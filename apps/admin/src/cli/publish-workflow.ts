@@ -6,14 +6,16 @@
 // format"). The publish is a Rabaed Engineer action, logged in admin_action with the
 // reason (visibility.md V9) against the active Engineer whose Rabaed Admin email
 // `--engineer` gives. A refused definition is listed problem by problem, in English,
-// and nothing is published or logged; warnings are listed and don't stop it. A
+// and nothing is published or logged; a Version some Active Project running the Rabaed
+// Default lacks an outcome or Stage of is refused with how many and which, and that
+// refusal is logged (RP-566); warnings are listed and don't stop it. A
 // published Version never changes: new Work Items of the Type, on every Project that
 // binds no other Workflow, start on it at once, and items already created keep theirs.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { createDb, databaseUrlsFromEnv } from "@rabaed/db";
-import { engineerReason, type WorkflowProblem } from "@rabaed/domain";
+import { engineerReason, formatNumber, outcomesAndStagesList, type WorkflowProblem } from "@rabaed/domain";
 import { z } from "zod";
 import { publishRabaedWorkflowAs } from "../workflows.ts";
 
@@ -40,7 +42,11 @@ try {
     if (result.reason === "engineer_not_found") console.error(`No active Rabaed Engineer ${input.engineer}.`);
     else if (result.reason === "type_not_found") console.error(`No Rabaed Default Work Item Type ${input.type} with a Workflow.`);
     else if (result.reason === "invalid_definition") console.error(`Not a Workflow definition:\n${lines(result.issues.map((i) => `${i.path || "(definition)"}: ${i.message}`))}`);
-    else console.error(`Refused, nothing published:\n${lines(result.problems.map(problemLine))}`);
+    else if (result.reason === "projects_lack_entries") {
+      console.error(
+        `Refused, nothing published: ${formatNumber(result.projects, "en")} Active Projects running this Rabaed Default lack ${outcomesAndStagesList(result, "en")}.`,
+      );
+    } else console.error(`Refused, nothing published:\n${lines(result.problems.map(problemLine))}`);
   }
 } finally {
   await db.destroy();

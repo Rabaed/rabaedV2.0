@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { formatNumber, outcomesAndStagesList, type Locale, type RabaedDefaultLackRefusal } from "@rabaed/domain";
 
 // Rabaed Admin's Workflows page: its own words, English and Arabic. The builder's words
 // come from the customer app's messages (messages.ts), so the builder reads the same everywhere.
@@ -37,6 +37,9 @@ const en = {
   saveFailed: "Couldn't save the draft.",
   unsavedLeave: "The builder has changes that are not saved as a draft.",
   published: (v: number) => `Version ${v} published. New items of this Type start on it.`,
+  // RP-566: how many Projects and which outcomes and Stages, never which Projects (V9).
+  projectsLack: ({ projects, ...lacking }: RabaedDefaultLackRefusal) =>
+    `Not published: ${formatNumber(projects, "en")} ${projects === 1 ? "Active Project running this Rabaed Default lacks" : "Active Projects running this Rabaed Default lack"} ${outcomesAndStagesList(lacking, "en")}. Edits of the Rabaed Defaults reach only new Projects: publish once their Project Admins have added it to their Project's set, or leave it out of this Version.`,
   duplicateHeading: "Start from another Workflow",
   duplicateFrom: "Copy the Workflow of",
   duplicateHelp: "Copies its draft, else its latest Version, in as this Type's draft. It replaces the draft this Type has.",
@@ -125,6 +128,8 @@ const ar: Strings = {
   saveFailed: "تعذّر حفظ المسودة.",
   unsavedLeave: "في المحرّر تغييرات غير محفوظة كمسودة.",
   published: (v: number) => `نُشرت النسخة ${v}. تبدأ بها العناصر الجديدة من هذا النوع.`,
+  projectsLack: ({ projects, ...lacking }: RabaedDefaultLackRefusal) =>
+    `لم تُنشر: عدد المشاريع النشطة التي تعمل بهذا الإعداد الافتراضي من رباد وينقصها ${outcomesAndStagesList(lacking, "ar")}: ${formatNumber(projects, "ar")}. تعديلات الإعداد الافتراضي من رباد تصل إلى المشاريع الجديدة فقط: انشر بعد أن يضيفها مسؤول المشروع إلى مجموعة مشروعه، أو اتركها خارج هذه النسخة.`,
   duplicateHeading: "البدء من سير عمل آخر",
   duplicateFrom: "نسخ سير عمل",
   duplicateHelp: "ينسخ مسودته، أو آخر نسخة منه، مسودةً لهذا النوع، ويحل محل مسودته الحالية.",
