@@ -20,6 +20,7 @@ import {
   type DefinitionIssue,
   type DuplicateWorkflowRequest,
   type LibraryWorkflows,
+  type OutcomesAndStages,
   type SavedToLibrary,
   type SaveWorkflowDraftRequest,
   type SaveWorkflowToLibraryRequest,
@@ -386,7 +387,34 @@ async function publishIn(trx: Db, definitionId: string, now: Date, changeNote?: 
   return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
 }
 
-const bindRefusals = ["not_found", "project_closed", "workflow_not_published", "workflow_not_for_type", "workflow_name_names_participant"] as const;
+const bindRefusals = [
+  "not_found",
+  "project_closed",
+  "workflow_not_published",
+  "workflow_not_for_type",
+  "workflow_name_names_participant",
+  "default_lacks_entries",
+] as const;
+
+/** A binding command's result: refused `default_lacks_entries` with the outcomes and Stages the Project lacks (RP-566). */
+type BindingResult<R extends string> = { ok: true } | { ok: false; reason: R; lacking?: OutcomesAndStages };
+
+/**
+ * `result`, with the outcomes and Stages the Project lacks when it is refused `default_lacks_entries`:
+ * the Project's own sets only, read for its Project Admin (`app.binding_lacks_entries`, RP-566).
+ */
+async function withLacking<R extends string>(
+  trx: Db,
+  result: { ok: true } | { ok: false; reason: R },
+  args: { projectId: string; typeId: string; participantId: string | null; definitionId: string | null },
+): Promise<BindingResult<R>> {
+  if (result.ok || result.reason !== "default_lacks_entries") return result;
+  const { rows } = await sql<OutcomesAndStages>`
+    select outcomes, stages from app.binding_lacks_entries(
+      ${args.projectId}::uuid, ${args.typeId}::uuid, ${args.participantId}::uuid, ${args.definitionId}::uuid)
+  `.execute(trx);
+  return { ...result, lacking: rows[0]! };
+}
 
 /** A Project Admin binds a Work Item Type on the Project to a Workflow, for every raiser or for one raising Participant. */
 export function bindWorkflow(db: Db, memberId: string, projectId: string, input: BindWorkflowRequest, now: Date) {
@@ -395,11 +423,13 @@ export function bindWorkflow(db: Db, memberId: string, projectId: string, input:
       select app.bind_workflow(
         ${projectId}::uuid, ${input.workItemTypeId}::uuid, ${input.raisingParticipantId}::uuid, ${input.workflowId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "bound", bindRefusals);
+    return withLacking(trx, commandResult(rows[0]!.outcome, "bound", bindRefusals), {
+      projectId, typeId: input.workItemTypeId, participantId: input.raisingParticipantId, definitionId: input.workflowId,
+    });
   });
 }
 
-const unbindRefusals = ["not_found", "project_closed"] as const;
+const unbindRefusals = ["not_found", "project_closed", "default_lacks_entries"] as const;
 
 /** A Project Admin takes a binding away: new items run the Project's binding, else the Rabaed Default. */
 export function unbindWorkflow(db: Db, memberId: string, projectId: string, input: UnbindWorkflowQuery, now: Date) {
@@ -407,7 +437,9 @@ export function unbindWorkflow(db: Db, memberId: string, projectId: string, inpu
     const { rows } = await sql<{ outcome: string }>`
       select app.unbind_workflow(${projectId}::uuid, ${input.workItemTypeId}::uuid, ${input.raisingParticipantId ?? null}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "unbound", unbindRefusals);
+    return withLacking(trx, commandResult(rows[0]!.outcome, "unbound", unbindRefusals), {
+      projectId, typeId: input.workItemTypeId, participantId: input.raisingParticipantId ?? null, definitionId: null,
+    });
   });
 }
 

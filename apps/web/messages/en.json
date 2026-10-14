@@ -1548,7 +1548,8 @@
         "namesParticipant": "The Workflow's label must not mention the Participant: everyone on the Project reads it.",
         "notPublished": "Publish the Workflow first.",
         "notForType": "That Workflow is made for another Type.",
-        "problems": "The Workflow has problems. Fix them in the builder first."
+        "problems": "The Workflow has problems. Fix them in the builder first.",
+        "defaultLacks": "The Rabaed Default's latest Version uses {entries}, which this Project lacks. Add them under Stages or the Type's outcomes first."
       }
     },
     "screens": {

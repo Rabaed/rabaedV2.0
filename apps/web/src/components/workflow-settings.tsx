@@ -1,6 +1,14 @@
 "use client";
 
-import { formatNumber, type BilingualText, type Locale, type WorkflowSettings, type WorkflowSettingsType } from "@rabaed/domain";
+import {
+  formatNumber,
+  isOutcomesAndStages,
+  outcomesAndStagesList,
+  type BilingualText,
+  type Locale,
+  type WorkflowSettings,
+  type WorkflowSettingsType,
+} from "@rabaed/domain";
 import {
   Badge,
   Button,
@@ -74,15 +82,18 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
       : []),
   ];
 
-  const errorText = (error: string) =>
-    refusalMessage(t, {
-      invalid_name: "invalidName",
-      stage_missing: "stageMissing",
-      workflow_name_names_participant: "namesParticipant",
-      workflow_not_published: "notPublished",
-      workflow_not_for_type: "notForType",
-      workflow_problems: "problems",
-    }, error);
+  // Back on a Rabaed Default whose latest Version uses an outcome or Stage this Project lacks (RP-566): which ones.
+  const errorText = (error: string, body?: unknown) =>
+    error === "default_lacks_entries" && isOutcomesAndStages(body)
+      ? t("errors.defaultLacks", { entries: outcomesAndStagesList(body, locale) })
+      : refusalMessage(t, {
+          invalid_name: "invalidName",
+          stage_missing: "stageMissing",
+          workflow_name_names_participant: "namesParticipant",
+          workflow_not_published: "notPublished",
+          workflow_not_for_type: "notForType",
+          workflow_problems: "problems",
+        }, error);
 
   const done = (message?: string) => {
     setDialog(null);
@@ -93,7 +104,7 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
   const removeException = async (type: WorkflowSettingsType, participantId: string) => {
     const res = await setupCall("DELETE", `/projects/${projectId}/workflow-bindings?workItemTypeId=${type.id}&raisingParticipantId=${participantId}`);
     if (res.ok) done(t("exceptionRemoved"));
-    else setNotice(errorText(res.error));
+    else setNotice(errorText(res.error, res.body));
   };
 
   return (
@@ -401,7 +412,7 @@ function DuplicateDialog({
   projectId: string;
   copySuffix: BilingualText;
   type: WorkflowSettingsType;
-  errorText: (error: string) => string;
+  errorText: (error: string, body?: unknown) => string;
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
@@ -453,7 +464,7 @@ function LibraryDialog({
   projectId: string;
   type: WorkflowSettingsType;
   library: WorkflowSettings["library"];
-  errorText: (error: string) => string;
+  errorText: (error: string, body?: unknown) => string;
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
@@ -501,7 +512,7 @@ function ExceptionDialog({
   type: WorkflowSettingsType;
   participants: { id: string; name: string }[];
   bind: (type: WorkflowSettingsType, workflowId: string, participantId: string | null) => Promise<SetupResult>;
-  errorText: (error: string) => string;
+  errorText: (error: string, body?: unknown) => string;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -554,7 +565,7 @@ function BackDialog({
 }: {
   projectId: string;
   type: WorkflowSettingsType;
-  errorText: (error: string) => string;
+  errorText: (error: string, body?: unknown) => string;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -571,7 +582,7 @@ function BackDialog({
           onDone();
           return null;
         }
-        return errorText(res.error);
+        return errorText(res.error, res.body);
       }}
     >
       <p className="text-sm text-text-secondary">{t("backBody", { workflow: type.workflow.name.en })}</p>
