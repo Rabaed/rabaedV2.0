@@ -23,7 +23,8 @@ export default async function setup(): Promise<void> {
     const files = createFileStore(settings);
     await ensureDemo(
       { migrator, admin: adminDb },
-      () => buildApp({ db, config: testConfig, logger: false, files }),
+      // A 500 while seeding prints its cause, not only "answered 500 internal".
+      () => buildApp({ db, config: testConfig, logger: "errors", files }),
       DEFAULT_PASSWORD,
       { files: true },
     );

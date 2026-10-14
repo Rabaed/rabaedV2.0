@@ -231,7 +231,8 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
     await ensureLocalBucket(settings);
     files = createFileStore(settings);
   }
-  const app = await buildApp({ db, config: testConfig, now, logger: false, ...(files ? { files } : {}) });
+  // A test's unexpected 500 prints its cause beside the failed assertion.
+  const app = await buildApp({ db, config: testConfig, now, logger: "errors", ...(files ? { files } : {}) });
 
   // One Engineer per TestApi does every onboarding.
   let engineerId: string | undefined;

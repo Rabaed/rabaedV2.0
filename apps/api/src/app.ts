@@ -63,7 +63,8 @@ export interface AppOptions {
   files?: FileStore;
   /** The current time; tests move it to check expiry. */
   now?: () => Date;
-  logger?: boolean;
+  /** `errors`: only a failed request's error (a 500 and its cause), as the tests' setups want. */
+  logger?: boolean | "errors";
   /** Sees every route as it is registered; test/sign-in-first.test.ts lists them this way. */
   onRoute?: (route: RouteOptions) => void;
 }
@@ -89,7 +90,9 @@ export async function buildApp({
   onRoute,
 }: AppOptions): Promise<FastifyInstance> {
   await dummyHash();
-  const app = Fastify({ logger: logger && loggerOptions() }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({
+    logger: logger === "errors" ? loggerOptions(undefined, "error") : logger && loggerOptions(),
+  }).withTypeProvider<ZodTypeProvider>();
   if (onRoute) app.addHook("onRoute", onRoute);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
