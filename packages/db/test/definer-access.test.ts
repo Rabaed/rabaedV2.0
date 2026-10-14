@@ -23,6 +23,8 @@ const CHECKS_ELSEWHERE: Record<string, string> = {
   "app.revision_document_copies(uuid)": "No rows unless app.can_change_documents, which requires app.can_save_answers.",
   "app.work_item_actions(uuid)":
     "Every branch joins app.acting_project_member, directly or through app.takeable_transitions; it is empty for an unseen item.",
+  "app.holds_work_item(uuid)":
+    "Answers only whether the caller's own Participant holds the item (RP-582's policies ask it): a holder sees the item, and for any other item it is false, as for an unseen one.",
   "app.form_participant_choices(uuid,uuid)":
     "Lists the Participants of a Project the caller is in; the item adds only app.work_item_companies, empty for an unseen item.",
 };
