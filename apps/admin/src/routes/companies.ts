@@ -8,13 +8,6 @@ import { inviteAuthorizedPerson, onboardCompany } from "../onboarding.ts";
 export const companyRoutes =
   (ctx: AdminContext): FastifyPluginAsyncZod =>
   async (app) => {
-    // Check the caller before validating the body: nothing is said to anyone not signed in.
-    const signedIn = {
-      onRequest: async (request: Parameters<AdminContext["requireEngineer"]>[0]) => {
-        ctx.requireEngineer(request);
-      },
-    };
-
     /** Emails the Authorized Person their invitation, in their language, linking to the customer web. */
     const sendInvitation = (to: { email: string; locale: Locale; companyName: BilingualText; token: string }) =>
       ctx.mailer.send({
@@ -29,7 +22,6 @@ export const companyRoutes =
     app.post(
       "/v1/companies",
       {
-        ...signedIn,
         schema: {
           body: onboardCompanyRequest,
           response: { 201: z.object({ companyId: z.uuid(), authorizedPersonId: z.uuid(), invitationSentTo: z.string() }) },
@@ -50,7 +42,6 @@ export const companyRoutes =
     app.post(
       "/v1/invitations",
       {
-        ...signedIn,
         schema: {
           body: z.object({ crNumber, reason: engineerReason }),
           response: { 201: z.object({ companyId: z.uuid(), invitationSentTo: z.string() }) },
@@ -69,7 +60,7 @@ export const companyRoutes =
     // The CR numbers Project Admins invited that aren't on Rabaed, for Rabaed to onboard (ADR 0009).
     app.get(
       "/v1/onboarding-leads",
-      { ...signedIn, schema: { querystring: z.object({ reason: engineerReason }), response: { 200: onboardingLeads } } },
+      { schema: { querystring: z.object({ reason: engineerReason }), response: { 200: onboardingLeads } } },
       async (request) => {
         const engineerId = ctx.requireEngineer(request);
         return { leads: await listOnboardingLeads(ctx.db, engineerId, request.query.reason) };
@@ -80,7 +71,7 @@ export const companyRoutes =
     // invitation stays pending until they withdraw it (ADR 0009).
     app.post(
       "/v1/onboarding-leads/:leadId/close",
-      { ...signedIn, schema: { params: z.object({ leadId: z.uuid() }), body: z.object({ reason: engineerReason }) } },
+      { schema: { params: z.object({ leadId: z.uuid() }), body: z.object({ reason: engineerReason }) } },
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await closeOnboardingLead(ctx.db, engineerId, request.params.leadId, request.body.reason, ctx.now());

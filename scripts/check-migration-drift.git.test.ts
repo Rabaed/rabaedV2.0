@@ -4,12 +4,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { takeTransition } from "./check-migration-drift.fixtures.ts";
-import { mergeGroupSides, migrationProblems } from "./check-migration-drift.ts";
+import { mergeGroupSides, type MigrationProblems, migrationProblems } from "./check-migration-drift.ts";
 import { migrationsDir as dir } from "./migrations.ts";
 
 // A throwaway repository replaying the RP-311 history: a branch redefines
 // app.take_transition, main redefines it later, the branch merges main.
 let repo: string;
+const none: MigrationProblems = { drift: [], ordering: [], overloads: [], duplicates: [] };
 const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], { cwd: repo, encoding: "utf8" }).trim();
 
 function commit(files: Record<string, string>, message = "change") {
@@ -40,6 +41,7 @@ describe("migrationProblems", () => {
   it("reports the drift main's merge caused, from the head and base commits", () => {
     expect(migrationProblems(repo, "main", "branch")).toEqual({
       drift: [{ object: "function app.take_transition", branch: ["20261026100000_numbering_pattern.sql"], main: ["20261030000100_take_transition_sections.sql"] }],
+      ordering: [],
       overloads: [],
       duplicates: [],
     });
@@ -49,6 +51,7 @@ describe("migrationProblems", () => {
     commit({ [`${dir}/20261104000000_numbering_after_sections.sql`]: takeTransition("fix-up") });
     expect(migrationProblems(repo, "main", "branch")).toEqual({
       drift: [],
+      ordering: [],
       overloads: [],
       duplicates: [["20261104000000_function_grants.sql", "20261104000000_numbering_after_sections.sql"]],
     });
@@ -81,6 +84,7 @@ describe("migrationProblems", () => {
     commit({ [`${dir}/20261106000000_numbering_after_action_forms.sql`]: takeTransition("fix-up of main's", "p_work_item uuid, p_answers jsonb") });
     expect(migrationProblems(repo, "main", "branch")).toEqual({
       drift: [],
+      ordering: [],
       overloads: [{ signature: "app.take_transition(uuid, text)", branch: ["20261026100000_numbering_pattern.sql"], main: ["20261026000000_action_forms.sql"] }],
       duplicates: [],
     });
@@ -107,7 +111,7 @@ describe("migrationProblems, when a migration is renamed", () => {
     git("merge", "-q", "--no-ff", "--no-edit", "a");
     git("switch", "-q", "b");
     git("merge", "-q", "--no-edit", "main");
-    expect(migrationProblems(repo, "main", "b")).toEqual({ drift: [], overloads: [], duplicates: [] });
+    expect(migrationProblems(repo, "main", "b")).toEqual(none);
   });
 
   it("judges a branch's renamed migration by the commit that first added its content", () => {
@@ -151,6 +155,98 @@ describe("migrationProblems, when a migration is renamed", () => {
     git("mv", `${dir}/20261202000000_rebuild.sql`, `${dir}/20261204000000_rebuild.sql`);
     git("commit", "-q", "-m", "B renames its rebuild");
     expect(migrationProblems(repo, "main", "b").drift).toHaveLength(1);
+  });
+});
+
+// RP-457: an integration branch merging two implementers' branches, each of
+// which redefined a function from the same base.
+describe("migrationProblems, with several branches merged onto one", () => {
+  beforeEach(() => {
+    git("switch", "-q", "main");
+    git("switch", "-q", "-c", "integration");
+  });
+
+  it("fails two parallel branches' redefinitions, judged by the commits that added them", () => {
+    git("switch", "-q", "-c", "wf7", "integration");
+    commit({ [`${dir}/20270201000000_wf7.sql`]: takeTransition("WF-7") }, "WF-7");
+    git("switch", "-q", "-c", "wf8", "integration");
+    commit({ [`${dir}/20270203000000_wf8.sql`]: takeTransition("WF-8") }, "WF-8");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf7");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf8");
+    expect(migrationProblems(repo, "main", "integration").ordering).toEqual([
+      { object: "function app.take_transition", earlier: "20270201000000_wf7.sql", later: "20270203000000_wf8.sql" },
+    ]);
+  });
+
+  it("passes a chain where the second branch built on the first", () => {
+    git("switch", "-q", "-c", "wf7", "integration");
+    commit({ [`${dir}/20270201000000_wf7.sql`]: takeTransition("WF-7") }, "WF-7");
+    git("switch", "-q", "-c", "wf8");
+    commit({ [`${dir}/20270203000000_wf8.sql`]: takeTransition("WF-8, from WF-7's") }, "WF-8");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf8");
+    expect(migrationProblems(repo, "main", "integration").ordering).toEqual([]);
+  });
+
+  it("passes a chain built on a branch migration renamed after it was seen", () => {
+    // WF-8 builds on WF-7's migration; WF-7's is then renamed to an earlier timestamp. WF-8's
+    // tree holds the old name only: it counts as seen by its content.
+    git("switch", "-q", "-c", "wf7", "integration");
+    commit({ [`${dir}/20270201000000_wf7.sql`]: takeTransition("WF-7") }, "WF-7");
+    git("switch", "-q", "-c", "wf8");
+    commit({ [`${dir}/20270203000000_wf8.sql`]: takeTransition("WF-8, from WF-7's") }, "WF-8");
+    git("mv", `${dir}/20270201000000_wf7.sql`, `${dir}/20270200000000_wf7.sql`);
+    git("commit", "-q", "-m", "WF-7's migration renamed");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf8");
+    expect(migrationProblems(repo, "main", "integration")).toEqual(none);
+  });
+
+  it("fails an author branch that merged the integration branch only after adding its migration", () => {
+    // WF-8 is written from the old body; its branch then merges the integration tip (WF-7
+    // in it) before being merged back. The merge's tree holds WF-7; the commit that wrote
+    // WF-8 didn't.
+    git("switch", "-q", "-c", "wf7", "integration");
+    commit({ [`${dir}/20270201000000_wf7.sql`]: takeTransition("WF-7") }, "WF-7");
+    git("switch", "-q", "-c", "wf8", "integration");
+    commit({ [`${dir}/20270203000000_wf8.sql`]: takeTransition("WF-8") }, "WF-8");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf7");
+    git("switch", "-q", "wf8");
+    git("merge", "-q", "--no-ff", "--no-edit", "integration");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf8");
+    expect(migrationProblems(repo, "main", "integration").ordering).toEqual([
+      { object: "function app.take_transition", earlier: "20270201000000_wf7.sql", later: "20270203000000_wf8.sql" },
+    ]);
+  });
+
+  it("fails two parallel migrations brought in by one merge of a sub-integration branch", () => {
+    git("switch", "-q", "-c", "wf7", "integration");
+    commit({ [`${dir}/20270201000000_wf7.sql`]: takeTransition("WF-7") }, "WF-7");
+    git("switch", "-q", "-c", "wf8", "integration");
+    commit({ [`${dir}/20270203000000_wf8.sql`]: takeTransition("WF-8") }, "WF-8");
+    git("switch", "-q", "-c", "sub", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf7");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf8");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "sub");
+    expect(migrationProblems(repo, "main", "integration").ordering).toEqual([
+      { object: "function app.take_transition", earlier: "20270201000000_wf7.sql", later: "20270203000000_wf8.sql" },
+    ]);
+  });
+
+  it("fails two parallel migrations brought in by one octopus merge", () => {
+    git("switch", "-q", "-c", "wf7", "integration");
+    commit({ [`${dir}/20270201000000_wf7.sql`]: takeTransition("WF-7") }, "WF-7");
+    git("switch", "-q", "-c", "wf8", "integration");
+    commit({ [`${dir}/20270203000000_wf8.sql`]: takeTransition("WF-8") }, "WF-8");
+    git("switch", "-q", "integration");
+    git("merge", "-q", "--no-ff", "--no-edit", "wf7", "wf8");
+    expect(migrationProblems(repo, "main", "integration").ordering).toEqual([
+      { object: "function app.take_transition", earlier: "20270201000000_wf7.sql", later: "20270203000000_wf8.sql" },
+    ]);
   });
 });
 
