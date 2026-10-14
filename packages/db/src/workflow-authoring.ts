@@ -1,5 +1,6 @@
 import {
   definitionFromRows,
+  definitionOutcomesAndStages,
   definitionToRows,
   formSchema,
   outcomeActions,
@@ -8,6 +9,7 @@ import {
   workflowPublishProblems,
   type DefinitionIssue,
   type OutcomeKind,
+  type OutcomesAndStages,
   type StageCategory,
   type WorkflowDefinition,
   type WorkflowProblem,
@@ -170,7 +172,11 @@ export type RabaedDefaultResult =
   | { ok: true; definitionId: string; versionNo: number; warnings: WorkflowProblem[] }
   | { ok: false; reason: "type_not_found" }
   | { ok: false; reason: "invalid_definition"; issues: DefinitionIssue[] }
-  | { ok: false; reason: "workflow_problems"; problems: WorkflowProblem[] };
+  | { ok: false; reason: "workflow_problems"; problems: WorkflowProblem[] }
+  | ({ ok: false; reason: "projects_lack_entries" } & ProjectsLacking);
+
+/** How many Projects running a Rabaed Default lack outcomes or Stages a Version would use, and which: never which Projects (V9). */
+export type ProjectsLacking = { projects: number } & OutcomesAndStages;
 
 /**
  * Saves `input` (a definition document) as the draft of the Rabaed Default Workflow of
@@ -192,6 +198,10 @@ export async function writeRabaedDefaultWorkflow(
   const prepared = prepareDraft(input, check);
   if (!prepared.ok) return { ok: false, reason: "invalid_definition", issues: prepared.issues };
   if (publish && hasError(prepared.problems)) return { ok: false, reason: "workflow_problems", problems: prepared.problems };
+  if (publish) {
+    const lacking = await projectsLackingOutcomesAndStages(trx, definitionId, check.workItemTypeId, definitionOutcomesAndStages(prepared.definition));
+    if (lacking.projects > 0) return { ok: false, reason: "projects_lack_entries", ...lacking };
+  }
   const { args } = prepared;
   const saved = await sql<{ outcome: string; version_no: number }>`
     select outcome, version_no from app.write_workflow_draft(
@@ -204,6 +214,67 @@ export async function writeRabaedDefaultWorkflow(
   `.execute(trx);
   if (published.rows[0]?.outcome !== "published") throw new Error(`mark_workflow_published: ${published.rows[0]?.outcome}`);
   return { ok: true, definitionId, versionNo: published.rows[0].version_no, warnings: prepared.problems };
+}
+
+/**
+ * The Active Projects that run Rabaed Default `definitionId` of Rabaed Work Item Type `typeId`
+ * and lack one of `used` in their own sets, counted, with the outcomes and Stages they lack
+ * (RP-566). A Project runs the Rabaed Default when it uses the Rabaed Type (no Type of its own
+ * of that code, `app.project_type_id`) and either binds no other Workflow to it Project-wide or
+ * binds a raising Participant to the Rabaed Default (`app.new_item_workflow_version` reads the
+ * raiser's own binding first; an exception for another Workflow leaves the other raisers on the
+ * Project-wide choice). It lacks an outcome its copy of the Type's set holds no closing outcome
+ * of (`work_item_outcome_in_set`), and a Stage its Module's Stage set has no key of. A Closed
+ * Project raises no items, so it is not counted. Read across every Company, as Rabaed Admin and
+ * the migrator read (V9): the answer names no Project.
+ *
+ * Run in the publish's transaction, it locks what it checks until the publish commits
+ * (CODING_STANDARDS "a lock per check-then-write"): the Rabaed Default's workflow_definition row
+ * for update, which `app.bind_workflow` (binding to it) and `app.unbind_workflow` (falling back
+ * to it) lock too, so no Project moves onto it between this check and the publish; and each
+ * counted Project's outcome set and Stage set, shared (`app.lock_project_sets_shared`), the
+ * advisory keys `app.delete_stage` and an outcome's code change take exclusively, so neither
+ * drops what this check found.
+ */
+export async function projectsLackingOutcomesAndStages(db: Db, definitionId: string, typeId: string, used: OutcomesAndStages): Promise<ProjectsLacking> {
+  await sql`select 1 from workflow_definition where id = ${definitionId}::uuid for update`.execute(db);
+  const onDefault = sql`
+    rabaed_type as (
+      select id, code, module_key from work_item_type where id = ${typeId}::uuid and owner_kind = 'rabaed'
+    ), on_default as (
+      select p.id from project p cross join rabaed_type t
+      where p.status = 'active'
+        and not exists (select 1 from work_item_type own where own.project_id = p.id and own.code = t.code)
+        and (
+          not exists (
+            select 1 from workflow_binding b
+            where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is null
+              and b.workflow_definition_id <> ${definitionId}::uuid)
+          or exists (
+            select 1 from workflow_binding b
+            where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is not null
+              and b.workflow_definition_id = ${definitionId}::uuid)
+        )
+    )`;
+  await sql`with ${onDefault} select app.lock_project_sets_shared(d.id, ${typeId}::uuid) from on_default d order by d.id`.execute(db);
+  const { rows } = await sql<ProjectsLacking>`
+    with ${onDefault}, lacks as (
+      select d.id, 'outcome' as kind, e.entry from on_default d cross join rabaed_type t
+      cross join unnest(${used.outcomes}::text[]) e(entry)
+      where not exists (
+        select 1 from outcome o where o.project_id = d.id and o.work_item_type_id = t.id and o.code = e.entry and o.closing
+      )
+      union all
+      select d.id, 'stage', e.entry from on_default d cross join rabaed_type t
+      cross join unnest(${used.stages}::text[]) e(entry)
+      where not exists (select 1 from stage s where s.project_id = d.id and s.module_key = t.module_key and s.key = e.entry)
+    )
+    select count(distinct id)::int as projects,
+      coalesce(array_agg(distinct entry order by entry) filter (where kind = 'outcome'), '{}') as outcomes,
+      coalesce(array_agg(distinct entry order by entry) filter (where kind = 'stage'), '{}') as stages
+    from lacks
+  `.execute(db);
+  return rows[0]!;
 }
 
 /** Whether any of `problems` refuses a publish (warnings don't). */

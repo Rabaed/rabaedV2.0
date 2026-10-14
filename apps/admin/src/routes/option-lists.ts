@@ -10,21 +10,16 @@ const refused = (reason: "not_found" | "duplicate_value" | "too_deep") => new Ht
 export const optionListRoutes =
   (ctx: AdminContext): FastifyPluginAsyncZod =>
   async (app) => {
-    const signedIn = {
-      onRequest: async (request: Parameters<AdminContext["requireEngineer"]>[0]) => {
-        ctx.requireEngineer(request);
-      },
-    };
     const listParams = z.object({ listId: z.uuid() });
     const optionParams = z.object({ optionId: z.uuid() });
 
-    app.get("/v1/option-lists", { ...signedIn, schema: { response: { 200: optionLists } } }, async () => ({
+    app.get("/v1/option-lists", { schema: { response: { 200: optionLists } } }, async () => ({
       optionLists: await listOptionLists(ctx.db),
     }));
 
     app.post(
       "/v1/option-lists",
-      { ...signedIn, schema: { body: createOptionListRequest, response: { 201: z.object({ id: z.uuid() }) } } },
+      { schema: { body: createOptionListRequest, response: { 201: z.object({ id: z.uuid() }) } } },
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         return reply.code(201).send({ id: await createOptionList(ctx.db, engineerId, request.body) });
@@ -33,7 +28,7 @@ export const optionListRoutes =
 
     app.post(
       "/v1/option-lists/:listId/options",
-      { ...signedIn, schema: { params: listParams, body: addOptionRequest, response: { 201: z.object({ id: z.uuid() }) } } },
+      { schema: { params: listParams, body: addOptionRequest, response: { 201: z.object({ id: z.uuid() }) } } },
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await addOption(ctx.db, engineerId, request.params.listId, request.body);
@@ -44,7 +39,7 @@ export const optionListRoutes =
 
     app.post(
       "/v1/options/:optionId/rename",
-      { ...signedIn, schema: { params: optionParams, body: renameOptionRequest } },
+      { schema: { params: optionParams, body: renameOptionRequest } },
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await renameOption(ctx.db, engineerId, request.params.optionId, request.body);
@@ -59,7 +54,7 @@ export const optionListRoutes =
     ] as const) {
       app.post(
         `/v1/options/:optionId/${path}`,
-        { ...signedIn, schema: { params: optionParams, body: optionReasonRequest } },
+        { schema: { params: optionParams, body: optionReasonRequest } },
         async (request, reply) => {
           const engineerId = ctx.requireEngineer(request);
           const result = await setOptionRetired(ctx.db, engineerId, request.params.optionId, retired, request.body.reason);

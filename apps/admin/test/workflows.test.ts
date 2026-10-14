@@ -4,7 +4,7 @@
 // logged in admin_action with its reason; a definition with an error is refused,
 // problem by problem, and nothing is published or logged.
 import { randomInt, randomUUID } from "node:crypto";
-import { createDb, readLatestPublishedDefinition, withMember } from "@rabaed/db";
+import { createDb, readLatestPublishedDefinition, withMember, writeRabaedDefaultWorkflow, type Db } from "@rabaed/db";
 import { addTestScreen, addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition } from "@rabaed/domain";
 import { sql } from "kysely";
@@ -28,6 +28,11 @@ const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).joi
 
 /** A new Project of a new Company, created as its Members create one (`app.create_project`): it copies the Rabaed Defaults as they are now. */
 async function newProject(): Promise<string> {
+  return (await newProjectWithAdmin()).projectId;
+}
+
+/** As `newProject`, with the Member who created it, its Project Admin. */
+async function newProjectWithAdmin(): Promise<{ projectId: string; memberId: string }> {
   const { id: engineerId } = await migrator
     .insertInto("rabaed_engineer")
     .values({ email: `eng-${randomUUID().slice(0, 8)}@rabaed.test`, full_name: "Seam One" })
@@ -43,11 +48,12 @@ async function newProject(): Promise<string> {
   `.execute(migrator);
   const memberId = member.rows[0]!.id;
   await sql`update company set authorized_person_id = ${memberId} where id = ${company.rows[0]!.id}`.execute(migrator);
-  return withMember(appDb, memberId, (trx) =>
+  const projectId = await withMember(appDb, memberId, (trx) =>
     sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Later", "ar": "لاحق"}'::jsonb, 'DEF', 'contractor')`
       .execute(trx)
       .then((r) => r.rows[0]!.project_id),
   );
+  return { projectId, memberId };
 }
 
 const TYPE = "WFADM";
@@ -409,5 +415,179 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       expect(res.statusCode, path).toBe(401);
       expect(res.json(), path).toEqual({ error: "not_signed_in" });
     }
+  });
+});
+
+// RP-566 (decided 2026-10-14, option 1): an edit of a Rabaed Default set reaches only the Projects
+// created afterwards, so publishing a Rabaed Default Version is refused while a Project running
+// that Default lacks an outcome or Stage it uses. The refusal names how many Projects and which
+// entries, never which Projects or Companies (visibility scenario RP-566-1, V9). The ticket's MAR is
+// played by this file's own Rabaed Default Type, a copy of MAR's shape: MAR's published Versions are
+// every other suite's (they count them), and a published Version can't be taken back.
+describe("a Rabaed Default Version that uses an outcome or Stage some Project lacks (visibility scenario RP-566-1)", () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const code = `Z${suffix}`;
+  const key = `held_${suffix}`;
+  let typeId = "";
+  let original: { versionNo: number; definition: WorkflowDefinition };
+  // The Step moved into the new Stage: one in a Stage of the same category, so only the Stage's absence refuses it.
+  let movedStep = "";
+
+  beforeAll(async () => {
+    typeId = (await migrator.selectFrom("work_item_type").select("id").where("owner_kind", "=", "rabaed").where("code", "=", TYPE).executeTakeFirstOrThrow()).id;
+    original = (await readLatestPublishedDefinition(adminDb, definitionId))!;
+    const inProgress = new Set(
+      (await migrator.selectFrom("stage").select("key").where("owner_kind", "=", "rabaed").where("module_key", "=", "submittals").where("category", "=", "in_progress").execute()).map(
+        (s) => s.key,
+      ),
+    );
+    movedStep = original.definition.steps.find((s) => inProgress.has(s.stage))!.key;
+  });
+  // The outcome stays (nothing deletes an outcome; its code is this run's own), and so does the
+  // Version that uses it. The Stage case runs in one transaction rolled back at its end: a Rabaed
+  // Default Stage reaches every later Project's Stage set, which other suites list, and nothing
+  // takes one away once a published Version uses it.
+
+  /** Gives every Project but `except` its own copy of the Rabaed Default outcome `code` of the Type, or of the Submittals Stage `key`. */
+  const copyIntoEveryProjectBut = async (db: Db, except: string[], entry: { outcome: string } | { stage: string }) => {
+    const others = sql`p.id <> all(${except}::uuid[])`;
+    await ("outcome" in entry
+      ? sql`
+          insert into outcome (owner_kind, project_id, work_item_type_id, code, name, closing, polarity, actions, sort)
+          select 'project', p.id, d.work_item_type_id, d.code, d.name, d.closing, d.polarity, d.actions, d.sort
+          from project p cross join (select * from outcome where owner_kind = 'rabaed' and work_item_type_id = ${typeId}::uuid and code = ${entry.outcome}) d
+          where ${others} and not exists (select 1 from outcome o where o.project_id = p.id and o.work_item_type_id = d.work_item_type_id and o.code = d.code)
+        `
+      : sql`
+          insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
+          select 'project', p.id, d.module_key, d.key, d.name, d.category, d.sort
+          from project p cross join (select * from stage where owner_kind = 'rabaed' and module_key = 'submittals' and key = ${entry.stage}) d
+          where ${others} and not exists (select 1 from stage x where x.project_id = p.id and x.module_key = d.module_key and x.key = d.key)
+        `
+    ).execute(db);
+  };
+
+  const withCloseUsing = (outcome: string): WorkflowDefinition => {
+    const a = original.definition.transitions.find((t) => t.key === "approve_a")!;
+    return {
+      ...original.definition,
+      transitions: [...original.definition.transitions, { ...a, key: `approve_${outcome.toLowerCase()}`, label: { en: `Approve · ${outcome}`, ar: `اعتماد · ${outcome}` }, outcome }],
+    };
+  };
+  const withStepIn = (stage: string): WorkflowDefinition => ({
+    ...original.definition,
+    steps: original.definition.steps.map((s) => (s.key === movedStep ? { ...s, stage } : s)),
+  });
+  const latestVersionNo = async () => (await readLatestPublishedDefinition(adminDb, definitionId))!.versionNo;
+  const publishActions = () =>
+    adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", definitionId).where("action", "=", "publish_workflow").execute();
+  /** The Type's refused publishes in admin_action: each with its reason and how many Projects lack which outcomes and Stages (V9). */
+  const refusedPublishes = () =>
+    adminDb
+      .selectFrom("admin_action")
+      .select(["engineer_id", "reason", "after"])
+      .where("target_id", "=", definitionId)
+      .where("action", "=", "refuse_workflow_publish")
+      .orderBy("at")
+      .execute();
+  /** The outcomes and Stages of the Version a new item of the Type on Project `projectId` starts on that the Project's own sets lack. */
+  const outsideSets = async (db: Db, projectId: string) =>
+    (
+      await sql<{ entry: string }>`
+        with v as (select app.new_item_workflow_version(${projectId}::uuid, ${typeId}::uuid, null) as id)
+        select t.outcome as entry from workflow_transition t join v on t.workflow_version_id = v.id
+        where t.outcome is not null
+          and not exists (select 1 from outcome o where o.project_id = ${projectId}::uuid and o.work_item_type_id = ${typeId}::uuid and o.code = t.outcome and o.closing)
+        union
+        select s.stage_key from workflow_step s join v on s.workflow_version_id = v.id
+        where not exists (select 1 from stage x where x.project_id = ${projectId}::uuid and x.module_key = 'submittals' and x.key = s.stage_key)
+      `.execute(db)
+    ).rows.map((r) => r.entry);
+
+  it("is refused while a Project created before an outcome was added lacks it, naming how many Projects and the outcome; it publishes once the Project Admin adds it", async () => {
+    const existing = await newProjectWithAdmin();
+    const closed = await newProject();
+    await migrator.updateTable("project").set({ status: "closed", closed_at: new Date().toISOString() }).where("id", "=", closed).execute();
+    const add = await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes`, {
+      code, name: { en: "Approved on site", ar: "معتمد في الموقع" }, closing: true, polarity: "positive", actions: [], reason: "Add an outcome for RP-566",
+    });
+    expect(add.statusCode, add.body).toBe(200);
+    // Every other Active Project already holds it, so `existing` is the one that lacks it (a Closed Project raises nothing).
+    await copyIntoEveryProjectBut(migrator, [existing.projectId, closed], { outcome: code });
+    const logged = (await publishActions()).length;
+    const refusals = (await refusedPublishes()).length;
+
+    const refused = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
+    expect(refused.statusCode, refused.body).toBe(422);
+    // How many Projects and which entries: no Project or Company is named.
+    const lacking = { projects: 1, outcomes: [code], stages: [] };
+    expect(refused.json()).toEqual({ error: "projects_lack_entries", ...lacking });
+    expect(await latestVersionNo()).toBe(original.versionNo);
+    expect((await publishActions()).length).toBe(logged);
+    // The workflow:publish CLI is refused alike.
+    const { email } = await migrator.selectFrom("rabaed_engineer").select("email").where("id", "=", engineer.id).executeTakeFirstOrThrow();
+    expect(await publishRabaedWorkflowAs(migrator, { engineerEmail: email, typeCode: TYPE, definition: withCloseUsing(code), reason: "From the CLI" })).toEqual({
+      ok: false, reason: "projects_lack_entries", ...lacking,
+    });
+    // Each refusal is logged with the Engineer's reason, the count and the entries, and nothing else (V9).
+    expect((await refusedPublishes()).slice(refusals)).toEqual([
+      { engineer_id: engineer.id, reason: "Close with the new outcome", after: { typeCode: TYPE, ...lacking } },
+      { engineer_id: engineer.id, reason: "From the CLI", after: { typeCode: TYPE, ...lacking } },
+    ]);
+    expect(await outsideSets(migrator, existing.projectId)).toEqual([]);
+
+    const added = await withMember(appDb, existing.memberId, (trx) =>
+      sql<{ outcome: string }>`
+        select app.add_outcome(${existing.projectId}::uuid, ${TYPE}, ${code}, '{"en": "Approved on site", "ar": "معتمد في الموقع"}'::jsonb, true, 'positive', '[]'::jsonb) as outcome
+      `.execute(trx),
+    );
+    expect(added.rows).toEqual([{ outcome: "added" }]);
+
+    const published = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json()).toEqual({ versionNo: original.versionNo + 1 });
+    // A new item on the Project starts on it, and every outcome and Stage it may reach is in the Project's sets.
+    const startsOn = await sql<{ version_no: number }>`
+      select v.version_no from workflow_version v where v.id = app.new_item_workflow_version(${existing.projectId}::uuid, ${typeId}::uuid, null)
+    `.execute(migrator);
+    expect(startsOn.rows).toEqual([{ version_no: original.versionNo + 1 }]);
+    expect(await outsideSets(migrator, existing.projectId)).toEqual([]);
+  });
+
+  // As Rabaed Admin and the CLI publish it (writeRabaedDefaultWorkflow, the outcome case above
+  // goes through the page's route), in one transaction rolled back at the end.
+  it("is refused while a Project created before a Stage was added lacks it, naming the Stage; it publishes once the Project Admin adds it", async () => {
+    const existing = await newProjectWithAdmin();
+    const before = await latestVersionNo();
+    const rolledBack = new Error("rolled back");
+    await migrator
+      .transaction()
+      .execute(async (trx) => {
+        await sql`
+          insert into stage (owner_kind, module_key, key, name, category, sort)
+          select 'rabaed', 'submittals', ${key}, '{"en": "Held", "ar": "معلق"}'::jsonb, 'in_progress', max(sort) + 1
+          from stage where owner_kind = 'rabaed' and module_key = 'submittals'
+        `.execute(trx);
+        await copyIntoEveryProjectBut(trx, [existing.projectId], { stage: key });
+
+        expect(await writeRabaedDefaultWorkflow(trx, TYPE, withStepIn(key), { publish: true })).toEqual({
+          ok: false, reason: "projects_lack_entries", projects: 1, outcomes: [], stages: [key],
+        });
+        expect(await outsideSets(trx, existing.projectId)).toEqual([]);
+
+        // The Project Admin adds it to the Project's Stage set, as Settings -> Stages does.
+        await sql`select set_config('app.member_id', ${existing.memberId}, true)`.execute(trx);
+        const added = await sql<{ outcome: string }>`
+          select app.add_stage(${existing.projectId}::uuid, 'submittals', ${key}, '{"en": "Held", "ar": "معلق"}'::jsonb, 'in_progress') as outcome
+        `.execute(trx);
+        expect(added.rows).toEqual([{ outcome: "added" }]);
+        expect(await writeRabaedDefaultWorkflow(trx, TYPE, withStepIn(key), { publish: true })).toMatchObject({ ok: true, versionNo: before + 1 });
+        expect(await outsideSets(trx, existing.projectId)).toEqual([]);
+        throw rolledBack;
+      })
+      .catch((error: unknown) => {
+        if (error !== rolledBack) throw error;
+      });
+    expect(await latestVersionNo()).toBe(before);
   });
 });

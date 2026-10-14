@@ -270,3 +270,87 @@ describe("a new Rabaed Default Version (scenario RP-443-1)", () => {
     expect(type.workflow).toMatchObject({ id: definitionId, versionNo: before.versionNo + 1, source: "rabaed_default" });
   });
 });
+
+// RP-566: a Project running a Rabaed Default must hold every outcome and Stage its latest Version
+// uses. An exception binding one Participant to the Default keeps that Participant on it (the raiser's
+// own binding is read first), so the Project counts when a Default Version is published; and a
+// Project Admin can't put the Project (or a Participant) back on a Default whose latest Version uses
+// an outcome or Stage the Project lacks: refused default_lacks_entries, naming the Project's own
+// missing outcomes and Stages, until they add them. A test Rabaed Type of its own (MAR's Form and
+// Workflow), so no other suite's Default changes under it.
+describe("a Rabaed Default a Project lacks an outcome of (RP-566)", () => {
+  const TYPE = "RLK";
+  const code = `L${Math.random().toString(36).slice(2, 7)}`;
+  let typeId = "";
+  let defaultId = "";
+  let t: Tower;
+  let participantId = "";
+  let copyId = "";
+  let withCode: WorkflowDefinition;
+  const bindings = (tower: Tower) => `/v1/projects/${tower.projectId}/workflow-bindings`;
+
+  beforeAll(async () => {
+    const created = await sql<{ id: string }>`
+      insert into workflow_definition (owner_kind, name) values ('rabaed', ${JSON.stringify(label("Lacking (test)"))}::jsonb) returning id
+    `.execute(migrator);
+    defaultId = created.rows[0]!.id;
+    typeId = (
+      await sql<{ id: string }>`
+        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+        select 'rabaed', m.module_key, ${TYPE}, ${JSON.stringify(label("Lacking (test)"))}::jsonb, ${defaultId}::uuid, m.outcome_kind, m.form_definition_id
+        from work_item_type m where m.owner_kind = 'rabaed' and m.code = 'MAR' returning id
+      `.execute(migrator)
+    ).rows[0]!.id;
+    const mar = (await readLatestPublishedDefinition(migrator, marWorkflowId))!;
+    expect(await writeRabaedDefaultWorkflow(migrator, TYPE, mar.definition, { publish: true })).toMatchObject({ ok: true });
+    const a = mar.definition.transitions.find((tr) => tr.key === "approve_a")!;
+    withCode = { ...mar.definition, transitions: [...mar.definition.transitions, { ...a, key: "approve_l", label: label(`Approve · ${code}`), outcome: code }] };
+
+    t = await buildTower(api, { c1, k1 }, "RLK");
+    participantId = await api.addParticipant(c1.caller, t.projectId, c2.company, "contractor");
+    copyId = (await ok(c1.caller.post(`/v1/workflows/${defaultId}/duplicate`, { projectId: t.projectId, name: label("Tower lacking") }), 201)).json().id;
+    await ok(c1.caller.post(`/v1/workflows/${copyId}/publish`), 200);
+    await ok(c1.caller.request("PUT", bindings(t), { workItemTypeId: typeId, raisingParticipantId: null, workflowId: copyId }));
+  });
+
+  it("counts a Project whose exception keeps one Participant on the Rabaed Default when a Default Version is published", async () => {
+    // The Participant's exception binds it to the Rabaed Default; the Project runs its copy otherwise.
+    await ok(c1.caller.request("PUT", bindings(t), { workItemTypeId: typeId, raisingParticipantId: participantId, workflowId: defaultId }));
+    // Rabaed adds an outcome to the Default set; every Project but the Tower already holds it.
+    await sql`
+      insert into outcome (owner_kind, project_id, work_item_type_id, code, name, closing, polarity, actions, sort)
+      select 'rabaed', null, ${typeId}::uuid, ${code}, ${JSON.stringify(label("On site"))}::jsonb, true, 'positive', '[]'::jsonb, 99
+    `.execute(migrator);
+    await sql`
+      insert into outcome (owner_kind, project_id, work_item_type_id, code, name, closing, polarity, actions, sort)
+      select 'project', p.id, ${typeId}::uuid, ${code}, ${JSON.stringify(label("On site"))}::jsonb, true, 'positive', '[]'::jsonb, 99
+      from project p where p.id <> ${t.projectId}::uuid
+    `.execute(migrator);
+
+    expect(await writeRabaedDefaultWorkflow(migrator, TYPE, withCode, { publish: true })).toEqual({
+      ok: false, reason: "projects_lack_entries", projects: 1, outcomes: [code], stages: [],
+    });
+    // Taking the exception away leaves the Participant on the Project's copy, so the Tower runs the Default no more.
+    await ok(c1.caller.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}&raisingParticipantId=${participantId}`));
+    expect(await writeRabaedDefaultWorkflow(migrator, TYPE, withCode, { publish: true })).toMatchObject({ ok: true });
+  });
+
+  it("refuses putting the Project or a Participant back on that Default until the Project Admin adds the outcome, naming only the Project's own lack", async () => {
+    const refused = { error: "default_lacks_entries", outcomes: [code], stages: [] };
+    const unbind = await c1.caller.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}`);
+    expect(unbind.statusCode, unbind.body).toBe(409);
+    expect(unbind.json()).toEqual(refused);
+    for (const raisingParticipantId of [participantId, null]) {
+      const bind = await c1.caller.request("PUT", bindings(t), { workItemTypeId: typeId, raisingParticipantId, workflowId: defaultId });
+      expect(bind.statusCode, bind.body).toBe(409);
+      expect(bind.json()).toEqual(refused);
+    }
+    expect((await settings(c1.caller, t.projectId)).types.find((x) => x.code === TYPE)!.workflow).toMatchObject({ id: copyId, source: "project_copy" });
+    // Anyone else learns nothing of it: the plain 404.
+    await expectHidden(t.c1Engineer.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}`));
+
+    await ok(c1.caller.post(`/v1/projects/${t.projectId}/work-item-types/${TYPE}/outcomes`, { code, name: label("On site"), closing: true, polarity: "positive", actions: [] }), 201);
+    await ok(c1.caller.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}`));
+    expect((await settings(c1.caller, t.projectId)).types.find((x) => x.code === TYPE)!.workflow).toMatchObject({ id: defaultId, source: "rabaed_default" });
+  });
+});
