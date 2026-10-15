@@ -16,6 +16,8 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     changedFiles: () => ["apps/api/src/a.ts"],
     check: () => ({ status: 0, output: "ok\n" }),
     labels: () => ["reviewed"],
+    labelWorkflowOnMain: () => true,
+    labelRuns: () => [{ status: "completed", conclusion: "success" }],
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
     removalReason: () => undefined,
     enqueue: (id, head) => {
@@ -84,6 +86,50 @@ describe("queuePr", () => {
     const result = queuePr(149, seam, { noReview: true });
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).toContain("--no-review");
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("refuses while the reviewed-label run for the head is still going, naming the head", () => {
+    const { seam, enqueued } = fakeSeam({ labelRuns: () => [{ status: "in_progress", conclusion: "" }] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc123, then run `pnpm queue 149` again");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("treats no run for the head yet as still going", () => {
+    const { seam, enqueued } = fakeSeam({ labelRuns: () => [] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc123");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("refuses when the reviewed-label run for the head failed", () => {
+    const { seam, enqueued } = fakeSeam({ labelRuns: () => [{ status: "completed", conclusion: "failure" }] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("failed");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("queues when the reviewed-label run for the head was skipped", () => {
+    const { seam, enqueued } = fakeSeam({ labelRuns: () => [{ status: "completed", conclusion: "skipped" }] });
+    expect(queuePr(149, seam).ok).toBe(true);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("skips the run check with a warning while the workflow is not on origin/main yet", () => {
+    const { seam, enqueued } = fakeSeam({ labelWorkflowOnMain: () => false, labelRuns: () => [] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).toContain("reviewed-label.yml is not on origin/main yet");
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("--no-review skips the run check too", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => [], labelRuns: () => [{ status: "queued", conclusion: "" }] });
+    expect(queuePr(149, seam, { noReview: true }).ok).toBe(true);
     expect(enqueued).toHaveLength(1);
   });
 
@@ -323,6 +369,16 @@ describe("realSeam", () => {
     const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"labels":[{"name":"reviewed"},{"name":"x"}]}' }));
     expect(seam.labels(149)).toEqual(["reviewed", "x"]);
     expect([calls[0]?.command, ...(calls[0]?.args ?? [])]).toEqual(["gh", "pr", "view", "149", "--json", "labels"]);
+  });
+
+  it("lists the reviewed-label runs for a commit through gh run list, and checks the workflow file on origin/main", () => {
+    const { calls, seam } = recorded((command) => (command === "gh" ? { status: 0, stdout: '[{"status":"completed","conclusion":"success"}]' } : { status: 0 }));
+    expect(seam.labelRuns("abc123")).toEqual([{ status: "completed", conclusion: "success" }]);
+    expect(seam.labelWorkflowOnMain()).toBe(true);
+    expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
+      ["gh", "run", "list", "--workflow", "reviewed-label.yml", "--commit", "abc123", "--json", "status,conclusion"],
+      ["git", "cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"],
+    ]);
   });
 
   it("enqueues through gh api graphql, passing the PR id and the head to pin", () => {

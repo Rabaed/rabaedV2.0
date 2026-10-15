@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
+import { REVIEWED_LABEL } from "./reviewed-label.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -41,6 +42,10 @@ export interface QueueSeam {
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
   /** The PR's label names (`gh pr view <pr> --json labels`). */
   labels(pr: number): string[];
+  /** True when `.github/workflows/reviewed-label.yml` exists on origin/main (`git cat-file -e`). */
+  labelWorkflowOnMain(): boolean;
+  /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
+  labelRuns(commit: string): { status: string; conclusion: string }[];
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
   enqueue(id: string, head: string): { position: number; state: string };
   /** The PR's `state` and `isInMergeQueue` (GraphQL; `gh pr view` has no such field). */
@@ -80,9 +85,6 @@ export function rootSharedFilesBreach(files: string[]): { root: string[]; others
   return root.length > 0 && example !== undefined ? { root, others: others.length, example } : undefined;
 }
 
-/** The label `/code-review` adds when its fixes are pushed (RP-584); .github/workflows/reviewed-label.yml removes it on a new push. */
-export const REVIEWED_LABEL = "reviewed";
-
 export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boolean } = {}): QueueResult {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
@@ -103,6 +105,19 @@ export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boole
       `PR #${pr} has no '${REVIEWED_LABEL}' label: planning/parallel-sessions.md rule 6 queues a PR only after a finished /code-review.`,
       `Fix: run /code-review, push its fixes, then \`gh pr edit ${pr} --add-label ${REVIEWED_LABEL}\` and run \`pnpm queue ${pr}\` again. A new push removes the label. For a docs-only PR: \`pnpm queue ${pr} --no-review\`.`,
     );
+  } else if (seam.labelWorkflowOnMain()) {
+    // The label alone is not tied to a head: a push whose workflow run has not finished (or never ran, as with a merge conflict) still shows the old label.
+    const runs = seam.labelRuns(head);
+    const wait = `Fix: wait for the reviewed-label run on ${head}, then run \`pnpm queue ${pr}\` again.`;
+    if (runs.length === 0 || runs.some((run) => run.status !== "completed")) {
+      return fail(`PR #${pr}: the reviewed-label workflow has not finished for the head ${head}, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.`, wait);
+    }
+    const [latest] = runs;
+    if (latest?.conclusion !== "success" && latest?.conclusion !== "skipped") {
+      return fail(`PR #${pr}: the reviewed-label run on ${head} failed (${latest?.conclusion}), so the '${REVIEWED_LABEL}' label cannot be trusted.`, "Fix: open the run in the Actions tab, re-run it, then run `pnpm queue " + pr + "` again.");
+    }
+  } else {
+    warnings.push("Warning: .github/workflows/reviewed-label.yml is not on origin/main yet, so the label could not be tied to the head; not checked.");
   }
   const checkout = seam.head();
   // Only a checkout of the PR's own branch can be behind it; an old main is just another branch.
@@ -211,6 +226,8 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
         .filter(Boolean),
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
     labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
+    labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,
+    labelRuns: (commit) => JSON.parse(must("gh", ["run", "list", "--workflow", "reviewed-label.yml", "--commit", commit, "--json", "status,conclusion"])) as { status: string; conclusion: string }[],
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,
     removalReason: (id, since) => {
       const node = graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { timelineItems(last: 1, itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT]) { nodes { ... on RemovedFromMergeQueueEvent { reason createdAt } } } } } }", { id }).data.node as {

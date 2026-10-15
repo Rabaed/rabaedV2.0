@@ -1,6 +1,6 @@
 import type { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { keepsLabel, onPush, realGit, type ReviewedGit } from "./reviewed-label.ts";
+import { keepsLabel, dropLabelOnPush, realGit, type ReviewedGit } from "./reviewed-label.ts";
 
 // A clean merge of main into the reviewed head: before = R, main commit = M, new head = N.
 function git(overrides: Partial<ReviewedGit> = {}): ReviewedGit {
@@ -57,7 +57,7 @@ describe("keepsLabel", () => {
   });
 });
 
-describe("onPush", () => {
+describe("dropLabelOnPush", () => {
   function recorder() {
     const removed: number[] = [];
     return { removed, github: { removeLabel: async (pr: number) => void removed.push(pr) } };
@@ -65,7 +65,7 @@ describe("onPush", () => {
 
   it("removes the label on a new push", async () => {
     const { removed, github } = recorder();
-    const text = await onPush({ pr: 7, labels: ["reviewed", "x"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
+    const text = await dropLabelOnPush({ pr: 7, labels: ["reviewed", "x"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
     expect(removed).toEqual([7]);
     expect(text).toContain("removed");
     expect(text).toContain("--add-label reviewed");
@@ -73,14 +73,14 @@ describe("onPush", () => {
 
   it("keeps the label when the push only merged main in", async () => {
     const { removed, github } = recorder();
-    const text = await onPush({ pr: 7, labels: ["reviewed"], before: "R", after: "N" }, git(), github);
+    const text = await dropLabelOnPush({ pr: 7, labels: ["reviewed"], before: "R", after: "N" }, git(), github);
     expect(removed).toEqual([]);
     expect(text).toContain("stays");
   });
 
   it("does nothing when the PR has no label", async () => {
     const { removed, github } = recorder();
-    await onPush({ pr: 7, labels: ["other"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
+    await dropLabelOnPush({ pr: 7, labels: ["other"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
     expect(removed).toEqual([]);
   });
 });

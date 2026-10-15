@@ -22,7 +22,7 @@ import { resolve } from "node:path";
 // branch's copy of this file in a checkout that has main's history and the PR head;
 // it runs no PR code.
 
-export const LABEL = "reviewed";
+export const REVIEWED_LABEL = "reviewed";
 
 export interface ReviewedGit {
   /** Parent commits of `commit`, first parent first. */
@@ -53,11 +53,11 @@ export interface ReviewedGitHub {
 }
 
 /** Returns what was done, for the log. */
-export async function onPush(event: { pr: number; labels: string[]; before: string; after: string }, git: ReviewedGit, github: ReviewedGitHub): Promise<string> {
-  if (!event.labels.includes(LABEL)) return `PR #${event.pr} has no \`${LABEL}\` label: nothing to remove.`;
-  if (keepsLabel(event.before, event.after, git)) return `PR #${event.pr}: the push only merged main in by a clean merge; \`${LABEL}\` stays.`;
+export async function dropLabelOnPush(event: { pr: number; labels: string[]; before: string; after: string }, git: ReviewedGit, github: ReviewedGitHub): Promise<string> {
+  if (!event.labels.includes(REVIEWED_LABEL)) return `PR #${event.pr} has no \`${REVIEWED_LABEL}\` label: nothing to remove.`;
+  if (keepsLabel(event.before, event.after, git)) return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
   await github.removeLabel(event.pr);
-  return `PR #${event.pr}: removed \`${LABEL}\`; the new push needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${LABEL}\`.`;
+  return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; the new push needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${REVIEWED_LABEL}\`.`;
 }
 
 export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): ReviewedGit {
@@ -81,7 +81,7 @@ export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = s
 function overHttp(repository: string, token: string): ReviewedGitHub {
   return {
     async removeLabel(pr) {
-      const response = await fetch(`https://api.github.com/repos/${repository}/issues/${pr}/labels/${LABEL}`, {
+      const response = await fetch(`https://api.github.com/repos/${repository}/issues/${pr}/labels/${REVIEWED_LABEL}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
       });
@@ -96,7 +96,7 @@ async function main() {
   const repository = process.env.GITHUB_REPOSITORY;
   if (!token || !repository) throw new Error("GITHUB_TOKEN and GITHUB_REPOSITORY must be set");
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")) as { pull_request: { number: number; labels: { name: string }[] }; before: string; after: string };
-  const summary = await onPush(
+  const summary = await dropLabelOnPush(
     { pr: event.pull_request.number, labels: event.pull_request.labels.map((label) => label.name), before: event.before, after: event.after },
     realGit(),
     overHttp(repository, token),
