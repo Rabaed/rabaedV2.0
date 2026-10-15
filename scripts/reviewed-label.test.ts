@@ -1,5 +1,8 @@
 import type { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import { keepsLabel, dropLabelOnPush, realGit, type ReviewedGit } from "./reviewed-label.ts";
 
 // A clean merge of main into the reviewed head: before = R, main commit = M, new head = N.
@@ -65,7 +68,7 @@ describe("dropLabelOnPush", () => {
 
   it("removes the label on a new push", async () => {
     const { removed, github } = recorder();
-    const text = await dropLabelOnPush({ pr: 7, labels: ["reviewed", "x"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
+    const text = await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed", "x"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
     expect(removed).toEqual([7]);
     expect(text).toContain("removed");
     expect(text).toContain("--add-label reviewed");
@@ -73,15 +76,46 @@ describe("dropLabelOnPush", () => {
 
   it("keeps the label when the push only merged main in", async () => {
     const { removed, github } = recorder();
-    const text = await dropLabelOnPush({ pr: 7, labels: ["reviewed"], before: "R", after: "N" }, git(), github);
+    const text = await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed"], before: "R", after: "N" }, git(), github);
     expect(removed).toEqual([]);
     expect(text).toContain("stays");
   });
 
   it("does nothing when the PR has no label", async () => {
     const { removed, github } = recorder();
-    await dropLabelOnPush({ pr: 7, labels: ["other"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
+    await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["other"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
     expect(removed).toEqual([]);
+  });
+
+  it("does nothing when a PR opens without the label: the run only gives the head one for pnpm queue (RP-604)", async () => {
+    const { removed, github } = recorder();
+    const text = await dropLabelOnPush({ pr: 7, action: "opened", labels: [] }, git(), github);
+    expect(removed).toEqual([]);
+    expect(text).toContain("nothing to remove");
+  });
+
+  it("removes a label already there when a PR opens or reopens, even if git would keep it on a push (RP-604)", async () => {
+    for (const action of ["opened", "reopened"]) {
+      const { removed, github } = recorder();
+      const text = await dropLabelOnPush({ pr: 7, action, labels: ["reviewed"], before: "R", after: "N" }, git(), github);
+      expect(removed).toEqual([7]);
+      expect(text).toContain(`the ${action} PR's head needs a /code-review`);
+    }
+  });
+});
+
+// The workflow file: every head of a same-repo PR must get a run, or `pnpm queue` waits for one forever (RP-604).
+describe("reviewed-label.yml", () => {
+  const source = readFileSync(join(dirname(import.meta.filename), "..", ".github", "workflows", "reviewed-label.yml"), "utf8");
+  const wf = parse(source) as { on: Record<string, { types?: string[] }>; jobs: Record<string, { steps: { run?: string }[] }> };
+
+  it("runs when a PR opens, reopens or gets a push, and on nothing else", () => {
+    expect(wf.on).toEqual({ pull_request: { types: ["opened", "reopened", "synchronize"] } });
+  });
+
+  it("fetches the old head only when the event has one", () => {
+    const fetch = Object.values(wf.jobs)[0]?.steps.find((s) => s.run?.includes("github.event.before"));
+    expect(fetch?.run).toMatch(/if \[ -n "\$\{\{ github\.event\.before \}\}" \]/);
   });
 });
 
