@@ -1,6 +1,6 @@
 // Seam 1 for the Owner's review (ADR 0022, RP-593; workflow-engine.md §5.3a; visibility.md V5,
-// V14 and scenarios RP-593-1 and RP-593-2). On a 1→1→1 Workflow the Consultant PM's Code is a
-// Recommended Code to the Owner: the Contractor sees the item with the Owner and no Code in any
+// V14 and scenarios RP-593-1, RP-593-2 and RP-598-1). On a 1→1→1 Workflow the Consultant PM's Code is a
+// Recommended Code to the Owner: the Contractor sees the item "With Owner review" and no Code in any
 // channel (the List, the Kanban, search, the item, its history, the Activity Feed, notifications,
 // the Dashboard) until the Owner confirms it, which issues it and runs its result. A Code the
 // Owner Sends Back never reaches the Contractor.
@@ -67,6 +67,9 @@ async function channels(by: Caller, id: string, title: string) {
   };
 }
 
+/** What anyone but the review's holder and the recommending Consultant reads as its "With" (scenario RP-598-1). */
+const OWNER_REVIEW = { en: "Owner review", ar: "مراجعة المالك" };
+
 /** A Code (A to D) as any value the channels give. */
 const aCode = /"[A-D]"/;
 const dashboard = async (by: Caller) => (await ok(by.get(`/v1/projects/${at.projectId}/dashboard`), 200)).json();
@@ -93,7 +96,9 @@ beforeAll(async () => {
   await addOwnerReviewType(migrator, TYPE, schema);
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
-  ow = await api.authorizedPerson();
+  // A name of its own, so a read that names OW shows (scenario RP-598-1).
+  const owCompany = await api.onboardCompany({ legalName: { en: "Waha Owner Holding", ar: "الواحة القابضة المالكة" } });
+  ow = { company: owCompany, caller: await api.acceptInvitation(owCompany.invitationToken) };
   at = await buildTower(api, { c1, k1 }, "OWR");
   const owParticipant = await api.addParticipant(c1.caller, at.projectId, ow.company, "owner");
   await ok(c1.caller.request("PUT", `/v1/participants/${owParticipant}/visibility`, { trade: all, location: all }));
@@ -111,7 +116,7 @@ describe("scenario RP-593-1: K1 recommends Code B to the Owner, who confirms it"
     await take(at.k1Manager, id, "recommend_b", { answers: comments, internalNote: "B, with one comment" });
     await drainOutbox(worker);
 
-    const withOwner = { companyName: (await detail(owPm, id)).heldBy!.companyName, memberName: null, pool: null };
+    const withOwner = { companyName: OWNER_REVIEW, memberName: null, pool: null };
     for (const by of [at.c1Pm, at.c1Engineer]) {
       const read = await channels(by, id, title);
       expect(JSON.stringify(read)).not.toMatch(aCode);
@@ -161,5 +166,50 @@ describe("scenario RP-593-2: the Owner Sends B Back, K1 recommends C, the Owner 
     expect(JSON.stringify(read).match(/"[A-D]"/g)?.every((c) => c === '"C"')).toBe(true);
     expect((await detail(at.c1Engineer, id)).actions.createRevision).toBe(true);
     expect((await history(owPm, id)).filter((e) => e.type === "recommend_code").map((e) => e.recommendedCode)).toEqual(["B", "C"]);
+  });
+});
+
+describe("scenario RP-598-1: while the Owner reviews, C1 reads it \"With Owner review\"", () => {
+  it("everywhere C1 reads the item, never the Owner's name or a Code; OW and K1 read the Owner's name", async () => {
+    const title = "Lighting control panels";
+    const id = await atConsultant(title);
+    await take(at.k1Manager, id, "recommend_a");
+    const owName = (await detail(owPm, id)).heldBy!.companyName;
+    const list = `/v1/projects/${at.projectId}/modules/submittals/work-items`;
+    const get = async (by: Caller, path: string) => (await ok(by.get(path), 200)).json();
+
+    for (const by of [at.c1Pm, at.c1Engineer]) {
+      const read = await channels(by, id, title);
+      expect(JSON.stringify(read)).not.toMatch(aCode);
+      // The List, its search and the Kanban's card: "With Owner review".
+      for (const rows of [read.list, read.search, read.kanban]) {
+        expect(rows.length).toBeGreaterThan(0);
+        for (const row of rows as { with?: unknown }[]) if ("with" in row) expect(row.with).toEqual({ kind: "company", companyName: OWNER_REVIEW });
+      }
+      // The Kanban's lane: one lane by that label, keyed by no Participant.
+      const board = (await get(by, `${list}/kanban`)) as { columns: { lanes: { kind: string; participantId?: string; companyName?: unknown; cards: { id: string }[] }[] }[] };
+      const lane = board.columns.flatMap((c) => c.lanes).find((l) => l.cards.some((c) => c.id === id));
+      expect(lane).toMatchObject({ kind: "company", companyName: OWNER_REVIEW, participantId: "00000000-0000-0000-0000-000000000000" });
+      // The item, and where its Workflow map puts it.
+      expect(read.item.heldBy).toEqual({ companyName: OWNER_REVIEW, memberName: null, pool: null });
+      expect((await get(by, `/v1/work-items/${id}/workflow`)).position).toMatchObject({ kind: "company", companyName: OWNER_REVIEW });
+      // Nothing of it names OW: not the item's channels, nor the "With" filter's Companies, nor a search by OW's name.
+      const named = JSON.stringify({ ...read, map: await get(by, `/v1/work-items/${id}/workflow`) });
+      expect(named).not.toContain(owName.en);
+      const filters = (await get(by, list)).filters as { with: { companies: { name: { en: string } }[] } };
+      expect(filters.with.companies.map((c) => c.name.en)).not.toContain(owName.en);
+      expect(about(await get(by, `${list}/kanban?q=${encodeURIComponent(owName.en)}`), id)).toEqual([]);
+    }
+
+    // OW, which holds the review, and K1, which recommended, read OW's name.
+    expect((await detail(at.k1Manager, id)).heldBy!.companyName).toEqual(owName);
+    const k1Row = about(await get(at.k1Manager, list), id)[0] as { with: unknown };
+    expect(k1Row.with).toEqual({ kind: "company", companyName: owName });
+    expect(owName).not.toEqual(OWNER_REVIEW);
+
+    // Confirmed: closed at A, and nobody holds it.
+    await ok(owPm.post(`/v1/work-items/${id}/pick-up`));
+    await take(owPm, id, "confirm_a");
+    expect((await detail(at.c1Pm, id)).heldBy).toBeNull();
   });
 });
