@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
+import { REVIEWED_LABEL } from "./reviewed-label.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -12,6 +13,7 @@ import { isAncestor } from "./worktrees.ts";
 // The checks and the queue entry use the PR's own head (refs/pull/<n>/head), not
 // HEAD. --wait polls every 60 s until the PR merges (exit 0) or leaves the queue
 // or closes (exit 1, with the reason).
+// The PR needs the `reviewed` label (a finished /code-review, RP-584); --no-review skips that for docs-only PRs.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -40,6 +42,12 @@ export interface QueueSeam {
   packageJsonVersions(commit: string, file: string): { before: string | undefined; after: string | undefined };
   /** The migration checks of `commit` against origin/main; status 0 when they pass. */
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
+  /** The PR's label names (`gh pr view <pr> --json labels`). */
+  labels(pr: number): string[];
+  /** True when `.github/workflows/reviewed-label.yml` exists on origin/main (`git cat-file -e`). */
+  labelWorkflowOnMain(): boolean;
+  /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
+  labelRuns(commit: string): { status: string; conclusion: string }[];
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
   enqueue(id: string, head: string): { position: number; state: string };
   /** The PR's `state` and `isInMergeQueue` (GraphQL; `gh pr view` has no such field). */
@@ -93,7 +101,7 @@ export function onlyDependencyFieldsChanged(before: string | undefined, after: s
   }
 }
 
-export function queuePr(pr: number, seam: QueueSeam): QueueResult {
+export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boolean } = {}): QueueResult {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
@@ -106,6 +114,27 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
     );
   }
   const warnings: string[] = [];
+  if (options.noReview) {
+    warnings.push(`Warning: --no-review: queued without the '${REVIEWED_LABEL}' label (for docs-only PRs); nothing checked that a /code-review finished.`);
+  } else if (!seam.labels(pr).includes(REVIEWED_LABEL)) {
+    return fail(
+      `PR #${pr} has no '${REVIEWED_LABEL}' label: planning/parallel-sessions.md rule 6 queues a PR only after a finished /code-review.`,
+      `Fix: run /code-review, push its fixes, then \`gh pr edit ${pr} --add-label ${REVIEWED_LABEL}\` and run \`pnpm queue ${pr}\` again. A new push removes the label. For a docs-only PR: \`pnpm queue ${pr} --no-review\`.`,
+    );
+  } else if (seam.labelWorkflowOnMain()) {
+    // The label alone is not tied to a head: a push whose workflow run has not finished (or never ran, as with a merge conflict) still shows the old label.
+    const runs = seam.labelRuns(head);
+    const wait = `Fix: wait for the reviewed-label run on ${head}, then run \`pnpm queue ${pr}\` again.`;
+    if (runs.length === 0 || runs.some((run) => run.status !== "completed")) {
+      return fail(`PR #${pr}: the reviewed-label workflow has not finished for the head ${head}, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.`, wait);
+    }
+    const [latest] = runs;
+    if (latest?.conclusion !== "success" && latest?.conclusion !== "skipped") {
+      return fail(`PR #${pr}: the reviewed-label run on ${head} failed (${latest?.conclusion}), so the '${REVIEWED_LABEL}' label cannot be trusted.`, "Fix: open the run in the Actions tab, re-run it, then run `pnpm queue " + pr + "` again.");
+    }
+  } else {
+    warnings.push("Warning: .github/workflows/reviewed-label.yml is not on origin/main yet, so the label could not be tied to the head; not checked.");
+  }
   const checkout = seam.head();
   // Only a checkout of the PR's own branch can be behind it; an old main is just another branch.
   if (checkout !== head && seam.branch() === pull.headRefName && seam.isAncestor(checkout, head)) {
@@ -230,6 +259,9 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
       return { before: base.status === 0 ? show(base.stdout.trim()) : undefined, after: show(commit) };
     },
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
+    labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
+    labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,
+    labelRuns: (commit) => JSON.parse(must("gh", ["run", "list", "--workflow", "reviewed-label.yml", "--commit", commit, "--json", "status,conclusion"])) as { status: string; conclusion: string }[],
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,
     removalReason: (id, since) => {
       const node = graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { timelineItems(last: 1, itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT]) { nodes { ... on RemovedFromMergeQueueEvent { reason createdAt } } } } } }", { id }).data.node as {
@@ -256,13 +288,13 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   const wait = args.includes("--wait");
   const pr = Number(args.find((arg) => !arg.startsWith("--")));
   if (!Number.isInteger(pr) || pr <= 0) {
-    console.error("Usage: pnpm queue <pr number> [--wait]");
+    console.error("Usage: pnpm queue <pr number> [--wait] [--no-review]");
     process.exit(2);
   }
   try {
     const seam = realSeam();
     const started = new Date();
-    let result = print(queuePr(pr, seam));
+    let result = print(queuePr(pr, seam, { noReview: args.includes("--no-review") }));
     if (result.ok && wait) {
       console.log(`Waiting for PR #${pr} to merge (polling every ${POLL_MS / 1000} s)...`);
       result = print(await waitForMerge(pr, seam, started));
