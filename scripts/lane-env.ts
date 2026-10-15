@@ -1,15 +1,19 @@
 // Writes .env for this worktree from .env.example with its own ports, so several
 // worktrees (parallel Claude Code sessions) can run `pnpm dev` and the tests at once.
 //
-//   pnpm lane:env <n> [--force] [--free] [--db <suffix>]     n = 0..9, one number per worktree
+//   pnpm lane:env <n> [--force] [--free] [--db <suffix>]     one lane number per worktree
 //
-// Lane n uses Postgres 5432+100n, api 4000+100n, Rabaed Admin 4050+100n, web 3000+100n,
-// Mailpit 8025+100n, the file store 9000+100n and its own Docker Compose project (container + volume). Lane 0 keeps the defaults.
+// A lane number is mL (RP-602): m the Main session 1–5, L = 0 for the Main itself, 1–4 for its
+// lanes A–D; 0 is the main folder's, and the legacy 1–9 still work. Any other number is refused.
+// Lane n uses each default port plus 10n (Postgres 5432, api 4000, Rabaed Admin 4050, web 3000,
+// Mailpit 8025, the file store 9000; legacy lanes plus 100n, so lane m0 = lane m) and its own
+// Docker Compose project (container + volume). Lane 0 keeps the defaults.
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
 // already uses, and names the holder, saying whether that worktree's branch (or detached HEAD, RP-601) is already merged
 // into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane, unless a worktree that is not
-// merged names the lane in its .env: prune keeps it, so that worktree is named instead). --free takes the next lane that is free instead.
+// merged names the lane in its .env: prune keeps it, so that worktree is named instead). --free takes the next lane that is free instead,
+// preferring the same Main's lanes m1–m4. Legacy lane m and lane m0 clash with each other's containers, as they share ports.
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
@@ -35,13 +39,13 @@ import {
   firstFreeLane,
   holderAdvice,
   holdsLaneProject,
-  isValidDbSuffix,
   laneClashes,
   laneEnv,
   laneHolders,
   lanePorts,
   laneProject,
   listContainers,
+  parseLaneEnvArgs,
   releaseContainers,
   takenLanePorts,
   type TakeoverWorktree,
@@ -51,24 +55,12 @@ import { foreignSessionLock, listeningPid, ownServerHint, parseSessionLock, read
 import { isRunning } from "./worktrees-stale.ts";
 import { currentRoot, gitDirty, gitError, listWorktrees, refExists, worktreeMerged, type Worktree } from "./worktrees.ts";
 
-const args = process.argv.slice(2);
-const force = args.includes("--force");
-const free = args.includes("--free");
-const dbAt = args.indexOf("--db");
-const db = dbAt === -1 ? undefined : args[dbAt + 1];
-const positional = args.filter((a, i) => !a.startsWith("--") && !(dbAt !== -1 && i === dbAt + 1));
-const n = positional.length === 0 && free ? 1 : Number(positional[0]);
-if (
-  !Number.isInteger(n) ||
-  n < 0 ||
-  n > 9 ||
-  positional.length > 1 ||
-  args.some((a) => a.startsWith("--") && !["--force", "--free", "--db"].includes(a)) ||
-  (dbAt !== -1 && !isValidDbSuffix(db))
-) {
-  console.error("Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (n = 0..9, one per worktree; suffix: lowercase letters and digits, e.g. rp322)");
+const parsed = parseLaneEnvArgs(process.argv.slice(2));
+if ("error" in parsed) {
+  console.error(parsed.error);
   process.exit(1);
 }
+const { lane: n, force, free, db } = parsed;
 // A worktree locked by another live Claude session belongs to that session; --force does not override this (RP-501).
 let locked: string | undefined;
 try {

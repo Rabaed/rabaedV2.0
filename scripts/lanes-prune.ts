@@ -12,12 +12,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
+import { composeProjectOfEnv, LANE_SCHEME, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
 import { listWorktrees, refExists, worktreeMerged } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
 if (!options) {
-  console.error("Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]   (--lane N: only rabaed-laneN, N = 0..9)");
+  console.error(`Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`);
   process.exit(1);
 }
 const withMerged = options.merged;
