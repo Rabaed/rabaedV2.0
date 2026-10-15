@@ -15,6 +15,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
     changedFiles: () => ["apps/api/src/a.ts"],
     check: () => ({ status: 0, output: "ok\n" }),
+    labels: () => ["reviewed"],
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
     removalReason: () => undefined,
     enqueue: (id, head) => {
@@ -57,6 +58,33 @@ describe("queuePr", () => {
   it("does not treat a nested package.json or lockfile as a root shared file", () => {
     const { seam } = fakeSeam({ changedFiles: () => ["apps/api/package.json", "scripts/x.ts"] });
     expect(queuePr(163, seam).ok).toBe(true);
+  });
+
+  it("refuses a PR without the reviewed label, says how to get it, and does not queue", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => ["other"] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    const text = result.lines.join("\n");
+    expect(text).toContain("reviewed");
+    expect(text).toContain("gh pr edit 149 --add-label reviewed");
+    expect(text).toContain("--no-review");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("queues a PR with the reviewed label, without a no-review warning", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => ["other", "reviewed"] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).not.toContain("--no-review");
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("--no-review queues a PR without the label and says so in the output", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => [] });
+    const result = queuePr(149, seam, { noReview: true });
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).toContain("--no-review");
+    expect(enqueued).toHaveLength(1);
   });
 
   it("refuses when origin/main cannot be fetched", () => {
@@ -289,6 +317,12 @@ describe("realSeam", () => {
     expect(calls[0]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
     expect(calls[1]?.args[0]).toMatch(/check-migrations-immutable\.ts$/);
     expect(calls[1]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
+  });
+
+  it("reads the PR's label names through gh pr view", () => {
+    const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"labels":[{"name":"reviewed"},{"name":"x"}]}' }));
+    expect(seam.labels(149)).toEqual(["reviewed", "x"]);
+    expect([calls[0]?.command, ...(calls[0]?.args ?? [])]).toEqual(["gh", "pr", "view", "149", "--json", "labels"]);
   });
 
   it("enqueues through gh api graphql, passing the PR id and the head to pin", () => {

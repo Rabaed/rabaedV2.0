@@ -12,6 +12,7 @@ import { isAncestor } from "./worktrees.ts";
 // The checks and the queue entry use the PR's own head (refs/pull/<n>/head), not
 // HEAD. --wait polls every 60 s until the PR merges (exit 0) or leaves the queue
 // or closes (exit 1, with the reason).
+// The PR needs the `reviewed` label (a finished /code-review, RP-584); --no-review skips that for docs-only PRs.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -38,6 +39,8 @@ export interface QueueSeam {
   changedFiles(commit: string): string[];
   /** The migration checks of `commit` against origin/main; status 0 when they pass. */
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
+  /** The PR's label names (`gh pr view <pr> --json labels`). */
+  labels(pr: number): string[];
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
   enqueue(id: string, head: string): { position: number; state: string };
   /** The PR's `state` and `isInMergeQueue` (GraphQL; `gh pr view` has no such field). */
@@ -77,7 +80,10 @@ export function rootSharedFilesBreach(files: string[]): { root: string[]; others
   return root.length > 0 && example !== undefined ? { root, others: others.length, example } : undefined;
 }
 
-export function queuePr(pr: number, seam: QueueSeam): QueueResult {
+/** The label `/code-review` adds when its fixes are pushed (RP-584); .github/workflows/reviewed-label.yml removes it on a new push. */
+export const REVIEWED_LABEL = "reviewed";
+
+export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boolean } = {}): QueueResult {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
@@ -90,6 +96,14 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
     );
   }
   const warnings: string[] = [];
+  if (options.noReview) {
+    warnings.push(`Warning: --no-review: queued without the '${REVIEWED_LABEL}' label (for docs-only PRs); nothing checked that a /code-review finished.`);
+  } else if (!seam.labels(pr).includes(REVIEWED_LABEL)) {
+    return fail(
+      `PR #${pr} has no '${REVIEWED_LABEL}' label: planning/parallel-sessions.md rule 6 queues a PR only after a finished /code-review.`,
+      `Fix: run /code-review, push its fixes, then \`gh pr edit ${pr} --add-label ${REVIEWED_LABEL}\` and run \`pnpm queue ${pr}\` again. A new push removes the label. For a docs-only PR: \`pnpm queue ${pr} --no-review\`.`,
+    );
+  }
   const checkout = seam.head();
   // Only a checkout of the PR's own branch can be behind it; an old main is just another branch.
   if (checkout !== head && seam.branch() === pull.headRefName && seam.isAncestor(checkout, head)) {
@@ -196,6 +210,7 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
         .split("\n")
         .filter(Boolean),
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
+    labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,
     removalReason: (id, since) => {
       const node = graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { timelineItems(last: 1, itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT]) { nodes { ... on RemovedFromMergeQueueEvent { reason createdAt } } } } } }", { id }).data.node as {
@@ -222,13 +237,13 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   const wait = args.includes("--wait");
   const pr = Number(args.find((arg) => !arg.startsWith("--")));
   if (!Number.isInteger(pr) || pr <= 0) {
-    console.error("Usage: pnpm queue <pr number> [--wait]");
+    console.error("Usage: pnpm queue <pr number> [--wait] [--no-review]");
     process.exit(2);
   }
   try {
     const seam = realSeam();
     const started = new Date();
-    let result = print(queuePr(pr, seam));
+    let result = print(queuePr(pr, seam, { noReview: args.includes("--no-review") }));
     if (result.ok && wait) {
       console.log(`Waiting for PR #${pr} to merge (polling every ${POLL_MS / 1000} s)...`);
       result = print(await waitForMerge(pr, seam, started));
