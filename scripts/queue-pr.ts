@@ -38,6 +38,8 @@ export interface QueueSeam {
   mergeTree(commit: string): { status: number; output: string; stderr: string };
   /** Paths the PR changes against main (`git diff --name-only origin/main...<commit>`). */
   changedFiles(commit: string): string[];
+  /** A package.json's text at the merge base of origin/main and `commit` (what the three-dot `changedFiles` diffs against) and at `commit`; undefined where it does not exist. */
+  packageJsonVersions(commit: string, file: string): { before: string | undefined; after: string | undefined };
   /** The migration checks of `commit` against origin/main; status 0 when they pass. */
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
   /** The PR's label names (`gh pr view <pr> --json labels`). */
@@ -76,13 +78,27 @@ const ROOT_SHARED = { files: ["package.json", "pnpm-lock.yaml"], prefixes: [".gi
 const isRootShared = (file: string) => ROOT_SHARED.files.includes(file) || ROOT_SHARED.prefixes.some((prefix) => file.startsWith(prefix));
 const rootSharedList = [...ROOT_SHARED.files, ...ROOT_SHARED.prefixes.map((prefix) => `${prefix}*`)].join(", ");
 const isDoc = (file: string) => file.startsWith("docs/") || file.endsWith(".md");
+const isWorkspacePackageJson = (file: string) => file.endsWith("/package.json");
 
 /** Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR, with at most docs. */
-export function rootSharedFilesBreach(files: string[]): { root: string[]; others: number; example: string } | undefined {
+export function rootSharedFilesBreach(files: string[], isDependencyOnlyChange: (file: string) => boolean = () => false): { root: string[]; others: number; example: string } | undefined {
   const root = files.filter(isRootShared);
-  const others = files.filter((file) => !isRootShared(file) && !isDoc(file));
+  const others = files.filter((file) => !isRootShared(file) && !isDoc(file) && !isDependencyOnlyChange(file));
   const [example] = others;
   return root.length > 0 && example !== undefined ? { root, others: others.length, example } : undefined;
+}
+
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
+/** RP-573: true when two versions of a workspace package.json differ only in the dependency fields (both must exist and parse). */
+export function onlyDependencyFieldsChanged(before: string | undefined, after: string | undefined): boolean {
+  if (before === undefined || after === undefined) return false;
+  try {
+    const strip = (text: string) => JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(text) as Record<string, unknown>).filter(([key]) => !DEPENDENCY_FIELDS.includes(key))));
+    return strip(before) === strip(after);
+  } catch {
+    return false;
+  }
 }
 
 export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boolean } = {}): QueueResult {
@@ -125,12 +141,21 @@ export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boole
     warnings.push(`Warning: HEAD (${checkout}) is behind PR #${pr}'s head (${head}); checked and queued the PR's head. Pull to catch up.`);
   }
 
-  const shared = rootSharedFilesBreach(seam.changedFiles(head));
+  // A workspace package.json that changes only dependency fields belongs to a dependencies-only PR beside the lockfile (RP-573).
+  const changed = seam.changedFiles(head);
+  const shared = rootSharedFilesBreach(changed, (file) => {
+    if (!isWorkspacePackageJson(file)) return false;
+    const { before, after } = seam.packageJsonVersions(head, file);
+    return onlyDependencyFieldsChanged(before, after);
+  });
   if (shared) {
     return fail(
       `PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`,
       ...shared.root.map((file) => `  shared: ${file}`),
       `  and ${shared.others} other file(s), e.g. ${shared.example}`,
+      ...(changed.some(isWorkspacePackageJson)
+        ? ["Note: a workspace package.json beside the lockfile is allowed when only its dependency fields (dependencies/devDependencies/peerDependencies/optionalDependencies) change."]
+        : []),
       `Fix: a change to root ${rootSharedList} is its own PR (only those and docs). Split it out, then run \`pnpm queue\` again.`,
     );
   }
@@ -224,6 +249,15 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
       must("git", ["diff", "--name-only", `origin/main...${commit}`])
         .split("\n")
         .filter(Boolean),
+    packageJsonVersions: (commit, file) => {
+      const show = (ref: string) => {
+        const done = run("git", ["show", `${ref}:${file}`]);
+        return done.status === 0 ? done.stdout : undefined;
+      };
+      // changedFiles diffs against the merge base (three dots), so `before` is read there, not at main's tip.
+      const base = run("git", ["merge-base", "origin/main", commit]);
+      return { before: base.status === 0 ? show(base.stdout.trim()) : undefined, after: show(commit) };
+    },
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
     labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
     labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,

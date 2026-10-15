@@ -14,6 +14,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     pullRequest: () => ({ id: "PR_node", headRefOid: "abc123", headRefName: "feature" }),
     mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
     changedFiles: () => ["apps/api/src/a.ts"],
+    packageJsonVersions: () => ({ before: undefined, after: undefined }),
     check: () => ({ status: 0, output: "ok\n" }),
     labels: () => ["reviewed"],
     labelWorkflowOnMain: () => true,
@@ -131,6 +132,49 @@ describe("queuePr", () => {
     const { seam, enqueued } = fakeSeam({ labels: () => [], labelRuns: () => [{ status: "queued", conclusion: "" }] });
     expect(queuePr(149, seam, { noReview: true }).ok).toBe(true);
     expect(enqueued).toHaveLength(1);
+  });
+
+  describe("dependencies-only PR (RP-573)", () => {
+    const admin = (fields: Record<string, unknown>) => JSON.stringify({ name: "admin", scripts: { dev: "vite" }, devDependencies: { a: "1.0.0" }, ...fields });
+    const withAdmin = (after: string, files = ["pnpm-lock.yaml", "apps/admin/package.json"]) =>
+      fakeSeam({ changedFiles: () => files, packageJsonVersions: () => ({ before: admin({}), after }) });
+
+    it("queues the lockfile with a workspace package.json whose only change is devDependencies", () => {
+      const { seam, enqueued } = withAdmin(admin({ devDependencies: { a: "1.0.0", b: "2.0.0" } }));
+      expect(queuePr(181, seam).ok).toBe(true);
+      expect(enqueued).toHaveLength(1);
+    });
+
+    it("refuses when the workspace package.json also changes a script", () => {
+      const { seam, enqueued } = withAdmin(admin({ devDependencies: { a: "1.0.0", b: "2.0.0" }, scripts: { dev: "vite --host" } }));
+      const result = queuePr(181, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("apps/admin/package.json");
+      expect(result.lines.join("\n")).toContain("only its dependency fields");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("refuses a package.json that does not parse", () => {
+      const { seam } = withAdmin("{ not json");
+      expect(queuePr(181, seam).ok).toBe(false);
+    });
+
+    it("refuses the lockfile with a dependencies-only package.json plus code", () => {
+      const { seam } = withAdmin(admin({ devDependencies: { b: "2.0.0" } }), ["pnpm-lock.yaml", "apps/admin/package.json", "apps/admin/src/a.ts"]);
+      const result = queuePr(181, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("apps/admin/src/a.ts");
+    });
+
+    it("refuses the lockfile with code as today", () => {
+      const { seam } = fakeSeam({ changedFiles: () => ["pnpm-lock.yaml", "apps/api/src/a.ts"] });
+      expect(queuePr(181, seam).ok).toBe(false);
+    });
+
+    it("refuses when the package.json is new or deleted", () => {
+      const { seam } = fakeSeam({ changedFiles: () => ["pnpm-lock.yaml", "apps/new/package.json"], packageJsonVersions: () => ({ before: undefined, after: admin({}) }) });
+      expect(queuePr(181, seam).ok).toBe(false);
+    });
   });
 
   it("refuses when origin/main cannot be fetched", () => {
@@ -352,6 +396,20 @@ describe("realSeam", () => {
     expect(seam.removalReason("PR_node", new Date("2026-10-09T10:00:00Z"))).toBe("MERGE_CONFLICT");
     expect(seam.removalReason("PR_node", new Date("2026-10-09T11:00:00Z"))).toBeUndefined();
     expect(calls.every((call) => call.command === "gh" && call.args.slice(0, 2).join(" ") === "api graphql" && call.args.includes("id=PR_node"))).toBe(true);
+  });
+
+  it("reads a package.json at the merge base with origin/main and at the PR's commit, undefined where git show fails", () => {
+    const { calls, seam } = recorded((_command, args) => {
+      if (args[0] === "merge-base") return { status: 0, stdout: "base777\n" };
+      if (args[1] === "base777:apps/admin/package.json") return { status: 0, stdout: "OLD" };
+      return { status: 128, stderr: "fatal: path does not exist" };
+    });
+    expect(seam.packageJsonVersions("abc123", "apps/admin/package.json")).toEqual({ before: "OLD", after: undefined });
+    expect(calls.map((call) => [call.command, ...call.args])).toEqual([
+      ["git", "merge-base", "origin/main", "abc123"],
+      ["git", "show", "base777:apps/admin/package.json"],
+      ["git", "show", "abc123:apps/admin/package.json"],
+    ]);
   });
 
   it("runs the migration checks for the PR's commit against origin/main with node", () => {
