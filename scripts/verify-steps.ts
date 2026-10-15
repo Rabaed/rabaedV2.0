@@ -1,6 +1,4 @@
-import { composeProjectOfEnv } from "./lanes.ts";
 import { migrationsDir } from "./migrations.ts";
-import { hostAndPort } from "./test-services.ts";
 
 // Which checks `pnpm verify` (RP-459) runs for a diff. Pure, so it is unit-tested.
 
@@ -32,24 +30,6 @@ export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skippe
 export function finalLine({ sha, dirty, steps }: { sha: string; dirty: boolean; steps: string[] }): string {
   return `pnpm verify passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.`;
 }
-
-const envValue = (env: string, key: string): string | undefined =>
-  new RegExp(`^${key}=(.*)$`, "m").exec(env)?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
-
-/** Where this worktree's Postgres listens, from its .env text (RP-575): the superuser URL's host and port, else POSTGRES_PORT on localhost; the lane from COMPOSE_PROJECT_NAME. */
-export function postgresOfEnv(env: string): { lane: number | undefined; host: string; port: number } | undefined {
-  const laneMatch = /^rabaed-lane(\d+)$/.exec(composeProjectOfEnv(env) ?? "");
-  const lane = laneMatch ? Number(laneMatch[1]) : undefined;
-  const url = envValue(env, "DATABASE_SUPERUSER_URL");
-  if (url) return { lane, ...hostAndPort(url) };
-  const port = Number(envValue(env, "POSTGRES_PORT"));
-  return port ? { lane, host: "localhost", port } : undefined;
-}
-
-/** The message `pnpm verify` stops with when this worktree's Postgres doesn't answer. */
-export const postgresDown = ({ lane, port }: { lane: number | undefined; port: number }): string =>
-  // eslint-disable-next-line rabaed/no-avoid-terms -- `files` is the Docker Compose service's name, not a Document
-  `Postgres for ${lane === undefined ? "this worktree" : `lane ${lane}`} (port ${port}) is down: \`docker compose up -d --wait db mailpit files\``;
 
 /** The last `count` lines of `output`. */
 export function tail(output: string, count: number): string {

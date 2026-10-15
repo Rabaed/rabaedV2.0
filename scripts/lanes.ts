@@ -139,9 +139,15 @@ export function staleProjects({ containers, volumes, cwd, currentProject, exists
   return stale;
 }
 
+/** A key's value in an .env file's text; the value may be quoted. */
+export const envValue = (env: string, key: string): string | undefined =>
+  new RegExp(`^${key}=(.*)$`, "m").exec(env)?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
+
 /** COMPOSE_PROJECT_NAME in an .env file's text; the value may be quoted. */
-export const composeProjectOfEnv = (env: string): string | undefined =>
-  /^COMPOSE_PROJECT_NAME=(.*)$/m.exec(env)?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
+export const composeProjectOfEnv = (env: string): string | undefined => envValue(env, "COMPOSE_PROJECT_NAME");
+
+/** The lane a .env's compose project names (`rabaed-lane5` → `5`); "" for any other. */
+export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(composeProjectOfEnv(env) ?? "")?.[1] ?? "";
 
 /** A worktree of this clone, as lanes:prune --merged sees it. */
 export type WorktreeLane = {

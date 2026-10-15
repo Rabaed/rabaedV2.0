@@ -1,4 +1,5 @@
 import { connect } from "node:net";
+import { envValue, laneOf } from "./lanes.ts";
 
 // The Docker services a test suite needs, checked before it runs (RP-362 retro), so
 // a stopped container fails at once with what to do instead of as a database or fetch
@@ -7,10 +8,23 @@ import { connect } from "node:net";
 // needs Mailpit, which is waited for briefly since it answers a moment after starting.
 
 // eslint-disable-next-line rabaed/no-avoid-terms -- `files` is the Docker Compose service's name, not a Document
-const fix = "run `docker compose up -d --wait db mailpit files`";
+const startServices = "`docker compose up -d --wait db mailpit files`";
 
 /** The message for a service that doesn't answer. */
-export const unreachable = (name: string, port: number) => `${name} for this worktree (port ${port}) isn't reachable: ${fix}.`;
+export const unreachable = (name: string, port: number) => `${name} for this worktree (port ${port}) isn't reachable: run ${startServices}.`;
+
+/** The message `pnpm verify` stops with when this worktree's Postgres doesn't answer (RP-575); lane is "" outside a lane. */
+export const postgresDown = ({ lane, port }: { lane: string; port: number }) =>
+  `Postgres for ${lane === "" ? "this worktree" : `lane ${lane}`} (port ${port}) is down: ${startServices}`;
+
+/** Where this worktree's Postgres listens, from its .env text: the superuser URL's host and port (what the seam suites check), else POSTGRES_PORT on localhost. */
+export function postgresOfEnv(env: string): { lane: string; host: string; port: number } | undefined {
+  const lane = laneOf(env);
+  const url = envValue(env, "DATABASE_SUPERUSER_URL");
+  if (url) return { lane, ...hostAndPort(url) };
+  const port = Number(envValue(env, "POSTGRES_PORT"));
+  return port ? { lane, host: "localhost", port } : undefined;
+}
 
 const defaultPorts: Record<string, number> = { "postgres:": 5432, "postgresql:": 5432, "http:": 80, "https:": 443 };
 

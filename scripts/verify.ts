@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tcpReachable } from "./test-services.ts";
-import { finalLine, postgresDown, postgresOfEnv, selectSteps, tail } from "./verify-steps.ts";
+import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
+import { finalLine, selectSteps, tail } from "./verify-steps.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
