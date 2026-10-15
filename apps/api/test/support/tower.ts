@@ -1,6 +1,10 @@
 // The Tower setup shared by the Links tests (spec RP-289): a Project of C1's
 // (Contractor, its creator) with K1 as its Consultant, and the MARs those tests
 // link to, from Draft to Submitted.
+//
+// The MARs are the legacy MAR (LEGACY_MAR, "MARV"), not the real "MAR", unless the test
+// passes { type: "MAR" } to draft() or inInternalReview(); submitted() always raises the
+// legacy MAR. See draft() for why, and when a test passes the type.
 import { randomUUID } from "node:crypto";
 import type { VisibilityGrant, WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
@@ -134,7 +138,13 @@ export async function buildTower(api: TestApi, { c1, k1 }: { c1: Company; k1: Co
 /** Which Draft `draft` raises: its Trade (Electrical by default) and Type (by default the legacy MAR, LEGACY_MAR). */
 export type DraftOptions = { trade?: string; type?: string };
 
-/** A Draft MAR (by default the legacy MAR: Form Version 3, Workflow Version 2) with the Subject `title`, on `at`'s Project, in Building A. */
+/**
+ * A Draft MAR with the Subject `title`, on `at`'s Project, in Building A. By default it raises the legacy MAR
+ * (LEGACY_MAR: copies of MAR's Form Version 3 and Workflow Version 2, as items started before RP-437 ran), not
+ * the real "MAR": the engine's general tests drive that route. A test about the real MAR's current Version, or
+ * one that binds, duplicates or changes a Project's or Company's MAR Workflow, passes `{ type: "MAR" }`, or its
+ * item runs MARV, not the Workflow it set up (RP-576).
+ */
 export async function draft(at: Tower, engineer: Caller, title: string, { trade = at.electrical, type = LEGACY_MAR }: DraftOptions = {}): Promise<string> {
   // The current MAR Form asks for an approved supplier of the Trade to leave Draft (RP-595); the legacy one has none.
   // Only where the Project's MAR Form has the field (a Company's own Form copy may not).
