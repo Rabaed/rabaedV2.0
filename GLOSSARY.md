@@ -125,7 +125,7 @@ One trackable item in a Project, such as a submittal, an inspection or a snag, m
 _Avoid_: Ticket, request, form (for the instance)
 
 **Work Item Type**:
-A kind of Work Item within a Module, such as Material Submittal, Inspection Request, Snag or Comment, with a short code (e.g. MAR, SAR, DAR) used in filters and Document Numbers. It fixes which Form and which Workflow its Work Items use.
+A kind of Work Item within a Module, such as Material Approval Request, Inspection Request, Snag or Comment, with a short code (e.g. MAR, SAR, DAR) used in filters and Document Numbers. It fixes which Form and which Workflow its Work Items use.
 _Avoid_: Form type, category
 
 **Submittal**:
@@ -134,7 +134,7 @@ _Avoid_: Transmittal
 
 **Material Approval Request (MAR)**:
 A Submittal asking approval of a material or product for the works, from a supplier on the Approved Supplier List for its Trade.
-_Avoid_: Material submittal form
+_Avoid_: Material Submittal, Material submittal form
 
 **Supplier Approval Request (SAR)**:
 A Submittal asking approval of a supplier or manufacturer; approved with Code A or B, the supplier joins the Approved Supplier List.

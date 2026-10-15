@@ -31,7 +31,7 @@ A Workflow version is a directed graph.
 - **Start:** every Workflow has exactly one **Draft** Step (Stage category `draft`) where items are created.
 - **End:** terminal Steps sit in Stages of category `closed_positive`, `closed_negative` or `cancelled`. Reaching one closes the item.
 
-### Example: Rabaed Default "Material Submittal (MAR)"
+### Example: Rabaed Default "Material Approval Request (MAR)"
 
 Settled 2026-10-10 (ADR 0020). As built (RP-437): Version 3 of the Rabaed Default, the document [`apps/admin/workflows/submittal-2-2.json`](../apps/admin/workflows/submittal-2-2.json) (the MAR's `MAR.json` until RP-596 renamed it; the eight submittal Workflows are listed under "Rabaed Default documents"), with the MAR Form Version 5 ([`apps/admin/forms/MAR.json`](../apps/admin/forms/MAR.json)) and the Rabaed Default Screens it names ([`apps/admin/screens`](../apps/admin/screens)); "Rabaed Default documents" below says how they are published.
 
@@ -63,7 +63,7 @@ As built (RP-437, WF-14): the Rabaed Default Workflows, Forms and Screens are JS
 
 | Type | Module | Workflow | Form | Outcomes |
 |---|---|---|---|---|
-| MAR, Material Submittal | Submittals | `submittal-2-2.json` (2→2), Version 3 | `MAR.json`, Version 6 | Review Codes |
+| MAR, Material Approval Request | Submittals | `submittal-2-2.json` (2→2), Version 3 | `MAR.json`, Version 6 | Review Codes |
 | SAR, Supplier Approval Request | Submittals | `submittal-2-2.json` (2→2) | `SAR.json` (RP-591) | Review Codes |
 | DAR, Document Approval Request | Submittals | `submittal-1-1-owner.json` (1→1 → Owner review) | `DAR.json` (RP-591) | Review Codes |
 | WIR, Work Inspection Request | Inspections | `WIR.json`: Draft → Contractor PM (Return to Contractor Engineer) → Submit (Cover Note) → Consultant inspection → Passed, Passed with Comments (its `items_to_create` rows become Comments) or Failed (re-inspection by Revision) | `WIR.json` | Inspection Results |

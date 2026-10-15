@@ -1481,7 +1481,7 @@
   "projectSettings": {
     "approvedSuppliers": {
       "title": "Approved Supplier List",
-      "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. Material submittals choose their supplier from here. Every company on the Project sees this list.",
+      "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. A Material Approval Request (MAR) chooses its supplier from here. Every company on the Project sees this list.",
       "add": "Add supplier",
       "addHelp": "Add a supplier the Project has already approved. A supplier approved through a submittal is added to the list for you.",
       "addSubmit": "Add supplier",

@@ -4,7 +4,7 @@ import type { CodeCState } from "./code-c.ts";
 import { dashboardCard, type DashboardCard } from "./dashboard.ts";
 import { defaultOutcomeSets, type Outcome, type OutcomeKind } from "./outcome.ts";
 
-const mar = { code: "MAR", name: { en: "Material Submittal", ar: "اعتماد المواد" } };
+const mar = { code: "MAR", name: { en: "Material Approval Request", ar: "طلب اعتماد مواد" } };
 /** A Type of `outcomeKind` whose outcome set is still the Rabaed Default one. */
 const kind = (outcomeKind: OutcomeKind, outcomes: readonly Outcome[] = defaultOutcomeSets[outcomeKind]) => ({ outcomeKind, outcomes });
 const counts = (entries: [ChainBucket | null, number][]) => new Map(entries);

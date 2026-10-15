@@ -179,7 +179,7 @@ export function WorkItemListOrKanban(
     query: WorkItemQuery;
     locale: Locale;
     tableLabel: string;
-    /** The toolbar's primary action, e.g. "New Material Submittal". */
+    /** The toolbar's primary action, e.g. "New Submittal". */
     action?: ReactNode;
     /** The Project and Module of the tab: the board's Card view layout and collapsed groups are kept per board. */
     projectId: string;

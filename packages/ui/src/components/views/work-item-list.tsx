@@ -218,7 +218,7 @@ export type WorkItemListProps = {
   itemHref: (id: string) => string;
   /** Shows the List for `query` (the web navigates to `hrefFor(query)`). */
   onQueryChange: (query: WorkItemQuery) => void;
-  /** The toolbar's primary action, at its start, e.g. "New Material Submittal". */
+  /** The toolbar's primary action, at its start, e.g. "New Submittal". */
   action?: ReactNode;
   /** At the toolbar's end: the List / Kanban switch. */
   viewSwitch?: ReactNode;

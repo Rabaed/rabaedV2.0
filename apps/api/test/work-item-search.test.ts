@@ -86,8 +86,8 @@ describe("what Search finds", () => {
   });
 
   it("finds the Type, Trade and Location by name, in Arabic too", async () => {
-    expect((await search(tower.c1Engineer, "Material Submittal")).items).toHaveLength(5);
-    expect((await search(tower.c1Engineer, "اعتماد المواد")).items).toHaveLength(5);
+    expect((await search(tower.c1Engineer, "Material Approval Request")).items).toHaveLength(5);
+    expect((await search(tower.c1Engineer, "طلب اعتماد مواد")).items).toHaveLength(5);
     expect(ids(await search(tower.c1Engineer, "Mechanical"))).toEqual([item.mechanical]);
     expect(ids(await search(tower.c1Engineer, "Building A"))).toHaveLength(5);
   });
@@ -111,7 +111,7 @@ describe("what Search finds", () => {
   });
 
   it("combines with the other filters", async () => {
-    expect(ids(await search(tower.c1Engineer, "Submittal", { trade: [tower.mechanical] }))).toEqual([item.mechanical]);
+    expect(ids(await search(tower.c1Engineer, "Approval Request", { trade: [tower.mechanical] }))).toEqual([item.mechanical]);
   });
 
   it("takes a LIKE wildcard as itself", async () => {
@@ -156,7 +156,7 @@ describe("what Search never finds (V1, V3, V19)", () => {
   });
 
   it("counts no more than the page shows", async () => {
-    const result = await search(tower.c1Engineer, "Submittal");
+    const result = await search(tower.c1Engineer, "Approval Request");
     expect(total(result)).toBe(result.items.length);
   });
 
@@ -192,7 +192,7 @@ describe("Search on the Kanban (RP-349)", () => {
   });
 
   it("counts no more than the cards it shows", async () => {
-    const result = await board(tower.c1Engineer, "Submittal");
+    const result = await board(tower.c1Engineer, "Approval Request");
     expect(cardIds(result).length).toBeGreaterThan(0);
     for (const s of result.stages) expect(s.count, s.key).toBe(result.columns.find((c) => c.stageKey === s.key)!.shown);
   });
