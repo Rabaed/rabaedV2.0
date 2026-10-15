@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foreignSessionLock, ownServerHint, parseProcessTable, parseSessionLock, sessionPidOf } from "./session-lock.ts";
+import { foreignSessionLock, otherLiveSession, ownServerHint, parseProcessTable, parseSessionLock, sessionPidOf } from "./session-lock.ts";
 
 const lock = "claude session RP-461-retro-tooling (pid 1700)";
 // Process list injected: pid -> [parent pid, name]. Pid 1700 is a live foreign claude.exe; 50 -> 40 -> 30 is this process's chain.
@@ -62,6 +62,22 @@ describe("foreignSessionLock", () => {
   it("passes for agent locks and unlocked worktrees", () => {
     expect(foreignSessionLock("claude agent agent-1 (pid 1700)", 50, processes)).toBeUndefined();
     expect(foreignSessionLock(undefined, 50, processes)).toBeUndefined();
+  });
+});
+
+describe("otherLiveSession (RP-585)", () => {
+  it("is true for a live claude pid that is neither this session nor an ancestor", () => {
+    expect(otherLiveSession(1700, 50, processes)).toBe(true);
+  });
+
+  it("is false for this session's own pid, given as CLAUDE_PID or found among the ancestors: its paused subagents' locks name it", () => {
+    expect(otherLiveSession(30, 50, processes)).toBe(false);
+    expect(otherLiveSession(1700, 50, processes, 1700)).toBe(false);
+  });
+
+  it("is false for a pid that is not running, or that runs something other than claude (a reused pid)", () => {
+    expect(otherLiveSession(9999, 50, processes)).toBe(false);
+    expect(otherLiveSession(60, 50, processes)).toBe(false);
   });
 });
 

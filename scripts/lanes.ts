@@ -267,7 +267,7 @@ type TakeoverInput = {
   cwd: string;
   /** Whether a folder exists; decides for a holder git does not list (default: none does, so it is gone). */
   exists?: (dir: string) => boolean;
-  /** Whether a process with the pid runs (default: none does). */
+  /** Whether the pid is another session that still runs (lane:env: worktrees.ts systemLiveness().pidLive, RP-585; default: none is). */
   pidRunning?: (pid: number) => boolean;
   platform?: NodeJS.Platform;
 };

@@ -51,7 +51,7 @@ if (withMerged) {
     .map((w, i) => ({
       path: w.path,
       branch: w.branch,
-      merged: i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
+      merged: i > 0 && w.branch !== undefined && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
       project: composeProjectOfEnv(readEnv(w.path) ?? ""),
     }));
   const known = new Set(stale.map((s) => s.project));

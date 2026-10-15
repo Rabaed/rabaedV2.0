@@ -76,8 +76,17 @@ function isClaude(pid: number, processes: ProcessList): boolean {
   return /^claude(\.exe)?$/i.test(processes.nameOf(pid) ?? "");
 }
 
-/** Whether the pid is a running `claude` process: a lock naming it belongs to a live session or agent (pids are reused). */
-export const isLiveClaude = (pid: number, processes: ProcessList): boolean => processes.isAlive(pid) && isClaude(pid, processes);
+/**
+ * RP-585: whether a lock naming pid belongs to another live Claude session: the pid is a running `claude`
+ * process (pids are reused) and is neither this session (sessionPid, CLAUDE_PID) nor one of ownPid's
+ * ancestors. The app locks a subagent's worktree with its parent session's pid, so a session's own
+ * paused subagents do not hold their worktrees against that session.
+ */
+export function otherLiveSession(pid: number, ownPid: number, processes: ProcessList, sessionPid?: number): boolean {
+  if (!processes.isAlive(pid) || !isClaude(pid, processes) || pid === sessionPid) return false;
+  for (const p of ancestors(ownPid, processes)) if (p === pid) return false;
+  return true;
+}
 
 /** The pid listening on a TCP port, or undefined when none is found or it cannot be read. */
 export function listeningPid(port: number): number | undefined {

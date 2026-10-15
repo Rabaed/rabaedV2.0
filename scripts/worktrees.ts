@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { normalPath, samePath } from "./paths.ts";
-import { isLiveClaude, readCommandLines, readProcessList, type ProcessList } from "./session-lock.ts";
+import { otherLiveSession, readCommandLines, readProcessList, sessionPidOf, type ProcessList } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
 // Cleaning up the app-made agent worktrees `/implement-spec` leaves under
@@ -222,31 +222,39 @@ function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Live
   // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
-  const asked = ahead === 0 && noCommitsYet;
-  return { ...w, ahead, dirty, noCommitsYet, lockLive: asked && live.lockLive(w.locked), heldByProcess: asked && live.heldByProcess(w.path) };
+  const mayBeStarting = ahead === 0 && noCommitsYet;
+  return { ...w, ahead, dirty, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
 }
+
+/** judgeWorktree's answer. neverCommitted: finished although its branch has had no commit of its own. */
+export type Verdict = { finished: boolean; neverCommitted: boolean };
+
+export const NOT_FINISHED: Verdict = { finished: false, neverCommitted: false };
 
 /**
  * isFinished for one worktree against the target (lane:env and lanes:prune; worktrees:clean
  * and worktrees:prune judge gatherFacts' facts by the same rule). neverCommitted: finished
  * although its branch has had no commit of its own. A worktree git cannot read is not finished.
  */
-export function judgeWorktree(w: Worktree, target: string, mainRoot: string, live: Liveness): { finished: boolean; neverCommitted: boolean } {
+export function judgeWorktree(w: Worktree, target: string, mainRoot: string, live: Liveness): Verdict {
   let facts: WorktreeFacts;
   try {
     facts = worktreeFacts(w, target, mainRoot, live);
   } catch {
-    return { finished: false, neverCommitted: false };
+    return NOT_FINISHED;
   }
   const finished = isFinished(facts);
   return { finished, neverCommitted: finished && facts.noCommitsYet };
 }
 
 /**
- * The real Liveness: the process list is read once, on first need. When it cannot be read,
- * every lock with a pid and every folder counts as held, so nothing with no commits yet is finished.
+ * The real Liveness: the process list is read once, on first need. A lock is live when it names
+ * another running Claude session (session-lock.ts otherLiveSession): the app locks a subagent's
+ * worktree with its parent's pid, so this session's own paused subagents do not count. When the
+ * processes cannot be read, every lock with a pid and every folder counts as held, so nothing with
+ * no commits yet is finished.
  */
-export function systemLiveness(platform: NodeJS.Platform = process.platform): Liveness {
+export function systemLiveness(platform: NodeJS.Platform = process.platform): Liveness & { pidLive: (pid: number) => boolean } {
   let processes: ProcessList | null | undefined;
   let commandLines: string[] | null | undefined;
   const read = <T>(f: () => T): T | null => {
@@ -256,13 +264,17 @@ export function systemLiveness(platform: NodeJS.Platform = process.platform): Li
       return null;
     }
   };
+  /** Whether the pid is another live Claude session (true when the processes cannot be read). */
+  const pidLive = (pid: number): boolean => {
+    if (processes === undefined) processes = read(readProcessList);
+    return processes === null || otherLiveSession(pid, process.pid, processes, sessionPidOf(process.env));
+  };
   return {
+    pidLive,
     lockLive: (locked) => {
       if (locked === undefined) return false;
       const pid = lockPid(locked);
-      if (pid === undefined) return true;
-      if (processes === undefined) processes = read(readProcessList);
-      return processes === null || isLiveClaude(pid, processes);
+      return pid === undefined || pidLive(pid);
     },
     heldByProcess: (path) => {
       if (commandLines === undefined) commandLines = read(readCommandLines);
