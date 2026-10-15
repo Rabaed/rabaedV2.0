@@ -63,8 +63,16 @@ In Arabic, Puck's chrome mirrors: navigation and palette on the right, propertie
 7. **An empty section passes `publishProblems`.** This is not a Puck question: decide whether publishing should refuse it.
 8. **Tests need real pointer input.** `PointerEvent`s dispatched from page JavaScript drove Puck's drag (dnd-kit) unreliably: some moves did nothing, and one insert happened twice. Playwright's mouse (CDP) is exact and repeatable. Story tests that drag must use real input.
 
+9. **axe finds WCAG 2.2 AA violations in Puck's chrome.** This came from the story test harness on CI (PR #222, EN and AR), before prototypes were left out of it:
+   - `aria-prohibited-attr` on Puck's loader;
+   - `color-contrast` on the drawer category headings;
+   - `frame-title`: the canvas iframe `#preview-frame` has no accessible name;
+   - `select-name`: an unnamed `select` (Puck's zoom picker).
+
+   A fifth, `scrollable-region-focusable`, was the prototype's own state `<pre>`. All four Puck ones look fixable with CSS, Puck `overrides` or a title set on the iframe, but the real builder must pass the harness, so budget for it.
+
 **Not tested here:**
-- keyboard drag and screen-reader use of Puck's chrome (WCAG 2.2 AA is required);
+- keyboard drag and screen-reader use of Puck's chrome (WCAG 2.2 AA is required; axe's automated findings are gap 9);
 - touch (phone/tablet);
 - bundle size and load time on a Next.js route;
 - a large Form (100+ fields);

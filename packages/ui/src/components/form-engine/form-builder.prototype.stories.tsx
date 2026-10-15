@@ -51,9 +51,8 @@ const initial = formSchema.parse({
 
 const meta = {
   title: "Prototypes/Puck form builder",
+  // Throwaway: test/stories.test.tsx leaves `*.prototype.stories.tsx` out.
   parameters: { layout: "fullscreen", a11y: { test: "off" } },
-  // Throwaway: kept out of the story test harness.
-  tags: ["!test"],
 } satisfies Meta;
 
 export default meta;

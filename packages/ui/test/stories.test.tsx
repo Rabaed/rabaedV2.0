@@ -46,7 +46,8 @@ beforeAll(async () => {
 
 type StoriesModule = Parameters<typeof composeStories>[0];
 type ComposedStory = ReturnType<typeof composeStory>;
-const modules = import.meta.glob<StoriesModule>("../src/**/*.stories.tsx", { eager: true });
+// Throwaway prototypes (`*.prototype.stories.tsx`, /prototype) are left out, unimported: they answer a question, and are not production UI.
+const modules = import.meta.glob<StoriesModule>(["../src/**/*.stories.tsx", "!../src/**/*.prototype.stories.tsx"], { eager: true });
 
 const nonLatinDigits = /[٠-٩۰-۹]/;
 
