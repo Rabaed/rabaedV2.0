@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { laneOf, newMigration, nextDay, type NewMigrationSeam } from "./migration-new.ts";
+import { laneOf } from "./lanes.ts";
+import { newMigration, nextDay, type NewMigrationSeam } from "./migration-new.ts";
 
 const table = `# Migration days
 
