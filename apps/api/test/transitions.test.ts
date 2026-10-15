@@ -3,11 +3,14 @@
 // The Engineer sends a Draft to the Contractor PM pool; a PM picks it up and
 // returns it with a reason. Nobody outside the Contractor sees any of it.
 import { randomUUID } from "node:crypto";
-import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
+import { createDb } from "@rabaed/db";
+import { takeTransitionRequest, type WorkItemDetail, type WorkItemHistory } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { takeTransition } from "../src/work-items/work-items.ts";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -303,6 +306,65 @@ describe("a Transition", () => {
     expect((await engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review" })).statusCode).toBe(400);
     expect((await tryTake(api.anonymous(), id, "send_for_review")).statusCode).toBe(401);
     await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/pick-up`));
+  });
+});
+
+// RP-600: a second request with the same key whose checks straddled the first's
+// commit was refused (409 no_route) instead of replaying it.
+describe("a Transition sent again while the first one commits", () => {
+  const appDb = createDb(testDatabaseUrls().app, { max: 2 });
+  const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+  afterAll(() => Promise.all([appDb.destroy(), migrator.destroy()]));
+
+  /** True once a session waits for an advisory lock: the key's, the only one these take. */
+  const waitingForKey = async () =>
+    (
+      await sql<{ n: number }>`
+        select count(*)::int as n from pg_locks
+        where locktype = 'advisory' and not granted
+          and database = (select oid from pg_database where datname = current_database())
+      `.execute(migrator)
+    ).rows[0]!.n > 0;
+
+  it("replays it, whichever of the two goes first", async () => {
+    const id = await createDraft(engineer, "Emergency lighting");
+    const { rows } = await sql<{ id: string }>`
+      select assignee_member_id as id from step_assignment where work_item_id = ${id}::uuid and status = 'picked_up'
+    `.execute(migrator);
+    const memberId = rows[0]!.id;
+    const input = takeTransitionRequest.parse({ transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() });
+
+    // The second request is held once it has read the item's buttons, before it routes the Transition.
+    let reached = () => {};
+    const atButtons = new Promise<void>((resolve) => (reached = resolve));
+    let release = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const held = appDb.withPlugin({
+      transformQuery: ({ node }) => node,
+      async transformResult({ result }) {
+        if (result.rows.some((r) => "offers_assign_to" in r)) {
+          reached();
+          await released;
+        }
+        return result;
+      },
+    });
+    const second = takeTransition(held, memberId, id, input, new Date());
+    await atButtons;
+
+    // The first runs to its commit meanwhile, or waits for the key the second holds.
+    let firstDone = false;
+    const first = takeTransition(appDb, memberId, id, input, new Date()).finally(() => (firstDone = true));
+    try {
+      for (let i = 0; i < 200 && !firstDone && !(await waitingForKey()); i++) await new Promise((r) => setTimeout(r, 25));
+      expect(firstDone || (await waitingForKey())).toBe(true);
+    } finally {
+      release();
+    }
+
+    expect(await Promise.all([first, second])).toEqual([{ ok: true }, { ok: true }]);
+    expect((await history(engineer, id)).filter((e) => e.type === "transition")).toHaveLength(1);
+    expect((await detail(engineer, id)).stage.key).toBe("internal_review");
   });
 });
 
