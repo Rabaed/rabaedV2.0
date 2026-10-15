@@ -14,9 +14,11 @@ export const workflowRoutes =
   (ctx: AdminContext): FastifyPluginAsyncZod =>
   async (app) => {
     const typeParams = z.object({ typeCode: z.string().trim().min(1).max(32) });
+    // `?workflow=` names one of the Type's other Rabaed Defaults (RP-596); without it, the one the Type runs.
+    const workflowQuery = z.object({ workflow: z.uuid().optional() });
 
-    app.post("/v1/workflows/:typeCode/validate", { schema: { params: typeParams, body: validateWorkflowRequest } }, async (request) => {
-      const result = await validateRabaedDefaultWorkflow(ctx.db, request.params.typeCode, request.body.definition);
+    app.post("/v1/workflows/:typeCode/validate", { schema: { params: typeParams, querystring: workflowQuery, body: validateWorkflowRequest } }, async (request) => {
+      const result = await validateRabaedDefaultWorkflow(ctx.db, request.params.typeCode, request.body.definition, request.query.workflow);
       if (!result) throw new HttpError(404, "not_found");
       return result;
     });
@@ -25,8 +27,11 @@ export const workflowRoutes =
       ["draft", false],
       ["publish", true],
     ] as const) {
-      app.post(`/v1/workflows/:typeCode/${path}`, { schema: { params: typeParams, body: rabaedWorkflowRequest } }, async (request, reply) => {
-        const result = await writeRabaedWorkflow(ctx.db, ctx.requireEngineer(request), request.params.typeCode, request.body, { publish });
+      app.post(`/v1/workflows/:typeCode/${path}`, { schema: { params: typeParams, querystring: workflowQuery, body: rabaedWorkflowRequest } }, async (request, reply) => {
+        const result = await writeRabaedWorkflow(ctx.db, ctx.requireEngineer(request), request.params.typeCode, request.body, {
+          publish,
+          workflowId: request.query.workflow,
+        });
         if (result.ok) return reply.code(200).send({ versionNo: result.versionNo });
         if (result.reason === "type_not_found") throw new HttpError(404, "not_found");
         if (result.reason === "invalid_definition") return reply.code(422).send({ error: result.reason, issues: result.issues });

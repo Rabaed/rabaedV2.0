@@ -21,9 +21,16 @@ export type WorkflowSettingsType = {
   moduleKey: ModuleKey;
   /** The Workflow new items run for every raiser without an exception. */
   workflow: WorkflowSettingsWorkflow & {
-    /** "Rabaed Default" while the Project binds none of its own, else "Project copy". */
+    /** "Rabaed Default" while the Project binds none of its own or binds one of the Type's Rabaed Defaults, else "Project copy". */
     source: "rabaed_default" | "project_copy";
   };
+  /**
+   * The Rabaed Defaults made for the Type that have a published Version, for everyone who reads
+   * the Project's Workflows (V20): the Workflow the Type runs by default and, for a Type with
+   * several (RP-596: the eight submittal Workflows), the others, which a Project Admin may bind
+   * or duplicate. `bound` is the one the Project's new items run.
+   */
+  rabaedDefaults: (WorkflowSettingsWorkflow & { bound: boolean; isTypeDefault: boolean })[];
   /** Exceptions for one raising Participant, as the viewer may read them (V15); the Participant's name as a Project Admin or that Participant's Member reads it. */
   exceptions: { participantId: string; companyName: BilingualText; workflow: WorkflowSettingsWorkflow }[];
   /** For Project Admins: the Project's own Workflows made for the Type, published or not, which they may bind or keep editing. */

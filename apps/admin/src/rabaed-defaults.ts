@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { rabaedDefaultWorkflowId, readLatestPublishedDefinition, type Db, type RabaedDefaultResult } from "@rabaed/db";
+import { readLatestPublishedDefinition, type Db, type RabaedDefaultResult } from "@rabaed/db";
 import { compareStrings, formSchema, parseWorkflowDefinition, sameJson, type WorkflowDefinition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { publishFormVersion, rabaedDefaultFormId, type PublishFormResult } from "./forms.ts";
@@ -32,17 +32,80 @@ export const rabaedDefaultScreens = [
 ] as const;
 
 /**
- * A Rabaed Default Type's Form and Workflow documents, by file. The three submittals (MAR,
- * SAR, DAR) have a Form each (RP-591, form-engine.md §2.11) and, until the eight Default
- * Workflows exist (RP-596), run the MAR's Workflow document. A Type whose `form` is null
- * publishes no Form.
+ * The eight Rabaed Default submittal Workflows (RP-596, ADR 0022): the number of reviewers on
+ * each side, 1 (the PM alone) or 2 (Engineer, then PM), each with and without the Owner's
+ * final review. `key` is the `default_key` of the Rabaed Default it is published into, one per
+ * submittal Type; the name is the Workflow's, in both languages, Latin digits in both.
+ */
+export const submittalWorkflows = [
+  {
+    key: "1-1",
+    file: "submittal-1-1.json",
+    name: { en: "1→1 Contractor PM → Consultant PM", ar: "1→1 مدير المقاول ← مدير الاستشاري" },
+  },
+  {
+    key: "1-2",
+    file: "submittal-1-2.json",
+    name: { en: "1→2 Contractor PM → Consultant Engineer → Consultant PM", ar: "1→2 مدير المقاول ← مهندس الاستشاري ← مدير الاستشاري" },
+  },
+  {
+    key: "2-1",
+    file: "submittal-2-1.json",
+    name: { en: "2→1 Contractor Engineer → Contractor PM → Consultant PM", ar: "2→1 مهندس المقاول ← مدير المقاول ← مدير الاستشاري" },
+  },
+  {
+    key: "2-2",
+    file: "submittal-2-2.json",
+    name: {
+      en: "2→2 Contractor Engineer → Contractor PM → Consultant Engineer → Consultant PM",
+      ar: "2→2 مهندس المقاول ← مدير المقاول ← مهندس الاستشاري ← مدير الاستشاري",
+    },
+  },
+  {
+    key: "1-1-owner",
+    file: "submittal-1-1-owner.json",
+    name: { en: "1→1 Contractor PM → Consultant PM → Owner review", ar: "1→1 مدير المقاول ← مدير الاستشاري ← مراجعة المالك" },
+  },
+  {
+    key: "1-2-owner",
+    file: "submittal-1-2-owner.json",
+    name: {
+      en: "1→2 Contractor PM → Consultant Engineer → Consultant PM → Owner review",
+      ar: "1→2 مدير المقاول ← مهندس الاستشاري ← مدير الاستشاري ← مراجعة المالك",
+    },
+  },
+  {
+    key: "2-1-owner",
+    file: "submittal-2-1-owner.json",
+    name: {
+      en: "2→1 Contractor Engineer → Contractor PM → Consultant PM → Owner review",
+      ar: "2→1 مهندس المقاول ← مدير المقاول ← مدير الاستشاري ← مراجعة المالك",
+    },
+  },
+  {
+    key: "2-2-owner",
+    file: "submittal-2-2-owner.json",
+    name: {
+      en: "2→2 Contractor Engineer → Contractor PM → Consultant Engineer → Consultant PM → Owner review",
+      ar: "2→2 مهندس المقاول ← مدير المقاول ← مهندس الاستشاري ← مدير الاستشاري ← مراجعة المالك",
+    },
+  },
+] as const;
+
+/**
+ * A Rabaed Default Type's Form and Workflow documents, by file. A Type whose `form` is null
+ * publishes no Form. `workflow` is the document of the Workflow the Type runs while a Project
+ * binds none (the Type's own `workflow_definition_id`): the MAR and the SAR run 2→2, the DAR
+ * 1→1 → Owner review (RP-596). The three submittals also have each of the eight (`variants`),
+ * published as Rabaed Defaults of their own that a Project Admin may bind or duplicate; `workflow`
+ * is one of them.
  */
 export const rabaedDefaultTypes = [
-  { type: "MAR", form: "MAR.json", workflow: "MAR.json" },
-  { type: "SAR", form: "SAR.json", workflow: "MAR.json" },
-  { type: "DAR", form: "DAR.json", workflow: "MAR.json" },
-  { type: "WIR", form: "WIR.json", workflow: "WIR.json" },
-  { type: "CMT", form: "CMT.json", workflow: "CMT.json" },
+  { type: "MAR", form: "MAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows },
+  { type: "SAR", form: "SAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows },
+  { type: "DAR", form: "DAR.json", workflow: "submittal-1-1-owner.json", variants: submittalWorkflows },
+  { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null },
+  { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>
@@ -92,20 +155,76 @@ export async function publishRabaedDefaults(migratorDb: Db, { engineerId, reason
     if (!result.ok) return { ok: false, kind: "form", name: type, result };
     done.push({ kind: "form", name: type, versionNo: result.versionNo, published: true });
   }
-  for (const { type, workflow } of rabaedDefaultTypes) {
-    const definition = rabaedWorkflowFile(workflow);
-    const definitionId = await rabaedDefaultWorkflowId(migratorDb, type);
-    const latest = definitionId ? await readLatestPublishedDefinition(migratorDb, definitionId) : null;
-    const parsed = parseWorkflowDefinition(definition);
-    if (latest && parsed.ok && sameDefinition(latest.definition, parsed.definition) && !(await pinsOlderScreens(migratorDb, definitionId!))) {
-      done.push({ kind: "workflow", name: type, versionNo: latest.versionNo, published: false });
-      continue;
+  for (const entry of rabaedDefaultTypes) {
+    const { type, workflow } = entry;
+    // The Workflow the Type runs, then the Type's other Rabaed Defaults (RP-596).
+    const targets: { name: string; file: string; variant: SubmittalWorkflow | null }[] = [
+      { name: type, file: workflow, variant: entry.variants?.find((v) => v.file === workflow) ?? null },
+      ...(entry.variants ?? []).filter((v) => v.file !== workflow).map((v) => ({ name: `${type}:${v.key}`, file: v.file, variant: v })),
+    ];
+    for (const { name, file, variant } of targets) {
+      const definition = rabaedWorkflowFile(file);
+      const definitionId = await ensureRabaedWorkflow(migratorDb, type, variant, file === workflow);
+      const latest = definitionId ? await readLatestPublishedDefinition(migratorDb, definitionId) : null;
+      const parsed = parseWorkflowDefinition(definition);
+      if (latest && parsed.ok && sameDefinition(latest.definition, parsed.definition) && !(await pinsOlderScreens(migratorDb, definitionId!))) {
+        done.push({ kind: "workflow", name, versionNo: latest.versionNo, published: false });
+        continue;
+      }
+      const result = await writeRabaedWorkflow(migratorDb, engineerId, type, { definition, reason }, { publish: true, workflowId: definitionId });
+      if (!result.ok) return { ok: false, kind: "workflow", name, result };
+      done.push({ kind: "workflow", name, versionNo: result.versionNo, published: true, warnings: result.warnings.map((w) => `${w.code}: ${w.message.en}`) });
     }
-    const result = await writeRabaedWorkflow(migratorDb, engineerId, type, { definition, reason }, { publish: true });
-    if (!result.ok) return { ok: false, kind: "workflow", name: type, result };
-    done.push({ kind: "workflow", name: type, versionNo: result.versionNo, published: true, warnings: result.warnings.map((w) => `${w.code}: ${w.message.en}`) });
   }
   return { ok: true, done, moved: await moveInFlightItems(migratorDb) };
+}
+
+/** One of the eight submittal Workflows, as `submittalWorkflows` lists it. */
+type SubmittalWorkflow = (typeof submittalWorkflows)[number];
+
+/**
+ * The Rabaed Default Workflow of Type `typeCode` that publishes `variant`'s document, with its
+ * `default_key` and name set (RP-596). `runsIt` is whether the Type runs that document: its own
+ * Rabaed Default (`workflow_definition_id`) is then that Workflow and takes the key and the name;
+ * each of the other seven is a row of its own, made the first time. A `variant` of null is a Type
+ * without the eight: its own Rabaed Default, untouched. Null when the Type has none. The name
+ * follows the document list, so renaming one there renames the Workflow on the next publish.
+ */
+async function ensureRabaedWorkflow(db: Db, typeCode: string, variant: SubmittalWorkflow | null, runsIt: boolean): Promise<string | null> {
+  const type = await db
+    .selectFrom("work_item_type")
+    .select(["id", "workflow_definition_id"])
+    .where("owner_kind", "=", "rabaed")
+    .where("code", "=", typeCode)
+    .executeTakeFirst();
+  if (!type) return null;
+  if (!variant) return type.workflow_definition_id;
+  const existing =
+    (await db
+      .selectFrom("workflow_definition")
+      .select("id")
+      .where("work_item_type_id", "=", type.id)
+      .where("owner_kind", "=", "rabaed")
+      .where("default_key", "=", variant.key)
+      .executeTakeFirst())?.id ?? null;
+  const id = existing ?? (runsIt ? type.workflow_definition_id : null);
+  if (id === null) {
+    const inserted = await db
+      .insertInto("workflow_definition")
+      .values({ owner_kind: "rabaed", name: JSON.stringify(variant.name), work_item_type_id: type.id, default_key: variant.key })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    return inserted.id;
+  }
+  const row = await db.selectFrom("workflow_definition").select(["name", "default_key"]).where("id", "=", id).executeTakeFirstOrThrow();
+  if (row.default_key !== variant.key || !sameJson(row.name, variant.name)) {
+    await db
+      .updateTable("workflow_definition")
+      .set({ default_key: variant.key, name: JSON.stringify(variant.name), updated_at: sql`now()` })
+      .where("id", "=", id)
+      .execute();
+  }
+  return id;
 }
 
 /**

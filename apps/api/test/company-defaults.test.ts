@@ -5,6 +5,7 @@
 // from the Rabaed Defaults; a Company joining it gets nothing copied and runs the Project's
 // copies, with no exception. Library Screens and Forms have no api yet (the Library is
 // RP-442), so the migrator writes those; the Workflow is copied through the api.
+import { submittalWorkflows } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { CompanyDefaults, ScreenList } from "@rabaed/domain";
@@ -21,9 +22,9 @@ afterAll(async () => {
 });
 
 const label = (en: string) => ({ en, ar: en });
-// The MAR's Rabaed Default, on Workflow Version 3 since RP-437 (ADR 0020). The tests raise the
+// The MAR's Rabaed Default, 2→2 (RP-596), on Workflow Version 3 since RP-437 (ADR 0020). The tests raise the
 // MAR itself (`{ type: "MAR" }`): `draft` raises the legacy MAR by default, a Type of its own.
-const MAR = { name: { en: "Material Submittal (MAR)", ar: "اعتماد المواد (MAR)" }, versionNo: 3 };
+const MAR = { name: submittalWorkflows[3].name, versionNo: 3 };
 const TMC_ROUTE = label("TMC MAR route");
 const reply = {
   sections: [{ key: "reply", title: label("Reply"), fields: [{ key: "remarks", type: "textarea", label: label("Remarks") }] }],

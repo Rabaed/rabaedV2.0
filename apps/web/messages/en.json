@@ -1560,6 +1560,8 @@
       "backBody": "{workflow} stays in this Project as a copy. Items already running keep their Version.",
       "backSubmit": "Go back to the Default",
       "backDone": "{type} runs the Rabaed Default again.",
+      "defaultsTitle": "Rabaed Default Workflows",
+      "defaultsIntro": "The Workflows Rabaed provides for a Type: how many reviewers each side has (1 is the PM alone, 2 is the Engineer, then the PM), with and without the Owner's final review. A Project Admin uses one for the Type, or duplicates it to edit.",
       "copiesTitle": "This Project's own Workflows",
       "copiesIntro": "Copies made in this Project. Publish a copy in the builder, then use it for its Type.",
       "colState": "Version in use",

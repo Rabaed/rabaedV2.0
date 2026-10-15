@@ -10,11 +10,18 @@ import type { WorkflowBuilderRead } from "./workflow-authoring.ts";
 // edits the Rabaed Default outcome sets and Stage sets. Every action carries the reason
 // Rabaed Admin logs (visibility.md V9).
 
-/** One Rabaed Default Work Item Type and its Workflow, in the list. */
+/**
+ * One Rabaed Default Workflow of a Rabaed Work Item Type, in the list: a Type has one that new
+ * items run while a Project binds none (`isTypeDefault`) and, since RP-596, may have others a
+ * Project Admin may bind (the eight submittal Workflows).
+ */
 export const adminWorkflowSummary = z.object({
   code: z.string(),
   name: bilingualText,
   moduleKey: moduleKeySchema,
+  workflowId: z.uuid(),
+  workflowName: bilingualText,
+  isTypeDefault: z.boolean(),
   publishedVersions: z.array(z.number().int()),
   hasDraft: z.boolean(),
 });
@@ -23,8 +30,15 @@ export type AdminWorkflowSummary = z.infer<typeof adminWorkflowSummary>;
 /** What the admin builder page edits with: the builder's read, plus the Rabaed Default outcome set in full. */
 export type AdminWorkflowRead = WorkflowBuilderRead & { moduleKey: z.infer<typeof moduleKeySchema>; outcomeSet: Outcome[] };
 
-/** Copies another Rabaed Default's Workflow (its draft, else its latest Version) in as this Type's draft. */
-export const adminDuplicateWorkflowRequest = z.object({ fromTypeCode: z.string().trim().min(1).max(32), reason: engineerReason });
+/**
+ * Copies another Rabaed Default's Workflow (its draft, else its latest Version) in as this Type's draft:
+ * the Type's own, or `fromWorkflowId` of that Type (RP-596).
+ */
+export const adminDuplicateWorkflowRequest = z.object({
+  fromTypeCode: z.string().trim().min(1).max(32),
+  fromWorkflowId: z.uuid().optional(),
+  reason: engineerReason,
+});
 export type AdminDuplicateWorkflowRequest = z.infer<typeof adminDuplicateWorkflowRequest>;
 
 /** A new outcome of a Rabaed Default set. */

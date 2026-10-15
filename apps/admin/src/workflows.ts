@@ -1,4 +1,4 @@
-import { rabaedDefaultWorkflowId, writeRabaedDefaultWorkflow, type Db, type RabaedDefaultResult } from "@rabaed/db";
+import { rabaedWorkflowTargetId, writeRabaedDefaultWorkflow, type Db, type RabaedDefaultResult } from "@rabaed/db";
 import type { RabaedWorkflowRequest } from "@rabaed/domain";
 import { asEngineer } from "./admin-action.ts";
 import { Refused, refusable } from "./refusals.ts";
@@ -24,12 +24,12 @@ export async function writeRabaedWorkflow(
   engineerId: string,
   typeCode: string,
   input: RabaedWorkflowRequest,
-  { publish }: { publish: boolean },
+  { publish, workflowId }: { publish: boolean; workflowId?: string | null | undefined },
 ): Promise<RabaedDefaultResult> {
   let refusal: Refusal | undefined;
   const result = await refusable(() =>
     asEngineer(db, { engineerId, action: publish ? "publish_workflow" : "save_workflow_draft", reason: input.reason }, async (trx) => {
-      const written = await writeRabaedDefaultWorkflow(trx, typeCode, input.definition, { publish, changeNote: input.changeNote });
+      const written = await writeRabaedDefaultWorkflow(trx, typeCode, input.definition, { publish, changeNote: input.changeNote, workflowId });
       if (!written.ok) {
         refusal = written;
         throw new Refused(written.reason);
@@ -48,7 +48,7 @@ export async function writeRabaedWorkflow(
   if (refusal!.reason === "projects_lack_entries") {
     const { projects, outcomes, stages } = refusal!;
     await asEngineer(db, { engineerId, action: "refuse_workflow_publish", reason: input.reason }, async (trx) => ({
-      target: { kind: "workflow_definition", id: await rabaedDefaultWorkflowId(trx, typeCode) },
+      target: { kind: "workflow_definition", id: await rabaedWorkflowTargetId(trx, typeCode, workflowId) },
       after: { typeCode, projects, outcomes, stages },
       result: null,
     }));

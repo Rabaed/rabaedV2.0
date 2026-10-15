@@ -110,10 +110,16 @@ describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
         { type: "CMT", moved: 0 },
         { type: "MAR", moved: 0 },
       ]);
+      // Each submittal Type: the Workflow it runs, then its seven other Rabaed Defaults (RP-596), in the list's order.
+      const others = (type: string, run: string) =>
+        ["1-1", "1-2", "2-1", "2-2", "1-1-owner", "1-2-owner", "2-1-owner", "2-2-owner"].filter((k) => k !== run).map((k) => [`${type}:${k}`, 1]);
       expect(again.ok && again.done.filter((d) => d.kind === "workflow").map((d) => [d.name, d.versionNo])).toEqual([
         ["MAR", 3],
+        ...others("MAR", "2-2"),
         ["SAR", 1],
+        ...others("SAR", "2-2"),
         ["DAR", 1],
+        ...others("DAR", "1-1-owner"),
         ["WIR", 1],
         ["CMT", 2],
       ]);

@@ -15,7 +15,7 @@ type Notice = { kind: "ok" | "error"; text: string } | null;
  * page; "Save draft" and the builder's Publish send them with the reason typed above, which
  * Rabaed Admin logs against the Engineer (V9). Validate is the server's check and asks for none.
  */
-export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale: Locale }) {
+export function WorkflowEditor({ typeCode, workflowId, locale }: { typeCode: string; workflowId: string | null; locale: Locale }) {
   const s = strings(locale);
   const [read, setRead] = useState<AdminWorkflowRead | "failed" | "missing" | null>(null);
   const [types, setTypes] = useState<AdminWorkflowSummary[]>([]);
@@ -31,11 +31,13 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
   const dirty = useRef(false);
   const known = useRef<readonly WorkflowProblem[]>([]);
   const reasonInput = useRef<HTMLInputElement>(null);
+  // One of the Type's other Rabaed Defaults is named in the query (RP-596); without it, the one the Type runs.
   const api_ = `/v1/workflows/${encodeURIComponent(typeCode)}`;
+  const qs = workflowId ? `?workflow=${encodeURIComponent(workflowId)}` : "";
 
   const load = useCallback(async () => {
     try {
-      const next = await api<AdminWorkflowRead>("GET", api_);
+      const next = await api<AdminWorkflowRead>("GET", `${api_}${qs}`);
       latest.current = next.workflow.draft?.definition ?? next.workflow.published?.definition ?? { steps: [], transitions: [], layout: {} };
       dirty.current = false;
       setRead(next);
@@ -44,7 +46,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
       setRead(error instanceof ApiError && error.status === 404 ? "missing" : "failed");
       return null;
     }
-  }, [api_]);
+  }, [api_, qs]);
   useEffect(() => {
     void load();
     api<{ types: AdminWorkflowSummary[] }>("GET", "/v1/workflows").then((r) => setTypes(r.types), () => undefined);
@@ -65,14 +67,14 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
   const check = useCallback(
     async (definition: WorkflowDefinition): Promise<readonly WorkflowProblem[]> => {
       try {
-        const found = (await api<{ problems: WorkflowProblem[] }>("POST", `${api_}/validate`, { definition })).problems;
+        const found = (await api<{ problems: WorkflowProblem[] }>("POST", `${api_}/validate${qs}`, { definition })).problems;
         show(found);
         return found;
       } catch {
         return known.current;
       }
     },
-    [api_],
+    [api_, qs],
   );
   // The draft as it opens is checked once.
   const opened = useRef(false);
@@ -101,7 +103,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
     setSaveState({ kind: "saving" });
     setNotice(null);
     try {
-      await api("POST", `${api_}/draft`, { definition: latest.current, reason: reason.trim() });
+      await api("POST", `${api_}/draft${qs}`, { definition: latest.current, reason: reason.trim() });
       dirty.current = false;
       setSaveState({ kind: "saved", at: new Date() });
       setNotice({ kind: "ok", text: s.saved });
@@ -118,7 +120,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
     if (needReason()) return { ok: false, problems: known.current };
     try {
       // The builder's change note is the Version's (RP-555); the reason is what admin_action logs (V9).
-      const { versionNo } = await api<{ versionNo: number }>("POST", `${api_}/publish`, { definition: latest.current, reason: reason.trim(), changeNote });
+      const { versionNo } = await api<{ versionNo: number }>("POST", `${api_}/publish${qs}`, { definition: latest.current, reason: reason.trim(), changeNote });
       setNotice({ kind: "ok", text: s.published(versionNo) });
       opened.current = false;
       await load();
@@ -138,7 +140,9 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
     if (needReason() || copyFrom === "") return;
     setNotice(null);
     try {
-      await api("POST", `${api_}/duplicate`, { fromTypeCode: copyFrom, reason: reason.trim() });
+      const from = types.find((t) => t.workflowId === copyFrom);
+      if (!from) return;
+      await api("POST", `${api_}/duplicate${qs}`, { fromTypeCode: from.code, fromWorkflowId: from.workflowId, reason: reason.trim() });
       opened.current = false;
       await load();
       setGeneration((g) => g + 1);
@@ -179,7 +183,8 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
   const { workflow } = read;
   const draftVersion = workflow.draft?.versionNo ?? Math.max(0, ...workflow.publishedVersions) + 1;
   const start = workflow.draft?.definition ?? workflow.published?.definition ?? { steps: [], transitions: [], layout: {} };
-  const others = types.filter((t) => t.code !== typeCode);
+  // Every other Rabaed Default Workflow: another Type's, or another of this Type's (RP-596).
+  const others = types.filter((t) => t.workflowId !== workflow.id);
 
   return (
     <div className="flex flex-col gap-4">
@@ -188,6 +193,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
           <h1 className="text-xl font-semibold">
             <span dir="ltr">{read.type.code}</span> · {read.type.name[locale]}
           </h1>
+          {workflowId && <span className="text-muted">{workflow.name[locale]}</span>}
           <Badge>{message(locale, `projectTabs.${read.moduleKey}`)}</Badge>
           {workflow.publishedVersions.map((v) => (
             <Badge key={v} tone={v === Math.max(...workflow.publishedVersions) ? "brand" : "neutral"}>
@@ -216,7 +222,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
                 value={copyFrom}
                 onValueChange={setCopyFrom}
                 placeholder={s.chooseType}
-                options={others.map((t) => ({ value: t.code, label: `${t.code} · ${t.name[locale]}` }))}
+                options={others.map((t) => ({ value: t.workflowId, label: `${t.code} · ${t.workflowName[locale]}` }))}
               />
             </Field>
             <Button variant="secondary" onClick={() => void duplicate()} disabled={copyFrom === ""}>
@@ -263,7 +269,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
         needReason={needReason}
         onChanged={() => {
           // The Stage and outcome sets feed the builder's pickers; its own edits stay.
-          void api<AdminWorkflowRead>("GET", api_).then((next) => setRead((current) => (typeof current === "object" && current ? { ...current, stages: next.stages, outcomes: next.outcomes, outcomeSet: next.outcomeSet } : next)));
+          void api<AdminWorkflowRead>("GET", `${api_}${qs}`).then((next) => setRead((current) => (typeof current === "object" && current ? { ...current, stages: next.stages, outcomes: next.outcomes, outcomeSet: next.outcomeSet } : next)));
         }}
       />
     </div>

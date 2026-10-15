@@ -9,7 +9,7 @@ import { WorkflowEditor } from "./workflow-editor.tsx";
 import { WorkflowList } from "./workflow-list.tsx";
 
 // Rabaed Admin -> Workflows (RP-443): one page, the list of the Rabaed Default Workflows and,
-// at `#/<Type code>`, the builder with that Type's outcome and Stage sets. The sign-in and the
+// at `#/<Type code>` (or `#/<Type code>/<Workflow id>`), the builder with that Type's outcome and Stage sets. The sign-in and the
 // other screens are the page at `/`; the language is the one it keeps.
 
 const localeKey = "rabaed-admin-locale";
@@ -21,15 +21,20 @@ const storedLocale = (): Locale => {
   }
 };
 
-const typeCodeOfHash = (): string | null => {
-  const code = decodeURIComponent(window.location.hash.replace(/^#\/?/, ""));
-  return code === "" ? null : code;
+/** `#/<Type code>` the Workflow the Type runs, `#/<Type code>/<Workflow id>` one of its other Rabaed Defaults (RP-596). */
+const targetOfHash = (): string | null => {
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  return hash === "" ? null : hash;
+};
+const parseTarget = (target: string): { typeCode: string; workflowId: string | null } => {
+  const [code = "", workflowId] = target.split("/");
+  return { typeCode: decodeURIComponent(code), workflowId: workflowId ? decodeURIComponent(workflowId) : null };
 };
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(storedLocale);
   const [signedIn, setSignedIn] = useState<"loading" | "out" | { email: string }>("loading");
-  const [typeCode, setTypeCode] = useState<string | null>(typeCodeOfHash);
+  const [target, setTarget] = useState<string | null>(targetOfHash);
   const s = strings(locale);
 
   useEffect(() => {
@@ -38,7 +43,7 @@ export function App() {
     document.title = `${s.workflows} · ${s.appName}`;
   }, [locale, s]);
   useEffect(() => {
-    const onHash = () => setTypeCode(typeCodeOfHash());
+    const onHash = () => setTarget(targetOfHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -101,7 +106,11 @@ export function App() {
           </p>
         )}
         {typeof signedIn === "object" &&
-          (typeCode === null ? <WorkflowList locale={locale} /> : <WorkflowEditor key={typeCode} typeCode={typeCode} locale={locale} />)}
+          (target === null ? (
+            <WorkflowList locale={locale} />
+          ) : (
+            <WorkflowEditor key={target} {...parseTarget(target)} locale={locale} />
+          ))}
       </main>
     </DirectionProvider>
   );

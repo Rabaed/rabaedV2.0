@@ -40,13 +40,23 @@ export function WorkflowList({ locale }: { locale: Locale }) {
           </TableHeader>
           <TableBody>
             {types.map((type) => (
-              <TableRow key={type.code}>
+              <TableRow key={type.workflowId}>
                 <TableCell>
                   <span dir="ltr" className="font-semibold">
                     {type.code}
                   </span>
                 </TableCell>
-                <TableCell>{type.name[locale]}</TableCell>
+                <TableCell>
+                  {types.some((other) => other.code === type.code && other.workflowId !== type.workflowId) ? (
+                    // A Type with several Rabaed Defaults (RP-596): each by its own name, the one new items run marked.
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span>{type.workflowName[locale]}</span>
+                      {type.isTypeDefault && <Badge tone="brand">{s.runsByDefault}</Badge>}
+                    </span>
+                  ) : (
+                    type.name[locale]
+                  )}
+                </TableCell>
                 <TableCell>{message(locale, `projectTabs.${type.moduleKey}`)}</TableCell>
                 <TableCell>
                   {type.publishedVersions.length === 0 ? (
@@ -63,9 +73,12 @@ export function WorkflowList({ locale }: { locale: Locale }) {
                 </TableCell>
                 <TableCell>{type.hasDraft ? <Badge tone="warning">{s.draftWaiting}</Badge> : <span className="text-muted">{s.noDraft}</span>}</TableCell>
                 <TableCell>
-                  <a href={`#/${encodeURIComponent(type.code)}`} className="text-brand underline">
+                  <a
+                    href={`#/${encodeURIComponent(type.code)}${type.isTypeDefault ? "" : `/${encodeURIComponent(type.workflowId)}`}`}
+                    className="text-brand underline"
+                  >
                     {s.open}
-                    <span className="sr-only"> {type.code}</span>
+                    <span className="sr-only"> {type.code} {type.workflowName[locale]}</span>
                   </a>
                 </TableCell>
               </TableRow>

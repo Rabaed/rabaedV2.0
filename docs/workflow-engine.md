@@ -33,7 +33,7 @@ A Workflow version is a directed graph.
 
 ### Example: Rabaed Default "Material Submittal (MAR)"
 
-Settled 2026-10-10 (ADR 0020). As built (RP-437): Version 3 of the Rabaed Default, the document [`apps/admin/workflows/MAR.json`](../apps/admin/workflows/MAR.json), with the MAR Form Version 5 ([`apps/admin/forms/MAR.json`](../apps/admin/forms/MAR.json)) and the Rabaed Default Screens it names ([`apps/admin/screens`](../apps/admin/screens)); "Rabaed Default documents" below says how they are published.
+Settled 2026-10-10 (ADR 0020). As built (RP-437): Version 3 of the Rabaed Default, the document [`apps/admin/workflows/submittal-2-2.json`](../apps/admin/workflows/submittal-2-2.json) (the MAR's `MAR.json` until RP-596 renamed it; the eight submittal Workflows are listed under "Rabaed Default documents"), with the MAR Form Version 5 ([`apps/admin/forms/MAR.json`](../apps/admin/forms/MAR.json)) and the Rabaed Default Screens it names ([`apps/admin/screens`](../apps/admin/screens)); "Rabaed Default documents" below says how they are published.
 
 ```mermaid
 flowchart LR
@@ -63,11 +63,30 @@ As built (RP-437, WF-14): the Rabaed Default Workflows, Forms and Screens are JS
 
 | Type | Module | Workflow | Form | Outcomes |
 |---|---|---|---|---|
-| MAR, Material Submittal | Submittals | `MAR.json`, Version 3 | `MAR.json`, Version 5 | Review Codes |
-| SAR, Supplier Approval Request | Submittals | `MAR.json` (the MAR's shape) | the MAR's Form, until its own exists | Review Codes |
-| DAR, Document Approval Request | Submittals | `MAR.json` (the MAR's shape) | the MAR's Form, until its own exists | Review Codes |
+| MAR, Material Submittal | Submittals | `submittal-2-2.json` (2→2), Version 3 | `MAR.json`, Version 5 | Review Codes |
+| SAR, Supplier Approval Request | Submittals | `submittal-2-2.json` (2→2) | `SAR.json` (RP-591) | Review Codes |
+| DAR, Document Approval Request | Submittals | `submittal-1-1-owner.json` (1→1 → Owner review) | `DAR.json` (RP-591) | Review Codes |
 | WIR, Work Inspection Request | Inspections | `WIR.json`: Draft → Contractor PM (Return to Contractor Engineer) → Submit (Cover Note) → Consultant inspection → Passed, Passed with Comments (its `items_to_create` rows become Comments) or Failed (re-inspection by Revision) | `WIR.json` | Inspection Results |
 | CMT, Comment | Snag List | `CMT.json`, Version 2 (Version 1 migrated), its Resolve showing the Screen `comment_resolution` | `CMT.json`, Version 2: no Resolution section (Version 1 migrated) | None |
+
+#### The eight submittal Workflows
+
+Settled 2026-10-15 (grilling of RP-26; ADR 0022); as built, RP-596 (`20270407000000_default_workflow_keys.sql`). The submittal Types (MAR, SAR, DAR) each have eight Rabaed Default Workflows: the number of reviewers on each side, 1 (the Project Manager alone) or 2 (the Engineer, then the Project Manager), each with and without the Owner's final review. There is no picker at Project creation: all eight are listed, read by every Member, in Rabaed Admin → Workflows and in Project → Settings → Workflows ("Rabaed Default Workflows"), where a Project Admin uses one for the Type (the binding command, as for a Project's own) or duplicates it to edit; Rabaed Engineers edit them in the builder as any Rabaed Default.
+
+| Document (`apps/admin/workflows`) | Name (English / Arabic) | Steps |
+|---|---|---|
+| `submittal-1-1.json` | 1→1 Contractor PM → Consultant PM / «1→1 مدير المقاول ← مدير الاستشاري» | Draft, Contractor PM, Consultant Manager issues the Code |
+| `submittal-1-2.json` | 1→2 Contractor PM → Consultant Engineer → Consultant PM | adds the Consultant Engineer, who Recommends to the Manager (Screen `consultant_review`) |
+| `submittal-2-1.json` | 2→1 Contractor Engineer → Contractor PM → Consultant PM | adds the Contractor Engineer Step the PM Returns to |
+| `submittal-2-2.json` | 2→2 Contractor Engineer → Contractor PM → Consultant Engineer → Consultant PM | MAR Version 3 |
+| `submittal-1-1-owner.json` … `submittal-2-2-owner.json` | the same, each ending "→ Owner review" / «… ← مراجعة المالك» | the Consultant PM Recommends A to D (Submits into `owner_review`, Screens `code_a` to `code_d`); the Owner's Step confirms (`confirm_a` to `confirm_d`, one "Confirm" offered) or Sends Back (`owner_send_back`, a reason, to the Consultant PM): §5.3a |
+
+All eight use the Codes A to D with their Screens (`cover_note` on the Contractor PM's Submit, `consultant_review` where a Consultant Engineer Step exists, `code_a` to `code_d`) and the same Cancel Transitions from the raiser's Steps; the 1-reviewer Contractor side has no Return, since a Return stays inside Internal Review and there is no Engineer Step to go to.
+
+- **Which one a Type runs.** The Type's own Rabaed Default (`work_item_type.workflow_definition_id`) is the one new items start on while a Project binds none: MAR and SAR 2→2, DAR 1→1 → Owner review. The other seven of each Type are Rabaed Defaults of their own (`workflow_definition` of `owner_kind` `rabaed` with `work_item_type_id` the Type and `default_key` ("1-1", "2-2-owner", …) naming it within the Type), which only a binding puts a Project on. `defaults:publish` creates them the first time and publishes each document's Versions into the row its `default_key` names (`submittalWorkflows` in `apps/admin/src/rabaed-defaults.ts`); the Workflow's name follows that list. Binding is `app.bind_workflow`, unchanged: any Rabaed Default made for the Type with a published Version.
+- **Existing Projects keep their bindings.** A Project that bound its own Workflow to a Type, or another Rabaed Default, keeps it; one on the Type's Rabaed Default runs its new Version from the next item it raises (a DAR now starts on the Owner's review; items already raised keep theirs, §2). A Project created later runs what the table says.
+- **RP-566's check** (publishing a Rabaed Default Version is refused while an Active Project running it lacks an outcome or Stage it uses) counts, for a Rabaed Default the Type does not run, only the Projects that bind it (`projectsLackingOutcomesAndStages`): none falls back to it.
+- **Rabaed Admin** lists one row per Rabaed Default Workflow (`GET /v1/workflows`: `workflowId`, `workflowName`, `isTypeDefault`); the read, check, save, publish and duplicate routes take `?workflow=<id>` to act on one of a Type's other Rabaed Defaults (404 for another Type's), and a duplicate's source may be named by `fromWorkflowId`. Project → Settings → Workflows reads `rabaedDefaults` per Type (`WorkflowSettingsType`), all that have a published Version.
 
 The Non-Conformance Report (NCR) is not a Rabaed Default yet: it gets its own Workflow and Form (RP-553, to decide with the product owner). The Inspections Module's Rabaed Default Stages: Draft, Internal Review, Pending Inspection, Passed, Failed, Cancelled; its Function Permissions give the Contractor's engineer `create`, its PM `review` and `submit`, and the Consultant's engineer and manager `review` and `approve`. The Rabaed Default Inspection Results changed with the WIR: Passed with Comments creates Comments (`create_items` CMT) and Failed offers a Revision (`app.default_outcomes`, `defaultOutcomeSets`), so a Failed inspection's chain counts in the Dashboard's Revision line (named "Failed" on an Inspection Results card, "Code C" on a Review Codes one) as a Code C chain does.
 
@@ -335,7 +354,7 @@ Effects, in order:
 
 Settled 2026-10-15 (grilling of RP-26); as built, RP-593 (`20270401000000_owner_review.sql`). A Workflow may end with the Owner's review (the DAR's 1→1→1): the Consultant PM's Code is a Recommended Code to the Owner, who confirms it, issuing it, or Sends the item Back.
 
-- **Definition.** The Consultant PM's Step Recommends a Code (`recommend_code`); its Recommendations are Submits into the Owner's Step, one per Code, each carrying its Code as the Transition's `outcome` (with its own Screen: Code B's holds the `items_to_create` table). The Owner's Step confirms a Code (`confirm_code`): its closes, one per Code (they may share the label "Confirm"), each set the outcome it issues, and a `send_back` returns the item to the Consultant PM (comment only, ADR 0014, ADR 0021). The publish checks are in §1 ("And, from ADR 0022"). The test Workflow is `addOwnerReviewWorkflow` (`packages/db/test-support`); the Rabaed Defaults that carry it are RP-596's.
+- **Definition.** The Consultant PM's Step Recommends a Code (`recommend_code`); its Recommendations are Submits into the Owner's Step, one per Code, each carrying its Code as the Transition's `outcome` (with its own Screen: Code B's holds the `items_to_create` table). The Owner's Step confirms a Code (`confirm_code`): its closes, one per Code (they may share the label "Confirm"), each set the outcome it issues, and a `send_back` returns the item to the Consultant PM (comment only, ADR 0014, ADR 0021). The publish checks are in §1 ("And, from ADR 0022"). The test Workflow is `addOwnerReviewWorkflow` (`packages/db/test-support`); the Rabaed Defaults that carry it are the four "→ Owner review" Workflows of §1 "The eight submittal Workflows" (RP-596; the DAR runs 1→1 → Owner review).
 - **The Code to confirm** is the `outcome` of the Transition that last brought the item to the confirming Step (`app.code_to_confirm`). Only the close setting it is offered (`app.takeable_transitions`) and taken (`app.take_transition`, refused `transition_not_available` otherwise); Transitions sharing its label route to it (`app.transition_routed`), so "Confirm" always issues the Recommended Code: the Owner picks no Code of its own (`app.confirm_allowed`).
 - **Confirm** issues the Code as an issued Code: the item closes with it, a shared `issue_code` event, and its result runs as for any issued Code (§6): B creates its Comments, C offers a Revision, D a replacement. Code B's Comments are made from the Recommendation's shared answers (its `items_to_create` rows), raised by the Consultant and its Member who recommended it, the reviewer of record (`app.transition_follow_up_items`, given that Member).
 - **A Send Back clears nothing:** the Consultant PM holds the item again (the Member who held it, §3.3) and may recommend another Code; the next Recommendation is the one confirmed.

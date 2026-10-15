@@ -8,6 +8,7 @@ import {
   type Locale,
   type WorkflowSettings,
   type WorkflowSettingsType,
+  type WorkflowSettingsWorkflow,
 } from "@rabaed/domain";
 import {
   Badge,
@@ -43,7 +44,9 @@ type Props = {
 };
 
 type Dialogs =
-  | { kind: "duplicate" | "library" | "exception" | "back"; type: WorkflowSettingsType }
+  | { kind: "library" | "exception" | "back"; type: WorkflowSettingsType }
+  // `source`: one of the Type's other Rabaed Defaults to copy (RP-596), else the Workflow the Type runs.
+  | { kind: "duplicate"; type: WorkflowSettingsType; source?: WorkflowSettingsWorkflow }
   | null;
 
 const cell = "px-5 py-3 align-top";
@@ -208,13 +211,23 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
         </div>
       </SettingsSection>
 
+      <RabaedDefaultsSection
+        types={settings.types}
+        base={base}
+        canEdit={settings.canEdit}
+        onBind={bind}
+        onDuplicate={(type, source) => setDialog({ kind: "duplicate", type, source })}
+        onDone={done}
+        onError={(e) => setNotice(errorText(e))}
+      />
+
       {settings.canEdit && <CopiesSection types={settings.types} base={base} onBind={bind} onDone={done} onError={(e) => setNotice(errorText(e))} />}
 
       {dialog?.kind === "duplicate" && (
         <DuplicateDialog
           projectId={projectId}
           copySuffix={copySuffix}
-          type={dialog.type}
+          source={dialog.source ?? dialog.type.workflow}
           errorText={errorText}
           onClose={() => setDialog(null)}
           onCreated={(id) => router.push(`${base}/${id}`)}
@@ -250,6 +263,107 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
         />
       )}
     </>
+  );
+}
+
+/**
+ * The Rabaed Default Workflows of the Types that have several (RP-596: the eight submittal
+ * Workflows, 1 or 2 reviewers on each side, with and without the Owner's review): everyone reads
+ * them and the one each Type runs; Project Admins use one for the Type or duplicate it to edit.
+ * Nothing is shown while no Type has more than one.
+ */
+function RabaedDefaultsSection({
+  types,
+  base,
+  canEdit,
+  onBind,
+  onDuplicate,
+  onDone,
+  onError,
+}: {
+  types: WorkflowSettingsType[];
+  base: string;
+  canEdit: boolean;
+  onBind: (type: WorkflowSettingsType, workflowId: string, participantId: string | null) => Promise<SetupResult>;
+  onDuplicate: (type: WorkflowSettingsType, source: WorkflowSettingsWorkflow) => void;
+  onDone: (message?: string) => void;
+  onError: (error: string) => void;
+}) {
+  const t = useTranslations("projectSettings.workflows");
+  const locale = useLocale() as Locale;
+  const several = types.filter((type) => type.rabaedDefaults.length > 1);
+  if (several.length === 0) return null;
+  return (
+    <SettingsSection title={t("defaultsTitle")} description={t("defaultsIntro")} bodyClassName="px-0 pt-[14px] pb-0" data-testid="workflow-rabaed-defaults">
+      <div role="region" aria-label={t("defaultsTitle")} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
+        <table className="w-full min-w-[44rem] border-collapse text-[13.5px]">
+          <thead>
+            <tr>
+              <th scope="col" className={head}>{t("colWorkflow")}</th>
+              <th scope="col" className={head}>{t("colType")}</th>
+              <th scope="col" className={head}>{t("colState")}</th>
+              {canEdit && (
+                <th scope="col" className={head}>
+                  <span className="sr-only">{t("colActions")}</span>
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {several.flatMap((type) =>
+              type.rabaedDefaults.map((workflow) => (
+                <tr key={`${type.id}-${workflow.id}`} className="border-b border-border-subtle last:border-b-0" data-testid="workflow-rabaed-default-row">
+                  <th scope="row" className={`${cell} min-w-96 text-start font-semibold text-text`}>{workflow.name[locale]}</th>
+                  <td className={cell}>
+                    <bdi dir="ltr" translate="no" className="rounded-[5px] bg-segment-participant-tint px-1.5 py-px text-caption font-bold text-segment-participant-fg">
+                      {type.code}
+                    </bdi>
+                  </td>
+                  <td className={cell}>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {workflow.versionNo !== null && <Badge tone="success">{t("publishedVersion", { n: formatNumber(workflow.versionNo, locale) })}</Badge>}
+                      {workflow.bound && <Badge tone="brand">{t("inUse")}</Badge>}
+                      {workflow.isTypeDefault && <Badge tone="neutral">{t("sourceDefault")}</Badge>}
+                    </span>
+                  </td>
+                  {canEdit && (
+                    <td className={`${cell} whitespace-nowrap`}>
+                      <span className="flex items-center justify-end gap-1.5">
+                        {workflow.versionNo !== null && !workflow.bound && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={async () => {
+                              const res = await onBind(type, workflow.id, null);
+                              if (res.ok) onDone(t("copyUsed", { type: type.code }));
+                              else onError(res.error);
+                            }}
+                          >
+                            {t("useFor", { type: type.code })}
+                          </Button>
+                        )}
+                        <Button variant="secondary" size="sm" onClick={() => onDuplicate(type, workflow)}>
+                          <Icon name="copy" size={15} />
+                          {t("duplicateEdit")}
+                        </Button>
+                        {workflow.versionNo !== null && (
+                          <Link
+                            href={`${base}/${workflow.id}/versions/${workflow.versionNo}`}
+                            className="inline-flex h-8 items-center rounded-sm px-3 text-sm font-medium text-brand-fg hover:bg-brand-tint focus-visible:outline-2 focus-visible:outline-focus"
+                          >
+                            {t("viewVersions")}
+                          </Link>
+                        )}
+                      </span>
+                    </td>
+                  )}
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -404,14 +518,15 @@ function FormDialog({
 function DuplicateDialog({
   projectId,
   copySuffix,
-  type,
+  source,
   errorText,
   onClose,
   onCreated,
 }: {
   projectId: string;
   copySuffix: BilingualText;
-  type: WorkflowSettingsType;
+  /** The Workflow copied: the Type's running one, or one of its other Rabaed Defaults. */
+  source: WorkflowSettingsWorkflow;
   errorText: (error: string, body?: unknown) => string;
   onClose: () => void;
   onCreated: (id: string) => void;
@@ -419,18 +534,18 @@ function DuplicateDialog({
   const t = useTranslations("projectSettings.workflows");
   const locale = useLocale() as Locale;
   const [name, setName] = useState<BilingualText>({
-    en: `${type.workflow.name.en} ${copySuffix.en}`,
-    ar: `${type.workflow.name.ar} ${copySuffix.ar}`,
+    en: `${source.name.en} ${copySuffix.en}`,
+    ar: `${source.name.ar} ${copySuffix.ar}`,
   });
   return (
     <FormDialog
-      title={t("duplicateTitle", { workflow: type.workflow.name[locale] })}
+      title={t("duplicateTitle", { workflow: source.name[locale] })}
       description={t("duplicateHelp")}
       submitLabel={t("duplicateSubmit")}
       onClose={onClose}
       disabled={name.en.trim() === "" || name.ar.trim() === ""}
       onSubmit={async () => {
-        const copy = await copyIntoProject(type.workflow.id, projectId, name);
+        const copy = await copyIntoProject(source.id, projectId, name);
         if (copy.ok) {
           onCreated(copy.id);
           return null;

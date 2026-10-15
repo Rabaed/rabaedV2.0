@@ -185,14 +185,16 @@ export type ProjectsLacking = { projects: number } & OutcomesAndStages;
  * on every Project that binds no other Workflow, start on it at once. Run inside a
  * transaction (`trx`), connected as the migrator (the `workflow:publish` CLI) or as
  * rabaed_admin (Rabaed Admin, in its admin_action). A draft the Default had is replaced.
+ * `workflowId` names one of the Type's other Rabaed Defaults (RP-596) instead of the one
+ * the Type runs; one made for another Type is `type_not_found`.
  */
 export async function writeRabaedDefaultWorkflow(
   trx: Db,
   typeCode: string,
   input: unknown,
-  { publish, changeNote }: { publish: boolean; changeNote?: string | undefined },
+  { publish, changeNote, workflowId }: { publish: boolean; changeNote?: string | undefined; workflowId?: string | null | undefined },
 ): Promise<RabaedDefaultResult> {
-  const definitionId = await rabaedDefaultWorkflowId(trx, typeCode);
+  const definitionId = await rabaedWorkflowTargetId(trx, typeCode, workflowId);
   const check = definitionId ? await readWorkflowCheckContext(trx, definitionId) : null;
   if (!definitionId || !check) return { ok: false, reason: "type_not_found" };
   const prepared = prepareDraft(input, check);
@@ -238,23 +240,31 @@ export async function writeRabaedDefaultWorkflow(
  */
 export async function projectsLackingOutcomesAndStages(db: Db, definitionId: string, typeId: string, used: OutcomesAndStages): Promise<ProjectsLacking> {
   await sql`select 1 from workflow_definition where id = ${definitionId}::uuid for update`.execute(db);
+  // One of the Type's other Rabaed Defaults (RP-596) is run only by the Projects that bind it: no
+  // Project falls back to it, so "binds no other Workflow" does not put a Project on it.
   const onDefault = sql`
     rabaed_type as (
-      select id, code, module_key from work_item_type where id = ${typeId}::uuid and owner_kind = 'rabaed'
+      select id, code, module_key, workflow_definition_id from work_item_type where id = ${typeId}::uuid and owner_kind = 'rabaed'
     ), on_default as (
       select p.id from project p cross join rabaed_type t
       where p.status = 'active'
         and not exists (select 1 from work_item_type own where own.project_id = p.id and own.code = t.code)
-        and (
-          not exists (
+        and case when t.workflow_definition_id = ${definitionId}::uuid then
+          (
+            not exists (
+              select 1 from workflow_binding b
+              where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is null
+                and b.workflow_definition_id <> ${definitionId}::uuid)
+            or exists (
+              select 1 from workflow_binding b
+              where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is not null
+                and b.workflow_definition_id = ${definitionId}::uuid)
+          )
+        else
+          exists (
             select 1 from workflow_binding b
-            where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is null
-              and b.workflow_definition_id <> ${definitionId}::uuid)
-          or exists (
-            select 1 from workflow_binding b
-            where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is not null
-              and b.workflow_definition_id = ${definitionId}::uuid)
-        )
+            where b.project_id = p.id and b.work_item_type_id = t.id and b.workflow_definition_id = ${definitionId}::uuid)
+        end
     )`;
   await sql`with ${onDefault} select app.lock_project_sets_shared(d.id, ${typeId}::uuid) from on_default d order by d.id`.execute(db);
   const { rows } = await sql<ProjectsLacking>`
@@ -281,10 +291,34 @@ export async function projectsLackingOutcomesAndStages(db: Db, definitionId: str
 export const hasError = (problems: WorkflowProblem[]): boolean => problems.some((p) => p.severity === "error");
 
 /** What a check of `input` against the Rabaed Default of `typeCode` finds; null for no such Type. */
-export async function validateRabaedDefaultWorkflow(db: Db, typeCode: string, input: unknown): Promise<WorkflowValidation | null> {
-  const definitionId = await rabaedDefaultWorkflowId(db, typeCode);
+export async function validateRabaedDefaultWorkflow(
+  db: Db,
+  typeCode: string,
+  input: unknown,
+  workflowId?: string | null,
+): Promise<WorkflowValidation | null> {
+  const definitionId = await rabaedWorkflowTargetId(db, typeCode, workflowId);
   const check = definitionId ? await readWorkflowCheckContext(db, definitionId) : null;
   return check ? draftValidation(prepareDraft(input, check)) : null;
+}
+
+/**
+ * Rabaed Default Workflow `workflowId` of the Rabaed Work Item Type `typeCode` (RP-596: a Type
+ * may have several, `workflow_definition.default_key`), else, for no `workflowId`, the one the
+ * Type runs; null when the Type has none, or `workflowId` is not a Rabaed Default made for it.
+ */
+export async function rabaedWorkflowTargetId(db: Db, typeCode: string, workflowId?: string | null): Promise<string | null> {
+  if (!workflowId) return rabaedDefaultWorkflowId(db, typeCode);
+  const row = await db
+    .selectFrom("workflow_definition as d")
+    .innerJoin("work_item_type as t", "t.id", "d.work_item_type_id")
+    .select("d.id")
+    .where("d.id", "=", workflowId)
+    .where("d.owner_kind", "=", "rabaed")
+    .where("t.owner_kind", "=", "rabaed")
+    .where("t.code", "=", typeCode)
+    .executeTakeFirst();
+  return row?.id ?? null;
 }
 
 /** The Rabaed Default Workflow of the Rabaed Work Item Type `typeCode`, if there is one. */
