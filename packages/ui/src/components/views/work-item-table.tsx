@@ -107,6 +107,18 @@ const head =
   "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
+/**
+ * The header's select-all checkbox: a 24 × 24px box (axe's `target-size`, since a header scrolled half under it
+ * leaves nothing else to keep it clear) that draws the same 16px square: the 4px transparent border and the
+ * background clipped inside it keep the fill, the inset outline is the square's own border.
+ */
+const headerCheckbox = cn(
+  "size-6 border-4 border-transparent bg-clip-padding align-middle outline-1 -outline-offset-4 outline-control-border",
+  "hover:border-transparent hover:outline-control-border-hover",
+  "data-[state=checked]:border-transparent data-[state=checked]:outline-primary",
+  "data-[state=indeterminate]:border-transparent data-[state=indeterminate]:outline-primary",
+  "disabled:border-transparent disabled:outline-border",
+);
 const dash = <span className="text-faint">—</span>;
 
 export function WorkItemTable({
@@ -143,10 +155,10 @@ export function WorkItemTable({
       <thead>
         <tr>
           {selection && (
-            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
+            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-3 pe-0pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
               <Checkbox
                 aria-label={selection.selectAll}
-                className="size-4 align-middle"
+                className={headerCheckbox}
                 disabled={rows.length === 0}
                 checked={chosen === 0 ? false : chosen === rows.length ? true : "indeterminate"}
                 onCheckedChange={() => selection.onChange(new Set(chosen === rows.length ? [] : rows.map((r) => r.id)))}
@@ -193,7 +205,7 @@ export function WorkItemTable({
               >
                 <span className="flex items-center gap-1.5">
                   <Icon name="grid-dots" size={14} className="shrink-0 text-faint opacity-70" />
-                  <span>{header}</span>
+                  {/* The sort button is the column's name and its arrow together, never the 24px arrow alone: a header scrolled half under the pinned settings button keeps a 24px target of its own, whatever the font's widths. */}
                   <button
                     type="button"
                     aria-label={labels.sortBy(header)}
@@ -201,14 +213,17 @@ export function WorkItemTable({
                     onClick={() =>
                       onSort({ sort: key, dir: sorted ? (direction === "asc" ? "desc" : "asc") : workItemSortOrders[key] })
                     }
-                    className={cn(
-                      "ms-auto -me-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint hover:bg-hover hover:text-text",
-                      sorted && "text-brand-fg hover:text-brand-fg",
-                      focusRing,
-                      touchBox,
-                    )}
+                    className={cn("group/sort flex min-h-6 min-w-0 flex-1 items-center gap-1.5 rounded-xs text-start", focusRing, touchBox)}
                   >
-                    <Icon name={!sorted ? "arrows-sort" : direction === "asc" ? "sort-ascending" : "sort-descending"} size={14} />
+                    <span>{header}</span>
+                    <span
+                      className={cn(
+                        "ms-auto -me-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint group-hover/sort:bg-hover group-hover/sort:text-text",
+                        sorted && "text-brand-fg group-hover/sort:text-brand-fg",
+                      )}
+                    >
+                      <Icon name={!sorted ? "arrows-sort" : direction === "asc" ? "sort-ascending" : "sort-descending"} size={14} />
+                    </span>
                   </button>
                 </span>
               </th>
