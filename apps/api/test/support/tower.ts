@@ -2,13 +2,9 @@
 // (Contractor, its creator) with K1 as its Consultant, and the MARs those tests
 // link to, from Draft to Submitted.
 //
-// draft(), inInternalReview() and submitted() raise the legacy MAR (LEGACY_MAR, "MARV":
-// MAR's Form Version 3 on a copy of its Workflow Version 2) by default, not "MAR": the
-// tests of the engine's general behaviour were written against that route, as items
-// started before RP-437 still run it. A test about the real MAR's current Version, or
-// one that binds, duplicates or changes a Project's or Company's MAR Workflow, passes
-// { type: "MAR" } to draft() or inInternalReview(); submitted() always raises the legacy
-// MAR (RP-576: seven of spec RP-528's tests bound MAR, then raised MARV).
+// The MARs are the legacy MAR (LEGACY_MAR, "MARV"), not the real "MAR", unless the test
+// passes { type: "MAR" } to draft() or inInternalReview(); submitted() always raises the
+// legacy MAR. See draft() for why, and when a test passes the type.
 import { randomUUID } from "node:crypto";
 import type { VisibilityGrant, WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
@@ -144,9 +140,10 @@ export type DraftOptions = { trade?: string; type?: string };
 
 /**
  * A Draft MAR with the Subject `title`, on `at`'s Project, in Building A. By default it raises the legacy MAR
- * (LEGACY_MAR: Form Version 3, Workflow Version 2), the route items started before RP-437 still run, never the
- * real "MAR": a test about the real MAR's current Version or a Project's or Company's MAR binding passes
- * `{ type: "MAR" }`, or its item runs MARV, not the Workflow it set up (RP-576).
+ * (LEGACY_MAR: copies of MAR's Form Version 3 and Workflow Version 2, as items started before RP-437 ran), not
+ * the real "MAR": the engine's general tests drive that route. A test about the real MAR's current Version, or
+ * one that binds, duplicates or changes a Project's or Company's MAR Workflow, passes `{ type: "MAR" }`, or its
+ * item runs MARV, not the Workflow it set up (RP-576).
  */
 export async function draft(at: Tower, engineer: Caller, title: string, { trade = at.electrical, type = LEGACY_MAR }: DraftOptions = {}): Promise<string> {
   // The current MAR Form asks for an approved supplier of the Trade to leave Draft (RP-595); the legacy one has none.
