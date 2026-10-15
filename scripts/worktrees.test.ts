@@ -4,19 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { samePath } from "./paths.ts";
+import { choosePrune } from "./worktrees-pruning.ts";
 import {
-  branchMerged,
   chooseWorktrees,
+  commandLineHolds,
   gatherFacts,
   hasOwnCommit,
   isAgentWorktree,
+  isFinished,
+  judgeWorktree,
   listWorktrees,
   localBranches,
   parseWorktrees,
   refExists,
   removeLinkedWorktree,
   removeWorktree,
+  stillStarting,
+  systemLiveness,
   unpushedCount,
+  type Liveness,
   type WorktreeFacts,
 } from "./worktrees.ts";
 
@@ -31,8 +37,13 @@ const wt = (name: string, w: Partial<WorktreeFacts> = {}): WorktreeFacts => ({
   ahead: 0,
   dirty: false,
   noCommitsYet: false,
+  lockLive: false,
+  heldByProcess: false,
   ...w,
 });
+
+/** A Liveness that sees no running session or process. */
+const nobody: Liveness = { lockLive: () => false, heldByProcess: () => false };
 
 describe("parseWorktrees", () => {
   it("reads path, head, branch and lock reason", () => {
@@ -114,10 +125,21 @@ describe("chooseWorktrees", () => {
     expect(remove).toEqual([]);
   });
 
-  it("skips a worktree with no commits yet, whose subagent may still be running, even when the app locked it", () => {
-    const { remove, skipped } = choose([wt("agent-a", { noCommitsYet: true, locked: "claude agent agent-a (pid 31260)" })]);
+  it("skips a worktree with no commits yet that a running session's lock or a running process holds", () => {
+    const { remove, skipped } = choose([
+      wt("agent-a", { noCommitsYet: true, locked: "claude agent agent-a (pid 31260)", lockLive: true }),
+      wt("agent-b", { noCommitsYet: true, heldByProcess: true }),
+    ]);
     expect(remove).toEqual([]);
-    expect(skipped[0]?.reason).toBe("no commits yet, may still be running (--include-empty removes it)");
+    expect(skipped.map((s) => s.reason)).toEqual([
+      "no commits yet, may still be running (locked by a running session; --include-empty removes it)",
+      "no commits yet, may still be running (a running process holds its folder; --include-empty removes it)",
+    ]);
+  });
+
+  it("removes a worktree with no commits yet that nothing holds: it is finished (RP-585)", () => {
+    const { remove } = choose([wt("agent-a", { noCommitsYet: true, locked: "claude agent agent-a (pid 31260)" })]);
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-a`]);
   });
 
   it("removes a worktree with no commits yet when asked to (--include-empty)", () => {
@@ -165,6 +187,47 @@ describe("chooseWorktrees", () => {
 
   it("returns the worktrees without the facts used to choose", () => {
     expect(choose([wt("agent-a")]).remove[0]).toEqual({ path: `${main}/.claude/worktrees/agent-a`, head: "abc123", branch: "worktree-agent-a", locked: undefined });
+  });
+});
+
+describe("isFinished and stillStarting (RP-585)", () => {
+  const facts = (f: Partial<WorktreeFacts>) => ({ ahead: 0, noCommitsYet: false, dirty: false, lockLive: false, heldByProcess: false, ...f });
+
+  it("is finished when nothing is ahead and the branch had a commit of its own, whatever holds it", () => {
+    expect(isFinished(facts({}))).toBe(true);
+    expect(isFinished(facts({ lockLive: true, heldByProcess: true }))).toBe(true);
+    expect(isFinished(facts({ ahead: 1 }))).toBe(false);
+  });
+
+  it("is finished with no commits yet only when clean, with no live lock and no process holding it", () => {
+    expect(isFinished(facts({ noCommitsYet: true }))).toBe(true);
+    expect(stillStarting(facts({ noCommitsYet: true, dirty: true }))).toBe("uncommitted changes");
+    expect(stillStarting(facts({ noCommitsYet: true, lockLive: true }))).toBe("locked by a running session");
+    expect(stillStarting(facts({ noCommitsYet: true, heldByProcess: true }))).toBe("a running process holds its folder");
+    expect(isFinished(facts({ noCommitsYet: true, heldByProcess: true }))).toBe(false);
+  });
+});
+
+describe("commandLineHolds", () => {
+  const dir = "G:\\Rabaed Contech\\.claude\\worktrees\\agent-a";
+
+  it("sees a process running a file in the folder, ignoring case and slashes on Windows", () => {
+    expect(commandLineHolds('"C:\\Program Files\\nodejs\\node.exe" "g:\\rabaed contech\\.claude\\worktrees\\AGENT-A\\node_modules\\next\\dist\\bin\\next" dev', dir, "win32")).toBe(true);
+    expect(commandLineHolds(`node ${dir}`, dir, "win32")).toBe(true);
+  });
+
+  it("does not take a folder whose name only starts with it, or another folder", () => {
+    expect(commandLineHolds("node G:\\Rabaed Contech\\.claude\\worktrees\\agent-ab\\x.js", dir, "win32")).toBe(false);
+    expect(commandLineHolds("node G:\\Rabaed Contech\\scripts\\x.js", dir, "win32")).toBe(false);
+    expect(commandLineHolds("node /w/Agent-A/x.js", "/w/agent-a", "linux")).toBe(false);
+  });
+});
+
+describe("systemLiveness", () => {
+  it("counts no lock as not live and a lock naming no pid (by hand) as live, without reading processes", () => {
+    const live = systemLiveness();
+    expect(live.lockLive(undefined)).toBe(false);
+    expect(live.lockLive("keep, mid-review")).toBe(true);
   });
 });
 
@@ -220,7 +283,7 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     run(["worktree", "add", "-b", "worktree-agent-reset", agent("agent-reset")]);
     run(["reset", "--hard", "integration"], agent("agent-reset"));
     run(["branch", "-m", "RP-1-reset"], agent("agent-reset"));
-    const facts = gatherFacts([listed("agent-new"), listed("agent-reset")], "main", root);
+    const facts = gatherFacts([listed("agent-new"), listed("agent-reset")], "main", root, nobody);
     expect(facts.map((f) => [f.ahead, f.dirty, f.noCommitsYet])).toEqual([
       [0, false, true],
       [0, false, true],
@@ -231,9 +294,9 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     run(["worktree", "add", "-b", "worktree-agent-store", agent("agent-store")]);
     mkdirSync(join(agent("agent-store"), ".pnpm-store", "v10"), { recursive: true });
     writeFileSync(join(agent("agent-store"), ".pnpm-store", "v10", "index"), "x");
-    expect(gatherFacts([listed("agent-store")], "main", root)[0]!.dirty).toBe(false);
+    expect(gatherFacts([listed("agent-store")], "main", root, nobody)[0]!.dirty).toBe(false);
     writeFileSync(join(agent("agent-store"), "c.txt"), "c");
-    expect(gatherFacts([listed("agent-store")], "main", root)[0]!.dirty).toBe(true);
+    expect(gatherFacts([listed("agent-store")], "main", root, nobody)[0]!.dirty).toBe(true);
   });
 
   it("sees a commit, and keeps it seen once merged", () => {
@@ -241,9 +304,9 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     writeFileSync(join(agent("agent-done"), "b.txt"), "b");
     run(["add", "b.txt"], agent("agent-done"));
     run(["commit", "-m", "work"], agent("agent-done"));
-    expect(gatherFacts([listed("agent-done")], "main", root)[0]).toMatchObject({ ahead: 1, noCommitsYet: false });
+    expect(gatherFacts([listed("agent-done")], "main", root, nobody)[0]).toMatchObject({ ahead: 1, noCommitsYet: false });
     run(["merge", "--no-ff", "-m", "merge", "worktree-agent-done"]);
-    expect(gatherFacts([listed("agent-done")], "main", root)[0]).toMatchObject({ ahead: 0, noCommitsYet: false });
+    expect(gatherFacts([listed("agent-done")], "main", root, nobody)[0]).toMatchObject({ ahead: 0, noCommitsYet: false });
   });
 
   it("deletes a merged branch with the worktree, and keeps one git says is not merged", () => {
@@ -313,16 +376,72 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(refExists("RP-12-held", root)).toBe(false);
   });
 
-  it("calls a branch merged only once it has a commit of its own that the target has", () => {
-    run(["worktree", "add", "-b", "RP-2-fresh", agent("agent-fresh")]);
+  it("calls a branch with a commit of its own finished only once the target has it", () => {
     run(["worktree", "add", "-b", "RP-3-done", agent("agent-done")]);
-    expect(branchMerged("RP-2-fresh", "main", root)).toBe(false);
     writeFileSync(join(agent("agent-done"), "c.txt"), "c");
     run(["add", "c.txt"], agent("agent-done"));
     run(["commit", "-m", "work"], agent("agent-done"));
-    expect(branchMerged("RP-3-done", "main", root)).toBe(false);
+    expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: false, neverCommitted: false });
     run(["merge", "--no-ff", "-m", "merge", "RP-3-done"]);
-    expect(branchMerged("RP-3-done", "main", root)).toBe(true);
+    expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+  });
+
+  // RP-585: lane:env called RP-555-review-fixes (made on the merged integration tip, never committed to) not merged,
+  // while worktrees:clean removed it. Now all four commands judge it by one rule.
+  describe("one finished rule for lane:env, lanes:prune, worktrees:clean and worktrees:prune (RP-585)", () => {
+    const paused = "agent-paused";
+    const verdicts = (live: Liveness) => {
+      const w = listed(paused);
+      const facts = gatherFacts([w], "main", root, live);
+      const pruneFacts = facts.map((f) => ({ ...f, upstreamGone: false, unpushed: 0, project: undefined }));
+      return {
+        "lane:env, lanes:prune": judgeWorktree(w, "main", root, live).finished,
+        "worktrees:clean": chooseWorktrees({ worktrees: facts, currentPath: root }).remove.length === 1,
+        "worktrees:prune": choosePrune({ worktrees: pruneFacts, branches: [], mainRoot: root, currentPath: root, docker: undefined, exists: existsSync }).remove.length === 1,
+      };
+    };
+    const all = (finished: boolean) => ({ "lane:env, lanes:prune": finished, "worktrees:clean": finished, "worktrees:prune": finished });
+
+    beforeEach(() => {
+      // The integration branch has a commit and is merged; the ticket's branch is made on its tip and never committed to.
+      run(["worktree", "add", "-b", "integration", join(root, "int")]);
+      writeFileSync(join(root, "int", "i.txt"), "i");
+      run(["add", "i.txt"], join(root, "int"));
+      run(["commit", "-m", "integration"], join(root, "int"));
+      run(["merge", "--no-ff", "-m", "merge", "integration"]);
+      run(["worktree", "add", "-b", "RP-555-review-fixes", agent(paused), "integration"]);
+    });
+
+    it("finds a never-committed, clean, unlocked branch at a commit in the target finished in all four", () => {
+      expect(verdicts(nobody)).toEqual(all(true));
+      expect(judgeWorktree(listed(paused), "main", root, nobody).neverCommitted).toBe(true);
+    });
+
+    it("also with the app's lock, once the session it names has stopped", () => {
+      run(["worktree", "lock", "--reason", "claude agent agent-paused (pid 4242)", agent(paused)]);
+      expect(verdicts(nobody)).toEqual(all(true));
+    });
+
+    it("finds it not finished in any of the four while a running session's lock holds it", () => {
+      run(["worktree", "lock", "--reason", "claude agent agent-paused (pid 4242)", agent(paused)]);
+      expect(verdicts({ lockLive: (locked) => locked?.includes("pid 4242") ?? false, heldByProcess: () => false })).toEqual(all(false));
+    });
+
+    it("finds it not finished in any of the four with uncommitted files", () => {
+      writeFileSync(join(agent(paused), "wip.txt"), "wip");
+      expect(verdicts(nobody)).toEqual(all(false));
+    });
+
+    it("finds it not finished in any of the four while a running process holds its folder", () => {
+      expect(verdicts({ lockLive: () => false, heldByProcess: (path) => samePath(path, agent(paused)) })).toEqual(all(false));
+    });
+
+    it("finds a branch that has commits the target lacks not finished in any of the four", () => {
+      writeFileSync(join(agent(paused), "w.txt"), "w");
+      run(["add", "w.txt"], agent(paused));
+      run(["commit", "-m", "work"], agent(paused));
+      expect(verdicts(nobody)).toEqual(all(false));
+    });
   });
 });
 

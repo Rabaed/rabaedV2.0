@@ -147,7 +147,7 @@ export const composeProjectOfEnv = (env: string): string | undefined =>
 export type WorktreeLane = {
   path: string;
   branch: string | undefined;
-  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  /** It is finished against origin/main (worktrees.ts isFinished: merged, or never committed to and nothing holds it). */
   merged: boolean;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project: string | undefined;
@@ -245,8 +245,10 @@ export function holderAdvice(n: number, holders: string[], { worktrees, hasOrigi
 export type TakeoverWorktree = {
   path: string;
   branch: string | undefined;
-  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  /** It is finished against origin/main (worktrees.ts isFinished). */
   merged: boolean;
+  /** Finished although its branch has had no commit of its own (RP-585); the takeover line says why it counts. */
+  neverCommitted?: boolean;
   /** Uncommitted changes, untracked files outside ignored paths included. */
   dirty: boolean;
   /** Why git status could not be read; the worktree then counts as having uncommitted changes. */
@@ -299,7 +301,8 @@ export function chooseTakeover(
     else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
     else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
     else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);
-    else from.push(`${dir} (${w.branch}, merged into origin/main)`);
+    else if (w.neverCommitted) from.push(`${dir} (${on}, never committed to: its tip is in origin/main, it is clean and unlocked, and no process holds it)`);
+    else from.push(`${dir} (${on}, merged into origin/main)`);
   }
   if (mine.length > 0) {
     for (const w of worktrees) {

@@ -1,5 +1,7 @@
 // Removes what merged PRs leave behind (RP-308). After `git fetch --prune origin`:
-//   1. every worktree merged into origin/main (or whose upstream is gone; desktop-app
+//   1. every worktree merged into origin/main, by the finished rule lane:env, lanes:prune
+//      and worktrees:clean share (worktrees.ts isFinished, RP-585: a branch never committed
+//      to counts once nothing holds it), or whose upstream is gone (desktop-app
 //      worktrees under .claude/worktrees/ only when merged), with its folder and its
 //      branch, then its rabaed-* compose project (containers, volumes, network) once
 //      the worktree is removed;
@@ -40,6 +42,7 @@ import {
   refExists,
   removeLinkedWorktree,
   reportRemoval,
+  systemLiveness,
   unpushedCount,
   type Worktree,
 } from "./worktrees.ts";
@@ -81,8 +84,9 @@ const readEnv = (dir: string) => {
 const here = currentRoot();
 const branches = localBranches(TARGET, mainRoot);
 const gone = new Set(branches.filter((b) => b.upstreamGone).map((b) => b.branch));
+const live = systemLiveness();
 const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
-  gatherFacts(list, TARGET, mainRoot).map((w) => ({
+  gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
     unpushed: unpushedCount(w.head, mainRoot),
