@@ -6,16 +6,15 @@ name: Reviewed label
 # branch's, never the pull request's. Pushes made with GITHUB_TOKEN do not
 # trigger it, which is fine: nothing here pushes. Not a required check (it must
 # never be added to the main ruleset; it does not run on merge_group).
-# The label itself must exist in the repository: gh label create reviewed.
-# It needs scripts/reviewed-label.ts on main first (PR RP-584-reviewed-label merges before this one).
-on:
+# The label itself must exist in the repository: gh label create reviewed.on:
   pull_request:
     types: [synchronize]
 permissions: {}
 jobs:
   drop-label:
     # A fork's PR gets a read-only token anyway; this keeps the job off it entirely.
-    if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'reviewed')
+    # Every same-repo push gets a run (the script returns early without the label), so `pnpm queue` can wait for the run on the head.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
