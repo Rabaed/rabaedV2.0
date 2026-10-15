@@ -4,6 +4,8 @@
 // readable by every Participant, with no link to the SAR (the app role has no grant on
 // `source_work_item_id`); at C nothing is added; a supplier the Trade lists already (the
 // same name, whatever its case or outer spaces, English or Arabic) is not added twice.
+// Scenario RP-598-2: a MAR's `approved_supplier` answer is the supplier's id, which every
+// Participant reads as its name on the list, and never leads to the SAR.
 import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -15,6 +17,7 @@ const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
 const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
 const TYPE = "SARADD";
+const MAR_TYPE = "MARSUP";
 
 let migrator: pg.Client;
 let app: Db;
@@ -122,6 +125,14 @@ beforeAll(async () => {
             {"key": "supplier_name_ar", "type": "text", "label": {"en": "Supplier name (Arabic)", "ar": "اسم المورد"}}]}]}'::jsonb);
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id, adds_approved_supplier)
         values ('rabaed', 'submittals', '${TYPE}', '{"en": "SAR (test)", "ar": "طلب اعتماد مورد"}', '${workflowId}', 'review_code', v_form, true);
+        -- A MAR's supplier field (RP-595), for scenario RP-598-2.
+        insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "MAR supplier (test)", "ar": "مورد طلب اعتماد مواد"}')
+        returning id into v_form;
+        insert into form_version (form_definition_id, version_no, status, published_at, schema)
+        values (v_form, 1, 'published', now(), '{"sections": [{"key": "material", "title": {"en": "Material", "ar": "المادة"},
+          "fields": [{"key": "supplier", "type": "approved_supplier", "label": {"en": "Approved supplier", "ar": "المورد المعتمد"}}]}]}'::jsonb);
+        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+        values ('rabaed', 'submittals', '${MAR_TYPE}', '{"en": "MAR supplier (test)", "ar": "مورد طلب اعتماد مواد"}', '${workflowId}', 'review_code', v_form);
       end
     $$`);
   const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
@@ -237,6 +248,30 @@ describe("scenario RP-594-1 (seam 2): the other Contractor reads the supplier, n
       ).rejects.toThrow(/permission denied/);
     }
     // And the SAR itself stays hidden from C2 (V1): no item, no event.
+    expect(await call(c2.member, sql<{ id: string }>`select id from work_item where id = ${sar}::uuid`)).toEqual([]);
+  });
+});
+
+describe("scenario RP-598-2 (seam 2): a MAR names its supplier, never the SAR that approved it", () => {
+  it("C2's MAR holds the id of the supplier C1's SAR added; C2 reads it as the supplier's name only", async () => {
+    const sar = await closedSar({ en: "Shared Cables", ar: "كابلات مشتركة" }, "approve_a");
+    const supplierId = (await migrator.query("select id from approved_supplier where project_id = $1 and name ->> 'en' = 'Shared Cables'", [projectId])).rows[0]
+      .id as string;
+    const [created] = await call<{ work_item_id: string }>(
+      c2.member,
+      sql`select work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${MAR_TYPE}, 'Cable drums', app.latest_form_version(${MAR_TYPE}), ${JSON.stringify({ supplier: supplierId })}::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const mar = created!.work_item_id;
+    // The answer is the supplier's id, as stored: it is Project-wide (V10), so nothing strips it, and nothing adds the SAR.
+    const [read] = await call<{ data: Record<string, unknown> }>(c2.member, sql`select app.work_item_answers(${mar}::uuid) as data`);
+    expect(read!.data.supplier).toBe(supplierId);
+    expect(JSON.stringify(read!.data)).not.toContain(sar);
+    // The id reads as the supplier's name on the list, and no further: the SAR is hidden from C2 (V1, V10).
+    expect(
+      await call<{ id: string; name: { en: string; ar: string } }>(c2.member, sql`select id, name from approved_supplier where id = ${supplierId}::uuid`),
+    ).toEqual([{ id: supplierId, name: { en: "Shared Cables", ar: "كابلات مشتركة" } }]);
     expect(await call(c2.member, sql<{ id: string }>`select id from work_item where id = ${sar}::uuid`)).toEqual([]);
   });
 });
