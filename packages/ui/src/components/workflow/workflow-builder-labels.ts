@@ -64,7 +64,7 @@ export type WorkflowBuilderLabels = {
   tipConnect: string;
   tipPalette: string;
   tipBoxSelect: string;
-  /** The keys' tip: "Delete removes the selection · ⌘Z undo · ⇧⌘Z redo". */
+  /** The keys' tip: "Delete removes the selection · ⌘Z undo · ⇧⌘Z redo", with ⌘ and ⇧ drawn as icons. */
   tipDelete: string;
   tipUndo: string;
   tipRedo: string;

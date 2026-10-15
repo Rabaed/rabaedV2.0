@@ -172,8 +172,7 @@ export const Draft: Story = {
     await expect(canvas.getByText(labels.draft("4"), { exact: false })).toBeVisible();
     await expect(canvas.getByText(labels.nothingSelected)).toBeVisible();
     await expect(canvas.getByText(labels.tipsHeading)).toBeVisible();
-    // The undo and redo keys show ⌘ and ⇧ as icons: no self-hosted font has those glyphs, so as
-    // text they took whichever system font the browser picked, and screenshots differed (RP-599).
+    // The undo and redo keys show ⌘ and ⇧ as icons, not as text (RP-599).
     await expect(canvas.getAllByRole("img", { name: "Command" })).toHaveLength(2);
     await expect(canvas.getAllByRole("img", { name: "Shift" })).toHaveLength(1);
     await expect(canvasElement.textContent).not.toMatch(/[⌘⇧]/);

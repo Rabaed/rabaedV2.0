@@ -81,6 +81,9 @@ const deleteLook = cn(
   focusRing,
 );
 
+/** The modifier keys the keys tip draws as icons, with their screen-reader names. */
+const modifierKeys = { command: "Command", shift: "Shift" } as const satisfies Partial<Record<IconName, string>>;
+
 export function Heading({ children }: { children: ReactNode }) {
   return <h2 className="mt-1.5 mb-1 text-[10.5px] font-bold tracking-wider text-muted uppercase">{children}</h2>;
 }
@@ -114,7 +117,8 @@ export function SideEditor(props: SideEditorProps) {
   const kbd = (keys: ReactNode) => <kbd dir="ltr" className="whitespace-nowrap rounded-[4px] border border-border-strong px-1 font-sans text-[10.5px] font-semibold text-muted">{keys}</kbd>;
   // ⌘ and ⇧ as icons: no self-hosted font has those glyphs, so as text they took whichever system
   // font the browser picked, which changed with what it had drawn before (RP-599).
-  const modifier = (name: "command" | "shift", label: string) => <Icon name={name} label={label} size={11} className="inline-block align-[-1px]" />;
+  // Named as on the key caps, in English in both languages, as "Delete" is.
+  const modifier = (name: keyof typeof modifierKeys) => <Icon name={name} label={modifierKeys[name]} size={11} className="inline-block align-[-1px]" />;
   const tip = (icon: IconName, text: ReactNode) => (
     <li className="flex gap-2 text-[12.5px] leading-[1.45] text-text-secondary">
       <Icon name={icon} size={16} className="mt-px text-primary" />
@@ -133,8 +137,7 @@ export function SideEditor(props: SideEditorProps) {
         {tip(
           "trash",
           <>
-            {kbd("Delete")} {labels.tipDelete} · {kbd(<>{modifier("command", "Command")}Z</>)} {labels.tipUndo} ·{" "}
-            {kbd(<>{modifier("shift", "Shift")}{modifier("command", "Command")}Z</>)} {labels.tipRedo}
+            {kbd("Delete")} {labels.tipDelete} · {kbd(<>{modifier("command")}Z</>)} {labels.tipUndo} · {kbd(<>{modifier("shift")}{modifier("command")}Z</>)} {labels.tipRedo}
           </>,
         )}
       </ul>
