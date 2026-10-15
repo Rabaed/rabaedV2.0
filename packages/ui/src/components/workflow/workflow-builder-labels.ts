@@ -88,13 +88,18 @@ export type WorkflowBuilderLabels = {
   /** The raiser's Steps: whether the Member holding it edits the raiser's Form (ADR 0019). */
   editsForm: string;
   editsFormHelp: string;
+  /** What a Step left unset does (`stepEditsForm`): on when it holds the Draft Step's Participant and Permission. */
+  editsFormDefault: (on: boolean) => string;
   outcomeHeading: string;
   /** The Step's Outcome choices, e.g. "Recommend a code (for the manager)". */
   outcomeOption: (mode: OutcomeMode) => string;
   draftsVisibleTo: string;
   draftsWholeCompany: string;
   draftsAuthorOnly: string;
+  /** Under "The whole Company" (the default). */
   draftsVisibleHelp: string;
+  /** Under "The author only" (visibility.md V1). */
+  draftsAuthorOnlyHelp: string;
   /** A raiser's Step a Send Back leads to: what the raiser may change after it (ADR 0021). */
   afterSendBack: string;
   afterSendBackComment: string;

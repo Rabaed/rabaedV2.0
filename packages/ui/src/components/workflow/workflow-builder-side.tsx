@@ -17,6 +17,7 @@ import {
   type AfterSendBack,
   type BaseRole,
   type BilingualText,
+  type DraftsVisibleTo,
   type FormField,
   type FormSchema,
   type Locale,
@@ -222,6 +223,10 @@ function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
   // The raiser's Steps: those of the Draft Step's Participant role (ADR 0019).
   const raiserRole = definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft")?.actor?.role;
   const raiser = raiserRole !== undefined && actor.role === raiserRole;
+  // What the Step does with the setting left out, stated under it (RP-551).
+  const { editsForm: _set, ...unset } = step;
+  const editsFormDefault = stepEditsForm(definition, unset, stages);
+  const draftsVisibleTo: DraftsVisibleTo = step.draftsVisibleTo ?? "company";
   const ofRole = positions.filter((p) => p.role === actor.role);
   const targets = definition.steps.filter((s) => s.key !== step.key);
   const outs = definition.transitions.filter((t) => t.from === step.key);
@@ -292,7 +297,7 @@ function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
       </Field>
       {raiser && (
         // The reference's "Editable form sections", as ADR 0019 allows it: one setting, on the raiser's Steps only (owner's decision 3).
-        <Field label={labels.editsForm} help={labels.editsFormHelp} layout="inline">
+        <Field label={labels.editsForm} help={`${labels.editsFormHelp} ${labels.editsFormDefault(editsFormDefault)}`} layout="inline">
           <Switch checked={stepEditsForm(definition, step, stages)} onCheckedChange={(on) => set({ editsForm: on })} />
         </Field>
       )}
@@ -315,10 +320,11 @@ function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
       {isDraft && (
         <>
           <Heading>{labels.draftsVisibleTo}</Heading>
-          {/* Read-only until the Draft Step's setting is stored (RP-514): today a Draft is read by the author's whole Company. */}
-          <Field label={labels.draftsVisibleTo} help={labels.draftsVisibleHelp} readOnly className="[&>label]:sr-only">
+          {/* Left out, a Draft is read by the author's whole Company (RP-514; visibility.md V1). */}
+          <Field label={labels.draftsVisibleTo} help={draftsVisibleTo === "author" ? labels.draftsAuthorOnlyHelp : labels.draftsVisibleHelp} className="[&>label]:sr-only">
             <Select
-              value="company"
+              value={draftsVisibleTo}
+              onValueChange={(setting) => set({ draftsVisibleTo: setting as DraftsVisibleTo })}
               options={[
                 { value: "company", label: labels.draftsWholeCompany },
                 { value: "author", label: labels.draftsAuthorOnly },
