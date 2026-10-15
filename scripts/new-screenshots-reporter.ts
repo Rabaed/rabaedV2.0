@@ -1,7 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { stripVTControlCharacters } from "node:util";
 import type { Reporter, SerializedError, TestModule, TestRunEndReason, Vitest } from "vitest/node";
+import { messageLines, type RunFailures, runFailures, writeResult } from "./story-run.ts";
 
 // Tells CI whether a story test run failed only because new stories have no
 // screenshot baseline yet (RP-296). Run with `vitest run --update=new`, so each
@@ -21,16 +19,13 @@ const missingReference = "No existing reference screenshot found";
 const matcherHeader = /^expect\(.*\)\.toMatchScreenshot\(\)$/;
 
 function isMissingReference(message: string): boolean {
-  const lines = stripVTControlCharacters(message).split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = messageLines(message);
   const body = matcherHeader.test(lines[0] ?? "") ? lines[1] : lines[0];
   return body?.startsWith(missingReference) ?? false;
 }
 
-export interface StoryRun {
+export interface StoryRun extends Omit<RunFailures, "failedTests"> {
   reason: TestRunEndReason;
-  unhandledErrors: number;
-  /** Errors in beforeAll/afterAll hooks or module loading, outside any test. */
-  hookErrors: number;
   /** The error messages of each failed test. */
   failedTests: string[][];
 }
@@ -55,16 +50,8 @@ export default class NewScreenshotsReporter implements Reporter {
   }
 
   onTestRunEnd(testModules: ReadonlyArray<TestModule>, unhandledErrors: ReadonlyArray<SerializedError>, reason: TestRunEndReason) {
-    const suites = testModules.flatMap((module) => [module, ...module.children.allSuites()]);
-    const tests = testModules.flatMap((module) => [...module.children.allTests("failed")]);
-    const verdict = onlyMissingReferences({
-      reason,
-      unhandledErrors: unhandledErrors.length,
-      hookErrors: suites.reduce((count, suite) => count + suite.errors().length, 0),
-      failedTests: tests.map((test) => (test.result().errors ?? []).map((error) => error.message)),
-    });
-    const file = resolve(this.root, ".vitest/new-screenshots.json");
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify(verdict));
+    const run = runFailures(testModules, unhandledErrors);
+    const verdict = onlyMissingReferences({ ...run, reason, failedTests: run.failedTests.map((test) => test.errors) });
+    writeResult(this.root, "new-screenshots.json", verdict);
   }
 }

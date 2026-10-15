@@ -116,14 +116,16 @@ jobs:
           REPORTER: scripts/unstable-screenshots-reporter.ts
           RESULT: packages/ui/.vitest/unstable-screenshots.json
         run: |
+          # Fail closed: a jq error in a pipe must stop the step, not commit an unstable baseline.
+          set -o pipefail
           if [ ! -f "$REPORTER" ]; then
             echo "::notice::$REPORTER is not on this branch yet (merge main); skipping the second render."
             exit 0
           fi
           rm -f "$RESULT"
           pnpm --filter @rabaed/ui exec vitest run --reporter=default --reporter="../../$REPORTER" || true
-          if [ ! -f "$RESULT" ]; then
-            echo "::error::The second render did not finish; see its log above."
+          if ! jq -e '(.unstable | type) == "array" and (.otherFailures | type) == "array" and (.refusal | type) == "array"' "$RESULT" > /dev/null 2>&1; then
+            echo "::error::The second render did not finish or wrote no readable result; see its log above. Nothing is committed."
             exit 1
           fi
           if [ "$(jq '.otherFailures | length' "$RESULT")" -gt 0 ]; then
@@ -308,14 +310,16 @@ jobs:
             gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
           fi
 
-  # RP-569: fails when a story rendered differently twice. Its baseline was not
-  # committed (the render job put it back); every other baseline was. The lines
-  # come from a job that ran PR code, so this job has no permissions and keeps
-  # each line from starting a workflow command.
+  # RP-569: fails when a story rendered differently twice. The render job put its
+  # baseline back, so only the stable baselines reached the commit job. The lines
+  # come from a job that ran PR code, so this job has no permissions, and each line
+  # is printed behind its own ::error:: so none can start a workflow command.
   unstable:
     name: Refuse stories that render differently twice
     needs: [render, commit]
-    if: always() && needs.render.outputs.refusal != '' && needs.render.outputs.refusal != '[]'
+    if: >-
+      !cancelled() &&
+      needs.render.outputs.refusal != '' && needs.render.outputs.refusal != '[]'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -325,7 +329,7 @@ jobs:
           jq -r '.[]' <<< "$REFUSAL" | while IFS= read -r line; do
             echo "::error::${line//::/: :}"
           done
-          echo "These baselines were not committed: fix the story so it renders the same every time (docs/agents/ci-logs.md), then push or add the update-screenshots label again."
+          echo "These stories' new baselines were left out of the commit: fix the story so it renders the same every time (docs/agents/ci-logs.md), then push or add the update-screenshots label again."
           exit 1
 
   unlabel:

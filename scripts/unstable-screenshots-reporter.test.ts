@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { refusal, secondRender, type SecondRun } from "./unstable-screenshots-reporter.ts";
+import type { RunFailures } from "./story-run.ts";
+import { refusal, stabilityOf } from "./unstable-screenshots-reporter.ts";
 
 // Messages exactly as @vitest/browser 5.0.2 reports them to a reporter (captured
 // from real runs): matcherHint colours the header and paths with ANSI codes.
@@ -25,15 +26,15 @@ Diff image:
 `;
 const story = "en > components/workflow/workflow-builder.stories.tsx > EndSelected";
 
-const run = (overrides: Partial<SecondRun>): SecondRun => ({ unhandledErrors: 0, hookErrors: 0, failedTests: [], ...overrides });
+const run = (overrides: Partial<RunFailures>): RunFailures => ({ unhandledErrors: 0, hookErrors: 0, failedTests: [], ...overrides });
 
-describe("secondRender", () => {
+describe("stabilityOf", () => {
   it("finds nothing unstable when the second render matched the first everywhere", () => {
-    expect(secondRender(run({}))).toEqual({ unstable: [], otherFailures: [] });
+    expect(stabilityOf(run({}))).toEqual({ unstable: [], otherFailures: [] });
   });
 
   it("names a story whose second render differs from the first, with its pixels and baseline", () => {
-    expect(secondRender(run({ failedTests: [{ name: story, errors: [mismatch(48)] }] }))).toEqual({
+    expect(stabilityOf(run({ failedTests: [{ name: story, errors: [mismatch(48)] }] }))).toEqual({
       unstable: [{ story, pixels: 48, reference }],
       otherFailures: [],
     });
@@ -41,7 +42,7 @@ describe("secondRender", () => {
 
   it("names every unstable story", () => {
     const other = "ar > components/workflow/workflow-builder.stories.tsx > StepAfterSendBack";
-    const { unstable } = secondRender(run({ failedTests: [{ name: story, errors: [mismatch(48)] }, { name: other, errors: [mismatch(1171, "0.00")] }] }));
+    const { unstable } = stabilityOf(run({ failedTests: [{ name: story, errors: [mismatch(48)] }, { name: other, errors: [mismatch(1171, "0.00")] }] }));
     expect(unstable.map((u) => [u.story, u.pixels])).toEqual([
       [story, 48],
       [other, 1171],
@@ -50,7 +51,7 @@ describe("secondRender", () => {
 
   it("reads a mismatch without colour codes or the matcher header", () => {
     const bare = `Screenshot does not match the stored reference.\n206 pixels (ratio 0.00) differ.\n\nReference screenshot:\n  ${reference}`;
-    expect(secondRender(run({ failedTests: [{ name: story, errors: [bare] }] })).unstable).toEqual([{ story, pixels: 206, reference }]);
+    expect(stabilityOf(run({ failedTests: [{ name: story, errors: [bare] }] })).unstable).toEqual([{ story, pixels: 206, reference }]);
   });
 
   it("keeps any other failure apart: a play function, axe or an unstable screenshot capture", () => {
@@ -58,20 +59,20 @@ describe("secondRender", () => {
       { name: story, errors: ["expected [ 'button-name: …' ] to deeply equal []"] },
       { name: "ar > x.stories.tsx > Y", errors: ["Could not capture a stable screenshot within 5000ms."] },
     ];
-    expect(secondRender(run({ failedTests: failures }))).toEqual({
+    expect(stabilityOf(run({ failedTests: failures }))).toEqual({
       unstable: [],
       otherFailures: [`${story}: expected [ 'button-name: …' ] to deeply equal []`, "ar > x.stories.tsx > Y: Could not capture a stable screenshot within 5000ms."],
     });
   });
 
   it("counts a mismatch with a second error as another failure", () => {
-    const { unstable, otherFailures } = secondRender(run({ failedTests: [{ name: story, errors: [mismatch(48), "TypeError: x is undefined"] }] }));
+    const { unstable, otherFailures } = stabilityOf(run({ failedTests: [{ name: story, errors: [mismatch(48), "TypeError: x is undefined"] }] }));
     expect(unstable).toEqual([]);
     expect(otherFailures).toHaveLength(1);
   });
 
   it("counts hook and unhandled errors as other failures", () => {
-    expect(secondRender(run({ hookErrors: 2, unhandledErrors: 1 })).otherFailures).toEqual(["2 hook errors", "1 unhandled error"]);
+    expect(stabilityOf(run({ hookErrors: 2, unhandledErrors: 1 })).otherFailures).toEqual(["2 hook errors", "1 unhandled error"]);
   });
 });
 
@@ -85,9 +86,9 @@ describe("refusal", () => {
     ).toEqual([`story ${story} renders differently twice (48 pixels)`, "story ar > a.stories.tsx > B renders differently twice (1 pixel)"]);
   });
 
-  it("keeps an untrusted story name to one line that starts no workflow command", () => {
-    const [line] = refusal([{ story: "x\n::error::forged\r", pixels: 3, reference }]);
-    expect(line).toBe("story x : :error: :forged  renders differently twice (3 pixels)");
+  it("keeps a story name to one line", () => {
+    const [line] = refusal([{ story: "x\r\ny", pixels: 3, reference }]);
+    expect(line).toBe("story x y renders differently twice (3 pixels)");
   });
 });
 
@@ -110,13 +111,16 @@ describe("update-screenshots.yml", () => {
     expect(upload).toBeGreaterThan(second);
     expect(render.steps[second]?.env?.REPORTER).toBe("scripts/unstable-screenshots-reporter.ts");
     expect(render.steps[second]?.run).toContain("git checkout --quiet HEAD --");
+    // Fails closed: a jq error in a pipe stops the step, and an unreadable result commits nothing.
+    expect(render.steps[second]?.run).toContain("set -o pipefail");
+    expect(render.steps[second]?.run).toMatch(/if ! jq -e /);
     expect(render.outputs?.refusal).toContain("steps.second.outputs.refusal");
   });
 
   it("refuses after the commit, in a job without permissions, only when a story was unstable", () => {
     expect(unstable.needs).toEqual(["render", "commit"]);
     expect(unstable.permissions).toEqual({});
-    expect(unstable.if).toContain("always()");
+    expect(unstable.if).toContain("!cancelled()");
     expect(unstable.if).toContain("needs.render.outputs.refusal != '[]'");
     expect(unstable.steps.at(-1)?.run).toMatch(/exit 1\s*$/);
   });
