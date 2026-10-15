@@ -8,8 +8,30 @@ import { lockPid } from "./worktrees-stale.ts";
 // refuses a lane whose ports are taken, and lanes-prune.ts, which removes the
 // rabaed-* compose projects old worktrees left behind (RP-297).
 
-/** Lanes 1..9 are for worktrees; lane 0 (the defaults) is the main folder's. */
-export const HIGHEST_LANE = 9;
+// A lane number is two digits mL (RP-602): m the Main session (1–5), L = 0 for the Main
+// itself, 1–4 for its lanes A–D. Lane 0 (the defaults) is the main folder's. The single-digit
+// lanes 1–9 are legacy: they keep working until no worktree uses them (lane m and lane m0
+// have the same ports, so Mains 1–5 keep theirs).
+
+/** The lanes 1–9 of the old scheme, still accepted while worktrees on them drain. */
+const LEGACY_LANES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** Whether n is a lane number: 0, a legacy 1–9, or mL with m 1–5 and L 0–4. */
+export const isValidLane = (n: number): boolean =>
+  Number.isInteger(n) && (n >= 0 && n <= 9 ? true : n >= 10 && n <= 54 && n % 10 <= 4);
+
+/** Every valid lane, ascending. */
+export const VALID_LANES: readonly number[] = Array.from({ length: 55 }, (_, n) => n).filter(isValidLane);
+
+/** What lane:env and lanes:prune say when a lane number is not one. */
+export const LANE_SCHEME = "lanes are 0 (the main folder), mL with m = Main 1–5 and L = 0 for the Main, 1–4 for lanes A–D (e.g. 32 = Main 3, lane B), or a legacy 1–9";
+
+/** The lane with the same ports under the other scheme: legacy m and m0, for m 1–5. */
+export function twinLane(n: number): number | undefined {
+  if (n >= 1 && n <= 5) return 10 * n;
+  if (n >= 10 && n <= 50 && n % 10 === 0) return n / 10;
+  return undefined;
+}
 
 export type LanePorts = { postgres: number; api: number; admin: number; web: number; mailpit: number; files: number };
 
@@ -22,9 +44,10 @@ const portNames: Record<keyof LanePorts, string> = {
   files: "file store",
 };
 
-/** Lane n's ports: the defaults plus 100n. */
+/** Lane n's ports: the defaults plus 10n (plus 100n for the legacy lanes 0–9, so lane m0 = lane m). */
 export function lanePorts(n: number): LanePorts {
-  return { postgres: 5432 + 100 * n, api: 4000 + 100 * n, admin: 4050 + 100 * n, web: 3000 + 100 * n, mailpit: 8025 + 100 * n, files: 9000 + 100 * n };
+  const step = n < 10 ? 100 * n : 10 * n;
+  return { postgres: 5432 + step, api: 4000 + step, admin: 4050 + step, web: 3000 + step, mailpit: 8025 + step, files: 9000 + step };
 }
 
 export const laneProject = (n: number) => `rabaed-lane${n}`;
@@ -89,16 +112,35 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
   if (others.length > 0) {
     clashes.push(`Compose project ${laneProject(n)} already belongs to ${others.join(", ")} (it would share that worktree's database).`);
   }
+  // Legacy lane m and lane m0 have the same ports: the other's containers, even stopped, would clash on start.
+  const twin = twinLane(n);
+  const twins = twin === undefined ? [] : [...new Set(containers.filter((c) => c.project === laneProject(twin) && !samePath(c.workingDir, cwd, platform)).map((c) => c.workingDir))];
+  if (twin !== undefined && twins.length > 0) {
+    clashes.push(`Compose project ${laneProject(twin)} (lane ${twin} has the same ports as lane ${n}) belongs to ${twins.join(", ")}.`);
+  }
   return clashes;
 }
 
-/** The first lane from start (wrapping round, never lane 0, which is the main folder's) with no clash. */
-export function firstFreeLane(start: number, clashesOf: (n: number) => string[]): number | undefined {
-  for (let i = 0; i < HIGHEST_LANE; i++) {
-    const n = ((Math.max(start, 1) - 1 + i) % HIGHEST_LANE) + 1;
-    if (clashesOf(n).length === 0) return n;
+/**
+ * The order lane:env --free tries lanes in from start. From mL: the same Main's lanes m1–m4
+ * from L (wrapping round), then the other Mains' lanes A–D; never a Main's own m0 or lane 0.
+ * From a legacy lane (or 0): lanes 1–9 from it, wrapping round, as before.
+ */
+export function freeLaneOrder(start: number): number[] {
+  if (start < 10) {
+    const from = Math.max(start, 1) - 1;
+    return LEGACY_LANES.map((_, i) => LEGACY_LANES[(from + i) % LEGACY_LANES.length]!);
   }
-  return undefined;
+  const main = Math.floor(start / 10);
+  const from = Math.max(start % 10, 1) - 1;
+  const own = [1, 2, 3, 4].map((_, i) => 10 * main + ((from + i) % 4) + 1);
+  const others = VALID_LANES.filter((n) => n >= 10 && n % 10 !== 0 && Math.floor(n / 10) !== main);
+  return [...own, ...others];
+}
+
+/** The first lane in freeLaneOrder(start) with no clash. */
+export function firstFreeLane(start: number, clashesOf: (n: number) => string[]): number | undefined {
+  return freeLaneOrder(start).find((n) => clashesOf(n).length === 0);
 }
 
 export type StaleProject = { project: string; reason: string; containers: string[]; volumes: string[] };
@@ -203,8 +245,11 @@ export const pruneCommand = (lane: number, { merged }: { merged: boolean }): str
  */
 export function laneHolders(n: number, { containers, cwd, platform, ownDatabase }: Omit<ClashInput, "takenPorts">): string[] {
   const ports = new Set(Object.values(lanePorts(n)));
+  const twin = twinLane(n);
   const holding = containers.filter((c) =>
-    ownDatabase === true && c.project === laneProject(n) ? false : c.project === laneProject(n) || (c.state === "running" && c.ports.some((p) => ports.has(p))),
+    ownDatabase === true && c.project === laneProject(n)
+      ? false
+      : c.project === laneProject(n) || (twin !== undefined && c.project === laneProject(twin)) || (c.state === "running" && c.ports.some((p) => ports.has(p))),
   );
   return [...new Set(holding.map((c) => c.workingDir).filter((dir) => dir !== "" && !samePath(dir, cwd, platform)))];
 }
@@ -351,11 +396,30 @@ export function parsePruneArgs(args: string[]): { merged: boolean; yes: boolean;
     else if (a === "--dry-run") options.dryRun = true;
     else if (a === "--lane") {
       const lane = Number(args[++i]);
-      if (!Number.isInteger(lane) || lane < 0 || lane > 9) return undefined;
+      if (!isValidLane(lane)) return undefined;
       options.lane = lane;
     } else return undefined;
   }
   return options;
+}
+
+export type LaneEnvArgs = { lane: number; force: boolean; free: boolean; db: string | undefined };
+
+const LANE_ENV_USAGE = "Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (one lane per worktree; suffix: lowercase letters and digits, e.g. rp322)";
+
+/** lane:env's arguments, or the refusal to print. --free alone starts at lane 1. */
+export function parseLaneEnvArgs(args: string[]): LaneEnvArgs | { error: string } {
+  const force = args.includes("--force");
+  const free = args.includes("--free");
+  const dbAt = args.indexOf("--db");
+  const db = dbAt === -1 ? undefined : args[dbAt + 1];
+  const positional = args.filter((a, i) => !a.startsWith("--") && !(dbAt !== -1 && i === dbAt + 1));
+  const lane = positional.length === 0 && free ? 1 : Number(positional[0]);
+  if (positional.length > 1 || args.some((a) => a.startsWith("--") && !["--force", "--free", "--db"].includes(a)) || (dbAt !== -1 && !isValidDbSuffix(db))) {
+    return { error: LANE_ENV_USAGE };
+  }
+  if (!isValidLane(lane)) return { error: `${positional[0] ?? ""} is not a lane: ${LANE_SCHEME}.\n${LANE_ENV_USAGE}` };
+  return { lane, force, free, db };
 }
 
 /** Whether something holds the port on 127.0.0.1: it cannot be bound there, or something answers on it. */
@@ -380,9 +444,9 @@ export async function isPortTaken(port: number): Promise<boolean> {
   });
 }
 
-/** Every lane port (lanes 0..9) that is taken right now. */
+/** Every port of a valid lane that is taken right now. */
 export async function takenLanePorts(): Promise<Set<number>> {
-  const ports = Array.from({ length: HIGHEST_LANE + 1 }, (_, n) => Object.values(lanePorts(n))).flat();
+  const ports = [...new Set(VALID_LANES.flatMap((n) => Object.values(lanePorts(n))))];
   const taken = await Promise.all(ports.map(isPortTaken));
   return new Set(ports.filter((_, i) => taken[i]));
 }
