@@ -17,6 +17,7 @@ import {
   removeLinkedWorktree,
   removeWorktree,
   unpushedCount,
+  worktreeMerged,
   type WorktreeFacts,
 } from "./worktrees.ts";
 
@@ -323,6 +324,20 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(branchMerged("RP-3-done", "main", root)).toBe(false);
     run(["merge", "--no-ff", "-m", "merge", "RP-3-done"]);
     expect(branchMerged("RP-3-done", "main", root)).toBe(true);
+  });
+
+  it("calls a detached HEAD merged once its commit is in the target (RP-601)", () => {
+    run(["worktree", "add", "-b", "RP-4-detach", agent("agent-detach")]);
+    writeFileSync(join(agent("agent-detach"), "d.txt"), "d");
+    run(["add", "d.txt"], agent("agent-detach"));
+    run(["commit", "-m", "work"], agent("agent-detach"));
+    run(["checkout", "--detach"], agent("agent-detach"));
+    expect(listed("agent-detach").branch).toBeUndefined();
+    expect(worktreeMerged(listed("agent-detach"), "main", root)).toBe(false);
+    run(["merge", "--no-ff", "-m", "merge", "RP-4-detach"]);
+    expect(worktreeMerged(listed("agent-detach"), "main", root)).toBe(true);
+    // A worktree on main itself never counts, though main is in main.
+    expect(worktreeMerged({ branch: "main", head: "" }, "main", root)).toBe(false);
   });
 });
 

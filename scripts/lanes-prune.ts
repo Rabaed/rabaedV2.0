@@ -1,6 +1,6 @@
 // Removes the rabaed-* Docker Compose projects old worktrees left behind: those whose
 // worktree no longer exists, that are not running, or that only have volumes left.
-// With --merged, also those whose worktrees' branches are all merged into origin/main
+// With --merged, also those whose worktrees are all merged into origin/main (their branch, or a detached HEAD's commit, RP-601)
 // (as of the last fetch), unless a worktree that is not merged names the project in its .env.
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
-import { branchMerged, listWorktrees, refExists } from "./worktrees.ts";
+import { listWorktrees, refExists, worktreeMerged } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
 if (!options) {
@@ -49,7 +49,7 @@ if (withMerged) {
     .map((w, i) => ({
       path: w.path,
       branch: w.branch,
-      merged: i > 0 && w.branch !== undefined && w.branch !== "main" && branchMerged(w.branch, "origin/main", mainRoot),
+      merged: i > 0 && worktreeMerged(w, "origin/main", mainRoot),
       project: composeProjectOfEnv(readEnv(w.path) ?? ""),
     }));
   const known = new Set(stale.map((s) => s.project));

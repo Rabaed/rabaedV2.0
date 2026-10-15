@@ -147,7 +147,7 @@ export const composeProjectOfEnv = (env: string): string | undefined =>
 export type WorktreeLane = {
   path: string;
   branch: string | undefined;
-  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  /** Its branch, or its detached HEAD's commit, is merged into origin/main (worktrees.ts worktreeMerged). */
   merged: boolean;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project: string | undefined;
@@ -178,7 +178,7 @@ export function mergedProjects({ containers, volumes, worktrees, cwd, currentPro
     if (worktrees.some((w) => !w.merged && w.project === project)) continue;
     const holders = [...new Set(mine.map((c) => c.workingDir))].map(worktreeAt);
     if (holders.some((w) => !w?.merged)) continue;
-    const named = holders.map((w) => `${w!.branch} at ${w!.path}`).join(", ");
+    const named = holders.map((w) => `${w!.branch ?? "a detached HEAD"} at ${w!.path}`).join(", ");
     merged.push({
       project,
       reason: `branch merged into origin/main (${named})`,
@@ -230,11 +230,11 @@ export function holderAdvice(n: number, holders: string[], { worktrees, hasOrigi
   return holders.map((dir) => {
     const w = worktrees.find((x) => samePath(x.path, dir, platform));
     if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(n, { merged: false })}\` frees the lane.`;
-    if (!w.branch) return `  ${dir} has a detached HEAD.`;
-    if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
-    if (!w.merged) return `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
-    if (claimants.length === 0) return `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(n, { merged: true })}\`, then re-run.`;
-    const kept = `  ${dir} is on ${w.branch}, already merged into origin/main, but lanes:prune keeps ${laneProject(n)}`;
+    const on = w.branch ?? "a detached HEAD";
+    if (!hasOriginMain) return `  ${dir} is on ${on}; run \`git fetch origin main\` to see whether it is merged.`;
+    if (!w.merged) return `  ${dir} is on ${on}, not merged into origin/main yet: its session may still need the lane.`;
+    if (claimants.length === 0) return `  ${dir} is on ${on}, already merged into origin/main: free the lane with \`${pruneCommand(n, { merged: true })}\`, then re-run.`;
+    const kept = `  ${dir} is on ${on}, already merged into origin/main, but lanes:prune keeps ${laneProject(n)}`;
     if (claimants.some((c) => samePath(c.path, cwd, platform))) return `${kept}: this worktree's own .env has it. \`pnpm lane:env ${n} --force\` takes the lane over.`;
     const sharers = claimants.map((c) => `${c.path} (on ${c.branch ?? "a detached HEAD"}, not merged)`).join(", ");
     return `${kept} while ${sharers} has it in its .env: that worktree still shares the lane. Take a free lane instead.`;
@@ -245,7 +245,7 @@ export function holderAdvice(n: number, holders: string[], { worktrees, hasOrigi
 export type TakeoverWorktree = {
   path: string;
   branch: string | undefined;
-  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  /** Its branch, or its detached HEAD's commit, is merged into origin/main (worktrees.ts worktreeMerged). */
   merged: boolean;
   /** Uncommitted changes, untracked files outside ignored paths included. */
   dirty: boolean;
@@ -299,7 +299,7 @@ export function chooseTakeover(
     else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
     else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
     else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);
-    else from.push(`${dir} (${w.branch}, merged into origin/main)`);
+    else from.push(`${dir} (${on}, merged into origin/main)`);
   }
   if (mine.length > 0) {
     for (const w of worktrees) {
