@@ -1,29 +1,30 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { combineReservations, parseReservations, reservationsFile, reservedIssues } from "./check-migrations-days.ts";
 
 // `pnpm migration-days --spec RP-nnn` (RP-587, from the spec RP-462 retro): lists
-// the spec's tickets that have no day in planning/migration-days.md, before
+// the spec's issues that have no day in planning/migration-days.md, before
 // implementers start. RP-453 took 20270320 from main's latest migration, and
 // the first warning came from `pnpm check:migrations` on the merged integration
 // branch, after the migration was written. Only the planning session edits
 // that file, so ask it for the days this names.
 //
-// The tickets come from the spec's ticket table in Jira (JIRA_EMAIL and
-// JIRA_API_TOKEN, as scripts/jira-close.ts), or from `--tickets RP-a,RP-b`
-// offline. The reservations are origin/main's, plus the branch's for the days
-// main doesn't reserve, as `check:migrations` reads them.
-// The Jira and file calls sit behind MigrationDaysSeam so the tests touch neither.
+// The issues come from the "Ticket" column of the spec's table in Jira
+// (JIRA_EMAIL and JIRA_API_TOKEN, as scripts/jira-close.ts), or from
+// `--tickets RP-a,RP-b` offline. The reservations are origin/main's, plus
+// HEAD's for the days main doesn't reserve, as `check:migrations` reads them.
+// The git and Jira calls sit behind MigrationDaysSeam so the tests touch neither.
 
 const JIRA = "https://rabaedsa.atlassian.net";
 
 export interface MigrationDaysSeam {
+  /** `git fetch origin main`; false when it fails. */
+  fetchMain(): boolean;
   /** True when JIRA_EMAIL and JIRA_API_TOKEN are set. */
   credentials(): boolean;
   /** The spec issue's description, as Jira's document format (ADF). */
   specDescription(key: string): Promise<unknown>;
-  /** The reservations file's text on origin/main, then in this worktree ("" when missing). */
+  /** The reservations file's text on origin/main, then at HEAD ("" when missing). */
   reservations(): [onMain: string, onBranch: string];
 }
 
@@ -34,6 +35,8 @@ export interface MigrationDaysResult {
 
 // eslint-disable-next-line rabaed/no-avoid-terms -- the flag RP-587 names: Jira tickets, not Rabaed items
 const issuesFlag = "--tickets";
+// eslint-disable-next-line rabaed/no-avoid-terms -- the spec tables' column header: Jira tickets, not Rabaed items
+const issuesColumn = "Ticket";
 // eslint-disable-next-line rabaed/no-avoid-terms -- the command's own name: database migrations, not a data import
 const usage = `Usage: pnpm migration-days --spec RP-nnn [${issuesFlag} RP-a,RP-b]   (${issuesFlag}: the spec's issues, offline, without Jira)`;
 const fail = (...lines: string[]): MigrationDaysResult => ({ ok: false, lines });
@@ -42,18 +45,42 @@ const isKey = (value: string) => /^RP-\d+$/.test(value);
 interface AdfNode {
   type?: string;
   text?: string;
+  attrs?: { url?: string };
   content?: AdfNode[];
 }
 
-const nodes = (node: unknown): AdfNode[] => (node !== null && typeof node === "object" ? [node as AdfNode] : []);
-const textOf = (node: AdfNode): string => node.text ?? (node.content ?? []).map(textOf).join("");
+/** A node's text; a smart link (inlineCard) reads as the issue key its URL ends in; a cell's paragraphs are joined by spaces. */
+function textOf(node: AdfNode): string {
+  if (node.type === "inlineCard") return /\/browse\/(RP-\d+)\b/.exec(node.attrs?.url ?? "")?.[1] ?? node.attrs?.url ?? "";
+  if (node.text !== undefined) return node.text;
+  return (node.content ?? []).map(textOf).join(node.type === "tableCell" || node.type === "tableHeader" ? " " : "");
+}
+
 const descendants = (node: AdfNode, type: string): AdfNode[] => (node.type === type ? [node] : (node.content ?? []).flatMap((child) => descendants(child, type)));
 
-/** The issues of a spec's table: each table row's first cell that holds one issue key alone ("RP-593, RP-591" is a Blocked by cell). */
-export function specIssues(description: unknown): string[] {
-  return nodes(description)
-    .flatMap((doc) => descendants(doc, "tableRow"))
-    .flatMap((row) => (row.content ?? []).map((cell) => textOf(cell).trim()).filter(isKey).slice(0, 1));
+/** What a spec's issue table gives: its issues, and the cells of that column that aren't one key. */
+export interface SpecIssues {
+  /** False when the description has no table with a "Ticket" header cell. */
+  found: boolean;
+  issues: string[];
+  unreadable: string[];
+}
+
+/**
+ * The issues of a spec's table: the column headed "Ticket" of the first table
+ * that has one, one key per row. A cell that isn't one key alone is
+ * unreadable, so a row is never silently left out of the check.
+ */
+export function specIssues(description: unknown): SpecIssues {
+  const doc = description !== null && typeof description === "object" ? (description as AdfNode) : {};
+  for (const table of descendants(doc, "table")) {
+    const [header, ...rows] = descendants(table, "tableRow").map((row) => (row.content ?? []).map((cell) => textOf(cell).trim()));
+    const column = (header ?? []).findIndex((cell) => cell.toLowerCase() === issuesColumn.toLowerCase());
+    if (column === -1) continue;
+    const cells = rows.map((row) => row[column] ?? "");
+    return { found: true, issues: cells.filter(isKey), unreadable: cells.filter((cell) => !isKey(cell)) };
+  }
+  return { found: false, issues: [], unreadable: [] };
 }
 
 /** The values after a flag, up to the next flag; undefined when the flag is absent. */
@@ -64,7 +91,8 @@ function flagValues(args: string[], name: string): string[] | undefined {
   return args.slice(at + 1, end === -1 ? undefined : end);
 }
 
-export async function migrationDays(args: string[], seam: MigrationDaysSeam): Promise<MigrationDaysResult> {
+/** The spec's issues (or the given ones) with no reserved day: ok when there are none. */
+export async function unreservedSpecIssues(args: string[], seam: MigrationDaysSeam): Promise<MigrationDaysResult> {
   const specValues = flagValues(args, "--spec");
   const spec = specValues?.[0];
   // PowerShell passes `RP-a,RP-b` as two arguments: take commas, spaces and arguments alike.
@@ -76,26 +104,32 @@ export async function migrationDays(args: string[], seam: MigrationDaysSeam): Pr
   let keys = given;
   if (keys === undefined) {
     if (!seam.credentials()) return fail(`JIRA_EMAIL and JIRA_API_TOKEN are not set, so ${spec}'s issue table can't be read. Pass the spec's issues with ${issuesFlag} RP-a,RP-b.`, usage);
-    keys = specIssues(await seam.specDescription(spec as string));
-    if (keys.length === 0) return fail(`${spec}'s description has no issue table (a table row with an issue key in a cell of its own). Pass the issues with ${issuesFlag} RP-a,RP-b.`);
+    const table = specIssues(await seam.specDescription(spec as string));
+    if (!table.found) return fail(`${spec}'s description has no issue table (a table with a "${issuesColumn}" column). Pass the issues with ${issuesFlag} RP-a,RP-b.`);
+    if (table.unreadable.length > 0) {
+      return fail(`${spec}'s "${issuesColumn}" column has cells that aren't one issue key: ${table.unreadable.map((cell) => `"${cell}"`).join(", ")}. Fix the table, or pass the issues with ${issuesFlag} RP-a,RP-b.`);
+    }
+    keys = table.issues;
   }
 
+  const warnings = seam.fetchMain() ? [] : ["Warning: git fetch origin main failed; checked against the last-fetched origin/main."];
   const [onMain, onBranch] = seam.reservations();
   const reserved = reservedIssues(combineReservations(parseReservations(onMain), parseReservations(onBranch)));
   const missing = keys.filter((key) => !reserved.has(key));
-  const of = spec === undefined ? "" : ` of ${spec}`;
-  if (missing.length === 0) return { ok: true, lines: [`Every issue${of} has a day in ${reservationsFile}: ${keys.join(", ")}.`] };
+  const ofSpec = spec === undefined ? "" : ` of ${spec}`;
+  if (missing.length === 0) return { ok: true, lines: [...warnings, `Every issue${ofSpec} has a day in ${reservationsFile}: ${keys.join(", ")}.`] };
   return fail(
-    `No day in ${reservationsFile} is reserved for ${missing.join(", ")}${of}.`,
+    ...warnings,
+    `No day in ${reservationsFile} is reserved for ${missing.join(", ")}${ofSpec}.`,
     "If any of them may change the database schema, ask the planning session to reserve days before the implementers start.",
   );
 }
 
-/** The real Jira and file calls, in the repository at `repo`. */
+/** The real git and Jira calls, in the repository at `repo`. */
 export function realSeam(repo: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): MigrationDaysSeam {
   const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
-  const local = join(repo, reservationsFile);
   return {
+    fetchMain: () => git("fetch", "origin", "main").status === 0,
     credentials: () => Boolean(env.JIRA_EMAIL && env.JIRA_API_TOKEN),
     async specDescription(key) {
       const headers = { Authorization: `Basic ${Buffer.from(`${env.JIRA_EMAIL}:${env.JIRA_API_TOKEN}`).toString("base64")}`, Accept: "application/json" };
@@ -104,17 +138,13 @@ export function realSeam(repo: string = process.cwd(), env: NodeJS.ProcessEnv = 
       if (!response.ok) throw new Error(`Jira GET issue/${key} answered ${response.status}`);
       return ((await response.json()) as { fields: { description: unknown } }).fields.description;
     },
-    reservations: () => {
-      // Offline, the fetch fails and the last-fetched origin/main counts.
-      git("fetch", "origin", "main");
-      return [git("show", `origin/main:${reservationsFile}`).stdout ?? "", existsSync(local) ? readFileSync(local, "utf8") : ""];
-    },
+    reservations: () => [git("show", `origin/main:${reservationsFile}`).stdout ?? "", git("show", `HEAD:${reservationsFile}`).stdout ?? ""],
   };
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   try {
-    const result = await migrationDays(process.argv.slice(2), realSeam());
+    const result = await unreservedSpecIssues(process.argv.slice(2), realSeam());
     for (const line of result.lines) (result.ok ? console.log : console.error)(line);
     process.exit(result.ok ? 0 : 1);
   } catch (error) {
