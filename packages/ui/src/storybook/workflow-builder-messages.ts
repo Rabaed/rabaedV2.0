@@ -58,6 +58,8 @@ export const builderMessages = {
       "poolHint": "Pool: anyone holding {holders}",
       "editsForm": "Edits the raiser's Form",
       "editsFormHelp": "Whoever holds this Step edits the raiser's Form. Nobody edits it after a Submit.",
+      "editsFormDefaultOn": "Default: on (this Step has the Draft Step's Participant and Permission).",
+      "editsFormDefaultOff": "Default: off (this Step's Permission differs from the Draft Step's).",
       "outcomeHeading": "Outcome",
       "outcomeOptions": {
         "none": "None",
@@ -65,9 +67,10 @@ export const builderMessages = {
         "issue_outcome": "Issues the outcome"
       },
       "draftsVisibleTo": "Drafts visible to",
-      "draftsWholeCompany": "The author's whole Company",
+      "draftsWholeCompany": "The author's whole Company (default)",
       "draftsAuthorOnly": "The author only",
-      "draftsVisibleHelp": "A Draft is read by the author's whole Company.",
+      "draftsVisibleHelp": "Members of the author's Company who see the item read a Draft; only its holder edits it.",
+      "draftsAuthorOnlyHelp": "Only the Member holding a Draft sees it: its author, unless it is handed over. Once it leaves the Draft Step, the author's Company reads it. Other Companies never see a Draft.",
       "afterSendBack": "After a Send Back",
       "afterSendBackComment": "Comment only",
       "afterSendBackEditForm": "Edit the Form",
@@ -305,6 +308,8 @@ export const builderMessages = {
       "poolHint": "المجموعة: أي شخص يتولى {holders}",
       "editsForm": "يعدّل نموذج المُنشئ",
       "editsFormHelp": "من يتولى هذه الخطوة يعدّل نموذج المُنشئ. لا يعدّله أحد بعد التقديم.",
+      "editsFormDefaultOn": "الافتراضي: مفعّل (مشارك هذه الخطوة وصلاحيتها هما مشارك خطوة المسودة وصلاحيتها).",
+      "editsFormDefaultOff": "الافتراضي: غير مفعّل (صلاحية هذه الخطوة غير صلاحية خطوة المسودة).",
       "outcomeHeading": "النتيجة",
       "outcomeOptions": {
         "none": "بدون",
@@ -312,9 +317,10 @@ export const builderMessages = {
         "issue_outcome": "يصدر النتيجة"
       },
       "draftsVisibleTo": "المسودات مرئية لـ",
-      "draftsWholeCompany": "شركة المُنشئ كاملة",
+      "draftsWholeCompany": "شركة المُنشئ كاملة (الافتراضي)",
       "draftsAuthorOnly": "المُنشئ فقط",
-      "draftsVisibleHelp": "تُقرأ المسودة من شركة المُنشئ كاملة.",
+      "draftsVisibleHelp": "يقرأ المسودة أعضاء شركة المُنشئ الذين يرون العنصر، ولا يعدّلها إلا من يتولاها.",
+      "draftsAuthorOnlyHelp": "لا يرى المسودة إلا من يتولاها: مُنشئها، ما لم تُسلَّم إلى غيره. وحين تغادر خطوة المسودة تقرؤها شركة المُنشئ. لا ترى الشركات الأخرى أي مسودة.",
       "afterSendBack": "بعد الإرجاع إلى المُقدِّم",
       "afterSendBackComment": "تعليق فقط",
       "afterSendBackEditForm": "تعديل النموذج",

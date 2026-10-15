@@ -159,6 +159,11 @@ const pickStep = async (canvas: Canvas, key: string, locale: "en" | "ar") => {
   await shown(canvas, name);
   await userEvent.click(canvas.getAllByText(name)[0]!);
 };
+/** Opens a Select and picks one of its options (they open in a portal). */
+const pickOption = async (select: HTMLElement, option: string) => {
+  await userEvent.click(select);
+  await userEvent.click(within(document.body).getByRole("option", { name: option }));
+};
 const ready = (canvas: Canvas, locale: "en" | "ar") => shown(canvas, step("consultant_qa").name[locale]);
 
 /** V2 01: the draft open, nothing selected: the palette, the canvas, how to work it, what the draft holds and its problems. */
@@ -233,8 +238,7 @@ export const StepAfterSendBack: Story = {
     const setting = editor.getByRole("combobox", { name: labels.afterSendBack });
     await expect(setting).toHaveTextContent(labels.afterSendBackComment);
     await expect(editor.getByText(labels.afterSendBackHelp)).toBeVisible();
-    await userEvent.click(setting);
-    await userEvent.click(within(document.body).getByRole("option", { name: labels.afterSendBackEditForm }));
+    await pickOption(setting, labels.afterSendBackEditForm);
     await expect(args.onChange).toHaveBeenCalledWith(
       expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", afterSendBack: "edit_form" })]) }),
     );
@@ -242,6 +246,36 @@ export const StepAfterSendBack: Story = {
     // A Step no Send Back leads to has no such setting.
     await pickStep(canvas, "contractor_pm", locale);
     await expect(editorOf(canvas, labels).queryByRole("combobox", { name: labels.afterSendBack })).toBeNull();
+  },
+};
+
+/** A Draft Step whose Drafts only their author sees (RP-514): the setting shows it, and is changed and saved. */
+const authorOnlyDraft: WorkflowDefinition = {
+  ...builderDraft,
+  steps: builderDraft.steps.map((s) => (s.key === "draft" ? { ...s, draftsVisibleTo: "author" as const } : s)),
+};
+
+/** The Draft Step's "Drafts visible to", set to "The author only" (RP-551), switched to the whole Company and back. */
+export const StepDraftsAuthorOnly: Story = {
+  args: { definition: authorOnlyDraft, problems: builderProblemsOf(authorOnlyDraft) },
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickStep(canvas, "draft", locale);
+    const setting = () => editorOf(canvas, labels).getByRole("combobox", { name: labels.draftsVisibleTo });
+    await expect(setting()).toHaveTextContent(labels.draftsAuthorOnly);
+    await expect(editorOf(canvas, labels).getByText(labels.draftsAuthorOnlyHelp)).toBeVisible();
+    await pickOption(setting(), labels.draftsWholeCompany);
+    await expect(args.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", draftsVisibleTo: "company" })]) }),
+    );
+    await expect(editorOf(canvas, labels).getByText(labels.draftsVisibleHelp)).toBeVisible();
+    await pickOption(setting(), labels.draftsAuthorOnly);
+    await expect(args.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", draftsVisibleTo: "author" })]) }),
+    );
+    await expect(setting()).toHaveTextContent(labels.draftsAuthorOnly);
   },
 };
 
@@ -317,6 +351,29 @@ export const TransitionCodeB: Story = {
     await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(builderScreens[2]!.name[locale]);
     await expect(editor.getByText(labels.createsItemsOf(locale === "ar" ? "ملاحظة" : "Comment"))).toBeVisible();
     await expect(editor.getByRole("link", { name: labels.editInScreens })).toHaveAttribute("href", "#screens");
+  },
+};
+
+/** A Transition's Screen switched (RP-551): to another Screen, then to none (its Internal Note only). */
+export const TransitionSwitchScreen: Story = {
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickTransition(canvas, "approve_b", locale);
+    const screen = () => editorOf(canvas, labels).getByRole("combobox", { name: labels.screen });
+    await expect(screen()).toHaveTextContent(builderScreens[2]!.name[locale]);
+    await pickOption(screen(), builderScreens[0]!.name[locale]);
+    await expect(args.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ transitions: expect.arrayContaining([expect.objectContaining({ key: "approve_b", screen: builderScreens[0]!.key })]) }),
+    );
+    await expect(screen()).toHaveTextContent(builderScreens[0]!.name[locale]);
+    await pickOption(screen(), labels.screenNone);
+    const saved = (args.onChange as ReturnType<typeof fn>).mock.lastCall![0] as WorkflowDefinition;
+    await expect(saved.transitions.find((t) => t.key === "approve_b")).toMatchObject({ actionForm: null });
+    await expect(saved.transitions.find((t) => t.key === "approve_b")).not.toHaveProperty("screen");
+    await expect(screen()).toHaveTextContent(labels.screenNone);
+    await expect(editorOf(canvas, labels).getByText(labels.internalNoteBlock)).toBeVisible();
   },
 };
 
