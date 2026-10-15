@@ -1,5 +1,6 @@
--- RP-593: the Owner's review (ADR 0022; workflow-engine.md §1, §3.1, §5.3a; visibility.md V5,
--- scenarios RP-593-1 to RP-593-3).
+-- Spec RP-598, RP-593: the Owner's review (ADR 0022; workflow-engine.md §1, §3.1, §5.3a;
+-- visibility.md V5, scenarios RP-593-1 to RP-593-3). Renamed from 20270401000000 to sort
+-- after main's latest migration (20270404000000, PR #208).
 --
 -- * A Step may confirm a Code (`outcome_mode` `confirm_code`): it is reached by a Submit that
 --   carries a Code (`workflow_transition.outcome`) from a Step that Recommends a Code, the

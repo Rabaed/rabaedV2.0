@@ -108,7 +108,7 @@ Removal never deletes access to what the Member signed (§10).
 - `position`: `id`, `owner_kind/owner_id`, `base_role`, `key` (stable, e.g. `project_manager`), `name i18n`, `sort`, `copied_from_id`. The walking skeleton has Rabaed Defaults only (no `owner_id`, no `copied_from_id` yet).
 - `position_permission`: `position_id`, `permission {view, create, submit, review, approve, assign, close, attach}`, `module_key`, `work_item_type_id` (null = whole Module).
 - `project_member_position`: `project_id`, `project_member_id`, `position_id` (many-to-many). Set by the Participant's Authorized Person; seen only by that Participant's Company (V14).
-- The walking skeleton seeds Rabaed Default Positions only (e.g. Contractor Engineer, Contractor Project Manager) with Module-wide permissions (no `work_item_type_id` yet). The Owner and the Owner Representative each also have a **Project Manager** (`project_manager`: View, Review and Approve in the Submittals), the PM who confirms a Recommended Code in the Owner's review (ADR 0022; RP-593, `20270401000000_owner_review.sql`).
+- The walking skeleton seeds Rabaed Default Positions only (e.g. Contractor Engineer, Contractor Project Manager) with Module-wide permissions (no `work_item_type_id` yet). The Owner and the Owner Representative each also have a **Project Manager** (`project_manager`: View, Review and Approve in the Submittals), the PM who confirms a Recommended Code in the Owner's review (ADR 0022; RP-593, `20270409000000_owner_review.sql`).
 
 ## 3. Visibility, Trades, Locations, Scopes
 

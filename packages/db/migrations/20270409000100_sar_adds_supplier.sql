@@ -1,6 +1,6 @@
--- RP-594: a Supplier Approval Request closed at Code A or B adds its supplier to the
--- Project's Approved Supplier List (spec RP-598; RP-592's list; workflow-engine.md §6;
--- visibility.md V10).
+-- Spec RP-598, RP-594: a Supplier Approval Request closed at Code A or B adds its supplier
+-- to the Project's Approved Supplier List (RP-592's list; workflow-engine.md §6;
+-- visibility.md V10). Renamed from 20270405000000 to sort after RP-593's migration.
 --
 -- * work_item_type.adds_approved_supplier marks the Types whose A / B outcomes do it;
 --   the Rabaed Default SAR is the one. Its Form keys supplier_name_en and
@@ -12,7 +12,7 @@
 --   app.approved_supplier_listed (RP-592: the English or the Arabic name, case and the
 --   spaces around it ignored), under the same Trade lock as a Project Admin's add.
 -- * Codes C and D add nothing. A Revision closed later at A or B adds it then.
--- * app.take_transition is rebuilt from RP-593's (20270401000000_owner_review.sql): one
+-- * app.take_transition is rebuilt from RP-593's (20270409000000_owner_review.sql): one
 --   added call, nothing else changed.
 
 alter table work_item_type add column adds_approved_supplier boolean not null default false;

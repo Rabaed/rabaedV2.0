@@ -1,4 +1,4 @@
--- Review fixes for spec RP-598: app.sar_adds_supplier (20270405000000_sar_adds_supplier.sql),
+-- Review fixes for spec RP-598: app.sar_adds_supplier (20270409000100_sar_adds_supplier.sql),
 -- unchanged but for its "not at Code A or B" condition, now in parentheses so it reads as it
 -- runs (`and` binds before `or`). That migration has been applied on the spec's databases,
 -- so it is redefined here rather than edited.
