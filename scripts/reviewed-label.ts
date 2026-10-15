@@ -1,0 +1,113 @@
+import { spawnSync } from "node:child_process";
+import { appendFileSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+// Removes the `reviewed` label from a pull request when a push lands on it (RP-584).
+// Run by .github/workflows/reviewed-label.yml on pull_request: synchronize.
+//
+// The label means "/code-review finished and its fixes are pushed, at this head":
+// `pnpm queue` refuses a PR without it. So a new push drops it, with one exception
+// (decided in RP-584): a push that only merges main in, by a clean automatic merge,
+// keeps it. "Clean automatic merge" is checked, not guessed:
+//   1. the new head is a merge commit with two parents,
+//   2. the first parent is the head the push replaced (`before`),
+//   3. the second parent is already on origin/main (not another feature branch),
+//   4. the tree of the new head equals the tree `git merge-tree` makes by merging
+//      that second parent into `before`, so nobody edited anything while merging
+//      (a conflict resolution, an "evil merge", or extra changes fail this).
+// Anything else, including any error while checking, removes the label: a missing
+// label costs one `gh pr edit`, a stale one lets unreviewed code into main.
+//
+// Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH. Runs the default
+// branch's copy of this file in a checkout that has main's history and the PR head;
+// it runs no PR code.
+
+export const REVIEWED_LABEL = "reviewed";
+
+export interface ReviewedGit {
+  /** Parent commits of `commit`, first parent first. */
+  parents(commit: string): string[];
+  /** True when `commit` is on origin/main (an ancestor of it, or the tip). */
+  onMain(commit: string): boolean;
+  /** The tree id of `commit`. */
+  tree(commit: string): string;
+  /** The tree id of the clean merge of `other` into `base` (`git merge-tree --write-tree`); undefined when it conflicts or errors. */
+  mergedTree(base: string, other: string): string | undefined;
+}
+
+/** True when the push `before` -> `after` only merged main in, with no change of its own. */
+export function keepsLabel(before: string, after: string, git: ReviewedGit): boolean {
+  try {
+    const [first, second, ...rest] = git.parents(after);
+    if (first !== before || second === undefined || rest.length > 0) return false;
+    if (!git.onMain(second)) return false;
+    const merged = git.mergedTree(before, second);
+    return merged !== undefined && merged === git.tree(after);
+  } catch {
+    return false;
+  }
+}
+
+export interface ReviewedGitHub {
+  removeLabel(pr: number): Promise<void>;
+}
+
+/** Returns what was done, for the log. */
+export async function dropLabelOnPush(event: { pr: number; labels: string[]; before: string; after: string }, git: ReviewedGit, github: ReviewedGitHub): Promise<string> {
+  if (!event.labels.includes(REVIEWED_LABEL)) return `PR #${event.pr} has no \`${REVIEWED_LABEL}\` label: nothing to remove.`;
+  if (keepsLabel(event.before, event.after, git)) return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
+  await github.removeLabel(event.pr);
+  return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; the new push needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${REVIEWED_LABEL}\`.`;
+}
+
+export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): ReviewedGit {
+  const run = (args: string[]) => spawn("git", args, { cwd, encoding: "utf8" });
+  const must = (args: string[]) => {
+    const done = run(args);
+    if (done.status !== 0) throw new Error(`git ${args.slice(0, 2).join(" ")} failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
+    return (done.stdout ?? "").trim();
+  };
+  return {
+    parents: (commit) => must(["rev-list", "--parents", "-n", "1", commit]).split(" ").slice(1),
+    onMain: (commit) => run(["merge-base", "--is-ancestor", commit, "origin/main"]).status === 0,
+    tree: (commit) => must(["rev-parse", `${commit}^{tree}`]),
+    mergedTree(base, other) {
+      const done = run(["merge-tree", "--write-tree", base, other]);
+      return done.status === 0 ? (done.stdout ?? "").split("\n")[0]?.trim() : undefined;
+    },
+  };
+}
+
+function overHttp(repository: string, token: string): ReviewedGitHub {
+  return {
+    async removeLabel(pr) {
+      const response = await fetch(`https://api.github.com/repos/${repository}/issues/${pr}/labels/${REVIEWED_LABEL}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+      });
+      // 404: the label was already removed (or never existed), which is the goal.
+      if (!response.ok && response.status !== 404) throw new Error(`GitHub DELETE label answered ${response.status}`);
+    },
+  };
+}
+
+async function main() {
+  const token = process.env.GITHUB_TOKEN;
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!token || !repository) throw new Error("GITHUB_TOKEN and GITHUB_REPOSITORY must be set");
+  const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")) as { pull_request: { number: number; labels: { name: string }[] }; before: string; after: string };
+  const summary = await dropLabelOnPush(
+    { pr: event.pull_request.number, labels: event.pull_request.labels.map((label) => label.name), before: event.before, after: event.after },
+    realGit(),
+    overHttp(repository, token),
+  );
+  console.log(summary);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+}
+
+if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}
