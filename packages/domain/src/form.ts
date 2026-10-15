@@ -260,6 +260,13 @@ export const formField = z.discriminatedUnion("type", [
    */
   z.object({ ...fieldBase, type: z.literal("participant") }),
   /**
+   * A supplier of the Project's Approved Supplier List (RP-595, form-engine.md
+   * §2.12), by id. A new choice is an approved supplier of the item's Trade;
+   * one the item already holds stays, withdrawn or not, until the Trade changes.
+   * Reads as the supplier's name only (V10), never what approved it.
+   */
+  z.object({ ...fieldBase, type: z.literal("approved_supplier") }),
+  /**
    * A link question (RP-293, form-engine.md part 2b): any number of Work Items
    * chosen with Link search (Submitted items the filler sees, in the same
    * Project), by id, in the order chosen. Each is also a `relies_on` Link under
@@ -569,7 +576,15 @@ export type ValidationContext = {
    * chosen. Without it any id is taken; the server always passes it.
    */
   linkable?: ReadonlySet<string>;
+  /**
+   * The Project's Approved Supplier List, for `approved_supplier` fields. Without
+   * it an answer is only checked to be an id; the server always passes it.
+   */
+  suppliers?: readonly SupplierChoice[];
 };
+
+/** A supplier of the Approved Supplier List as the validator and the renderer read it; `name` is for display. */
+export type SupplierChoice = { id: string; tradeId: string; status: "approved" | "withdrawn"; name?: z.infer<typeof bilingualText> };
 
 /** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
@@ -892,6 +907,14 @@ function checkValue(
       const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
       return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
     }
+    case "approved_supplier": {
+      if (typeof value !== "string") return "wrong_type";
+      if (!context.suppliers) return isId(value) ? null : "unknown_option";
+      const supplier = context.suppliers.find((s) => s.id === value);
+      // Another Trade's supplier is refused (a held one was cleared before this check).
+      if (!supplier || supplier.tradeId !== given.trade) return "unknown_option";
+      return supplier.status === "approved" || context.held?.[field.key] === value ? null : "unknown_option";
+    }
     case "work_item_ref": {
       if (!Array.isArray(value) || !value.every((v) => isId(v) || isHiddenLinkChoice(v))) return "wrong_type";
       const ids = value.filter((v): v is string => typeof v === "string");
@@ -1083,6 +1106,27 @@ export function tableTotals(field: TableField, rows: unknown): Record<string, nu
 }
 
 /**
+ * `answers` without the supplier an `approved_supplier` field already holds when
+ * the Trade has changed to another than that supplier's: changing the Trade
+ * clears it. A supplier given anew for another Trade is not cleared but refused.
+ */
+function clearSuppliersOfOtherTrades(
+  fields: readonly AnswerField[],
+  answers: Record<string, unknown>,
+  context: ValidationContext,
+): Record<string, unknown> {
+  if (!context.suppliers || !context.held) return answers;
+  const out = { ...answers };
+  for (const field of fields) {
+    if (field.type !== "approved_supplier") continue;
+    const value = out[field.key];
+    const supplier = typeof value === "string" ? context.suppliers.find((s) => s.id === value) : undefined;
+    if (supplier && context.held[field.key] === value && supplier.tradeId !== out.trade) delete out[field.key];
+  }
+  return out;
+}
+
+/**
  * Checks `answers` against a Form Version's schema in `mode`. On success it
  * answers with the values to store: exactly as typed, empty ones and hidden
  * fields' dropped (a hidden field is cleared, never checked), and calculated
@@ -1101,8 +1145,8 @@ export function validateAnswers(
   if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
-  const given = answers as Record<string, unknown>;
   const fields = answerFields(schema);
+  const given = clearSuppliersOfOtherTrades(fields, answers as Record<string, unknown>, context);
   const visibility = formVisibility(schema, given);
   const errors: FieldError[] = [];
   const clean: Record<string, FormValue> = {};

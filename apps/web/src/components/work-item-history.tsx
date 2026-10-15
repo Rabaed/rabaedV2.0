@@ -16,7 +16,7 @@ type Change = NonNullable<Event["changes"]>[number];
 
 // Answers that hold ids (Built-in Fields, people and Companies) are named only on
 // the Form itself; a diff says they changed, never the ids.
-const idTypes = new Set(["trade", "location", "scopes", "member", "participant"]);
+const idTypes = new Set(["trade", "location", "scopes", "member", "participant", "approved_supplier"]);
 /**
  * Answers the history gives an event as its own line (app.work_item_history's `reason`
  * and `remarks`, read from the same answers), so a reply's answers don't repeat them.

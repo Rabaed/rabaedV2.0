@@ -226,6 +226,15 @@ export async function seedDemo(
   const emergencyLighting = await scope(bi("Emergency lighting", "إنارة الطوارئ"), lighting);
   await scope(bi("Power distribution", "توزيع الطاقة"));
 
+  // The Project's Approved Supplier List for Electrical (RP-595): the MAR Form's supplier field offers only these.
+  const gulfLighting = (
+    await tmc.caller<{ id: string }>("POST", `/v1/projects/${projectId}/approved-suppliers`, {
+      tradeId: electrical,
+      scopeId: null,
+      name: bi("Gulf Lighting Supply (fictional)", "الخليج لتوريد الإنارة (افتراضي)"),
+    })
+  ).id;
+
   // Participants, each invited by the Project Admin and accepted by its own
   // Authorized Person (ADR 0009), and what each covers (set by the Project Admin). Beta Build
   // covers exactly what TMC does: only the Company boundary keeps TMC's items from it (V3).
@@ -315,6 +324,7 @@ export async function seedDemo(
     // Filled through the MAR Form (Version 3): its Items, and its Built-in Fields; no Related submittals.
     answers: {
       manufacturer: "Zumtobel",
+      supplier: gulfLighting,
       model: "RESCLITE PRO",
       specification_section: "26 52 13",
       description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
@@ -422,6 +432,7 @@ export async function seedDemo(
       ["Thorn Voyager", "LED exit sign, maintained, 3-hour duration.", "Demo datasheet: made up for the Rabaed demo."],
       {
         manufacturer: "Thorn",
+        supplier: gulfLighting,
         model: "Voyager",
         specification_section: "26 52 13",
         description: "LED exit signs for the Tower 1 escape routes, maintained, 3-hour duration.",
@@ -442,6 +453,7 @@ export async function seedDemo(
       ["Zumtobel ONLITE CPS", "Central battery panel for emergency luminaires and exit signs.", "Demo datasheet: made up for the Rabaed demo."],
       {
         manufacturer: "Zumtobel",
+        supplier: gulfLighting,
         model: "ONLITE CPS",
         specification_section: "26 52 13",
         description: "Central battery panel monitoring the Tower 2 emergency luminaires and exit signs.",
@@ -465,6 +477,7 @@ export async function seedDemo(
       ["Legrand Cablofil CF 54", "Wire mesh cable tray, hot dip galvanised.", "Demo datasheet: made up for the Rabaed demo."],
       {
         manufacturer: "Legrand",
+        supplier: gulfLighting,
         model: "Cablofil CF 54",
         specification_section: "26 05 36",
         description: "Wire mesh cable trays for the Tower 1 electrical risers.",

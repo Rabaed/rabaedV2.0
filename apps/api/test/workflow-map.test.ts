@@ -10,7 +10,7 @@ import type { WorkItemDetail, WorkItemWorkflowMap } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { addInternalConsultantStepsType, INTERNAL_STEPS_TYPE } from "./support/internal-steps-type.ts";
-import { projectMember, tryTake } from "./support/tower.ts";
+import { approvedSupplier, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -26,6 +26,7 @@ const bilingual = (text: string) => ({ en: text, ar: text });
 const all = { isAll: true, valueIds: [] };
 
 let projectId = "";
+let supplier = ""; // An approved supplier of Electrical: the MAR Form asks for one to leave Draft (RP-595).
 let electrical = "";
 let buildingA = "";
 let engineer: Caller; // C1 Engineer.
@@ -60,6 +61,7 @@ beforeAll(async () => {
   projectId = (await api.createProject(c1.caller)).id;
   const post = async (path: string, body: unknown) => (await c1.caller.post(`/v1/projects/${projectId}/${path}`, body)).json().id;
   electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
+  supplier = await approvedSupplier(c1.caller, projectId, electrical);
   buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
 
   const c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
@@ -90,7 +92,7 @@ describe("the map of an item moving through C1 and K1", () => {
     const res = await engineer.post(`/v1/projects/${projectId}/work-items`, {
       type: INTERNAL_STEPS_TYPE,
       title: "Lighting fixtures",
-      answers: { manufacturer: "Thorn", description: "LED panels", trade: electrical, location: buildingA },
+      answers: { manufacturer: "Thorn", supplier, description: "LED panels", trade: electrical, location: buildingA },
     });
     expect(res.statusCode, res.body).toBe(201);
     id = res.json().id;

@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { NumberingSettings, SaveNumberingPatternRequest, SaveNumberingRequest } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
-import { all, bilingual, buildTower, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
+import { all, approvedSupplier, bilingual, buildTower, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
 
 let api: TestApi;
 let c1: Company;
@@ -60,7 +60,7 @@ async function numbered(at: Tower, engineer: Caller, location = at.buildingA): P
   const res = await engineer.post(`/v1/projects/${at.projectId}/work-items`, {
     type: "MAR",
     title: "Cable trays",
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: at.electrical, location },
+    answers: { manufacturer: "ACME Cables", supplier: await approvedSupplier(c1.caller, at.projectId, at.electrical), description: "Galvanised, 300 mm", trade: at.electrical, location },
   });
   expect(res.statusCode, res.body).toBe(201);
   const id = res.json().id as string;

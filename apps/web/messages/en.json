@@ -838,6 +838,10 @@
         "none": "None",
         "unavailable": "This list isn't available."
       },
+      "approvedSupplierField": {
+        "none": "No approved supplier for this Trade yet",
+        "withdrawn": "\u2068{name}\u2069 (withdrawn)"
+      },
       "linkQuestion": {
         "remove": "Remove {number}"
       }

@@ -443,6 +443,8 @@ export interface WorkItemTypeTable {
   outcome_kind: "review_code" | "inspection_result" | "approval" | "none";
   /** Its Form; always set on a Rabaed Default. */
   form_definition_id: string | null;
+  /** RP-594: closing at Code A or B adds the item's supplier (Form keys supplier_name_en / _ar) to the Approved Supplier List. The Rabaed Default SAR. */
+  adds_approved_supplier: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

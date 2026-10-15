@@ -10,7 +10,7 @@ import { decodeWorkItemCursor, workItemSearchParams, type WorkItemBoard, type Wo
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { all, approvedSupplier, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -52,7 +52,11 @@ const saudiDay = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "
 
 async function draft(by: Caller, project: string, title: string, tradeId: string, locationId: string): Promise<string> {
   const res = await ok(
-    by.post(`/v1/projects/${project}/work-items`, { type: "MAR", title, answers: { ...complete, trade: tradeId, location: locationId } }),
+    by.post(`/v1/projects/${project}/work-items`, {
+      type: "MAR",
+      title,
+      answers: { ...complete, supplier: await approvedSupplier(c1.caller, project, tradeId), trade: tradeId, location: locationId },
+    }),
     201,
   );
   const id = res.json().id as string;

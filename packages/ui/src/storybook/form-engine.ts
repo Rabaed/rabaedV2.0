@@ -237,6 +237,7 @@ export const formRendererLabels: Record<Locale, FormRendererLabels> = {
     },
     optionList: { level: (n) => `Level ${n}`, choose: "Choose…", none: "None", unavailable: "This list isn't available." },
     linkQuestion: linkQuestion.en,
+    approvedSupplier: { none: "No approved supplier for this Trade yet", withdrawn: (name) => `${name} (withdrawn)` },
   },
   ar: {
     summary: (n, count) =>
@@ -310,6 +311,7 @@ export const formRendererLabels: Record<Locale, FormRendererLabels> = {
     },
     optionList: { level: (n) => `المستوى ${n}`, choose: "اختر…", none: "بدون", unavailable: "هذه القائمة غير متاحة." },
     linkQuestion: linkQuestion.ar,
+    approvedSupplier: { none: "لا يوجد مورّد معتمد لهذا التخصص بعد", withdrawn: (name) => `${name} (مسحوب)` },
   },
 };
 
