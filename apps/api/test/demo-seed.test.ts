@@ -36,6 +36,7 @@ const demo = {
   layla: "layla.mansour@designconsultants.demo.rabaed.test",
   hind: "hind.almutairi@alwaha.demo.rabaed.test",
   omar: "omar.alharbi@tmc.demo.rabaed.test",
+  noura: "noura.alharbi@alwaha.demo.rabaed.test",
 } as const;
 type Who = keyof typeof demo;
 const signIn = (who: Who) => api.signIn(demo[who], DEFAULT_PASSWORD);
@@ -65,7 +66,55 @@ beforeAll(async () => {
   const dimensions = (await hafiz.get(`/v1/projects/${projectId}/dimensions`)).json();
   electrical = dimensions.trade.find((v: { code: string }) => v.code === "EL").id;
   tower1Floor2 = dimensions.location.find((v: { code: string }) => v.code === "T1F02").id;
-  supplier = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`)).json().suppliers.find((s: { tradeId: string }) => s.tradeId === electrical).id;
+  supplier = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`))
+    .json()
+    .suppliers.find((s: { tradeId: string; name: { en: string } }) => s.tradeId === electrical && s.name.en === "Najd Electrical Supplies").id;
+});
+
+// The submittals demo (RP-597, spec RP-598): the three Types, three fictional suppliers (two
+// preloaded, one added by the SAR taken to Code A) and a DAR through the Owner's Confirm.
+describe("the submittals the demo seeds", () => {
+  const titled = async (by: Caller, title: string): Promise<WorkItemDetail> => {
+    const items = (await by.get(`/v1/projects/${projectId}/work-items`)).json().items as { id: string; title: string }[];
+    return (await by.get(`/v1/work-items/${items.find((i) => i.title === title)!.id}`)).json();
+  };
+
+  it("has a MAR, a SAR and a DAR, each on its own Type", async () => {
+    const types = ["MAR", "SAR", "DAR"];
+    const found = await Promise.all(
+      ["Exit signage – Tower 1", "Tabuk Cable Industries", "Cable sizing calculation – Tower 1"].map(async (t) => (await titled(hafiz, t)).documentNumber),
+    );
+    expect(found.map((n, i) => n!.startsWith(`TWR-${types[i]}-`))).toEqual([true, true, true]);
+  });
+
+  it("lists three fictional suppliers: two preloaded (Civil, Electrical) and the one the SAR's Code A added", async () => {
+    const list = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`)).json().suppliers as { name: { en: string; ar: string }; tradeId: string; status: string }[];
+    const names = list.map((s) => s.name.en).sort();
+    expect(names).toEqual(["Al-Rimal Building Materials", "Najd Electrical Supplies", "Tabuk Cable Industries"]);
+    expect(list.every((s) => s.status === "approved" && s.name.ar)).toBe(true);
+    const tradeOf = (n: string) => list.find((s) => s.name.en === n)!.tradeId;
+    expect(tradeOf("Najd Electrical Supplies")).toBe(electrical);
+    expect(tradeOf("Tabuk Cable Industries")).toBe(electrical);
+    expect(tradeOf("Al-Rimal Building Materials")).not.toBe(electrical);
+  });
+
+  it("the SAR is at Code A, and the cable tray MAR chose the supplier it added", async () => {
+    const sar = await titled(hafiz, "Tabuk Cable Industries");
+    expect(sar).toMatchObject({ outcome: "A", stage: { key: "approved" } });
+    const tray = await titled(hafiz, CODE_C_TITLE);
+    const list = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`)).json().suppliers as { id: string; name: { en: string } }[];
+    expect(tray.answers.supplier).toBe(list.find((s) => s.name.en === "Tabuk Cable Industries")!.id);
+  });
+
+  it("the DAR ran 1→1 → Owner review and closed at A on Al Waha's Confirm", async () => {
+    const dar = await titled(hafiz, "Cable sizing calculation – Tower 1");
+    for (const by of [hafiz, ali, mohammed, faisal]) {
+      const d: WorkItemDetail = (await by.get(`/v1/work-items/${dar.id}`)).json();
+      expect([d.outcome, d.stage.key, d.stage.category]).toEqual(["A", "approved", "closed_positive"]);
+    }
+    const history: WorkItemHistory = (await faisal.get(`/v1/work-items/${dar.id}/history`)).json();
+    expect(history.events.some((e) => e.type === "issue_code")).toBe(true);
+  });
 });
 
 describe("the demo seed", () => {
