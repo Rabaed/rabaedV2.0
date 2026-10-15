@@ -76,7 +76,13 @@ describe("queuePr", () => {
       const result = queuePr(181, seam);
       expect(result.ok).toBe(false);
       expect(result.lines.join("\n")).toContain("apps/admin/package.json");
+      expect(result.lines.join("\n")).toContain("only its dependency fields");
       expect(enqueued).toEqual([]);
+    });
+
+    it("refuses a package.json that does not parse", () => {
+      const { seam } = withAdmin("{ not json");
+      expect(queuePr(181, seam).ok).toBe(false);
     });
 
     it("refuses the lockfile with a dependencies-only package.json plus code", () => {
@@ -316,6 +322,20 @@ describe("realSeam", () => {
     expect(seam.removalReason("PR_node", new Date("2026-10-09T10:00:00Z"))).toBe("MERGE_CONFLICT");
     expect(seam.removalReason("PR_node", new Date("2026-10-09T11:00:00Z"))).toBeUndefined();
     expect(calls.every((call) => call.command === "gh" && call.args.slice(0, 2).join(" ") === "api graphql" && call.args.includes("id=PR_node"))).toBe(true);
+  });
+
+  it("reads a package.json at the merge base with origin/main and at the PR's commit, undefined where git show fails", () => {
+    const { calls, seam } = recorded((_command, args) => {
+      if (args[0] === "merge-base") return { status: 0, stdout: "base777\n" };
+      if (args[1] === "base777:apps/admin/package.json") return { status: 0, stdout: "OLD" };
+      return { status: 128, stderr: "fatal: path does not exist" };
+    });
+    expect(seam.packageJsonVersions("abc123", "apps/admin/package.json")).toEqual({ before: "OLD", after: undefined });
+    expect(calls.map((call) => [call.command, ...call.args])).toEqual([
+      ["git", "merge-base", "origin/main", "abc123"],
+      ["git", "show", "base777:apps/admin/package.json"],
+      ["git", "show", "abc123:apps/admin/package.json"],
+    ]);
   });
 
   it("runs the migration checks for the PR's commit against origin/main with node", () => {
