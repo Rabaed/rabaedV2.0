@@ -3,7 +3,9 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Removes the `reviewed` label from a pull request when a push lands on it (RP-584).
-// Run by .github/workflows/reviewed-label.yml on pull_request: synchronize.
+// Run by .github/workflows/reviewed-label.yml on pull_request: synchronize, and on
+// opened and reopened (RP-604) so that every head has a run `pnpm queue` can wait for.
+// A label already there when a PR opens or reopens is dropped: no review is tied to that head.
 //
 // The label means "/code-review finished and its fixes are pushed, at this head":
 // `pnpm queue` refuses a PR without it. So a new push drops it, with one exception
@@ -53,9 +55,16 @@ export interface ReviewedGitHub {
 }
 
 /** Returns what was done, for the log. */
-export async function dropLabelOnPush(event: { pr: number; labels: string[]; before: string; after: string }, git: ReviewedGit, github: ReviewedGitHub): Promise<string> {
+export async function dropLabelOnPush(
+  event: { pr: number; action: string; labels: string[]; before?: string | undefined; after?: string | undefined },
+  git: ReviewedGit,
+  github: ReviewedGitHub,
+): Promise<string> {
   if (!event.labels.includes(REVIEWED_LABEL)) return `PR #${event.pr} has no \`${REVIEWED_LABEL}\` label: nothing to remove.`;
-  if (keepsLabel(event.before, event.after, git)) return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
+  // Only a push (synchronize) has a reviewed head before it; opened and reopened never keep the label.
+  if (event.action === "synchronize" && event.before && event.after && keepsLabel(event.before, event.after, git)) {
+    return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
+  }
   await github.removeLabel(event.pr);
   return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; the new push needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${REVIEWED_LABEL}\`.`;
 }
@@ -95,9 +104,14 @@ async function main() {
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
   if (!token || !repository) throw new Error("GITHUB_TOKEN and GITHUB_REPOSITORY must be set");
-  const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")) as { pull_request: { number: number; labels: { name: string }[] }; before: string; after: string };
+  const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")) as {
+    action: string;
+    pull_request: { number: number; labels: { name: string }[] };
+    before?: string;
+    after?: string;
+  };
   const summary = await dropLabelOnPush(
-    { pr: event.pull_request.number, labels: event.pull_request.labels.map((label) => label.name), before: event.before, after: event.after },
+    { pr: event.pull_request.number, action: event.action, labels: event.pull_request.labels.map((label) => label.name), before: event.before, after: event.after },
     realGit(),
     overHttp(repository, token),
   );

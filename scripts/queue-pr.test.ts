@@ -103,6 +103,8 @@ describe("queuePr", () => {
     const result = queuePr(149, seam);
     expect(result.ok).toBe(false);
     expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc123");
+    // RP-604: a PR from before opened-runs never gets one by waiting, so the fix says how to make one.
+    expect(result.lines.join("\n")).toContain("merge origin/main in cleanly and push");
     expect(enqueued).toEqual([]);
   });
 
