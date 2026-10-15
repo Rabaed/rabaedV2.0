@@ -1358,6 +1358,11 @@ export function takeTransition(
   now: Date,
 ): Promise<TakeTransitionResult> {
   return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
+    // The Member's key first, the lock app.take_transition takes (RP-600): a request
+    // with the same key waits for this one to commit, so its checks below read the
+    // item as moved and it reaches the replay, rather than being refused (no_route).
+    // Taken before the 404: it is the Member's own key, not the item's.
+    await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
     // A hidden item is the plain 404 first; then nothing moves unconfirmed.

@@ -272,7 +272,7 @@ A condition is a small JSON rule over three sources: the item's Form data, the c
 
 Every command runs in **one transaction**:
 - it locks the item row (`SELECT … FOR UPDATE`);
-- it takes an **idempotency key**, so a double-click can't apply twice;
+- it takes an **idempotency key**, so a double-click can't apply twice; a Transition locks the Member's key before the api checks anything, so the second of two requests sent at once waits for the first to commit and replays it (RP-600);
 - it writes side effects (notifications, PDF jobs, emails) to an **outbox** table in the same transaction, and workers deliver them afterwards.
 
 ### 5.1 `take_transition(item, transition, action_form_answers, confirmed)`

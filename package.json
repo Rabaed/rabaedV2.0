@@ -20,6 +20,7 @@
     "db:reset": "node scripts/pnpm.ts --filter @rabaed/db run reset",
     "check:migrations": "node scripts/check-migrations.ts",
     "migration:new": "node scripts/migration-new.ts",
+    "migration-days": "node scripts/migration-days.ts",
     "db:fn": "node scripts/db-fn.ts",
     "queue": "node scripts/queue-pr.ts",
     "verify": "node scripts/verify.ts",
