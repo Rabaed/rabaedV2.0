@@ -31,6 +31,9 @@ export function parseReservations(text: string): Reservation[] {
   });
 }
 
+/** The issues the reservations name (`spec RP-525` names RP-525). */
+export const reservedIssues = (reservations: Reservation[]): Set<string> => new Set(reservations.flatMap((r) => issues(r.owner)));
+
 /** A reservation as the file's row says it, for a message. */
 export const formatReservation = ({ day, owner, lane, purpose }: Reservation): string => `${day} | ${owner} | ${lane} | ${purpose}`;
 
