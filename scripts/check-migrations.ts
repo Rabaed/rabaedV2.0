@@ -6,7 +6,8 @@ import { git } from "./migrations.ts";
 // `pnpm check:migrations` (RP-384): the CI drift check, run before a push or
 // PR update. Fetches origin main, then checks origin/main against HEAD, so a
 // migration that shares a timestamp with one on main (RP-363's rename, PR #126)
-// shows up locally. Offline, the fetch fails: say so and stop.
+// shows up locally (the drift check also reports a new migration that sorts by
+// a hidden column, RP-534). Offline, the fetch fails: say so and stop.
 // Then the migration days (RP-560): a migration on a day planning/migration-days.md
 // reserves for another issue is refused; one on a day nobody reserved is named.
 

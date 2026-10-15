@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { reportHiddenSortKeys } from "./check-migrations-hidden-sort.ts";
 import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migrationsDir } from "./migrations.ts";
 
 // Four checks on the migrations a pull request adds (RP-337, from the RP-311 retro):
@@ -30,6 +31,9 @@ import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migr
 // - Unique timestamps. Two migrations sharing a YYYYMMDDHHMMSS prefix (RP-317
 //   and the RP-311 fix-up) run in an order nobody chose. Fix: rename the
 //   branch's migration to a new, later timestamp.
+//
+// It also runs check-migrations-hidden-sort.ts (RP-534): a new migration that
+// sorts by a column the visibility rules hide.
 //
 // Usage: node scripts/check-migration-drift.ts <base> <head>   (CI: the PR's base and head SHAs; needs their history)
 //        node scripts/check-migration-drift.ts --merge-group <group base> <group head>
@@ -394,6 +398,8 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error("  A different argument list makes a second function, so the stale one stays with its old body and grants. Make this branch's change on main's signature instead: rewrite the branch's migration (it isn't on main yet), or drop the stale signature in a new, later migration.");
   }
   for (const group of duplicates) console.error(`These migrations share a timestamp; rename this branch's (it isn't on main yet) to a new, later one: ${group.join(", ")}`);
-  if (hasProblems(problems)) process.exit(1);
+  // RP-534: run here so CI's "migration drift and timestamps" job and `pnpm check:migrations` both check it.
+  const hiddenSorts = reportHiddenSortKeys(process.cwd(), base, head);
+  if (hasProblems(problems) || hiddenSorts) process.exit(1);
   console.log("No migration redefined on both sides of a merge, none on the branch redefining another's object unseen, no stale overloads, and no shared timestamps.");
 }
