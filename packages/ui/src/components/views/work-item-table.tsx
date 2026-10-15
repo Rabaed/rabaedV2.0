@@ -107,18 +107,6 @@ const head =
   "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
-/**
- * The header's select-all checkbox: a 24 × 24px box (axe's `target-size`, since a header scrolled half under it
- * leaves nothing else to keep it clear) that draws the same 16px square: the 4px transparent border and the
- * background clipped inside it keep the fill, the inset outline is the square's own border.
- */
-const headerCheckbox = cn(
-  "size-6 border-4 border-transparent bg-clip-padding align-middle outline-1 -outline-offset-4 outline-control-border",
-  "hover:border-transparent hover:outline-control-border-hover",
-  "data-[state=checked]:border-transparent data-[state=checked]:outline-primary",
-  "data-[state=indeterminate]:border-transparent data-[state=indeterminate]:outline-primary",
-  "disabled:border-transparent disabled:outline-border",
-);
 const dash = <span className="text-faint">—</span>;
 
 export function WorkItemTable({
@@ -155,10 +143,12 @@ export function WorkItemTable({
       <thead>
         <tr>
           {selection && (
-            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-3 pe-0pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
+            // The 24px box starts 4px before its square, so the square lines up with the rows' (ps-4).
+            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-3 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
               <Checkbox
                 aria-label={selection.selectAll}
-                className={headerCheckbox}
+                targetBox
+                className="align-middle"
                 disabled={rows.length === 0}
                 checked={chosen === 0 ? false : chosen === rows.length ? true : "indeterminate"}
                 onCheckedChange={() => selection.onChange(new Set(chosen === rows.length ? [] : rows.map((r) => r.id)))}
@@ -205,7 +195,7 @@ export function WorkItemTable({
               >
                 <span className="flex items-center gap-1.5">
                   <Icon name="grid-dots" size={14} className="shrink-0 text-faint opacity-70" />
-                  {/* The sort button is the column's name and its arrow together, never the 24px arrow alone: a header scrolled half under the pinned settings button keeps a 24px target of its own, whatever the font's widths. */}
+                  {/* The name is part of the sort button, so a header scrolled under the pinned settings button keeps 24px uncovered, whatever the font widths. */}
                   <button
                     type="button"
                     aria-label={labels.sortBy(header)}
@@ -229,7 +219,7 @@ export function WorkItemTable({
               </th>
             );
           })}
-          {/* Its button sits at the end, 24px in from the column's edge: a sort button scrolled under the pinned column is covered by the cell, never by a control. */}
+          {/* The settings button sits at the end of this pinned cell, with 24px of the cell before it: a sort button scrolled under the pinned cell is covered by the cell, never by a control. */}
           {end && (
             <th scope="col" className={cn(head, "sticky end-0 z-[4] w-[60px] border-s ps-0 pe-2 text-end")}>
               {settings}

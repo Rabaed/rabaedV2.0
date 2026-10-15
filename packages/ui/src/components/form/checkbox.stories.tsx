@@ -112,6 +112,52 @@ export const ReadOnly: Story = {
   },
 };
 
+const boxStates = [
+  { name: { en: "Unchecked", ar: "غير محدد" }, props: {} },
+  { name: { en: "Checked", ar: "محدد" }, props: { defaultChecked: true } },
+  { name: { en: "Indeterminate", ar: "محدد جزئيًا" }, props: { defaultChecked: "indeterminate" } },
+  { name: { en: "Disabled", ar: "معطّل" }, props: { disabled: true } },
+  { name: { en: "Invalid", ar: "غير صالح" }, props: { "aria-invalid": true } },
+  { name: { en: "Read-only", ar: "للقراءة فقط" }, props: { readOnly: true, defaultChecked: true } },
+] as const;
+
+/**
+ * `targetBox` (a table header's select-all): each state in its 24px box, then the plain checkbox at a table
+ * row's 16px for comparison. The square looks the same, and the focus ring sits 2px off it, inside the box.
+ */
+export const TargetBox: Story = {
+  render: (_args, context) => (
+    <div className="flex flex-col gap-3">
+      {boxStates.map(({ name, props }) => (
+        <div key={name.en} className="flex items-center gap-3">
+          <Checkbox targetBox aria-label={`${storyText(context, name)} 24px`} {...props} />
+          <Checkbox className="size-4" aria-label={`${storyText(context, name)} 16px`} {...props} />
+          <span className="text-body text-text">{storyText(context, name)}</span>
+        </div>
+      ))}
+    </div>
+  ),
+  play: async (context) => {
+    for (const { name } of boxStates) {
+      const box = context.canvas.getByRole("checkbox", { name: `${storyText(context, name)} 24px` });
+      const plain = context.canvas.getByRole("checkbox", { name: `${storyText(context, name)} 16px` });
+      const { width, height } = box.getBoundingClientRect();
+      await expect([width, height]).toEqual([24, 24]);
+      const square = box.firstElementChild as Element;
+      const { width: side } = square.getBoundingClientRect();
+      await expect(side).toBe(16);
+      const look = (el: Element) => {
+        const s = getComputedStyle(el);
+        return [s.borderTopColor, s.borderTopWidth, s.backgroundColor, s.borderTopLeftRadius];
+      };
+      await expect(look(square)).toEqual(look(plain.firstElementChild as Element));
+    }
+    const first = context.canvas.getByRole("checkbox", { name: `${storyText(context, boxStates[0].name)} 24px` });
+    await expectTabFocusRing(first);
+    await expect(getComputedStyle(first).outlineOffset).toBe("-2px");
+  },
+};
+
 /** On a phone: a 44px touch area around the box. */
 export const Phone: Story = {
   parameters: phone,

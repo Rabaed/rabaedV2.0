@@ -117,6 +117,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 
 - **Read-only** keeps the value, stays focusable and is announced read-only (for every control, not only text boxes).
 - **Touch**: on a touch screen (`pointer: coarse`) every control and option is at least 44 × 44px. Small controls (checkbox, radio, switch) keep their size and get a larger hit area (`touchArea`); links and other inline controls grow to 44px (`touchBox`), both in `control-styles.ts`.
+- **24px targets** (axe `target-size`, every pointer): `touchArea` covers coarse pointers only. A checkbox that other targets can overlap, such as a table header's select-all under a pinned cell, needs a 24 × 24px box of its own: use `<Checkbox targetBox>`, which draws a table row checkbox's 16px square inside it, every state as on the plain checkbox.
 - **Direction**: wrap the app once in `<DirectionProvider dir={directionOf(locale)}>` so arrow keys and the Select menu follow Arabic (`apps/web` does this in its layout).
 - Form control borders use `control-border` (3:1 against the background, WCAG 1.4.11); `border` is for decorative lines only.
 
