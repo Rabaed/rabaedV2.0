@@ -14,6 +14,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     pullRequest: () => ({ id: "PR_node", headRefOid: "abc123", headRefName: "feature" }),
     mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
     changedFiles: () => ["apps/api/src/a.ts"],
+    packageJsonVersions: () => ({ before: undefined, after: undefined }),
     check: () => ({ status: 0, output: "ok\n" }),
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
     removalReason: () => undefined,
@@ -57,6 +58,43 @@ describe("queuePr", () => {
   it("does not treat a nested package.json or lockfile as a root shared file", () => {
     const { seam } = fakeSeam({ changedFiles: () => ["apps/api/package.json", "scripts/x.ts"] });
     expect(queuePr(163, seam).ok).toBe(true);
+  });
+
+  describe("dependencies-only PR (RP-573)", () => {
+    const admin = (fields: Record<string, unknown>) => JSON.stringify({ name: "admin", scripts: { dev: "vite" }, devDependencies: { a: "1.0.0" }, ...fields });
+    const withAdmin = (after: string, files = ["pnpm-lock.yaml", "apps/admin/package.json"]) =>
+      fakeSeam({ changedFiles: () => files, packageJsonVersions: () => ({ before: admin({}), after }) });
+
+    it("queues the lockfile with a workspace package.json whose only change is devDependencies", () => {
+      const { seam, enqueued } = withAdmin(admin({ devDependencies: { a: "1.0.0", b: "2.0.0" } }));
+      expect(queuePr(181, seam).ok).toBe(true);
+      expect(enqueued).toHaveLength(1);
+    });
+
+    it("refuses when the workspace package.json also changes a script", () => {
+      const { seam, enqueued } = withAdmin(admin({ devDependencies: { a: "1.0.0", b: "2.0.0" }, scripts: { dev: "vite --host" } }));
+      const result = queuePr(181, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("apps/admin/package.json");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("refuses the lockfile with a dependencies-only package.json plus code", () => {
+      const { seam } = withAdmin(admin({ devDependencies: { b: "2.0.0" } }), ["pnpm-lock.yaml", "apps/admin/package.json", "apps/admin/src/a.ts"]);
+      const result = queuePr(181, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("apps/admin/src/a.ts");
+    });
+
+    it("refuses the lockfile with code as today", () => {
+      const { seam } = fakeSeam({ changedFiles: () => ["pnpm-lock.yaml", "apps/api/src/a.ts"] });
+      expect(queuePr(181, seam).ok).toBe(false);
+    });
+
+    it("refuses when the package.json is new or deleted", () => {
+      const { seam } = fakeSeam({ changedFiles: () => ["pnpm-lock.yaml", "apps/new/package.json"], packageJsonVersions: () => ({ before: undefined, after: admin({}) }) });
+      expect(queuePr(181, seam).ok).toBe(false);
+    });
   });
 
   it("refuses when origin/main cannot be fetched", () => {
