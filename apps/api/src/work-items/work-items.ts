@@ -639,7 +639,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         -- Its Comments (WF-11), only those the viewer sees.
         cc.open_count as open_comments, cc.closed_count as closed_comments,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
-        raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
+        -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
+        raiser.legal_name as raised_by, coalesce(app.with_owner_review(w.id), holder.legal_name) as held_by, m.full_name as holder_name,
         pool.names as pool_names,
         app.can_save_answers(w.id) as can_save_answers, app.sent_back_for_comment(w.id) as sent_back_for_comment, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
