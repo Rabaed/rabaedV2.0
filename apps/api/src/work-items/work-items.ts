@@ -20,6 +20,7 @@ import {
   stepAgeWeeks,
   checklistItemFilesKey,
   storedTransitionRules,
+  submittalTypeCodes,
   validateAnswers,
   validationMessage,
   type TransitionRules,
@@ -290,11 +291,16 @@ type WorkflowSteps = { steps: WorkflowStepHolder[] };
 
 /** The Steps of the Workflow Version `workflowVersionId`. Definitions, which every Member reads. */
 async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<WorkflowSteps> {
-  const { rows } = await sql<{ key: string; role: string | null; draft: boolean }>`
+  return (await workflowStepsOf(trx, [workflowVersionId])).get(workflowVersionId) ?? { steps: [] };
+}
+
+/** The Steps of each Workflow Version of `workflowVersionIds`, by its id, in one read. */
+async function workflowStepsOf(trx: Trx, workflowVersionIds: readonly string[]): Promise<Map<string, WorkflowSteps>> {
+  const { rows } = await sql<{ version_id: string; key: string; role: string | null; draft: boolean }>`
     -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Stage of category draft, in any
     -- Module, of the Stage set the Workflow is published against (RP-428): its Project's for a Project's own
     -- Workflow, the Rabaed Defaults' for any other.
-    select s.key, s.actor_rule ->> 'base_role' as role,
+    select s.workflow_version_id as version_id, s.key, s.actor_rule ->> 'base_role' as role,
       exists (
         select 1 from stage st
         where st.key = s.stage_key and st.category = 'draft'
@@ -303,10 +309,16 @@ async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<Workf
     from workflow_step s
     join workflow_version v on v.id = s.workflow_version_id
     join workflow_definition d on d.id = v.workflow_definition_id
-    where s.workflow_version_id = ${workflowVersionId}
+    where s.workflow_version_id = any(${workflowVersionIds}::uuid[])
     order by s.key
   `.execute(trx);
-  return { steps: rows.map(({ key, role, draft }) => ({ key, role, draft })) };
+  const byVersion = new Map<string, WorkflowSteps>();
+  for (const { version_id, key, role, draft } of rows) {
+    const steps = byVersion.get(version_id) ?? { steps: [] };
+    steps.steps.push({ key, role, draft });
+    byVersion.set(version_id, steps);
+  }
+  return byVersion;
 }
 
 /** `form` as it is filled in at `step`: the sections editable there. */
@@ -353,15 +365,15 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string): P
         and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
         and pm.participant_id in (select app.current_participant_ids())
         and p.status = 'active' and p.company_id = app.current_company_id()
-      order by array_position(array['MAR', 'SAR', 'DAR'], t.code::text), t.code
+      order by array_position(${[...submittalTypeCodes]}::text[], t.code::text), t.code
     `.execute(trx);
-    const types: RaisableTypes["types"] = [];
-    for (const r of rows) {
-      if (!r.workflow_version_id) continue;
-      const draft = (await workflowSteps(trx, r.workflow_version_id)).steps.find((s) => s.draft);
-      if (draft?.role === r.base_role) types.push({ code: r.code, name: r.name });
-    }
-    return { types };
+    const versions = rows.flatMap((r) => (r.workflow_version_id ? [r.workflow_version_id] : []));
+    const steps = await workflowStepsOf(trx, [...new Set(versions)]);
+    const types = rows.filter((r) => {
+      const draft = r.workflow_version_id ? steps.get(r.workflow_version_id)?.steps.find((s) => s.draft) : undefined;
+      return draft !== undefined && draft.role === r.base_role;
+    });
+    return { types: types.map((r) => ({ code: r.code, name: r.name })) };
   });
 }
 

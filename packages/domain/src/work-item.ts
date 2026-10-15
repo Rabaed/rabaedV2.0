@@ -32,6 +32,9 @@ export const createdWorkItem = z.object({ id: z.uuid() });
 export const raisableTypes = z.object({ types: z.array(z.object({ code: workItemTypeCode, name: bilingualText })) });
 export type RaisableTypes = z.infer<typeof raisableTypes>;
 
+/** The Submittals' Rabaed Default Types, in the Type picker's order (RP-590): the MAR, the SAR, the DAR. */
+export const submittalTypeCodes = ["MAR", "SAR", "DAR"] as const;
+
 /** Save draft: the Draft's answers so far, checked in draft mode (types, not required). */
 export const saveAnswersRequest = z.object({
   answers: formAnswers,
