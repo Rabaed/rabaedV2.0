@@ -185,7 +185,8 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
     left join dimension_value lv on lv.id = ldv.dimension_value_id
     -- One holder: a closed item has none.
     left join lateral (select * from app.work_item_holder(w.id) limit 1) h on true
-    cross join lateral (select app.with_owner_review(w.id) as name) orv
+    -- Asked only where the Step it is seen at confirms a Code: only there can it be at the Owner's review.
+    cross join lateral (select case when s.outcome_mode = 'confirm_code' then app.with_owner_review(w.id) end as name) orv
     where w.project_id = ${projectId} and t.module_key = ${moduleKey}
       and (${allRevisions}::boolean or app.latest_visible_revision(w.id))
   `;
