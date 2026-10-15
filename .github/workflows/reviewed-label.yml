@@ -1,0 +1,40 @@
+name: Reviewed label
+# Removes the `reviewed` label when a push lands on the PR (RP-584), so the label
+# means "reviewed at this head" and `pnpm queue` can rely on it. A push that only
+# merges main in by a clean merge keeps it (rule in scripts/reviewed-label.ts).
+# Same safety shape as queue-drop-comment: the code it runs is the default
+# branch's, never the pull request's. Pushes made with GITHUB_TOKEN do not
+# trigger it, which is fine: nothing here pushes. Not a required check (it must
+# never be added to the main ruleset; it does not run on merge_group).
+# The label itself must exist in the repository: gh label create reviewed.
+# It needs scripts/reviewed-label.ts on main first (PR RP-584-reviewed-label merges before this one).
+on:
+  pull_request:
+    types: [synchronize]
+permissions: {}
+jobs:
+  drop-label:
+    # A fork's PR gets a read-only token anyway; this keeps the job off it entirely.
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'reviewed')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      # The PR's commits as data for `git merge-tree`; nothing from them is run.
+      - name: Fetch the pushed commits
+        run: |
+          git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/head"
+          # After a force push the old head may be gone; the script then removes the label.
+          git fetch --no-tags origin "${{ github.event.before }}" || true
+      - name: Remove the label unless the push only merged main
+        run: node scripts/reviewed-label.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
