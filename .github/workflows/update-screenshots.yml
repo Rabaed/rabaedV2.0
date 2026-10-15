@@ -6,6 +6,8 @@
 # this file is on main, run
 #   gh workflow run update-screenshots.yml --ref <your-branch>).
 # The render job re-renders every baseline and the commit job commits them.
+# The render job renders every story twice: a story whose two renders differ
+# keeps its old baseline, and the unstable job fails naming it (RP-569).
 # Then review the changed PNGs in the PR like any other change. The bot's own
 # commit starts no new run: a push made with the workflow token triggers no
 # pull_request event, and ui-changed skips github-actions[bot] as well.
@@ -89,6 +91,8 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.head.outputs.sha }}
+      # The stories whose two renders differed, one line each, as a JSON array (RP-569).
+      refusal: ${{ steps.second.outputs.refusal }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -102,6 +106,48 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rabaed/ui exec playwright install --with-deps chromium
       - run: pnpm --filter @rabaed/ui exec vitest run --update
+      # RP-569: every story renders a second time, compared with the baseline its
+      # first render just wrote. A story whose two renders differ would fail the
+      # next CI run with its new baseline (fc18c1395), so its baseline is put back
+      # as it was and is not committed; the refuse job then fails naming it.
+      - id: second
+        name: Render every story again and compare
+        env:
+          REPORTER: scripts/unstable-screenshots-reporter.ts
+          RESULT: packages/ui/.vitest/unstable-screenshots.json
+        run: |
+          # Fail closed: a jq error in a pipe must stop the step, not commit an unstable baseline.
+          set -o pipefail
+          if [ ! -f "$REPORTER" ]; then
+            echo "::notice::$REPORTER is not on this branch yet (merge main); skipping the second render."
+            exit 0
+          fi
+          rm -f "$RESULT"
+          pnpm --filter @rabaed/ui exec vitest run --reporter=default --reporter="../../$REPORTER" || true
+          if ! jq -e '(.unstable | type) == "array" and (.otherFailures | type) == "array" and (.refusal | type) == "array"' "$RESULT" > /dev/null 2>&1; then
+            echo "::error::The second render did not finish or wrote no readable result; see its log above. Nothing is committed."
+            exit 1
+          fi
+          if [ "$(jq '.otherFailures | length' "$RESULT")" -gt 0 ]; then
+            echo "::error::The second render failed for more than screenshots, so nothing is committed:"
+            jq -r '.otherFailures[]' "$RESULT"
+            exit 1
+          fi
+          # Keep each first render for the diffs artifact, then put the baseline back.
+          mkdir -p packages/ui/.vitest/attachments/first-render
+          jq -r '.unstable[].reference' "$RESULT" | while IFS= read -r file; do
+            cp -- "$file" packages/ui/.vitest/attachments/first-render/ 2>/dev/null || true
+            git checkout --quiet HEAD -- "$file" 2>/dev/null || rm -f -- "$file"
+          done
+          echo "refusal=$(jq -c '.refusal' "$RESULT")" >> "$GITHUB_OUTPUT"
+      - name: Upload the unstable stories' two renders and diffs
+        if: steps.second.outputs.refusal != '' && steps.second.outputs.refusal != '[]'
+        uses: actions/upload-artifact@v7
+        with:
+          name: unstable-screenshot-diffs
+          path: packages/ui/.vitest/attachments/
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: screenshots
@@ -263,6 +309,28 @@ jobs:
             # Pushes made with the workflow token do not start CI; start it explicitly.
             gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
           fi
+
+  # RP-569: fails when a story rendered differently twice. The render job put its
+  # baseline back, so only the stable baselines reached the commit job. The lines
+  # come from a job that ran PR code, so this job has no permissions, and each line
+  # is printed behind its own ::error:: so none can start a workflow command.
+  unstable:
+    name: Refuse stories that render differently twice
+    needs: [render, commit]
+    if: >-
+      !cancelled() &&
+      needs.render.outputs.refusal != '' && needs.render.outputs.refusal != '[]'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          REFUSAL: ${{ needs.render.outputs.refusal }}
+        run: |
+          jq -r '.[]' <<< "$REFUSAL" | while IFS= read -r line; do
+            echo "::error::${line//::/: :}"
+          done
+          echo "These stories' new baselines were left out of the commit: fix the story so it renders the same every time (docs/agents/ci-logs.md), then push or add the update-screenshots label again."
+          exit 1
 
   unlabel:
     name: Remove the label so it can be added again
