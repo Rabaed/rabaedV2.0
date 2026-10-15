@@ -6,7 +6,8 @@ name: Reviewed label
 # branch's, never the pull request's. Pushes made with GITHUB_TOKEN do not
 # trigger it, which is fine: nothing here pushes. Not a required check (it must
 # never be added to the main ruleset; it does not run on merge_group).
-# The label itself must exist in the repository: gh label create reviewed.on:
+# The label itself must exist in the repository: gh label create reviewed.
+on:
   pull_request:
     types: [synchronize]
 permissions: {}
