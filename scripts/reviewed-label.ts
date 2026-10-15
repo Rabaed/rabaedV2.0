@@ -66,7 +66,8 @@ export async function dropLabelOnPush(
     return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
   }
   await github.removeLabel(event.pr);
-  return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; the new push needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${REVIEWED_LABEL}\`.`;
+  const why = event.action === "synchronize" ? "the new push" : `the ${event.action} PR's head`;
+  return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; ${why} needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${REVIEWED_LABEL}\`.`;
 }
 
 export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): ReviewedGit {

@@ -97,8 +97,9 @@ describe("dropLabelOnPush", () => {
   it("removes a label already there when a PR opens or reopens, even if git would keep it on a push (RP-604)", async () => {
     for (const action of ["opened", "reopened"]) {
       const { removed, github } = recorder();
-      await dropLabelOnPush({ pr: 7, action, labels: ["reviewed"], before: "R", after: "N" }, git(), github);
+      const text = await dropLabelOnPush({ pr: 7, action, labels: ["reviewed"], before: "R", after: "N" }, git(), github);
       expect(removed).toEqual([7]);
+      expect(text).toContain(`the ${action} PR's head needs a /code-review`);
     }
   });
 });
