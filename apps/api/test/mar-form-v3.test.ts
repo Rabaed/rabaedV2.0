@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { detail, projectMember, tryTake } from "./support/tower.ts";
+import { approvedSupplier, detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -26,6 +26,7 @@ const all = { isAll: true, valueIds: [] };
 let engineer: Caller;
 let pm: Caller;
 let projectId = "";
+let supplier = ""; // An approved supplier of Electrical: the MAR Form asks for one to leave Draft (RP-595).
 let electrical = "";
 let buildingA = "";
 
@@ -57,7 +58,7 @@ const created = async (title: string, answers: Record<string, unknown> = {}) =>
       engineer.post(`/v1/projects/${projectId}/work-items`, {
         type: "MAR",
         title,
-        answers: { ...complete, trade: electrical, location: buildingA, ...answers },
+        answers: { ...complete, supplier, trade: electrical, location: buildingA, ...answers },
       }),
       201,
     )
@@ -84,6 +85,7 @@ beforeAll(async () => {
   const c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  supplier = await approvedSupplier(c1.caller, projectId, electrical);
   buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null }))
     .json().id;
   const own = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
@@ -167,7 +169,7 @@ describe("a new MAR", () => {
 
 describe("a MAR on an earlier Version", () => {
   it("keeps Version 2: it shows Version 2, has no Related submittals, and leaves Draft with Version 2's rules", async () => {
-    const id = await created("Lighting fixtures, Version 2");
+    const id = await created("Lighting fixtures, Version 2", { supplier: undefined });
     await pin(id, 2);
     expect((await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json().versionNo).toBe(2);
     const refused = await save(id, { ...complete, related_submittals: [] });
@@ -181,7 +183,7 @@ describe("a MAR on an earlier Version", () => {
   });
 
   it("keeps Version 1: it shows Version 1 and leaves Draft without a Datasheet", async () => {
-    const id = await created("Emergency luminaires, Version 1", { items: undefined });
+    const id = await created("Emergency luminaires, Version 1", { items: undefined, supplier: undefined });
     await pin(id, 1);
     expect((await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json().versionNo).toBe(1);
     const v1Answers = { manufacturer: "Zumtobel", quantity: 48, description: "Emergency luminaires" };

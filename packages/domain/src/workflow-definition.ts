@@ -27,10 +27,12 @@ export type FunctionPermission = (typeof functionPermissions)[number];
 
 /**
  * What a Step does about the outcome: nothing, Recommend a Code (inside its
- * Participant, §5.3), or issue the outcome (the Issued Code or the Inspection
- * Result, by the Work Item Type's outcome kind).
+ * Participant, §5.3, or to the Owner, ADR 0022), issue the outcome (the Issued Code
+ * or the Inspection Result, by the Work Item Type's outcome kind), or confirm the
+ * Code another Participant Recommended to it (the Owner's review, ADR 0022): its
+ * closes issue the Recommended Code, the one whose outcome it is.
  */
-export const outcomeModes = ["none", "recommend_code", "issue_outcome"] as const;
+export const outcomeModes = ["none", "recommend_code", "issue_outcome", "confirm_code"] as const;
 export type OutcomeMode = (typeof outcomeModes)[number];
 
 /**
@@ -204,7 +206,7 @@ export type WorkflowStepRow = {
   actor_rule: Record<string, unknown>;
   /** Dropped by ADR 0017 (every Transition is confirmed and recorded): always written false. */
   is_signing: boolean;
-  outcome_mode: "none" | "recommend_code" | "issue_code" | "inspection_result";
+  outcome_mode: "none" | "recommend_code" | "issue_code" | "inspection_result" | "confirm_code";
   /** Null (left out): the default (RP-514). */
   edits_form?: boolean | null;
   /** On the Draft Step; null (left out): `company`. */

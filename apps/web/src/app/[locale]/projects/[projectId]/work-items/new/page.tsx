@@ -11,6 +11,7 @@ import {
   getNewWorkItemForm,
   getNewWorkItemFormChoices,
   getOptionLists,
+  getSupplierChoices,
   getProject,
   getProjectScopes,
   getRaisableTypes,
@@ -33,7 +34,7 @@ export default async function NewWorkItemPage({
   const { type: requested } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, project, mine, scopes, raisable, people, optionLists] = await Promise.all([
+  const [me, project, mine, scopes, raisable, people, optionLists, suppliers] = await Promise.all([
     getMe(),
     getProject(projectId),
     getMyVisibility(projectId),
@@ -41,6 +42,7 @@ export default async function NewWorkItemPage({
     getRaisableTypes(projectId),
     getNewWorkItemFormChoices(projectId),
     getOptionLists(),
+    getSupplierChoices(projectId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !mine || !scopes || !raisable || !people) notFound();
@@ -72,6 +74,7 @@ export default async function NewWorkItemPage({
               choices={fillingChoices(mine, scopes.scopes, locale)}
               people={people}
               optionLists={optionLists}
+              suppliers={suppliers}
               locale={locale}
             />
           )}

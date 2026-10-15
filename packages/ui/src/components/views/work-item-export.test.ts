@@ -7,7 +7,7 @@ const b = (en: string, ar: string) => Object.fromEntries([["en", en], ["ar", ar]
 const row: WorkItemRow = {
   id: "00000000-0000-4000-8000-000000000001",
   projectId: "00000000-0000-4000-8000-000000000100",
-  type: { code: "MAR", name: b("Material Submittal", "اعتماد مواد") },
+  type: { code: "MAR", name: b("Material Approval Request", "طلب اعتماد مواد") },
   title: 'Cable "tray", galvanised',
   documentNumber: "TWR-MAR-0003 Rev 1",
   revisionNo: 1,

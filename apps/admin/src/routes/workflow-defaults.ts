@@ -44,18 +44,25 @@ export const workflowDefaultRoutes =
 
     app.get("/v1/workflows", async () => ({ types: await listRabaedWorkflows(ctx.db) }));
 
-    app.get("/v1/workflows/:typeCode", { schema: { params: typeParams } }, async (request) => {
-      const read = await readRabaedWorkflow(ctx.db, request.params.typeCode);
+    // `?workflow=` names one of the Type's other Rabaed Defaults (RP-596); without it, the one the Type runs.
+    const workflowQuery = z.object({ workflow: z.uuid().optional() });
+
+    app.get("/v1/workflows/:typeCode", { schema: { params: typeParams, querystring: workflowQuery } }, async (request) => {
+      const read = await readRabaedWorkflow(ctx.db, request.params.typeCode, request.query.workflow);
       if (!read) throw new HttpError(404, "not_found");
       return read;
     });
 
-    app.post("/v1/workflows/:typeCode/duplicate", { schema: { params: typeParams, body: adminDuplicateWorkflowRequest } }, async (request, reply) => {
-      const result = await duplicateRabaedWorkflow(ctx.db, ctx.requireEngineer(request), request.params.typeCode, request.body);
-      if (result.ok) return reply.code(200).send(result.value);
-      if (result.reason === "not_found") throw new HttpError(404, "not_found");
-      return reply.code(422).send({ error: result.reason });
-    });
+    app.post(
+      "/v1/workflows/:typeCode/duplicate",
+      { schema: { params: typeParams, querystring: workflowQuery, body: adminDuplicateWorkflowRequest } },
+      async (request, reply) => {
+        const result = await duplicateRabaedWorkflow(ctx.db, ctx.requireEngineer(request), request.params.typeCode, request.body, request.query.workflow);
+        if (result.ok) return reply.code(200).send(result.value);
+        if (result.reason === "not_found") throw new HttpError(404, "not_found");
+        return reply.code(422).send({ error: result.reason });
+      },
+    );
 
     app.post("/v1/workflows/:typeCode/outcomes", { schema: { params: typeParams, body: adminAddOutcomeRequest } }, async (request, reply) => {
       const result = await addDefaultOutcome(ctx.db, ctx.requireEngineer(request), request.params.typeCode, request.body);

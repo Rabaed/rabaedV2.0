@@ -64,7 +64,8 @@ export const builderMessages = {
       "outcomeOptions": {
         "none": "None",
         "recommend_code": "Recommends a code",
-        "issue_outcome": "Issues the outcome"
+        "issue_outcome": "Issues the outcome",
+        "confirm_code": "Confirms the Recommended Code"
       },
       "draftsVisibleTo": "Drafts visible to",
       "draftsWholeCompany": "The author's whole Company (default)",
@@ -224,7 +225,8 @@ export const builderMessages = {
       "grouped": "Some Steps are grouped because they are internal to another company.",
       "outcomeModes": {
         "recommend_code": "Recommends a code",
-        "issue_outcome": "Issues the outcome"
+        "issue_outcome": "Issues the outcome",
+        "confirm_code": "Confirms the Recommended Code"
       },
       "kinds": {
         "send": "Send",
@@ -314,7 +316,8 @@ export const builderMessages = {
       "outcomeOptions": {
         "none": "بدون",
         "recommend_code": "يوصي برمز",
-        "issue_outcome": "يصدر النتيجة"
+        "issue_outcome": "يصدر النتيجة",
+        "confirm_code": "يؤكد الرمز الموصى به"
       },
       "draftsVisibleTo": "المسودات مرئية لـ",
       "draftsWholeCompany": "شركة المُنشئ كاملة (الافتراضي)",
@@ -474,7 +477,8 @@ export const builderMessages = {
       "grouped": "بعض الخطوات مجمّعة لأنها داخلية لشركة أخرى.",
       "outcomeModes": {
         "recommend_code": "يوصي برمز",
-        "issue_outcome": "يصدر النتيجة"
+        "issue_outcome": "يصدر النتيجة",
+        "confirm_code": "يؤكد الرمز الموصى به"
       },
       "kinds": {
         "send": "إرسال",

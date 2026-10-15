@@ -17,6 +17,19 @@
           "required": true
         },
         {
+          "key": "supplier",
+          "help": {
+            "ar": "من قائمة الموردين المعتمدين للمشروع، حسب تخصص هذا الطلب.",
+            "en": "From the Project's Approved Supplier List, for this request's Trade."
+          },
+          "type": "approved_supplier",
+          "label": {
+            "ar": "المورّد المعتمد",
+            "en": "Approved supplier"
+          },
+          "required": true
+        },
+        {
           "key": "model",
           "type": "text",
           "label": {

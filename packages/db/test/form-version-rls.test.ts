@@ -67,7 +67,7 @@ describe("the Rabaed Default MAR Form", () => {
     const rows = await asMember<{ name: { en: string } }>(sql`
       select d.name from form_definition d join form_version v on v.form_definition_id = d.id
       where v.id = ${marVersion}::uuid`);
-    expect(rows.map((r) => r.name.en)).toEqual(["Material Submittal (MAR)"]);
+    expect(rows.map((r) => r.name.en)).toEqual(["Material Approval Request (MAR)"]);
   });
 
   it("is not readable with no Member set", async () => {

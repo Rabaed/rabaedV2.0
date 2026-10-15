@@ -65,7 +65,7 @@ export async function addLegacyMarType(migrator: Db, code: string): Promise<void
         update workflow_version set status = 'published', published_at = now() where id = v_version;
 
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        values ('rabaed', 'submittals', ${sql.lit(code)}, '{"en": "Material Submittal (before RP-437, test)", "ar": "اعتماد المواد (قبل RP-437، اختبار)"}',
+        values ('rabaed', 'submittals', ${sql.lit(code)}, '{"en": "Material Approval Request (before RP-437, test)", "ar": "طلب اعتماد مواد (قبل RP-437، اختبار)"}',
           v_definition, 'review_code', v_form)
         returning id into v_type;
         update workflow_definition set work_item_type_id = v_type where id = v_definition;

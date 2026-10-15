@@ -15,10 +15,12 @@ import {
   formSchema,
   isHiddenLinkChoice,
   offeredChoices,
+  type SupplierChoice,
   parseActionForm,
   stepAgeWeeks,
   checklistItemFilesKey,
   storedTransitionRules,
+  submittalTypeCodes,
   validateAnswers,
   validationMessage,
   type TransitionRules,
@@ -142,6 +144,19 @@ async function optionListsFor(trx: Trx, schema: FormSchema) {
     (f) => f.type === "option_list" || (f.type === "table" && f.columns.some((c) => c.type === "option_list")),
   );
   return uses ? readOptionLists(trx) : undefined;
+}
+
+/**
+ * The Project's Approved Supplier List as the validator reads it, when the Form
+ * has an `approved_supplier` field (RP-595). Read through RLS: every Project
+ * Member reads it (V10).
+ */
+async function suppliersFor(trx: Trx, schema: FormSchema, projectId: string): Promise<SupplierChoice[] | undefined> {
+  if (!formFields(schema).some((f) => f.type === "approved_supplier")) return undefined;
+  const { rows } = await sql<{ id: string; trade_value_id: string; status: "approved" | "withdrawn" }>`
+    select id, trade_value_id, status from approved_supplier where project_id = ${projectId}::uuid
+  `.execute(trx);
+  return rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, status: r.status }));
 }
 
 /** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
@@ -276,11 +291,16 @@ type WorkflowSteps = { steps: WorkflowStepHolder[] };
 
 /** The Steps of the Workflow Version `workflowVersionId`. Definitions, which every Member reads. */
 async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<WorkflowSteps> {
-  const { rows } = await sql<{ key: string; role: string | null; draft: boolean }>`
+  return (await workflowStepsOf(trx, [workflowVersionId])).get(workflowVersionId) ?? { steps: [] };
+}
+
+/** The Steps of each Workflow Version of `workflowVersionIds`, by its id, in one read. */
+async function workflowStepsOf(trx: Trx, workflowVersionIds: readonly string[]): Promise<Map<string, WorkflowSteps>> {
+  const { rows } = await sql<{ version_id: string; key: string; role: string | null; draft: boolean }>`
     -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Stage of category draft, in any
     -- Module, of the Stage set the Workflow is published against (RP-428): its Project's for a Project's own
     -- Workflow, the Rabaed Defaults' for any other.
-    select s.key, s.actor_rule ->> 'base_role' as role,
+    select s.workflow_version_id as version_id, s.key, s.actor_rule ->> 'base_role' as role,
       exists (
         select 1 from stage st
         where st.key = s.stage_key and st.category = 'draft'
@@ -289,10 +309,16 @@ async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<Workf
     from workflow_step s
     join workflow_version v on v.id = s.workflow_version_id
     join workflow_definition d on d.id = v.workflow_definition_id
-    where s.workflow_version_id = ${workflowVersionId}
+    where s.workflow_version_id = any(${workflowVersionIds}::uuid[])
     order by s.key
   `.execute(trx);
-  return { steps: rows.map(({ key, role, draft }) => ({ key, role, draft })) };
+  const byVersion = new Map<string, WorkflowSteps>();
+  for (const { version_id, key, role, draft } of rows) {
+    const steps = byVersion.get(version_id) ?? { steps: [] };
+    steps.steps.push({ key, role, draft });
+    byVersion.set(version_id, steps);
+  }
+  return byVersion;
 }
 
 /** `form` as it is filled in at `step`: the sections editable there. */
@@ -339,15 +365,15 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string): P
         and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
         and pm.participant_id in (select app.current_participant_ids())
         and p.status = 'active' and p.company_id = app.current_company_id()
-      order by array_position(array['MAR', 'SAR', 'DAR'], t.code::text), t.code
+      order by array_position(${[...submittalTypeCodes]}::text[], t.code::text), t.code
     `.execute(trx);
-    const types: RaisableTypes["types"] = [];
-    for (const r of rows) {
-      if (!r.workflow_version_id) continue;
-      const draft = (await workflowSteps(trx, r.workflow_version_id)).steps.find((s) => s.draft);
-      if (draft?.role === r.base_role) types.push({ code: r.code, name: r.name });
-    }
-    return { types };
+    const versions = rows.flatMap((r) => (r.workflow_version_id ? [r.workflow_version_id] : []));
+    const steps = await workflowStepsOf(trx, [...new Set(versions)]);
+    const types = rows.filter((r) => {
+      const draft = r.workflow_version_id ? steps.get(r.workflow_version_id)?.steps.find((s) => s.draft) : undefined;
+      return draft !== undefined && draft.role === r.base_role;
+    });
+    return { types: types.map((r) => ({ code: r.code, name: r.name })) };
   });
 }
 
@@ -527,6 +553,7 @@ async function createWorkItemIn(trx: Trx, projectId: string, input: Required<Cre
     offered: await offeredFor(trx, form.schema, projectId, null),
     optionLists: await optionListsFor(trx, form.schema),
     linkable: await linkableIds(trx, form.schema, projectId, null, input.answers),
+    suppliers: await suppliersFor(trx, form.schema, projectId),
   });
   if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
   // A link question's items are saved with their Links, by app.save_work_item_answers below.
@@ -624,7 +651,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         -- Its Comments (WF-11), only those the viewer sees.
         cc.open_count as open_comments, cc.closed_count as closed_comments,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
-        raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
+        -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
+        raiser.legal_name as raised_by, coalesce(app.with_owner_review(w.id), holder.legal_name) as held_by, m.full_name as holder_name,
         pool.names as pool_names,
         app.can_save_answers(w.id) as can_save_answers, app.sent_back_for_comment(w.id) as sent_back_for_comment, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
@@ -1173,6 +1201,9 @@ async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<s
       select e.seq, e.transition_id, e.audience_participant_id, e.payload - 'document_number' - 'outcome' as answers
       from work_item_event e
       where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
+        -- Taken by that Participant itself: the Owner's review writes the moves between the
+        -- Consultant and the Owner internal to each (ADR 0022), and those cross Participants.
+        and e.actor_participant_id = e.audience_participant_id
         and e.seq = (
           select max(m.seq) from work_item_event m
           where m.work_item_id = e.work_item_id and m.type in ('transition', 'issue_code') and m.to_step_id is not null
@@ -1361,6 +1392,7 @@ export function takeTransition(
         scopes: await projectScopes(trx, pinned.projectId),
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
+        suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
         files: await fieldFileCounts(trx, workItemId),
       });
     // Moving on by a Member who may save the answers now (other than a cancel or a Return),
@@ -1453,6 +1485,7 @@ export function saveAnswers(
       optionLists: await optionListsFor(trx, pinned.form.schema),
       held: pinned.data,
       linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
+      suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));

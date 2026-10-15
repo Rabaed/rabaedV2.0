@@ -58,7 +58,7 @@ describe("a Project's outcome sets", () => {
     const t = await buildTower(api, { c1, k1 }, "OSA");
     const byAdmin = await outcomesOf(c1.caller, t);
     expect(byAdmin).toEqual({
-      type: { code: "MAR", name: { en: "Material Submittal", ar: "اعتماد المواد" } },
+      type: { code: "MAR", name: { en: "Material Approval Request", ar: "طلب اعتماد مواد" } },
       canEdit: true,
       outcomes: defaultOutcomeSets.review_code,
     });

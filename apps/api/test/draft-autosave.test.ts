@@ -8,7 +8,7 @@ import type { SavedAnswers, WorkItemHistory } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { detail, projectMember, tryTake } from "./support/tower.ts";
+import { approvedSupplier, detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -88,7 +88,8 @@ describe("one Draft, saved by its holder only (RP-514)", () => {
   // (ADR 0019). How a save keeps another Member's newer change (after a Handover) is
   // mergeFieldAnswers' (field-times.test.ts).
   it("refuses another Member's save, times or not, and changes nothing", async () => {
-    const id = await newDraft({ manufacturer: "ACME", description: "d0" });
+    const supplier = await approvedSupplier(c1.caller, projectId, electrical);
+    const id = await newDraft({ manufacturer: "ACME", description: "d0", supplier });
     const based = await times(engineer, id);
     for (const res of [await save(colleague, id, { manufacturer: "theirs" }, based), await save(colleague, id, { manufacturer: "theirs" })]) {
       expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
@@ -97,7 +98,8 @@ describe("one Draft, saved by its holder only (RP-514)", () => {
   });
 
   it("lets the holder's later save, from an older page, overwrite their own earlier one", async () => {
-    const id = await newDraft({ manufacturer: "ACME", description: "d0" });
+    const supplier = await approvedSupplier(c1.caller, projectId, electrical);
+    const id = await newDraft({ manufacturer: "ACME", description: "d0", supplier });
     const based = await times(engineer, id);
     await pause();
     await ok(save(engineer, id, { manufacturer: "ACME", description: "first tab" }, based), 200);
@@ -116,10 +118,11 @@ describe("one Draft, saved by its holder only (RP-514)", () => {
 
 describe("history", () => {
   it("writes no answers_changed event for Draft saves, autosave or not, and one per button save after Draft", async () => {
-    const id = await newDraft({ manufacturer: "ACME", description: "d0" });
+    const supplier = await approvedSupplier(c1.caller, projectId, electrical);
+    const id = await newDraft({ manufacturer: "ACME", description: "d0", supplier });
     expect((await detail(engineer, id)).autosave).toBe(true);
-    await ok(save(engineer, id, { manufacturer: "ACME", description: "d1" }, await times(engineer, id)), 200);
-    await ok(save(engineer, id, { manufacturer: "ACME", description: "d2" }, await times(engineer, id)), 200);
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d1", supplier }, await times(engineer, id)), 200);
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d2", supplier }, await times(engineer, id)), 200);
     expect(await diffs(engineer, id)).toEqual([]);
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
@@ -127,9 +130,9 @@ describe("history", () => {
     expect((await detail(engineer, id)).autosave).toBe(false);
     // The PM holding Internal Review doesn't edit the Form (RP-514); Returned, the engineer does.
     await ok(tryTake(pm, id, "return", { reason: "Change the description" }));
-    await ok(save(engineer, id, { manufacturer: "ACME", description: "d3" }));
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d3", supplier }));
     expect(await diffs(pm, id)).toHaveLength(1);
-    await ok(save(engineer, id, { manufacturer: "ACME", description: "d4" }));
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d4", supplier }));
     expect(await diffs(pm, id)).toHaveLength(2);
   });
 });

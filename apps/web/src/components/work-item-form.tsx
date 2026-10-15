@@ -15,6 +15,7 @@ import {
   type FieldTime,
   type SavedAnswers,
   type OptionList,
+  type SupplierChoice,
 } from "@rabaed/domain";
 import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
@@ -49,6 +50,8 @@ type WorkItemFormState = {
   people: FormChoices;
   /** The Option Lists its `option_list` fields offer and read from. */
   optionLists: readonly OptionList[];
+  /** The Project's Approved Supplier List, for its `approved_supplier` fields (V10). */
+  suppliers: readonly SupplierChoice[];
   /** Its Project, which a link question's Link search searches. */
   projectId: string;
   /** The item's Document Number; none while it is a Draft (a Revision Draft included). */
@@ -102,6 +105,7 @@ export function WorkItemFormProvider({
   named,
   people,
   optionLists,
+  suppliers = [],
   editable,
   editableSections,
   fixedByNumber = [],
@@ -121,6 +125,7 @@ export function WorkItemFormProvider({
   named: NamedAnswers;
   people: FormChoices;
   optionLists: readonly OptionList[];
+  suppliers?: readonly SupplierChoice[];
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   editableSections: readonly string[];
@@ -164,6 +169,7 @@ export function WorkItemFormProvider({
       // didn't load (empty) aren't checked here: the server is the authority.
       optionLists: optionLists.length > 0 ? optionLists : undefined,
       held: saved,
+      suppliers: suppliers.length > 0 ? suppliers : undefined,
     });
     setErrors(checked.ok ? [] : checked.errors);
   }
@@ -248,6 +254,7 @@ export function WorkItemFormProvider({
         choices,
         people,
         optionLists,
+        suppliers,
         projectId,
         documentNumber,
         linkTargets,
@@ -307,6 +314,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         named={form.named}
         people={form.people}
         optionLists={form.optionLists}
+        suppliers={form.suppliers}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         editableSections={form.editableSections}

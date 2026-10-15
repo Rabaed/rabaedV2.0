@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  SupplierChoice,
   ApprovedSuppliers,
   SharedWorkItem,
   ActivityFeed,
@@ -137,6 +138,15 @@ export function getProjectScopes(projectId: string): Promise<Scopes | null> {
 /** The Project's Approved Supplier List (RP-592), for its Members; null for anyone else. */
 export function getApprovedSuppliers(projectId: string): Promise<ApprovedSuppliers | null> {
   return apiGet<ApprovedSuppliers>(`/v1/projects/${encodeURIComponent(projectId)}/approved-suppliers`);
+}
+
+/**
+ * The Project's Approved Supplier List as an `approved_supplier` field reads it (RP-595): every
+ * supplier, withdrawn too, with its Trade and name; empty for anyone who isn't a Member.
+ */
+export async function getSupplierChoices(projectId: string): Promise<SupplierChoice[]> {
+  const list = await getApprovedSuppliers(projectId);
+  return (list?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name }));
 }
 
 /** A Project's Numbering Pattern and per-Type overrides, for its Project Members; null otherwise. */

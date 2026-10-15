@@ -16,7 +16,7 @@ const floor = { id: "00000000-0000-4000-8000-0000000000a2", code: "ZAF1", name: 
 const row = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
   id: `00000000-0000-4000-8000-00000000000${n}`,
   projectId: "00000000-0000-4000-8000-000000000100",
-  type: { code: "MAR", name: b("Material Submittal", "اعتماد مواد") },
+  type: { code: "MAR", name: b("Material Approval Request", "طلب اعتماد مواد") },
   title: `Item ${n}`,
   documentNumber: `TWR-MAR-000${n}`,
   revisionNo: 0,

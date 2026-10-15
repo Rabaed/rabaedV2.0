@@ -36,7 +36,8 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       select w.project_id, t.module_key, w.workflow_version_id, w.outcome, w.closed_at, wf.name, wf.version_no,
         s.key as seen_step_key,
         a.participant_id in (select app.current_participant_ids()) as holder_mine,
-        holder.legal_name as holder_name
+        -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
+        coalesce(app.with_owner_review(w.id), holder.legal_name) as holder_name
       from work_item w
       join work_item_type t on t.id = w.work_item_type_id
       join app.work_item_workflow(w.id) wf on true

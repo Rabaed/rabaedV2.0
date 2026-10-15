@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import type { LinkedFrom } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, only, projectMember, take, type Company } from "./support/tower.ts";
+import { all, approvedSupplier, bilingual, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -37,7 +37,7 @@ async function draft(title: string, trade: string): Promise<string> {
   const res = await c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade, location: buildingA },
+    answers: { manufacturer: "ACME Cables", supplier: await approvedSupplier(c1.caller, projectId, trade), description: "Galvanised, 300 mm", trade, location: buildingA },
   });
   expect(res.statusCode, res.body).toBe(201);
   await attachDatasheet(c1Engineer, res.json().id);

@@ -20,6 +20,7 @@ export const notInActionForm = [
   "scopes",
   "member",
   "participant",
+  "approved_supplier",
   "work_item_ref",
   "attachments",
   "photos",

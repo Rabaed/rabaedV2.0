@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { defaultModules } from "./support/default-types.ts";
-import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { all, approvedSupplier, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 // What no api does yet: closing a Project, adding a Project's own Work Item Type.
@@ -54,8 +54,13 @@ async function card(by: Caller, project = projectId): Promise<ProjectSummary> {
 
 /** A Draft MAR raised by `by`, complete, with its datasheet. */
 async function draft(by: Caller, title: string, project = projectId, answers: Record<string, unknown> = {}): Promise<string> {
+  const given = { ...complete, trade: electrical, location: buildingA, ...answers };
   const res = await ok(
-    by.post(`/v1/projects/${project}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA, ...answers } }),
+    by.post(`/v1/projects/${project}/work-items`, {
+      type: "MAR",
+      title,
+      answers: { ...given, supplier: await approvedSupplier(c1.caller, project, given.trade as string) },
+    }),
     201,
   );
   const id = res.json().id as string;

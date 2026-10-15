@@ -60,7 +60,7 @@ describe("the search index", () => {
     expect(members.length).toBeGreaterThan(1);
     let found = 0;
     for (const member of members) {
-      // Every item of the seeded Type has "Material Submittal" in its search text.
+      // Every item of the seeded Type has "Material Approval Request" in its search text.
       const visible = await as(member, async (trx) =>
         (
           await sql<{ id: string }>`
@@ -71,7 +71,7 @@ describe("the search index", () => {
           .map((r) => r.id)
           .sort(),
       );
-      expect(await searched(member, "Material Submittal"), member).toEqual(visible);
+      expect(await searched(member, "Material Approval Request"), member).toEqual(visible);
       found += visible.length;
     }
     expect(found).toBeGreaterThan(0); // the check is not blind

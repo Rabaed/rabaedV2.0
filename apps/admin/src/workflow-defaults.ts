@@ -1,5 +1,5 @@
 import {
-  rabaedDefaultWorkflowId,
+  rabaedWorkflowTargetId,
   readLatestPublishedDefinition,
   readModuleStages,
   readPositions,
@@ -38,18 +38,42 @@ type VersionRows = { layout: unknown; steps: unknown; transitions: unknown };
 const definitionOf = (row: VersionRows): WorkflowDefinition =>
   definitionFromRows({ layout: row.layout, steps: row.steps as WorkflowVersionRows["steps"], transitions: row.transitions as WorkflowVersionRows["transitions"] });
 
-/** Every Rabaed Default Work Item Type with its Workflow's published Versions and whether a draft is waiting. */
+/**
+ * Every Rabaed Default Workflow, a row each, with its Type, its published Versions and whether a
+ * draft is waiting: the Workflow a Rabaed Type runs first, then the Type's other Rabaed Defaults
+ * (RP-596) in the order their keys give: the four reviewer counts, then the same with the Owner's review.
+ */
 export async function listRabaedWorkflows(db: Db): Promise<AdminWorkflowSummary[]> {
-  const { rows } = await sql<{ code: string; name: BilingualText; module_key: ModuleKey; versions: number[]; has_draft: boolean }>`
-    select t.code, t.name, t.module_key,
+  const { rows } = await sql<{
+    code: string;
+    name: BilingualText;
+    module_key: ModuleKey;
+    workflow_id: string;
+    workflow_name: BilingualText;
+    is_default: boolean;
+    versions: number[];
+    has_draft: boolean;
+  }>`
+    select t.code, t.name, t.module_key, d.id as workflow_id, d.name as workflow_name,
+      d.id = t.workflow_definition_id as is_default,
       coalesce((select array_agg(v.version_no order by v.version_no) from workflow_version v
-        where v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'), '{}') as versions,
-      exists (select 1 from workflow_version v where v.workflow_definition_id = t.workflow_definition_id and v.status = 'draft') as has_draft
+        where v.workflow_definition_id = d.id and v.status = 'published'), '{}') as versions,
+      exists (select 1 from workflow_version v where v.workflow_definition_id = d.id and v.status = 'draft') as has_draft
     from work_item_type t
+    join workflow_definition d on d.owner_kind = 'rabaed' and (d.id = t.workflow_definition_id or d.work_item_type_id = t.id)
     where t.owner_kind = 'rabaed'
-    order by t.module_key, t.code
+    order by t.module_key, t.code, coalesce(d.default_key like '%-owner', false), d.default_key nulls first, d.created_at, d.id
   `.execute(db);
-  return rows.map((r) => ({ code: r.code, name: r.name, moduleKey: r.module_key, publishedVersions: r.versions, hasDraft: r.has_draft }));
+  return rows.map((r) => ({
+    code: r.code,
+    name: r.name,
+    moduleKey: r.module_key,
+    workflowId: r.workflow_id,
+    workflowName: r.workflow_name,
+    isTypeDefault: r.is_default,
+    publishedVersions: r.versions,
+    hasDraft: r.has_draft,
+  }));
 }
 
 /** The draft of Workflow `definitionId`, if it has one (the newest Version, while unpublished). */
@@ -66,17 +90,22 @@ async function readDraft(db: Db, definitionId: string) {
   return row ? { versionNo: row.version_no, name: row.name, definition: definitionOf(row) } : null;
 }
 
-/** What the builder edits Type `typeCode`'s Rabaed Default with; null for a Type that has none. */
-export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<AdminWorkflowRead | null> {
+/**
+ * What the builder edits Type `typeCode`'s Rabaed Default with, or its other Rabaed Default
+ * `workflowId` (RP-596); null for a Type that has none, or a Workflow that isn't one of the Type's.
+ */
+export async function readRabaedWorkflow(db: Db, typeCode: string, workflowId?: string | null): Promise<AdminWorkflowRead | null> {
+  const definitionId = await rabaedWorkflowTargetId(db, typeCode, workflowId);
+  if (!definitionId) return null;
   const type = await db
     .selectFrom("work_item_type")
     .innerJoin("workflow_definition", "workflow_definition.id", "work_item_type.workflow_definition_id")
-    .select(["work_item_type.id", "work_item_type.code", "work_item_type.name", "work_item_type.module_key", "work_item_type.workflow_definition_id", "workflow_definition.name as workflow_name"])
+    .select(["work_item_type.id", "work_item_type.code", "work_item_type.name", "work_item_type.module_key"])
     .where("work_item_type.owner_kind", "=", "rabaed")
     .where("work_item_type.code", "=", typeCode)
     .executeTakeFirst();
   if (!type) return null;
-  const definitionId = type.workflow_definition_id;
+  const workflowName = await db.selectFrom("workflow_definition").select("name").where("id", "=", definitionId).executeTakeFirstOrThrow();
   const versions = await db
     .selectFrom("workflow_version")
     .select("version_no")
@@ -105,7 +134,7 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
   return {
     workflow: {
       id: definitionId,
-      name: type.workflow_name,
+      name: workflowName.name,
       owner: "rabaed",
       projectId: null,
       workItemTypeId: type.id,
@@ -146,22 +175,24 @@ export type DuplicateRefusal = "not_found" | "invalid_definition";
 
 /**
  * Rabaed Engineer `engineerId` copies Type `fromTypeCode`'s Workflow (its draft, else its latest
- * Version) in as the draft of Type `typeCode`'s, replacing the draft it had. The copy is checked
- * against the target Type when it is published, not now.
+ * Version) in as the draft of Type `typeCode`'s, or of its other Rabaed Default `workflowId`
+ * (RP-596), replacing the draft it had. The source is the Type's own, or its `fromWorkflowId`.
+ * The copy is checked against the target Type when it is published, not now.
  */
 export async function duplicateRabaedWorkflow(
   db: Db,
   engineerId: string,
   typeCode: string,
-  input: { fromTypeCode: string; reason: string },
+  input: { fromTypeCode: string; fromWorkflowId?: string | undefined; reason: string },
+  workflowId?: string | null,
 ): Promise<Refusable<{ versionNo: number }, DuplicateRefusal>> {
   return refusable(() =>
     asEngineer(db, { engineerId, action: "duplicate_workflow", reason: input.reason }, async (trx) => {
-      const source = await readRabaedWorkflow(trx, input.fromTypeCode);
-      const targetId = await rabaedDefaultWorkflowId(trx, typeCode);
+      const source = await readRabaedWorkflow(trx, input.fromTypeCode, input.fromWorkflowId);
+      const targetId = await rabaedWorkflowTargetId(trx, typeCode, workflowId);
       const definition = source && (source.workflow.draft?.definition ?? source.workflow.published?.definition);
       if (!targetId || !definition) throw new Refused("not_found");
-      const written = await writeRabaedDefaultWorkflow(trx, typeCode, definition, { publish: false });
+      const written = await writeRabaedDefaultWorkflow(trx, typeCode, definition, { publish: false, workflowId });
       if (!written.ok) throw new Refused(written.reason === "type_not_found" ? "not_found" : "invalid_definition");
       return {
         target: { kind: "workflow_definition", id: written.definitionId },

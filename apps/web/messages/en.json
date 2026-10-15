@@ -838,6 +838,10 @@
         "none": "None",
         "unavailable": "This list isn't available."
       },
+      "approvedSupplierField": {
+        "none": "No approved supplier for this Trade yet",
+        "withdrawn": "\u2068{name}\u2069 (withdrawn)"
+      },
       "linkQuestion": {
         "remove": "Remove {number}"
       }
@@ -1009,7 +1013,8 @@
     "grouped": "Some Steps are grouped because they are internal to another company.",
     "outcomeModes": {
       "recommend_code": "Recommends a code",
-      "issue_outcome": "Issues the outcome"
+      "issue_outcome": "Issues the outcome",
+      "confirm_code": "Confirms the Recommended Code"
     },
     "kinds": {
       "send": "Send",
@@ -1091,7 +1096,8 @@
     "outcomeOptions": {
       "none": "None",
       "recommend_code": "Recommends a code",
-      "issue_outcome": "Issues the outcome"
+      "issue_outcome": "Issues the outcome",
+      "confirm_code": "Confirms the Recommended Code"
     },
     "draftsVisibleTo": "Drafts visible to",
     "draftsWholeCompany": "The author's whole Company (default)",
@@ -1478,7 +1484,7 @@
   "projectSettings": {
     "approvedSuppliers": {
       "title": "Approved Supplier List",
-      "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. Material submittals choose their supplier from here. Every company on the Project sees this list.",
+      "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. A Material Approval Request (MAR) chooses its supplier from here. Every company on the Project sees this list.",
       "add": "Add supplier",
       "addHelp": "Add a supplier the Project has already approved. A supplier approved through a submittal is added to the list for you.",
       "addSubmit": "Add supplier",
@@ -1561,6 +1567,8 @@
       "backBody": "{workflow} stays in this Project as a copy. Items already running keep their Version.",
       "backSubmit": "Go back to the Default",
       "backDone": "{type} runs the Rabaed Default again.",
+      "defaultsTitle": "Rabaed Default Workflows",
+      "defaultsIntro": "The Workflows Rabaed provides for a Type: how many reviewers each side has (1 is the PM alone, 2 is the Engineer, then the PM), with and without the Owner's final review. A Project Admin uses one for the Type, or duplicates it to edit.",
       "copiesTitle": "This Project's own Workflows",
       "copiesIntro": "Copies made in this Project. Publish a copy in the builder, then use it for its Type.",
       "colState": "Version in use",

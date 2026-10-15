@@ -350,6 +350,8 @@ export interface WorkflowDefinitionTable {
   name: ColumnType<Bilingual, string, string>;
   /** The Work Item Type it is made for (RP-427); null only for test Workflows made before it. */
   work_item_type_id: string | null;
+  /** Names a Rabaed Default within its Type ("2-2", "1-1-owner"; RP-596), so `defaults:publish` finds it again; null elsewhere. */
+  default_key: ColumnType<string | null, string | null | undefined, string | null>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -441,6 +443,8 @@ export interface WorkItemTypeTable {
   outcome_kind: "review_code" | "inspection_result" | "approval" | "none";
   /** Its Form; always set on a Rabaed Default. */
   form_definition_id: string | null;
+  /** RP-594: closing at Code A or B adds the item's supplier (Form keys supplier_name_en / _ar) to the Approved Supplier List. The Rabaed Default SAR. */
+  adds_approved_supplier: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

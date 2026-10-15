@@ -153,14 +153,15 @@ describe("Save draft with the Built-in Fields", () => {
 
 describe("leaving Draft", () => {
   it("is refused without a Location, naming the field", async () => {
-    const id = await created({ ...material, trade: trade.electrical });
+    const supplier = await post("approved-suppliers", { tradeId: trade.electrical, scopeId: null, name: bilingual("ACME Supply") });
+    const id = await created({ ...material, supplier, trade: trade.electrical });
     await attachDatasheet(engineer, id);
     const res = await sendForReview(id);
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "form_incomplete", fields: [{ key: "location", code: "required" }] });
     expect((await detail(engineer, id)).stage.key).toBe("draft");
 
-    await ok(save(id, { ...material, trade: trade.electrical, location: buildingA }));
+    await ok(save(id, { ...material, supplier, trade: trade.electrical, location: buildingA }));
     await ok(sendForReview(id));
     expect((await detail(engineer, id)).stage.key).toBe("internal_review");
   });

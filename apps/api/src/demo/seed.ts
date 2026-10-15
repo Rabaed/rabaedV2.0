@@ -210,6 +210,7 @@ export async function seedDemo(
     (await tmc.caller<{ id: string }>("POST", `/v1/projects/${projectId}/locations`, { code, name, parentId })).id;
   const electrical = await trade("EL", bi("Electrical Works", "الأعمال الكهربائية"));
   const mechanical = await trade("ME", bi("Mechanical Works", "الأعمال الميكانيكية"));
+  const civil = await trade("CV", bi("Civil Works", "الأعمال المدنية"));
   const zone = await location("MZ", bi("Main Zone", "المنطقة الرئيسية"), null);
   const tower1 = await location("T1", bi("Tower 1", "البرج 1"), zone);
   const tower2 = await location("T2", bi("Tower 2", "البرج 2"), zone);
@@ -225,6 +226,14 @@ export async function seedDemo(
   const lighting = await scope(bi("Lighting", "الإنارة"));
   const emergencyLighting = await scope(bi("Emergency lighting", "إنارة الطوارئ"), lighting);
   await scope(bi("Power distribution", "توزيع الطاقة"));
+
+  // The Project's Approved Supplier List (RP-597): two fictional suppliers the Project Admin
+  // preloaded, one per Trade. The MAR Form's supplier field offers only these for its Trade;
+  // a third, Tabuk Cable Industries, joins Electrical when the SAR below is closed at Code A.
+  const addSupplier = async (tradeId: string, name: BilingualText) =>
+    (await tmc.caller<{ id: string }>("POST", `/v1/projects/${projectId}/approved-suppliers`, { tradeId, scopeId: null, name })).id;
+  await addSupplier(civil, bi("Al-Rimal Building Materials", "مواد البناء الرمال"));
+  const najd = await addSupplier(electrical, bi("Najd Electrical Supplies", "نجد للتوريدات الكهربائية"));
 
   // Participants, each invited by the Project Admin and accepted by its own
   // Authorized Person (ADR 0009), and what each covers (set by the Project Admin). Beta Build
@@ -295,6 +304,11 @@ export async function seedDemo(
     locale: "ar",
   };
   await member(waha, participant.waha, faisal, ["engineer"]);
+  // Holds the Owner's review of a DAR (RP-597): the Owner review Step is the Owner Representative's Project Managers'.
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the Project Manager Position, as GLOSSARY.md's Position entry names it.
+  const noura = { key: "waha-pm", local: "noura.alharbi", name: bi("Noura Al Harbi", "نورة الحربي"), label: "Owner Representative Project Manager", locale: "ar" as Locale };
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the same Position's key.
+  await member(waha, participant.waha, noura, ["project_manager"]);
   // A second TMC engineer who covers Tower 2 only: a Link to a Tower 1 item is
   // its Document Number and Subject to him, nothing more (E1, RP-294).
   const omar = {
@@ -315,6 +329,7 @@ export async function seedDemo(
     // Filled through the MAR Form (Version 3): its Items, and its Built-in Fields; no Related submittals.
     answers: {
       manufacturer: "Zumtobel",
+      supplier: najd,
       model: "RESCLITE PRO",
       specification_section: "26 52 13",
       description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
@@ -417,11 +432,76 @@ export async function seedDemo(
     /** Mohammed issues the Code with its Screen's answers: the final verification and Remarks, shared with the Code. */
     const coded = (itemId: string, transition: string, answers: Record<string, unknown>) =>
       mohammedCaller("POST", `/v1/work-items/${itemId}/transitions`, { transition, answers, confirmed: true, idempotencyKey: randomUUID() });
+    // A SAR (Supplier Approval Request, RP-597) taken to Code A on the 2→2 Workflow: its
+    // supplier joins the Electrical list on its own (RP-594), and the cable tray MAR below picks it.
+    const sarAnswers = {
+      supplier_name_en: "Tabuk Cable Industries",
+      supplier_name_ar: "تبوك لصناعة الكابلات",
+      commercial_registration_number: "1010000003",
+      country_of_origin: "Saudi Arabia",
+      proposed_supply: "Wire mesh cable trays and cable ladders for the Tower 1 and Tower 2 risers.",
+      past_projects: [{ project_name: "Demo Logistics Park, Dammam", year: 2023 }],
+      trade: electrical,
+      location: tower1Floors[0],
+    };
+    const { id: sar } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, {
+      type: "SAR",
+      title: "Tabuk Cable Industries",
+      answers: sarAnswers,
+    });
+    await upload(sar, {
+      fieldKey: "company_profile",
+      fileName: "Tabuk-Cable-Industries-profile.pdf",
+      contentType: "application/pdf",
+      body: demoPdf(["Tabuk Cable Industries", "Cable trays and ladders.", "Demo company profile: made up for the Rabaed demo."]),
+    });
+    await take(hafizCaller, sar, "send_for_review");
+    await aliCaller("POST", `/v1/work-items/${sar}/pick-up`);
+    await take(aliCaller, sar, "submit");
+    await reviewed(sar, { sample_checked: true, matches_specification: true }, "A", "Profile and references checked.");
+    await coded(sar, "approve_a", { sample_checked: true, matches_specification: true });
+    const { suppliers } = await hafizCaller<{ suppliers: { id: string; name: BilingualText }[] }>(
+      "GET",
+      `/v1/projects/${projectId}/approved-suppliers?tradeId=${electrical}`,
+    );
+    const tabuk = suppliers.find((x) => x.name.en === "Tabuk Cable Industries")?.id;
+    if (!tabuk) throw new Error("Demo seed: the approved SAR did not add its supplier to the Approved Supplier List");
+
+    // A DAR (Document Approval Request) on 1→1 → Owner review: the Contractor PM submits it, the
+    // Consultant Manager recommends Code A, and Al Waha, the Owner Representative, Confirms.
+    const { id: dar } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, {
+      type: "DAR",
+      title: "Cable sizing calculation – Tower 1",
+      answers: {
+        document_type: "calculation",
+        document_title: "Cable sizing calculation – Tower 1",
+        document_revision: "R0",
+        specification_section: "26 05 19",
+        trade: electrical,
+        location: tower1Floors[0],
+      },
+    });
+    await upload(dar, {
+      fieldKey: "document",
+      fileName: "Cable-sizing-calculation-T1.pdf",
+      contentType: "application/pdf",
+      body: demoPdf(["Cable sizing calculation, Tower 1", "Demo document: made up for the Rabaed demo."]),
+    });
+    await take(hafizCaller, dar, "send_for_review");
+    await aliCaller("POST", `/v1/work-items/${dar}/pick-up`);
+    await take(aliCaller, dar, "submit");
+    await mohammedCaller("POST", `/v1/work-items/${dar}/pick-up`);
+    await coded(dar, "recommend_a", { sample_checked: true, matches_specification: true });
+    const nouraCaller = await signedIn(waha, noura);
+    await nouraCaller("POST", `/v1/work-items/${dar}/pick-up`);
+    await take(nouraCaller, dar, "confirm_a");
+
     const exitSignage = await submitted(
       "Exit signage – Tower 1",
       ["Thorn Voyager", "LED exit sign, maintained, 3-hour duration.", "Demo datasheet: made up for the Rabaed demo."],
       {
         manufacturer: "Thorn",
+        supplier: najd,
         model: "Voyager",
         specification_section: "26 52 13",
         description: "LED exit signs for the Tower 1 escape routes, maintained, 3-hour duration.",
@@ -442,6 +522,7 @@ export async function seedDemo(
       ["Zumtobel ONLITE CPS", "Central battery panel for emergency luminaires and exit signs.", "Demo datasheet: made up for the Rabaed demo."],
       {
         manufacturer: "Zumtobel",
+        supplier: najd,
         model: "ONLITE CPS",
         specification_section: "26 52 13",
         description: "Central battery panel monitoring the Tower 2 emergency luminaires and exit signs.",
@@ -465,6 +546,7 @@ export async function seedDemo(
       ["Legrand Cablofil CF 54", "Wire mesh cable tray, hot dip galvanised.", "Demo datasheet: made up for the Rabaed demo."],
       {
         manufacturer: "Legrand",
+        supplier: tabuk,
         model: "Cablofil CF 54",
         specification_section: "26 05 36",
         description: "Wire mesh cable trays for the Tower 1 electrical risers.",

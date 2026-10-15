@@ -4,6 +4,7 @@
 // runs workflowPublishProblems on each of them, with its Work Item Type, the
 // Module's Stages and the Type's latest published Form, as publishing will. Each
 // Version's rows also read as a definition and write back as the same rows.
+import { submittalWorkflows } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import {
@@ -33,6 +34,7 @@ type Version = {
   versionNo: number;
   layout: unknown;
   typeId: string | null;
+  typeCode: string | null;
   moduleKey: string | null;
   projectId: string | null;
   /** The Project owning the Workflow; null for a Rabaed Default. */
@@ -70,7 +72,7 @@ beforeAll(async () => {
   versions = (
     await sql<Version>`
       select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
-        t.id as "typeId", t.module_key as "moduleKey", coalesce(d.project_id, t.project_id) as "projectId", d.project_id as "ownerProjectId",
+        t.id as "typeId", t.code as "typeCode", t.module_key as "moduleKey", coalesce(d.project_id, t.project_id) as "projectId", d.project_id as "ownerProjectId",
         t.outcome_kind as "outcomeKind",
         (select f.schema from form_version f
          where f.form_definition_id = t.form_definition_id and f.status = 'published'
@@ -128,7 +130,8 @@ beforeAll(async () => {
 
 describe("every published Workflow Version", () => {
   it("includes MAR Versions 1, 2 and 3 (RP-437), each used by a Work Item Type", () => {
-    expect(versions.filter((v) => v.name === "Material Submittal (MAR)").map((v) => [v.versionNo, v.outcomeKind])).toEqual([
+    // The MAR's own Rabaed Default is the 2→2 Workflow (RP-596), named so; the SAR's is too.
+    expect(versions.filter((v) => v.typeCode === "MAR" && v.name === submittalWorkflows[3].name.en).map((v) => [v.versionNo, v.outcomeKind])).toEqual([
       [1, "review_code"],
       [2, "review_code"],
       [3, "review_code"],

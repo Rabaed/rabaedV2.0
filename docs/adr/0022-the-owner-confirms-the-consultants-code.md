@@ -7,7 +7,7 @@ We decided (2026-10-15, with the product owner, grilling of RP-26):
 - **In a Workflow with the Owner's review, the Consultant PM's Code is a Recommended Code to the Owner.** The item goes to the Owner's Step; nothing closes yet.
 - **The Owner confirms it or Sends the item Back.** Confirming issues that Code: the item closes and the Code's result runs (Comments with B, a Revision offered with C, a replacement with D). A Send Back returns the item to the Consultant PM with a comment, who may recommend another Code. The Owner doesn't pick a different Code itself.
 - **The Owner's PM acts, or an Owner Representative's PM** on a Project that has one.
-- **Nobody but the Consultant and the Owner sees the Recommended Code.** The Contractor sees the item as "With Owner review" (V14) and learns the Code only when it is issued; a Code the Owner sent back is never shown to it.
+- **Nobody but the Consultant and the Owner sees the Recommended Code.** When an Owner Representative holds the review, only the Consultant and the Representative read the Recommended Code; the Owner reads it once it is issued. The Contractor sees the item as "With Owner review" (V14) and learns the Code only when it is issued; a Code the Owner sent back is never shown to it. (Amended 2026-10-15, spec RP-598 review, with the product owner: the build's stricter audience is kept.)
 
 ## Considered Options
 

@@ -7,7 +7,7 @@ import { formSchemaProblems, isAnswerField, type FormVersion } from "@rabaed/dom
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
-import { detail, projectMember } from "./support/tower.ts";
+import { approvedSupplier, detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -22,6 +22,7 @@ let k1Engineer: Caller; // Consultant.
 let outsider: Caller; // A C1 Member not on the Project.
 let projectId = "";
 let electrical = "";
+let supplier = ""; // An approved supplier of Electrical (RP-595).
 let buildingA = "";
 
 const bilingual = (text: string) => ({ en: text, ar: text });
@@ -60,6 +61,7 @@ beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  supplier = await approvedSupplier(c1.caller, projectId, electrical);
   buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null })).json().id;
   const own = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
@@ -79,6 +81,7 @@ describe("the Form for a new MAR", () => {
     expect(form.versionNo).toBe(5);
     expect(form.schema.sections.flatMap((s) => s.fields.filter(isAnswerField).map((f) => [f.key, f.type, f.required]))).toEqual([
       ["manufacturer", "text", true],
+      ["supplier", "approved_supplier", true],
       ["model", "text", false],
       ["specification_section", "text", false],
       ["description", "textarea", true],
@@ -179,6 +182,7 @@ describe("Send for Review", () => {
       error: "form_incomplete",
       fields: [
         { key: "manufacturer", code: "required" },
+        { key: "supplier", code: "required" },
         { key: "description", code: "required" },
         { key: "datasheet", code: "required" },
         { key: "location", code: "required" },
@@ -194,18 +198,18 @@ describe("Send for Review", () => {
   });
 
   it("succeeds once the Form is complete", async () => {
-    await ok(save(engineer, id, { ...complete, location: buildingA, model: "CT-300" }));
+    await ok(save(engineer, id, { ...complete, supplier, location: buildingA, model: "CT-300" }));
     await attachDatasheet(engineer, id);
     await ok(sendForReview(engineer, id));
     expect(await detail(engineer, id)).toMatchObject({
       stage: { key: "internal_review" },
-      answers: { ...complete, model: "CT-300", trade: electrical, location: buildingA },
+      answers: { ...complete, supplier, model: "CT-300", trade: electrical, location: buildingA },
     });
   });
 
   it("closes the answers at Internal Review, to the engineer and the PM alike (RP-514; was open, RP-268)", async () => {
     for (const by of [engineer, pm]) {
-      const res = await save(by, id, { ...complete, location: buildingA, model: "Later" });
+      const res = await save(by, id, { ...complete, supplier, location: buildingA, model: "Later" });
       expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
       expect((await detail(by, id)).actions.saveAnswers).toBe(false);
     }

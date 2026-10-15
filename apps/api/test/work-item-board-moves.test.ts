@@ -13,7 +13,7 @@ import { dropTargets, workItemSearchParams, type WorkItemBoard, type WorkItemDet
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { all, approvedSupplier, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
@@ -85,6 +85,7 @@ let c2Engineer: Caller; // A second Contractor (V3).
 let k1ManagerA: Caller; // In the review Step's pool; picks up.
 let k1ManagerB: Caller; // In the same pool; does not.
 let projectId = "";
+let supplier = ""; // An approved supplier of Electrical: the MAR Form asks for one to leave Draft (RP-595).
 let trade = "";
 let location = "";
 
@@ -105,7 +106,7 @@ async function pageTransitions(by: Caller, id: string): Promise<string[]> {
 }
 
 async function draft(type: string, title: string): Promise<string> {
-  const res = await ok(c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type, title, answers: { ...complete, trade, location } }), 201);
+  const res = await ok(c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type, title, answers: { ...complete, ...(type === TYPE ? { supplier } : {}), trade, location } }), 201);
   const id = res.json().id as string;
   await attachDatasheet(c1Engineer, id);
   return id;
@@ -132,6 +133,7 @@ beforeAll(async () => {
   projectId = (await api.createProject(c1.caller)).id;
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id;
   trade = await post("trades", { code: "EL", name: bilingual("Electrical") });
+  supplier = await approvedSupplier(c1.caller, projectId, trade);
   location = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
   const own = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()

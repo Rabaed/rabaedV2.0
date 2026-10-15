@@ -62,6 +62,20 @@ export function readWorkflowSettings(db: Db, memberId: string, projectId: string
         `.execute(trx)
       : { rows: [] };
 
+    // The Rabaed Defaults made for each Rabaed Type the Project uses (RP-596: a Type may have several,
+    // the eight submittal Workflows), as the Project's Members read them (V20: only those with a published Version).
+    const rabaedTypeIds = [...byCode.values()].filter((t) => !t.own).map((t) => t.id);
+    const defaults =
+      rabaedTypeIds.length === 0
+        ? { rows: [] }
+        : await sql<Latest & { type_id: string }>`
+            select d.id, d.name, d.work_item_type_id as type_id, ${latestPublishedVersionNo(sql.ref("d.id"))} as version_no
+            from workflow_definition d
+            where d.owner_kind = 'rabaed' and d.work_item_type_id = any(${rabaedTypeIds}::uuid[])
+            order by coalesce(d.default_key like '%-owner', false), d.default_key nulls first, d.created_at, d.id
+          `.execute(trx);
+    const rabaedIds = new Set(defaults.rows.map((d) => d.id));
+
     const result: WorkflowSettingsType[] = [...byCode.values()]
       .sort((a, b) => moduleKeys.indexOf(a.module_key) - moduleKeys.indexOf(b.module_key) || a.code.localeCompare(b.code))
       .flatMap((t): WorkflowSettingsType[] => {
@@ -74,7 +88,22 @@ export function readWorkflowSettings(db: Db, memberId: string, projectId: string
             code: t.code,
             name: t.name,
             moduleKey: t.module_key,
-            workflow: { id: running.id, name: running.name, versionNo: running.version_no, source: own ? "project_copy" : "rabaed_default" },
+            // A Rabaed Default the Project bound (RP-596) is still the Rabaed Default, not a copy of its own.
+            workflow: {
+              id: running.id,
+              name: running.name,
+              versionNo: running.version_no,
+              source: own && !rabaedIds.has(own.workflow_definition_id) ? "project_copy" : "rabaed_default",
+            },
+            rabaedDefaults: defaults.rows
+              .filter((d) => d.type_id === t.id && d.version_no !== null)
+              .map((d) => ({
+                id: d.id,
+                name: d.name,
+                versionNo: d.version_no,
+                bound: d.id === running.id,
+                isTypeDefault: d.id === t.workflow_definition_id,
+              })),
             exceptions: bindings.rows
               .filter((b) => b.work_item_type_id === t.id && b.raising_participant_id !== null)
               .flatMap((b) => {

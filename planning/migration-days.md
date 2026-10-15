@@ -16,4 +16,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270406 | RP-595 | B | MAR supplier field |
 | 20270407 | RP-596 | B | Eight default Workflows |
 | 20270408 | RP-597 | B | Demo |
-| 20270409 | spec RP-598 | B | Review fixes |
+| 20270409 | spec RP-598 | B | Review fixes; RP-593's and RP-594's migrations, moved here to sort after RP-591's on `main` |
