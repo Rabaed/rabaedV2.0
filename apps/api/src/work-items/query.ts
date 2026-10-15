@@ -57,7 +57,9 @@ import { sql, type RawBuilder, type Transaction } from "kysely";
 //
 // "With" follows V14 too: the viewer's own Participant sees the Step and who
 // picked it up; anyone else sees the holding Company's name only, which is all
-// app.work_item_holder gives them.
+// app.work_item_holder gives them. While the item waits for the Owner's review,
+// anyone who is neither of its holder nor of the recommending Consultant reads
+// "With Owner review" instead, with no holder (app.with_owner_review; ADR 0022).
 //
 // A new filter is a new key of WorkItemQuery and one more condition in
 // `matching`; the page, the counts and the "With" values all follow it.
@@ -98,6 +100,8 @@ type Row = {
   creation_date: Date | null;
   holder_participant_id: string | null;
   assignee_member_id: string | null;
+  /** "Owner review", read in place of the holder by those app.with_owner_review gives it; else null. */
+  owner_review_name: BilingualText | null;
   held_by_own: boolean;
   step_key: string;
   step_name: BilingualText;
@@ -153,7 +157,10 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
       app.work_item_creation_date(w.id) as creation_date,
-      h.participant_id as holder_participant_id, h.assignee_member_id, w.raised_by_participant_id as raiser_participant_id,
+      -- At the Owner's review, no holder for those who read "Owner review": no name, filter, search or lane names it.
+      case when orv.name is null then h.participant_id end as holder_participant_id,
+      case when orv.name is null then h.assignee_member_id end as assignee_member_id, orv.name as owner_review_name,
+      w.raised_by_participant_id as raiser_participant_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
       s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key
     from work_item w
@@ -178,6 +185,7 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
     left join dimension_value lv on lv.id = ldv.dimension_value_id
     -- One holder: a closed item has none.
     left join lateral (select * from app.work_item_holder(w.id) limit 1) h on true
+    cross join lateral (select app.with_owner_review(w.id) as name) orv
     where w.project_id = ${projectId} and t.module_key = ${moduleKey}
       and (${allRevisions}::boolean or app.latest_visible_revision(w.id))
   `;
@@ -453,7 +461,7 @@ const columnSorts: Record<WorkItemSort, ColumnSort> = {
       named(
         sql`(case when r.closed then coalesce(cm.full_name, co.closer_company_name)
           when r.held_by_own and r.assignee_member_id is null then r.step_name
-          else coalesce(m.full_name, co.holder_name) end)`,
+          else coalesce(m.full_name, co.holder_name, r.owner_review_name) end)`,
         lang,
       ),
   },
@@ -516,9 +524,12 @@ function toRow(r: Row, now: Date): WorkItemRow {
         : r.closer_company_name
           ? { kind: "company", companyName: r.closer_company_name }
           : null,
-    with:
-      !open || r.holder_name === null
-        ? null
+    with: !open
+      ? null
+      : r.owner_review_name
+        ? { kind: "company", companyName: r.owner_review_name }
+        : r.holder_name === null
+          ? null
         : r.held_by_own
           ? {
               kind: "own",
@@ -680,6 +691,9 @@ async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: 
   return new Map(counts.map((c) => [c.stage_key, c.count]));
 }
 
+/** The lane of the cards read "With Owner review": one lane, keyed by no Participant (the nil UUID). */
+const ownerReviewLane = "00000000-0000-0000-0000-000000000000";
+
 /**
  * The Kanban's cards: every visible item of the scope matching `q`, in the
  * sort's order, but of a closed Stage only those closed in the last
@@ -699,7 +713,7 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
   const byStage = new Map<string, BoardCardInput[]>();
   for (const r of rows) {
     const cards = byStage.get(r.stage_key) ?? [];
-    cards.push({ card: toRow(r, now), holderParticipantId: r.holder_participant_id });
+    cards.push({ card: toRow(r, now), holderParticipantId: r.owner_review_name ? ownerReviewLane : r.holder_participant_id });
     byStage.set(r.stage_key, cards);
   }
   return byStage;
