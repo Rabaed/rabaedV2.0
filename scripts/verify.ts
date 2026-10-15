@@ -1,15 +1,31 @@
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { finalLine, selectSteps, tail } from "./verify-steps.ts";
+import { tcpReachable } from "./test-services.ts";
+import { finalLine, postgresDown, postgresOfEnv, selectSteps, tail } from "./verify-steps.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
 // its exit code; a failing step prints the tail of its output, so a setup
-// failure (Postgres down) shows. Needs the lane's .env (`pnpm lane:env`).
+// failure shows. Needs the lane's .env (`pnpm lane:env`), and stops before the
+// first step when its Postgres doesn't answer.
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
 const tailLines = 40;
+
+// The lane's Postgres first (RP-575): a stopped container otherwise showed only at
+// test:seam1, after every step before it had run.
+const envFile = join(root, ".env");
+const postgres = existsSync(envFile) ? postgresOfEnv(readFileSync(envFile, "utf8")) : undefined;
+if (!postgres) {
+  console.error("No Postgres in this worktree's .env: run `pnpm lane:env <n>` first.");
+  process.exit(1);
+}
+if (!(await tcpReachable(postgres.host, postgres.port))) {
+  console.error(postgresDown(postgres));
+  process.exit(1);
+}
 
 const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) {
