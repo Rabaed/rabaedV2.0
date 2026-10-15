@@ -10,7 +10,7 @@
 // Docker Compose project (container + volume). Lane 0 keeps the defaults.
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
-// already uses, and names the holder, saying whether that worktree's branch is already merged
+// already uses, and names the holder, saying whether that worktree's branch (or detached HEAD, RP-601) is already merged
 // into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane, unless a worktree that is not
 // merged names the lane in its .env: prune keeps it, so that worktree is named instead). --free takes the next lane that is free instead,
 // preferring the same Main's lanes m1–m4. Legacy lane m and lane m0 clash with each other's containers, as they share ports.
@@ -53,7 +53,7 @@ import {
 import { samePath } from "./paths.ts";
 import { foreignSessionLock, listeningPid, ownServerHint, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
 import { isRunning } from "./worktrees-stale.ts";
-import { branchMerged, currentRoot, gitDirty, gitError, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
+import { currentRoot, gitDirty, gitError, listWorktrees, refExists, worktreeMerged, type Worktree } from "./worktrees.ts";
 
 const parsed = parseLaneEnvArgs(process.argv.slice(2));
 if ("error" in parsed) {
@@ -111,7 +111,7 @@ function holderStatus(lane: number): string[] {
     .map(({ w, project }) => ({
       path: w.path,
       branch: w.branch,
-      merged: hasOriginMain && w.branch !== undefined && w.branch !== "main" && !samePath(w.path, mainRoot) && branchMerged(w.branch, "origin/main", mainRoot),
+      merged: hasOriginMain && !samePath(w.path, mainRoot) && worktreeMerged(w, "origin/main", mainRoot),
       project,
     }));
   return holderAdvice(lane, holders, { worktrees: relevant, hasOriginMain, cwd: check.cwd });
@@ -169,7 +169,7 @@ function takeOverLane(lane: number): boolean {
       path: w.path,
       branch: w.branch,
       exists,
-      merged: merged && w.branch !== undefined && w.branch !== "main" && !samePath(w.path, mainRoot) && branchMerged(w.branch, "origin/main", mainRoot),
+      merged: merged && !samePath(w.path, mainRoot) && worktreeMerged(w, "origin/main", mainRoot),
       dirty,
       ...(statusError === undefined ? {} : { statusError }),
       locked: w.locked,
