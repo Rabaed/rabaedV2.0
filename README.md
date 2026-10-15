@@ -117,23 +117,27 @@ Both seam suites run against this seeded setup: their global setup (`apps/api/te
 Parallel Claude Code sessions each work in their own git worktree. Give each worktree its own lane number so they never share a database or a port:
 
 ```bash
-pnpm lane:env 1        # in the first extra worktree; 2, 3 … in the others
+pnpm lane:env 32       # Main 3's lane B; see below
 pnpm install
 pnpm dev
 ```
 
-Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own container and volume) and these ports:
+A lane number is two digits `mL` (RP-602): `m` is the Main (planning) session, 1–5, and `L` is 0 for the Main itself (it only runs the app) or 1–4 for its lanes A–D. So `32` is Main 3's lane B, and the valid lanes are 10–14, 20–24, … 50–54, plus lane 0 for the main folder. `lane:env` refuses any other number (15, 55, 60, …). Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own container and volume), the host `laneN.localhost`, and these ports:
 
-| | lane 0 (default) | lane n |
-|---|---|---|
-| Postgres | 5432 | 5432 + 100n |
-| api | 4000 | 4000 + 100n |
-| Rabaed Admin | 4050 | 4050 + 100n |
-| web | 3000 | 3000 + 100n |
-| Mailpit | 8025 | 8025 + 100n |
-| File store | 9000 | 9000 + 100n |
+| | lane 0 (default) | lane n | lane 32 |
+|---|---|---|---|
+| Postgres | 5432 | 5432 + 10n | 5752 |
+| api | 4000 | 4000 + 10n | 4320 |
+| Rabaed Admin | 4050 | 4050 + 10n | 4370 |
+| web | 3000 | 3000 + 10n | 3320 (`lane32.localhost:3320`) |
+| Mailpit | 8025 | 8025 + 10n | 8345 |
+| File store | 9000 | 9000 + 10n | 9320 |
 
-`pnpm lane:env N` first checks that lane N's ports are free and that no other worktree uses its compose project. If one is taken it stops and names the container (or other process) holding it, and suggests a free lane; `pnpm lane:env N --free` takes the next free lane itself. Old worktrees leave their compose projects running or stopped: `pnpm lanes:prune` lists the `rabaed-*` projects whose worktree is gone, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. When the worktree holding a lane is on a branch already merged into `origin/main`, `lane:env` says so; `pnpm lanes:prune --merged` then removes such projects too, unless a worktree that is not merged names the project in its `.env`.
+No two lanes share a port: within each hundred the api ports end in 00–40 and Rabaed Admin's in 50–90, and the other services have ranges of their own. The single-digit lanes 1–9 of the old scheme (ports base + 100n) still work until no worktree uses them; lane `m0` has exactly legacy lane `m`'s ports, so `lane:env` treats the two as one lane and refuses either while the other's compose project belongs to another worktree.
+
+Machine load: 5 Mains × (the Main + 4 lanes) is 25 stacks, about 75 containers. Start a lane's containers only while you work in it, and stop idle ones (`docker compose stop` in that worktree; `pnpm servers:stop` once RP-568 merges).
+
+`pnpm lane:env N` first checks that lane N's ports are free and that no other worktree uses its compose project. If one is taken it stops and names the container (or other process) holding it, and suggests a free lane; `pnpm lane:env N --free` takes the next free lane itself, trying the same Main's lanes `m1`–`m4` first (from 31: 32, 33, 34, then the other Mains' lanes). Old worktrees leave their compose projects running or stopped: `pnpm lanes:prune` lists the `rabaed-*` projects whose worktree is gone, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. When the worktree holding a lane is on a branch already merged into `origin/main`, `lane:env` says so; `pnpm lanes:prune --merged` then removes such projects too, unless a worktree that is not merged names the project in its `.env`.
 
 After the queue merges a PR, run `pnpm worktrees:prune`, then the retro, then archive the session. It removes every worktree merged into `origin/main` (or whose upstream is gone) with its compose project, folder and branch, deletes the other merged local branches, and prunes orphaned compose projects. It never touches the main checkout or the current worktree, skips worktrees with uncommitted or unpushed work, and asks first (`--yes` skips the prompt). See "Pruning old lanes" in `planning/parallel-sessions.md`.
 

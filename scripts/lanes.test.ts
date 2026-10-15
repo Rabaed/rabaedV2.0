@@ -8,9 +8,11 @@ import {
   databasesOfEnv,
   dropOrKeep,
   firstFreeLane,
+  freeLaneOrder,
   holderAdvice,
   isPortTaken,
   isValidDbSuffix,
+  isValidLane,
   laneClashes,
   laneEnv,
   laneHolders,
@@ -20,6 +22,7 @@ import {
   orphanDatabases,
   parseConnections,
   parseContainers,
+  parseLaneEnvArgs,
   parsePruneArgs,
   parseVolumes,
   chooseTakeover,
@@ -28,6 +31,8 @@ import {
   pruneCommand,
   releaseContainers,
   staleProjects,
+  twinLane,
+  VALID_LANES,
   type Container,
   type TakeoverWorktree,
   type WorktreeLane,
@@ -39,9 +44,68 @@ const psLine = (name: string, state: string, project: string, dir: string, ports
 const container = (c: Partial<Container> & Pick<Container, "name">): Container => ({ state: "running", project: "", workingDir: "", ports: [], ...c });
 
 describe("lanePorts", () => {
-  it("keeps the defaults for lane 0 and adds 100 per lane", () => {
-    expect(lanePorts(0)).toEqual({ postgres: 5432, api: 4000, admin: 4050, web: 3000, mailpit: 8025, files: 9000 });
-    expect(lanePorts(3)).toEqual({ postgres: 5732, api: 4300, admin: 4350, web: 3300, mailpit: 8325, files: 9300 });
+  it.each([
+    [0, { postgres: 5432, api: 4000, admin: 4050, web: 3000, mailpit: 8025, files: 9000 }],
+    [3, { postgres: 5732, api: 4300, admin: 4350, web: 3300, mailpit: 8325, files: 9300 }],
+    [10, { postgres: 5532, api: 4100, admin: 4150, web: 3100, mailpit: 8125, files: 9100 }],
+    [11, { postgres: 5542, api: 4110, admin: 4160, web: 3110, mailpit: 8135, files: 9110 }],
+    [14, { postgres: 5572, api: 4140, admin: 4190, web: 3140, mailpit: 8165, files: 9140 }],
+    [32, { postgres: 5752, api: 4320, admin: 4370, web: 3320, mailpit: 8345, files: 9320 }],
+    [54, { postgres: 5972, api: 4540, admin: 4590, web: 3540, mailpit: 8565, files: 9540 }],
+  ])("lane %i", (n, ports) => {
+    expect(lanePorts(n)).toEqual(ports);
+  });
+
+  it("gives lane m0 the ports of legacy lane m", () => {
+    for (const m of [1, 2, 3, 4, 5]) expect(lanePorts(10 * m)).toEqual(lanePorts(m));
+  });
+
+  it("lets no two valid lanes share a port, legacy m and m0 aside", () => {
+    const owner = new Map<number, number>();
+    for (const n of VALID_LANES) {
+      const key = n >= 1 && n <= 5 ? 10 * n : n;
+      for (const port of Object.values(lanePorts(n))) {
+        const held = owner.get(port);
+        expect(held === undefined || held === key, `lane ${n} port ${port} is also lane ${held}'s`).toBe(true);
+        owner.set(port, key);
+      }
+    }
+  });
+});
+
+describe("isValidLane", () => {
+  it("takes 0, the legacy 1–9 and mL for m 1–5, L 0–4", () => {
+    expect(VALID_LANES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 20, 21, 22, 23, 24, 30, 31, 32, 33, 34, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54]);
+  });
+
+  it.each([15, 55, 60, 100, -1, 3.5, Number.NaN])("refuses %d", (n) => {
+    expect(isValidLane(n)).toBe(false);
+  });
+});
+
+describe("parseLaneEnvArgs", () => {
+  it("reads the lane and options", () => {
+    expect(parseLaneEnvArgs(["32", "--force", "--db", "rp602"])).toEqual({ lane: 32, force: true, free: false, db: "rp602" });
+    expect(parseLaneEnvArgs(["--free"])).toEqual({ lane: 1, force: false, free: true, db: undefined });
+    expect(parseLaneEnvArgs(["7"])).toEqual({ lane: 7, force: false, free: false, db: undefined });
+  });
+
+  it.each(["15", "55", "60", "100"])("refuses lane %s, naming the scheme", (n) => {
+    const parsed = parseLaneEnvArgs([n]);
+    expect("error" in parsed && parsed.error).toContain(`${n} is not a lane: lanes are 0 (the main folder), mL with m = Main 1–5`);
+  });
+
+  it("refuses unknown options and a bad --db suffix", () => {
+    expect(parseLaneEnvArgs(["31", "--fast"])).toHaveProperty("error");
+    expect(parseLaneEnvArgs(["31", "--db", "Bad"])).toHaveProperty("error");
+    expect(parseLaneEnvArgs(["31", "32"])).toHaveProperty("error");
+  });
+});
+
+describe("twinLane", () => {
+  it("pairs legacy lane m with lane m0", () => {
+    expect([1, 5, 10, 30, 50].map(twinLane)).toEqual([10, 50, 1, 3, 5]);
+    expect([0, 6, 9, 11, 34].map(twinLane)).toEqual([undefined, undefined, undefined, undefined, undefined]);
   });
 });
 
@@ -123,6 +187,33 @@ describe("firstFreeLane", () => {
     const tried: number[] = [];
     expect(firstFreeLane(0, (n) => (tried.push(n), n === 9 ? [] : ["taken"]))).toBe(9);
     expect(tried).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("picks 32 from 31 when 31 is taken", () => {
+    expect(firstFreeLane(31, (n) => (n === 31 ? ["taken"] : []))).toBe(32);
+  });
+
+  it("tries the same Main's lanes A–D first, wrapping round, then the other Mains', never an m0", () => {
+    expect(freeLaneOrder(33)).toEqual([33, 34, 31, 32, 11, 12, 13, 14, 21, 22, 23, 24, 41, 42, 43, 44, 51, 52, 53, 54]);
+    expect(freeLaneOrder(30).slice(0, 4)).toEqual([31, 32, 33, 34]);
+    expect(firstFreeLane(31, (n) => (n >= 31 && n <= 34 ? ["taken"] : []))).toBe(11);
+  });
+});
+
+describe("laneClashes between legacy lane m and lane m0", () => {
+  const here = "G:\\rabaed-wt\\RP-602";
+
+  it("refuses lane 30 while another worktree has rabaed-lane3's containers, even stopped", () => {
+    const containers = [container({ name: "rabaed-lane3-db-1", state: "exited", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\RP-500" })];
+    expect(laneClashes(30, { containers, takenPorts: new Set(), cwd: here })).toEqual([
+      "Compose project rabaed-lane3 (lane 3 has the same ports as lane 30) belongs to G:\\rabaed-wt\\RP-500.",
+    ]);
+    expect(laneHolders(30, { containers, cwd: here })).toEqual(["G:\\rabaed-wt\\RP-500"]);
+  });
+
+  it("lets this worktree move from lane 3 to lane 30", () => {
+    const containers = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: here, ports: [5732] })];
+    expect(laneClashes(30, { containers, takenPorts: new Set([5732]), cwd: here })).toEqual([]);
   });
 });
 
@@ -583,10 +674,11 @@ describe("parsePruneArgs", () => {
     expect(parsePruneArgs(["--merged", "--lane", "3", "--dry-run"])).toEqual({ merged: true, yes: false, dryRun: true, lane: 3 });
   });
 
-  it("rejects anything else, and a lane outside 0..9", () => {
+  it("rejects anything else, and a number that is not a lane", () => {
     expect(parsePruneArgs(["--force"])).toBeUndefined();
     expect(parsePruneArgs(["--lane"])).toBeUndefined();
-    expect(parsePruneArgs(["--lane", "10"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane", "15"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane", "32"])).toEqual({ merged: false, yes: false, dryRun: false, lane: 32 });
     expect(parsePruneArgs(["--lane", "x"])).toBeUndefined();
   });
 });

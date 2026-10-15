@@ -1,20 +1,25 @@
 # Parallel Claude Code sessions (lanes)
 
-Four lanes. **main** plans; **A, B and C** implement. Each implementing session works on **one ticket** in its **own app-made worktree**, so the desktop app binds its PR and sends CI / PR notifications.
+**5 Mains × lanes A–D** (RP-602). Each **Main** is a planning session; each Main has four implementing **lanes, A–D**. Each implementing session works on **one ticket** in its **own app-made worktree**, so the desktop app binds its PR and sends CI / PR notifications.
 
-| Lane | Session | Job | `pnpm lane:env N` | Web |
+| Session | Job | `pnpm lane:env N` | Jira label | Web |
 |---|---|---|---|---|
-| 1 | **main** | Planning only: grilling, `/to-spec`, `/to-tickets`, reviews, questions, design prompts. It edits docs in its own worktree, never in the main folder. | 1 (only to run the app) | lane1.localhost:3100 |
-| 2 | **Agent A** | Implements tickets labelled `lane-a` | 2 | lane2.localhost:3200 |
-| 3 | **Agent B** | Implements tickets labelled `lane-b` | 3 | lane3.localhost:3300 |
-| 4 | **Agent C** | Implements tickets labelled `lane-c` | 4 | lane4.localhost:3400 |
+| **Main m** (m = 1–5) | Planning only: grilling, `/to-spec`, `/to-tickets`, reviews, questions, design prompts. It edits docs in its own worktree, never in the main folder. | `m0` (only to run the app) | — | lane`m0`.localhost:3`m`00 |
+| **Main m, lane A** | Implements Main m's tickets labelled `lane-ma` | `m1` | `lane-ma` | lane`m1`.localhost:3`m`10 |
+| **Main m, lane B** | … labelled `lane-mb` | `m2` | `lane-mb` | lane`m2`.localhost:3`m`20 |
+| **Main m, lane C** | … labelled `lane-mc` | `m3` | `lane-mc` | lane`m3`.localhost:3`m`30 |
+| **Main m, lane D** | … labelled `lane-md` | `m4` | `lane-md` | lane`m4`.localhost:3`m`40 |
 
-Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README.
+So Main 3's lane B runs `pnpm lane:env 32`, takes tickets labelled `lane-3b`, and opens `lane32.localhost:3320`. The labels run `lane-1a` … `lane-5d`, one per Main and lane. Lane `m0` has the ports the single-digit lane `m` had, so a Main keeps its stack; the other single-digit lanes (1–9) still work until no worktree uses them, but start new lanes only on `mL` numbers. Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README. 25 stacks are about 75 containers: start a lane's containers only while it works, and stop idle ones.
 
-**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done, and that are not In Progress (an implementer claims a ticket by moving it to In Progress and assigning itself: `docs/agents/issue-tracker.md`, Claim). The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets:
+**One major epic per Main.** Each Main owns one major epic at a time and takes it from grilling to spec to tickets on its own lanes: it labels the tickets `lane-ma` … `lane-md` with its own number, never another Main's.
+
+**Shared modules are claimed across Mains** (rule 12): before a Main's lane changes a shared module (the engine functions, `app.can_save_answers`, the work item query `apps/api/src/work-items/query.ts`, `apps/admin/src/rabaed-defaults.ts`, shared test fixtures, the root scripts and this file), it comments `CLAIM <files> — Main m, lane-mx, RP-nnn` on the standing **Shared module claims** issue, RP-603, and `RELEASE <files> — RP-nnn (PR #n)` when the PR merges. Read the open claims first: a module another Main has claimed waits, or the two Mains agree there who goes first and the second merges `main` before its PR.
+
+**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-mx` tickets that are `ready-for-agent` and have every "Blocks" blocker Done, and that are not In Progress (an implementer claims a ticket by moving it to In Progress and assigning itself: `docs/agents/issue-tracker.md`, Claim). The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets (here Main 3's lane B):
 
 ```
-project = RP AND labels = lane-a AND labels = ready-for-agent AND statusCategory != Done AND status != "In Progress" ORDER BY rank
+project = RP AND labels = lane-3b AND labels = ready-for-agent AND statusCategory != Done AND status != "In Progress" ORDER BY rank
 ```
 
 A lane takes work in one of two ways: **one ticket per session** (below), or **a whole spec in one session** with `/implement-spec`.
@@ -26,12 +31,12 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
    1. Call the `EnterWorktree` tool, named after the branch. It creates `.claude/worktrees/<name>` from `origin/main`, but if a worktree of that name already exists it **resumes** it (once it resumed another session's live one). Check the worktree is yours before working in it: `pnpm lane:env` refuses a worktree another live session holds (RP-501's lock check); if it does, stop and use another name.
    2. Rename the branch to the key's name (`git branch -m RP-nnn-...`), then run `pnpm lane:env N --force`.
    3. After `gh pr create`, link the PR to the session with `bind_pr`, so CI and Auto-fix notifications still arrive.
-2. Name it `Agent X – RP-nnn`.
-3. First message:
+2. Name it `Main m, lane X – RP-nnn`.
+3. First message (`mL` is the lane's number, e.g. 32):
    ```
-   Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement RP-nnn
+   Main m, lane X. Run `pnpm lane:env mL --force`, then /mattpocock-skills:implement RP-nnn
    ```
-   `lane:env` refuses a lane whose ports are taken, or whose compose project (`rabaed-laneN`) another worktree still uses, and names the container holding it. Add `--free` to take the next free lane instead, or run `pnpm lanes:prune` (below) first.
+   `lane:env` refuses a lane whose ports are taken, or whose compose project (`rabaed-laneN`) another worktree still uses, and names the container holding it. It also refuses a number that is not a lane (15, 55, 60, …). Add `--free` to take the next free lane instead (the same Main's lanes first), or run `pnpm lanes:prune` (below) first. If the ticket changes a shared module, claim it on RP-603 first (rule 12).
 4. When the PR opens, it appears in that session's PR bar: turn on **Auto-fix**. CI failures, merge conflicts and review comments will wake that session. To read a failed job's log without waiting for the rest of the run, see `docs/agents/ci-logs.md`.
    Once CI is green and `/code-review` is done, the session queues its own PR; nobody merges by hand. "Done" means its fixes are pushed and the PR carries the **`reviewed`** label: the reviewer adds it as its last step (`gh pr edit <number> --add-label reviewed`), and `pnpm queue` refuses a PR without it (`--no-review` skips the check for a docs-only PR and says so; RP-584). The `reviewed-label` workflow (PR #221) removes the label on every later push, so it always means "reviewed at this head", and `pnpm queue` also needs a finished run of that workflow on the PR's head (it refuses while one is running or failed): add the label only after the last push's run has finished, and add it again after a push that removed it. Fork PRs are not handled (the job skips them). A push that only merges `main` in by a clean automatic merge (second parent already on `main`, tree identical to `git merge-tree` of the two, no edit of its own) keeps it, while a conflict resolution or any other change removes it and the review runs again. `gh pr merge` cannot queue it: it tries to turn on auto-merge, which this repository does not allow ("Auto merge is not allowed for this repository"). Queue it with one plain command:
    ```
@@ -44,7 +49,7 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 
 Never run `docker compose down -v` (or `--volumes`, or `docker volume rm rabaed-*`) by hand: it deletes a lane's database volume, and the committed `.claude/settings.json` denies those commands for agents. Free a lane only with `pnpm lanes:prune --lane N` (or `pnpm worktrees:prune` after merges), which confirm first and keep a live worktree's lane.
 
-Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 3`) to free only `rabaed-lane3`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
+Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 32`) to free only `rabaed-lane32`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
 
 `pnpm lane:env N --force` does not need a prune to take lane N over from a worktree that is gone, or whose branch is merged into `origin/main` and has no uncommitted changes (RP-500): it removes that project's containers, keeps its volumes (the database), and says which worktree it came from; the next `docker compose up` recreates the containers under the new worktree. A holder that is not merged, has uncommitted changes, is locked by a session that still runs, or is a folder git does not list still refuses, as does a not-merged worktree that has the project in its `.env`. A `--db` run never takes a lane over.
 
@@ -62,7 +67,7 @@ Under the skipped list, both `worktrees:prune` and `worktrees:clean` print a **S
 
 Use it when a spec's tickets form a chain that one lane would otherwise work through one session at a time (e.g. RP-290 → RP-294 under spec RP-289). Implementer subagents build the ready tickets in parallel, each in its own worktree, and merge them onto one **integration branch**; one `/code-review` runs over the whole branch at the end, which counts as the spec's epic review.
 
-1. Start the session as in step 1 above, named `Agent X – RP-nnn (spec)`, with the spec's key. First move the spec issue to **In Progress**; if it already is In Progress, another session owns it: stop. `pnpm lane:env` also refuses a worktree locked by another live `claude session`, even with `--force` (RP-461 was run by two sessions at once).
+1. Start the session as in step 1 above, named `Main m, lane X – RP-nnn (spec)`, with the spec's key. First move the spec issue to **In Progress**; if it already is In Progress, another session owns it: stop. `pnpm lane:env` also refuses a worktree locked by another live `claude session`, even with `--force` (RP-461 was run by two sessions at once).
 2. First message:
    ```
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
@@ -129,3 +134,4 @@ Every ticket already gets a `/code-review` inside `/implement`; when the review 
    4. Add a new rule at the end of a numbered list; never renumber, since tickets cite rules by number.
 10. Before opening or updating a PR that adds a migration, run `pnpm check:migrations`. It fetches `origin/main` and runs the drift check (redefinitions, stale overloads, shared timestamps) on `origin/main` and `HEAD`, the check CI runs, so a clash shows before the push (RP-363 learned of one only on merge). It also refuses a migration on a day `planning/migration-days.md` reserves for another issue, and warns of one on an unreserved day (step 4.5). It needs the network for the fetch. A pre-push hook is optional, not installed.
 11. To change an `app.*` function, start from its newest body: `pnpm db:fn <name>` prints it with the migration and line (`--list` shows every redefinition). Do not grep the migrations for it; the first hit is rarely the current one.
+12. With 5 Mains, a lane that changes a shared module (the engine functions, `app.can_save_answers`, the work item query, `apps/admin/src/rabaed-defaults.ts`, shared test fixtures, root scripts, this file) claims it first on RP-603, Shared module claims: `CLAIM <files> — Main m, lane-mx, RP-nnn`, then `RELEASE <files> — RP-nnn (PR #n)` when it merges. A module another Main holds waits for its release, or the two agree on that issue who merges first (RP-602).
