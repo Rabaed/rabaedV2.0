@@ -96,6 +96,7 @@ Every implementing session and implementer subagent follows these, on top of the
 - **Glossary lint:** run `pnpm lint` before your first commit; scripts and `messages/*.json` are linted against `GLOSSARY.md` _Avoid_ too (`packages/eslint-plugin/README.md` lists the common false hits and how to silence one).
 - **Report ends with the verify line:** the report ends with the last line of `pnpm verify`, verbatim (`pnpm verify passed on <sha>: <steps>.`), from one complete run on the pushed commit, or names the step it stopped at and why. A fix after the run means a new run.
 - **Renames:** renaming a term, label or message key, or removing a group, follows the checklist in `docs/agents/renames.md`.
+- **Stories:** when the diff touches `packages/ui/`, `apps/web/` or any `*.stories.tsx`, run `pnpm test:stories` from the repo root before pushing (`pnpm verify` already includes it then). Off Linux it compares no screenshots, so any failure is a real behaviour or axe failure; screenshot baselines come from `pnpm test:stories:linux` or the `update-screenshots` label on CI.
 
 ## Retro before archiving
 

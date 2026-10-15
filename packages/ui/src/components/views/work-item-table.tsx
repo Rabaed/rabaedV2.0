@@ -143,10 +143,12 @@ export function WorkItemTable({
       <thead>
         <tr>
           {selection && (
-            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
+            // The 24px box starts 4px before its square, so the square lines up with the rows' (ps-4).
+            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-3 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
               <Checkbox
                 aria-label={selection.selectAll}
-                className="size-4 align-middle"
+                targetBox
+                className="align-middle"
                 disabled={rows.length === 0}
                 checked={chosen === 0 ? false : chosen === rows.length ? true : "indeterminate"}
                 onCheckedChange={() => selection.onChange(new Set(chosen === rows.length ? [] : rows.map((r) => r.id)))}
@@ -193,7 +195,7 @@ export function WorkItemTable({
               >
                 <span className="flex items-center gap-1.5">
                   <Icon name="grid-dots" size={14} className="shrink-0 text-faint opacity-70" />
-                  <span>{header}</span>
+                  {/* The name is part of the sort button, so a header scrolled under the pinned settings button keeps 24px uncovered, whatever the font widths. */}
                   <button
                     type="button"
                     aria-label={labels.sortBy(header)}
@@ -201,20 +203,23 @@ export function WorkItemTable({
                     onClick={() =>
                       onSort({ sort: key, dir: sorted ? (direction === "asc" ? "desc" : "asc") : workItemSortOrders[key] })
                     }
-                    className={cn(
-                      "ms-auto -me-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint hover:bg-hover hover:text-text",
-                      sorted && "text-brand-fg hover:text-brand-fg",
-                      focusRing,
-                      touchBox,
-                    )}
+                    className={cn("group/sort flex min-h-6 min-w-0 flex-1 items-center gap-1.5 rounded-xs text-start", focusRing, touchBox)}
                   >
-                    <Icon name={!sorted ? "arrows-sort" : direction === "asc" ? "sort-ascending" : "sort-descending"} size={14} />
+                    <span>{header}</span>
+                    <span
+                      className={cn(
+                        "ms-auto -me-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint group-hover/sort:bg-hover group-hover/sort:text-text",
+                        sorted && "text-brand-fg group-hover/sort:text-brand-fg",
+                      )}
+                    >
+                      <Icon name={!sorted ? "arrows-sort" : direction === "asc" ? "sort-ascending" : "sort-descending"} size={14} />
+                    </span>
                   </button>
                 </span>
               </th>
             );
           })}
-          {/* Its button sits at the end, 24px in from the column's edge: a sort button scrolled under the pinned column is covered by the cell, never by a control. */}
+          {/* The settings button sits at the end of this pinned cell, with 24px of the cell before it: a sort button scrolled under the pinned cell is covered by the cell, never by a control. */}
           {end && (
             <th scope="col" className={cn(head, "sticky end-0 z-[4] w-[60px] border-s ps-0 pe-2 text-end")}>
               {settings}
