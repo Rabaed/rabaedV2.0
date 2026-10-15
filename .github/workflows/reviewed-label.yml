@@ -34,7 +34,11 @@ jobs:
           git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/head"
           # After a force push the old head may be gone; the script then removes the label.
           git fetch --no-tags origin "${{ github.event.before }}" || true
+      - name: Note that the script has not landed yet
+        if: hashFiles('scripts/reviewed-label.ts') == ''
+        run: echo "scripts/reviewed-label.ts is not on the default branch yet; nothing to do"
       - name: Remove the label unless the push only merged main
+        if: hashFiles('scripts/reviewed-label.ts') != ''
         run: node scripts/reviewed-label.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
