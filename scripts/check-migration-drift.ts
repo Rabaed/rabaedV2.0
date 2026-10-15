@@ -2,7 +2,8 @@ import { resolve } from "node:path";
 import { reportHiddenSortKeys } from "./check-migrations-hidden-sort.ts";
 import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migrationsDir } from "./migrations.ts";
 
-// Four checks on the migrations a pull request adds (RP-337, from the RP-311 retro):
+// Five checks on the migrations a pull request adds (RP-337, from the RP-311 retro;
+// the fifth from RP-534):
 //
 // - Redefinition drift. Migrations run in name order, so for each function,
 //   view or policy the newest-sorting definition wins. When the branch and main
@@ -31,9 +32,10 @@ import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migr
 // - Unique timestamps. Two migrations sharing a YYYYMMDDHHMMSS prefix (RP-317
 //   and the RP-311 fix-up) run in an order nobody chose. Fix: rename the
 //   branch's migration to a new, later timestamp.
-//
-// It also runs check-migrations-hidden-sort.ts (RP-534): a new migration that
-// sorts by a column the visibility rules hide.
+// - Hidden sort keys (RP-534, check-migrations-hidden-sort.ts). A branch
+//   migration that sorts by a column the visibility rules hide
+//   (scripts/hidden-columns.ts). Fix: sort by a value the viewer may see, or
+//   say why the order reveals nothing in a `-- hidden-sort-key:` comment.
 //
 // Usage: node scripts/check-migration-drift.ts <base> <head>   (CI: the PR's base and head SHAs; needs their history)
 //        node scripts/check-migration-drift.ts --merge-group <group base> <group head>

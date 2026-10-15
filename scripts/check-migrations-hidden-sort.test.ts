@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { branchHiddenSortKeys, hiddenSortKeys } from "./check-migrations-hidden-sort.ts";
+import { hiddenColumns } from "./hidden-columns.ts";
 import { migrationsDir as dir } from "./migrations.ts";
 
 describe("branchHiddenSortKeys", () => {
@@ -90,6 +91,40 @@ describe("hiddenSortKeys", () => {
       "/* select w.id from work_item w order by w.created_at; */",
     ].join("\n");
     expect(hiddenSortKeys(name, sql)).toEqual([]);
+  });
+
+  it("is not fooled by -- inside a string literal, and still checks dynamic SQL in one", () => {
+    const sql = [
+      "select w.id from work_item w where w.subject <> '--' order by w.created_at;",
+      "execute 'select w.id from work_item w order by w.created_at';",
+    ].join("\n");
+    expect(hiddenSortKeys(name, sql).map((k) => k.line)).toEqual([1, 2]);
+  });
+
+  it("is not silenced by the exception text inside a string literal", () => {
+    expect(hiddenSortKeys(name, "select w.id from work_item w order by w.created_at, 'hidden-sort-key: no';")).toHaveLength(1);
+  });
+
+  it("accepts the app schema prefix", () => {
+    expect(hiddenSortKeys(name, "select w.id from app.work_item w order by w.created_at;").map((k) => k.column)).toEqual(["work_item.created_at"]);
+  });
+
+  it("lets an exception cover only the column use on its line or the line below, not the rest of the clause", () => {
+    const sql = [
+      "select w.id from work_item w join step_assignment a on a.work_item_id = w.id",
+      "-- hidden-sort-key: worker-only",
+      "order by w.created_at,",
+      "  a.picked_up_at;",
+    ].join("\n");
+    expect(hiddenSortKeys(name, sql).map((k) => `${k.line} ${k.column}`)).toEqual(["4 step_assignment.picked_up_at"]);
+  });
+
+  it("reports every listed hidden column used as a sort key", () => {
+    for (const { table, columns } of hiddenColumns) {
+      for (const column of columns) {
+        expect(hiddenSortKeys(name, `select t.id from ${table} t order by t.${column};`).map((k) => k.column), `${table}.${column}`).toEqual([`${table}.${column}`]);
+      }
+    }
   });
 
   it("scopes an alias to its statement: w is a work_item in one and an event in the next", () => {
