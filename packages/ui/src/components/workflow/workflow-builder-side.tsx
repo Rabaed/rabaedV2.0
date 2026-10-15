@@ -113,8 +113,9 @@ export function SideEditor(props: SideEditorProps) {
   }
   const steps = definition.steps.filter((s) => !props.isTerminal(s)).length;
   const transitions = definition.transitions.length;
-  // Left to right in Arabic too, so "⇧⌘Z" doesn't read "Z⌘⇧".
-  const kbd = (keys: ReactNode) => <kbd dir="ltr" className="whitespace-nowrap rounded-[4px] border border-border-strong px-1 font-sans text-[10.5px] font-semibold text-muted">{keys}</kbd>;
+  // Left to right in Arabic too, so "⇧⌘Z" doesn't read "Z⌘⇧". In the UI font: <kbd> otherwise takes
+  // the monospace stack, all system fonts, whose pick changed with what the browser had drawn (RP-599).
+  const kbd = (keys: ReactNode) => <kbd dir="ltr" className="whitespace-nowrap rounded-[4px] border border-border-strong px-1 font-ui text-[10.5px] font-semibold text-muted">{keys}</kbd>;
   // ⌘ and ⇧ as icons: no self-hosted font has those glyphs, so as text they took whichever system
   // font the browser picked, which changed with what it had drawn before (RP-599).
   // Named as on the key caps, in English in both languages, as "Delete" is.
