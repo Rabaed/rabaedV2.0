@@ -110,7 +110,11 @@ export function SideEditor(props: SideEditorProps) {
   }
   const steps = definition.steps.filter((s) => !props.isTerminal(s)).length;
   const transitions = definition.transitions.length;
-  const kbd = (key: string) => <kbd className="rounded-[4px] border border-border-strong px-1 font-sans text-[10.5px] font-semibold text-muted">{key}</kbd>;
+  // Left to right in Arabic too, so "⇧⌘Z" doesn't read "Z⌘⇧".
+  const kbd = (keys: ReactNode) => <kbd dir="ltr" className="whitespace-nowrap rounded-[4px] border border-border-strong px-1 font-sans text-[10.5px] font-semibold text-muted">{keys}</kbd>;
+  // ⌘ and ⇧ as icons: no self-hosted font has those glyphs, so as text they took whichever system
+  // font the browser picked, which changed with what it had drawn before (RP-599).
+  const modifier = (name: "command" | "shift", label: string) => <Icon name={name} label={label} size={11} className="inline-block align-[-1px]" />;
   const tip = (icon: IconName, text: ReactNode) => (
     <li className="flex gap-2 text-[12.5px] leading-[1.45] text-text-secondary">
       <Icon name={icon} size={16} className="mt-px text-primary" />
@@ -129,7 +133,8 @@ export function SideEditor(props: SideEditorProps) {
         {tip(
           "trash",
           <>
-            {kbd("Delete")} {labels.tipDelete} · {kbd("⌘Z")} {labels.tipUndo} · {kbd("⇧⌘Z")} {labels.tipRedo}
+            {kbd("Delete")} {labels.tipDelete} · {kbd(<>{modifier("command", "Command")}Z</>)} {labels.tipUndo} ·{" "}
+            {kbd(<>{modifier("shift", "Shift")}{modifier("command", "Command")}Z</>)} {labels.tipRedo}
           </>,
         )}
       </ul>

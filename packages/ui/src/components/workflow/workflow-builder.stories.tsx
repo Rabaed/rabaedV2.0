@@ -164,7 +164,7 @@ const ready = (canvas: Canvas, locale: "en" | "ar") => shown(canvas, step("consu
 /** V2 01: the draft open, nothing selected: the palette, the canvas, how to work it, what the draft holds and its problems. */
 export const Draft: Story = {
   render,
-  play: async ({ canvas, context }) => {
+  play: async ({ canvas, canvasElement, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
     await ready(canvas, locale);
@@ -172,6 +172,11 @@ export const Draft: Story = {
     await expect(canvas.getByText(labels.draft("4"), { exact: false })).toBeVisible();
     await expect(canvas.getByText(labels.nothingSelected)).toBeVisible();
     await expect(canvas.getByText(labels.tipsHeading)).toBeVisible();
+    // The undo and redo keys show ⌘ and ⇧ as icons: no self-hosted font has those glyphs, so as
+    // text they took whichever system font the browser picked, and screenshots differed (RP-599).
+    await expect(canvas.getAllByRole("img", { name: "Command" })).toHaveLength(2);
+    await expect(canvas.getAllByRole("img", { name: "Shift" })).toHaveLength(1);
+    await expect(canvasElement.textContent).not.toMatch(/[⌘⇧]/);
     // 6 Steps and 15 Transitions, in each language's plural.
     await expect(canvas.getByText(labels.counts({ steps: 6, stepsN: "6", transitions: 15, transitionsN: "15" }))).toBeVisible();
     const errors = builderProblemsOf(builderDraft).filter((p) => p.severity === "error").length;
