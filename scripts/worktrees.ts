@@ -162,6 +162,17 @@ export function branchMerged(branch: string, target: string, cwd: string): boole
   return hasOwnCommit(reflogSubjects(`refs/heads/${branch}`, cwd)) && inTarget(branch, target, cwd);
 }
 
+/**
+ * Whether a worktree's work is merged into target: its branch is (branchMerged; a worktree
+ * on main never is), or, on a detached HEAD, its HEAD commit is in target (RP-601). The app
+ * often leaves a worktree detached once its branch merges; its HEAD reflog then holds
+ * checkouts, not commits, so no commit of its own is asked for there.
+ */
+export function worktreeMerged(w: Pick<Worktree, "branch" | "head">, target: string, cwd: string): boolean {
+  if (w.branch !== undefined) return w.branch !== "main" && branchMerged(w.branch, target, cwd);
+  return w.head !== "" && isAncestor(w.head, target, cwd);
+}
+
 /** The subjects of a ref's reflog, newest first; none when it has no reflog. */
 function reflogSubjects(ref: string, cwd: string): string[] {
   try {
