@@ -53,6 +53,16 @@ describe("indexProblems", () => {
     expect(indexProblems("docs/x.md", doc(swapped, body))).toEqual(["docs/x.md: the index is not in the headings' order"]);
   });
 
+  it("names an index line that is not an entry, instead of dropping it", () => {
+    const typo = ["- **1. Model** read when a", "  - **Example: MAR**: read when b", "- **2. State**: read when c"];
+    expect(indexProblems("docs/x.md", doc(typo, body))[0]).toBe('docs/x.md: the index line "- **1. Model** read when a" is not `- **<heading>**: read when …`');
+  });
+
+  it("wants one entry per heading when two headings share their text", () => {
+    const twice = [...body, "### Example: MAR", ""];
+    expect(indexProblems("docs/x.md", doc(full, twice))).toEqual(['docs/x.md: the index lacks "### Example: MAR"']);
+  });
+
   it("asks for a read-when hint on every entry", () => {
     const bare = ["- **1. Model**: about models", "  - **Example: MAR**: read when b", "- **2. State**: read when c"];
     expect(indexProblems("docs/x.md", doc(bare, body))).toEqual(['docs/x.md: the entry "1. Model" needs a hint starting "read when"']);

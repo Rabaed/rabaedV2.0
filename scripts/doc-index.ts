@@ -14,9 +14,11 @@
 export const indexedDocs = ["docs/workflow-engine.md", "docs/visibility.md", "docs/form-engine.md", "docs/data-model.md"];
 
 const indexHeading = "## Contents";
+const isIndexHeading = (line: string) => line.trimEnd() === indexHeading;
 
-export type Heading = { level: number; text: string };
+export type Heading = { level: 2 | 3; text: string };
 export type Entry = Heading & { hint: string };
+type Parsed = { hasIndex: boolean; headings: Heading[]; entries: Entry[]; malformed: string[] };
 
 /** The doc's lines outside fenced code blocks. */
 function proseLines(markdown: string): string[] {
@@ -27,37 +29,44 @@ function proseLines(markdown: string): string[] {
   });
 }
 
-/** The ## and ### headings, in order, outside code fences; the index's own heading is left out. */
-export function docHeadings(markdown: string): Heading[] {
-  return proseLines(markdown).flatMap((line) => {
+function parse(markdown: string): Parsed {
+  const lines = proseLines(markdown);
+  const headings = lines.flatMap((line): Heading[] => {
     const match = /^(#{2,3}) (.+?)\s*$/.exec(line);
-    return match && line.trimEnd() !== indexHeading ? [{ level: match[1]!.length, text: match[2]! }] : [];
+    return match && !isIndexHeading(line) ? [{ level: match[1]!.length === 2 ? 2 : 3, text: match[2]! }] : [];
   });
+  const start = lines.findIndex(isIndexHeading);
+  const entries: Entry[] = [];
+  const malformed: string[] = [];
+  if (start >= 0) {
+    for (const line of lines.slice(start + 1)) {
+      if (line.startsWith("#")) break;
+      const match = /^( *)- \*\*(.+?)\*\*: (.*)$/.exec(line);
+      if (match) entries.push({ level: match[1]!.length >= 2 ? 3 : 2, text: match[2]!, hint: match[3]!.trim() });
+      else if (/^ *- /.test(line)) malformed.push(line.trim());
+    }
+  }
+  return { hasIndex: start >= 0, headings, entries, malformed };
 }
 
+/** The ## and ### headings, in order, outside code fences; the index's own heading is left out. */
+export const docHeadings = (markdown: string): Heading[] => parse(markdown).headings;
+
 /** The index's entries: `- **text**: hint` is a ## heading's, indented by two spaces a ###'s. */
-export function indexEntries(markdown: string): Entry[] {
-  const lines = proseLines(markdown);
-  const start = lines.findIndex((line) => line.trimEnd() === indexHeading);
-  if (start < 0) return [];
-  const entries: Entry[] = [];
-  for (const line of lines.slice(start + 1)) {
-    if (line.startsWith("#")) break;
-    const match = /^( *)- \*\*(.+?)\*\*: (.*)$/.exec(line);
-    if (match) entries.push({ level: match[1]!.length >= 2 ? 3 : 2, text: match[2]!, hint: match[3]!.trim() });
-  }
-  return entries;
-}
+export const indexEntries = (markdown: string): Entry[] => parse(markdown).entries;
 
 /** What is wrong with a doc's index against its headings; empty when it matches. */
 export function indexProblems(file: string, markdown: string): string[] {
-  if (!proseLines(markdown).some((line) => line.trimEnd() === indexHeading)) return [`${file} has no \`${indexHeading}\` index at the top`];
-  const headings = docHeadings(markdown);
-  const entries = indexEntries(markdown);
+  const { hasIndex, headings, entries, malformed } = parse(markdown);
+  if (!hasIndex) return [`${file} has no \`${indexHeading}\` index at the top`];
   const hashes = (level: number) => "#".repeat(level);
+  const count = (items: Heading[], text: string) => items.filter((item) => item.text === text).length;
+  // Counted, not just looked up, so a heading whose text appears twice needs two entries.
+  const lacking = headings.filter((h, i) => count(headings.slice(0, i + 1), h.text) > count(entries, h.text));
   const problems = [
-    ...headings.filter((h) => !entries.some((e) => e.text === h.text)).map((h) => `${file}: the index lacks "${hashes(h.level)} ${h.text}"`),
-    ...entries.filter((e) => !headings.some((h) => h.text === e.text)).map((e) => `${file}: the index lists "${hashes(e.level)} ${e.text}", which is not a heading`),
+    ...malformed.map((line) => `${file}: the index line "${line}" is not \`- **<heading>**: read when …\``),
+    ...lacking.map((h) => `${file}: the index lacks "${hashes(h.level)} ${h.text}"`),
+    ...entries.filter((e) => count(headings, e.text) === 0).map((e) => `${file}: the index lists "${hashes(e.level)} ${e.text}", which is not a heading`),
     ...entries.flatMap((e) => {
       const heading = headings.find((h) => h.text === e.text);
       return heading && heading.level !== e.level ? [`${file}: the index lists "${e.text}" as ${hashes(e.level)}, but it is a ${hashes(heading.level)} heading`] : [];
