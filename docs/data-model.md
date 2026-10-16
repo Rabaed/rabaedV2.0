@@ -313,8 +313,8 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 `id`, `work_item_id`, `author_member_id`, `participant_id`, `body`, `file_ids`, `created_at`. Insert-only.
 
 **package**
-`id`, `project_id`, `participant_id`, `name i18n`, `scope_id` (optional), `status {open, in_progress, closed}`.
-Status is recomputed on every member item's closure. The Package is Closed when every *latest revision* in it is A or B.
+`id`, `project_id`, `participant_id`, `seq` (per Project, shown PKG-001), `name i18n`, `status {open, in_progress, done}`.
+Status is recomputed on Submit and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (to be specified, RP-588).
 
 ## 6. Documents, signing, Documental Records, distribution
 
