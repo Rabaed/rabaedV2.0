@@ -186,7 +186,7 @@ _Avoid_: housekeeping item, NCR
 
 **Question**:
 A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
-_Avoid_: Comment (reserved for a reviewer's comment on a reviewed item)
+_Avoid_: Comment (reserved for Code B and Passed with Comments)
 
 **Comment**:
 A Work Item in the Snag List created from a reviewer's comment on a Code B approval (or a Passed with Comments Inspection), linked to the reviewed Work Item.
