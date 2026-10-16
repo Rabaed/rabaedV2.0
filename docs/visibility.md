@@ -4,6 +4,16 @@
 
 Terms follow [GLOSSARY.md](../GLOSSARY.md). Enforcement follows [ADR 0007](adr/0007-project-is-the-tenancy-boundary.md) (Project is the tenancy boundary, row-level security) and [data-model.md](data-model.md).
 
+## Contents
+
+Don't read this doc whole: find your heading with `grep -n '^#' docs/visibility.md`, then Read from that line with offset and limit. For one scenario, grep its ID (`grep -n '| RP-412-1 |' docs/visibility.md`). `scripts/doc-index.test.ts` keeps this list in step with the headings.
+
+- **The layers**: read when you start any feature: the five layers a Member must pass to see a thing.
+- **Rules**: read when you need a numbered rule (V1, V2 …) that says who sees what, and when.
+- **Leak channels**: read when your change adds or changes a way another Company's work could show: a list, count, search, message, export or error.
+- **Scenario matrix (becomes the automated visibility test suite)**: read when you add a scenario or write its test; grep its ID instead of reading the table.
+- **Settled rules (2026-09-26)**: read when you need a rule settled later (V10 on): the Approved Supplier List, and others.
+
 ## The layers
 
 A Member sees a thing only if it passes **every** layer, in order.
