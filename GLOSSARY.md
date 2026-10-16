@@ -181,12 +181,12 @@ A Work Item in the Snag List recording a defect in the work, raised from site wi
 _Avoid_: Punch item, defect
 
 **Site Observation**:
-A Work Item in the Snag List recording something on site that needs to be put right but is not a defect in the work, such as a violation, waste, or an area to clean.
-_Avoid_: Violation (as the Type's name), housekeeping item, NCR
+A Work Item in the Snag List recording something on site that needs to be put right but is not a defect in the work, such as a violation, waste, or an area to clean. The Type is not named Violation.
+_Avoid_: Housekeeping item, NCR
 
 **Question**:
 A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
-_Avoid_: Comment (reserved for Code B), query
+_Avoid_: Comment (reserved for Code B)
 
 **Comment**:
 A Work Item in the Snag List created from a reviewer's comment on a Code B approval (or a Passed with Comments Inspection), linked to the reviewed Work Item.
@@ -361,8 +361,8 @@ The short code (2–6 letters or digits) that stands for a Participant in that P
 _Avoid_: Company code, contractor code
 
 **Package**:
-A named group of submittals, numbered in sequence per Project (PKG-001), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement puts it back In Progress.
-_Avoid_: Closed (for a Package), bundle, batch, transmittal
+A named group of submittals, numbered in sequence per Project (PKG-001), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement puts it back In Progress. A Package is Done, never Closed.
+_Avoid_: Bundle, batch, transmittal
 
 **Approved Supplier List**:
 A Project's register of suppliers and manufacturers that may be used, per Trade: a Supplier Approval Request closed at Code A or B adds its supplier, and a Project Admin can add one by hand or withdraw one. A Material Approval Request chooses its supplier from it; every Participant sees who is on it, never the submittal that put them there.
