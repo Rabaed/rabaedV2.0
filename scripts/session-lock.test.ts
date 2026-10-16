@@ -101,6 +101,7 @@ describe("ownServerHint (RP-545)", () => {
     const hint = ownServerHint(4700, 90, 50, procs, 30, "win32");
     expect(hint).toContain("Port 4700 is held by this session's own dev server");
     expect(hint).toContain("pid 90");
+    expect(hint).toContain("`pnpm servers:stop --yes` in the worktree that started it");
     expect(hint).toContain("taskkill /pid 90 /t /f");
     expect(ownServerHint(4700, 90, 50, procs, 30, "linux")).toContain("`kill 90`");
   });

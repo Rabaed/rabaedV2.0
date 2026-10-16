@@ -60,7 +60,7 @@ export function ownServerHint(
   if (![...ancestors(holderPid, processes)].slice(1).includes(session)) return undefined;
   // /f: a windowless node process refuses a plain taskkill ("can only be terminated forcefully").
   const stop = platform === "win32" ? `taskkill /pid ${holderPid} /t /f` : `kill ${holderPid}`;
-  return `Port ${port} is held by this session's own dev server (${processes.nameOf(holderPid) ?? "process"}, pid ${holderPid}), probably its pnpm demo or pnpm dev. Stop it with \`${stop}\`, or run it after the implementers finish or on another lane.`;
+  return `Port ${port} is held by this session's own dev server (${processes.nameOf(holderPid) ?? "process"}, pid ${holderPid}), probably its pnpm demo or pnpm dev. Stop it with \`pnpm servers:stop --yes\` in the worktree that started it (RP-568; or \`${stop}\`), or run it after the implementers finish or on another lane.`;
 }
 
 /** pid, then its parent, grandparent and so on, stopping at a pid that is not running or one already seen. */

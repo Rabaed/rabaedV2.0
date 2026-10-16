@@ -94,9 +94,15 @@ describe("choosePrune", () => {
     ]);
   });
 
-  it("removes a worktree never committed to once nothing holds it (RP-585)", () => {
-    const p = choose([wt(`${main}/.claude/worktrees/agent-paused`, { branch: "RP-555-review-fixes", noCommitsYet: true })]);
+  it("removes a worktree never committed to once the session its lock names has stopped and nothing holds it (RP-585)", () => {
+    const p = choose([wt(`${main}/.claude/worktrees/agent-paused`, { branch: "RP-555-review-fixes", noCommitsYet: true, locked: "claude agent agent-paused (pid 4242)" })]);
     expect(p.remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-paused`]);
+  });
+
+  it("keeps an unlocked worktree never committed to: its session may have just branched off origin/main (RP-610)", () => {
+    const p = choose([wt(`${main}/.claude/worktrees/vibrant`, { branch: "RP-568-servers-stop", noCommitsYet: true })]);
+    expect(p.remove).toEqual([]);
+    expect(reasons(p)[2]).toEqual([`${main}/.claude/worktrees/vibrant`, "no commits yet, may still be running (no lock to show its session has stopped)"]);
   });
 
   it("puts uncommitted changes first, even on a merged worktree whose upstream is gone", () => {
