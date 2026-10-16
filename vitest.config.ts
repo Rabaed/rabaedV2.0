@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -13,10 +14,20 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 // - infra: assertions on the synthesised AWS CloudFormation templates.
 // - mail:  the mailer against the local mail catcher (Mailpit).
 // Seam tests drive whole Workflows through the API or the database; 5 s is too tight on CI.
-const seamTimeout = 20_000;
+// With other lanes' runs on the machine (RP-607) a test that makes 50 items took over 20 s, and
+// the afterAll that closes its pools then waited past the 10 s hook default on the requests
+// still in flight: one budget for both, with room for load, that still stops a hung test.
+const seamTimeout = 60_000;
+
+// Vitest's default is a fork per CPU but one, for every run: with several lanes testing at once
+// (5 Mains x 4 lanes, RP-602) that is dozens of forks contending for one machine (RP-607). A
+// quarter of the CPUs runs the unit suite as fast here (20 CPUs: 36 s at 5 forks, 38 s at 19).
+// The seam suites run one file at a time anyway (fileParallelism: false).
+const maxWorkers = Math.max(2, Math.floor(availableParallelism() / 4));
 
 export default defineConfig({
   test: {
+    maxWorkers,
     projects: [
       {
         test: {
@@ -31,6 +42,7 @@ export default defineConfig({
         test: {
           name: "seam1",
           testTimeout: seamTimeout,
+          hookTimeout: seamTimeout,
           include: ["apps/api/test/**/*.test.ts", "apps/admin/test/**/*.test.ts"],
           globalSetup: ["scripts/test-services.ts", "packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
@@ -40,6 +52,7 @@ export default defineConfig({
         test: {
           name: "seam2",
           testTimeout: seamTimeout,
+          hookTimeout: seamTimeout,
           include: ["packages/db/test/**/*.test.ts"],
           globalSetup: ["scripts/test-services.ts", "packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
