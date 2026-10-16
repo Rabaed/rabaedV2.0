@@ -1,3 +1,4 @@
+import { openSessionReason, type DesktopSession, type DesktopSessions } from "./desktop-sessions.ts";
 import { mergedProjects, staleProjects, type Container, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
@@ -36,6 +37,11 @@ type PruneInput = {
   exists: (dir: string) => boolean;
   /** Undefined when Docker is not running: no compose project is chosen. */
   docker: DockerState | undefined;
+  /**
+   * The Claude desktop session holding the worktree at a path, found in the app's own
+   * records (desktop-sessions.ts, RP-608): the app does not lock its worktrees with git.
+   */
+  openSession?: DesktopSessions;
   platform?: NodeJS.Platform;
 };
 
@@ -72,12 +78,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  * changes or commits on no origin branch (so a squash-merged worktree whose remote
  * branch was deleted stays); those are skipped with their reason.
  */
-export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker, exists, platform }: PruneInput): PruneChoice {
+export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker, exists, openSession, platform }: PruneInput): PruneChoice {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   for (const facts of worktrees) {
     const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
-    const reason = skipReason(facts, mainRoot, currentPath, platform);
+    const reason = skipReason(facts, openSession?.(facts.path), mainRoot, currentPath, platform);
     if (reason) skipped.push({ worktree: w, reason });
     else remove.push(w);
   }
@@ -93,22 +99,25 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
 
 /**
  * Why a worktree chosen for removal stays after all, judged on its facts gathered
- * again just before removing it (undefined when no longer listed by git), or
- * undefined when it still goes.
+ * again just before removing it (undefined when no longer listed by git) with the
+ * desktop sessions read again too, or undefined when it still goes.
  */
-export function changedSinceListed(now: PruneWorktree | undefined): string | undefined {
+export function changedSinceListed(now: PruneWorktree | undefined, openSession?: DesktopSessions): string | undefined {
   if (!now) return "no longer a worktree";
+  const session = openSession?.(now.path);
+  if (session !== undefined) return openSessionReason(session, { sinceListed: true });
   if (now.dirty) return "uncommitted changes since it was listed";
   if (now.unpushed > 0) return `${plural(now.unpushed, "commit")} on no origin branch since it was listed`;
   return undefined;
 }
 
 /** Why a worktree stays, or undefined when it goes. */
-function skipReason(w: PruneWorktree, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
+function skipReason(w: PruneWorktree, session: DesktopSession | undefined, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
   if (samePath(w.path, mainRoot, platform)) return "the main checkout";
   if (samePath(w.path, currentPath, platform)) return CURRENT_WORKTREE;
   if (w.branch === "main") return "on main";
-  if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return `its Claude desktop session is open (${w.locked}); archive it first`;
+  if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return openSessionReason({ kind: "open", session: w.locked });
+  if (session !== undefined) return openSessionReason(session);
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
   if (w.dirty) return "uncommitted changes";
   if (w.unpushed > 0) return `${plural(w.unpushed, "commit")} on no origin branch`;

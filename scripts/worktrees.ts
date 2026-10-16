@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
+import { openSessionReason, type DesktopSessions } from "./desktop-sessions.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { otherLiveSession, readCommandLines, readProcessList, sessionPidOf, type ProcessList } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
@@ -129,6 +130,8 @@ type ChooseInput = {
   includeEmpty?: boolean;
   /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
   only?: string[];
+  /** The open Claude desktop session holding the worktree at a path, if any (desktop-sessions.ts, RP-608); it is never removed. */
+  openSession?: DesktopSessions;
   platform?: NodeJS.Platform;
 };
 
@@ -147,7 +150,7 @@ export const isNamed = (path: string, names: string[], platform?: NodeJS.Platfor
  * have uncommitted changes. Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, openSession, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
@@ -156,9 +159,12 @@ export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, 
     const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
     if (only && !isNamed(w.path, only, platform)) continue;
     const starting = stillStarting(facts);
+    const session = openSession?.(w.path);
     const reason = samePath(w.path, currentPath, platform)
       ? CURRENT_WORKTREE
-      : dirty
+      : session !== undefined
+        ? openSessionReason(session)
+        : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
