@@ -8,5 +8,18 @@
       "PowerShell(docker-compose *down*-v*)",
       "PowerShell(docker volume rm *rabaed-*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/main-folder-guard.ts\""
+          }
+        ]
+      }
+    ]
   }
 }
