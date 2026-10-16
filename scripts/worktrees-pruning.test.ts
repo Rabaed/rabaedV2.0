@@ -134,6 +134,22 @@ describe("choosePrune", () => {
     expect(reasons(p)[2]?.[1]).toBe("its Claude desktop session is open (claude session RP-8-c (pid 42668)); archive it first");
   });
 
+  it("skips a merged desktop-app worktree whose session is open after its branch was renamed (RP-608)", () => {
+    // The app does not lock its own worktrees: the open session is known by the worktree's path only.
+    const renamed = wt(`${main}/.claude/worktrees/quiet-heron-0a1b2c`, { branch: "RP-602-lane-numbers", upstreamGone: true });
+    const openSession = (path: string) => (path === renamed.path ? { kind: "open" as const, session: 'session "Build RP-602"' } : undefined);
+    const p = choose([renamed], { openSession });
+    expect(p.remove).toEqual([]);
+    expect(reasons(p)[2]).toEqual([renamed.path, 'its Claude desktop session is open (session "Build RP-602"); archive it first']);
+  });
+
+  it("skips every worktree when the desktop app's records cannot be read (RP-608)", () => {
+    const openSession = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list (x.json) could not be read" });
+    const p = choose([wt("/w/done")], { openSession });
+    expect(p.remove).toEqual([]);
+    expect(reasons(p)[2]).toEqual(["/w/done", "a Claude desktop session may hold it: Claude desktop's worktree list (x.json) could not be read"]);
+  });
+
   it("skips a worktree on main and one locked by hand", () => {
     const p = choose([wt("/w/on-main", { branch: "main" }), wt("/w/locked", { locked: "keep" })]);
     expect(p.remove).toEqual([]);
@@ -197,5 +213,7 @@ describe("changedSinceListed", () => {
     expect(changedSinceListed(wt("/w/done", { dirty: true }))).toBe("uncommitted changes since it was listed");
     expect(changedSinceListed(wt("/w/done", { unpushed: 1 }))).toBe("1 commit on no origin branch since it was listed");
     expect(changedSinceListed(undefined)).toBe("no longer a worktree");
+    expect(changedSinceListed(wt("/w/done"), () => ({ kind: "open", session: 'session "RP-9"' }))).toBe('its Claude desktop session is open (session "RP-9")');
+    expect(changedSinceListed(wt("/w/done"), () => ({ kind: "unknown", reason: "list unreadable" }))).toBe("a Claude desktop session may hold it: list unreadable");
   });
 });
