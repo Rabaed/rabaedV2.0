@@ -102,6 +102,7 @@ Every implementing session and implementer subagent follows these, on top of the
 - **Report ends with the verify line:** the report ends with the last line of `pnpm verify`, verbatim (`pnpm verify passed on <sha>: <steps>.`), from one complete run on the pushed commit, or names the step it stopped at and why. A fix after the run means a new run.
 - **Renames:** renaming a term, label or message key, or removing a group, follows the checklist in `docs/agents/renames.md`.
 - **Stories:** when the diff touches `packages/ui/`, `apps/web/` or any `*.stories.tsx`, run `pnpm test:stories` from the repo root before pushing (`pnpm verify` already includes it then). Off Linux it compares no screenshots, so any failure is a real behaviour or axe failure; screenshot baselines come from `pnpm test:stories:linux` or the `update-screenshots` label on CI.
+- **Design docs:** don't read `docs/workflow-engine.md`, `docs/visibility.md`, `docs/form-engine.md` or `docs/data-model.md` whole (50–150 KB each). Each opens with a Contents list saying which part to read when. Find your heading with `grep -n '^#' docs/<doc>.md`, then Read from that line with offset and limit (RP-538).
 
 ## Retro before archiving
 
