@@ -47,7 +47,7 @@ const notQueueBranch = /!\s*startsWith\([^)]*,\s*'gh-readonly-queue\/'\)/;
 const sameRepoRun = /github\.event\.workflow_run\.head_repository\.full_name\s*==\s*github\.repository/;
 const sameRepoPullRequest = /github\.event\.pull_request\.head\.repo\.full_name\s*==\s*github\.repository/;
 
-describe.each(["ci.yml", "secret-scan.yml"])("%s in the merge queue", (name) => {
+describe.each(["ci.yml", "secret-scan.yml", "reviewed-required.yml"])("%s in the merge queue", (name) => {
   it("runs on merge_group, so the queue gets its required checks", () => {
     expect(workflow(name).on).toHaveProperty("merge_group");
   });
