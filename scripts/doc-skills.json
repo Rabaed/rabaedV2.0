@@ -1,0 +1,27 @@
+{
+  "plugins": {
+    "mattpocock-skills": [
+      "ask-matt",
+      "code-review",
+      "codebase-design",
+      "diagnosing-bugs",
+      "domain-modeling",
+      "grill-with-docs",
+      "implement",
+      "implement-spec",
+      "improve-codebase-architecture",
+      "pr",
+      "prototype",
+      "research",
+      "retro",
+      "setup-matt-pocock-skills",
+      "tdd",
+      "to-spec",
+      "to-tickets",
+      "triage",
+      "wayfinder",
+      "wizard"
+    ]
+  },
+  "notSkills": ["clear", "en", "ar", "health"]
+}

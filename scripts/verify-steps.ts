@@ -31,6 +31,52 @@ export function finalLine({ sha, dirty, steps }: { sha: string; dirty: boolean; 
   return `pnpm verify passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.`;
 }
 
+// A seam step that fails only on timeouts or a worker that never started (RP-607): what
+// several lanes' test runs on one machine at once look like, never a cause verify can see
+// in the diff. Every other error line (an AssertionError, a TypeError, ...) is a real failure.
+const loadErrors = [/^Error: (Test|Hook) timed out in \d+ms/, /^Error: \[vitest-pool\]: (Worker \w+ emitted error|Timeout starting|Failed to start)/, /^Error: Worker exited unexpectedly .*during starting state/];
+const errorLine = /^(?:[A-Z]\w*)?(Error|Exception)\b[^:]*:/;
+const failHeader = /^FAIL\s+(?:\|[^|]+\|\s+)?(\S+\.test\.\w+)(?:\s+>\s+(.+?))?(?:\s+\[.*\])?$/;
+// eslint-disable-next-line no-control-regex -- colour codes, should a run print them.
+const ansi = /\x1b\[[0-9;]*m/g;
+
+/**
+ * When `step` (a seam suite) failed only on timeouts or worker start-up, the message `pnpm verify`
+ * adds: likely machine load, the timed-out tests, and the command to rerun only their files.
+ * Undefined for any other failure. It never makes the step pass.
+ */
+export function loadFailure(step: string, output: string): string | undefined {
+  if (!step.startsWith("test:seam")) return undefined;
+  const timedOut = new Set<string>();
+  const files = new Set<string>();
+  let headers: { file: string; name: string }[] = [];
+  let loadSeen = false;
+  for (const raw of output.replace(ansi, "").split("\n")) {
+    const line = raw.trim().replace(/^Caused by: /, "");
+    const header = failHeader.exec(line);
+    if (header) {
+      headers.push({ file: header[1]!, name: header[2] ? `${header[1]} > ${header[2]}` : header[1]! });
+      continue;
+    }
+    if (!errorLine.test(line)) continue;
+    if (!loadErrors.some((pattern) => pattern.test(line))) return undefined;
+    loadSeen = true;
+    for (const { file, name } of headers) {
+      files.add(file);
+      if (/timed out/.test(line)) timedOut.add(name);
+    }
+    headers = [];
+  }
+  if (!loadSeen) return undefined;
+  const rerun = `pnpm ${step}${[...files].map((file) => ` ${file}`).join("")}`;
+  return [
+    `${step} failed only on timeouts or worker start-up: likely machine load (other test runs on this machine), not this diff.`,
+    ...(timedOut.size > 0 ? ["Timed out:", ...[...timedOut].map((name) => `  ${name}`)] : []),
+    `Rerun ${files.size > 0 ? "only them" : "the step"} when the machine is quieter: ${rerun}`,
+    "The step still failed: verify does not pass it on its own.",
+  ].join("\n");
+}
+
 /** The last `count` lines of `output`. */
 export function tail(output: string, count: number): string {
   return output.trimEnd().split("\n").slice(-count).join("\n");
