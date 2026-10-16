@@ -29,7 +29,7 @@
 // The default branch is main; --yes skips the confirmation.
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { describeServer, findServersOf, stopServers, type Server } from "./servers.ts";
+import { describeServer, findServersOf, firstLine, stopServers, type Server } from "./servers.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
@@ -142,7 +142,7 @@ async function main(): Promise<void> {
       all.map((w) => w.path),
     );
   } catch (error) {
-    console.warn(`Could not read the running processes (${gitError(error).split("\n")[0]}), so dev servers are not stopped first.`);
+    console.warn(`Could not read the running processes (${firstLine(error)}), so dev servers are not stopped first.`);
   }
   console.log(`Agent worktrees merged into ${target}:`);
   for (const w of remove) {

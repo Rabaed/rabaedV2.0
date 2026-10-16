@@ -44,6 +44,11 @@ describe("serversOf (RP-568)", () => {
     expect(serversOf(ps, posix[1]!, posix, "linux").map((p) => p.pid)).toEqual([20]);
   });
 
+  it("gives the main folder nothing under .claude/worktrees/, also from a removed worktree's leftover folder that git no longer lists", () => {
+    const gone = proc(17, `node "${main}\\.claude\\worktrees\\RP-400-gone\\node_modules\\next\\dist\\bin\\next" dev`);
+    expect(serversOf([gone], main, worktrees, "win32")).toEqual([]);
+  });
+
   it("leaves out the given pids (this command and its ancestors)", () => {
     expect(serversOf(processes, lane, worktrees, "win32", new Set([10])).map((p) => p.pid)).toEqual([11]);
   });
@@ -74,8 +79,8 @@ describe("lsofToPortLines", () => {
 });
 
 describe("stopCommand", () => {
-  it("stops the whole tree forcefully on Windows (a windowless node refuses a plain taskkill), and sends SIGTERM elsewhere", () => {
+  it("stops the whole tree forcefully on Windows (a windowless node refuses a plain taskkill), and its children then it with SIGTERM elsewhere", () => {
     expect(stopCommand(10, "win32")).toEqual(["taskkill", ["/pid", "10", "/t", "/f"]]);
-    expect(stopCommand(10, "linux")).toEqual(["kill", ["10"]]);
+    expect(stopCommand(10, "linux")).toEqual(["sh", ["-c", "pkill -TERM -P 10; kill 10"]]);
   });
 });

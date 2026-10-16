@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { normalPath } from "./paths.ts";
 import { readProcessList } from "./session-lock.ts";
+import { isRunning } from "./worktrees-stale.ts";
 
 // The dev servers one worktree started (RP-568): node processes whose command line runs a
 // file under that worktree's node_modules (web, api, admin, Storybook), with the ports they
@@ -22,17 +23,18 @@ function pathsIn(commandLine: string): string[] {
 }
 
 /** The deepest worktree folder holding the path, or undefined. Paths are normalPath'd. */
-function ownerOf(path: string, worktrees: string[]): string | undefined {
-  let best: string | undefined;
-  for (const w of worktrees) if ((path === w || path.startsWith(`${w}/`)) && (best === undefined || w.length > best.length)) best = w;
-  return best;
+function worktreeOf(path: string, worktrees: string[]): string | undefined {
+  let deepest: string | undefined;
+  for (const w of worktrees) if ((path === w || path.startsWith(`${w}/`)) && (deepest === undefined || w.length > deepest.length)) deepest = w;
+  return deepest;
 }
 
 /**
  * The node processes running a file under the worktree's node_modules (its own, or a
  * package's: apps/api/node_modules/...). worktrees: every worktree of the clone, so a file
- * under a nested worktree (.claude/worktrees/x in the main folder) counts as that one's.
- * skip: pids to leave out (this command and its ancestors).
+ * under a nested worktree (.claude/worktrees/x in the main folder) counts as that one's. A
+ * file under .claude/worktrees/ that no listed worktree holds (a removed worktree's leftover
+ * folder) is nobody's: never the main folder's. skip: pids to leave out (this command and its ancestors).
  */
 export function serversOf(processes: ServerProcess[], worktree: string, worktrees: string[], platform: NodeJS.Platform = process.platform, skip: ReadonlySet<number> = new Set()): ServerProcess[] {
   const dir = normalPath(worktree, platform);
@@ -43,7 +45,8 @@ export function serversOf(processes: ServerProcess[], worktree: string, worktree
       !skip.has(p.pid) &&
       pathsIn(p.commandLine).some((raw) => {
         const path = normalPath(raw, platform);
-        return ownerOf(path, roots) === dir && path.slice(dir.length).includes("/node_modules/");
+        const inside = path.slice(dir.length);
+        return worktreeOf(path, roots) === dir && inside.includes("/node_modules/") && !inside.startsWith("/.claude/worktrees/");
       }),
   );
 }
@@ -84,9 +87,14 @@ export function lsofToPortLines(out: string): string {
   return lines.join("\n");
 }
 
-/** The command that stops a server: its whole tree, forcefully, on Windows (a windowless node refuses a plain taskkill); SIGTERM elsewhere. */
+/**
+ * The command that stops a server with its children: on Windows its whole tree, forcefully (a
+ * windowless node refuses a plain taskkill); elsewhere SIGTERM to its children, then to it (Next's
+ * `next-server` child renames itself, so only its `next dev` parent matches, and a plain kill would
+ * leave the child holding the port).
+ */
 export const stopCommand = (pid: number, platform: NodeJS.Platform = process.platform): [string, string[]] =>
-  platform === "win32" ? ["taskkill", ["/pid", String(pid), "/t", "/f"]] : ["kill", [String(pid)]];
+  platform === "win32" ? ["taskkill", ["/pid", String(pid), "/t", "/f"]] : ["sh", ["-c", `pkill -TERM -P ${pid}; kill ${pid}`]];
 
 /** One line naming a server for the output: pid, ports and what it runs. */
 export function describeServer(s: Server): string {
@@ -144,25 +152,23 @@ export function findServersOf(targets: string[], worktrees: string[]): Map<strin
 /** The dev servers of one worktree right now, with their ports. */
 export const findServers = (worktree: string, worktrees: string[]): Server[] => findServersOf([worktree], worktrees).get(worktree) ?? [];
 
-/** Stops each server; returns those it could not stop, with why. A server already gone counts as stopped. */
-export function stopServers(servers: Server[]): { server: Server; reason: string }[] {
-  const failed: { server: Server; reason: string }[] = [];
+/** A server stopServers could not stop, with why. */
+export type NotStopped = { server: Server; reason: string };
+
+/** Stops each server; returns those it could not stop. A server already gone counts as stopped. */
+export function stopServers(servers: Server[]): NotStopped[] {
+  const failed: NotStopped[] = [];
   for (const s of servers) {
     const [file, args] = stopCommand(s.pid);
     try {
       run(file, args);
     } catch (error) {
-      if (stillRunning(s.pid)) failed.push({ server: s, reason: (error as { stderr?: string }).stderr?.trim() || String(error) });
+      if (isRunning(s.pid)) failed.push({ server: s, reason: firstLine(error) });
     }
   }
   return failed;
 }
 
-function stillRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as { code?: string }).code === "EPERM";
-  }
-}
+/** The first line of an error's stderr or message, for the output. */
+export const firstLine = (error: unknown): string =>
+  ((error as { stderr?: string }).stderr?.trim() || (error instanceof Error ? error.message : String(error))).split("\n")[0]!;

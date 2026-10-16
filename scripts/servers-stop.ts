@@ -11,7 +11,7 @@
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { samePath } from "./paths.ts";
-import { describeServer, findServers, stopServers } from "./servers.ts";
+import { describeServer, findServers, firstLine, stopServers } from "./servers.ts";
 import { currentRoot, listWorktrees } from "./worktrees.ts";
 
 const usage = "Usage: pnpm servers:stop [--worktree <path>] [--yes] [--dry-run]";
@@ -44,7 +44,7 @@ let servers;
 try {
   servers = findServers(target, worktrees);
 } catch (error) {
-  console.error(`Could not read the running processes (${error instanceof Error ? error.message.split("\n")[0] : String(error)}).`);
+  console.error(`Could not read the running processes (${firstLine(error)}).`);
   process.exit(1);
 }
 if (servers.length === 0) {
