@@ -39,12 +39,12 @@ const readEnv = (dir: string) => {
 };
 const inUse = databasesInUse([...worktrees, process.cwd()], readEnv);
 
-const lanes = dbContainers(containers, lane);
-if (lane !== undefined && lanes.length === 0) {
+const postgres = dbContainers(containers, lane);
+if (lane !== undefined && postgres.length === 0) {
   console.log(`No running Postgres for lane ${lane} (${laneProject(lane)}-db-1); nothing to drop.`);
   process.exit(0);
 }
-const found = lanes
+const found = postgres
   .map((c) => {
     const orphans = orphanDatabases(psql(c.name, "select datname from pg_database where datname like 'rabaed\\_%'"), inUse);
     const connections = parseConnections(psql(c.name, "select datname, count(*) from pg_stat_activity where datname like 'rabaed\\_%' group by datname"));

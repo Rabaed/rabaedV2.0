@@ -441,7 +441,7 @@ export function parseDropDbsArgs(args: string[]): { yes: boolean; lane?: number 
   return options;
 }
 
-export type LaneEnvArgs ={ lane: number; force: boolean; free: boolean; db: string | undefined };
+export type LaneEnvArgs = { lane: number; force: boolean; free: boolean; db: string | undefined };
 
 const LANE_ENV_USAGE = "Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (one lane per worktree; suffix: lowercase letters and digits, e.g. rp322)";
 
