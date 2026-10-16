@@ -53,24 +53,31 @@ export type Liveness = {
 /**
  * Why a worktree whose branch has had no commit of its own may still be starting
  * (its session or subagent may be about to write code); undefined when it has had one,
- * or when nothing holds it: clean, no live lock, and no running process in its folder.
+ * or when nothing holds it: clean, no live lock, no running process in its folder, and a
+ * lock naming a stopped session, or a detached HEAD (RP-610).
  */
-export function stillStarting(f: Pick<WorktreeFacts, "noCommitsYet" | "dirty" | "lockLive" | "heldByProcess">): string | undefined {
+export function stillStarting(f: StartingFacts): string | undefined {
   if (!f.noCommitsYet) return undefined;
   if (f.dirty) return "uncommitted changes";
   if (f.lockLive) return "locked by a running session";
   if (f.heldByProcess) return "a running process holds its folder";
+  // RP-610: a branch with no lock shows nothing of its session having stopped; its session may
+  // have just branched off the target (one was pruned minutes after `git switch -c`).
+  if (f.branch !== undefined && f.locked === undefined) return "no lock to show its session has stopped";
   return undefined;
 }
+
+type StartingFacts = Pick<WorktreeFacts, "branch" | "locked" | "noCommitsYet" | "dirty" | "lockLive" | "heldByProcess">;
 
 /**
  * The one "finished worktree" rule (RP-585) of lane:env, lanes:prune, worktrees:clean and
  * worktrees:prune: its tip is in the target (nothing ahead), and either its branch has had a
- * commit of its own, or it has none and nothing holds it (stillStarting). A branch created on
- * an already merged commit and never committed to is then finished once its session is gone.
+ * commit of its own, or it has none and nothing holds it (stillStarting): clean, no running
+ * process in its folder, and either a lock naming a session that has stopped (or this session:
+ * its own paused subagent) or a detached HEAD (RP-601). An unlocked branch never committed to
+ * may be a session that just started, so it is never finished (RP-610).
  */
-export const isFinished = (f: Pick<WorktreeFacts, "ahead" | "noCommitsYet" | "dirty" | "lockLive" | "heldByProcess">): boolean =>
-  f.ahead === 0 && stillStarting(f) === undefined;
+export const isFinished = (f: StartingFacts & Pick<WorktreeFacts, "ahead">): boolean => f.ahead === 0 && stillStarting(f) === undefined;
 
 /**
  * Whether a reflog (its entries' subjects, `git reflog --format=%gs`) shows a commit
@@ -144,9 +151,11 @@ export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, 
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
-  for (const { ahead, dirty, noCommitsYet, lockLive, heldByProcess, ...w } of worktrees) {
+  for (const facts of worktrees) {
+    const { ahead, dirty } = facts;
+    const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
     if (only && !isNamed(w.path, only, platform)) continue;
-    const starting = stillStarting({ noCommitsYet, dirty, lockLive, heldByProcess });
+    const starting = stillStarting(facts);
     const reason = samePath(w.path, currentPath, platform)
       ? CURRENT_WORKTREE
       : dirty
