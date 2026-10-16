@@ -8,7 +8,10 @@
 // --include-empty, those whose branch has no commit of its own yet while a live lock or
 // a running process still holds them: their subagent may still be running. With nothing
 // holding it, such a worktree is finished and goes, the same rule lane:env, lanes:prune
-// and worktrees:prune use (RP-585). They are listed as skipped.
+// and worktrees:prune use (RP-585). They are listed as skipped. The dev servers each
+// removed worktree still runs (servers.ts, as `pnpm servers:stop` finds them) are listed
+// with it and stopped just before it is removed; one that cannot be stopped keeps its
+// worktree (RP-568).
 //
 // It fetches origin first and checks against `origin/<branch>` when that exists, so a
 // stale local `main` no longer hides merged worktrees (RP-564); the local branch is
@@ -26,6 +29,7 @@
 // The default branch is main; --yes skips the confirmation.
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
+import { describeServer, findServersOf, firstLine, stopServers, type Server } from "./servers.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
@@ -130,13 +134,32 @@ async function main(): Promise<void> {
     console.log(`No agent worktrees merged into ${target} to remove.`);
     process.exit(0);
   }
+  // RP-568: each worktree's dev servers are stopped before it is removed, and listed here.
+  let servers = new Map<string, Server[]>();
+  try {
+    servers = findServersOf(
+      remove.map((w) => w.path),
+      all.map((w) => w.path),
+    );
+  } catch (error) {
+    console.warn(`Could not read the running processes (${firstLine(error)}), so dev servers are not stopped first.`);
+  }
   console.log(`Agent worktrees merged into ${target}:`);
-  for (const w of remove) console.log(`  ${name(w)}`);
+  for (const w of remove) {
+    console.log(`  ${name(w)}`);
+    for (const s of servers.get(w.path) ?? []) console.log(`    dev server to stop: ${describeServer(s)}`);
+  }
 
-  await confirmOrExit("Remove them with their folders and branches?", { yes, verb: "remove", done: "removed" });
+  await confirmOrExit("Stop their dev servers and remove them with their folders and branches?", { yes, verb: "remove", done: "removed" });
 
   let failed = 0;
   for (const w of remove) {
+    const notStopped = stopServers(servers.get(w.path) ?? []);
+    if (notStopped.length > 0) {
+      failed++;
+      for (const { server, reason } of notStopped) console.error(`Kept ${w.path}: could not stop its dev server pid ${server.pid} (${reason}).`);
+      continue;
+    }
     try {
       if (reportRemoval(w.path, removeWorktree(w, mainRoot, target))) failed++;
     } catch (error) {
