@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { REVIEWED_LABEL } from "./reviewed-label.ts";
+import { DOCS_ONLY_LABEL, isDoc, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -13,7 +14,9 @@ import { isAncestor } from "./worktrees.ts";
 // The checks and the queue entry use the PR's own head (refs/pull/<n>/head), not
 // HEAD. --wait polls every 60 s until the PR merges (exit 0) or leaves the queue
 // or closes (exit 1, with the reason).
-// The PR needs the `reviewed` label (a finished /code-review, RP-584); --no-review skips that for docs-only PRs.
+// The PR needs the `reviewed` label (a finished /code-review, RP-584), or the `docs-only` label when
+// every file it changes is a doc: the rule of the main ruleset's reviewed-required check (RP-606).
+// --no-review only names the docs-only label when it is missing; it no longer skips the rule.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -77,7 +80,6 @@ export function conflictedFiles(output: string): string[] {
 const ROOT_SHARED = { files: ["package.json", "pnpm-lock.yaml"], prefixes: [".github/workflows/"] };
 const isRootShared = (file: string) => ROOT_SHARED.files.includes(file) || ROOT_SHARED.prefixes.some((prefix) => file.startsWith(prefix));
 const rootSharedList = [...ROOT_SHARED.files, ...ROOT_SHARED.prefixes.map((prefix) => `${prefix}*`)].join(", ");
-const isDoc = (file: string) => file.startsWith("docs/") || file.endsWith(".md");
 const isWorkspacePackageJson = (file: string) => file.endsWith("/package.json");
 
 /** Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR, with at most docs. */
@@ -114,13 +116,24 @@ export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boole
     );
   }
   const warnings: string[] = [];
-  if (options.noReview) {
-    warnings.push(`Warning: --no-review: queued without the '${REVIEWED_LABEL}' label (for docs-only PRs); nothing checked that a /code-review finished.`);
-  } else if (!seam.labels(pr).includes(REVIEWED_LABEL)) {
+  const changed = seam.changedFiles(head);
+  // The same rule as the main ruleset's reviewed-required check (RP-606), so what this queues the queue keeps.
+  const gate = reviewGate(seam.labels(pr), changed);
+  if (!gate.ok) {
+    const docsOnlyFix = `For a PR that changes only docs: \`gh pr edit ${pr} --add-label ${DOCS_ONLY_LABEL}\`, wait for the ${REQUIRED_CHECK} check, then \`pnpm queue ${pr}\` again.`;
+    if (options.noReview) {
+      return fail(
+        `PR #${pr}: --no-review needs the '${DOCS_ONLY_LABEL}' label now: ${gate.reason}. Without it the main ruleset's ${REQUIRED_CHECK} check fails and the queue drops the PR.`,
+        `Fix: ${docsOnlyFix} A PR that changes more than docs needs a /code-review and the '${REVIEWED_LABEL}' label.`,
+      );
+    }
     return fail(
-      `PR #${pr} has no '${REVIEWED_LABEL}' label: planning/parallel-sessions.md rule 6 queues a PR only after a finished /code-review.`,
-      `Fix: run /code-review, push its fixes, then \`gh pr edit ${pr} --add-label ${REVIEWED_LABEL}\` and run \`pnpm queue ${pr}\` again. A new push removes the label. For a docs-only PR: \`pnpm queue ${pr} --no-review\`.`,
+      `PR #${pr}: ${gate.reason}. planning/parallel-sessions.md rule 6 queues a PR only after a finished /code-review.`,
+      `Fix: run /code-review, push its fixes, then \`gh pr edit ${pr} --add-label ${REVIEWED_LABEL}\` and run \`pnpm queue ${pr}\` again. A new push removes the label. ${docsOnlyFix}`,
     );
+  }
+  if (gate.via === DOCS_ONLY_LABEL) {
+    warnings.push(`Warning: queued under the '${DOCS_ONLY_LABEL}' label (every changed file is a doc); nothing checked that a /code-review finished.`);
   } else if (seam.labelWorkflowOnMain()) {
     // The label alone is not tied to a head: a push whose workflow run has not finished (or never ran, as with a merge conflict) still shows the old label.
     const runs = seam.labelRuns(head);
@@ -144,7 +157,6 @@ export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boole
   }
 
   // A workspace package.json that changes only dependency fields belongs to a dependencies-only PR beside the lockfile (RP-573).
-  const changed = seam.changedFiles(head);
   const shared = rootSharedFilesBreach(changed, (file) => {
     if (!isWorkspacePackageJson(file)) return false;
     const { before, after } = seam.packageJsonVersions(head, file);
@@ -248,7 +260,8 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     pullRequest: (pr) => JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "id,headRefOid,headRefName"])) as { id: string; headRefOid: string; headRefName: string },
     mergeTree: (commit) => run("git", ["merge-tree", "--write-tree", "origin/main", commit]),
     changedFiles: (commit) =>
-      must("git", ["diff", "--name-only", `origin/main...${commit}`])
+      // --no-renames lists a rename's old path too, so code renamed to .md is not a docs-only change (RP-606).
+      must("git", ["diff", "--name-only", "--no-renames", `origin/main...${commit}`])
         .split("\n")
         .filter(Boolean),
     packageJsonVersions: (commit, file) => {

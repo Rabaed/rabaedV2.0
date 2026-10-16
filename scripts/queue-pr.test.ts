@@ -1,4 +1,7 @@
-import type { spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { queuePr, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
 
@@ -70,7 +73,7 @@ describe("queuePr", () => {
     const text = result.lines.join("\n");
     expect(text).toContain("reviewed");
     expect(text).toContain("gh pr edit 149 --add-label reviewed");
-    expect(text).toContain("--no-review");
+    expect(text).toContain("gh pr edit 149 --add-label docs-only");
     expect(enqueued).toEqual([]);
   });
 
@@ -82,12 +85,34 @@ describe("queuePr", () => {
     expect(enqueued).toHaveLength(1);
   });
 
-  it("--no-review queues a PR without the label and says so in the output", () => {
-    const { seam, enqueued } = fakeSeam({ labels: () => [] });
+  // RP-606: the main ruleset's reviewed-required check would fail a PR with neither label, and the
+  // queue would drop it, so --no-review no longer stands in for a label: it names the docs-only one.
+  it("--no-review refuses a PR without the docs-only label and says how to add it", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => [], changedFiles: () => ["docs/a.md"] });
     const result = queuePr(149, seam, { noReview: true });
-    expect(result.ok).toBe(true);
-    expect(result.lines.join("\n")).toContain("--no-review");
-    expect(enqueued).toHaveLength(1);
+    expect(result.ok).toBe(false);
+    const text = result.lines.join("\n");
+    expect(text).toContain("gh pr edit 149 --add-label docs-only");
+    expect(text).toContain("reviewed-required");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("queues a docs-only PR with the docs-only label, with or without --no-review, and says no review was checked", () => {
+    for (const noReview of [true, false]) {
+      const { seam, enqueued } = fakeSeam({ labels: () => ["docs-only"], changedFiles: () => ["docs/a.md", "planning/parallel-sessions.md"] });
+      const result = queuePr(149, seam, { noReview });
+      expect(result.ok).toBe(true);
+      expect(result.lines.join("\n")).toContain("docs-only");
+      expect(enqueued).toHaveLength(1);
+    }
+  });
+
+  it("refuses the docs-only label on a PR that changes code, naming the file", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => ["docs-only"], changedFiles: () => ["docs/a.md", "scripts/x.ts"] });
+    const result = queuePr(149, seam, { noReview: true });
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("scripts/x.ts");
+    expect(enqueued).toEqual([]);
   });
 
   it("refuses while the reviewed-label run for the head is still going, naming the head", () => {
@@ -130,8 +155,8 @@ describe("queuePr", () => {
     expect(enqueued).toHaveLength(1);
   });
 
-  it("--no-review skips the run check too", () => {
-    const { seam, enqueued } = fakeSeam({ labels: () => [], labelRuns: () => [{ status: "queued", conclusion: "" }] });
+  it("a docs-only PR skips the reviewed-label run check (there is no review to tie to the head)", () => {
+    const { seam, enqueued } = fakeSeam({ labels: () => ["docs-only"], changedFiles: () => ["docs/a.md"], labelRuns: () => [{ status: "queued", conclusion: "" }] });
     expect(queuePr(149, seam, { noReview: true }).ok).toBe(true);
     expect(enqueued).toHaveLength(1);
   });
@@ -423,6 +448,29 @@ describe("realSeam", () => {
     expect(calls[0]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
     expect(calls[1]?.args[0]).toMatch(/check-migrations-immutable\.ts$/);
     expect(calls[1]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
+  });
+
+  it("lists both paths of a renamed file, so x.ts renamed to x.md is not a docs-only change (RP-606)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "queue-rename-"));
+    try {
+      const git = (...args: string[]) => {
+        const done = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: dir, encoding: "utf8" });
+        if (done.status !== 0) throw new Error(done.stderr);
+        return done.stdout.trim();
+      };
+      git("init", "-q");
+      writeFileSync(join(dir, "x.ts"), "export const a = 1;\nexport const b = 2;\nexport const c = 3;\n");
+      git("add", ".");
+      git("commit", "-q", "-m", "main");
+      git("update-ref", "refs/remotes/origin/main", "HEAD");
+      git("mv", "x.ts", "x.md");
+      git("commit", "-q", "-m", "rename");
+      const files = realSeam(dir).changedFiles(git("rev-parse", "HEAD"));
+      expect(files.sort()).toEqual(["x.md", "x.ts"]);
+      expect(queuePr(149, fakeSeam({ labels: () => ["docs-only"], changedFiles: () => files }).seam).ok).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("reads the PR's label names through gh pr view", () => {
