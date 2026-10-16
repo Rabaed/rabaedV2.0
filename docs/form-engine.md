@@ -7,6 +7,45 @@ One engine serves:
 - every **Action Form**: the pop-up on a Workflow Transition;
 - **Checklist templates** in the library.
 
+## Contents
+
+Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine.md`, then Read from that line with offset and limit. `scripts/doc-index.test.ts` keeps this list in step with the headings.
+
+- **1. Schema shape**: read when you change the JSON a Form Version is stored as.
+  - **Common field properties**: read when you add or change a property every field has (key, required, visible_if …).
+  - **System Fields and Built-in Fields (settled 2026-10-03)**: read when you work on Subject, Document Number, Attachments, Links or the Built-in Fields.
+- **2. Field type catalogue (v1)**: read when you need the list of field types, or add one.
+  - **2.1 Numbers and contact details (as built, RP-264)**: read when you touch number, currency, email or phone fields.
+  - **2.2 Tables (as built, RP-280)**: read when you touch table fields and their columns.
+  - **2.3 Option List fields (as built, RP-282)**: read when you touch `option_list` fields.
+  - **2.4 Calculated fields (as built, RP-283)**: read when you touch formulas in `calculated` fields.
+  - **2.5 The MAR Form Version 1 (as built, RP-272)**: read when you need the first MAR Form Version.
+  - **2.6 The MAR Form Version 2 (as built, RP-286)**: read when you need what MAR Form Version 2 added.
+  - **2.7 Free Links (as built, RP-291)**: read when you work on Links added by hand in the Links System Field.
+  - **2.8 Linked from (as built, RP-292)**: read when you work on the items that link to this one.
+  - **2.8a Links within a Revision chain (RP-311 review, `20261107000000_revision_links_follow_chain.sql`)**: read when Links meet Revisions of one chain.
+  - **2.9 The link question (as built, RP-293)**: read when you touch `work_item_ref` fields.
+  - **2.10 The MAR Form Version 3 (as built, RP-294)**: read when you need what MAR Form Version 3 added (References).
+  - **2.11 The three Rabaed Default submittal Forms (as built, RP-591, spec RP-598)**: read when you work on the MAR, SAR or DAR Form.
+  - **2.12 The `approved_supplier` field and the MAR Form Version 6 (as built, RP-595, spec RP-598)**: read when you touch the `approved_supplier` field.
+- **3. Checklists**: read when you work on `checklist` fields and their check items.
+  - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
+- **4. Who fills what: section editability**: read when you change which Participant fills a Form Section, and at which Step.
+  - **Settled 2026-10-05 (part 3)**: read when you need the rule of one Participant per Form Section.
+  - **Settled 2026-10-10: the Form belongs to the raiser (ADR 0019)**: read when you work on who may edit the raiser's Form.
+- **5. Languages, dates, numbers**: read when you touch Arabic and English labels, dates or number formats.
+- **6. PDF layout**: read when you work on the Documental Record's PDF.
+  - **PDF Templates**: read when you work on choosing among several PDF Templates per Form.
+- **7. Versioning and data compatibility**: read when you change how Form Versions publish and stay compatible.
+  - **Which Form a new item gets (as built, RP-554)**: read when you need which Form Version a new Work Item is pinned to.
+  - **Publish-time validation**: read when a Form Version won't publish, or you add a publish rule.
+- **8. Validation, drafts, reporting**: read when you touch `validateAnswers`, Save as draft, or reporting on answers.
+- **9. Builder**: read when you work on the Form builder.
+- **10. Option Lists, Saved Fields and Libraries (settled 2026-10-03)**: read when you work on Option Lists, Saved Fields or Libraries.
+- **Delivery order (settled 2026-10-03)**: read when you need which part of the engine is built when.
+- **Settled (2026-09-26)**: read when you hit an early decision: Hijri dates, no internal-only fields, and others.
+- **Former open questions**: read when you need the questions those decisions answered, with their recommendations.
+
 ---
 
 ## 1. Schema shape

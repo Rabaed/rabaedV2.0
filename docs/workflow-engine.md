@@ -6,6 +6,44 @@ The engine has two halves:
 - **Definition time:** the visual builder, validation and publishing.
 - **Run time:** one command, `take_transition`, plus a few supporting commands (§5), all executed as single database transactions.
 
+## Contents
+
+Don't read this doc whole: find your heading with `grep -n '^#' docs/workflow-engine.md`, then Read from that line with offset and limit. `scripts/doc-index.test.ts` keeps this list in step with the headings.
+
+- **1. Definition model**: read when you change what a Workflow Version holds: Steps, Stages, Transitions, Outcomes.
+  - **Example: Rabaed Default "Material Approval Request (MAR)"**: read when you need a worked Workflow, or touch the MAR's.
+  - **Rabaed Default documents**: read when you edit or import the Rabaed Default JSON documents in `apps/admin`.
+  - **Definition format**: read when you change `WorkflowDefinition`, the JSON the builder, api and Rabaed Admin share.
+  - **Publish-time validation**: read when a Workflow Version won't publish, or you add a publish rule.
+  - **Ownership and binding (ADR 0016)**: read when you work on who owns a Workflow (Rabaed, Project, Library) and how a Type binds one.
+  - **Authoring (WF-4)**: read when you add or change a command that writes Workflow definitions.
+  - **Company defaults (RP-517)**: read when you work on a Company's default Form, Workflow or Screen per Type.
+  - **The Library of Workflows (RP-442, WF-19)**: read when you work on a Company's Library of Workflows.
+- **2. Run-time state**: read when you need the columns a Work Item's Workflow position lives in.
+- **3. Who holds a Step (actor resolution)**: read when you change who gets a Step: the Participant, the Step Pool, the holder.
+- **4. Conditions (routing)**: read when you write or evaluate a condition on a Transition.
+  - **As built (RP-430, WF-7): Restrict and Validate at run time**: read when you touch `evaluateCondition` or `app.condition_holds`.
+- **5. Commands**: read when you add a Workflow command; it gives the rules every command follows (one transaction, locks, idempotency).
+  - **5.1 `take_transition(item, transition, action_form_answers, confirmed)`**: read when you change what taking a Transition checks or writes.
+  - **5.2 Pick up and Return to pool (`app.pick_up_step` / `app.return_to_pool_step` in the code)**: read when you work on pooled Steps.
+  - **5.3 `recommend_code(item, code, note)`**: read when you work on a Recommended Code inside one Participant.
+  - **5.3a The Owner's review: a Recommended Code to the Owner (ADR 0022)**: read when you work on the Owner confirming a Consultant's Code.
+  - **5.4 `create_revision(closed_item)`**: read when you work on Revisions of a closed item.
+  - **5.5 `replace_rejected(closed_item)` for Code D**: read when you work on replacing a rejected item.
+  - **5.6 Admin commands (Rabaed Admin only, `admin_action` + a shared event with a reason)**: read when you add a Rabaed Admin command on a Work Item.
+  - **5.7 Screens and replies (settled 2026-10-10, ADR 0019; built in RP-516)**: read when you work on Screens or a Participant's reply in an Action Form.
+  - **5.7 The List's row commands: Delete, Duplicate, Download (as built, RP-409)**: read when you change the List row's ⋯ menu.
+- **6. Outcome hooks**: read when you change what an outcome leads to (Revision, replacement, Comment).
+- **7. Signing and the Documental Record**: read when you touch signing a Transition or the Documental Record.
+- **8. Document Numbers**: read when you work on how and when a Document Number is given.
+  - **Settled 2026-10-05 (Document numbering)**: read when you need the numbering decisions: who sets the Numbering Pattern, when a change applies.
+  - **As built (RP-312 to RP-317, RP-311 review)**: read when you touch the numbering functions in the database.
+- **9. People and companies leaving**: read when a Member or a Participant leaves: Handover, Vacancy.
+- **10. Step Age and "Need My Action"**: read when you work on Step Age dots or the Need My Action list.
+- **11. Builder (React Flow) contract**: read when you work on the visual Workflow builder.
+- **Settled (2026-09-26)**: read when you hit an edge case settled early (a Consultant withdrawn, and others).
+- **12. Adding a Rabaed Default Type: the checklist**: read when you add a Rabaed Default Work Item Type.
+
 ---
 
 ## 1. Definition model
