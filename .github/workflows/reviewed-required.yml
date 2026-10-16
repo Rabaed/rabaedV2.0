@@ -33,11 +33,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      - name: Note that the script has not landed yet
+      # The script merges before this workflow (RP-606), so a missing one is an error, never a pass.
+      - name: Fail when the script is missing
         if: hashFiles('scripts/reviewed-required.ts') == ''
-        run: echo "scripts/reviewed-required.ts is not on the default branch yet; nothing to check"
+        run: |
+          echo "::error::scripts/reviewed-required.ts is missing on the default branch; reviewed-required cannot check this PR"
+          exit 1
       - name: Require the reviewed label
-        if: hashFiles('scripts/reviewed-required.ts') != ''
         run: node scripts/reviewed-required.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
