@@ -54,11 +54,17 @@ export function parseArgs(argv: string[]): DemoSessionArgs {
     }
   }
   if (!person) throw new Error(`Name a person: an email or one of ${Object.keys(demoPeople).join(", ")}.`);
+  const { email, short } = resolvePerson(person);
+  return { email, short, out: out ?? resolve(root, ".demo-sessions", `${short}.json`) };
+}
+
+/** A demo person's email and short name, from an email or one of demoPeople's short names. Throws a plain message on an unknown name. */
+export function resolvePerson(person: string): { email: string; short: string } {
   const key = person.trim().toLowerCase();
   const email = key.includes("@") ? key : demoPeople[key];
   if (!email) throw new Error(`Unknown short name "${person}". Use an email or one of ${Object.keys(demoPeople).join(", ")}.`);
   const short = key.includes("@") ? key.split("@")[0]!.replace(/[^a-z0-9.-]/g, "") : key;
-  return { email, short, out: out ?? resolve(root, ".demo-sessions", `${short}.json`) };
+  return { email, short };
 }
 
 /** The DEMO_PASSWORD line of .env.demo, or undefined. */
@@ -175,30 +181,40 @@ export function postJson(url: string, body: unknown): Promise<{ status: number; 
   });
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+/** This worktree's web app address: WEB_URL from the environment (`.env`), without a trailing slash. */
+export const webUrlFromEnv = () => (process.env.WEB_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
+
+/**
+ * Signs `email` in at `webUrl` with this worktree's demo password and returns the Playwright storage state.
+ * The password is read here and goes only into the sign-in request: never into a message or the result.
+ */
+export async function signIn(email: string, webUrl: string) {
   if (!existsSync(passwordFile)) {
     throw new Error("No .env.demo in this worktree yet: run `pnpm demo` here once (it creates the password), then try again.");
   }
   const password = parseDemoPassword(readFileSync(passwordFile, "utf8"));
   if (!password) throw new Error(".env.demo has no DEMO_PASSWORD line.");
 
-  const webUrl = (process.env.WEB_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
   // Through the web app's /api/v1 proxy, so the cookie is the browser's first-party one.
   // A lane's WEB_URL is http://laneN.localhost:<port>: postJson connects to 127.0.0.1 but keeps
   // that Host, and the cookies below are for laneN.localhost, the host the README says to open.
-  const response = await postJson(`${webUrl}/api/v1/session`, { email: args.email, password }).catch(() => {
+  const response = await postJson(`${webUrl}/api/v1/session`, { email, password }).catch(() => {
     throw new Error(`Could not reach ${webUrl}. Is the demo running (pnpm demo)?`);
   });
   if (response.status !== 204) {
     const hint = response.status === 401 ? " (wrong email, or the seed used another password: run pnpm demo again)" : "";
-    throw new Error(`Sign-in as ${args.email} failed with ${response.status}${hint}.`);
+    throw new Error(`Sign-in as ${email} failed with ${response.status}${hint}.`);
   }
   const cookies = response.setCookies;
   if (cookies.length === 0) throw new Error("Sign-in worked but set no session cookie.");
+  return storageState(cookies, webUrl);
+}
 
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const state = await signIn(args.email, webUrlFromEnv());
   mkdirSync(dirname(args.out), { recursive: true });
-  writeFileSync(args.out, JSON.stringify(storageState(cookies, webUrl), null, 2));
+  writeFileSync(args.out, JSON.stringify(state, null, 2));
   console.log(args.out);
 }
 
