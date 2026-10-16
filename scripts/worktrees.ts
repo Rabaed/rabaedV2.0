@@ -233,7 +233,10 @@ export const NOT_FINISHED: Verdict = { finished: false, neverCommitted: false };
 
 /**
  * isFinished for one worktree against the target (lane:env and lanes:prune; worktrees:clean
- * and worktrees:prune judge gatherFacts' facts by the same rule). neverCommitted: finished
+ * and worktrees:prune judge gatherFacts' facts by the same rule). A detached HEAD is judged
+ * too (RP-601): the app often leaves a worktree detached once its branch merges, and its HEAD
+ * reflog holds checkouts, not commits, so it is finished once its commit is in the target and
+ * nothing holds it. neverCommitted: finished
  * although its branch has had no commit of its own. A worktree git cannot read is not finished.
  */
 export function judgeWorktree(w: Worktree, target: string, mainRoot: string, live: Liveness): Verdict {
@@ -244,7 +247,8 @@ export function judgeWorktree(w: Worktree, target: string, mainRoot: string, liv
     return NOT_FINISHED;
   }
   const finished = isFinished(facts);
-  return { finished, neverCommitted: finished && facts.noCommitsYet };
+  // A detached HEAD's reflog holds checkouts, so "never committed to" would mislead there.
+  return { finished, neverCommitted: finished && facts.noCommitsYet && w.branch !== undefined };
 }
 
 /**

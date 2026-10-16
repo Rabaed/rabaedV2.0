@@ -443,6 +443,25 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
       expect(verdicts(nobody)).toEqual(all(false));
     });
   });
+
+  it("calls a detached HEAD merged once its commit is in the target (RP-601)", () => {
+    run(["worktree", "add", "-b", "RP-4-detach", agent("agent-detach")]);
+    writeFileSync(join(agent("agent-detach"), "d.txt"), "d");
+    run(["add", "d.txt"], agent("agent-detach"));
+    run(["commit", "-m", "work"], agent("agent-detach"));
+    run(["checkout", "--detach"], agent("agent-detach"));
+    expect(listed("agent-detach").branch).toBeUndefined();
+    expect(judgeWorktree(listed("agent-detach"), "main", root, nobody).finished).toBe(false);
+    run(["merge", "--no-ff", "-m", "merge", "RP-4-detach"]);
+    expect(judgeWorktree(listed("agent-detach"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+  });
+
+  it("calls a detached HEAD whose reflog holds only checkouts finished once nothing holds it, without saying never committed (RP-601, RP-585)", () => {
+    run(["worktree", "add", "--detach", agent("agent-left")]);
+    expect(listed("agent-left").branch).toBeUndefined();
+    expect(judgeWorktree(listed("agent-left"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+    expect(judgeWorktree(listed("agent-left"), "main", root, { lockLive: () => false, heldByProcess: () => true }).finished).toBe(false);
+  });
 });
 
 // worktrees:prune's git side: a clone (its folder name has a space) of a throwaway origin.

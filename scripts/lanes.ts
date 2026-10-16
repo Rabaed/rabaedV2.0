@@ -181,15 +181,21 @@ export function staleProjects({ containers, volumes, cwd, currentProject, exists
   return stale;
 }
 
+/** A key's value in an .env file's text; the value may be quoted. */
+export const envValue = (env: string, key: string): string | undefined =>
+  new RegExp(`^${key}=(.*)$`, "m").exec(env)?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
+
 /** COMPOSE_PROJECT_NAME in an .env file's text; the value may be quoted. */
-export const composeProjectOfEnv = (env: string): string | undefined =>
-  /^COMPOSE_PROJECT_NAME=(.*)$/m.exec(env)?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
+export const composeProjectOfEnv = (env: string): string | undefined => envValue(env, "COMPOSE_PROJECT_NAME");
+
+/** The lane a .env's compose project names (`rabaed-lane5` → `5`); "" for any other. */
+export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(composeProjectOfEnv(env) ?? "")?.[1] ?? "";
 
 /** A worktree of this clone, as lanes:prune --merged sees it. */
 export type WorktreeLane = {
   path: string;
   branch: string | undefined;
-  /** It is finished against origin/main (worktrees.ts isFinished: merged, or never committed to and nothing holds it). */
+  /** It is finished against origin/main: its branch, or its detached HEAD (RP-601), by worktrees.ts isFinished (merged, or never committed to and nothing holds it). */
   merged: boolean;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project: string | undefined;
@@ -220,7 +226,7 @@ export function mergedProjects({ containers, volumes, worktrees, cwd, currentPro
     if (worktrees.some((w) => !w.merged && w.project === project)) continue;
     const holders = [...new Set(mine.map((c) => c.workingDir))].map(worktreeAt);
     if (holders.some((w) => !w?.merged)) continue;
-    const named = holders.map((w) => `${w!.branch} at ${w!.path}`).join(", ");
+    const named = holders.map((w) => `${w!.branch ?? "a detached HEAD"} at ${w!.path}`).join(", ");
     merged.push({
       project,
       reason: `branch merged into origin/main (${named})`,
@@ -275,11 +281,11 @@ export function holderAdvice(n: number, holders: string[], { worktrees, hasOrigi
   return holders.map((dir) => {
     const w = worktrees.find((x) => samePath(x.path, dir, platform));
     if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(n, { merged: false })}\` frees the lane.`;
-    if (!w.branch) return `  ${dir} has a detached HEAD.`;
-    if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
-    if (!w.merged) return `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
-    if (claimants.length === 0) return `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(n, { merged: true })}\`, then re-run.`;
-    const kept = `  ${dir} is on ${w.branch}, already merged into origin/main, but lanes:prune keeps ${laneProject(n)}`;
+    const on = w.branch ?? "a detached HEAD";
+    if (!hasOriginMain) return `  ${dir} is on ${on}; run \`git fetch origin main\` to see whether it is merged.`;
+    if (!w.merged) return `  ${dir} is on ${on}, not merged into origin/main yet: its session may still need the lane.`;
+    if (claimants.length === 0) return `  ${dir} is on ${on}, already merged into origin/main: free the lane with \`${pruneCommand(n, { merged: true })}\`, then re-run.`;
+    const kept = `  ${dir} is on ${on}, already merged into origin/main, but lanes:prune keeps ${laneProject(n)}`;
     if (claimants.some((c) => samePath(c.path, cwd, platform))) return `${kept}: this worktree's own .env has it. \`pnpm lane:env ${n} --force\` takes the lane over.`;
     const sharers = claimants.map((c) => `${c.path} (on ${c.branch ?? "a detached HEAD"}, not merged)`).join(", ");
     return `${kept} while ${sharers} has it in its .env: that worktree still shares the lane. Take a free lane instead.`;
@@ -290,7 +296,7 @@ export function holderAdvice(n: number, holders: string[], { worktrees, hasOrigi
 export type TakeoverWorktree = {
   path: string;
   branch: string | undefined;
-  /** It is finished against origin/main (worktrees.ts isFinished). */
+  /** It is finished against origin/main: its branch, or its detached HEAD (RP-601), by worktrees.ts isFinished. */
   merged: boolean;
   /** Finished although its branch has had no commit of its own (RP-585); the takeover line says why it counts. */
   neverCommitted?: boolean;

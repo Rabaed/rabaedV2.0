@@ -519,6 +519,14 @@ describe("holderAdvice (lane:env's line per holder)", () => {
     expect(line).toContain("pnpm lane:env 3 --force");
   });
 
+  it("says whether a holder on a detached HEAD is merged, like one on a branch (RP-601)", () => {
+    const detached: WorktreeLane = { ...holder, branch: undefined };
+    expect(holderAdvice(3, [detached.path], input([detached]))[0]).toBe(
+      "  G:/rabaed-wt/RP-362 is on a detached HEAD, already merged into origin/main: free the lane with `pnpm lanes:prune --merged --lane 3`, then re-run.",
+    );
+    expect(holderAdvice(3, [detached.path], input([{ ...detached, merged: false }]))[0]).toContain("is on a detached HEAD, not merged into origin/main yet");
+  });
+
   it("keeps the other lines: unmerged holder, gone holder, no origin/main", () => {
     const open = wt("G:/rabaed-wt/RP-363", "RP-363-dashboard", false, "rabaed-lane3");
     expect(holderAdvice(3, [open.path], input([open]))[0]).toContain("not merged into origin/main yet");
@@ -561,6 +569,22 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     const p = choice([wt({ merged: false })]);
     expect(p.takeOver).toEqual([]);
     expect(p.refused).toEqual([`${old} is on RP-448-workflow-core, not merged into origin/main yet.`]);
+  });
+
+  it("takes the project over from a clean worktree on a detached HEAD already in origin/main (RP-601)", () => {
+    const p = choice([wt({ branch: undefined, merged: true })]);
+    expect(p.takeOver.map((c) => c.name)).toEqual(["rabaed-lane3-db-1", "rabaed-lane3-files-1"]);
+    expect(p.from).toEqual([`${old} (a detached HEAD, merged into origin/main)`]);
+    expect(p.refused).toEqual([]);
+  });
+
+  it("refuses a detached HEAD that is not in origin/main, or has uncommitted changes, or a live lock (RP-601)", () => {
+    const unmerged = choice([wt({ branch: undefined, merged: false })]);
+    expect(unmerged.takeOver).toEqual([]);
+    expect(unmerged.refused).toEqual([`${old} is on a detached HEAD, not merged into origin/main yet.`]);
+    expect(choice([wt({ branch: undefined, dirty: true })]).refused).toEqual([`${old} is on a detached HEAD and has uncommitted changes.`]);
+    const locked = chooseTakeover(3, { containers, worktrees: [wt({ branch: undefined, locked: "claude agent x (pid 7)" })], cwd, pidRunning: (pid) => pid === 7, platform: "win32" });
+    expect(locked.refused).toEqual([`${old} is locked by a session that is still running (pid 7).`]);
   });
 
   it("takes over from a worktree that is gone, and refuses a folder that is not a worktree of this clone", () => {

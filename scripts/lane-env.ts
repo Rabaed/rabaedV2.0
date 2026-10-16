@@ -10,7 +10,7 @@
 // Docker Compose project (container + volume). Lane 0 keeps the defaults.
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
-// already uses, and names the holder, saying whether that worktree's branch is already merged
+// already uses, and names the holder, saying whether that worktree's branch (or detached HEAD, RP-601) is already merged
 // into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane, unless a worktree that is not
 // merged names the lane in its .env: prune keeps it, so that worktree is named instead). --free takes the next lane that is free instead,
 // preferring the same Main's lanes m1–m4. Legacy lane m and lane m0 clash with each other's containers, as they share ports.
@@ -98,10 +98,10 @@ const live = systemLiveness();
 
 /**
  * Whether a worktree is finished against origin/main (worktrees.ts isFinished, the rule lanes:prune,
- * worktrees:clean and worktrees:prune share; RP-585). Never the main checkout, a worktree on main or a detached HEAD.
+ * worktrees:clean and worktrees:prune share; RP-585), on a branch or a detached HEAD (RP-601). Never the main checkout or a worktree on main.
  */
 const verdictOf = (w: Worktree, mainRoot: string): Verdict =>
-  w.branch === undefined || w.branch === "main" || samePath(w.path, mainRoot) ? NOT_FINISHED : judgeWorktree(w, "origin/main", mainRoot, live);
+  w.branch === "main" || samePath(w.path, mainRoot) ? NOT_FINISHED : judgeWorktree(w, "origin/main", mainRoot, live);
 
 /** For each worktree holding lane n: whether its branch is merged into origin/main, and how to free the lane. */
 function holderStatus(lane: number): string[] {

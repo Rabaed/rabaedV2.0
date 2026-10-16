@@ -1,6 +1,6 @@
 // Removes the rabaed-* Docker Compose projects old worktrees left behind: those whose
 // worktree no longer exists, that are not running, or that only have volumes left.
-// With --merged, also those whose worktrees' branches are all merged into origin/main
+// With --merged, also those whose worktrees are all merged into origin/main (their branch, or a detached HEAD's commit, RP-601)
 // (as of the last fetch), unless a worktree that is not merged names the project in its .env.
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
@@ -51,7 +51,7 @@ if (withMerged) {
     .map((w, i) => ({
       path: w.path,
       branch: w.branch,
-      merged: i > 0 && w.branch !== undefined && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
+      merged: i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
       project: composeProjectOfEnv(readEnv(w.path) ?? ""),
     }));
   const known = new Set(stale.map((s) => s.project));

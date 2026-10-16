@@ -62,7 +62,7 @@ beforeAll(async () => {
   at = { projectId, c1ParticipantId, electrical, mechanical, buildingA, c1Engineer: hafiz, c1Pm: ali, k1Manager };
 });
 
-describe("only the holder edits the raiser's Form, on the Rabaed Default MAR (seam 1)", () => {
+describe("only the holder edits the raiser's Form, on the legacy MAR (seam 1)", () => {
   it("Omar, of the same Company, reads Hafiz's Draft but can't save it; Hafiz can", async () => {
     const id = await draft(at, hafiz, "Hafiz's Draft");
     expect((await detail(omar, id)).answers.manufacturer).toBe("ACME Cables");

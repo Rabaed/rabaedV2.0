@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseReservations, reservationsFile } from "./check-migrations-days.ts";
-import { composeProjectOfEnv } from "./lanes.ts";
+import { laneOf } from "./lanes.ts";
 import { migrationsDir } from "./migrations.ts";
 
 // `pnpm migration:new <name> --issue RP-nnn` (RP-583, from the RP-580 / RP-582
@@ -45,9 +45,6 @@ export const dayOfDate = (date: Date): string => date.toISOString().slice(0, 10)
 
 /** The calendar day after `day` (`yyyymmdd`). */
 export const nextDay = (day: string): string => dayOfDate(new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)) + 1)));
-
-/** The lane a .env's compose project names (`rabaed-lane5` → `5`); "" for any other. */
-export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(composeProjectOfEnv(env) ?? "")?.[1] ?? "";
 
 /** The text with `row` after its last table row (so text after the table stays after it); at the end when it has no table. */
 export function withRow(text: string, row: string): string {

@@ -1,6 +1,36 @@
 import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkReachable, hostAndPort, tcpReachable, unreachable, waitForMailpit } from "./test-services.ts";
+import { checkReachable, hostAndPort, postgresDown, postgresOfEnv, tcpReachable, unreachable, waitForMailpit } from "./test-services.ts";
+
+describe("postgresOfEnv", () => {
+  const lane5 = "COMPOSE_PROJECT_NAME=rabaed-lane5\nPOSTGRES_PORT=5932\nDATABASE_SUPERUSER_URL=postgres://postgres:pw@localhost:5932/postgres\n";
+
+  it("reads the lane and the superuser URL's host and port", () => {
+    expect(postgresOfEnv(lane5)).toEqual({ lane: "5", host: "localhost", port: 5932 });
+  });
+
+  it("falls back to POSTGRES_PORT on localhost without a superuser URL", () => {
+    expect(postgresOfEnv("COMPOSE_PROJECT_NAME=rabaed-lane3\nPOSTGRES_PORT=5732\n")).toEqual({ lane: "3", host: "localhost", port: 5732 });
+  });
+
+  it("has no lane for a project that is not a lane's", () => {
+    expect(postgresOfEnv("COMPOSE_PROJECT_NAME=rabaed\nPOSTGRES_PORT=5432\n")).toEqual({ lane: "", host: "localhost", port: 5432 });
+  });
+
+  it("finds nothing to check in an .env without either", () => {
+    expect(postgresOfEnv("PORT=3000\n")).toBeUndefined();
+  });
+});
+
+describe("postgresDown", () => {
+  it("names the lane, the port and the command to start it", () => {
+    expect(postgresDown({ lane: "5", port: 5932 })).toBe("Postgres for lane 5 (port 5932) is down: `docker compose up -d --wait db mailpit files`");
+  });
+
+  it("names this worktree when it has no lane", () => {
+    expect(postgresDown({ lane: "", port: 5432 })).toBe("Postgres for this worktree (port 5432) is down: `docker compose up -d --wait db mailpit files`");
+  });
+});
 
 describe("hostAndPort", () => {
   it("reads the host and port of a database or HTTP URL, with the scheme's default port", () => {
