@@ -141,14 +141,11 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
  */
 export function freeLaneOrder(start: number): number[] {
   const lanesAD = VALID_LANES.filter((n) => n >= 10 && n % 10 !== 0);
-  if (start < 10) {
-    const from = Math.max(start, 1) - 1;
-    return [...LEGACY_LANES.slice(from), ...LEGACY_LANES.slice(0, from), ...lanesAD];
-  }
+  const rotate = (lanes: number[], from: number) => [...lanes.slice(from), ...lanes.slice(0, from)];
+  if (start < 10) return [...rotate(LEGACY_LANES, Math.max(start, 1) - 1), ...lanesAD];
   const main = Math.floor(start / 10);
-  const from = Math.max(start % 10, 1) - 1;
   const own = lanesAD.filter((n) => Math.floor(n / 10) === main);
-  return [...own.slice(from), ...own.slice(0, from), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)];
+  return [...rotate(own, Math.max(start % 10, 1) - 1), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)];
 }
 
 /** The first lane in freeLaneOrder(start) with no clash. */
@@ -278,7 +275,7 @@ type AdviceInput = {
   hasOriginMain: boolean;
   cwd: string;
   /** The containers laneHolders looked at: a holder with only the twin lane's project is freed by pruning that lane. */
-  containers?: Container[];
+  containers: Container[];
   platform?: NodeJS.Platform;
 };
 
@@ -290,10 +287,10 @@ type AdviceInput = {
  * The line then names that worktree and does not suggest prune. A holder whose containers are
  * all the twin lane's (legacy m for m0, or m0 for m) is freed by pruning the twin (RP-605).
  */
-export function holderAdvice(n: number, holders: string[], { worktrees, hasOriginMain, cwd, containers = [], platform }: AdviceInput): string[] {
+export function holderAdvice(n: number, holders: string[], { worktrees, hasOriginMain, cwd, containers, platform }: AdviceInput): string[] {
+  const twin = twinLane(n);
   return holders.map((dir) => {
     const held = new Set(containers.filter((c) => samePath(c.workingDir, dir, platform)).map((c) => laneOfProject(c.project)));
-    const twin = twinLane(n);
     const lane = twin !== undefined && held.has(twin) && !held.has(n) ? twin : n;
     const claimants = worktrees.filter((w) => !w.merged && w.project === laneProject(lane));
     const w = worktrees.find((x) => samePath(x.path, dir, platform));
