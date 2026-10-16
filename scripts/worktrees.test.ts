@@ -89,10 +89,17 @@ describe("chooseWorktrees", () => {
 
   it("skips a merged worktree a desktop session holds, found by its path whatever its branch (RP-608)", () => {
     const held = wt("agent-held", { branch: "RP-602-renamed" });
-    const openSession = (path: string) => (path === held.path ? 'session "RP-602"' : undefined);
+    const openSession = (path: string) => (path === held.path ? { kind: "open" as const, session: 'session "RP-602"' } : undefined);
     const { remove, skipped } = chooseWorktrees({ worktrees: [held, wt("agent-free")], currentPath: here, platform: "linux", openSession, only: ["agent-held", "agent-free"] });
     expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
     expect(skipped.map((s) => s.reason)).toEqual(['its Claude desktop session is open (session "RP-602"); archive it first']);
+  });
+
+  it("skips every worktree when the desktop app's records cannot be read (RP-608)", () => {
+    const openSession = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list (x.json) could not be read" });
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-a")], currentPath: here, platform: "linux", openSession });
+    expect(remove).toEqual([]);
+    expect(skipped.map((s) => s.reason)).toEqual(["a Claude desktop session may hold it: Claude desktop's worktree list (x.json) could not be read"]);
   });
 
   it("skips and names a worktree with uncommitted changes", () => {

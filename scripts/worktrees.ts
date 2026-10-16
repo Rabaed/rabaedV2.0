@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
+import { openSessionReason, type DesktopSessions } from "./desktop-sessions.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { otherLiveSession, readCommandLines, readProcessList, sessionPidOf, type ProcessList } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
@@ -123,7 +124,7 @@ type ChooseInput = {
   /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
   only?: string[];
   /** The open Claude desktop session holding the worktree at a path, if any (desktop-sessions.ts, RP-608); it is never removed. */
-  openSession?: (path: string) => string | undefined;
+  openSession?: DesktopSessions;
   platform?: NodeJS.Platform;
 };
 
@@ -153,7 +154,7 @@ export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, 
     const reason = samePath(w.path, currentPath, platform)
       ? CURRENT_WORKTREE
       : session !== undefined
-        ? `its Claude desktop session is open (${session}); archive it first`
+        ? openSessionReason(session)
         : dirty
         ? "uncommitted changes"
         : ahead > 0

@@ -89,21 +89,17 @@ const here = currentRoot();
 const branches = localBranches(TARGET, mainRoot);
 const gone = new Set(branches.filter((b) => b.upstreamGone).map((b) => b.branch));
 const live = systemLiveness();
-const pruneFacts = (list: Worktree[]): PruneWorktree[] => {
-  // Read again each time: a session may open, or be archived, between listing and removing (RP-608).
-  const sessionAt = readDesktopSessions();
-  return gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
+const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
+  gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
     unpushed: unpushedCount(w.head, mainRoot),
     project: composeProjectOfEnv(readEnv(w.path) ?? ""),
-    desktopSession: sessionAt(w.path),
   }));
-};
 const worktrees = pruneFacts(listWorktrees(mainRoot));
 const containers = listContainers();
 const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readEnv(here) ?? "") };
-const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync });
+const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync, openSession: readDesktopSessions() });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
 const goesWithoutSaying = (reason: string) => reason === "the main checkout" || reason === CURRENT_WORKTREE;
@@ -146,8 +142,9 @@ const removedPaths: string[] = [];
 for (const w of chosen.remove) {
   // Checked again just before: never the main checkout or the current worktree.
   if (samePath(w.path, mainRoot) || samePath(w.path, here)) continue;
-  // Its uncommitted changes and unpushed commits too, which may have changed since the prompt.
-  const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)))[0]);
+  // Its uncommitted changes, unpushed commits and desktop session too, which may have changed
+  // since the prompt: the sessions are read again each time, as one may open meanwhile (RP-608).
+  const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)))[0], readDesktopSessions());
   if (changed) {
     console.log(`Kept ${name(w)}: ${changed}.`);
     continue;

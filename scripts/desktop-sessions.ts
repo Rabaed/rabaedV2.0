@@ -18,24 +18,58 @@ export function desktopAppDir(env: Record<string, string | undefined> = process.
   return join(env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "Claude");
 }
 
-type AppWorktree = { path: string; leasedBy: string | null };
+type AppWorktree = { path?: unknown; leasedBy?: unknown };
 type SessionRecord = { title?: string; isArchived?: boolean };
 
 /**
- * A lookup from a worktree path to the open desktop session holding it (`session "<title>"`),
- * or undefined when none does. A worktree leased by a session whose record is missing counts
- * as open. With no worktree list the app is not in use and nothing is held; when the list
- * cannot be read, every worktree is held, so nothing is removed on a guess.
+ * What holds a worktree: an open desktop session (`session "<title>"`, or its id when its
+ * record is missing), or, when the app's records cannot be read, an unknown one.
  */
-export function readDesktopSessions(appDir: string = desktopAppDir(), platform: NodeJS.Platform = process.platform): (path: string) => string | undefined {
+export type DesktopSession = { kind: "open"; session: string } | { kind: "unknown"; reason: string };
+
+/** A lookup from a worktree path to the desktop session holding it, or undefined when none does. */
+export type DesktopSessions = (path: string) => DesktopSession | undefined;
+
+/**
+ * Why a worktree a desktop session holds is skipped: when listing (the default), an open
+ * session also says to archive it first; `sinceListed` is for the check just before removal.
+ */
+export function openSessionReason(s: DesktopSession, { sinceListed = false }: { sinceListed?: boolean } = {}): string {
+  if (s.kind === "unknown") return `a Claude desktop session may hold it: ${s.reason}`;
+  return `its Claude desktop session is open (${s.session})${sinceListed ? "" : "; archive it first"}`;
+}
+
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+
+/** The app's worktree records, or undefined when the file is not in a shape this knows. */
+function appWorktrees(json: unknown): AppWorktree[] | undefined {
+  if (!isObject(json) || !isObject(json.worktrees)) return undefined;
+  const records = Object.values(json.worktrees);
+  if (!records.every((r) => isObject(r) && (typeof r.path === "string" || "leasedBy" in r))) return undefined;
+  return records as AppWorktree[];
+}
+
+/**
+ * A lookup from a worktree path to the open desktop session holding it, or undefined when
+ * none does. A worktree leased by a session whose record is missing counts as open. With no
+ * worktree list the app is not in use and nothing is held; when the list cannot be read or
+ * has a shape this does not know, every worktree is held (kind "unknown"), so nothing is
+ * removed on a guess.
+ */
+export function readDesktopSessions(appDir: string = desktopAppDir(), platform: NodeJS.Platform = process.platform): DesktopSessions {
   const file = join(appDir, "git-worktrees.json");
   if (!existsSync(file)) return () => undefined;
-  let worktrees: AppWorktree[];
+  let json: unknown;
   try {
-    const json = JSON.parse(readFileSync(file, "utf8")) as { worktrees?: Record<string, AppWorktree> };
-    worktrees = Object.values(json.worktrees ?? {});
+    json = JSON.parse(readFileSync(file, "utf8"));
   } catch {
-    return () => `unknown: Claude desktop's worktree list (${file}) could not be read`;
+    const unreadable: DesktopSession = { kind: "unknown", reason: `Claude desktop's worktree list (${file}) could not be read` };
+    return () => unreadable;
+  }
+  const worktrees = appWorktrees(json);
+  if (!worktrees) {
+    const unknownShape: DesktopSession = { kind: "unknown", reason: `Claude desktop's worktree list (${file}) has a shape this script does not know` };
+    return () => unknownShape;
   }
   const sessions = new Map<string, SessionRecord | undefined>();
   const sessionOf = (id: string) => {
@@ -45,9 +79,10 @@ export function readDesktopSessions(appDir: string = desktopAppDir(), platform: 
   return (path) => {
     const w = worktrees.find((x) => typeof x.path === "string" && samePath(x.path, path, platform));
     if (!w?.leasedBy) return undefined;
-    const s = sessionOf(w.leasedBy);
+    const id = String(w.leasedBy);
+    const s = sessionOf(id);
     if (s?.isArchived === true) return undefined;
-    return s?.title ? `session "${s.title}"` : `session ${w.leasedBy}`;
+    return { kind: "open", session: s?.title ? `session "${s.title}"` : `session ${id}` };
   };
 }
 

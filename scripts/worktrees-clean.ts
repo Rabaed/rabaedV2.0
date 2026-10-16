@@ -10,7 +10,8 @@
 // holding it, such a worktree is finished and goes, the same rule lane:env, lanes:prune
 // and worktrees:prune use (RP-585). Nor, even with --only, one an open Claude desktop
 // session holds by the app's own record of its path (desktop-sessions.ts, RP-608).
-// They are listed as skipped.
+// They are listed as skipped. The sessions are read again just before each removal,
+// and a worktree a session opened after the prompt is kept and named.
 //
 // It fetches origin first and checks against `origin/<branch>` when that exists, so a
 // stale local `main` no longer hides merged worktrees (RP-564); the local branch is
@@ -28,7 +29,7 @@
 // The default branch is main; --yes skips the confirmation.
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { readDesktopSessions } from "./desktop-sessions.ts";
+import { openSessionReason, readDesktopSessions, type DesktopSessions } from "./desktop-sessions.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
@@ -68,6 +69,16 @@ export function resolveTarget(target: string, git: TargetGit): { ref: string | u
   }
   if (ref !== undefined) lines.push(`Checking against ${ref}${why}.`);
   return { ref, lines };
+}
+
+/**
+ * Why a worktree chosen for removal stays after all: a desktop session holds it now, by
+ * the app's records read again just before removing it (a session may open one after the
+ * prompt, as in worktrees:prune's changedSinceListed); undefined when it still goes.
+ */
+export function openedSinceListed(path: string, openSession: DesktopSessions): string | undefined {
+  const session = openSession(path);
+  return session === undefined ? undefined : openSessionReason(session, { sinceListed: true });
 }
 
 const gitTarget = (cwd: string): TargetGit => ({
@@ -140,6 +151,12 @@ async function main(): Promise<void> {
 
   let failed = 0;
   for (const w of remove) {
+    // Read again just before each removal: a session may have opened it since the prompt (RP-608).
+    const opened = openedSinceListed(w.path, readDesktopSessions());
+    if (opened) {
+      console.log(`Kept ${name(w)}: ${opened}.`);
+      continue;
+    }
     try {
       if (reportRemoval(w.path, removeWorktree(w, mainRoot, target))) failed++;
     } catch (error) {
