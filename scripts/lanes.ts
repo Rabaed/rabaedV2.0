@@ -426,7 +426,22 @@ export function parsePruneArgs(args: string[]): { merged: boolean; yes: boolean;
   return options;
 }
 
-export type LaneEnvArgs = { lane: number; force: boolean; free: boolean; db: string | undefined };
+/** lanes:drop-dbs's options, or undefined for an unknown argument. --lane N limits it to lane N's Postgres, as lanes:prune --lane N does (RP-535). */
+export function parseDropDbsArgs(args: string[]): { yes: boolean; lane?: number } | undefined {
+  const options: { yes: boolean; lane?: number } = { yes: false };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--yes") options.yes = true;
+    else if (a === "--lane") {
+      const lane = Number(args[++i]);
+      if (!isValidLane(lane)) return undefined;
+      options.lane = lane;
+    } else return undefined;
+  }
+  return options;
+}
+
+export type LaneEnvArgs ={ lane: number; force: boolean; free: boolean; db: string | undefined };
 
 const LANE_ENV_USAGE = "Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (one lane per worktree; suffix: lowercase letters and digits, e.g. rp322)";
 
@@ -581,8 +596,9 @@ export function parseConnections(lines: string[]): Map<string, number> {
   return new Map(lines.map((line) => line.split("|")).map(([name = "", count = "0"]) => [name, Number(count)] as const));
 }
 
-/** The `db` service containers of the running rabaed-* compose projects. */
-export const dbContainers = (containers: Container[]): Container[] => containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name));
+/** The `db` service containers of the running rabaed-* compose projects; with lane, only that lane's project (lanes:drop-dbs --lane N, RP-535). */
+export const dbContainers = (containers: Container[], lane?: number): Container[] =>
+  containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name) && (lane === undefined || c.project === laneProject(lane)));
 
 /** Runs SQL as the superuser inside a db container and returns one value per line. */
 export function psql(container: string, sql: string): string[] {
