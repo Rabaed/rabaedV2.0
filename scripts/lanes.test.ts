@@ -23,6 +23,8 @@ import {
   parseConnections,
   parseContainers,
   parseLaneEnvArgs,
+  dbContainers,
+  parseDropDbsArgs,
   parsePruneArgs,
   parseVolumes,
   chooseTakeover,
@@ -762,6 +764,39 @@ describe("parsePruneArgs", () => {
     expect(parsePruneArgs(["--lane", "15"])).toBeUndefined();
     expect(parsePruneArgs(["--lane", "32"])).toEqual({ merged: false, yes: false, dryRun: false, lane: 32 });
     expect(parsePruneArgs(["--lane", "x"])).toBeUndefined();
+  });
+});
+
+describe("parseDropDbsArgs (RP-535)", () => {
+  it("reads --yes and --lane N, like lanes:prune", () => {
+    expect(parseDropDbsArgs([])).toEqual({ yes: false });
+    expect(parseDropDbsArgs(["--lane", "5", "--yes"])).toEqual({ yes: true, lane: 5 });
+    expect(parseDropDbsArgs(["--lane", "32"])).toEqual({ yes: false, lane: 32 });
+  });
+
+  it("rejects anything else, and a number that is not a lane", () => {
+    expect(parseDropDbsArgs(["--merged"])).toBeUndefined();
+    expect(parseDropDbsArgs(["--lane"])).toBeUndefined();
+    expect(parseDropDbsArgs(["--lane", "15"])).toBeUndefined();
+    expect(parseDropDbsArgs(["--lane", "x"])).toBeUndefined();
+  });
+});
+
+describe("dbContainers", () => {
+  const all = [
+    container({ name: "rabaed-lane5-db-1", project: "rabaed-lane5" }),
+    container({ name: "rabaed-lane5-mailpit-1", project: "rabaed-lane5" }),
+    container({ name: "rabaed-lane7-db-1", project: "rabaed-lane7" }),
+    container({ name: "rabaed-lane8-db-1", project: "rabaed-lane8", state: "exited" }),
+  ];
+
+  it("takes the running db containers of every rabaed-* project", () => {
+    expect(dbContainers(all).map((c) => c.name)).toEqual(["rabaed-lane5-db-1", "rabaed-lane7-db-1"]);
+  });
+
+  it("with a lane, takes only that lane's: --lane 5 leaves lane 7's databases alone (RP-535)", () => {
+    expect(dbContainers(all, 5).map((c) => c.name)).toEqual(["rabaed-lane5-db-1"]);
+    expect(dbContainers(all, 9)).toEqual([]);
   });
 });
 

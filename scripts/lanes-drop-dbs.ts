@@ -6,18 +6,23 @@
 // open connection, and drops without force: a connection that opens meanwhile makes the
 // drop fail instead of being cut. Never rabaed or rabaed_test.
 //
-//   pnpm lanes:drop-dbs [--yes]     --yes skips the confirmation
+//   pnpm lanes:drop-dbs [--lane N] [--yes]     --yes skips the confirmation
+//
+// --lane N limits the candidates to lane N's Postgres (rabaed-laneN-db-1), with the same
+// confirmation and the same keep rules, so a spec's session drops only its own lane's
+// databases, not another session's on another lane (RP-535; as lanes:prune --lane N, RP-505).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { databasesInUse, dbContainers, dropOrKeep, listContainers, orphanDatabases, parseConnections, psql } from "./lanes.ts";
+import { databasesInUse, dbContainers, dropOrKeep, LANE_SCHEME, laneProject, listContainers, orphanDatabases, parseConnections, parseDropDbsArgs, psql } from "./lanes.ts";
 import { listWorktrees } from "./worktrees.ts";
 
-const args = process.argv.slice(2);
-if (args.some((a) => a !== "--yes")) {
-  console.error("Usage: pnpm lanes:drop-dbs [--yes]");
+const options = parseDropDbsArgs(process.argv.slice(2));
+if (!options) {
+  console.error(`Usage: pnpm lanes:drop-dbs [--lane N] [--yes]   (--lane N: only rabaed-laneN's Postgres; ${LANE_SCHEME})`);
   process.exit(1);
 }
+const { lane } = options;
 
 const containers = listContainers();
 if (!containers) {
@@ -34,7 +39,12 @@ const readEnv = (dir: string) => {
 };
 const inUse = databasesInUse([...worktrees, process.cwd()], readEnv);
 
-const found = dbContainers(containers)
+const postgres = dbContainers(containers, lane);
+if (lane !== undefined && postgres.length === 0) {
+  console.log(`No running Postgres for lane ${lane} (${laneProject(lane)}-db-1); nothing to drop.`);
+  process.exit(0);
+}
+const found = postgres
   .map((c) => {
     const orphans = orphanDatabases(psql(c.name, "select datname from pg_database where datname like 'rabaed\\_%'"), inUse);
     const connections = parseConnections(psql(c.name, "select datname, count(*) from pg_stat_activity where datname like 'rabaed\\_%' group by datname"));
@@ -48,13 +58,13 @@ for (const o of found.filter((f) => f.busy.length > 0)) {
 }
 const toDrop = found.filter((o) => o.drop.length > 0);
 if (toDrop.length === 0) {
-  console.log("No databases to drop.");
+  console.log(lane === undefined ? "No databases to drop." : `No databases to drop in lane ${lane}.`);
   process.exit(0);
 }
 console.log("Databases of worktrees that no longer exist:");
 for (const o of toDrop) console.log(`  ${o.container}: ${o.drop.join(", ")}`);
 
-await confirmOrExit("Drop them? Their data is lost.", { yes: args.includes("--yes"), verb: "drop", done: "dropped" });
+await confirmOrExit("Drop them? Their data is lost.", { yes: options.yes, verb: "drop", done: "dropped" });
 
 let failed = 0;
 for (const o of toDrop) {
