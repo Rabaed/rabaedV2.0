@@ -19,6 +19,7 @@ const wt = (path: string, w: Partial<PruneWorktree> = {}): PruneWorktree => ({
   upstreamGone: false,
   unpushed: 0,
   project: undefined,
+  desktopSession: undefined,
   ...w,
 });
 const mainCheckout = wt(main, { branch: "main", project: "rabaed" });
@@ -128,6 +129,14 @@ describe("choosePrune", () => {
     expect(reasons(p)[2]?.[1]).toBe("its Claude desktop session is open (claude session RP-8-c (pid 42668)); archive it first");
   });
 
+  it("skips a merged desktop-app worktree whose session is open after its branch was renamed (RP-608)", () => {
+    // The app does not lock its own worktrees: the open session is known by the worktree's path only.
+    const renamed = wt(`${main}/.claude/worktrees/brave-elion-4e1430`, { branch: "RP-602-lane-numbers", upstreamGone: true, desktopSession: 'session "Build RP-602"' });
+    const p = choose([renamed]);
+    expect(p.remove).toEqual([]);
+    expect(reasons(p)[2]).toEqual([renamed.path, 'its Claude desktop session is open (session "Build RP-602"); archive it first']);
+  });
+
   it("skips a worktree on main and one locked by hand", () => {
     const p = choose([wt("/w/on-main", { branch: "main" }), wt("/w/locked", { locked: "keep" })]);
     expect(p.remove).toEqual([]);
@@ -191,5 +200,6 @@ describe("changedSinceListed", () => {
     expect(changedSinceListed(wt("/w/done", { dirty: true }))).toBe("uncommitted changes since it was listed");
     expect(changedSinceListed(wt("/w/done", { unpushed: 1 }))).toBe("1 commit on no origin branch since it was listed");
     expect(changedSinceListed(undefined)).toBe("no longer a worktree");
+    expect(changedSinceListed(wt("/w/done", { desktopSession: 'session "RP-9"' }))).toBe('its Claude desktop session is open (session "RP-9")');
   });
 });

@@ -16,6 +16,11 @@ export type PruneWorktree = WorktreeFacts & {
   unpushed: number;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project: string | undefined;
+  /**
+   * The open Claude desktop session whose worktree this is, found by path in the app's own
+   * records (desktop-sessions.ts, RP-608): the app does not lock its worktrees with git.
+   */
+  desktopSession: string | undefined;
 };
 
 export type DockerState = {
@@ -98,6 +103,7 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
  */
 export function changedSinceListed(now: PruneWorktree | undefined): string | undefined {
   if (!now) return "no longer a worktree";
+  if (now.desktopSession !== undefined) return `its Claude desktop session is open (${now.desktopSession})`;
   if (now.dirty) return "uncommitted changes since it was listed";
   if (now.unpushed > 0) return `${plural(now.unpushed, "commit")} on no origin branch since it was listed`;
   return undefined;
@@ -109,6 +115,7 @@ function skipReason(w: PruneWorktree, mainRoot: string, currentPath: string, pla
   if (samePath(w.path, currentPath, platform)) return CURRENT_WORKTREE;
   if (w.branch === "main") return "on main";
   if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return `its Claude desktop session is open (${w.locked}); archive it first`;
+  if (w.desktopSession !== undefined) return `its Claude desktop session is open (${w.desktopSession}); archive it first`;
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
   if (w.dirty) return "uncommitted changes";
   if (w.unpushed > 0) return `${plural(w.unpushed, "commit")} on no origin branch`;

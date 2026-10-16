@@ -122,6 +122,8 @@ type ChooseInput = {
   includeEmpty?: boolean;
   /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
   only?: string[];
+  /** The open Claude desktop session holding the worktree at a path, if any (desktop-sessions.ts, RP-608); it is never removed. */
+  openSession?: (path: string) => string | undefined;
   platform?: NodeJS.Platform;
 };
 
@@ -140,16 +142,19 @@ export const isNamed = (path: string, names: string[], platform?: NodeJS.Platfor
  * have uncommitted changes. Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, openSession, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
   for (const { ahead, dirty, noCommitsYet, lockLive, heldByProcess, ...w } of worktrees) {
     if (only && !isNamed(w.path, only, platform)) continue;
     const starting = stillStarting({ noCommitsYet, dirty, lockLive, heldByProcess });
+    const session = openSession?.(w.path);
     const reason = samePath(w.path, currentPath, platform)
       ? CURRENT_WORKTREE
-      : dirty
+      : session !== undefined
+        ? `its Claude desktop session is open (${session}); archive it first`
+        : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
