@@ -400,11 +400,11 @@ _Avoid_: Seal (the record's digital seal), company signature
 
 **Documental Record**:
 The sealed PDF produced when a Work Item closes, whatever its outcome (approved, issued, Code C or D, Failed, Cancelled): its Form content, the shared replies and Remarks, the Signature of everyone who acted on its path with their Companies' Stamps, and its Documents as an appendix, in one file nobody can change without it showing (ADR 0023). It is made from the item's Record Data. Internal Communication and Chat are left out. Everyone who can see the closed item may download it, and Signatory Access keeps it for those who signed. It is printed in Arabic, English or both, as the Project's settings choose.
-_Avoid_: Output, report, printout, export
+_Avoid_: Output, report, printout
 
 **Record Data**:
 The data file written when a Work Item closes, holding exactly what its Documental Record prints and nothing more. The record is made from it and carries it inside, and can be made again from it; it never changes.
-_Avoid_: XML export, metadata
+_Avoid_: Transaction file, data dump
 
 **Verification Code**:
 The code printed on a Documental Record, under its QR and in its footer, that opens the record's public verification page: whether it is genuine, its Document Number, Subject, Project, outcome, date and signers, and a check of a copy against the original. Typing it needs the Document Number too.
@@ -412,11 +412,11 @@ _Avoid_: Reference number, serial
 
 **Working Copy**:
 A PDF of a Work Item that isn't closed, made on request for anyone who can see it: the item as shared, Companies named but not their people, no Signatures, no Verification Code, unsealed, and watermarked with the Project's text ("Not Final / غير نهائي" unless the Project Admin changes it).
-_Avoid_: Draft (an item never sent), preview, Documental Record
+_Avoid_: Draft (an item never sent), print copy
 
 **Disclaimer**:
 Fixed text a Form carries, in Arabic and English, printed at the end of every Documental Record made with it. Rabaed Defaults come with one; a Company may change it in its own Forms.
-_Avoid_: Footer note, terms
+_Avoid_: Footer note, legal note
 
 **PDF Template**:
 The one Rabaed layout every Documental Record and Working Copy is printed with. What differs between Work Item Types is their Forms' fields, never the layout.
