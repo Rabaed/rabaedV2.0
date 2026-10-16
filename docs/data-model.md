@@ -2,6 +2,24 @@
 
 The logical data model for the platform and the Project Module, in PostgreSQL terms. Names follow [GLOSSARY.md](../GLOSSARY.md). Schedule, Tendering and Financial are out of scope. Each Instance (standard / KSA) runs this same schema independently.
 
+## Contents
+
+Don't read this doc whole: find your heading with `grep -n '^#' docs/data-model.md`, then Read from that line with offset and limit; for one table, grep its name (`grep -n '\*\*work_item\*\*' docs/data-model.md`). `scripts/doc-index.test.ts` keeps this list in step with the headings.
+
+- **Conventions**: read when you add any table or column: random ids, bilingual `i18n` values, the Library levels, no hard deletes, finding an `app.*` function's current body.
+- **Core relationships**: read when you need the diagram of how the main tables relate.
+- **1. Platform and tenancy**: read when you touch Companies, Members, or the row-level security every table has.
+- **2. Projects and participation**: read when you work on Projects, Participants or Project Members.
+- **3. Visibility, Trades, Locations, Scopes**: read when you work on Visibility Dimensions and what a Member's Visibility covers.
+- **4. Engines: Forms, Workflows, Work Item Types**: read when you touch the tables behind Modules, Stages, Forms, Workflows and Work Item Types.
+- **5. Work Items**: read when you touch the `work_item` table or what hangs off it.
+- **6. Documents, signing, Documental Records, distribution**: read when you work on stored files, signatures, Documental Records or Distribution Lists.
+- **7. Drawings, Markups, Pins**: read when you work on Drawings and what is drawn on them.
+- **8. Files, Approved Suppliers, reports**: read when you work on the Files Module, the Approved Supplier List or reports.
+- **9. Audit trail, notifications, admin**: read when you touch `work_item_event`, notifications or `admin_action`.
+- **10. Access rules that cut across tables**: read when you need the full rule for seeing a Work Item, a file or an event.
+- **Settled points**: read when you hit a settled edge case: oversight, Snags assigned to a Contractor, and others.
+
 ## Conventions
 
 - **IDs** are random UUIDv4 in every table: safe to expose, because they carry no time, and nothing to enumerate. Not UUIDv7, whose creation time would reveal when a Draft was started ([ADR 0015](adr/0015-random-ids-not-uuidv7.md)).
