@@ -75,6 +75,13 @@ describe("overHttp", () => {
     expect(urls).toEqual(["https://api.github.com/repos/o/r/pulls/9/files?per_page=100&page=1", "https://api.github.com/repos/o/r/pulls/9/files?per_page=100&page=2"]);
   });
 
+  it("counts a renamed file's old path too, so x.ts renamed to x.md is not docs-only", async () => {
+    const { github } = recorded(() => ({ status: 200, body: [{ filename: "x.md", previous_filename: "x.ts" }, { filename: "docs/a.md" }] }));
+    const files = await github.files(9);
+    expect(files).toEqual(["x.md", "x.ts", "docs/a.md"]);
+    expect(reviewGate(["docs-only"], files).ok).toBe(false);
+  });
+
   it("lists the reviewed-label runs of a head, and undefined when the workflow is not there", async () => {
     const { urls, github } = recorded(() => ({ status: 200, body: { workflow_runs: [{ status: "queued" }] } }));
     expect(await github.labelRuns("abc")).toEqual([{ status: "queued" }]);

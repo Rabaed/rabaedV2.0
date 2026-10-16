@@ -260,7 +260,8 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     pullRequest: (pr) => JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "id,headRefOid,headRefName"])) as { id: string; headRefOid: string; headRefName: string },
     mergeTree: (commit) => run("git", ["merge-tree", "--write-tree", "origin/main", commit]),
     changedFiles: (commit) =>
-      must("git", ["diff", "--name-only", `origin/main...${commit}`])
+      // --no-renames lists a rename's old path too, so code renamed to .md is not a docs-only change (RP-606).
+      must("git", ["diff", "--name-only", "--no-renames", `origin/main...${commit}`])
         .split("\n")
         .filter(Boolean),
     packageJsonVersions: (commit, file) => {

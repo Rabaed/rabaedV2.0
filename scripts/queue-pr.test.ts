@@ -1,4 +1,7 @@
-import type { spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { queuePr, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
 
@@ -445,6 +448,29 @@ describe("realSeam", () => {
     expect(calls[0]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
     expect(calls[1]?.args[0]).toMatch(/check-migrations-immutable\.ts$/);
     expect(calls[1]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
+  });
+
+  it("lists both paths of a renamed file, so x.ts renamed to x.md is not a docs-only change (RP-606)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "queue-rename-"));
+    try {
+      const git = (...args: string[]) => {
+        const done = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: dir, encoding: "utf8" });
+        if (done.status !== 0) throw new Error(done.stderr);
+        return done.stdout.trim();
+      };
+      git("init", "-q");
+      writeFileSync(join(dir, "x.ts"), "export const a = 1;\nexport const b = 2;\nexport const c = 3;\n");
+      git("add", ".");
+      git("commit", "-q", "-m", "main");
+      git("update-ref", "refs/remotes/origin/main", "HEAD");
+      git("mv", "x.ts", "x.md");
+      git("commit", "-q", "-m", "rename");
+      const files = realSeam(dir).changedFiles(git("rev-parse", "HEAD"));
+      expect(files.sort()).toEqual(["x.md", "x.ts"]);
+      expect(queuePr(149, fakeSeam({ labels: () => ["docs-only"], changedFiles: () => files }).seam).ok).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("reads the PR's label names through gh pr view", () => {

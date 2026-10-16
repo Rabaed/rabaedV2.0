@@ -63,8 +63,12 @@ export interface RequiredResult {
 }
 
 export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, options: { pollMs?: number; timeoutMs?: number } = {}): Promise<RequiredResult> {
-  const pr = event.kind === "merge_group" ? queuedPrNumber(event.headRef) : event.pr;
-  if (pr === undefined) return { ok: false, summary: `The merge queue ref ${event.kind === "merge_group" ? event.headRef : ""} names no PR (expected gh-readonly-queue/<branch>/pr-<n>-<sha>).` };
+  let pr: number;
+  if (event.kind === "merge_group") {
+    const queued = queuedPrNumber(event.headRef);
+    if (queued === undefined) return { ok: false, summary: `The merge queue ref ${event.headRef} names no PR (expected gh-readonly-queue/<branch>/pr-<n>-<sha>).` };
+    pr = queued;
+  } else pr = event.pr;
   // On a PR, the reviewed-label run for this head may still be about to remove the label. It removes
   // it with GITHUB_TOKEN, which starts no `unlabeled` run, so this run waits and reads what it left.
   // A fork's PR gets no such run. In the queue the head cannot change, so there is nothing to wait for.
@@ -130,8 +134,9 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       const files: string[] = [];
       // 30 pages of 100 is the API's 3000-file limit.
       for (let page = 1; page <= 30; page++) {
-        const batch = (await get(`pulls/${pr}/files?per_page=100&page=${page}`)) as { filename: string }[];
-        files.push(...batch.map((file) => file.filename));
+        const batch = (await get(`pulls/${pr}/files?per_page=100&page=${page}`)) as { filename: string; previous_filename?: string }[];
+        // A rename's old path counts too: code renamed to .md is still a code change.
+        files.push(...batch.flatMap((file) => (file.previous_filename ? [file.filename, file.previous_filename] : [file.filename])));
         if (batch.length < 100) break;
       }
       return files;
