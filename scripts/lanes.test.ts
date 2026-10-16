@@ -605,6 +605,12 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     expect(p.refused).toEqual([]);
   });
 
+  it("takes the project over from a finished worktree never committed to, and says why it counts (RP-585)", () => {
+    const p = choice([wt({ branch: "RP-555-review-fixes", neverCommitted: true })]);
+    expect(p.takeOver).toHaveLength(2);
+    expect(p.from).toEqual([`${old} (RP-555-review-fixes, never committed to: its tip is in origin/main, it is clean and unlocked, and no process holds it)`]);
+  });
+
   it("refuses a worktree with uncommitted changes", () => {
     const p = choice([wt({ dirty: true })]);
     expect(p.takeOver).toEqual([]);

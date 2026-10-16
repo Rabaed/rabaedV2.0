@@ -205,7 +205,7 @@ export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(compose
 export type WorktreeLane = {
   path: string;
   branch: string | undefined;
-  /** Its branch, or its detached HEAD's commit, is merged into origin/main (worktrees.ts worktreeMerged). */
+  /** It is finished against origin/main: its branch, or its detached HEAD (RP-601), by worktrees.ts isFinished (merged, or never committed to and nothing holds it). */
   merged: boolean;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project: string | undefined;
@@ -310,8 +310,10 @@ export function holderAdvice(n: number, holders: string[], { worktrees, hasOrigi
 export type TakeoverWorktree = {
   path: string;
   branch: string | undefined;
-  /** Its branch, or its detached HEAD's commit, is merged into origin/main (worktrees.ts worktreeMerged). */
+  /** It is finished against origin/main: its branch, or its detached HEAD (RP-601), by worktrees.ts isFinished. */
   merged: boolean;
+  /** Finished although its branch has had no commit of its own (RP-585); the takeover line says why it counts. */
+  neverCommitted?: boolean;
   /** Uncommitted changes, untracked files outside ignored paths included. */
   dirty: boolean;
   /** Why git status could not be read; the worktree then counts as having uncommitted changes. */
@@ -330,7 +332,7 @@ type TakeoverInput = {
   cwd: string;
   /** Whether a folder exists; decides for a holder git does not list (default: none does, so it is gone). */
   exists?: (dir: string) => boolean;
-  /** Whether a process with the pid runs (default: none does). */
+  /** Whether the pid is another session that still runs (lane:env: worktrees.ts systemLiveness().pidLive, RP-585; default: none is). */
   pidRunning?: (pid: number) => boolean;
   platform?: NodeJS.Platform;
 };
@@ -367,6 +369,7 @@ export function chooseTakeover(
     else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
     else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
     else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);
+    else if (w.neverCommitted) from.push(`${dir} (${on}, never committed to: its tip is in origin/main, it is clean and unlocked, and no process holds it)`);
     else from.push(`${dir} (${on}, merged into origin/main)`);
   }
   if (mine.length > 0) {

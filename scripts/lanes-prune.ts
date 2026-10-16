@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { composeProjectOfEnv, LANE_SCHEME, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
-import { listWorktrees, refExists, worktreeMerged } from "./worktrees.ts";
+import { judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
 if (!options) {
@@ -43,13 +43,15 @@ if (withMerged) {
     console.error("origin/main not found: run `git fetch origin main` and re-run.");
     process.exit(1);
   }
-  // The main folder, and any worktree on main itself, always keeps its lane.
+  // The main folder, and any worktree on main itself, always keeps its lane. Merged is the finished rule
+  // lane:env, worktrees:clean and worktrees:prune share (worktrees.ts isFinished, RP-585).
+  const live = systemLiveness();
   const worktrees: WorktreeLane[] = all
     .filter((w) => existsSync(w.path))
     .map((w, i) => ({
       path: w.path,
       branch: w.branch,
-      merged: i > 0 && worktreeMerged(w, "origin/main", mainRoot),
+      merged: i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
       project: composeProjectOfEnv(readEnv(w.path) ?? ""),
     }));
   const known = new Set(stale.map((s) => s.project));

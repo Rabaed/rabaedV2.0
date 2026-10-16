@@ -5,8 +5,10 @@
 // target, whichever branch the main folder has checked out; otherwise it is kept and
 // named), plus the `worktree-agent-*` branch the app created it on. Worktrees with
 // uncommitted changes or unmerged commits are never touched, nor, without
-// --include-empty, those whose branch has no commit of its own yet: their subagent
-// may still be running. They are listed as skipped.
+// --include-empty, those whose branch has no commit of its own yet while a live lock or
+// a running process still holds them: their subagent may still be running. With nothing
+// holding it, such a worktree is finished and goes, the same rule lane:env, lanes:prune
+// and worktrees:prune use (RP-585). They are listed as skipped.
 //
 // It fetches origin first and checks against `origin/<branch>` when that exists, so a
 // stale local `main` no longer hides merged worktrees (RP-564); the local branch is
@@ -25,7 +27,7 @@
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
-import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
+import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
 /** The git queries resolveTarget needs; injected so tests run without a repository. */
 export interface TargetGit {
@@ -112,7 +114,7 @@ async function main(): Promise<void> {
   for (const n of only ?? []) {
     if (!agentWorktrees.some((w) => isNamed(w.path, [n]))) console.log(`Not an agent worktree here, ignored: ${n}`);
   }
-  const agents = gatherFacts(agentWorktrees, target, mainRoot);
+  const agents = gatherFacts(agentWorktrees, target, mainRoot, systemLiveness());
   const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty, only });
 
   const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;

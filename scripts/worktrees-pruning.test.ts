@@ -14,6 +14,8 @@ const wt = (path: string, w: Partial<PruneWorktree> = {}): PruneWorktree => ({
   ahead: 0,
   dirty: false,
   noCommitsYet: false,
+  lockLive: false,
+  heldByProcess: false,
   upstreamGone: false,
   unpushed: 0,
   project: undefined,
@@ -79,15 +81,22 @@ describe("choosePrune", () => {
       wt("/w/dirty", { dirty: true }),
       wt("/w/unpushed", { unpushed: 2, ahead: 2 }),
       wt("/w/open", { ahead: 1 }),
-      wt("/w/fresh", { noCommitsYet: true }),
+      wt("/w/fresh", { noCommitsYet: true, lockLive: true }),
+      wt("/w/served", { noCommitsYet: true, heldByProcess: true }),
     ]);
     expect(p.remove).toEqual([]);
     expect(reasons(p).slice(2)).toEqual([
       ["/w/dirty", "uncommitted changes"],
       ["/w/unpushed", "2 commits on no origin branch"],
       ["/w/open", "1 commit not in origin/main"],
-      ["/w/fresh", "no commits yet, may still be running"],
+      ["/w/fresh", "no commits yet, may still be running (locked by a running session)"],
+      ["/w/served", "no commits yet, may still be running (a running process holds its folder)"],
     ]);
+  });
+
+  it("removes a worktree never committed to once nothing holds it (RP-585)", () => {
+    const p = choose([wt(`${main}/.claude/worktrees/agent-paused`, { branch: "RP-555-review-fixes", noCommitsYet: true })]);
+    expect(p.remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-paused`]);
   });
 
   it("puts uncommitted changes first, even on a merged worktree whose upstream is gone", () => {

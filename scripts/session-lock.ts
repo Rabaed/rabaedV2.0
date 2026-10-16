@@ -76,6 +76,18 @@ function isClaude(pid: number, processes: ProcessList): boolean {
   return /^claude(\.exe)?$/i.test(processes.nameOf(pid) ?? "");
 }
 
+/**
+ * RP-585: whether a lock naming pid belongs to another live Claude session: the pid is a running `claude`
+ * process (pids are reused) and is neither this session (sessionPid, CLAUDE_PID) nor one of ownPid's
+ * ancestors. The app locks a subagent's worktree with its parent session's pid, so a session's own
+ * paused subagents do not hold their worktrees against that session.
+ */
+export function otherLiveSession(pid: number, ownPid: number, processes: ProcessList, sessionPid?: number): boolean {
+  if (!processes.isAlive(pid) || !isClaude(pid, processes) || pid === sessionPid) return false;
+  for (const p of ancestors(ownPid, processes)) if (p === pid) return false;
+  return true;
+}
+
 /** The pid listening on a TCP port, or undefined when none is found or it cannot be read. */
 export function listeningPid(port: number): number | undefined {
   try {
@@ -101,6 +113,15 @@ export function parseProcessTable(out: string): ProcessList {
     if (m[3]) names.set(Number(m[1]), m[3].replace(/^.*[\\/]/, ""));
   }
   return { parentOf: (pid) => parents.get(pid), nameOf: (pid) => names.get(pid), isAlive: (pid) => parents.has(pid) };
+}
+
+/** Every running process's command line (RP-585: whether one holds a worktree's folder). Throws when they cannot be read. */
+export function readCommandLines(): string[] {
+  const out =
+    process.platform === "win32"
+      ? execFileSync("powershell.exe", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine }"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 })
+      : execFileSync("ps", ["-A", "-o", "args="], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+  return out.split(/\r?\n/).filter((line) => line.trim() !== "");
 }
 
 /** The running processes: `ps` on Unix, PowerShell's Win32_Process on Windows. Throws when they cannot be read (lane:env then warns and goes on). */

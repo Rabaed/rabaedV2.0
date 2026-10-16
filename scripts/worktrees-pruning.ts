@@ -1,6 +1,6 @@
 import { mergedProjects, staleProjects, type Container, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { CURRENT_WORKTREE, lockedByApp, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
+import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
 // merged into origin/main, with its rabaed-* compose project and branch, then the
@@ -65,8 +65,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * Which worktrees, branches and compose projects to remove. A worktree goes when it is
- * merged: all its commits are in origin/main and its branch has had one of its own, or
- * its upstream is gone (desktop-app worktrees need the former). Never the main checkout,
+ * finished (worktrees.ts isFinished: all its commits are in origin/main, and its branch
+ * has had one of its own or nothing holds it), or its upstream is gone (desktop-app
+ * worktrees need the former). Never the main checkout,
  * the current worktree, one on `main`, one locked by hand, or one with uncommitted
  * changes or commits on no origin branch (so a squash-merged worktree whose remote
  * branch was deleted stays); those are skipped with their reason.
@@ -111,9 +112,9 @@ function skipReason(w: PruneWorktree, mainRoot: string, currentPath: string, pla
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
   if (w.dirty) return "uncommitted changes";
   if (w.unpushed > 0) return `${plural(w.unpushed, "commit")} on no origin branch`;
-  const merged = (w.ahead === 0 && !w.noCommitsYet) || (w.upstreamGone && !isAppWorktree(w.path, mainRoot, platform));
+  const merged = isFinished(w) || (w.upstreamGone && !isAppWorktree(w.path, mainRoot, platform));
   if (merged) return undefined;
-  return w.ahead > 0 ? `${plural(w.ahead, "commit")} not in origin/main` : "no commits yet, may still be running";
+  return w.ahead > 0 ? `${plural(w.ahead, "commit")} not in origin/main` : `no commits yet, may still be running (${stillStarting(w)})`;
 }
 
 type ProjectsInput = {

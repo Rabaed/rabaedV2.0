@@ -2,6 +2,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { normalPath, samePath } from "./paths.ts";
+import { otherLiveSession, readCommandLines, readProcessList, sessionPidOf, type ProcessList } from "./session-lock.ts";
+import { lockPid } from "./worktrees-stale.ts";
 
 // Cleaning up the app-made agent worktrees `/implement-spec` leaves under
 // .claude/worktrees/agent-* (RP-326, planning/parallel-sessions.md). On Windows
@@ -31,7 +33,44 @@ export type WorktreeFacts = Worktree & {
    * nothing tracked changed, and the app's lock names the parent session's pid.
    */
   noCommitsYet: boolean;
+  /**
+   * Its lock names a running Claude session or agent, or names no pid at all (Liveness.lockLive).
+   * Looked up only while it has no commits yet and nothing ahead; false otherwise.
+   */
+  lockLive: boolean;
+  /** A running process holds its folder, such as its dev server (Liveness.heldByProcess). Looked up as lockLive is. */
+  heldByProcess: boolean;
 };
+
+/** The running sessions and processes a worktree with no commits yet is checked against (RP-585); injected so tests need none. */
+export type Liveness = {
+  /** Whether the lock reason names a running Claude session or agent, or names no pid (a lock by hand). */
+  lockLive: (locked: string | undefined) => boolean;
+  /** Whether a running process's command line names a file in the folder. */
+  heldByProcess: (path: string) => boolean;
+};
+
+/**
+ * Why a worktree whose branch has had no commit of its own may still be starting
+ * (its session or subagent may be about to write code); undefined when it has had one,
+ * or when nothing holds it: clean, no live lock, and no running process in its folder.
+ */
+export function stillStarting(f: Pick<WorktreeFacts, "noCommitsYet" | "dirty" | "lockLive" | "heldByProcess">): string | undefined {
+  if (!f.noCommitsYet) return undefined;
+  if (f.dirty) return "uncommitted changes";
+  if (f.lockLive) return "locked by a running session";
+  if (f.heldByProcess) return "a running process holds its folder";
+  return undefined;
+}
+
+/**
+ * The one "finished worktree" rule (RP-585) of lane:env, lanes:prune, worktrees:clean and
+ * worktrees:prune: its tip is in the target (nothing ahead), and either its branch has had a
+ * commit of its own, or it has none and nothing holds it (stillStarting). A branch created on
+ * an already merged commit and never committed to is then finished once its session is gone.
+ */
+export const isFinished = (f: Pick<WorktreeFacts, "ahead" | "noCommitsYet" | "dirty" | "lockLive" | "heldByProcess">): boolean =>
+  f.ahead === 0 && stillStarting(f) === undefined;
 
 /**
  * Whether a reflog (its entries' subjects, `git reflog --format=%gs`) shows a commit
@@ -94,26 +133,28 @@ export const isNamed = (path: string, names: string[], platform?: NodeJS.Platfor
   names.some((n) => normalPath(n, platform) === normalPath(worktreeName(path), platform));
 
 /**
- * Which agent worktrees to remove: those whose commits are all in the target
- * branch (a merged branch, or a detached HEAD with no unique commits), that
- * have no uncommitted changes, and whose branch has had a commit of its own
- * (unless includeEmpty). Everything else is skipped with its reason.
+ * Which agent worktrees to remove: the finished ones (isFinished: commits all in the
+ * target branch, a merged branch or a detached HEAD with no unique commits, and either
+ * a commit of its own or nothing holding it), that have no uncommitted changes; with
+ * includeEmpty also those with no commits yet that something still holds, unless they
+ * have uncommitted changes. Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
 export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
-  for (const { ahead, dirty, noCommitsYet, ...w } of worktrees) {
+  for (const { ahead, dirty, noCommitsYet, lockLive, heldByProcess, ...w } of worktrees) {
     if (only && !isNamed(w.path, only, platform)) continue;
+    const starting = stillStarting({ noCommitsYet, dirty, lockLive, heldByProcess });
     const reason = samePath(w.path, currentPath, platform)
       ? CURRENT_WORKTREE
       : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
-          : noCommitsYet && !keepEmpty
-            ? "no commits yet, may still be running (--include-empty removes it)"
+          : starting && !keepEmpty
+            ? `no commits yet, may still be running (${starting}; --include-empty removes it)`
             : w.locked !== undefined && !lockedByApp(w.locked)
               ? `locked by hand (${w.locked || "no reason"})`
               : undefined;
@@ -153,26 +194,6 @@ export function refExists(ref: string, cwd: string): boolean {
   }
 }
 
-/**
- * Whether the branch has had a commit of its own and all its commits are in target
- * (e.g. origin/main): its PR has merged. A new branch with nothing of its own yet is
- * not merged; its session may be just starting.
- */
-export function branchMerged(branch: string, target: string, cwd: string): boolean {
-  return hasOwnCommit(reflogSubjects(`refs/heads/${branch}`, cwd)) && inTarget(branch, target, cwd);
-}
-
-/**
- * Whether a worktree's work is merged into target: its branch is (branchMerged; a worktree
- * on main never is), or, on a detached HEAD, its HEAD commit is in target (RP-601). The app
- * often leaves a worktree detached once its branch merges; its HEAD reflog then holds
- * checkouts, not commits, so no commit of its own is asked for there.
- */
-export function worktreeMerged(w: Pick<Worktree, "branch" | "head">, target: string, cwd: string): boolean {
-  if (w.branch !== undefined) return w.branch !== "main" && branchMerged(w.branch, target, cwd);
-  return w.head !== "" && isAncestor(w.head, target, cwd);
-}
-
 /** The subjects of a ref's reflog, newest first; none when it has no reflog. */
 function reflogSubjects(ref: string, cwd: string): string[] {
   try {
@@ -184,17 +205,102 @@ function reflogSubjects(ref: string, cwd: string): string[] {
   }
 }
 
-/** Looks each worktree up: its commits the target lacks, whether it has uncommitted changes, and whether it has had a commit of its own. */
-export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: string): WorktreeFacts[] {
-  return worktrees.map((w) => {
-    // A folder deleted by hand is still listed; it has nothing uncommitted, and no subagent runs in it.
-    const exists = existsSync(w.path);
-    const dirty = exists && gitDirty(w.path);
-    const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
-    // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
-    const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
-    return { ...w, ahead, dirty, noCommitsYet: exists && !hasOwnCommit(subjects) };
-  });
+/**
+ * Looks each worktree up: its commits the target lacks, whether it has uncommitted changes,
+ * whether it has had a commit of its own, and, when it has none and nothing is ahead, whether
+ * a live lock or a running process holds it.
+ */
+export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: string, live: Liveness): WorktreeFacts[] {
+  return worktrees.map((w) => worktreeFacts(w, target, mainRoot, live));
+}
+
+function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Liveness): WorktreeFacts {
+  // A folder deleted by hand is still listed; it has nothing uncommitted, and no subagent runs in it.
+  const exists = existsSync(w.path);
+  const dirty = exists && gitDirty(w.path);
+  const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
+  // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
+  const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
+  const noCommitsYet = exists && !hasOwnCommit(subjects);
+  const mayBeStarting = ahead === 0 && noCommitsYet;
+  return { ...w, ahead, dirty, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
+}
+
+/** judgeWorktree's answer. neverCommitted: finished although its branch has had no commit of its own. */
+export type Verdict = { finished: boolean; neverCommitted: boolean };
+
+export const NOT_FINISHED: Verdict = { finished: false, neverCommitted: false };
+
+/**
+ * isFinished for one worktree against the target (lane:env and lanes:prune; worktrees:clean
+ * and worktrees:prune judge gatherFacts' facts by the same rule). A detached HEAD is judged
+ * too (RP-601): the app often leaves a worktree detached once its branch merges, and its HEAD
+ * reflog holds checkouts, not commits, so it is finished once its commit is in the target and
+ * nothing holds it. neverCommitted: finished
+ * although its branch has had no commit of its own. A worktree git cannot read is not finished.
+ */
+export function judgeWorktree(w: Worktree, target: string, mainRoot: string, live: Liveness): Verdict {
+  let facts: WorktreeFacts;
+  try {
+    facts = worktreeFacts(w, target, mainRoot, live);
+  } catch {
+    return NOT_FINISHED;
+  }
+  const finished = isFinished(facts);
+  // A detached HEAD's reflog holds checkouts, so "never committed to" would mislead there.
+  return { finished, neverCommitted: finished && facts.noCommitsYet && w.branch !== undefined };
+}
+
+/**
+ * The real Liveness: the process list is read once, on first need. A lock is live when it names
+ * another running Claude session (session-lock.ts otherLiveSession): the app locks a subagent's
+ * worktree with its parent's pid, so this session's own paused subagents do not count. When the
+ * processes cannot be read, every lock with a pid and every folder counts as held, so nothing with
+ * no commits yet is finished.
+ */
+export function systemLiveness(platform: NodeJS.Platform = process.platform): Liveness & { pidLive: (pid: number) => boolean } {
+  let processes: ProcessList | null | undefined;
+  let commandLines: string[] | null | undefined;
+  const read = <T>(f: () => T): T | null => {
+    try {
+      return f();
+    } catch {
+      return null;
+    }
+  };
+  /** Whether the pid is another live Claude session (true when the processes cannot be read). */
+  const pidLive = (pid: number): boolean => {
+    if (processes === undefined) processes = read(readProcessList);
+    return processes === null || otherLiveSession(pid, process.pid, processes, sessionPidOf(process.env));
+  };
+  return {
+    pidLive,
+    lockLive: (locked) => {
+      if (locked === undefined) return false;
+      const pid = lockPid(locked);
+      return pid === undefined || pidLive(pid);
+    },
+    heldByProcess: (path) => {
+      if (commandLines === undefined) commandLines = read(readCommandLines);
+      return commandLines === null || commandLines.some((line) => commandLineHolds(line, path, platform));
+    },
+  };
+}
+
+/**
+ * Whether a process command line names the folder or a file in it, e.g. the node of its
+ * `pnpm dev`, "G:\...\agent-a\node_modules\...". The folder's name must end there, so
+ * agent-a does not match agent-ab.
+ */
+export function commandLineHolds(commandLine: string, folder: string, platform: NodeJS.Platform = process.platform): boolean {
+  const line = normalPath(commandLine, platform);
+  const dir = normalPath(folder, platform);
+  if (dir === "") return false;
+  for (let at = line.indexOf(dir); at !== -1; at = line.indexOf(dir, at + 1)) {
+    const next = line[at + dir.length];
+    if (next === undefined || /[/"'\s]/.test(next)) return true;
+  }
+  return false;
 }
 
 /**
