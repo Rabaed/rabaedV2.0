@@ -18,6 +18,23 @@ describe("skillReferences", () => {
     const text = "See `/en/health`, http://localhost:3000/en, `apps/api/src`, `/api/v1/*`, `<port>/en`, `/job/<id>` and `/rabaed/dev/x`.";
     expect(skillReferences(text)).toEqual([]);
   });
+
+  it("finds a skill followed by sentence punctuation", () => {
+    const text = "Run /mattpocock-skills:implement. Then /retro: it asks. Or /tdd, (or /tdd) and /code-review; then /grill-me!";
+    expect(skillReferences(text)).toEqual([
+      { plugin: "mattpocock-skills", name: "implement", line: 1 },
+      { plugin: undefined, name: "retro", line: 1 },
+      { plugin: undefined, name: "tdd", line: 1 },
+      { plugin: undefined, name: "tdd", line: 1 },
+      { plugin: undefined, name: "code-review", line: 1 },
+      { plugin: undefined, name: "grill-me", line: 1 },
+    ]);
+  });
+
+  it("still ignores a file name, a port and a path after the punctuation", () => {
+    const text = "See /readme.md, /api:3000, /tmp.d/x, ~/.claude/plugins/cache and `/etc:/x`.";
+    expect(skillReferences(text)).toEqual([]);
+  });
 });
 
 describe("docSkillProblems", () => {

@@ -28,7 +28,9 @@ export function agentDocs(repo: string): string[] {
 
 // A slash command starts a word (not inside a path, URL or `<port>/x`) and
 // ends the word: a route or path such as `/en/health` goes on with another `/`.
-const command = /(?<![\w.:/<>*-])\/([a-z][a-z0-9-]*)(?::([a-z][a-z0-9-]*))?(?![\w/.*:-])/g;
+// Sentence punctuation may follow it (`/retro:`, `/tdd.`), but a `.` or `:` that
+// goes on (`/readme.md`, `/api:3000`, `/etc:/x`) makes it a path.
+const command = /(?<![\w.:/<>*-])\/([a-z][a-z0-9-]*)(?::([a-z][a-z0-9-]*))?(?![\w/*-])(?![.:][\w/.*:<-])/g;
 
 /** Each slash command in the text, with its 1-based line. */
 export function skillReferences(text: string): SkillReference[] {
