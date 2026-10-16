@@ -33,8 +33,9 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Daily email digest
 - [ ] Need My Action
 - [ ] Watch
-- [ ] Distribution List
+- [ ] Working Copy
 - [ ] Documental Record
+- [ ] Verification page
 - [ ] Activity Feed
 - [ ] Workflow definitions and bindings
 - [ ] Home across Projects

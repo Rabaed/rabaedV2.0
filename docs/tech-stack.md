@@ -42,7 +42,7 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | Styling | Tailwind CSS 4, with design tokens; logical CSS only (RTL-safe) |
 | Components | Radix UI primitives behind our own components (`@rabaed/ui`), `class-variance-authority`, Tabler icons |
 | Languages | next-intl. Arabic and English from day one, RTL, Latin digits, Document Numbers always left-to-right |
-| Fonts | IBM Plex Sans Arabic and IBM Plex Sans (open), Montserrat. The licensed **Thmanyah** fonts come from a private S3 bucket at build time and are never committed |
+| Fonts | IBM Plex Sans Arabic and IBM Plex Sans (open), Montserrat. The licensed **Thmanyah** fonts come from a private S3 bucket at build time and are never committed. The product owner has Thmanyah's consent to embed them in the Documental Record's PDFs (RP-23 grilling, 2026-10-16); the worker reads them from the same private bucket |
 | Design system | Storybook 10, with story tests for behaviour, axe accessibility and EN/AR screenshots |
 
 ## Backend and data
@@ -60,6 +60,7 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | Background work | Outbox table written in the same transaction, delivered by the worker | No lost or premature notifications |
 | Auth | In-house: argon2id passwords, server-side sessions in HttpOnly, SameSite, Secure cookies, one-time expiring invitation tokens. Rabaed Engineers sign in with a password plus an email code | Our own Postgres, under our own rules |
 | Files | S3, keys prefixed by Project, short-lived signed URLs signed by the api only | Storage follows tenancy (ADR 0007) |
+| Documental Records | The worker writes the Record Data (XML), renders the one layout with **headless Chromium** (Playwright), converts to **PDF/A-3** with the XML attached, checks it (veraPDF), and seals it with **PAdES B-LT**: a KMS key (`pdf-sealing`) under Rabaed's own certificate, plus a free RFC 3161 timestamp ([ADR 0023](adr/0023-the-record-is-a-sealed-pdf-a-3-made-from-record-data.md)) | Arabic shaping and mixed RTL/LTR as the browser draws them; tamper-evident with no paid certificate; a record can be made again from the same facts |
 | Logging | pino; database error codes only, never raw messages (they can quote row values) | No data leaks through logs |
 
 ## Local development

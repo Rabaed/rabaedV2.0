@@ -35,7 +35,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
   - **Settled 2026-10-10: the Form belongs to the raiser (ADR 0019)**: read when you work on who may edit the raiser's Form.
 - **5. Languages, dates, numbers**: read when you touch Arabic and English labels, dates or number formats.
 - **6. PDF layout**: read when you work on the Documental Record's PDF.
-  - **PDF Templates**: read when you work on choosing among several PDF Templates per Form.
+  - **PDF Templates**: read when you meet an old mention of several PDF Templates per Form (retired, ADR 0023).
 - **7. Versioning and data compatibility**: read when you change how Form Versions publish and stay compatible.
   - **Which Form a new item gets (as built, RP-554)**: read when you need which Form Version a new Work Item is pinned to.
   - **Publish-time validation**: read when a Form Version won't publish, or you add a publish rule.
@@ -144,7 +144,7 @@ System Fields   Attachments · Links
 - `phone` (`isPhoneNumber`): spaces, dashes, dots and brackets may group the digits. A KSA number as dialled at home (`05x xxx xxxx`, a landline `01x xxx xxxx`, `800 …`, `920 …`), or any number with its country code after `+` or `00` (E.164, at most 15 digits; after `+966`, a KSA mobile or landline, with or without its home 0). Arabic-Indic digits are refused; the phone box turns them into Latin ones as they are typed.
 - On screen: numbers are grouped, in Latin digits, to the field's decimals, with the unit after them; amounts in the viewer's language (`SAR 1,250.75`, `1,250.75 ر.س.`). A number reads in the page's direction, so in Arabic its unit still follows it; email addresses and phone numbers read left to right. The number box takes text, turns Arabic-Indic digits into Latin ones as they are typed (`toLatinDigits`, `parseNumberInput`), takes commas only where they group thousands (`12,5` is refused, never read as 125), and passes text that isn't a number on for the validator to refuse.
 
-**Signatures are never Form fields.** They come only from signing Transitions ([ADR 0003](adr/0003-docusign-grade-signing-not-legally-qualified.md)).
+**Signatures are never Form fields.** They come only from the Transitions Members take, every one of which signs ([ADR 0017](adr/0017-the-documental-record-names-everyone-who-acted.md)).
 
 ### 2.2 Tables (as built, RP-280)
 
@@ -328,25 +328,36 @@ Action Forms remain the place for per-Transition input: Review Code, comments, "
 
 ## 6. PDF layout
 
-Every Form version carries a `pdf` block. The Documental Record renderer lays out, in order:
+Settled in the RP-23 grilling (2026-10-16, ADR 0023), from the product owner's sample records (MAR, DAR and DAS, A4, Arabic first with English labels): **one Rabaed layout** prints every Documental Record and every Working Copy. What differs between an MAR and a SAR is the Form's fields, never the layout; there are no per-Form or per-Project templates and no paper-matching layouts. Where a sample clashed with visibility.md or the glossary, those won (the Draft-started time, a Revision after Code D, an internal reviewer's own Code). The record is printed from its Record Data only (workflow-engine.md §7).
 
-1. **Header:** Project name and code, Participants' logos (raiser, reviewer, Owner), Work Item Type, Document Number with revision, outcome badge, dates. `header_fields` adds chosen Form fields here.
-2. **System fields**, then the **sections** in order. A layout of 1 or 2 columns sets how fields sit per row. Tables and checklists are rendered as tables. Photos go in a grid (`photo_grid` per row) with captions and time stamps.
-3. **Signing trail:** every signing event with Signature image, name, Position, Company, time and content hash. There is no Internal Communication and no Chat.
-4. **Appended Documents:** PDFs and images are appended. Other file types are listed with their hashes.
-5. **Verification footer:** a QR code to the verification page, and page X of Y on every page.
+Every Form Version carries a `pdf` block: its sections' `include`, `width` and `label_override` (§1), `header_fields`, its **Disclaimer** (`disclaimer {en, ar}`, from the Rabaed Default, which a Company may change in its own Forms) and `show_review_duration` (a Form's choice; information, never an SLA, ADR 0023). The record lays out, in order:
 
-With record language `bilingual`, each label prints as `English / العربية`, with the Arabic side laid out right-to-left.
+**Page 1**
+1. **Companies:** the logo, name and Project Role of the Owner and of every Company whose Member acted. A Company without a logo shows its name.
+2. **Title block:** the Work Item Type's code and name (ar, en), the Subject, the Document Number with its Revision (always left-to-right); a Revision adds "Revision of ‹number›, closed at Code C on ‹date›".
+3. **Parties:** the Project, then the Companies on the item by Project Role (Owner, Consultant, Main Contractor…).
+4. **Classification:** the item's Trade among the Project's Trades, then the Built-in and Form fields the Form places here (Scope, sub-scope, hard copy…).
+5. **Final decision:** the outcome in large type, its chips (A B C D; for an Inspection Passed, Passed with Comments, Failed; Cancelled has its own), who issued it (name, Position, Company; with the Owner's review, ADR 0022, the Consultant's PM, the Owner's confirmation on its own card), the Submission Date and the reply date, the review duration in days if the Form shows it, the number of Review Comments and the page they start on, and the QR with its **Verification Code**. A Cancelled item shows who cancelled it and the reason; when Rabaed cancelled it because a Company left the Project, "Cancelled by Rabaed: ‹Company› left the Project", with no card for that step.
+6. **Reply:** the first lines of the issued Code's Remarks, with "full text, page n".
+7. **Approval flow:** every Transition on the path to the outcome, in order: its label, the Member's name, their Company's role, the date and time, and a mark (done, returned for revision, rejected). The first entry, "Prepared", is dated at the raiser's first Transition, never when the Draft was started (visibility.md, Creation Date). Returns and the work around them, Internal Notes, Recommended Codes and a Code the Owner sent back stay out (V7).
+8. **The Form:** its sections in Form Version order, plain fields as a label and value grid, tables (a Drawing Register, Items) as tables, checklists as tables with their summary, photos in a grid (`photo_grid`) with captions and when they were taken.
+9. **Documents:** the shared Documents with their page counts; their pages follow in the appendix.
+
+**Pages after**
+10. **Running header:** the Type badge, Subject, Document Number and Revision, outcome badge.
+11. **Review Comments:** the issued reply's comments, each author's card (initials, name, Position, Company, date), numbered, under their headings. An internal reviewer's card says "Reviewed" and shows no Code of their own (RP-615 decides whether it may).
+12. **Signatures:** one card per Transition on the path: its number and verb (prepared, submitted, reviewed, approved, confirmed), its label or Code, the Member's name, Position and Company, their Signature as it was then, the date and time, and what they wrote in the Transition's shared Action Form (Remarks, recommendations, a Code B's actions as a numbered list). With Code C, a **Next step** card: "Revision ‹n+1›, by ‹raiser's Company›"; with Code D: "A new submittal replaces this one".
+13. **Stamps:** the Stamp of every Company whose Member acted.
+14. **Disclaimer:** the Form Version's, in Arabic and English.
+15. **Appendix:** every shared PDF and image Document as pages, in Form order and then in the order they were added; other files (DWG, Excel…) attached inside the PDF; above 100 MB in all, files are listed with their fingerprints and stay in Rabaed.
+
+**Every page:** the footer "Issued electronically through Rabaed · Verification Code · page X of Y".
+
+**Languages:** with record language `bilingual` (the default), headings are Arabic with their English label beside them, as in the samples; `ar` prints Arabic only, `en` English only. Dates are Gregorian, with the Hijri date beside them when the Project turns it on (off by default). A **Working Copy** prints the same layout from the shared read, with Companies by name only, no names, Signatures, Stamps or Verification Code, and the Project's watermark on every page.
 
 ### PDF Templates
 
-Layout is not fixed to the Form: a Form can have **several PDF Templates**, and each Project picks which one a Work Item Type uses.
-
-- **Rabaed Default templates** come ready-made, e.g. "Portal style" (the layout above) and "Classic paper style".
-- **Paper-matching templates** reproduce a customer's existing paper form (their layout, boxes, logo positions). In v1 they are authored by Rabaed Engineers in Rabaed Admin ("make a new template") and published to that customer's Company library. A customer-facing visual designer comes later.
-- A template is an HTML/CSS layout with placeholders bound to Form field keys, system fields, the checklist and photo blocks, and the signing trail. It is versioned and immutable once published, like Forms.
-- The signing-trail page and the verification QR code are always added by the engine, whatever the template. Templates can't remove them.
-- The template version used is recorded on the `documental_record`, so a sealed PDF can always be explained.
+Retired (2026-10-16, ADR 0023): a Form no longer has several PDF Templates, and there are no paper-matching templates. The term now names the one Rabaed layout above (GLOSSARY.md).
 
 ---
 
@@ -451,7 +462,7 @@ The full engine is built in five parts. Each part is merged and usable before th
      - **MAR Form Version 3** adds an optional **Related submittals** `work_item_ref` field. The demo shows a MAR linking an approved MAR, and a Contractor who sees only its number and Subject.
    - Before 2b, answers are read only through the stripping function (ADR 0012, RP-275).
 3. **Who fills what:** `editable_at` per Form Section, Action Forms built from Forms, and autosave with per-field timestamps (settled 2026-10-05, §4 and §8). Publishes MAR Form Version 4 and MAR Workflow Version 2. The reporting table moved to its first reader.
-4. **PDF output:** the Documental Record layout and PDF Templates, and optional Hijri dates per Project (part 1 shows Gregorian only).
+4. **PDF output:** the Documental Record's one layout (§6, ADR 0023), the Form's Disclaimer and review-duration settings, and optional Hijri dates per Project (part 1 shows Gregorian only). Built in the Signing epic (RP-23).
 5. **The builder and Libraries:** the Form builder, the Field Library (Saved Fields), Company Libraries with "Copy to my Library" and offering to a Project (V18 tests), and the Company Trade/Scope lists with "pull updates".
 
 Later, with their own modules:
@@ -463,7 +474,7 @@ Later, with their own modules:
 
 1. **Hijri dates:** optional per Project, shown beside the Gregorian date and never replacing it.
 2. **No internal-only fields.** Everyone with access to a Work Item sees its whole Form. Only Internal Communication (notes and back-and-forth inside one Participant) is hidden.
-3. **PDF Templates:** several per Form, with Rabaed Defaults plus paper-matching templates built by Rabaed Engineers (see §6).
+3. **PDF Templates:** several per Form, with Rabaed Defaults plus paper-matching templates built by Rabaed Engineers. Superseded 2026-10-16 (ADR 0023): one Rabaed layout for every record (§6).
 
 ## Former open questions
 

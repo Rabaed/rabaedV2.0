@@ -13,7 +13,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/data-model.
 - **3. Visibility, Trades, Locations, Scopes**: read when you work on Visibility Dimensions and what a Member's Visibility covers.
 - **4. Engines: Forms, Workflows, Work Item Types**: read when you touch the tables behind Modules, Stages, Forms, Workflows and Work Item Types.
 - **5. Work Items**: read when you touch the `work_item` table or what hangs off it.
-- **6. Documents, signing, Documental Records, distribution**: read when you work on stored files, signatures, Documental Records or Distribution Lists.
+- **6. Documents, signing, Documental Records**: read when you work on stored files, Signatures, Stamps or Documental Records.
 - **7. Drawings, Markups, Pins**: read when you work on Drawings and what is drawn on them.
 - **8. Files, Approved Suppliers, reports**: read when you work on the Files Module, the Approved Supplier List or reports.
 - **9. Audit trail, notifications, admin**: read when you touch `work_item_event`, notifications or `admin_action`.
@@ -55,7 +55,7 @@ erDiagram
   WORK_ITEM ||--o{ WORK_ITEM_EVENT : "audit trail"
   WORK_ITEM ||--o{ STEP_ASSIGNMENT : "held by"
   WORK_ITEM ||--o{ DOCUMENT : attaches
-  WORK_ITEM ||--o{ DOCUMENTAL_RECORD : produces
+  WORK_ITEM ||--o| DOCUMENTAL_RECORD : produces
   WORK_ITEM ||--o{ WORK_ITEM_ACCESS : "visible to"
   WORK_ITEM }o--o| WORK_ITEM : "revision of / subtask of"
   PACKAGE ||--o{ WORK_ITEM : groups
@@ -68,7 +68,8 @@ erDiagram
 Tenancy is per Project (ADR 0007): every Project-owned table has `project_id` and a row-level-security policy that allows rows only for Projects the current Member participates in. Company-owned tables have `company_id` and a policy limited to the Member's own Company.
 
 **company**
-`id`, `legal_name i18n`, `cr_number` (unique), `vat_number` (unique), `status {active, suspended}`, `authorized_person_id → member` (exactly one; nullable only while onboarding), `onboarded_by → rabaed_engineer`.
+`id`, `legal_name i18n`, `cr_number` (unique), `vat_number` (unique), `status {active, suspended}`, `authorized_person_id → member` (exactly one; nullable only while onboarding), `onboarded_by → rabaed_engineer`, `logo_file_id → stored_file` (nullable: without one, records print the name), `stamp_file_id → stored_file` (nullable, but while it is null no Member of the Company can take a Transition; ADR 0023).
+The owner or Authorized Person uploads the logo and the Stamp in the Company profile. Like Signatures they are versioned through `stored_file` (a new upload is a new file), and each record's Record Data keeps the ones in force when the item closed.
 
 **member**
 `id`, `company_id → company`, `email` (unique per Instance), `full_name i18n`, `phone`, `locale`, `status {invited, active, locked, deactivated}`, `can_create_projects bool` (= Project Creator).
@@ -86,8 +87,8 @@ A Member never moves between Companies. Changing employer means a new Member.
 Identity tables record who created a row through `company.onboarded_by`, `invitation.invited_by_*` and `admin_action` instead of a generic `created_by`.
 
 **member_signature**
-`id`, `member_id`, `file_id → stored_file`, `active_from`, `active_to`.
-This table is versioned: every signing event points at the exact signature row that was in force, so replacing a signature never changes old records. Signing is blocked while a Member has no active row.
+`id`, `member_id`, `file_id → stored_file`, `method {drawn, typed, uploaded}`, `active_from`, `active_to`.
+This table is versioned: every signing event points at the exact signature row that was in force, so replacing a signature never changes old records. Signing is blocked while a Member has no active row. Profile → Add Signature draws it (pen styles and colours), types it in a handwriting style, or uploads an image; each is stored as an image.
 
 **authorized_person_transfer**
 `company_id`, `from_member_id`, `to_member_id`, `by_engineer_id`, `reason`, `at`.
@@ -95,7 +96,7 @@ This table is versioned: every signing event points at the exact signature row t
 ## 2. Projects and participation
 
 **project**
-`id` (random UUIDv4, internal and used in URLs), `host_company_id → company` (whose subscription it counts against), `project_number` (per Host Company: 1, 2, 3…, unique `(host_company_id, project_number)`), `code` (short, editable, used in Document Numbers), `name i18n`, `status {active, closed}`, `closed_at`, `planned_completion` (date, nullable; shown as plain text, never counted down or flagged), `creator_member_id`, `record_language {ar, en, bilingual}`, `origin {direct, tender}`, `tender_ref` (nullable, future).
+`id` (random UUIDv4, internal and used in URLs), `host_company_id → company` (whose subscription it counts against), `project_number` (per Host Company: 1, 2, 3…, unique `(host_company_id, project_number)`), `code` (short, editable, used in Document Numbers), `name i18n`, `status {active, closed}`, `closed_at`, `planned_completion` (date, nullable; shown as plain text, never counted down or flagged), `creator_member_id`, `record_language {ar, en, bilingual}` (chosen at creation, default `bilingual`; a change applies to records made afterwards), `working_copy_watermark i18n` (default "Not Final / غير نهائي", never empty; the Project Admin sets it), `hijri_dates bool` (default false), `origin {direct, tender}`, `tender_ref` (nullable, future).
 
 **company_project_counter**
 `company_id`, `last_project_number`. Incremented in the same transaction that creates the Project.
@@ -174,10 +175,7 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 **checklist_template**
 `id`, `owner_kind/owner_id`, `name i18n`, `items jsonb`, `copied_from_id`. Copied into Forms, never linked (see form-engine.md §3).
 
-**pdf_template** / **pdf_template_version**
-- `pdf_template`: `id`, `owner_kind/owner_id`, `form_definition_id` (null = generic), `name i18n`, `style {portal, paper, custom}`, `copied_from_id`.
-- `pdf_template_version`: `id`, `pdf_template_id`, `version_no`, `status`, `html`, `css`, `bindings jsonb`, `authored_by` (member or engineer).
-`work_item_type.pdf_template_id` picks the template per Project. `documental_record.pdf_template_version_id` records which one sealed it.
+**PDF layout** (no table): there is one Rabaed layout, shipped with the code (ADR 0023, form-engine.md §6), so `pdf_template` and `pdf_template_version` are dropped. `documental_record.layout_version` records which release of it printed a record. A Form Version's `pdf` block carries its `disclaimer {en, ar}` and `show_review_duration`.
 
 **workflow_definition** / **workflow_version**
 - `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`. As built (RP-426, ADR 0016): `owner_kind {rabaed, project, company}` with `project_id` or `company_id` (a Company's Library); no `copied_from_id`, since a copy is independent of its original. Read by every Member for a Rabaed Default, by the Project's Members for a Project's, by its own Company for a Library's (visibility.md V18, V20). `work_item_type_id` (RP-427): the Work Item Type it is made for, whose outcome set, Module Stages and Form its publish checks use; copied with it, and a binding names a Workflow of the bound Type. `default_key` (RP-596): names a Rabaed Default within its Type ("2-2", "1-1-owner"), unique per Type, null elsewhere; a Type has one Rabaed Default it runs (`work_item_type.workflow_definition_id`) and may have others, as the eight submittal Workflows (workflow-engine.md "The eight submittal Workflows"). Changed only through the authoring commands (workflow-engine.md §1 "Authoring").
@@ -316,7 +314,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 `id`, `project_id`, `participant_id`, `seq` (per Project, shown PKG-001), `name i18n`, `status {open, in_progress, done}`.
 Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (to be specified, RP-588).
 
-## 6. Documents, signing, Documental Records, distribution
+## 6. Documents, signing, Documental Records
 
 **stored_file**
 `id`, `storage_key` (object storage), `sha256`, `size`, `mime`, `uploaded_by`, `created_at`. Immutable.
@@ -328,19 +326,14 @@ Frozen at the first Submit (ADR 0020; RP-515: the trigger `work_item_freezes_doc
 `arrival` (RP-309): the item's `arrivals` when the row was added, set by a trigger. A Document added while the item is held (the raiser's Draft after a Send Back) is seen only by the holding Participant until the item leaves it; everyone else reads the Documents it had when it arrived (`app.item_row_seen`, in the RLS policy, so lists and downloads agree). A Document others have seen is frozen, so never removed.
 A Revision's Documents are copied as new rows with their own storage keys; **document_copy** (`document_id`, `copied_from_id`) records each one's source so the api copies the file, and is never granted to the app role (RP-316). A copy keeps its source's `created_at` and `confirmed_at` (its `uploadedAt`), never the Revision's start, so it carries no Draft-started time (RP-393, scenario 75).
 `created_at` and `confirmed_at` are not granted to the app role: a Document added during the Draft keeps its real time, for audit. `app.document_times` gives each visible Document its upload time (the api's `uploadedAt`), no earlier than the Creation Date of the item it was first uploaded on once that item is numbered, so a copy follows the original's Creation Date and a Revision's own Documents its own; while that item is a Draft, real times. It also gives the order they were uploaded in (`seq`) (RP-399, scenarios 61 and 75).
-`stored_file` (with its `sha256`) comes with the Files Module and the Documental Record; until then the file's details live on the Document.
+`stored_file` (with its `sha256`) comes with the Files Module and the Documental Record; until then the file's details live on the Document. From RP-23 a Document gets `sha256` (its bytes' fingerprint, taken when the api confirms the upload; not granted to the app role, like the content hash), which joins the content hash (workflow-engine.md §7).
 
 **documental_record**
-`id`, `work_item_id`, `stored_file_id`, `pdf_template_version_id`, `language`, `outcome`, `content_sha256`, `sealed_at`, `verification_code` (QR target).
-Produced on every closure. The PDF names everyone who took a Transition on the item's path to its outcome, whichever Company (name, Position, Company, date, Signature), but no Returns, Internal Notes, Recommended Codes, Chat or in-progress answers (visibility.md V7, ADR 0017). It is sealed with PAdES and a trusted timestamp (ADR 0003).
+`id`, `work_item_id` (unique: one record per item), `pdf_file_id → stored_file`, `record_data_file_id → stored_file` (the Record Data XML, also attached inside the PDF), `layout_version`, `language`, `outcome`, `pdf_sha256`, `sealed_at`, `verification_token_hash` (the QR's long link), `verification_code` (the short printed code, unique with the Document Number), `status {preparing, published, failed_checks}`.
+Produced on every closure from its Record Data (ADR 0023). The PDF names everyone who took a Transition on the item's path to its outcome, whichever Company (name, Position, Company, date, Signature, Stamp), but no Returns, Internal Notes, Recommended Codes, Chat or in-progress answers (visibility.md V7, ADR 0017). It is PDF/A-3, sealed with PAdES B-LT and a timestamp. Its location, name and URL never change.
 
-**distribution_list** / **distribution_recipient**
-- `distribution_list`: `id`, `project_id`, `work_item_type_id`.
-- `distribution_recipient`: `list_id`, `member_id` or `email`.
-- Per-item overrides are copied onto the item at issue.
-
-**record_delivery**
-`id`, `documental_record_id`, `recipient`, `token_hash`, `expires_at`, `sent_at`, `delivered_at`, `first_opened_at`, `open_count`. This is the Delivery Log.
+**documental_record_reproduction**
+`id`, `documental_record_id`, `replaced_pdf_file_id`, `replaced_pdf_sha256`, `replaced_sealed_at`, `reason`, `by_engineer_id`, `at`. A Re-produce in Rabaed Admin (workflow-engine.md §7): the replaced PDF kept for Rabaed Engineers only; its fingerprint still opens the verification page, which says it was replaced.
 
 ## 7. Drawings, Markups, Pins
 
