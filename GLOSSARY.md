@@ -117,7 +117,7 @@ A Location's progress picture (Complete, In Progress, Issues, Pending) worked ou
 _Avoid_: Progress percentage
 
 **Module**:
-One tab of a Project: Dashboard, Submittals, Inspections, Snag List, Site Reports, Drawings, Files, Views, Schedule, Settings. Submittals, Inspections, Snag List and Site Reports hold Work Items. Packages live inside Submittals, the Activity Feed inside the Dashboard, and the Approved Supplier List inside Settings.
+One tab of a Project: Dashboard, Submittals, Inspections, Snag List, Site Reports, Drawings, Files, Views, Schedule, Settings. Submittals, Inspections, Snag List and Site Reports hold Work Items. Packages live inside Submittals, the Activity Feed inside the Dashboard, and the Approved Supplier List inside Settings. A Project may show Inspections inside the Submittals tab instead of its own; it stays its own Module either way.
 _Avoid_: Section, app
 
 **Work Item**:
@@ -173,16 +173,24 @@ A Form field made of predefined check items, each answered and optionally eviden
 _Avoid_: Tick list
 
 **Snag List**:
-The Module holding follow-up Work Item Types: Snags, Comments, and others such as Questions or plain tasks.
+The Module holding follow-up Work Item Types, a task list of things to be done that are not official submittals or packages: Snags, Site Observations, Questions and Comments by default, and any Types a Project adds, each with its own Form and Workflow.
 _Avoid_: Comment list, punch list
 
 **Snag**:
-A Work Item in the Snag List recording a defect or an action to be done.
+A Work Item in the Snag List recording a defect in the work, raised from site with photos, a Location and an optional Pin, or from a failed check item of an Inspection.
 _Avoid_: Punch item, defect
 
+**Site Observation**:
+A Work Item in the Snag List recording something on site that needs to be put right but is not a defect in the work, such as a violation, waste, or an area to clean. The Type is called Site Observation, not Violation.
+_Avoid_: housekeeping item, NCR
+
+**Question**:
+A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
+_Avoid_: Comment (reserved for Code B)
+
 **Comment**:
-A Work Item in the Snag List created from a reviewer's comment on a Code B approval, linked to the reviewed Work Item.
-_Avoid_: Remark (the text written with a Code is Remarks), note
+A Work Item in the Snag List created from a reviewer's comment on a Code B approval (or a Passed with Comments Inspection), linked to the reviewed Work Item.
+_Avoid_: Remark (the text written with a Code is Remarks), note, question
 
 **Cancelled**:
 The outcome of a Work Item stopped before it finished, such as when its Participant is withdrawn from the Project. It cannot be reopened.
@@ -293,8 +301,19 @@ Giving each open Step a Member holds, their Drafts included, to another Member o
 _Avoid_: Reassignment (on its own), vacancy (for a Member)
 
 **Submittal Register Import**:
-Uploading the list of submittals a contract requires (as a spreadsheet now, later as a PDF read by an AI agent) and mapping each row to a Work Item Type and fields, which creates Draft Work Items.
+Uploading a Participant's list of submittals (as a spreadsheet now, later as a PDF read by an AI agent) and mapping each row to a Work Item Type, a Trade and optional fields, which creates Draft Work Items, optionally grouped into new or still-Open Packages. Rows with errors are left out and can be downloaded to fix and import again. Each import is kept with exactly what it created, for anyone to check. An import is either a plan, whose rows become Drafts with no number (a submittal still under review on paper starts again this way), or history, whose rows become Paper or Legacy Submittals, closed with their own numbers and Codes.
 _Avoid_: Bulk upload, migration
+
+**Origin**:
+Where a submittal came from: Rabaed (made here), Paper (brought in from paper records) or Legacy (brought in from another system). It is not the submittal's Work Item Type.
+
+**Paper Submittal**:
+A submittal finished before the Project used Rabaed, brought in from paper by a history import with its Document Number, Subject, Work Item Type, Trade and Issued Code. It never went through a Workflow. Members see it only with the View Paper Submittals Function Permission, and only where their Company would have seen it had it been Submitted in Rabaed.
+_Avoid_: Historical submittal, migrated item
+
+**Legacy Submittal**:
+Like a Paper Submittal, but brought in from another system.
+_Avoid_: Historical submittal, migrated item
 
 **Step Pool**:
 The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them picks it up, unless the step already has a holder: the Member it came back to, the one picked with "Assign to", or the pool's only Member, who holds it at once.
@@ -353,8 +372,8 @@ The short code (2–6 letters or digits) that stands for a Participant in that P
 _Avoid_: Company code, contractor code
 
 **Package**:
-A named group of submittals covering one piece of work (e.g. bathrooms), submitted together, with each submittal still getting its own Review Code. It is Open, In Progress or Closed, and closes by itself once every submittal in it ends at Code A or B, after any Revisions or replacements.
-_Avoid_: Bundle, batch, transmittal
+A named group of submittals, numbered in sequence per Project (PKG-001), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done (not Closed) once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement puts it back In Progress.
+_Avoid_: bundle, batch, transmittal
 
 **Approved Supplier List**:
 A Project's register of suppliers and manufacturers that may be used, per Trade: a Supplier Approval Request closed at Code A or B adds its supplier, and a Project Admin can add one by hand or withdraw one. A Material Approval Request chooses its supplier from it; every Participant sees who is on it, never the submittal that put them there.
