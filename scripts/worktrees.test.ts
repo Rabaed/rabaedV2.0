@@ -87,6 +87,14 @@ describe("chooseWorktrees", () => {
     expect(skipped).toEqual([]);
   });
 
+  it("skips a merged worktree a desktop session holds, found by its path whatever its branch (RP-608)", () => {
+    const held = wt("agent-held", { branch: "RP-602-renamed" });
+    const openSession = (path: string) => (path === held.path ? 'session "RP-602"' : undefined);
+    const { remove, skipped } = chooseWorktrees({ worktrees: [held, wt("agent-free")], currentPath: here, platform: "linux", openSession, only: ["agent-held", "agent-free"] });
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
+    expect(skipped.map((s) => s.reason)).toEqual(['its Claude desktop session is open (session "RP-602"); archive it first']);
+  });
+
   it("skips and names a worktree with uncommitted changes", () => {
     const { remove, skipped } = choose([wt("agent-a", { dirty: true })]);
     expect(remove).toEqual([]);

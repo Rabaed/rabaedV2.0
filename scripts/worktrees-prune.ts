@@ -8,7 +8,10 @@
 //   2. every other local branch merged into origin/main and checked out nowhere
 //      (merge-base --is-ancestor origin/main, then `git branch -D`), never main;
 //   3. the orphaned compose projects lanes:prune finds.
-// It never touches the main checkout or the current worktree, and skips, and lists,
+// It never touches the main checkout or the current worktree, nor one whose Claude
+// session is open: a "claude session" lock, or the desktop app's own record of the
+// worktree's path (desktop-sessions.ts, RP-608: the app does not lock its worktrees,
+// and a session may have renamed the app's branch). It skips, and lists,
 // worktrees with uncommitted changes (untracked files outside ignored paths included),
 // commits on no origin branch, or nothing merged; it checks the first two again just
 // before removing each worktree. A squash-merged worktree whose remote branch was
@@ -24,6 +27,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
+import { readDesktopSessions } from "./desktop-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
@@ -85,13 +89,17 @@ const here = currentRoot();
 const branches = localBranches(TARGET, mainRoot);
 const gone = new Set(branches.filter((b) => b.upstreamGone).map((b) => b.branch));
 const live = systemLiveness();
-const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
-  gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
+const pruneFacts = (list: Worktree[]): PruneWorktree[] => {
+  // Read again each time: a session may open, or be archived, between listing and removing (RP-608).
+  const sessionAt = readDesktopSessions();
+  return gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
     unpushed: unpushedCount(w.head, mainRoot),
     project: composeProjectOfEnv(readEnv(w.path) ?? ""),
+    desktopSession: sessionAt(w.path),
   }));
+};
 const worktrees = pruneFacts(listWorktrees(mainRoot));
 const containers = listContainers();
 const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readEnv(here) ?? "") };

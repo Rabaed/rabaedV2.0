@@ -8,7 +8,9 @@
 // --include-empty, those whose branch has no commit of its own yet while a live lock or
 // a running process still holds them: their subagent may still be running. With nothing
 // holding it, such a worktree is finished and goes, the same rule lane:env, lanes:prune
-// and worktrees:prune use (RP-585). They are listed as skipped.
+// and worktrees:prune use (RP-585). Nor, even with --only, one an open Claude desktop
+// session holds by the app's own record of its path (desktop-sessions.ts, RP-608).
+// They are listed as skipped.
 //
 // It fetches origin first and checks against `origin/<branch>` when that exists, so a
 // stale local `main` no longer hides merged worktrees (RP-564); the local branch is
@@ -26,6 +28,7 @@
 // The default branch is main; --yes skips the confirmation.
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
+import { readDesktopSessions } from "./desktop-sessions.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
@@ -115,7 +118,7 @@ async function main(): Promise<void> {
     if (!agentWorktrees.some((w) => isNamed(w.path, [n]))) console.log(`Not an agent worktree here, ignored: ${n}`);
   }
   const agents = gatherFacts(agentWorktrees, target, mainRoot, systemLiveness());
-  const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty, only });
+  const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty, only, openSession: readDesktopSessions() });
 
   const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
   if (skipped.length > 0) {
