@@ -186,7 +186,7 @@ _Avoid_: housekeeping item, NCR
 
 **Question**:
 A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
-_Avoid_: Comment (reserved for Code B)
+_Avoid_: Comment (reserved for a reviewer's comment on a reviewed item)
 
 **Comment**:
 A Work Item in the Snag List created from a reviewer's comment on a Code B approval (or a Passed with Comments Inspection), linked to the reviewed Work Item.
@@ -340,7 +340,7 @@ The formal outcome of reviewing a Work Item such as a submittal: A (Approved), B
 _Avoid_: Status, result
 
 **Outcome**:
-How a Work Item ends, set by the Transition that closes it: a Review Code, an Inspection Result, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B, a Revision with Code C, a replacement with Code D.
+How a Work Item ends, set by the Transition that closes it: a Review Code, an Inspection Result, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B or Passed with Comments, a Revision with Code C, a replacement with Code D.
 _Avoid_: Status, result
 
 **Recommended Code**:
@@ -372,7 +372,7 @@ The short code (2–6 letters or digits) that stands for a Participant in that P
 _Avoid_: Company code, contractor code
 
 **Package**:
-A named group of submittals, numbered in sequence per Project (PKG-001), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done (not Closed) once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement puts it back In Progress.
+A named group of submittals, numbered in sequence per Project (PKG-001), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done (not Closed) once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement, or a submittal added to it, puts it back In Progress.
 _Avoid_: bundle, batch, transmittal
 
 **Approved Supplier List**:
