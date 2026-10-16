@@ -439,6 +439,11 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
       expect(verdicts({ lockLive: (locked) => locked?.includes("pid 4242") ?? false, heldByProcess: () => false })).toEqual(all(false));
     });
 
+    it("finds it not finished in any of the four under a lock by hand that names no pid", () => {
+      run(["worktree", "lock", "--reason", "keep, mid-review", agent(paused)]);
+      expect(verdicts({ lockLive: systemLiveness().lockLive, heldByProcess: () => false })).toEqual(all(false));
+    });
+
     it("finds it not finished in any of the four with uncommitted files", () => {
       lockByStoppedSession();
       writeFileSync(join(agent(paused), "wip.txt"), "wip");

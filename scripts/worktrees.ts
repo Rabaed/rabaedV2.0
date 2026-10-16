@@ -151,9 +151,11 @@ export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, 
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
-  for (const { ahead, dirty, noCommitsYet, lockLive, heldByProcess, ...w } of worktrees) {
+  for (const facts of worktrees) {
+    const { ahead, dirty } = facts;
+    const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
     if (only && !isNamed(w.path, only, platform)) continue;
-    const starting = stillStarting({ ...w, noCommitsYet, dirty, lockLive, heldByProcess });
+    const starting = stillStarting(facts);
     const reason = samePath(w.path, currentPath, platform)
       ? CURRENT_WORKTREE
       : dirty
