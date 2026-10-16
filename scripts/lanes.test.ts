@@ -61,13 +61,13 @@ describe("lanePorts", () => {
   });
 
   it("lets no two valid lanes share a port, legacy m and m0 aside", () => {
-    const owner = new Map<number, number>();
+    const holder = new Map<number, number>();
     for (const n of VALID_LANES) {
-      const key = n >= 1 && n <= 5 ? 10 * n : n;
+      const key = n < 10 ? (twinLane(n) ?? n) : n;
       for (const port of Object.values(lanePorts(n))) {
-        const held = owner.get(port);
+        const held = holder.get(port);
         expect(held === undefined || held === key, `lane ${n} port ${port} is also lane ${held}'s`).toBe(true);
-        owner.set(port, key);
+        holder.set(port, key);
       }
     }
   });
@@ -86,7 +86,7 @@ describe("isValidLane", () => {
 describe("parseLaneEnvArgs", () => {
   it("reads the lane and options", () => {
     expect(parseLaneEnvArgs(["32", "--force", "--db", "rp602"])).toEqual({ lane: 32, force: true, free: false, db: "rp602" });
-    expect(parseLaneEnvArgs(["--free"])).toEqual({ lane: 1, force: false, free: true, db: undefined });
+    expect(parseLaneEnvArgs(["--free"])).toEqual({ lane: 11, force: false, free: true, db: undefined });
     expect(parseLaneEnvArgs(["7"])).toEqual({ lane: 7, force: false, free: false, db: undefined });
   });
 
@@ -198,6 +198,16 @@ describe("firstFreeLane", () => {
     expect(freeLaneOrder(30).slice(0, 4)).toEqual([31, 32, 33, 34]);
     expect(firstFreeLane(31, (n) => (n >= 31 && n <= 34 ? ["taken"] : []))).toBe(11);
   });
+
+  it("goes on to the lanes A–D once the legacy lanes 1–9 are all taken, never an m0 (RP-605)", () => {
+    expect(freeLaneOrder(4)).toEqual([4, 5, 6, 7, 8, 9, 1, 2, 3, 11, 12, 13, 14, 21, 22, 23, 24, 31, 32, 33, 34, 41, 42, 43, 44, 51, 52, 53, 54]);
+    expect(firstFreeLane(1, (n) => (n < 10 ? ["taken"] : []))).toBe(11);
+  });
+
+  it("starts a bare --free at lane 11, so it never hands out a legacy lane (RP-605)", () => {
+    const parsed = parseLaneEnvArgs(["--free"]);
+    expect("lane" in parsed && freeLaneOrder(parsed.lane).every((n) => n >= 11 && n % 10 !== 0)).toBe(true);
+  });
 });
 
 describe("laneClashes between legacy lane m and lane m0", () => {
@@ -214,6 +224,48 @@ describe("laneClashes between legacy lane m and lane m0", () => {
   it("lets this worktree move from lane 3 to lane 30", () => {
     const containers = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: here, ports: [5732] })];
     expect(laneClashes(30, { containers, takenPorts: new Set([5732]), cwd: here })).toEqual([]);
+  });
+
+  it("lets a --db run share the twin lane's stack, as it shares the lane's own (RP-605)", () => {
+    const containers = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\main-3", ports: [5732] })];
+    expect(laneClashes(30, { containers, takenPorts: new Set([5732]), cwd: here, ownDatabase: true })).toEqual([]);
+    expect(laneHolders(30, { containers, cwd: here, ownDatabase: true })).toEqual([]);
+  });
+
+  it("advises pruning the twin lane a holder actually has (RP-605)", () => {
+    const old = "G:/rabaed-wt/RP-500";
+    const containers = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: old })];
+    const merged: WorktreeLane = { path: old, branch: "RP-500-x", merged: true, project: "rabaed-lane3" };
+    const advice = (worktrees: WorktreeLane[]) => holderAdvice(30, [old], { worktrees, hasOriginMain: true, cwd: here, containers, platform: "win32" })[0];
+    expect(advice([merged])).toContain("`pnpm lanes:prune --merged --lane 3`");
+    expect(advice([])).toContain("`pnpm lanes:prune --lane 3`");
+    // An unmerged worktree naming rabaed-lane3 keeps it from lanes:prune, so prune is not suggested.
+    const claimant: WorktreeLane = { path: "G:/rabaed-wt/agent-1", branch: "worktree-agent-1", merged: false, project: "rabaed-lane3" };
+    expect(advice([merged, claimant])).toContain("lanes:prune keeps rabaed-lane3");
+  });
+
+  it("lets --force take lane 30 over from a merged, clean worktree's rabaed-lane3 (RP-605)", () => {
+    const old = "G:\\rabaed-wt\\RP-500";
+    const containers = [
+      container({ name: "rabaed-lane3-db-1", state: "exited", project: "rabaed-lane3", workingDir: old, ports: [] }),
+      container({ name: "rabaed-lane5-db-1", project: "rabaed-lane5", workingDir: "G:\\rabaed-wt\\other", ports: [5932] }),
+    ];
+    const worktrees: TakeoverWorktree[] = [{ path: old, branch: "RP-500-x", merged: true, dirty: false, exists: true, project: "rabaed-lane3" }];
+    const p = chooseTakeover(30, { containers, worktrees, cwd: here, platform: "win32" });
+    expect(p.takeOver.map((c) => c.name)).toEqual(["rabaed-lane3-db-1"]);
+    expect(p.refused).toEqual([]);
+    expect(holdsLaneProject(30, containers, old, "win32")).toBe(true);
+    expect(clashesAfterRemoval(30, { containers, takenPorts: new Set(), cwd: here }, p.takeOver)).toEqual([]);
+    // A running twin holds lane 30's ports; once its containers are removed they are free.
+    const running = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: old, ports: [5732] })];
+    const busy = { containers: running, takenPorts: new Set([5732]), cwd: here };
+    expect(laneClashes(30, busy)).toHaveLength(2);
+    expect(clashesAfterRemoval(30, busy, running)).toEqual([]);
+    // Not when an unmerged worktree has the twin's project in its .env.
+    const sharer: TakeoverWorktree = { path: "G:\\rabaed-wt\\agent-2", branch: "worktree-agent-2", merged: false, dirty: false, exists: true, project: "rabaed-lane3" };
+    expect(chooseTakeover(30, { containers, worktrees: [...worktrees, sharer], cwd: here, platform: "win32" }).refused).toEqual([
+      "G:\\rabaed-wt\\agent-2 is on worktree-agent-2, not merged into origin/main yet, and has rabaed-lane3 in its .env.",
+    ]);
   });
 });
 
@@ -496,7 +548,7 @@ describe("holderAdvice (lane:env's line per holder)", () => {
   const cwd = "G:/rabaed-wt/current";
   const wt = (path: string, branch: string, merged: boolean, project?: string): WorktreeLane => ({ path, branch, merged, project });
   const holder = wt("G:/rabaed-wt/RP-362", "RP-362-views", true, "rabaed-lane3");
-  const input = (worktrees: WorktreeLane[]) => ({ worktrees, hasOriginMain: true, cwd, platform: "win32" as const });
+  const input = (worktrees: WorktreeLane[]) => ({ worktrees, hasOriginMain: true, cwd, containers: [], platform: "win32" as const });
 
   it("suggests lanes:prune --merged --lane N for a merged holder when no unmerged worktree names the lane", () => {
     expect(holderAdvice(3, [holder.path], input([holder]))[0]).toContain("pnpm lanes:prune --merged --lane 3");

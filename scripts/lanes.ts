@@ -52,6 +52,18 @@ export function lanePorts(n: number): LanePorts {
 
 export const laneProject = (n: number) => `rabaed-lane${n}`;
 
+/** The compose projects that can hold lane n's ports: its own, and its twin's (legacy m and m0, RP-605). */
+export function laneProjects(n: number): string[] {
+  const twin = twinLane(n);
+  return twin === undefined ? [laneProject(n)] : [laneProject(n), laneProject(twin)];
+}
+
+/** The lane whose compose project is `project` (`rabaed-lane32` → 32), or undefined. */
+const laneOfProject = (project: string): number | undefined => {
+  const m = /^rabaed-lane(\d+)$/.exec(project);
+  return m ? Number(m[1]) : undefined;
+};
+
 export type Container = { name: string; state: string; project: string; workingDir: string; ports: number[] };
 export type Volume = { name: string; project: string };
 
@@ -95,7 +107,8 @@ type ClashInput = {
  * already used from another worktree (it would share that worktree's database).
  */
 export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase }: ClashInput): string[] {
-  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (ownDatabase === true && c.project === laneProject(n));
+  // A --db run shares the lane's stack, under either project of its ports (RP-605).
+  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (ownDatabase === true && laneProjects(n).includes(c.project));
   const clashes: string[] = [];
   for (const [key, port] of Object.entries(lanePorts(n)) as [keyof LanePorts, number][]) {
     if (!takenPorts.has(port)) continue;
@@ -114,7 +127,7 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
   }
   // Legacy lane m and lane m0 have the same ports: the other's containers, even stopped, would clash on start.
   const twin = twinLane(n);
-  const twins = twin === undefined ? [] : [...new Set(containers.filter((c) => c.project === laneProject(twin) && !samePath(c.workingDir, cwd, platform)).map((c) => c.workingDir))];
+  const twins = twin === undefined ? [] : [...new Set(containers.filter((c) => c.project === laneProject(twin) && !own(c)).map((c) => c.workingDir))];
   if (twin !== undefined && twins.length > 0) {
     clashes.push(`Compose project ${laneProject(twin)} (lane ${twin} has the same ports as lane ${n}) belongs to ${twins.join(", ")}.`);
   }
@@ -124,18 +137,15 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
 /**
  * The order lane:env --free tries lanes in from start. From mL: the same Main's lanes m1–m4
  * from L (wrapping round), then the other Mains' lanes A–D; never a Main's own m0 or lane 0.
- * From a legacy lane (or 0): lanes 1–9 from it, wrapping round, as before.
+ * From a legacy lane (or 0): lanes 1–9 from it, wrapping round, then every Main's lanes A–D (RP-605).
  */
 export function freeLaneOrder(start: number): number[] {
-  if (start < 10) {
-    const from = Math.max(start, 1) - 1;
-    return LEGACY_LANES.map((_, i) => LEGACY_LANES[(from + i) % LEGACY_LANES.length]!);
-  }
+  const lanesAD = VALID_LANES.filter((n) => n >= 10 && n % 10 !== 0);
+  const rotate = (lanes: number[], from: number) => [...lanes.slice(from), ...lanes.slice(0, from)];
+  if (start < 10) return [...rotate(LEGACY_LANES, Math.max(start, 1) - 1), ...lanesAD];
   const main = Math.floor(start / 10);
-  const from = Math.max(start % 10, 1) - 1;
-  const own = [1, 2, 3, 4].map((_, i) => 10 * main + ((from + i) % 4) + 1);
-  const others = VALID_LANES.filter((n) => n >= 10 && n % 10 !== 0 && Math.floor(n / 10) !== main);
-  return [...own, ...others];
+  const own = lanesAD.filter((n) => Math.floor(n / 10) === main);
+  return [...rotate(own, Math.max(start % 10, 1) - 1), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)];
 }
 
 /** The first lane in freeLaneOrder(start) with no clash. */
@@ -251,11 +261,9 @@ export const pruneCommand = (lane: number, { merged }: { merged: boolean }): str
  */
 export function laneHolders(n: number, { containers, cwd, platform, ownDatabase }: Omit<ClashInput, "takenPorts">): string[] {
   const ports = new Set(Object.values(lanePorts(n)));
-  const twin = twinLane(n);
+  const projects = laneProjects(n);
   const holding = containers.filter((c) =>
-    ownDatabase === true && c.project === laneProject(n)
-      ? false
-      : c.project === laneProject(n) || (twin !== undefined && c.project === laneProject(twin)) || (c.state === "running" && c.ports.some((p) => ports.has(p))),
+    projects.includes(c.project) ? ownDatabase !== true : c.state === "running" && c.ports.some((p) => ports.has(p)),
   );
   return [...new Set(holding.map((c) => c.workingDir).filter((dir) => dir !== "" && !samePath(dir, cwd, platform)))];
 }
@@ -266,6 +274,8 @@ type AdviceInput = {
   /** origin/main is fetched, so merged can be trusted. */
   hasOriginMain: boolean;
   cwd: string;
+  /** The containers laneHolders looked at: a holder with only the twin lane's project is freed by pruning that lane. */
+  containers: Container[];
   platform?: NodeJS.Platform;
 };
 
@@ -274,18 +284,22 @@ type AdviceInput = {
  * into origin/main, and how to free the lane. A merged holder's lane is freed by
  * `lanes:prune --merged --lane n`, unless a worktree that is not merged names the lane's
  * project in its .env: mergedProjects keeps the project then, so prune would free nothing.
- * The line then names that worktree and does not suggest prune.
+ * The line then names that worktree and does not suggest prune. A holder whose containers are
+ * all the twin lane's (legacy m for m0, or m0 for m) is freed by pruning the twin (RP-605).
  */
-export function holderAdvice(n: number, holders: string[], { worktrees, hasOriginMain, cwd, platform }: AdviceInput): string[] {
-  const claimants = worktrees.filter((w) => !w.merged && w.project === laneProject(n));
+export function holderAdvice(n: number, holders: string[], { worktrees, hasOriginMain, cwd, containers, platform }: AdviceInput): string[] {
+  const twin = twinLane(n);
   return holders.map((dir) => {
+    const held = new Set(containers.filter((c) => samePath(c.workingDir, dir, platform)).map((c) => laneOfProject(c.project)));
+    const lane = twin !== undefined && held.has(twin) && !held.has(n) ? twin : n;
+    const claimants = worktrees.filter((w) => !w.merged && w.project === laneProject(lane));
     const w = worktrees.find((x) => samePath(x.path, dir, platform));
-    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(n, { merged: false })}\` frees the lane.`;
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, { merged: false })}\` frees the lane.`;
     const on = w.branch ?? "a detached HEAD";
     if (!hasOriginMain) return `  ${dir} is on ${on}; run \`git fetch origin main\` to see whether it is merged.`;
     if (!w.merged) return `  ${dir} is on ${on}, not merged into origin/main yet: its session may still need the lane.`;
-    if (claimants.length === 0) return `  ${dir} is on ${on}, already merged into origin/main: free the lane with \`${pruneCommand(n, { merged: true })}\`, then re-run.`;
-    const kept = `  ${dir} is on ${on}, already merged into origin/main, but lanes:prune keeps ${laneProject(n)}`;
+    if (claimants.length === 0) return `  ${dir} is on ${on}, already merged into origin/main: free the lane with \`${pruneCommand(lane, { merged: true })}\`, then re-run.`;
+    const kept = `  ${dir} is on ${on}, already merged into origin/main, but lanes:prune keeps ${laneProject(lane)}`;
     if (claimants.some((c) => samePath(c.path, cwd, platform))) return `${kept}: this worktree's own .env has it. \`pnpm lane:env ${n} --force\` takes the lane over.`;
     const sharers = claimants.map((c) => `${c.path} (on ${c.branch ?? "a detached HEAD"}, not merged)`).join(", ");
     return `${kept} while ${sharers} has it in its .env: that worktree still shares the lane. Take a free lane instead.`;
@@ -330,12 +344,15 @@ type TakeoverInput = {
  * cannot be read), is locked by a process that still runs, or is a folder git does not
  * list refuses the whole takeover (refused names each, with why). So does a worktree that
  * is not merged (other than cwd) naming the lane's project in its .env: it shares the lane.
+ * The twin lane's project (legacy m for m0, or m0 for m) counts as the lane's, as it holds the
+ * same ports; its volumes stay too, but lane n's project starts with a database of its own (RP-605).
  */
 export function chooseTakeover(
   n: number,
   { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, platform }: TakeoverInput,
 ): { takeOver: Container[]; from: string[]; refused: string[] } {
-  const mine = containers.filter((c) => c.project === laneProject(n) && !samePath(c.workingDir, cwd, platform));
+  const projects = laneProjects(n);
+  const mine = containers.filter((c) => projects.includes(c.project) && !samePath(c.workingDir, cwd, platform));
   const from: string[] = [];
   const refused: string[] = [];
   for (const dir of new Set(mine.map((c) => c.workingDir))) {
@@ -354,17 +371,17 @@ export function chooseTakeover(
   }
   if (mine.length > 0) {
     for (const w of worktrees) {
-      if (!w.merged && w.project === laneProject(n) && !samePath(w.path, cwd, platform)) {
-        refused.push(`${w.path} is on ${w.branch ?? "a detached HEAD"}, not merged into origin/main yet, and has ${laneProject(n)} in its .env.`);
+      if (!w.merged && w.project !== undefined && projects.includes(w.project) && !samePath(w.path, cwd, platform)) {
+        refused.push(`${w.path} is on ${w.branch ?? "a detached HEAD"}, not merged into origin/main yet, and has ${w.project} in its .env.`);
       }
     }
   }
   return refused.length > 0 ? { takeOver: [], from: [], refused } : { takeOver: mine, from, refused };
 }
 
-/** Whether a worktree has a container of lane n's compose project; its folder is then checked before a takeover. */
+/** Whether a worktree has a container of lane n's compose project (or its twin's); its folder is then checked before a takeover. */
 export const holdsLaneProject = (n: number, containers: Container[], dir: string, platform?: NodeJS.Platform): boolean =>
-  containers.some((c) => c.project === laneProject(n) && samePath(c.workingDir, dir, platform));
+  containers.some((c) => laneProjects(n).includes(c.project) && samePath(c.workingDir, dir, platform));
 
 /** laneClashes for lane n once the containers `removed` are gone: their containers and the ports they held no longer count. */
 export function clashesAfterRemoval(n: number, input: ClashInput, removed: Container[]): string[] {
@@ -410,14 +427,14 @@ export type LaneEnvArgs = { lane: number; force: boolean; free: boolean; db: str
 
 const LANE_ENV_USAGE = "Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (one lane per worktree; suffix: lowercase letters and digits, e.g. rp322)";
 
-/** lane:env's arguments, or the refusal to print. --free alone starts at lane 1. */
+/** lane:env's arguments, or the refusal to print. --free alone starts at lane 11 (Main 1, lane A), never a legacy lane. */
 export function parseLaneEnvArgs(args: string[]): LaneEnvArgs | { error: string } {
   const force = args.includes("--force");
   const free = args.includes("--free");
   const dbAt = args.indexOf("--db");
   const db = dbAt === -1 ? undefined : args[dbAt + 1];
   const positional = args.filter((a, i) => !a.startsWith("--") && !(dbAt !== -1 && i === dbAt + 1));
-  const lane = positional.length === 0 && free ? 1 : Number(positional[0]);
+  const lane = positional.length === 0 && free ? 11 : Number(positional[0]);
   if (positional.length > 1 || args.some((a) => a.startsWith("--") && !["--force", "--free", "--db"].includes(a)) || (dbAt !== -1 && !isValidDbSuffix(db))) {
     return { error: LANE_ENV_USAGE };
   }
