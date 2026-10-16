@@ -126,7 +126,9 @@ export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boole
     const runs = seam.labelRuns(head);
     const wait = `Fix: wait for the reviewed-label run on ${head}, then run \`pnpm queue ${pr}\` again.`;
     if (runs.length === 0 || runs.some((run) => run.status !== "completed")) {
-      return fail(`PR #${pr}: the reviewed-label workflow has not finished for the head ${head}, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.`, wait);
+      // Since RP-604 a PR's opening makes a run too; a PR opened before that and not pushed to since has none.
+      const none = runs.length === 0 ? " A PR opened before RP-604 and not pushed to since never gets one: merge origin/main in cleanly and push (the label stays)." : "";
+      return fail(`PR #${pr}: the reviewed-label workflow has not finished for the head ${head}, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.`, wait + none);
     }
     const [latest] = runs;
     if (latest?.conclusion !== "success" && latest?.conclusion !== "skipped") {

@@ -7,9 +7,11 @@ name: Reviewed label
 # trigger it, which is fine: nothing here pushes. Not a required check (it must
 # never be added to the main ruleset; it does not run on merge_group).
 # The label itself must exist in the repository: gh label create reviewed.
+# It also runs when a PR opens or reopens (RP-604), so every head has a run for
+# `pnpm queue` to wait for, even a PR that was never pushed to after opening.
 on:
   pull_request:
-    types: [synchronize]
+    types: [opened, reopened, synchronize]
 permissions: {}
 jobs:
   drop-label:
@@ -33,7 +35,8 @@ jobs:
         run: |
           git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/head"
           # After a force push the old head may be gone; the script then removes the label.
-          git fetch --no-tags origin "${{ github.event.before }}" || true
+          # Only a synchronize event has a `before`.
+          if [ -n "${{ github.event.before }}" ]; then git fetch --no-tags origin "${{ github.event.before }}" || true; fi
       - name: Note that the script has not landed yet
         if: hashFiles('scripts/reviewed-label.ts') == ''
         run: echo "scripts/reviewed-label.ts is not on the default branch yet; nothing to do"
