@@ -70,7 +70,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
 1. Start the session as in step 1 above, named `Main m, lane X – RP-nnn (spec)`, with the spec's key. First move the spec issue to **In Progress**; if it already is In Progress, another session owns it: stop. `pnpm lane:env` also refuses a worktree locked by another live `claude session`, even with `--force` (RP-461 was run by two sessions at once).
 2. First message:
    ```
-   Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
+   Main m, lane X. Run `pnpm lane:env mL --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
    ```
 3. Label every ticket of the spec with this lane, so no other lane starts one of them. A ticket marked **own PR** (it changes root `package.json`, `pnpm-lock.yaml` or `.github/workflows/*`; rule 3) is not merged onto the integration branch: its implementer subagent branches from `origin/main`, and it goes up as a PR of its own (RP-331 had to be reverted off spec RP-327's branch and split into PR #130).
 4. The subagents share the lane's Postgres, but each uses its own databases. Before launching them, and after any long pause, run `docker compose ps` in the session's own worktree and start any container of the lane that isn't up from there: `docker compose up -d --wait db mailpit files` (RP-575: lane 8's containers were down for a whole round, found only at `test:seam1`). `pnpm verify` also stops before its first step when the lane's Postgres doesn't answer.

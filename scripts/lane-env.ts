@@ -44,6 +44,7 @@ import {
   laneHolders,
   lanePorts,
   laneProject,
+  laneProjects,
   listContainers,
   parseLaneEnvArgs,
   releaseContainers,
@@ -107,14 +108,14 @@ function holderStatus(lane: number): string[] {
   // Only the holders and the worktrees whose .env names the lane: lanes:prune --merged keeps the lane for the latter.
   const relevant = worktrees
     .map((w) => ({ w, project: existsSync(join(w.path, ".env")) ? composeProjectOfEnv(readFileSync(join(w.path, ".env"), "utf8")) : undefined }))
-    .filter(({ w, project }) => project === laneProject(lane) || holders.some((dir) => samePath(w.path, dir)))
+    .filter(({ w, project }) => (project !== undefined && laneProjects(lane).includes(project)) || holders.some((dir) => samePath(w.path, dir)))
     .map(({ w, project }) => ({
       path: w.path,
       branch: w.branch,
       merged: hasOriginMain && !samePath(w.path, mainRoot) && worktreeMerged(w, "origin/main", mainRoot),
       project,
     }));
-  return holderAdvice(lane, holders, { worktrees: relevant, hasOriginMain, cwd: check.cwd });
+  return holderAdvice(lane, holders, { worktrees: relevant, hasOriginMain, cwd: check.cwd, containers: check.containers });
 }
 
 /** RP-545: lane n's taken ports held by a process of this session itself (its own pnpm demo / dev), with the command to stop it. */
@@ -189,7 +190,10 @@ function takeOverLane(lane: number): boolean {
     console.error((error as Error).message);
     process.exit(1);
   }
-  console.log(`Took lane ${lane} over from ${choice.from.join(", ")}: removed its containers, kept the volumes (database) of ${laneProject(lane)}.`);
+  const taken = [...new Set(choice.takeOver.map((c) => c.project))];
+  console.log(`Took lane ${lane} over from ${choice.from.join(", ")}: removed its containers, kept the volumes (database) of ${taken.join(", ")}.`);
+  // The twin lane's project (legacy m for m0, or m0 for m): its database stays in its volumes, and lane n's project starts a new one (RP-605).
+  if (taken.some((p) => p !== laneProject(lane))) console.log(`${laneProject(lane)} starts with a database of its own; \`pnpm lanes:prune\` removes the volumes left behind.`);
   return true;
 }
 
