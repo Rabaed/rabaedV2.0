@@ -87,6 +87,21 @@ describe("chooseWorktrees", () => {
     expect(skipped).toEqual([]);
   });
 
+  it("skips a merged worktree a desktop session holds, found by its path whatever its branch (RP-608)", () => {
+    const held = wt("agent-held", { branch: "RP-602-renamed" });
+    const openSession = (path: string) => (path === held.path ? { kind: "open" as const, session: 'session "RP-602"' } : undefined);
+    const { remove, skipped } = chooseWorktrees({ worktrees: [held, wt("agent-free")], currentPath: here, platform: "linux", openSession, only: ["agent-held", "agent-free"] });
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
+    expect(skipped.map((s) => s.reason)).toEqual(['its Claude desktop session is open (session "RP-602"); archive it first']);
+  });
+
+  it("skips every worktree when the desktop app's records cannot be read (RP-608)", () => {
+    const openSession = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list (x.json) could not be read" });
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-a")], currentPath: here, platform: "linux", openSession });
+    expect(remove).toEqual([]);
+    expect(skipped.map((s) => s.reason)).toEqual(["a Claude desktop session may hold it: Claude desktop's worktree list (x.json) could not be read"]);
+  });
+
   it("skips and names a worktree with uncommitted changes", () => {
     const { remove, skipped } = choose([wt("agent-a", { dirty: true })]);
     expect(remove).toEqual([]);
@@ -200,11 +215,21 @@ describe("isFinished and stillStarting (RP-585)", () => {
   });
 
   it("is finished with no commits yet only when clean, with no live lock and no process holding it", () => {
-    expect(isFinished(facts({ noCommitsYet: true }))).toBe(true);
-    expect(stillStarting(facts({ noCommitsYet: true, dirty: true }))).toBe("uncommitted changes");
-    expect(stillStarting(facts({ noCommitsYet: true, lockLive: true }))).toBe("locked by a running session");
-    expect(stillStarting(facts({ noCommitsYet: true, heldByProcess: true }))).toBe("a running process holds its folder");
-    expect(isFinished(facts({ noCommitsYet: true, heldByProcess: true }))).toBe(false);
+    const stopped = { branch: "RP-555-review-fixes", locked: "claude agent agent-a (pid 4242)", noCommitsYet: true };
+    expect(isFinished(facts(stopped))).toBe(true);
+    expect(stillStarting(facts({ ...stopped, dirty: true }))).toBe("uncommitted changes");
+    expect(stillStarting(facts({ ...stopped, lockLive: true }))).toBe("locked by a running session");
+    expect(stillStarting(facts({ ...stopped, heldByProcess: true }))).toBe("a running process holds its folder");
+    expect(isFinished(facts({ ...stopped, heldByProcess: true }))).toBe(false);
+  });
+
+  it("never finishes an unlocked branch with no commits yet: its session may have just branched off the target (RP-610)", () => {
+    expect(stillStarting(facts({ branch: "RP-568-x", locked: undefined, noCommitsYet: true }))).toBe("no lock to show its session has stopped");
+    expect(isFinished(facts({ branch: "RP-568-x", locked: undefined, noCommitsYet: true }))).toBe(false);
+  });
+
+  it("finishes an unlocked detached HEAD with no commits of its own once nothing holds it (RP-601)", () => {
+    expect(isFinished(facts({ branch: undefined, locked: undefined, noCommitsYet: true }))).toBe(true);
   });
 });
 
@@ -412,27 +437,36 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
       run(["worktree", "add", "-b", "RP-555-review-fixes", agent(paused), "integration"]);
     });
 
-    it("finds a never-committed, clean, unlocked branch at a commit in the target finished in all four", () => {
+    const lockByStoppedSession = () => run(["worktree", "lock", "--reason", "claude agent agent-paused (pid 4242)", agent(paused)]);
+
+    it("finds a never-committed, clean branch at a commit in the target, locked by a session that has stopped, finished in all four", () => {
+      lockByStoppedSession();
       expect(verdicts(nobody)).toEqual(all(true));
       expect(judgeWorktree(listed(paused), "main", root, nobody).neverCommitted).toBe(true);
     });
 
-    it("also with the app's lock, once the session it names has stopped", () => {
-      run(["worktree", "lock", "--reason", "claude agent agent-paused (pid 4242)", agent(paused)]);
-      expect(verdicts(nobody)).toEqual(all(true));
+    it("finds the same branch without a lock finished in none of the four: its session may have just started (RP-610)", () => {
+      expect(verdicts(nobody)).toEqual(all(false));
     });
 
     it("finds it not finished in any of the four while a running session's lock holds it", () => {
-      run(["worktree", "lock", "--reason", "claude agent agent-paused (pid 4242)", agent(paused)]);
+      lockByStoppedSession();
       expect(verdicts({ lockLive: (locked) => locked?.includes("pid 4242") ?? false, heldByProcess: () => false })).toEqual(all(false));
     });
 
+    it("finds it not finished in any of the four under a lock by hand that names no pid", () => {
+      run(["worktree", "lock", "--reason", "keep, mid-review", agent(paused)]);
+      expect(verdicts({ lockLive: systemLiveness().lockLive, heldByProcess: () => false })).toEqual(all(false));
+    });
+
     it("finds it not finished in any of the four with uncommitted files", () => {
+      lockByStoppedSession();
       writeFileSync(join(agent(paused), "wip.txt"), "wip");
       expect(verdicts(nobody)).toEqual(all(false));
     });
 
     it("finds it not finished in any of the four while a running process holds its folder", () => {
+      lockByStoppedSession();
       expect(verdicts({ lockLive: () => false, heldByProcess: (path) => samePath(path, agent(paused)) })).toEqual(all(false));
     });
 

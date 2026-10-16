@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { resolveTarget, type TargetGit } from "./worktrees-clean.ts";
+import { openedSinceListed, resolveTarget, type TargetGit } from "./worktrees-clean.ts";
+
+describe("openedSinceListed", () => {
+  const agent = "G:/Rabaed Contech/.claude/worktrees/agent-a1";
+
+  it("lets a worktree go that no desktop session holds", () => {
+    expect(openedSinceListed(agent, () => undefined)).toBeUndefined();
+  });
+
+  it("keeps and names one a desktop session opened after the prompt (RP-608)", () => {
+    const openSession = (path: string) => (path === agent ? { kind: "open" as const, session: 'session "RP-9"' } : undefined);
+    expect(openedSinceListed(agent, openSession)).toBe('its Claude desktop session is open (session "RP-9")');
+    expect(openedSinceListed("G:/Rabaed Contech/.claude/worktrees/agent-b2", openSession)).toBeUndefined();
+  });
+
+  it("keeps one when the app's records can no longer be read", () => {
+    expect(openedSinceListed(agent, () => ({ kind: "unknown", reason: "list unreadable" }))).toBe("a Claude desktop session may hold it: list unreadable");
+  });
+});
 
 /** A fake git with the given refs; `ancestors` lists "a<b" pairs where a is an ancestor of b. */
 const fakeGit = (refs: string[], { ancestors = [] as string[], fetchFails = false } = {}) => {

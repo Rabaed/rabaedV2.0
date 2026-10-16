@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
-import { finalLine, selectSteps, tail } from "./verify-steps.ts";
+import { finalLine, loadFailure, selectSteps, tail } from "./verify-steps.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
@@ -48,7 +48,11 @@ for (const { name, script } of steps) {
     continue;
   }
   console.error(`FAIL ${name} (${seconds}s, exit ${result.status ?? result.error?.message}). Tail of its output:`);
-  console.error(tail(`${result.stdout ?? ""}${result.stderr ?? ""}`, tailLines));
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  console.error(tail(output, tailLines));
+  // Only timeouts or workers that never started (RP-607): say so, still stop.
+  const load = loadFailure(name, output);
+  if (load) console.error(`\n${load}`);
   console.error(`\npnpm verify stopped at ${name}.`);
   process.exit(result.status ?? 1);
 }
