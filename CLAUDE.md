@@ -14,7 +14,7 @@ Rabaed is a B2B construction management platform for KSA (Project Module first; 
 ## Rules
 
 - **No secrets in the repo.** Never commit keys, tokens, passwords, certificates or real customer data. Use environment variables and a secrets manager; commit only `.env.example`. The repo is public.
-- Rabaed shows no due dates, deadlines or SLAs: only Step Age (weeks, 1–4+ dots). Never write "overdue".
+- Rabaed shows no due dates, deadlines or SLAs: only Step Age (weeks, 1–4+ dots). Never write "overdue". (A Documental Record may print the review duration in days when its Form asks: information, not an SLA; ADR 0023.)
 - Arabic and English from day one, RTL, Latin digits; Document Numbers always left-to-right.
 - Do not commit the Thmanyah font files (licence forbids redistribution).
 - **Isolated worktree shell:** plain, literal commands that act on this worktree only; write scripts with Write and run them; no heredocs, `git -C`, `cd … &&` or variable paths. Run `pnpm lane:env` from PowerShell, not Git Bash. See `planning/parallel-sessions.md` › Implementer brief.

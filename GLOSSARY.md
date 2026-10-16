@@ -391,20 +391,36 @@ An earlier copy of a free file in the Files Module, kept when a new copy is uplo
 _Avoid_: Revision, Drawing Revision
 
 **Signature**:
-A Member's signature, kept in their profile and applied, together with who acted and when, every time they take a Transition on a Work Item; the Documental Record shows the Signature of everyone who acted on the item's path (ADR 0017). A Member without one cannot take Transitions.
-_Avoid_: Stamp, initials
+A Member's handwritten signature, drawn, typed or uploaded in their profile, and applied, together with who acted and when, every time they take a Transition on a Work Item; the Documental Record shows the Signature of everyone who acted on the item's path (ADR 0017). A Member without one cannot take Transitions. A new Signature never changes records already made. There is no separate signing step: confirming a Transition applies it.
+_Avoid_: Stamp, initials, e-signature
+
+**Stamp**:
+A Company's official stamp, uploaded to its Company profile by its owner or Authorized Person beside its logo. The Documental Record prints the Stamp of every Company whose Members acted on the item. While a Company has no Stamp, none of its Members can take Transitions, as a paper submittal without its stamp isn't processed (ADR 0023).
+_Avoid_: Seal (the record's digital seal), company signature
 
 **Documental Record**:
-The certified PDF produced when a Work Item closes, whatever its outcome (approved, issued, Code C or D, Failed, Cancelled): its Form content, all Documents, the Signature of everyone who acted on it and the events between Participants, in one file. Internal Communication and Chat are left out. It is printed in Arabic, English or both, as the Project's settings choose.
-_Avoid_: Output, report, printout
+The sealed PDF produced when a Work Item closes, whatever its outcome (approved, issued, Code C or D, Failed, Cancelled): its Form content, the shared replies and Remarks, the Signature of everyone who acted on its path with their Companies' Stamps, and its Documents as an appendix, in one file nobody can change without it showing (ADR 0023). It is made from the item's Record Data. Internal Communication and Chat are left out. Everyone who can see the closed item may download it, and Signatory Access keeps it for those who signed. It is printed in Arabic, English or both, as the Project's settings choose.
+_Avoid_: Output, report, printout, export
+
+**Record Data**:
+The data file written when a Work Item closes, holding exactly what its Documental Record prints and nothing more. The record is made from it and carries it inside, and can be made again from it; it never changes.
+_Avoid_: XML export, metadata
+
+**Verification Code**:
+The code printed on a Documental Record, under its QR and in its footer, that opens the record's public verification page: whether it is genuine, its Document Number, Subject, Project, outcome, date and signers, and a check of a copy against the original. Typing it needs the Document Number too.
+_Avoid_: Reference number, serial
+
+**Working Copy**:
+A PDF of a Work Item that isn't closed, made on request for anyone who can see it: the item as shared, Companies named but not their people, no Signatures, no Verification Code, unsealed, and watermarked with the Project's text ("Not Final / غير نهائي" unless the Project Admin changes it).
+_Avoid_: Draft (an item never sent), preview, Documental Record
+
+**Disclaimer**:
+Fixed text a Form carries, in Arabic and English, printed at the end of every Documental Record made with it. Rabaed Defaults come with one; a Company may change it in its own Forms.
+_Avoid_: Footer note, terms
 
 **PDF Template**:
-A layout a Documental Record is printed with, such as a portal-style or a paper-matching layout. A Form can have several, and each Project chooses one per Work Item Type.
+The one Rabaed layout every Documental Record and Working Copy is printed with. What differs between Work Item Types is their Forms' fields, never the layout.
 _Avoid_: Print template, report format
-
-**Distribution List**:
-The people, including email addresses outside Rabaed, who receive a Work Item's Documental Record when it is issued, as an expiring, tracked link. Each Work Item Type has a default list per Project that can be edited on each item.
-_Avoid_: CC list, mailing list
 
 **Signatory Access**:
 The permanent right of every Member who signed a Work Item to see the Project's name and open the Documental Records they signed, even after removal from the Project or its closure. The Company keeps the same right, through its Authorized Person, for everything its Members signed.
