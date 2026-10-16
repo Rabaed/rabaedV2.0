@@ -58,7 +58,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
     if (option) {
       const name = option[1] as keyof typeof values;
       const value = option[2] ?? argv[++i];
-      if (!value) throw new Error(`--${name} needs a value.`);
+      if (!value || (option[2] === undefined && value.startsWith("--"))) throw new Error(`--${name} needs a value.`);
       values[name] = value;
     } else if (arg.startsWith("--")) {
       throw new Error(`Unknown option ${arg}.`);
@@ -73,7 +73,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
   const { email, short } = resolvePerson(values.as);
   const folder = values.folder ?? (/^RP-\d+/.exec(at.branch)?.[0] ?? at.branch.replace(/[^A-Za-z0-9._-]/g, "-"));
   if (!/^[A-Za-z0-9._-]+$/.test(folder) || folder.startsWith(".")) throw new Error(`--folder must be a plain name (letters, digits, . _ -): got "${folder}".`);
-  return { routes, email, short, setup: values.setup, folder, out: values.out ?? resolve(at.root, ".screens", folder), publish };
+  return { routes, email, short, setup: values.setup, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish };
 }
 
 /** `route` with each `{name}` replaced by the setup's value for it. */
@@ -93,21 +93,31 @@ export function shotName(route: string, width: number, locale: string): string {
 
 export type Shot = { route: string; width: number; locale: (typeof LOCALES)[number]; file: string };
 
-/** Every shot to take, locale by locale, then width. */
+/** Every shot to take, locale by locale, then width. Refuses two routes that would be saved as the same file. */
 export function plannedShots(routes: string[]): Shot[] {
-  return routes.flatMap((route) => LOCALES.flatMap((locale) => WIDTHS.map((width) => ({ route, width, locale, file: shotName(route, width, locale) }))));
+  const byName = new Map<string, string>();
+  for (const route of routes) {
+    const name = shotName(route, 0, "");
+    const other = byName.get(name);
+    if (other !== undefined && other !== route) throw new Error(`Routes ${other} and ${route} would be saved as the same file: shoot them in separate runs.`);
+    byName.set(name, route);
+  }
+  return [...new Set(routes)].flatMap((route) => LOCALES.flatMap((locale) => WIDTHS.map((width) => ({ route, width, locale, file: shotName(route, width, locale) }))));
 }
 
-export const screensBranch = (branch: string) => `screens-${branch}`;
+/** The branch the shots are published to: one level, so its raw URLs never mistake a part of it for the path. */
+export const screensBranch = (branch: string) => `screens-${branch.replace(/\//g, "-")}`;
 
 /** `owner/repo` from a GitHub remote URL, https or ssh. */
 export function repoSlug(remote: string): string {
   const match = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(remote.trim());
-  if (!match) throw new Error(`origin is not a GitHub repository (${remote.trim()}), so there is no raw URL to link.`);
+  // Without any user:token@ part, so a credential in the remote is never printed.
+  if (!match) throw new Error(`origin is not a GitHub repository (${remote.trim().replace(/\/\/[^@/]*@/, "//")}), so there is no raw URL to link.`);
   return `${match[1]}/${match[2]}`;
 }
 
-export const rawUrl = (repo: string, branch: string, path: string) => `https://raw.githubusercontent.com/${repo}/${branch}/${path}`;
+/** The raw URL of `path` at `ref`: the published commit, so GitHub's raw cache never shows an older image at the same path. */
+export const rawUrl = (repo: string, ref: string, path: string) => `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
 
 /** The PR body's table: one row per route, one column per locale and width. */
 export function markdownTable(shots: Shot[], urlOf: (file: string) => string): string {
@@ -119,7 +129,7 @@ export function markdownTable(shots: Shot[], urlOf: (file: string) => string): s
   };
   return [
     `| Page | ${columns.map((c) => `${LOCALE_NAMES[c.locale]} ${c.width}`).join(" | ")} |`,
-    `|${columns.map(() => "---").join("|")}|---|`,
+    `|---|${columns.map(() => "---").join("|")}|`,
     ...routes.map((route) => `| \`${route}\` | ${columns.map((c) => cell(route, c.locale, c.width)).join(" | ")} |`),
   ].join("\n");
 }
@@ -135,9 +145,10 @@ export type SetupApi = {
   transition(id: string, transition: string, extra?: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
 };
 
-type Page = { evaluate<R, A>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R> };
+/** The one Playwright Page method setupApi uses, so a test can stand in for the page. */
+export type EvaluatingPage = Pick<import("playwright").Page, "evaluate">;
 
-function setupApi(page: Page): SetupApi {
+export function setupApi(page: EvaluatingPage): SetupApi {
   const request: SetupApi["request"] = async (method, path, body) => {
     const result = await page.evaluate(
       async ({ method, path, body }) => {
@@ -151,9 +162,12 @@ function setupApi(page: Page): SetupApi {
       },
       { method, path, body },
     );
-    const parsed = result.text ? (JSON.parse(result.text) as unknown) : null;
     if (result.status >= 400) throw new Error(`Setup: ${method} ${path} failed with ${result.status}: ${result.text}`);
-    return { status: result.status, body: parsed };
+    try {
+      return { status: result.status, body: result.text ? (JSON.parse(result.text) as unknown) : null };
+    } catch {
+      return { status: result.status, body: result.text };
+    }
   };
   return {
     request,
@@ -172,16 +186,16 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
   const { chromium } = loadPlaywright();
   const browser = await chromium.launch();
   try {
-    let values: Record<string, string> = {};
+    let placeholders: Record<string, string> = {};
     if (args.setup) {
       const context = await browser.newContext({ storageState });
       const page = await context.newPage();
       await page.goto(`${webUrl}/en`);
       const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as { default: (api: SetupApi) => Promise<Record<string, string> | void> };
-      values = (await setup.default(setupApi(page))) ?? {};
+      placeholders = (await setup.default(setupApi(page))) ?? {};
       await context.close();
     }
-    const routes = args.routes.map((route) => fillRoute(route, values));
+    const routes = args.routes.map((route) => fillRoute(route, placeholders));
     const shots = plannedShots(routes);
     mkdirSync(args.out, { recursive: true });
     for (const width of WIDTHS) {
@@ -190,6 +204,8 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
       for (const shot of shots.filter((s) => s.width === width)) {
         const response = await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" });
         if (!response || response.status() >= 400) throw new Error(`${shot.locale}${shot.route} answered ${response?.status() ?? "nothing"}.`);
+        // A lost session redirects to the sign-in page with a 200: that is not the page asked for.
+        if (new URL(page.url()).pathname.includes("/sign-in")) throw new Error(`${shot.locale}${shot.route} sent ${args.email} to the sign-in page: the session did not hold.`);
         // Next's dev-mode indicator ("N" in a corner) is not part of the page.
         await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
         await page.screenshot({ path: join(args.out, shot.file), fullPage: true });
@@ -207,14 +223,10 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
 function publish(args: ScreensArgs, shots: Shot[], branch: string): string {
   const target = screensBranch(branch);
   const repo = repoSlug(git(["remote", "get-url", "origin"]));
-  let parent: string | undefined;
-  try {
-    git(["fetch", "--quiet", "origin", `refs/heads/${target}`]);
-    parent = git(["rev-parse", "FETCH_HEAD"]);
-  } catch {
-    parent = undefined; // No such branch yet: this is its first, orphan commit.
-  }
+  // No such branch yet: this is its first, orphan commit. A network or auth failure stops here, not later as a rejected push.
+  const parent = git(["ls-remote", "--heads", "origin", target]) ? fetchTip(target) : undefined;
   const scratch = mkdtempSync(join(tmpdir(), "rabaed-screens-"));
+  let commit: string;
   try {
     const env = { GIT_INDEX_FILE: join(scratch, "index") };
     if (parent) git(["read-tree", parent], env);
@@ -224,12 +236,21 @@ function publish(args: ScreensArgs, shots: Shot[], branch: string): string {
       git(["update-index", "--add", "--cacheinfo", `100644,${blob},${args.folder}/${shot.file}`], env);
     }
     const tree = git(["write-tree"], env);
-    const commit = git(["commit-tree", tree, ...(parent ? ["-p", parent] : []), "-m", `${branch} screenshots: ${args.folder}/ (not for merging)`]);
+    commit = git(["commit-tree", tree, ...(parent ? ["-p", parent] : []), "-m", `${branch} screenshots: ${args.folder}/ (not for merging)`]);
     git(["push", "--quiet", "origin", `${commit}:refs/heads/${target}`]);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
-  return markdownTable(shots, (file) => rawUrl(repo, target, `${args.folder}/${file}`));
+  return markdownTable(shots, (file) => rawUrl(repo, commit, `${args.folder}/${file}`));
+}
+
+/** The tip of origin's `branch`, fetched into the object store only (no FETCH_HEAD, no local branch). */
+function fetchTip(branch: string): string {
+  const ref = `refs/screens-publish/${branch}`;
+  git(["fetch", "--quiet", "--no-write-fetch-head", "origin", `+refs/heads/${branch}:${ref}`]);
+  const tip = git(["rev-parse", ref]);
+  git(["update-ref", "-d", ref]);
+  return tip;
 }
 
 async function main() {

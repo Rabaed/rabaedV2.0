@@ -1,5 +1,6 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fillRoute, markdownTable, parseArgs, plannedShots, rawUrl, repoSlug, screensBranch, shotName, type Shot } from "./screens.ts";
+import { fillRoute, markdownTable, parseArgs, plannedShots, rawUrl, repoSlug, screensBranch, setupApi, shotName, type EvaluatingPage, type Shot } from "./screens.ts";
 
 const at = { root: "/repo", branch: "RP-531-pnpm-screens" };
 
@@ -17,7 +18,7 @@ describe("parseArgs", () => {
 
   it("takes --setup, --folder, --out and --publish", () => {
     const args = parseArgs(["/home", "--as", "ali", "--setup", "s.ts", "--folder=handover", "--out", "shots", "--publish"], at);
-    expect(args).toMatchObject({ setup: "s.ts", folder: "handover", out: "shots", publish: true });
+    expect(args).toMatchObject({ setup: "s.ts", folder: "handover", out: resolve("shots"), publish: true });
   });
 
   it("uses the branch name as the folder when it has no issue key", () => {
@@ -36,6 +37,43 @@ describe("parseArgs", () => {
 
   it("refuses a folder that is not a plain name", () => {
     expect(() => parseArgs(["/home", "--as", "ali", "--folder", "../x"], at)).toThrow(/--folder/);
+  });
+
+  it("does not take the next option as a value", () => {
+    expect(() => parseArgs(["/home", "--as", "ali", "--setup", "--publish"], at)).toThrow(/--setup needs/);
+  });
+});
+
+describe("setupApi", () => {
+  /** A page whose fetch answers `status` with `text`, and records each request it was asked to make. */
+  function fakePage(status: number, text: string) {
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const page = {
+      evaluate: async (_fn: unknown, arg: { method: string; path: string; body: unknown }) => {
+        calls.push(arg);
+        return { status, text };
+      },
+    } as unknown as EvaluatingPage;
+    return { page, calls };
+  }
+
+  it("takes a Transition confirmed, with a fresh idempotencyKey, and returns the parsed body", async () => {
+    const { page, calls } = fakePage(200, '{"ok":true}');
+    const api = setupApi(page);
+    expect(await api.transition("item-1", "send_for_review", { remarks: "x" })).toEqual({ status: 200, body: { ok: true } });
+    await api.transition("item-1", "submit");
+    expect(calls[0]).toMatchObject({ method: "POST", path: "/work-items/item-1/transitions", body: { transition: "send_for_review", confirmed: true, remarks: "x" } });
+    const keys = calls.map((call) => (call.body as { idempotencyKey: string }).idempotencyKey);
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it("stops with the status and body of a failed call, JSON or not", async () => {
+    await expect(setupApi(fakePage(502, "<html>Bad gateway</html>").page).request("GET", "/projects")).rejects.toThrow(/GET \/projects failed with 502: <html>Bad gateway/);
+  });
+
+  it("returns a body that is not JSON as text", async () => {
+    expect(await setupApi(fakePage(200, "plain").page).request("GET", "/x")).toEqual({ status: 200, body: "plain" });
   });
 });
 
@@ -63,11 +101,17 @@ describe("plannedShots", () => {
     expect(shots.map((s) => s.file)).toEqual(["home-1366-en.png", "home-1920-en.png", "home-1366-ar.png", "home-1920-ar.png"]);
     expect(plannedShots(["/a", "/b"])).toHaveLength(8);
   });
+
+  it("refuses two routes that would be saved as the same file, and shoots a repeated route once", () => {
+    expect(() => plannedShots(["/a-b", "/a/b"])).toThrow(/\/a-b and \/a\/b/);
+    expect(plannedShots(["/a", "/a"])).toHaveLength(4);
+  });
 });
 
 describe("publishing", () => {
   it("is on screens-<branch>", () => {
     expect(screensBranch("RP-531-pnpm-screens")).toBe("screens-RP-531-pnpm-screens");
+    expect(screensBranch("prototype/uat")).toBe("screens-prototype-uat");
   });
 
   it("reads the GitHub repository from an https or ssh remote", () => {
@@ -77,10 +121,17 @@ describe("publishing", () => {
     expect(() => repoSlug("https://gitlab.com/x/y.git")).toThrow(/GitHub/);
   });
 
-  it("links the raw file", () => {
-    expect(rawUrl("Rabaed/rabaedV2.0", "screens-RP-531-x", "RP-531/home-1366-en.png")).toBe(
-      "https://raw.githubusercontent.com/Rabaed/rabaedV2.0/screens-RP-531-x/RP-531/home-1366-en.png",
-    );
+  it("never prints a credential in the remote", () => {
+    expect(() => repoSlug("https://bot:s3cr3t-token@gitlab.com/x/y.git")).toThrow(/https:\/\/gitlab\.com\/x\/y\.git/);
+    try {
+      repoSlug("https://bot:s3cr3t-token@gitlab.com/x/y.git");
+    } catch (error) {
+      expect(String(error)).not.toContain("s3cr3t-token");
+    }
+  });
+
+  it("links the raw file at the published commit", () => {
+    expect(rawUrl("Rabaed/rabaedV2.0", "c83dd470e", "RP-531/home-1366-en.png")).toBe("https://raw.githubusercontent.com/Rabaed/rabaedV2.0/c83dd470e/RP-531/home-1366-en.png");
   });
 
   it("prints one row per route and one column per width and locale", () => {

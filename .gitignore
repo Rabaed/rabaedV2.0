@@ -30,6 +30,7 @@ packages/ui/src/styles/arabic-font.css
 
 # Signed-in browser states written by `pnpm demo:session` (RP-543); they hold live session cookies.
 .demo-sessions/
+# pnpm screens's PR screenshots (RP-531): published to screens-<branch>, never committed here.
 .screens/
 
 # --- Tooling ---
