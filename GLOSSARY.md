@@ -186,7 +186,7 @@ _Avoid_: housekeeping item, NCR
 
 **Question**:
 A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
-_Avoid_: Comment (reserved for Code B)
+_Avoid_: Comment (reserved for Code B and Passed with Comments)
 
 **Comment**:
 A Work Item in the Snag List created from a reviewer's comment on a Code B approval (or a Passed with Comments Inspection), linked to the reviewed Work Item.
@@ -340,7 +340,7 @@ The formal outcome of reviewing a Work Item such as a submittal: A (Approved), B
 _Avoid_: Status, result
 
 **Outcome**:
-How a Work Item ends, set by the Transition that closes it: a Review Code, an Inspection Result, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B, a Revision with Code C, a replacement with Code D.
+How a Work Item ends, set by the Transition that closes it: a Review Code, an Inspection Result, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B or Passed with Comments, a Revision with Code C, a replacement with Code D.
 _Avoid_: Status, result
 
 **Recommended Code**:
