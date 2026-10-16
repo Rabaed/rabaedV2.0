@@ -10,9 +10,9 @@
   },
   "scripts": {
     "tokens": "node scripts/generate-tokens.ts",
-    "storybook": "storybook dev --port 6006 --no-open",
+    "storybook": "storybook dev --port 6006 --no-open --ci",
     "build-storybook": "storybook build",
-    "prototype:puck": "storybook dev --port 6116 --no-open",
+    "prototype:puck": "storybook dev --port 6116 --no-open --ci",
     "test:stories": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
