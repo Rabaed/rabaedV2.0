@@ -314,7 +314,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 
 **package**
 `id`, `project_id`, `participant_id`, `seq` (per Project, shown PKG-001), `name i18n`, `status {open, in_progress, done}`.
-Status is recomputed on Submit and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (to be specified, RP-588).
+Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (to be specified, RP-588).
 
 ## 6. Documents, signing, Documental Records, distribution
 
