@@ -102,6 +102,18 @@ export function contentDisposition(fileName: string, contentType: string): strin
 export function createFileStore(settings: FileStoreSettings): FileStore {
   const s3 = clientFor(settings);
   const expiresAt = (signedAt: Date) => new Date(signedAt.getTime() + SIGNED_URL_TTL_SECONDS * 1000).toISOString();
+  /** The stored object's body, or null when there is none at that key. */
+  const getObjectBody = async (key: string) => {
+    try {
+      const object = await s3.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
+      return object.Body ?? null;
+    } catch (error) {
+      if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
+  };
   return {
     async signUpload(key, file, signedAt) {
       const command = new PutObjectCommand({
@@ -143,30 +155,16 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
     },
 
     async read(key) {
-      try {
-        const object = await s3.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
-        return (await object.Body?.transformToByteArray()) ?? null;
-      } catch (error) {
-        if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
-          return null;
-        }
-        throw error;
-      }
+      const body = await getObjectBody(key);
+      return (await body?.transformToByteArray()) ?? null;
     },
 
     async sha256(key) {
-      try {
-        const object = await s3.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
-        if (!object.Body) return null;
-        const hash = createHash("sha256");
-        for await (const chunk of object.Body as AsyncIterable<Uint8Array>) hash.update(chunk);
-        return hash.digest();
-      } catch (error) {
-        if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
-          return null;
-        }
-        throw error;
-      }
+      const body = await getObjectBody(key);
+      if (!body) return null;
+      const hash = createHash("sha256");
+      for await (const chunk of body as AsyncIterable<Uint8Array>) hash.update(chunk);
+      return hash.digest();
     },
 
     async copy(fromKey, toKey) {

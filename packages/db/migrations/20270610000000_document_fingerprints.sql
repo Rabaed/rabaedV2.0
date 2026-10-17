@@ -8,7 +8,7 @@
 --   document is granted column by column (draft_row_times_floor migration), so a
 --   new column is nobody's until granted. Null only on Documents confirmed before
 --   this migration (dev and UAT data).
--- * Copies carry their source's: a Revision's and a Replacement's through
+-- * Copies carry their source's: a Revision's and a replacement's through
 --   document_copy (a trigger copies it as each copy is recorded), a Duplicate's in
 --   app.copy_duplicate_documents. The api copies the bytes too, so it still holds.
 -- * app.work_item_content_sha256 names each Document with its fingerprint (hex,
@@ -79,7 +79,7 @@ grant execute on function
   app.confirm_document_upload(uuid, uuid, bigint, text, bytea, timestamptz, timestamptz, double precision, double precision)
   to rabaed_app;
 
--- A Revision's or a Replacement's copy takes its source's fingerprint as it is
+-- A Revision's or a replacement's copy takes its source's fingerprint as it is
 -- recorded. Only the owner's functions write document_copy.
 create function app.document_copy_takes_fingerprint() returns trigger
   language plpgsql
