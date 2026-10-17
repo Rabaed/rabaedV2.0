@@ -120,9 +120,7 @@ type Row = {
   closer_name: BilingualText | null;
   closer_company_name: BilingualText | null;
   /** Its Package (RP-636), only where the viewer sees the Package (app.work_item_package); else null. */
-  package_id: string | null;
-  package_seq: number | null;
-  package_name: BilingualText | null;
+  package: { id: string; seq: number; name: BilingualText } | null;
 };
 
 /**
@@ -167,8 +165,7 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       case when orv.name is null then h.assignee_member_id end as assignee_member_id, orv.name as owner_review_name,
       w.raised_by_participant_id as raiser_participant_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
-      s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key,
-      pk.package_id, pk.seq as package_seq, pk.name as package_name
+      s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
@@ -193,8 +190,6 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
     left join lateral (select * from app.work_item_holder(w.id) limit 1) h on true
     -- Asked only where the Step it is seen at confirms a Code: only there can it be at the Owner's review.
     cross join lateral (select case when s.outcome_mode = 'confirm_code' then app.with_owner_review(w.id) end as name) orv
-    -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package.
-    left join lateral app.work_item_package(w.id) pk on true
     where w.project_id = ${projectId} and t.module_key = ${moduleKey}
       and (${allRevisions}::boolean or app.latest_visible_revision(w.id))
   `;
@@ -525,9 +520,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,
     ...(r.raiser_name ? { raiserCompanyName: r.raiser_name } : {}),
-    ...(r.package_id && r.package_seq !== null && r.package_name
-      ? { package: { id: r.package_id, number: packageNumber(r.package_seq), name: r.package_name } }
-      : {}),
+    ...(r.package ? { package: { id: r.package.id, number: packageNumber(r.package.seq), name: r.package.name } } : {}),
     // Who closed it (RP-410): my own Company's person, or the Company only (V14).
     closedBy: open
       ? null
@@ -562,7 +555,10 @@ function toRow(r: Row, now: Date): WorkItemRow {
 // shows only their own Company's people (V14).
 const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name, cm.full_name as closer_name,
   m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me,
-  hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role`;
+  hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role,
+  -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package. A column of
+  -- the rows read, not of visibleRows, so the counts never ask for it and a page asks for its own rows only.
+  (select jsonb_build_object('id', pk.package_id, 'seq', pk.seq, 'name', pk.name) from app.work_item_package(r.id) pk) as package`;
 // RP-410:
 // - The closing move of a closed item: the latest event, as RLS lets the viewer read it (the
 //   closing Transition is shared), that brought it to the Step it is at. Its actor is named only
