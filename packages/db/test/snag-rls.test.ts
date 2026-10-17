@@ -195,3 +195,83 @@ describe("a Consultant's Snag reaches exactly K1 and C1", () => {
     expect(await stepAsSeen(k1.member, id)).toEqual(atRaise);
   });
 });
+
+// RP-622 (SNAG-2): the Snag's Draft and Verify are held by the raiser. C1 raises a Snag on
+// itself: Open is of its own role, so C1 holds every Step (workflow-engine.md §3.1).
+describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () => {
+  /** C1's PM's Draft Snag on Building A. */
+  async function drafted(title: string): Promise<string> {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1Pm,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', ${title}, app.latest_form_version('SNG'), ${JSON.stringify({ description: title })}::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    return created!.work_item_id;
+  }
+  /** C1's PM takes `transition` and holds the Step it leads to. */
+  async function move(id: string, transition: string, answers: object = {}) {
+    expect(await take(c1Pm, id, transition, answers)).toBe("applied");
+    await pickUp(c1Pm, id);
+  }
+  /** What K1 and C2 read of item `id`: none of its row, events, Steps, Documents, Links or raiser. */
+  async function readByOthers(id: string) {
+    const reads = [];
+    for (const who of [k1.member, c2.member]) {
+      reads.push(
+        await seen(who, id),
+        await events(who, id),
+        await call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
+        await call(who, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`),
+        await call(who, sql<{ to_id: string }>`select * from app.work_item_links(${id}::uuid)`),
+        await stepAsSeen(who, id),
+        (await call<{ role: string | null }>(who, sql`select app.work_item_raiser_role(${id}::uuid) as role`))[0]!.role,
+      );
+    }
+    return reads;
+  }
+  const nothing = [[], [], [], [], [], undefined, null, [], [], [], [], [], undefined, null];
+
+  it("RP-622-1: its Draft, Open, moves, Verify and Close are C1's alone: K1 and C2 read none of it at any Step", async () => {
+    const id = await drafted("Missing fire stopping");
+    expect(await readByOthers(id)).toEqual(nothing);
+    await move(id, "raise");
+    expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("open");
+    expect(await readByOthers(id)).toEqual(nothing);
+    await move(id, "start_work");
+    await move(id, "put_on_hold_in_progress");
+    expect(await readByOthers(id)).toEqual(nothing);
+    await move(id, "resolve_on_hold", { resolution_note: "Sealed" });
+    expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("resolved");
+    expect(await readByOthers(id)).toEqual(nothing);
+    expect(await take(c1Pm, id, "close")).toBe("applied");
+    expect(await readByOthers(id)).toEqual(nothing);
+    // C1 reads it whole, every event its own.
+    expect(await seen(c1.member, id)).toEqual([id]);
+    expect((await events(c1.member, id)).every((e) => e.actor_participant_id === participant.c1)).toBe(true);
+  });
+
+  it("RP-622-2: the raiser's role is read by those who see the item only: C1 of its own Snag, K1 and C1 of K1's", async () => {
+    const own = await drafted("Raiser role of C1's Snag");
+    const k1s = await raised("Raiser role of K1's Snag");
+    const role = async (who: string, id: string) => (await call<{ role: string | null }>(who, sql`select app.work_item_raiser_role(${id}::uuid) as role`))[0]!.role;
+    expect(await role(c1.member, own)).toBe("contractor");
+    expect(await role(k1.member, own)).toBeNull();
+    expect(await role(k1.member, k1s)).toBe("consultant");
+    expect(await role(c1.member, k1s)).toBe("consultant");
+    expect(await role(c2.member, k1s)).toBeNull();
+  });
+
+  it("RP-622-3: K1's Snag Returned to Open from its Verify goes back to C1, which resolved it, and C2 still reads nothing", async () => {
+    const id = await raised("Returned by K1");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "resolve", { resolution_note: "Done" })).toBe("applied");
+    expect(await take(k1.member, id, "return_to_open", { reason: "Not done" })).toBe("applied");
+    expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("open");
+    expect(await call(c1.member, sql<{ participant_id: string }>`select participant_id from step_assignment where work_item_id = ${id}::uuid and status <> 'done'`)).toEqual([
+      { participant_id: participant.c1 },
+    ]);
+    expect(await seen(c2.member, id)).toEqual([]);
+  });
+});

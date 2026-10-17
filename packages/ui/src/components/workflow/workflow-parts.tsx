@@ -1,4 +1,4 @@
-import type { Locale, TransitionKind, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import { actorHolder, actorRole, type Locale, type TransitionKind, type WorkflowStep, type WorkflowTransition } from "@rabaed/domain";
 import type { CSSProperties } from "react";
 import type { StageKey } from "../../tokens/themes.ts";
 import type { IconName } from "../icon/icon.tsx";
@@ -14,12 +14,13 @@ export const stageVars = (colour: StageKey) => ({
   fg: `var(--stage-${colour}-fg)`,
 });
 
-/** "Contractor · Review · Engineer": the Step's role, Function Permission and Positions. */
+/** "Contractor · Review · Engineer": the Step's role (or "The raiser"), Function Permission and Positions. */
 export function stepMeta(step: WorkflowStep, labels: WorkflowLabels): string {
-  if (!step.actor) return "";
-  const { role } = step.actor;
-  const positions = (step.actor.positions ?? []).map((p) => labels.position(p, role));
-  return [labels.role(step.actor.role), labels.permission(step.actor.permission), ...positions].join(" · ");
+  const holder = actorHolder(step.actor);
+  if (!step.actor || holder === null) return "";
+  const role = actorRole(step.actor);
+  const positions = (step.actor.positions ?? []).map((p) => (role === null ? p : labels.position(p, role)));
+  return [labels.role(holder), labels.permission(step.actor.permission), ...positions].join(" · ");
 }
 
 /**
@@ -33,7 +34,8 @@ export function stepIcon(step: WorkflowStep): IconName {
   /* eslint-disable rabaed/no-avoid-terms */
   const actor = step.actor;
   if (!actor) return "user";
-  if (actor.role === "owner" || actor.role === "owner_representative") return "building";
+  const role = actorRole(actor);
+  if (role === "owner" || role === "owner_representative") return "building";
   if (step.outcomeMode === "issue_outcome" || actor.permission === "approve" || actor.permission === "close") return "gavel";
   if (step.outcomeMode === "recommend_code") return "user-search";
   if (actor.permission === "create" || actor.permission === "submit") return "user";

@@ -11,13 +11,13 @@ import type { FieldError, FormSection } from "./form.ts";
 /** A Step of a Work Item Type's Workflow, as Form Sections are matched to it. */
 export type WorkflowStepHolder = {
   key: string;
-  /** The base role of the Participant that holds it (`contractor`, `consultant`…); null on a terminal Step. */
+  /** The base role of the Participant that holds it (`contractor`, `consultant`…), `raiser` when the raiser does (RP-622); null on a terminal Step. */
   role: string | null;
   /** The Draft Step, where the raiser starts. */
   draft: boolean;
 };
 
-/** The base role of the raiser: the one holding the Draft Step. */
+/** The raiser's holder: the one holding the Draft Step (`raiser` when the Draft names the raiser, RP-622). */
 const raiserRole = (steps: readonly WorkflowStepHolder[]): string | null => steps.find((s) => s.draft)?.role ?? null;
 
 /** The Steps where `section` is changed: its `editable_at`, or else the raiser's Draft and internal Steps. */
