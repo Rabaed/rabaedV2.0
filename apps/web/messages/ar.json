@@ -842,6 +842,21 @@
         "none": "لا يوجد مورّد معتمد لهذا التخصص بعد",
         "withdrawn": "\u2068{name}\u2069 (مسحوب)"
       },
+      "checklistTemplateField": {
+        "choose": "اختر…",
+        "none": "بدون",
+        "chooseTradeFirst": "اختر التخصص أولًا.",
+        "noneForTrade": "لا يوجد قالب قائمة تحقق لهذا التخصص بعد",
+        "kept": "\u2068{name}\u2069 (كما اختير)",
+        "checks": "{count, plural, =0 {0 بنود} one {بند واحد} two {بندان} few {{n} بنود} many {{n} بندًا} other {{n} بند}}",
+        "filledOnSite": "يجيب عنها الاستشاري في الموقع",
+        "itemNumber": "{n} من {of}",
+        "commentRequired": "تعليق مطلوب عند {answer}",
+        "photoRequired": "صورة مطلوبة عند {answer}",
+        "commentOptional": "التعليق اختياري",
+        "photoOptional": "الصور اختيارية",
+        "raisesSnag": "{answer} تُنشئ ملاحظة"
+      },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
       }

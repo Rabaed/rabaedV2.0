@@ -17,6 +17,7 @@ import { formSchema, publishProblems, type FormVersion, type LinkSearchResults, 
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { checklistTemplate } from "./support/checklist-template.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, ok, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
@@ -43,6 +44,8 @@ let k1: Company;
 let tower: Tower;
 const item = { a: "", b: "", c: "", open: "" };
 const requestedFor = "2026-11-02T05:30:00.000Z";
+// A Checklist Template of the Project's, for Electrical: the WIR Form Version 3 asks for one (RP-651).
+let wirChecklist = "";
 
 /** A submittal of C1's, Submitted to K1: K1's manager holds its Code. */
 async function submittal(title: string): Promise<string> {
@@ -77,6 +80,7 @@ const wirAnswers = (extra: Record<string, unknown> = {}) => ({
   requested_for: requestedFor,
   trade: tower.electrical,
   location: tower.buildingA,
+  checklist_template: wirChecklist,
   ...extra,
 });
 const createWir = (extra: Record<string, unknown> = {}) =>
@@ -114,6 +118,7 @@ beforeAll(async () => {
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
   tower = await buildTower(api, { c1, k1 }, "WV2");
+  wirChecklist = await checklistTemplate(tower.admin!, tower.projectId, tower.electrical);
   item.a = await closedWith("Cable trays, Code A", "approve_a");
   item.b = await closedWith("Cable ladders, Code B", "approve_b");
   item.c = await closedWith("Cable glands, Code C", "revise_c");
@@ -122,16 +127,18 @@ beforeAll(async () => {
 
 describe("the WIR Form Version 2 (`pnpm defaults:publish`)", () => {
   // Version 2 wherever Version 1 was published (every deployed environment); a database seeded fresh, as
-  // this one, publishes the document once, as Version 1.
-  it("is the WIR's latest Version: Version 1 plus Requested for and the References section, and passes the publish checks against it", async () => {
+  // this one, publishes the document once, as Version 1. The document is now Version 3 (RP-651): Version 2
+  // plus the Checklist section (checklist-templates.test.ts).
+  it("is Version 1 plus Requested for and the References section, and passes the publish checks against it", async () => {
     const latest = formSchema.parse((await wirVersions()).at(-1)!.schema);
+    const v2 = { sections: latest.sections.filter((s) => s.key !== "checklist") };
     // Version 1 (RP-437): the same, less Requested for and the References section.
     const v1 = {
-      sections: latest.sections
+      sections: v2.sections
         .filter((s) => s.key !== "references")
         .map((s) => ({ ...s, fields: s.fields.filter((f) => f.key !== "requested_for") })),
     };
-    expect(latest.sections.map((s) => s.key)).toEqual(["inspection", "documents", "references", "classification"]);
+    expect(latest.sections.map((s) => s.key)).toEqual(["inspection", "documents", "references", "classification", "checklist"]);
     expect(latest.sections[0]!.fields.map((f) => f.key)).toEqual(["description", "specification_section", "requested_for"]);
     expect(latest.sections[0]!.fields[2]).toMatchObject({ type: "datetime", required: true, label: { en: "Requested for" } });
     expect(latest.sections[2]!.fields).toEqual([
@@ -144,7 +151,8 @@ describe("the WIR Form Version 2 (`pnpm defaults:publish`)", () => {
       ["MAR", new Set(["A", "B", "C", "D"])],
       ["WIR", new Set(["passed", "passed_with_comments", "failed"])],
     ]);
-    expect(publishProblems(latest, [v1], { types })).toEqual([]);
+    expect(publishProblems(v2, [v1], { types })).toEqual([]);
+    expect(publishProblems(latest, [v2, v1], { types })).toEqual([]);
   });
 
   it("is the Form a new WIR gets", async () => {
@@ -279,12 +287,13 @@ describe("Project Settings → Required links: \"Approved submittals required\""
   it("is the Project's own: another Project's WIRs are as the Form says", async () => {
     await ok(set(tower.admin!, { type: "WIR", key: "approved_submittals", required: true }));
     const other = await buildTower(api, { c1, k1 }, "WV3");
+    const otherChecklist = await checklistTemplate(other.admin!, other.projectId, other.electrical);
     const id = (
       await ok(
         other.c1Engineer.post(`/v1/projects/${other.projectId}/work-items`, {
           type: "WIR",
           title: "Cable trays, elsewhere",
-          answers: { description: "Trays", requested_for: requestedFor, trade: other.electrical, location: other.buildingA },
+          answers: { description: "Trays", requested_for: requestedFor, trade: other.electrical, location: other.buildingA, checklist_template: otherChecklist },
         }),
         201,
       )

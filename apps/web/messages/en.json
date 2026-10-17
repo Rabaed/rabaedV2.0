@@ -842,6 +842,21 @@
         "none": "No approved supplier for this Trade yet",
         "withdrawn": "\u2068{name}\u2069 (withdrawn)"
       },
+      "checklistTemplateField": {
+        "choose": "Choose\u2026",
+        "none": "None",
+        "chooseTradeFirst": "Choose a Trade first.",
+        "noneForTrade": "No Checklist Template for this Trade yet",
+        "kept": "\u2068{name}\u2069 (as picked)",
+        "checks": "{count, plural, one {1 check} other {{n} checks}}",
+        "filledOnSite": "answered by the Consultant on site",
+        "itemNumber": "{n} of {of}",
+        "commentRequired": "Comment required on {answer}",
+        "photoRequired": "Photo required on {answer}",
+        "commentOptional": "Comment optional",
+        "photoOptional": "Photos optional",
+        "raisesSnag": "{answer} raises a Snag"
+      },
       "linkQuestion": {
         "remove": "Remove {number}"
       }

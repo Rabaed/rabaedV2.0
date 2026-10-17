@@ -13,6 +13,7 @@ import { parseWorkflowDefinition, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
+import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, memberOnProject, ok, tryTake, take, type Company } from "./support/tower.ts";
 
@@ -28,6 +29,7 @@ afterAll(async () => {
 let projectId = "";
 let electrical = "";
 let buildingA = "";
+let wirChecklist = ""; // A Checklist Template of the Project's, for Electrical: the WIR Form Version 3 asks for one (RP-651).
 let hafiz: Caller; // C1 Contractor Engineer: the author.
 let ali: Caller; // C1's only Project Manager: holds Contractor PM at once.
 let ahmed: { id: string; caller: Caller }; // K1 Consultant Engineer.
@@ -50,8 +52,14 @@ async function inReview(title: string) {
       hafiz.post(`/v1/projects/${projectId}/work-items`, {
         type: "WIR",
         title,
-        // The WIR Form Version 2 asks when the work is ready (RP-82).
-        answers: { description: "Slab rebar, Level 2", requested_for: "2026-11-02T05:30:00.000Z", trade: electrical, location: buildingA },
+        // The WIR Form Version 2 asks when the work is ready (RP-82); Version 3 for its Checklist Template (RP-651).
+        answers: {
+          description: "Slab rebar, Level 2",
+          requested_for: "2026-11-02T05:30:00.000Z",
+          trade: electrical,
+          location: buildingA,
+          checklist_template: wirChecklist,
+        },
       }),
       201,
     )
@@ -86,6 +94,7 @@ beforeAll(async () => {
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id as string;
   electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
   buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
+  wirChecklist = await checklistTemplate(c1.caller, projectId, electrical);
   const c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id as string;

@@ -2,6 +2,7 @@ import type { Locale } from "@rabaed/domain";
 import type { ActionFormLabels } from "../components/form-engine/action-form.tsx";
 import type { AttachmentsFieldLabels } from "../components/form-engine/attachments-field.tsx";
 import type { ChecklistFieldLabels } from "../components/form-engine/checklist-field.tsx";
+import type { ChecklistTemplateFieldLabels } from "../components/form-engine/checklist-template-field.tsx";
 import type { FormRendererLabels } from "../components/form-engine/form-renderer.tsx";
 import type { LinkQuestionLabels } from "../components/form-engine/link-question-field.tsx";
 import type { LinkSearchLabels } from "../components/form-engine/link-search.tsx";
@@ -14,6 +15,42 @@ import type { PhotosFieldLabels } from "../components/form-engine/photos-field.t
 // (apps/web/messages), in English and Arabic. The plural wording is written out
 // here as the messages' plural rules give it: Arabic counts one, two (dual),
 // 3 to 10 (plural) and 11 and more (singular accusative).
+
+const arabicChecks = (n: string, count: number) =>
+  count === 0 ? "0 بنود" : count === 1 ? "بند واحد" : count === 2 ? "بندان" : count <= 10 ? `${n} بنود` : `${n} بندًا`;
+
+export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabels> = {
+  en: {
+    choose: "Choose…",
+    none: "None",
+    chooseTradeFirst: "Choose a Trade first.",
+    noneForTrade: "No Checklist Template for this Trade yet",
+    kept: (name) => `${name} (as picked)`,
+    checks: (n, count) => (count === 1 ? "1 check" : `${n} checks`),
+    filledOnSite: "answered by the Consultant on site",
+    itemNumber: (n, of) => `${n} of ${of}`,
+    commentRequired: (answer) => `Comment required on ${answer}`,
+    photoRequired: (answer) => `Photo required on ${answer}`,
+    commentOptional: "Comment optional",
+    photoOptional: "Photos optional",
+    raisesSnag: (answer) => `${answer} raises a Snag`,
+  },
+  ar: {
+    choose: "اختر…",
+    none: "بدون",
+    chooseTradeFirst: "اختر التخصص أولًا.",
+    noneForTrade: "لا يوجد قالب قائمة تحقق لهذا التخصص بعد",
+    kept: (name) => `${name} (كما اختير)`,
+    checks: arabicChecks,
+    filledOnSite: "يجيب عنها الاستشاري في الموقع",
+    itemNumber: (n, of) => `${n} من ${of}`,
+    commentRequired: (answer) => `تعليق مطلوب عند ${answer}`,
+    photoRequired: (answer) => `صورة مطلوبة عند ${answer}`,
+    commentOptional: "التعليق اختياري",
+    photoOptional: "الصور اختيارية",
+    raisesSnag: (answer) => `${answer} تُنشئ ملاحظة`,
+  },
+};
 
 const linkedItemRow: Record<Locale, LinkedItemRowLabels> = {
   en: { hidden: "You are not allowed to see the details of this item." },
@@ -238,6 +275,7 @@ export const formRendererLabels: Record<Locale, FormRendererLabels> = {
     optionList: { level: (n) => `Level ${n}`, choose: "Choose…", none: "None", unavailable: "This list isn't available." },
     linkQuestion: linkQuestion.en,
     approvedSupplier: { none: "No approved supplier for this Trade yet", withdrawn: (name) => `${name} (withdrawn)` },
+    checklistTemplate: checklistTemplateLabels.en,
   },
   ar: {
     summary: (n, count) =>
@@ -312,6 +350,7 @@ export const formRendererLabels: Record<Locale, FormRendererLabels> = {
     optionList: { level: (n) => `المستوى ${n}`, choose: "اختر…", none: "بدون", unavailable: "هذه القائمة غير متاحة." },
     linkQuestion: linkQuestion.ar,
     approvedSupplier: { none: "لا يوجد مورّد معتمد لهذا التخصص بعد", withdrawn: (name) => `${name} (مسحوب)` },
+    checklistTemplate: checklistTemplateLabels.ar,
   },
 };
 
