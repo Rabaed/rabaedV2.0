@@ -121,14 +121,16 @@ create function app.work_item_package(p_work_item_id uuid) returns table (packag
   set search_path = pg_catalog, public
   as $$
     #variable_conflict use_column
+    declare
+      v_package_id uuid;
     begin
-      if not app.sees_work_item(p_work_item_id) then
+      -- Most items have none: answer at once, before the dearer checks (the work item query asks for every row).
+      -- No row either way, so the order tells nothing.
+      select w.package_id into v_package_id from work_item w where w.id = p_work_item_id;
+      if v_package_id is null or not app.sees_work_item(p_work_item_id) or not app.sees_package(v_package_id) then
         return;
       end if;
-      return query
-        select k.id, k.seq, k.name
-        from work_item w join package k on k.id = w.package_id
-        where w.id = p_work_item_id and app.sees_package(k.id);
+      return query select k.id, k.seq, k.name from package k where k.id = v_package_id;
     end
   $$;
 
