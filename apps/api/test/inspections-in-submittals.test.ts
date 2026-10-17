@@ -4,6 +4,7 @@
 // chip and the Inspections Stages as groups of their own (`inspections:<key>`); the Submittals'
 // own Stage keys, the Need My Action counts, the item pages and the Inspections List itself stay
 // as they are, and nobody reads a WIR they could not read before.
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -48,7 +49,7 @@ beforeAll(async () => {
   await ok(admin.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: { isAll: false, valueIds: [tower.mechanical] }, location: all }));
   c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
 
-  // A Draft MAR (Submittals) and a WIR C1 has Submitted to the Consultant (Inspections, Pending Inspection).
+  // A Draft legacy MAR (Submittals) and a WIR C1 has Submitted to the Consultant (Inspections, Pending Inspection).
   marId = await draft(tower, c1Engineer, "Cable tray");
   wirId = (
     await ok(
@@ -107,11 +108,11 @@ describe("Show Inspections in the Submittals tab: on", () => {
     const list = await submittals(c1Engineer);
     expect(ids(list)).toEqual([marId, wirId].sort());
     expect(list.items.find((i) => i.id === wirId)).toMatchObject({ type: { code: "WIR" }, stage: { key: "inspections:pending_inspection" } });
-    expect(list.items.find((i) => i.id === marId)).toMatchObject({ type: { code: "MAR" }, stage: { key: "draft" } });
+    expect(list.items.find((i) => i.id === marId)).toMatchObject({ type: { code: LEGACY_MAR }, stage: { key: "draft" } });
     // The Type filter offers both, and filters.
-    expect(list.filters.types.map((t) => t.code).sort()).toEqual(expect.arrayContaining(["MAR", "WIR"]));
+    expect(list.filters.types.map((t) => t.code)).toEqual(expect.arrayContaining([LEGACY_MAR, "WIR"]));
     expect(ids(await submittals(c1Engineer, { type: ["WIR"] }))).toEqual([wirId]);
-    expect(ids(await submittals(c1Engineer, { type: ["MAR"] }))).toEqual([marId]);
+    expect(ids(await submittals(c1Engineer, { type: [LEGACY_MAR] }))).toEqual([marId]);
     // The Submittals' Stages keep their keys; Inspections' come after them, named after their Module, so "Draft" is not two groups of one name.
     const own = list.stages.filter((s) => !s.key.includes(":")).map((s) => s.key);
     const theirs = list.stages.filter((s) => s.key.startsWith("inspections:"));
