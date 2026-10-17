@@ -59,6 +59,56 @@ def too_many_rows_xlsx():
     book.save(path("too-many-rows.xlsx"))
 
 
+def formats_xlsx():
+    """Numbers and times whose stored value differs from what Excel shows."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Formats"
+    sheet.append(["Shown as", "Value"])
+    sheet.append(["09:30", datetime.time(9, 30)])
+    sheet["B2"].number_format = "hh:mm"
+    # What Excel stores for =0.1+0.2, and shows as 0.3.
+    sheet.append(["0.3", 0.1 + 0.2])
+    sheet.append(["0012", 12])
+    sheet["B4"].number_format = "0000"
+    sheet.append(["15%", 0.15])
+    sheet["B5"].number_format = "0%"
+    # A reference typed as text that only looks like a number: never rounded.
+    sheet.append(["12345678901234567890", "12345678901234567890"])
+    book.save(path("formats.xlsx"))
+
+
+def forged_sizes_xlsx():
+    """A sheet that inflates to 101 MB while the zip says it is as small as before: a zip bomb
+    that a check of the stated sizes alone would let through."""
+    book = Workbook()
+    book.active.title = "Register"
+    book.active.append(["Subject"])
+    book.active.append(["Panels"])
+    book.save(path("forged-sizes.xlsx"))
+    name = "xl/worksheets/sheet1.xml"
+    with zipfile.ZipFile(path("forged-sizes.xlsx")) as archive:
+        parts = {info.filename: archive.read(info.filename) for info in archive.infolist()}
+    honest = len(parts[name])
+    # openpyxl writes the sheet with no XML declaration: whitespace before its root element is well-formed.
+    parts[name] = b" " * (101 * 1024 * 1024) + parts[name]
+    with zipfile.ZipFile(path("forged-sizes.xlsx"), "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for part, data in parts.items():
+            archive.writestr(part, data)
+    data = bytearray(open(path("forged-sizes.xlsx"), "rb").read())
+    encoded = name.encode()
+    # Each record's signature, then where its uncompressed size, name length and name sit:
+    # the local file header, and the central directory entry.
+    for signature, size_at, name_length_at, name_at in ((b"PK\x03\x04", 22, 26, 30), (b"PK\x01\x02", 24, 28, 46)):
+        at = data.find(signature)
+        while at >= 0:
+            length = int.from_bytes(data[at + name_length_at : at + name_length_at + 2], "little")
+            if bytes(data[at + name_at : at + name_at + length]) == encoded:
+                data[at + size_at : at + size_at + 4] = honest.to_bytes(4, "little")
+            at = data.find(signature, at + 4)
+    write_bytes("forged-sizes.xlsx", bytes(data))
+
+
 def inflated_xlsx():
     """A valid one-sheet workbook carrying a part that inflates to 101 MB: small on disk, huge in memory."""
     book = Workbook()
@@ -99,5 +149,7 @@ def csv_files():
 
 register_xlsx()
 too_many_rows_xlsx()
+formats_xlsx()
 inflated_xlsx()
+forged_sizes_xlsx()
 csv_files()

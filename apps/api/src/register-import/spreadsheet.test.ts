@@ -11,7 +11,7 @@ const fixture = (fileName: string): SpreadsheetFile => ({
 const csv = (fileName: string, text: string): SpreadsheetFile => ({ fileName, bytes: Buffer.from(text, "utf8") });
 
 /** The refusal `read` throws: its reason and details. */
-async function refusal(read: () => unknown): Promise<{ reason: string; details: unknown }> {
+async function refusalOf(read: () => unknown): Promise<{ reason: string; details: unknown }> {
   try {
     await read();
   } catch (error) {
@@ -48,6 +48,18 @@ describe("an .xlsx register", () => {
 
   it("reads the first sheet from row 1 when nothing is chosen", async () => {
     expect((await openSpreadsheet(fixture("register.xlsx"))).table()).toEqual({ sheet: "Notes", headerRow: 1, headers: ["Read me first"], rows: [] });
+  });
+
+  it("reads a number as stored, rounded as Excel rounds it, and a time of day as the time alone", async () => {
+    const { rows } = (await openSpreadsheet(fixture("formats.xlsx"))).table();
+    expect(rows.map((row) => row.values)).toEqual([
+      ["09:30", "09:30"],
+      ["0.3", "0.3"],
+      // Not as shown: the reader can't apply a cell's number format (type a reference number as text to keep its zeros).
+      ["0012", "12"],
+      ["15%", "0.15"],
+      ["12345678901234567890", "12345678901234567890"],
+    ]);
   });
 
   it("counts only the rows below the chosen header row", async () => {
@@ -93,11 +105,16 @@ describe("a .csv register", () => {
   });
 
   it("refuses a file that isn't UTF-8 (Arabic saved as Windows-1256)", async () => {
-    expect(await refusal(() => openSpreadsheet(fixture("register-windows-1256.csv")))).toEqual({ reason: "not_utf8", details: undefined });
+    expect(await refusalOf(() => openSpreadsheet(fixture("register-windows-1256.csv")))).toEqual({ reason: "not_utf8", details: undefined });
+  });
+
+  it("keeps a quote inside a value, such as an inch mark", async () => {
+    const { rows } = (await openSpreadsheet(csv("inches.csv", 'Subject,Trade\nPipe 2" dia,Mechanical\n'))).table();
+    expect(rows).toEqual([{ rowNo: 2, values: ['Pipe 2" dia', "Mechanical"] }]);
   });
 
   it("refuses quotes it can't read", async () => {
-    expect((await refusal(() => openSpreadsheet(csv("broken.csv", 'Subject\n"never closed\n')))).reason).toBe("unreadable");
+    expect((await refusalOf(() => openSpreadsheet(csv("broken.csv", 'Subject\n"never closed\n')))).reason).toBe("unreadable");
   });
 });
 
@@ -110,7 +127,7 @@ describe("the limits", () => {
 
   it("refuse a file over 10 MB, before reading it", async () => {
     const big = { fileName: "big.xlsx", bytes: new Uint8Array(maxBytes + 1) };
-    expect(await refusal(() => openSpreadsheet(big))).toEqual({ reason: "too_large", details: { bytes: maxBytes + 1, maxBytes } });
+    expect(await refusalOf(() => openSpreadsheet(big))).toEqual({ reason: "file_too_large", details: { bytes: maxBytes + 1, maxBytes } });
   });
 
   it("let a file of exactly 10 MB through", async () => {
@@ -122,7 +139,7 @@ describe("the limits", () => {
 
   it("refuse a sheet of 2,001 data rows", async () => {
     const register = await openSpreadsheet(fixture("too-many-rows.xlsx"));
-    expect(await refusal(() => register.table())).toEqual({ reason: "too_many_rows", details: { rows: maxDataRows + 1, maxDataRows } });
+    expect(await refusalOf(() => register.table())).toEqual({ reason: "too_many_rows", details: { rows: maxDataRows + 1, maxDataRows } });
   });
 
   it("let 2,000 data rows through, not counting empty rows or the rows above the header", async () => {
@@ -134,19 +151,24 @@ describe("the limits", () => {
   it("refuse an .xlsx that unpacks to more than the limit, however small on disk", async () => {
     const file = fixture("inflated.xlsx");
     expect(file.bytes.length).toBeLessThan(1024 * 1024);
-    expect((await refusal(() => openSpreadsheet(file))).reason).toBe("too_large_unpacked");
+    expect((await refusalOf(() => openSpreadsheet(file))).reason).toBe("unpacks_too_large");
+  });
+
+  it("refuse a forged zip bomb: a sheet that inflates to 101 MB while the zip says 601 bytes", async () => {
+    // fflate inflates only the 601 bytes stated, which hold no sheet (spreadsheet.ts, readXlsx).
+    expect((await refusalOf(() => openSpreadsheet(fixture("forged-sizes.xlsx")))).reason).toBe("unreadable");
   });
 });
 
 describe("a file it can't read", () => {
   it("is refused when it isn't .xlsx or .csv, the old .xls included", async () => {
     for (const fileName of ["register.xls", "register.pdf", "register"]) {
-      expect((await refusal(() => openSpreadsheet({ fileName, bytes: Buffer.from("not a register") }))).reason).toBe("unsupported_type");
+      expect((await refusalOf(() => openSpreadsheet({ fileName, bytes: Buffer.from("not a register") }))).reason).toBe("unsupported_type");
     }
   });
 
   it("is refused when an .xlsx isn't one", async () => {
-    expect((await refusal(() => openSpreadsheet({ fileName: "register.xlsx", bytes: Buffer.from("plain text, not a workbook") }))).reason).toBe("unreadable");
+    expect((await refusalOf(() => openSpreadsheet({ fileName: "register.xlsx", bytes: Buffer.from("plain text, not a workbook") }))).reason).toBe("unreadable");
   });
 
   it("names the extension in any case", async () => {
@@ -157,18 +179,18 @@ describe("a file it can't read", () => {
 describe("a choice the file doesn't have", () => {
   it("refuses a sheet that isn't there", async () => {
     const register = await openSpreadsheet(fixture("register.xlsx"));
-    expect((await refusal(() => register.table({ sheet: "Sheet9" }))).reason).toBe("sheet_not_found");
+    expect((await refusalOf(() => register.table({ sheet: "Sheet9" }))).reason).toBe("sheet_not_found");
   });
 
   it("refuses a header row past the last row, or not a row at all", async () => {
     const register = await openSpreadsheet(fixture("register.xlsx"));
     for (const headerRow of [9, 0, -1, 1.5]) {
-      expect((await refusal(() => register.table({ sheet: "Register", headerRow }))).reason).toBe("header_row_not_found");
+      expect((await refusalOf(() => register.table({ sheet: "Register", headerRow }))).reason).toBe("header_row_not_found");
     }
   });
 
   it("refuses an empty header row", async () => {
     const register = await openSpreadsheet(fixture("register.xlsx"));
-    expect((await refusal(() => register.table({ sheet: "Register", headerRow: 3 }))).reason).toBe("empty_header_row");
+    expect((await refusalOf(() => register.table({ sheet: "Register", headerRow: 3 }))).reason).toBe("empty_header_row");
   });
 });
