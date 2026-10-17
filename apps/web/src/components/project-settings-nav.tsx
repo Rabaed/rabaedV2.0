@@ -9,7 +9,7 @@ import { Link, usePathname, useRouter } from "@/i18n/navigation";
  * Numbering, Workflows, Screens, Stages and Outcomes (RP-441: every Member reads
  * them, only Project Admins change them), Trades & Locations, the Approved Supplier
  * List (RP-592: every Member reads it, Project Admins change it), Required links (RP-82:
- * the same), and for a Project
+ * the same), Checklist Templates (RP-651: the same), and for a Project
  * Admin Visibility. The
  * Authorized Person also reaches their Company's Members' Visibility, which
  * is the Participant's own page. The current page comes from the address.
@@ -38,6 +38,7 @@ export function ProjectSettingsNav({
     { key: "trades-locations", label: t("tradesLocations"), icon: "map-pin", href: `${base}/trades-locations` },
     { key: "approved-suppliers", label: t("approvedSuppliers"), icon: "building", href: `${base}/approved-suppliers` },
     { key: "required-links", label: t("requiredLinks"), icon: "link", href: `${base}/required-links` },
+    { key: "checklist-templates", label: t("checklistTemplates"), icon: "clipboard-check", href: `${base}/checklist-templates` },
     ...(isProjectAdmin ? [{ key: "visibility", label: t("visibility"), icon: "eye", href: `${base}/visibility` } satisfies SettingsNavItem] : []),
     ...(ownParticipantId
       ? [{ key: "members-visibility", label: t("membersVisibility"), icon: "eye-off", href: `/participants/${ownParticipantId}` } satisfies SettingsNavItem]

@@ -26,7 +26,7 @@ export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabel
     chooseTradeFirst: "Choose a Trade first.",
     noneForTrade: "No Checklist Template for this Trade yet",
     kept: (name) => `${name} (as picked)`,
-    checks: (n, count) => (count === 1 ? "1 check" : `${n} checks`),
+    checks: (n, count) => (count === 1 ? "1 item" : `${n} items`),
     filledOnSite: "answered by the Consultant on site",
     itemNumber: (n, of) => `${n} of ${of}`,
     commentRequired: (answer) => `Comment required on ${answer}`,
