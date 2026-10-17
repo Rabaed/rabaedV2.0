@@ -188,13 +188,14 @@ export const workItemRoutes =
       },
     );
 
-    // The Types the Member may raise on a Project: the New item's Type picker (RP-590).
+    // The Types the Member may raise on a Project: the New item's Type picker (RP-590), of the
+    // Submittals unless `module` names another (the Snag List's "+ New", RP-94).
     app.get(
       "/v1/projects/:projectId/raisable-types",
-      { schema: { params: projectParams, response: { 200: raisableTypes } } },
+      { schema: { params: projectParams, querystring: z.object({ module: z.enum(moduleKeys).default("submittals") }), response: { 200: raisableTypes } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(getRaisableTypes(ctx.db, memberId, idOrNotFound(request.params.projectId)));
+        return visibleOrNotFound(getRaisableTypes(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query.module));
       },
     );
 
