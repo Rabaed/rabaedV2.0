@@ -277,7 +277,6 @@ describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinn
 // nothing of the WIR (V3).
 describe("RP-170-1: who reads the Consultant Engineer's Recommended Result of a WIR on Version 2", () => {
   let id = "";
-  const seen = (events: WorkItemHistory["events"]) => JSON.stringify(events.map((e) => [e.type, e.answers, e.recommendedCode, e.internalNote]));
   /** What `as` reads of the item's events through row-level security, as the app role. */
   const eventsAs = (as: string) =>
     withMember(appDb, as, (trx) =>
@@ -310,7 +309,7 @@ describe("RP-170-1: who reads the Consultant Engineer's Recommended Result of a 
     for (const who of [hafiz, ali, faisal]) {
       const events = await history(who, id);
       expect(events.some((e) => e.type === "recommend_code")).toBe(false);
-      expect(seen(events)).not.toContain("failed");
+      expect(events.map((e) => e.recommendedCode ?? null)).toEqual(events.map(() => null));
       expect(JSON.stringify(events)).not.toContain(RECOMMENDATION_NOTE);
       expect(events.at(-1)).toMatchObject({ outcome: "passed_with_comments" });
     }
