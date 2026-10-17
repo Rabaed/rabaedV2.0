@@ -90,6 +90,7 @@ const evidence = (id: string, itemKey: string, fileName: string, frozen = false)
   frozen,
   fieldKey: "pour_check",
   itemKey,
+  annotatedFromId: null,
   takenAt: "2026-10-03T11:22:05.000Z",
   takenWhere: { latitude: 24.7136, longitude: 46.6753 },
 });

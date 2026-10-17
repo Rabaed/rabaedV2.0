@@ -38,12 +38,13 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       frozen: boolean;
       field_key: string | null;
       item_key: string | null;
+      annotated_from_id: string | null;
       taken_at: Date | null;
       taken_latitude: number | null;
       taken_longitude: number | null;
     }>`
       select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
-        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key, d.item_key,
+        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key, d.item_key, d.annotated_from_id,
         d.taken_at, d.taken_latitude, d.taken_longitude
       from document d
       -- The upload time, never earlier than the Creation Date once numbered (RP-399), and the
@@ -67,6 +68,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         frozen: r.frozen,
         fieldKey: r.field_key,
         itemKey: r.item_key,
+        annotatedFromId: r.annotated_from_id,
         takenAt: r.taken_at?.toISOString() ?? null,
         takenWhere:
           r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
@@ -80,7 +82,9 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
 const changeRefusals = ["not_found", "project_closed", "forbidden", "not_editable"] as const;
 /** A file a Form's `attachments`, `photos` or `checklist` field won't take (the field_documents migration). */
 const fieldRefusals = ["field_not_found", "content_type_not_allowed", "too_many_files"] as const;
-const startRefusals = [...changeRefusals, ...fieldRefusals] as const;
+/** An annotated copy whose original is frozen: others may have seen it (RP-656). One of a file that isn't a photo is content_type_not_allowed. */
+const annotateRefusals = ["document_frozen"] as const;
+const startRefusals = [...changeRefusals, ...fieldRefusals, ...annotateRefusals] as const;
 export type StartUploadResult =
   | { ok: true; started: StartedDocumentUpload }
   | { ok: false; reason: (typeof startRefusals)[number] | OverLimit["reason"] };
@@ -96,6 +100,8 @@ class OverLimit extends Error {
  * Step 1: the acting Member declares a file for a visible item, and for one of
  * its Form's `attachments`, `photos` or `checklist` fields (a checklist's for one of its
  * items, as evidence) or the Attachments System Field, and gets a URL to PUT it to. The URL is signed for exactly that size and type.
+ * With `annotatedFromId`, the file is the annotated copy of that photo (RP-656): a
+ * new Document beside it, in its field and checklist item; the original is never written.
  */
 export function startUpload(
   db: Db,
@@ -107,9 +113,13 @@ export function startUpload(
   now: Date,
 ): Promise<StartUploadResult> {
   return withMember(db, memberId, async (trx): Promise<StartUploadResult> => {
+    const start = file.annotatedFromId
+      ? sql`app.start_annotated_copy_upload(
+          ${workItemId}::uuid, ${file.annotatedFromId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
+      : sql`app.start_document_upload(
+          ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null}, ${file.itemKey ?? null})`;
     const { rows } = await sql<{ outcome: string; document_id: string | null; storage_key: string | null }>`
-      select outcome, document_id, storage_key from app.start_document_upload(
-        ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null}, ${file.itemKey ?? null})
+      select outcome, document_id, storage_key from ${start}
     `.execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["started", ...startRefusals]);
     if (outcome !== "started") return { ok: false, reason: outcome };

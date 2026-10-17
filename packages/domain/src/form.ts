@@ -4,6 +4,7 @@ import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condit
 import { contentType, photoContentTypes } from "./document.ts";
 import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
 import { OPTION_LIST_MAX_LEVELS, isChoosable, optionPath, reachesDepth, type OptionList } from "./option-list.ts";
+import { outcomeCode } from "./outcome.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -182,6 +183,31 @@ export const tableColumn = z.discriminatedUnion("type", [
 ]);
 export type TableColumn = z.infer<typeof tableColumn>;
 
+const distinct = (values: readonly string[]) => new Set(values).size === values.length;
+
+/**
+ * What a link question offers (RP-82, form-engine.md §2.13): items of one of
+ * `types` (Work Item Type codes), and, with `outcomes`, only closed items with one
+ * of them, such as a submittal's Code A or B. At least one of the two.
+ */
+const linkAcceptsSchema = z
+  .strictObject({
+    types: z.array(z.string().regex(/^[A-Z]{2,6}$/)).min(1).max(20).refine(distinct, "Each Type once").optional(),
+    outcomes: z.array(outcomeCode).min(1).max(20).refine(distinct, "Each outcome once").optional(),
+  })
+  .refine((accepts) => accepts.types !== undefined || accepts.outcomes !== undefined, "Types or outcomes");
+export type LinkAccepts = z.infer<typeof linkAcceptsSchema>;
+
+/** An item as `accepts` reads it: its Type's code, its outcome, and whether it is closed. */
+export type LinkCandidate = { type: string; outcome: string | null; closed: boolean };
+
+/** Whether a link question's `accepts` takes the item: any item without it. */
+export function linkAccepts(accepts: LinkAccepts | undefined, item: LinkCandidate): boolean {
+  if (!accepts) return true;
+  if (accepts.types && !accepts.types.includes(item.type)) return false;
+  return !accepts.outcomes || (item.closed && item.outcome !== null && accepts.outcomes.includes(item.outcome));
+}
+
 export const builtInFieldTypes = ["trade", "location", "scopes"] as const;
 export type BuiltInFieldType = (typeof builtInFieldTypes)[number];
 
@@ -270,10 +296,11 @@ export const formField = z.discriminatedUnion("type", [
    * A link question (RP-293, form-engine.md part 2b): any number of Work Items
    * chosen with Link search (Submitted items the filler sees, in the same
    * Project), by id, in the order chosen. Each is also a `relies_on` Link under
-   * the field's label. No limit by Type or outcome. A reader who can't see a
-   * chosen item gets it as a HiddenLinkChoice, never its id (ADR 0012).
+   * the field's label. No limit by Type or outcome unless it says `accepts`
+   * (RP-82, linkAccepts). A reader who can't see a chosen item gets it as a
+   * HiddenLinkChoice, never its id (ADR 0012).
    */
-  z.object({ ...fieldBase, type: z.literal("work_item_ref") }),
+  z.object({ ...fieldBase, type: z.literal("work_item_ref"), accepts: linkAcceptsSchema.optional() }),
   /**
    * Repeating rows of typed columns, with optional row limits (checked when the
    * item leaves Draft) and a total under number and currency columns. Answers
@@ -571,11 +598,12 @@ export type ValidationContext = {
    */
   held?: Readonly<Record<string, unknown>>;
   /**
-   * The Work Item ids a link question may take for this filler: those Link
-   * search could offer them (Submitted, visible, same Project) and those already
-   * chosen. Without it any id is taken; the server always passes it.
+   * The Work Item ids each link question may take for this filler, by field key:
+   * those Link search could offer them for it (Submitted, visible, same Project,
+   * what its `accepts` takes) and those already chosen. Without it any id is
+   * taken; the server always passes it.
    */
-  linkable?: ReadonlySet<string>;
+  linkable?: Readonly<Record<string, ReadonlySet<string>>>;
   /**
    * The Project's Approved Supplier List, for `approved_supplier` fields. Without
    * it an answer is only checked to be an id; the server always passes it.
@@ -585,6 +613,17 @@ export type ValidationContext = {
 
 /** A supplier of the Approved Supplier List as the validator and the renderer read it; `name` is for display. */
 export type SupplierChoice = { id: string; tradeId: string; status: "approved" | "withdrawn"; name?: z.infer<typeof bilingualText> };
+
+/**
+ * The schema with the link questions `keys` names always required: those its
+ * Project makes required (RP-82, `project_required_field`), such as the WIR's
+ * Approved submittals. Any other key is ignored; the same schema when none is named.
+ */
+export function requiredByProject(schema: FormSchema, keys: readonly string[]): FormSchema {
+  const named = (field: FormField) => field.type === "work_item_ref" && keys.includes(field.key);
+  if (!schema.sections.some((s) => s.fields.some(named))) return schema;
+  return { ...schema, sections: schema.sections.map((s) => ({ ...s, fields: s.fields.map((f) => (named(f) ? { ...f, required: true } : f)) })) };
+}
 
 /** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
@@ -920,7 +959,9 @@ function checkValue(
       const ids = value.filter((v): v is string => typeof v === "string");
       const hiddenNumbers = value.flatMap((v) => (isHiddenLinkChoice(v) ? [v.documentNumber] : []));
       if (new Set(ids).size !== ids.length || new Set(hiddenNumbers).size !== hiddenNumbers.length) return "wrong_type";
-      return !context.linkable || ids.every((id) => context.linkable!.has(id)) ? null : "unknown_option";
+      if (!context.linkable) return null;
+      const linkable = context.linkable[field.key];
+      return ids.every((id) => linkable?.has(id)) ? null : "unknown_option";
     }
     // A table is checked by checkTable, which knows its rows and columns; a
     // calculated field's answer is the server's own result, never the one given;

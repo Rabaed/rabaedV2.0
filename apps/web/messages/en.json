@@ -1479,9 +1479,26 @@
     "workflows": "Workflows",
     "screens": "Screens",
     "stages": "Stages",
-    "outcomes": "Outcomes"
+    "outcomes": "Outcomes",
+    "modules": "Modules",
+    "requiredLinks": "Required links"
   },
   "projectSettings": {
+    "modules": {
+      "title": "Modules",
+      "intro": "Where the Project's Modules show.",
+      "inspections": {
+        "title": "Inspections",
+        "description": "Inspections stays its own Module either way: its Document Numbers, permissions, Workflows, Stages and item links do not change.",
+        "label": "Show Inspections in Submittals",
+        "help": "Off: Inspections has its own place in the Project's navigation. On: it is hidden there and Submittals lists the WIRs too, with their own type and Stage groups."
+      },
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed."
+      }
+    },
     "approvedSuppliers": {
       "title": "Approved Supplier List",
       "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. A Material Approval Request (MAR) chooses its supplier from here. Every company on the Project sees this list.",
@@ -1520,6 +1537,21 @@
         "tradeNotFound": "That Trade is no longer on this Project. Reload the page.",
         "scopeNotFound": "That Scope is no longer offered for this Trade. Choose another.",
         "exists": "This Trade already lists that supplier as approved."
+      }
+    },
+    "requiredLinks": {
+      "title": "Required links",
+      "intro": "Link questions in this Project's Forms that an item can't leave Draft without, such as the approved submittals an inspection relies on. Every company on the Project sees these settings.",
+      "requiredHelp": "When on, an item of this Type can't be sent on from Draft until at least one item is linked here.",
+      "byForm": "Always required: its Form asks for it.",
+      "none": "No Form on this Project has a link question.",
+      "on": "{field} is now required on {type}.",
+      "off": "{field} is no longer required on {type}.",
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed.",
+        "gone": "This Form has changed. Reload the page."
       }
     },
     "workflows": {
