@@ -184,6 +184,8 @@ export function boundaryStatements(stack: Stack, config: EnvironmentConfig): iam
         "kms:Encrypt",
         "kms:GenerateDataKey*",
         "kms:ReEncrypt*",
+        // The worker seals the Documental Records with the pdf-sealing key (RP-620).
+        "kms:Sign",
         "secretsmanager:DescribeSecret",
         "secretsmanager:GetRandomPassword",
         "secretsmanager:GetSecretValue",

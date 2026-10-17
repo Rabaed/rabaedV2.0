@@ -1,0 +1,291 @@
+// Seam 1: a closed item gets its sealed Documental Record (RP-620, spec RP-632;
+// ADR 0023; workflow-engine.md §7; visibility.md V7, the Documental Record row,
+// scenario RP-23-1, without Stamps until RP-650). Closing writes the record job
+// to the outbox; the worker (run here in-process, with the local sealing key and
+// timestamp stand-in, as the notification tests run theirs) writes the Record
+// Data, renders the layout with Chromium, makes a PDF/A-3 with the Record Data
+// inside and seals it. Everyone who sees the closed item downloads the same
+// record through a short-lived signed link; anyone else gets the plain 404.
+import { createHash } from "node:crypto";
+import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import type { SignedUrl } from "@rabaed/domain";
+import {
+  attachedFiles,
+  chromiumRenderer,
+  documentalRecordHandler,
+  fallbackFonts,
+  LOCAL_SEAL_NAME,
+  localSealSigner,
+  localTimestampAuthority,
+  pdfA3Problems,
+  projectFilesFromEnv,
+  s3RecordFiles,
+  verifySeal,
+  type PdfRenderer,
+} from "@rabaed/worker/record";
+import { sql } from "kysely";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
+
+const api = await createTestApi({ files: true });
+const urls = testDatabaseUrls();
+// The worker connects as the app role, with no Member set.
+const worker = createDb(urls.app, { max: 2 });
+const migrator = createDb(urls.migrator, { max: 1 });
+const renderer = chromiumRenderer();
+afterAll(async () => {
+  await renderer.close();
+  await api.close();
+  await Promise.all([worker.destroy(), migrator.destroy()]);
+});
+
+const K1_NAME = "Record Consultants";
+const OR_NAME = "Record Owner Representative";
+const SUBJECT = "Cable trays for Building A";
+const INTERNAL_NOTE = "Internal note never printed";
+const RETURN_REASON = "Secret return reason";
+
+let at: Tower;
+let c1Name = "";
+let c1Engineer: Caller;
+let c1Pm: Caller;
+let k1Pm: Caller;
+let k1Engineer: Caller;
+let orEngineer: Caller;
+let c2Engineer: Caller;
+let handler: OutboxHandler;
+
+/** The record job as the worker runs it, with the local adapters. */
+async function recordHandler(rendering: PdfRenderer = renderer): Promise<OutboxHandler> {
+  const signer = await localSealSigner();
+  const timestamps = await localTimestampAuthority();
+  return documentalRecordHandler({
+    files: s3RecordFiles(projectFilesFromEnv()),
+    renderer: rendering,
+    signer: async () => signer,
+    timestamps: async () => timestamps,
+    fonts: async () => fallbackFonts(),
+    webUrl: "https://rabaed.test",
+  });
+}
+
+const onboard = async (legalName: string): Promise<Company> => {
+  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+  return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
+};
+
+async function participant(company: Company, role: "contractor" | "owner_representative"): Promise<string> {
+  const participantId = await api.addParticipant(at.admin!, at.projectId, company.company, role);
+  await ok(at.admin!.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
+  return participantId;
+}
+
+const downloadLink = (by: Caller, id: string) => by.get(`/v1/work-items/${id}/documental-record`);
+
+/** The record as `by` downloads it: the signed link, then the file. */
+async function download(by: Caller, id: string): Promise<{ link: SignedUrl; bytes: Uint8Array }> {
+  const link = (await ok(downloadLink(by, id), 200)).json() as SignedUrl;
+  const res = await fetch(link.url);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toBe("application/pdf");
+  return { link, bytes: new Uint8Array(await res.arrayBuffer()) };
+}
+
+/** Everything the PDF prints, as one string without whitespace (a narrow column wraps a hash). */
+async function printed(bytes: Uint8Array): Promise<string> {
+  const task = getDocument({ data: bytes.slice(), useSystemFonts: false });
+  const pdf = await task.promise;
+  let text = "";
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const content = await (await pdf.getPage(n)).getTextContent();
+    text += content.items.map((item) => ("str" in item ? item.str : "")).join("");
+  }
+  await task.destroy();
+  return text.replace(/\s+/g, "");
+}
+
+const squeeze = (s: string) => s.replace(/\s+/g, "");
+
+/** The Transitions' content hashes, in order, as the migrator reads the audit trail. */
+async function hashes(id: string): Promise<{ transition: string; hash: string }[]> {
+  const { rows } = await sql<{ transition: string; hash: string }>`
+    select tr.key as transition, encode(e.content_sha256, 'hex') as hash
+    from work_item_event e join workflow_transition tr on tr.id = e.transition_id
+    where e.work_item_id = ${id}::uuid and e.type in ('transition', 'issue_code') order by e.seq
+  `.execute(migrator);
+  return rows;
+}
+
+/** The record job rows written for item `id`, as the migrator sees them. */
+const recordJobs = (id: string) =>
+  sql<{ attempts: number; processed_at: Date | null; last_error: string | null }>`
+    select attempts, processed_at, last_error from outbox
+    where kind = 'documental_record' and payload ->> 'closed_work_item_id' = ${id}
+  `
+    .execute(migrator)
+    .then((r) => r.rows);
+
+beforeAll(async () => {
+  const c1 = await api.projectCreator();
+  const k1 = await onboard(K1_NAME);
+  at = await buildTower(api, { c1, k1 }, "REC");
+  const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as {
+    id: string;
+    isOwnCompany: boolean;
+    company: { legalName: { en: string } };
+  }[];
+  const k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
+  c1Name = participants.find((p) => p.isOwnCompany)!.company.legalName.en;
+  c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
+  c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
+  k1Pm = (await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" })).caller;
+  k1Engineer = (await memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Faisal Otaibi" })).caller;
+  const or = await onboard(OR_NAME);
+  orEngineer = (await memberOnProject(api, or, await participant(or, "owner_representative"), ["engineer"])).caller;
+  const c2 = await onboard("Record Second Contractor");
+  c2Engineer = (await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"])).caller;
+  handler = await recordHandler();
+  // Anything earlier tests left in the outbox is not ours to judge.
+  await drainOutbox(worker, { documental_record: handler });
+});
+
+/** A MAR the C1 engineer prepares, the C1 PM Returns once, then Submits with an Internal Note; K1's PM issues `code`. */
+async function closedAt(code: "approve_a" | "revise_c", subject = SUBJECT): Promise<string> {
+  const id = await draft(at, c1Engineer, subject);
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "return", { reason: RETURN_REASON });
+  // Changed before it goes again, so the Returned send's hash is its own.
+  await ok(
+    c1Engineer.request("PUT", `/v1/work-items/${id}/answers`, {
+      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", model: "CT-300", trade: at.electrical, location: at.buildingA },
+    }),
+  );
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit", { internalNote: INTERNAL_NOTE });
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Pm, id, code, code === "revise_c" ? { remarks: "Revise the tray sizes" } : {});
+  return id;
+}
+
+describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is made", () => {
+  let id = "";
+  let record: Uint8Array;
+  let text = "";
+
+  beforeAll(async () => {
+    id = await closedAt("approve_a");
+  });
+
+  it("closes without waiting for the record: until the job has run there is none to download", async () => {
+    expect((await detail(c1Pm, id)).outcome).toBe("A");
+    expect(await recordJobs(id)).toEqual([{ attempts: 0, processed_at: null, last_error: null }]);
+    await expectHidden(downloadLink(c1Pm, id));
+  });
+
+  it("is the same sealed PDF for C1, K1 and the Owner Representative, through a short-lived link", async () => {
+    await drainOutbox(worker, { documental_record: handler });
+    expect((await recordJobs(id))[0]!.processed_at).not.toBeNull();
+    const copies = await Promise.all([c1Pm, c1Engineer, k1Pm, k1Engineer, orEngineer].map((by) => download(by, id)));
+    const fingerprints = new Set(copies.map((c) => createHash("sha256").update(c.bytes).digest("hex")));
+    expect(fingerprints.size).toBe(1);
+    record = copies[0]!.bytes;
+    for (const { link } of copies) {
+      const expiresIn = new Date(link.expiresAt).getTime() - Date.now();
+      expect(expiresIn).toBeGreaterThan(0);
+      expect(expiresIn).toBeLessThanOrEqual(5 * 60 * 1000);
+    }
+    text = await printed(record);
+  });
+
+  it("is the plain 404 for C2, as for an item that doesn't exist", async () => {
+    await expectHidden(downloadLink(c2Engineer, id), "C2");
+    await expectHidden(downloadLink(c1Pm, "0198f5c0-0000-7000-8000-000000000000"), "made-up id");
+    await expectHidden(downloadLink(c1Pm, "not-an-id"), "malformed id");
+  });
+
+  it("prints the item, its outcome and everyone on its path, C1's and K1's alike, with each Transition's time and hash", async () => {
+    const detailed = await detail(c1Pm, id);
+    for (const value of [detailed.documentNumber!, SUBJECT, "Omar Haddad", "Sara Qahtani", "Huda Harbi", c1Name, K1_NAME, "Project Manager", "Manager"]) {
+      expect(text, value).toContain(squeeze(value));
+    }
+    const trail = await hashes(id);
+    expect(trail.map((t) => t.transition)).toEqual(["send_for_review", "return", "send_for_review", "submit", "approve_a"]);
+    // The path: the second Send for Review, the Submit and the Code; the Return and the send before it are left out (V7).
+    for (const t of [trail[2]!, trail[3]!, trail[4]!]) expect(text, t.transition).toContain(t.hash);
+    for (const t of [trail[0]!, trail[1]!]) expect(text, t.transition).not.toContain(t.hash);
+  });
+
+  it("never prints the Internal Note, the Return or its reason", () => {
+    for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(text).not.toContain(squeeze(hidden));
+  });
+
+  it("carries its Record Data inside, which holds nothing the pages don't print", async () => {
+    const files = await attachedFiles(record);
+    expect(files.map((f) => [f.name, f.mimeType, f.relationship])).toEqual([["record-data.xml", "application/xml", "Data"]]);
+    const xml = new TextDecoder().decode(files[0]!.bytes);
+    for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(xml).not.toContain(hidden);
+    // Every value it holds is on the pages: element text and attributes, but its structure
+    // (languages, numbering, the layout version), and the times, which the pages print in Riyadh time.
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at"]);
+    const body = xml.replace(/^<\?xml[^>]*\?>/, "");
+    const values = [
+      ...[...body.matchAll(/>([^<>]+)</g)].map((m) => m[1]!),
+      ...[...body.matchAll(/\s([A-Za-z0-9]+)="([^"]*)"/g)].filter((m) => !structural.has(m[1]!)).map((m) => m[2]!),
+    ]
+      .map((v) => v.trim().replace(/&amp;/g, "&"))
+      // Arabic is shaped on the page, so its extracted text reads differently.
+      .filter((v) => v !== "" && !/[؀-ۿ]/.test(v));
+    expect(values.length).toBeGreaterThan(10);
+    for (const value of values) expect(text, value).toContain(squeeze(value));
+  });
+
+  it("is sealed: the seal verifies, and one changed byte breaks it", async () => {
+    const seal = await verifySeal(record);
+    expect(seal).toMatchObject({ valid: true, signer: LOCAL_SEAL_NAME, subFilter: "ETSI.CAdES.detached" });
+    expect(seal.timestampedAt).toBeInstanceOf(Date);
+    expect(seal.dssCertificates).toBeGreaterThanOrEqual(2);
+    const changed = record.slice();
+    const middle = Math.floor(record.length / 3);
+    changed[middle] = changed[middle]! ^ 0x01;
+    expect((await verifySeal(changed)).valid).toBe(false);
+  });
+
+  it("validates as PDF/A-3", async () => {
+    expect(await pdfA3Problems(record)).toEqual([]);
+  });
+});
+
+describe("the record job", () => {
+  it("is written at any outcome: a Code C item gets its record too", async () => {
+    const id = await closedAt("revise_c", "Cable ladders");
+    await drainOutbox(worker, { documental_record: handler });
+    const { bytes } = await download(c1Pm, id);
+    expect(await printed(bytes)).toContain("Cableladders");
+    expect((await verifySeal(bytes)).valid).toBe(true);
+  });
+
+  it("is never written for a discarded Draft, which nobody sees again", async () => {
+    const id = await draft(at, c1Engineer, "Discarded trays");
+    await ok(c1Engineer.post(`/v1/work-items/${id}/discard-draft`));
+    expect(await recordJobs(id)).toEqual([]);
+  });
+
+  it("retries a failure without touching the closure, then makes the record", async () => {
+    const id = await closedAt("approve_a", "Cable glands");
+    const failing: PdfRenderer = { render: () => Promise.reject(new Error("Chromium is not there")), close: async () => {} };
+    const run = await processOutbox(worker, { handlers: { documental_record: await recordHandler(failing) } });
+    expect(run.failed).toBeGreaterThanOrEqual(1);
+    expect(await recordJobs(id)).toEqual([{ attempts: 1, processed_at: null, last_error: "Chromium is not there" }]);
+    expect((await detail(c1Pm, id)).outcome).toBe("A");
+    await expectHidden(downloadLink(c1Pm, id));
+
+    await sql`update outbox set available_at = now() where kind = 'documental_record' and payload ->> 'closed_work_item_id' = ${id}`.execute(migrator);
+    await drainOutbox(worker, { documental_record: handler });
+    expect((await verifySeal((await download(c1Pm, id)).bytes)).valid).toBe(true);
+  });
+});

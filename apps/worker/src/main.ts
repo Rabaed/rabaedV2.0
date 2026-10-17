@@ -3,6 +3,7 @@ import { createDbFromEnv, pingDatabase, processOutbox, runScheduledJobs } from "
 import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import { z } from "zod";
 import { outboxHandlers, scheduledJobs } from "./jobs.ts";
+import { documentalRecordHandler, recordJobFromEnv } from "./record/index.ts";
 import { createLogger } from "./log.ts";
 
 // The outbox processor: each poll runs the scheduled jobs that are due (the
@@ -24,7 +25,9 @@ process.once("SIGTERM", () => stop.abort());
 // Built at the first email, not at start-up: an environment without a verified
 // sender yet still starts, and its emails are retried, then dead-lettered.
 let mailer: Mailer | undefined;
-const handlers = outboxHandlers(() => (mailer ??= mailerFromEnv()), env.WEB_URL);
+// The Documental Record job (RP-620): Chromium starts at the first record, and stops with the worker.
+const record = recordJobFromEnv(env.WEB_URL);
+const handlers = { ...outboxHandlers(() => (mailer ??= mailerFromEnv()), env.WEB_URL), documental_record: documentalRecordHandler(record) };
 
 let lastOk: boolean | undefined;
 log.info("worker started");
@@ -54,5 +57,6 @@ while (!stop.signal.aborted) {
   }
   await sleep(env.WORKER_POLL_INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => undefined);
 }
+await record.close();
 await db.destroy();
 log.info("worker stopped");

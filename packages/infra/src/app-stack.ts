@@ -11,7 +11,13 @@ import { grantToDeployRole } from "./deploy-grants.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
-import { PROJECT_FILES_PREFIX, type StorageStack } from "./storage-stack.ts";
+import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
+
+/**
+ * The free public RFC 3161 timestamp authority the Documental Records' seals use (ADR 0023).
+ * Over HTTPS: the worker's security group lets only HTTPS out.
+ */
+export const TIMESTAMP_AUTHORITY_URL = "https://freetsa.org/tsr";
 import { databaseConnection, imageTagParameter, taskDefinition, type TaskProps } from "./task.ts";
 
 export interface AppStackProps extends StackProps {
@@ -112,11 +118,36 @@ export class AppStack extends Stack {
     const adminDatabase = databaseConnection(data, "rabaed_admin");
     adminDatabase.grantRead(adminTaskRole);
 
-    // Named, like the others, so the email grants can be checked by name.
+    // Named, like the others, so the email grants can be checked by name, and the
+    // Project files bucket can let it in.
     const workerTaskRole = new iam.Role(this, "WorkerTaskRole", {
       roleName: names.workerTaskRole,
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
+    // The Documental Record job (RP-620, ADR 0023): it reads Documents (for the
+    // appendix, RP-147) and writes each record under its item's own prefix, never
+    // anything else; it reads the fonts and Rabaed's sealing certificate from the
+    // build assets bucket, and signs with the `pdf-sealing` key, which nothing
+    // else may use.
+    workerTaskRole.addToPolicy(
+      new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)] }),
+    );
+    workerTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:PutObject"], resources: [storage.projectFiles.arnForObjects(RECORD_OBJECTS)] }));
+    workerTaskRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [storage.buildAssets.arnForObjects(`${FONTS_PREFIX}*`), storage.buildAssets.arnForObjects(`${SEALING_PREFIX}*`)],
+      }),
+    );
+    workerTaskRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        resources: [storage.buildAssets.bucketArn],
+        conditions: { StringLike: { "s3:prefix": `${FONTS_PREFIX}*` } },
+      }),
+    );
+    storage.storageKey.grantEncryptDecrypt(workerTaskRole);
+    storage.pdfSealingKey.grant(workerTaskRole, "kms:Sign");
 
     // Email through Amazon SES. Only the services that send email (the api,
     // Rabaed Admin for its sign-in codes and invitations, and the worker for
@@ -200,6 +231,11 @@ export class AppStack extends Stack {
         // Notification emails link to the item on the customer web.
         WEB_URL: webUrl,
         ...mail.environment,
+        // The Documental Record job (RP-620): where records go, the fonts and certificate, the key and the timestamps.
+        PROJECT_FILES_BUCKET: storage.projectFiles.bucketName,
+        BUILD_ASSETS_BUCKET: storage.buildAssets.bucketName,
+        PDF_SEALING_KEY_ID: storage.pdfSealingKey.keyArn,
+        TIMESTAMP_AUTHORITY_URL,
       },
       taskRole: workerTaskRole,
     });

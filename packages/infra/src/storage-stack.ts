@@ -16,16 +16,25 @@ export const PROJECT_FILES_PREFIX = "projects/";
 /** The licensed fonts in the build assets bucket; the Thmanyah files go under `fonts/thmanyah/`. */
 export const FONTS_PREFIX = "fonts/";
 
+/** Rabaed's sealing certificate for the `pdf-sealing` key (PEM, chain after it), in the build assets bucket. */
+export const SEALING_PREFIX = "sealing/";
+
+/** Where each item's Documental Record lives under its Project's prefix (apps/worker recordKeys). */
+export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
+
 // Files and the keys that protect them. Every bucket is private, versioned,
 // owner-enforced (no ACLs) and refuses requests not made over TLS.
 //
 // - Project files: encrypted with the storage key. Only the api's task role
-//   can read or write objects, only under projects/, and the bucket policy
-//   refuses everyone else, administrators included. Browsers upload and get
-//   files through signed URLs the api creates, refused once 15 minutes old.
+//   and the worker's can read or write objects, only under projects/, and the
+//   bucket policy refuses everyone else, administrators included. Browsers
+//   upload and get files through signed URLs the api creates, refused once 15
+//   minutes old. The worker reads Documents and writes only Documental Records.
 // - Build assets: private files the build needs. The setup wizard uploads
 //   the licensed Thmanyah fonts under fonts/; the deploy workflow, which
-//   builds the images, may read that prefix and nothing else (RP-211).
+//   builds the images, may read that prefix and nothing else (RP-211). The
+//   worker reads the fonts and Rabaed's sealing certificate (sealing/) for the
+//   Documental Records (RP-620).
 // - Logs: S3 access logs of the other two buckets, the load balancer's
 //   access logs (under load-balancer/) and CloudTrail's audit trail (under
 //   cloudtrail/), kept for a year. Encrypted with S3-managed keys, because
@@ -33,6 +42,7 @@ export const FONTS_PREFIX = "fonts/";
 //   KMS-encrypted bucket.
 export class StorageStack extends Stack {
   readonly storageKey: kms.Key;
+  readonly pdfSealingKey: kms.Key;
   readonly projectFiles: s3.Bucket;
   readonly buildAssets: s3.Bucket;
   readonly logs: s3.Bucket;
@@ -49,10 +59,12 @@ export class StorageStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
-    // Reserved: sealing issued PDFs (a digital signature) comes later. Nothing may use it yet.
-    new kms.Key(this, "PdfSealingKey", {
+    // Seals the Documental Records (ADR 0023, RP-620): only the worker may sign with
+    // it (app stack), under Rabaed's own certificate, kept in the build assets
+    // bucket under sealing/. The private key never leaves KMS.
+    this.pdfSealingKey = new kms.Key(this, "PdfSealingKey", {
       alias: names.keyAlias("pdf-sealing"),
-      description: `Reserved for sealing ${names.prefix} PDFs; not used yet`,
+      description: `Seals ${names.prefix} Documental Records (PAdES); only the worker signs with it`,
       keySpec: kms.KeySpec.RSA_3072,
       keyUsage: kms.KeyUsage.SIGN_VERIFY,
       removalPolicy: RemovalPolicy.RETAIN,
@@ -94,17 +106,18 @@ export class StorageStack extends Stack {
     });
     this.buildAssets = encryptedBucket("BuildAssets", "build-assets/");
 
-    // By name, not by reference: the api's role lives in the app stack, which
-    // depends on this one.
-    const apiTaskRole = `arn:${this.partition}:iam::${this.account}:role/${names.apiTaskRole}`;
+    // By name, not by reference: the api's and the worker's roles live in the app
+    // stack, which depends on this one. The worker reads Documents and writes the
+    // Documental Records (RP-620); what each may do is its role's own grant there.
+    const taskRole = (name: string) => `arn:${this.partition}:iam::${this.account}:role/${name}`;
     this.projectFiles.addToResourcePolicy(
       new iam.PolicyStatement({
-        sid: "OnlyTheApiReadsAndWritesProjectFiles",
+        sid: "OnlyTheApiAndWorkerReadAndWriteProjectFiles",
         effect: iam.Effect.DENY,
         principals: [new iam.AnyPrincipal()],
         actions: ["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:RestoreObject"],
         resources: [this.projectFiles.arnForObjects("*")],
-        conditions: { StringNotEquals: { "aws:PrincipalArn": apiTaskRole } },
+        conditions: { StringNotEquals: { "aws:PrincipalArn": [taskRole(names.apiTaskRole), taskRole(names.workerTaskRole)] } },
       }),
     );
     // The deploy role (account stack) builds the web image, which bundles the
