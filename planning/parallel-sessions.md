@@ -57,9 +57,9 @@ One session named `Orchestrator`, in its own worktree (`EnterWorktree` named `or
    2. Rename the branch to the key's name (`git branch -m RP-nnn-...`), then run `pnpm lane:env N --force`.
    3. After `gh pr create`, link the PR to the session with `bind_pr`, so CI and Auto-fix notifications still arrive.
 2. Name it `Main m, lane X – RP-nnn`.
-3. First message (`mL` is the lane's number, e.g. 32):
+3. First message (`mL` is the lane's number, e.g. 32), starting with the slash command: the app loads a skill only from a command at the very start of a message, and `implement`, `implement-spec`, `to-spec`, `to-tickets`, `grill-with-docs` and `retro` are skills an agent cannot load itself (their `disable-model-invocation`), so a command later in the message is just text:
    ```
-   Main m, lane X. Run `pnpm lane:env mL --force`, then /mattpocock-skills:implement RP-nnn
+   /mattpocock-skills:implement RP-nnn. Main m, lane X: first run `pnpm lane:env mL --force`.
    ```
    `lane:env` refuses a lane whose ports are taken, or whose compose project (`rabaed-laneN`) another worktree still uses, and names the container holding it. It also refuses a number that is not a lane (15, 55, 60, …). Add `--free` to take the next free lane instead (the same Main's lanes first), or run `pnpm lanes:prune` (below) first. If the ticket changes a shared module, claim it on RP-603 first (rule 12).
    **A UI ticket is shot before its review** (RP-533), and `/implement`'s `/code-review` runs before the PR opens, so do it inside `/implement`, in this order:
@@ -104,7 +104,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
 1. Start the session as in step 1 above, named `Main m, lane X – RP-nnn (spec)`, with the spec's key. First move the spec issue to **In Progress**; if it already is In Progress, another session owns it: stop. `pnpm lane:env` also refuses a worktree locked by another live `claude session`, even with `--force` (RP-461 was run by two sessions at once).
 2. First message:
    ```
-   Main m, lane X. Run `pnpm lane:env mL --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
+   /mattpocock-skills:implement-spec RP-nnn. Main m, lane X: first run `pnpm lane:env mL --force`. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
    ```
 3. Label every ticket of the spec with this lane, so no other lane starts one of them. A ticket marked **own PR** (it changes root `package.json`, `pnpm-lock.yaml` or `.github/workflows/*`; rule 3) is not merged onto the integration branch: its implementer subagent branches from `origin/main`, and it goes up as a PR of its own (RP-331 had to be reverted off spec RP-327's branch and split into PR #130).
 4. The subagents share the lane's Postgres, but each uses its own databases. Before launching them, and after any long pause, run `docker compose ps` in the session's own worktree and start any container of the lane that isn't up from there: `docker compose up -d --wait db mailpit files` (RP-575: lane 8's containers were down for a whole round, found only at `test:seam1`). `pnpm verify` also stops before its first step when the lane's Postgres doesn't answer.
