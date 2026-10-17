@@ -535,6 +535,8 @@ export interface DocumentTable {
   taken_at: Timestamp | null;
   taken_latitude: number | null;
   taken_longitude: number | null;
+  /** The SHA-256 of the file's bytes, taken by the api at confirming; copies carry their source's. Never the app role's (RP-618). */
+  file_sha256: Buffer | null;
   /** The item's `arrivals` when it was added (a trigger sets it): until the item leaves, only its holder sees it (RP-309). */
   arrival: Generated<number>;
 }

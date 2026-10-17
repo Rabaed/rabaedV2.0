@@ -129,8 +129,9 @@ export type ConfirmUploadResult = { ok: true } | { ok: false; reason: (typeof co
 
 /**
  * Step 3: the uploader confirms; the file must be in the store, exactly as
- * declared. An image's EXIF time and place are read from the stored file and
- * kept with it (RP-284).
+ * declared. The SHA-256 of its bytes is kept as the Document's fingerprint, which
+ * every later Transition's content hash covers (RP-618). An image's EXIF time and
+ * place are read from the stored file and kept with it (RP-284).
  */
 export function confirmUpload(
   db: Db,
@@ -146,10 +147,14 @@ export function confirmUpload(
     `.execute(trx);
     const pendingKey = rows[0]!.storage_key;
     let stored: { sizeBytes: number; contentType: string } | null = null;
+    let fingerprint: Buffer | null = null;
     let photo: PhotoMetadata = { takenAt: null, takenWhere: null };
     if (pendingKey) {
       stored = await files.stat(pendingKey);
       if (!stored) return { ok: false, reason: "not_uploaded" };
+      // The Document's fingerprint: the SHA-256 of the bytes stored, never the browser's word (RP-618).
+      fingerprint = await files.sha256(pendingKey);
+      if (!fingerprint) return { ok: false, reason: "not_uploaded" };
       // A photo's time and place come from the stored file itself, never from the browser.
       if (photoContentTypes.includes(stored.contentType)) {
         const bytes = await files.read(pendingKey);
@@ -159,7 +164,7 @@ export function confirmUpload(
     // No pending upload of theirs: the function answers for a confirmed one, or not_found.
     const { rows: confirmed } = await sql<{ outcome: string }>`
       select app.confirm_document_upload(${workItemId}::uuid, ${documentId}::uuid,
-        ${stored?.sizeBytes ?? null}::bigint, ${stored?.contentType ?? null}, ${now},
+        ${stored?.sizeBytes ?? null}::bigint, ${stored?.contentType ?? null}, ${fingerprint}::bytea, ${now},
         ${photo.takenAt}::timestamptz, ${photo.takenWhere?.latitude ?? null}::double precision,
         ${photo.takenWhere?.longitude ?? null}::double precision) as outcome
     `.execute(trx);
