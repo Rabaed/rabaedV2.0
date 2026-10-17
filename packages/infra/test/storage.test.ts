@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
-import { environmentTemplates, references, render, resourcesOfType, type Resource } from "./support.ts";
+import { environmentTemplates, references, render, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const storage = env.template("storage");
