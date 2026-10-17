@@ -98,14 +98,18 @@ export const submittalWorkflows = [
  * binds none (the Type's own `workflow_definition_id`): the MAR and the SAR run 2→2, the DAR
  * 1→1 → Owner review (RP-596). The three submittals also have each of the eight (`variants`),
  * published as Rabaed Defaults of their own that a Project Admin may bind or duplicate; `workflow`
- * is one of them.
+ * is one of them. `history` lists the documents of the Type's earlier Workflow Versions, Version 1
+ * first, that still have items on them (RP-170: the WIR's Version 1, `WIR-1.json`, whose items
+ * finish on it): each is published as its Version only while the Type's Workflow has no Version
+ * that number or later, so a database seeded before the Version 2 document keeps its own Version 1
+ * and a fresh one gets the same two Versions.
  */
 export const rabaedDefaultTypes = [
-  { type: "MAR", form: "MAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows },
-  { type: "SAR", form: "SAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows },
-  { type: "DAR", form: "DAR.json", workflow: "submittal-1-1-owner.json", variants: submittalWorkflows },
-  { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null },
-  { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null },
+  { type: "MAR", form: "MAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows, history: null },
+  { type: "SAR", form: "SAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows, history: null },
+  { type: "DAR", form: "DAR.json", workflow: "submittal-1-1-owner.json", variants: submittalWorkflows, history: null },
+  { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null, history: ["WIR-1.json"] },
+  { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null, history: null },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>
@@ -157,6 +161,17 @@ export async function publishRabaedDefaults(migratorDb: Db, { engineerId, reason
   }
   for (const entry of rabaedDefaultTypes) {
     const { type, workflow } = entry;
+    // The Type's earlier Versions (RP-170), before the Workflow it runs publishes the next.
+    for (const [index, file] of (entry.history ?? []).entries()) {
+      const [versionNo, name] = [index + 1, `${type}@${index + 1}`];
+      const definitionId = await ensureRabaedWorkflow(migratorDb, type, null, true);
+      if (!definitionId) continue;
+      const latest = await readLatestPublishedDefinition(migratorDb, definitionId);
+      if (latest && latest.versionNo >= versionNo) continue;
+      const result = await writeRabaedWorkflow(migratorDb, engineerId, type, { definition: rabaedWorkflowFile(file), reason }, { publish: true, workflowId: definitionId });
+      if (!result.ok) return { ok: false, kind: "workflow", name, result };
+      done.push({ kind: "workflow", name, versionNo: result.versionNo, published: true, warnings: result.warnings.map((w) => `${w.code}: ${w.message.en}`) });
+    }
     // The Workflow the Type runs, then the Type's other Rabaed Defaults (RP-596).
     const targets: { name: string; file: string; variant: SubmittalWorkflow | null }[] = [
       { name: type, file: workflow, variant: entry.variants?.find((v) => v.file === workflow) ?? null },

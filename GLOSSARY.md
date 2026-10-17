@@ -172,6 +172,10 @@ _Avoid_: Site log, diary, Affirm
 A Form field made of predefined check items, each answered and optionally evidenced with photos.
 _Avoid_: Tick list
 
+**Checklist Template**:
+A named, official set of check items, such as "Concrete pour" or "Blockwork", kept in the library. A Form's Checklist copies its items, or, on an Inspection, the Contractor picks one when requesting and its items are copied onto the item, fixed once it is Submitted.
+_Avoid_: Checklist type, inspection form
+
 **Snag List**:
 The Module holding follow-up Work Item Types, a task list of things to be done that are not official submittals or packages: Snags, Site Observations, Questions and Comments by default, and any Types a Project adds, each with its own Form and Workflow.
 _Avoid_: Comment list, punch list
@@ -344,7 +348,7 @@ How a Work Item ends, set by the Transition that closes it: a Review Code, an In
 _Avoid_: Status, result
 
 **Recommended Code**:
-A Review Code a reviewer proposes to the next reviewer: inside the Consultant, for information, and the next reviewer can accept it, override it, or send it back; to the Owner, where the Workflow ends with the Owner's review, the Owner confirms it, which issues it, or Sends the item Back to the Consultant. Nobody else sees a Recommended Code.
+A Review Code a reviewer proposes to the next reviewer: inside the Consultant, for information, and the next reviewer can accept it, override it, or send it back; to the Owner, where the Workflow ends with the Owner's review, the Owner confirms it, which issues it, or Sends the item Back to the Consultant. Nobody else sees a Recommended Code. On an Inspection the same proposal is an Inspection Result, the Recommended Result: the Consultant Engineer proposes it to the Consultant Manager, and nobody outside the Consultant sees it.
 _Avoid_: Draft code, proposed status
 
 **Issued Code**:
@@ -356,7 +360,7 @@ The shared text the Consultant writes with a Review Code, a field of the Code Tr
 _Avoid_: Comments (reserved for the Snag List), note, recommendation (too close to Recommended Code), highlights
 
 **Revision**:
-A resubmission of a Work Item that ended with Code C: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
+A resubmission of a Work Item that ended with Code C, or a re-inspection of an Inspection that Failed: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at its outcome (Code C or Failed), and anyone who sees a Revision can switch to the earlier ones they may see.
 _Avoid_: Version (reserved for Forms, Workflows, Screens and Numbering Patterns), resubmittal
 
 **Document Number**:
