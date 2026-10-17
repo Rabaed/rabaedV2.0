@@ -10,6 +10,11 @@ const byKey = new Map<string, StageKey>([
   ["pending_approval", "pending"],
   ["approved", "approved"],
   ["revise_resubmit", "resubmitted"],
+  // The Snag List's (RP-94, the design's snag-list.html): Open amber, In Progress blue, On Hold grey, Resolved violet.
+  ["open", "resubmitted"],
+  ["in_progress", "internal"],
+  ["on_hold", "cancelled"],
+  ["resolved", "pending"],
 ]);
 
 // Any other Stage (e.g. another Module's) takes the colour of its category.
