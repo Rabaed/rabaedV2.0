@@ -610,11 +610,11 @@ function SnagTable({
                       <td className={cell}>
                         <span className={cn("inline-flex h-[22px] items-center rounded-[6px] px-1.5 text-caption font-semibold", tradeChipClass(row.trade.code))}>{row.trade.name[locale]}</span>
                       </td>
-                      <td className={cn(cell, "text-[12.5px] text-text-secondary")}>{placeText(row, places, locale) ?? dash}</td>
+                      <td className={cn(cell, "max-w-[150px] min-w-[120px] text-[12.5px] leading-tight whitespace-normal text-text-secondary")}>{placeText(row, places, locale) ?? dash}</td>
                       <td className={cell}>
                         <RaisedFrom row={row} locale={locale} labels={labels} itemHref={itemHref} linkAs={Link} />
                       </td>
-                      <td className={cn(cell, "max-w-[220px]")}>
+                      <td className={cn(cell, "max-w-[190px]")}>
                         <With row={row} locale={locale} labels={labels} />
                       </td>
                       <td className={cell}>{isOpenStageCategory(row.stage.category) && row.stepAgeWeeks !== null ? <AgeDots weeks={row.stepAgeWeeks} locale={locale} /> : dash}</td>
