@@ -1,4 +1,4 @@
-import { moduleOfTabPath, moduleTabPaths, type Locale } from "@rabaed/domain";
+import { inspectionsInSubmittals, moduleOfTabPath, moduleTabPaths, type Locale } from "@rabaed/domain";
 import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ModuleWorkItemsPage } from "@/components/module-work-items-page";
@@ -22,7 +22,8 @@ export default async function ModuleTabPage({
   setRequestLocale(locale);
   const moduleKey = moduleOfTabPath(moduleTab);
   if (!moduleKey) notFound();
-  if (moduleKey === "inspections" && (await getProject(projectId))?.showInspectionsInSubmittals) {
+  const project = moduleKey === "inspections" ? await getProject(projectId) : null;
+  if (project && inspectionsInSubmittals(project)) {
     return redirect({ href: `/projects/${projectId}/${moduleTabPaths.submittals}`, locale });
   }
   return <ModuleWorkItemsPage locale={locale} projectId={projectId} module={moduleKey} searchParams={await searchParams} />;

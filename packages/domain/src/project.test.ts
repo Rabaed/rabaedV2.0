@@ -33,6 +33,10 @@ describe("Module tab paths", () => {
 });
 
 describe("Module tabs", () => {
+  it("keep Inspections' tab when the Project has no Submittals tab to show them in (RP-652)", () => {
+    expect(projectTabModules({ modules: ["inspections", "snag_list"], showInspectionsInSubmittals: true })).toEqual(["inspections", "snag_list"]);
+  });
+
   const project = { modules: ["submittals", "inspections", "snag_list"] as ModuleKey[] };
 
   it("are the Project's Modules while Inspections have their own tab", () => {

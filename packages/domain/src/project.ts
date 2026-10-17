@@ -80,11 +80,18 @@ export const myProjects = z.object({
 export type MyProjects = z.infer<typeof myProjects>;
 
 /**
+ * Whether the Project's Inspections show in its Submittals tab (RP-652): the setting is on and the Project has a
+ * Submittals tab to show them in. A Project with Inspections and no Submittals Type keeps the Inspections tab.
+ */
+export const inspectionsInSubmittals = (project: Pick<ProjectSummary, "modules" | "showInspectionsInSubmittals">): boolean =>
+  project.showInspectionsInSubmittals && project.modules.includes("submittals");
+
+/**
  * The Modules that get a tab on the Project (RP-346): the Modules it has a Work Item Type in, but not Inspections
  * while the Project shows it in the Submittals tab (RP-652).
  */
 export const projectTabModules = (project: Pick<ProjectSummary, "modules" | "showInspectionsInSubmittals">): ModuleKey[] =>
-  project.showInspectionsInSubmittals ? project.modules.filter((m) => m !== "inspections") : project.modules;
+  inspectionsInSubmittals(project) ? project.modules.filter((m) => m !== "inspections") : project.modules;
 
 /** A Project Admin turns "Show Inspections in the Submittals tab" on or off (RP-652). */
 export const showInspectionsInSubmittalsRequest = z.object({ show: z.boolean() });

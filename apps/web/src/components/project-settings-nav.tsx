@@ -9,8 +9,7 @@ import { Link, usePathname, useRouter } from "@/i18n/navigation";
  * Numbering, Workflows, Screens, Stages and Outcomes (RP-441: every Member reads
  * them, only Project Admins change them), Trades & Locations, the Approved Supplier
  * List (RP-592: every Member reads it, Project Admins change it), Modules (RP-652: where
- * Inspections show; the same), and for a Project
- * Admin Visibility. The
+ * Inspections show; the same), and for a Project Admin Visibility. The
  * Authorized Person also reaches their Company's Members' Visibility, which
  * is the Participant's own page. The current page comes from the address.
  */

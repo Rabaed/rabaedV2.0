@@ -78,6 +78,12 @@ describe("Show Inspections in the Submittals tab: off, as today", () => {
     expect(ids(await inspections(c1Engineer))).toEqual([wirId]);
   });
 
+  it("reads a Stage key of another Module, or a made-up one, as no group: it matches nothing and never errors", async () => {
+    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_inspection"] }))).toEqual([]);
+    expect(ids(await submittals(c1Engineer, { stage: ["nonsense:draft"] }))).toEqual([]);
+    expect(ids(await inspections(c1Engineer, { stage: ["pending_inspection"] }))).toEqual([wirId]);
+  });
+
   it("is set by a Project Admin only; anyone else is told 404, like a made-up Project", async () => {
     await expectHidden(setting(c1Engineer, true));
     await expectHidden(setting(k1Manager, true));
@@ -157,6 +163,16 @@ describe("Show Inspections in the Submittals tab: on", () => {
     // The Consultant is waiting on the WIR, and the toggle includes it in the Submittals List too.
     expect(without.consultant).toBeGreaterThan(0);
     expect(ids(await submittals(k1Manager, { needMyAction: true }))).toContain(wirId);
+  });
+
+  it("exports the same rows as the List, WIRs included, and none of another Contractor's", async () => {
+    const exported = async (by: Caller) =>
+      ((await ok(by.get(`/v1/projects/${projectId}/modules/submittals/work-items/export?${workItemSearchParams({})}`), 200)).json() as { items: { id: string }[] }).items
+        .map((i) => i.id)
+        .sort();
+    expect(await exported(c1Engineer)).toEqual(ids(await submittals(c1Engineer)));
+    expect(await exported(c1Engineer)).toContain(wirId);
+    expect(await exported(c2Engineer)).toEqual([]);
   });
 
   it("shows another Contractor none of C1's WIRs: not in the list, the Stage counts, the Kanban, the filters or the card (V3, scenario RP-652-1)", async () => {

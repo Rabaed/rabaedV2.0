@@ -1,5 +1,5 @@
 import type { Database } from "@rabaed/db";
-import { workItemQuery, type ProjectSummary } from "@rabaed/domain";
+import { inspectionsInSubmittals, workItemQuery, type ProjectSummary } from "@rabaed/domain";
 import type { Transaction } from "kysely";
 import { countWorkItems, stageCountTotal, type QueryScope } from "../work-items/query.ts";
 
@@ -15,7 +15,7 @@ export async function submittalCounts(trx: Transaction<Database>, projects: read
   const counts: Record<string, number> = Object.fromEntries(projects.map((p) => [p.id, 0]));
   for (const p of projects) {
     if (!p.modules.includes("submittals")) continue;
-    const scope: QueryScope = { projectId: p.id, moduleKey: "submittals", ...(p.showInspectionsInSubmittals ? { alsoModules: ["inspections"] } : {}) };
+    const scope: QueryScope = { projectId: p.id, moduleKey: "submittals", ...(inspectionsInSubmittals(p) ? { alsoModules: ["inspections"] } : {}) };
     const stages = await countWorkItems(trx, scope, workItemQuery.parse({}), now);
     counts[p.id] = stageCountTotal(stages);
   }

@@ -138,7 +138,7 @@ export function getProject(db: Db, memberId: string, projectId: string): Promise
 /**
  * A Project Admin turns "Show Inspections in the Submittals tab" on or off (RP-652): the Inspections tab is
  * hidden and the Submittals tab lists the Inspections Module's items too. app.set_show_inspections_in_submittals
- * checks the Admin, audits the change, and tells anyone else 'not_found'.
+ * checks the Admin and tells anyone else 'not_found'. The change is not written to setup_event yet.
  */
 export const setShowInspectionsInSubmittals = (db: Db, memberId: string, projectId: string, show: boolean) =>
   projectAdminCommand(
