@@ -17,3 +17,10 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270407 | RP-596 | B | Eight default Workflows |
 | 20270408 | RP-597 | B | Demo |
 | 20270409 | spec RP-598 | B | Review fixes; RP-593's and RP-594's migrations, moved here to sort after RP-591's on `main` |
+| 20270422 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
+| 20270423 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
+| 20270424 | RP-640 | 5C | Register Import: Assign to |
+| 20270425 | RP-645 | 5C | Register Import by a Rabaed Engineer in Rabaed Admin |
+| 20270426 | RP-644 | 5D | Register Import: Packages from an import, downloads and saved mappings |
+| 20270427 | spec RP-631 | 5A | Review fixes |
+| 20270428 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
