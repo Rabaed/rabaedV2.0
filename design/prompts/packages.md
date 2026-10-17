@@ -42,3 +42,26 @@ A **Package** is a named group of submittals that one company (usually the Contr
 - **Consultant PM**: an **In Progress** Package with several submittals selected and the bulk Transition's Action Form open; and the all-or-nothing message when one item can't take it.
 - **Consultant engineer narrowed to Electrical**: the same Package showing only its Electrical submittals and counts.
 - Every screen in **English and Arabic (RTL)**. Document and Package numbers stay LTR inside Arabic text.
+
+## Reference (RP-633)
+
+The product owner's prototype is `design/reference/claude-design/ui_kits/app/packages.html` (2026-10-17). Its embedded Thmanyah fonts were removed, as the licence requires, so it renders in fallback fonts. Take its **look** from it: the Package card, the page header layout, the counts panel, the bulk bar and the item slide-over. Where it differs from this prompt, the spec RP-616, `GLOSSARY.md` or `docs/visibility.md`, those win (product owner, 2026-10-17). The known differences:
+
+| Area | The prototype shows | Build this instead |
+| --- | --- | --- |
+| Where | A separate "Packages" project tab with its own Kanban and List | A **Packages** toggle next to List and Kanban inside the Submittals module |
+| Status | Not started / In progress / Needs attention / Complete; D counted as bad | **Open / In Progress / Done**; Done when every latest item is closed at A, B or D; a C waits for its Revision |
+| Number | `PKG-TWR-TMC-001` | `PKG-001` per Project, LTR |
+| Companies | From → To Companies | The owning Company only |
+| Counts | A/B, C/D, In review, Missing, by Type | One count per Review Code (A–D) plus "still open", only from the submittals the viewer sees |
+| Item table | Number, Title, Type, Trade, Rev, Status, Code, Current owner (a person), Due | Document Number, Subject, Type, Trade, **With** (a Company name for another Company, V14), Review Code or Stage, Step Age dots |
+| Dates | "Target Week 40", "Needed by", a Due column and field | None: no due dates, deadlines or SLAs anywhere; Step Age dots only |
+| Expected ("Missing") items | Placeholder slots that hold the Package open | Not built |
+| Remove | Removing a submittal at any time | Remove only while the Package is **Open** |
+| Bulk | A Code and comment per item; signing Steps not excluded; no "Assign to" | One Transition for all, one **Action Form** (Remarks), optional "Assign to", all or nothing, never at a signing Step |
+| Not in the prototype | — | Submit Package with its not-ready list; rename; delete while Open; Comments (for information); the Package chip on submittal cards and the item page; the Package filter in List and Kanban. Build them from this prompt in the prototype's style |
+| Name | One name | Arabic and English names |
+| Words | Title, Discipline, comment, Shop drawing, Complete, Current owner; Types DAS and MS | Subject, Trade, Remarks, SAR, Done, With; Types MAR, SAR and DAR only |
+| Visibility | Every Company's Packages on one board, including another Company's empty one; "Created by" and an activity log naming other Companies' people | Another Company's Open Package is never shown; a Package is seen only through the submittals the viewer sees; other Companies by Company name only |
+| Digits | Arabic-Indic digits in Arabic names | Latin digits everywhere |
+| Shell | The shared projects page shows "Overdue" (متأخر) | Never "overdue" (not part of Packages; don't copy it) |
