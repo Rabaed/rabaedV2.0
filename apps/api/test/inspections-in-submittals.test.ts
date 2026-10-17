@@ -16,7 +16,8 @@ afterAll(() => api.close());
 let tower: Tower;
 let admin: Caller; // C1's Authorized Person: the Project Admin.
 let c1Engineer: Caller;
-let k1Manager: Caller; // K1, the Consultant: inspects.
+let k1Manager: Caller; // K1, the Consultant: its Manager.
+let k1Engineer: Caller; // K1's Consultant Engineer: holds the WIR's inspection Step once it is Submitted.
 let c2Engineer: Caller; // C2, a second Contractor covering Mechanical only (V3).
 let projectId = "";
 let marId = "";
@@ -48,6 +49,11 @@ beforeAll(async () => {
   const c2ParticipantId = await api.addParticipant(admin, projectId, c2.company, "contractor");
   await ok(admin.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: { isAll: false, valueIds: [tower.mechanical] }, location: all }));
   c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
+  // The Tower's K1 has a Manager only; the WIR's Consultant Step is held by its Engineers (WIR Workflow Version 2).
+  const k1ParticipantId = (await ok(k1Manager.get(`/v1/projects/${projectId}/participants`), 200))
+    .json()
+    .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id as string;
+  k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
 
   // A Draft legacy MAR (Submittals) and a WIR C1 has Submitted to the Consultant (Inspections, Pending Inspection).
   marId = await draft(tower, c1Engineer, "Cable tray");
@@ -102,7 +108,7 @@ describe("Show Inspections in the Submittals tab: on", () => {
   });
 
   it("every Member of the Project reads the setting, and the Inspections tab is left out of the tabs they get", async () => {
-    for (const by of [admin, c1Engineer, k1Manager, c2Engineer]) {
+    for (const by of [admin, c1Engineer, k1Manager, k1Engineer, c2Engineer]) {
       const project = await summary(by);
       expect(project.showInspectionsInSubmittals).toBe(true);
       // The Module itself is still the Project's: only where it shows changes.
@@ -153,16 +159,16 @@ describe("Show Inspections in the Submittals tab: on", () => {
   });
 
   it("counts them in the Projects page's Submittals count, and Need My Action is the same as with it off", async () => {
-    const withIt = { submittals: await cardCount(c1Engineer), consultant: (await summary(k1Manager)).needMyAction, c1: (await summary(c1Engineer)).needMyAction };
+    const withIt = { submittals: await cardCount(c1Engineer), consultant: (await summary(k1Engineer)).needMyAction, c1: (await summary(c1Engineer)).needMyAction };
     expect((await setting(admin, false)).statusCode).toBe(204);
-    const without = { submittals: await cardCount(c1Engineer), consultant: (await summary(k1Manager)).needMyAction, c1: (await summary(c1Engineer)).needMyAction };
+    const without = { submittals: await cardCount(c1Engineer), consultant: (await summary(k1Engineer)).needMyAction, c1: (await summary(c1Engineer)).needMyAction };
     expect((await setting(admin, true)).statusCode).toBe(204);
     expect(withIt.submittals).toBe(without.submittals + 1);
     expect(withIt.consultant).toBe(without.consultant);
     expect(withIt.c1).toBe(without.c1);
     // The Consultant is waiting on the WIR, and the toggle includes it in the Submittals List too.
     expect(without.consultant).toBeGreaterThan(0);
-    expect(ids(await submittals(k1Manager, { needMyAction: true }))).toContain(wirId);
+    expect(ids(await submittals(k1Engineer, { needMyAction: true }))).toContain(wirId);
   });
 
   it("exports the same rows as the List, WIRs included, and none of another Contractor's", async () => {
