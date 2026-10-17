@@ -45,6 +45,7 @@ describe("creating a Project", () => {
       isProjectAdmin: true,
       needMyAction: 0,
       modules: await defaultModules(migrator),
+      showInspectionsInSubmittals: false,
     });
     expect(projectIds(await a.caller.get("/v1/projects"))).toContain(projectId);
   });
