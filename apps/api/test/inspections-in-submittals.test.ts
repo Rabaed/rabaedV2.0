@@ -62,7 +62,8 @@ beforeAll(async () => {
       c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
         type: "WIR",
         title: "Rebar Level 2",
-        answers: { description: "Slab rebar, Level 2", trade: tower.electrical, location: tower.buildingA },
+        // WIR Form Version 2 asks when the work will be ready (a value only).
+        answers: { description: "Slab rebar, Level 2", requested_for: "2026-11-02T05:30:00.000Z", trade: tower.electrical, location: tower.buildingA },
       }),
       201,
     )
