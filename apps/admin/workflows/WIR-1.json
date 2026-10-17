@@ -1,0 +1,178 @@
+{
+  "steps": [
+    {
+      "key": "draft",
+      "name": { "en": "Draft", "ar": "مسودة" },
+      "stage": "draft",
+      "actor": { "role": "contractor", "permission": "create" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "internal_review",
+      "name": { "en": "Contractor PM", "ar": "مدير مشروع المقاول" },
+      "stage": "internal_review",
+      "actor": { "role": "contractor", "permission": "review" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "contractor_engineer",
+      "name": { "en": "Contractor Engineer", "ar": "مهندس المقاول" },
+      "stage": "internal_review",
+      "actor": { "role": "contractor", "permission": "create" },
+      "outcomeMode": "none",
+      "editsForm": true
+    },
+    {
+      "key": "consultant_inspection",
+      "name": { "en": "Consultant inspection", "ar": "معاينة الاستشاري" },
+      "stage": "pending_inspection",
+      "actor": { "role": "consultant", "permission": "approve" },
+      "outcomeMode": "issue_outcome"
+    },
+    {
+      "key": "passed",
+      "name": { "en": "Passed", "ar": "ناجح" },
+      "stage": "passed",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "failed",
+      "name": { "en": "Failed", "ar": "راسب" },
+      "stage": "failed",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "cancelled",
+      "name": { "en": "Cancelled", "ar": "ملغى" },
+      "stage": "cancelled",
+      "actor": null,
+      "outcomeMode": "none"
+    }
+  ],
+  "transitions": [
+    {
+      "key": "send_for_review",
+      "label": { "en": "Send for Review", "ar": "إرسال للمراجعة" },
+      "kind": "send",
+      "from": "draft",
+      "to": "internal_review",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "return",
+      "label": { "en": "Return", "ar": "إعادة" },
+      "kind": "return",
+      "from": "internal_review",
+      "to": "contractor_engineer",
+      "outcome": null,
+      "permission": "review",
+      "actionForm": {
+        "sections": [
+          {
+            "key": "return",
+            "title": { "en": "Return", "ar": "إعادة" },
+            "fields": [
+              {
+                "key": "reason",
+                "type": "textarea",
+                "required": true,
+                "maxLength": 2000,
+                "label": { "en": "Reason", "ar": "السبب" },
+                "help": { "en": "Only your Company sees this.", "ar": "لا يراه إلا شركتك." }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "send_for_review_again",
+      "label": { "en": "Send for Review", "ar": "إرسال للمراجعة" },
+      "kind": "send",
+      "from": "contractor_engineer",
+      "to": "internal_review",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "submit",
+      "label": { "en": "Submit", "ar": "تقديم" },
+      "kind": "submit",
+      "from": "internal_review",
+      "to": "consultant_inspection",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null,
+      "screen": "cover_note"
+    },
+    {
+      "key": "pass",
+      "label": { "en": "Passed", "ar": "ناجح" },
+      "kind": "close",
+      "from": "consultant_inspection",
+      "to": "passed",
+      "outcome": "passed",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "inspection_passed"
+    },
+    {
+      "key": "pass_with_comments",
+      "label": { "en": "Passed with Comments", "ar": "ناجح مع ملاحظات" },
+      "kind": "close",
+      "from": "consultant_inspection",
+      "to": "passed",
+      "outcome": "passed_with_comments",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "inspection_passed_with_comments"
+    },
+    {
+      "key": "fail",
+      "label": { "en": "Failed", "ar": "راسب" },
+      "kind": "close",
+      "from": "consultant_inspection",
+      "to": "failed",
+      "outcome": "failed",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "inspection_failed"
+    },
+    {
+      "key": "cancel",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "draft",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "cancel_engineer",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "contractor_engineer",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "cancel_review",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "internal_review",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "review",
+      "actionForm": null
+    }
+  ],
+  "layout": {}
+}
