@@ -38,13 +38,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270415 | RP-646 | 1A | Bulk Transitions from the Package page |
 | 20270416 | RP-647 | 1B | Package filter and Comments on the Package page |
 | 20270417 | spec RP-616 | 1A | Review fixes |
-| 20270422 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
-| 20270423 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
-| 20270424 | RP-640 | 5C | Register Import: Assign to |
-| 20270425 | RP-645 | 5C | Register Import by a Rabaed Engineer in Rabaed Admin |
-| 20270426 | RP-644 | 5D | Register Import: Packages from an import, downloads and saved mappings |
-| 20270427 | spec RP-631 | 5A | Review fixes |
-| 20270428 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
 | 20270418 | RP-170 | 4A | WIR Workflow Version 2 (Engineer → Manager, Recommended Result) |
 | 20270419 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 |
 | 20270420 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
@@ -55,3 +48,10 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270425 | RP-656 | 4D | Annotated photo beside the original |
 | 20270426 | spec RP-649 | 4A | Review fixes |
 | 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
+| 20270524 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
+| 20270525 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
+| 20270526 | RP-640 | 5C | Register Import: Assign to |
+| 20270527 | RP-645 | 5C | Register Import by a Rabaed Engineer in Rabaed Admin |
+| 20270528 | RP-644 | 5D | Register Import: Packages from an import, downloads and saved mappings |
+| 20270529 | spec RP-631 | 5A | Review fixes |
+| 20270530 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
