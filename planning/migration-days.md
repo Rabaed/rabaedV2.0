@@ -30,3 +30,11 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270509 | RP-630 | 3D | Snag List on a phone |
 | 20270510 | RP-658 | 3A | Pick one of several covering Participants at a Submit |
 | 20270511 | spec RP-619 | 3A | Review fixes |
+| 20270410 | RP-636 | 1A | Build an Open Package |
+| 20270411 | RP-638 | 1A | Submit Package |
+| 20270412 | RP-641 | 1A | Packages board and each viewer's counts |
+| 20270413 | RP-642 | 1B | When a Package is Done |
+| 20270414 | RP-643 | 1C | Grouped notification for a Package Submit |
+| 20270415 | RP-646 | 1A | Bulk Transitions from the Package page |
+| 20270416 | RP-647 | 1B | Package filter and Comments on the Package page |
+| 20270417 | spec RP-616 | 1A | Review fixes |
