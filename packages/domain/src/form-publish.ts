@@ -35,6 +35,8 @@ export const schemaProblemCodes = [
   "unknown_step",
   "mixed_roles",
   "other_participant_section",
+  "unknown_link_type",
+  "unknown_link_outcome",
   // Action Forms only (action-form.ts).
   "not_in_action_form",
   "reserved_key",
@@ -53,6 +55,11 @@ export type PublishContext = {
    * Without them, `editable_at` isn't checked.
    */
   workflows?: readonly (readonly WorkflowStepHolder[])[];
+  /**
+   * The Work Item Types a link question's `accepts` may name, by code, each with
+   * its outcome codes (RP-82). Without them, `accepts` isn't checked.
+   */
+  types?: ReadonlyMap<string, ReadonlySet<string>>;
 };
 
 /**
@@ -74,6 +81,7 @@ export function formSchemaProblems(schema: FormSchema, context: PublishContext =
     ...builtIns,
     ...(context.optionListIds ? unknownOptionLists(schema, context.optionListIds).map((key) => problem(key, "unknown_option_list")) : []),
     ...(context.workflows ? editableAtProblems(schema, context.workflows) : []),
+    ...(context.types ? linkAcceptsProblems(schema, context.types) : []),
   ];
 }
 
@@ -269,6 +277,21 @@ function unknownOptionLists(schema: FormSchema, known: ReadonlySet<string>): str
       return f.type === "table" && f.columns.some((c) => c.type === "option_list" && !known.has(c.list));
     })
     .map((f) => f.key);
+}
+
+/**
+ * Link questions whose `accepts` names a Type that doesn't exist, or an outcome
+ * none of the Types it names has (any Type, when it names none).
+ */
+function linkAcceptsProblems(schema: FormSchema, types: ReadonlyMap<string, ReadonlySet<string>>): SchemaProblem[] {
+  return formFields(schema).flatMap((f): SchemaProblem[] => {
+    if (f.type !== "work_item_ref" || !f.accepts) return [];
+    const { types: named, outcomes } = f.accepts;
+    if (named?.some((code) => !types.has(code))) return [problem(f.key, "unknown_link_type")];
+    const sets = named ? named.map((code) => types.get(code)!) : [...types.values()];
+    if (outcomes?.some((code) => !sets.some((set) => set.has(code)))) return [problem(f.key, "unknown_link_outcome")];
+    return [];
+  });
 }
 
 /** Each Built-in Field placed exactly once, never in a section that can be hidden, with Trade and Location required. */

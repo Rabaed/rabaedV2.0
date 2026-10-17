@@ -783,6 +783,7 @@ export function FormRenderer({
           mode="edit"
           locale={locale}
           links={links}
+          accepts={field.accepts}
           onChange={(value) => onChange?.({ [field.key]: value })}
         />
       ),

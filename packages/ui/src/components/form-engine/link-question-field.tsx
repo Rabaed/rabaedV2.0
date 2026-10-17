@@ -1,6 +1,6 @@
 "use client";
 
-import { isHiddenLinkChoice, type HiddenLinkChoice, type LinkSearchResults, type LinkTarget, type Locale } from "@rabaed/domain";
+import { isHiddenLinkChoice, type HiddenLinkChoice, type LinkAccepts, type LinkSearchResults, type LinkTarget, type Locale } from "@rabaed/domain";
 import { useState, type ElementType } from "react";
 import { LinkSearch, type LinkSearchLabels } from "./link-search.tsx";
 import { LinkedItemRow, type LinkedItemRowLabels } from "./linked-item-row.tsx";
@@ -28,8 +28,8 @@ export type LinkTargetNames = Readonly<Record<string, Omit<LinkTarget, "id">>>;
 export type FormLinks = {
   /** The number and Subject of each chosen item the viewer sees, by id (e.g. from the item's Links). */
   targets: LinkTargetNames;
-  /** The Link search API (edit mode). */
-  search: (query: string, page: number) => Promise<LinkSearchResults>;
+  /** The Link search API (edit mode), offering only what the field's `accepts` takes (RP-82), when it has one. */
+  search: (query: string, page: number, accepts?: LinkAccepts) => Promise<LinkSearchResults>;
   /**
    * Where a chosen item opens: one the viewer sees by its id; one they can't, by
    * its Document Number, on the page of the item's Link to it (RP-521). Null:
@@ -90,6 +90,8 @@ export type LinkQuestionFieldProps = {
   locale: Locale;
   labels: LinkQuestionLabels;
   links: FormLinks;
+  /** The field's `accepts`, which Link search passes on: only those items are offered. */
+  accepts?: LinkAccepts;
   /** Called with the new answer (edit mode); `undefined` once nothing is chosen. */
   onChange?: (value: Choice[] | undefined) => void;
 };
@@ -98,7 +100,7 @@ export type LinkQuestionFieldProps = {
  * A link question: its chosen items, and in edit mode Link search (named by the
  * Field's label) to choose more, never offering one already chosen or the item itself.
  */
-export function LinkQuestionField({ label, value, mode, locale, labels, links, onChange }: LinkQuestionFieldProps) {
+export function LinkQuestionField({ label, value, mode, locale, labels, links, accepts, onChange }: LinkQuestionFieldProps) {
   // Items picked here, named until the page's `targets` name them.
   const [picked, setPicked] = useState<LinkTargetNames>({});
   const chosen = linkChoicesOf(value);
@@ -127,7 +129,7 @@ export function LinkQuestionField({ label, value, mode, locale, labels, links, o
           key={ids.length}
           locale={locale}
           labels={labels.search}
-          search={links.search}
+          search={(query, page) => links.search(query, page, accepts)}
           exclude={[...(links.workItemId ? [links.workItemId] : []), ...ids]}
           debounceMs={links.debounceMs}
           onPick={({ id, documentNumber, subject }) => {
