@@ -169,7 +169,7 @@ describe("scenario RP-596-2: a DAR on 1→1 → Owner review", () => {
       const d = await detail(by, id);
       expect([d.outcome, d.stage.category]).toEqual(["B", "closed_positive"]);
     }
-    expect((await detail(ali, id)).comments).toEqual({ open: 1, closed: 0 });
+    expect((await detail(ali, id)).raisedItems).toMatchObject([{ type: { code: "CMT" }, open: 1, closed: 0 }]);
   });
 
   it("an Owner's Send Back returns it to the Consultant PM, who recommends another Code that the Owner confirms", async () => {
