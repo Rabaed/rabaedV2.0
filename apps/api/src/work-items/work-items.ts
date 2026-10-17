@@ -1086,12 +1086,13 @@ async function sharedDocuments(trx: Trx, workItemId: string): Promise<SharedWork
     frozen: boolean;
     field_key: string | null;
     item_key: string | null;
+    annotated_from_id: string | null;
     taken_at: Date | null;
     taken_latitude: number | null;
     taken_longitude: number | null;
   }>`
     select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
-      d.frozen_at is not null as frozen, d.field_key, d.item_key, d.taken_at, d.taken_latitude, d.taken_longitude
+      d.frozen_at is not null as frozen, d.field_key, d.item_key, d.annotated_from_id, d.taken_at, d.taken_latitude, d.taken_longitude
     from document d
     join app.document_times(${workItemId}::uuid) t on t.document_id = d.id
     join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
@@ -1108,6 +1109,7 @@ async function sharedDocuments(trx: Trx, workItemId: string): Promise<SharedWork
     frozen: r.frozen,
     fieldKey: r.field_key,
     itemKey: r.item_key,
+    annotatedFromId: r.annotated_from_id,
     takenAt: r.taken_at?.toISOString() ?? null,
     takenWhere: r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
   }));
@@ -1356,12 +1358,12 @@ function validationRefused(rule: Validation, form: FormSchema, actionForm: FormS
  * How many confirmed files each `attachments` or `photos` field of a visible
  * item has, by field key, and each checklist item's photos, by
  * checklistItemFilesKey (RLS shows only confirmed, unremoved Documents), for
- * leaving Draft.
+ * leaving Draft. An annotated copy is not a file of its own (RP-656).
  */
 async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<string, number>> {
   const { rows } = await sql<{ field_key: string; item_key: string | null; files: number }>`
     select field_key, item_key, count(*)::integer as files from document
-    where work_item_id = ${workItemId} and field_key is not null
+    where work_item_id = ${workItemId} and field_key is not null and annotated_from_id is null
     group by field_key, item_key
   `.execute(trx);
   return Object.fromEntries(rows.map((r) => [r.item_key === null ? r.field_key : checklistItemFilesKey(r.field_key, r.item_key), r.files]));
