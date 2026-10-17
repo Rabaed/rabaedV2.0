@@ -36,6 +36,8 @@ export interface FileStore {
   stat(key: string): Promise<{ sizeBytes: number; contentType: string } | null>;
   /** The stored file's bytes (a photo's, to read its EXIF), or null when nothing is stored under `key`. */
   read(key: string): Promise<Uint8Array | null>;
+  /** Stores `bytes` under `key` as `contentType`: a small file the api itself received (a Member's Signature image, RP-85). */
+  put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** Stores a copy of the file under `fromKey` as `toKey` (a Revision's copied Documents; both under the same Project). */
   copy(fromKey: string, toKey: string): Promise<void>;
   /** Deletes the file stored under `key`, if any (a copy whose item was never created). */
@@ -151,6 +153,10 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
       }
     },
 
+    async put(key, bytes, contentType) {
+      await s3.send(new PutObjectCommand({ Bucket: settings.bucket, Key: key, Body: bytes, ContentType: contentType, ContentLength: bytes.byteLength }));
+    },
+
     async copy(fromKey, toKey) {
       await s3.send(new CopyObjectCommand({ Bucket: settings.bucket, Key: toKey, CopySource: `${settings.bucket}/${encodeURIComponent(fromKey).replace(/%2F/g, "/")}` }));
     },
@@ -190,6 +196,7 @@ export const noFileStore: FileStore = {
   signDownload: () => Promise.reject(new Error("No file store configured")),
   stat: () => Promise.reject(new Error("No file store configured")),
   read: () => Promise.reject(new Error("No file store configured")),
+  put: () => Promise.reject(new Error("No file store configured")),
   copy: () => Promise.reject(new Error("No file store configured")),
   remove: () => Promise.reject(new Error("No file store configured")),
 };

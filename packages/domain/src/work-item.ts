@@ -497,6 +497,12 @@ export const workItemActions = z.object({
    * Revision, while it has no Document Number, for a Member of the raiser's Participant.
    */
   discardDraft: z.boolean(),
+  /**
+   * The viewer may take the `transitions` below but has no Signature yet (RP-85, ADR 0023):
+   * opening one shows the pop-up that sends them to Profile → Add Signature, before its
+   * Action Form, since taking it is refused `no_signature`. False when there are none.
+   */
+  signatureRequired: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),

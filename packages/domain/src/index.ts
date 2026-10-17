@@ -23,6 +23,7 @@ export * from "./participant.ts";
 export * from "./project.ts";
 export * from "./schedule.ts";
 export * from "./scope.ts";
+export * from "./signature.ts";
 export * from "./approved-supplier.ts";
 export * from "./step-age.ts";
 export * from "./visibility.ts";

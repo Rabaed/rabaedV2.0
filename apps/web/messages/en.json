@@ -872,6 +872,7 @@
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
       "tryAgain": "The answers changed meanwhile. Try again.",
+      "noSignature": "Add your Signature in your profile before you take a Transition.",
       "unavailable": "Something went wrong. Try again.",
       "internalNote": "Internal Note",
       "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
@@ -1467,6 +1468,63 @@
     "title": "Profile",
     "notificationSettings": "Notification settings",
     "unavailable": "Something went wrong. Try again."
+  },
+  "signature": {
+    "title": "Signature",
+    "help": "Every Transition you take records your Signature. A new one is used from then on; what you signed before keeps the one it was signed with.",
+    "none": "You have no Signature yet. Add one before you take any Transition.",
+    "imageAlt": "Your Signature",
+    "since": "In force since {date}",
+    "madeBy": {
+      "drawn": "Drawn",
+      "typed": "Typed",
+      "uploaded": "Uploaded"
+    },
+    "add": "Add Signature",
+    "replace": "Replace Signature",
+    "addTitle": "Add Signature",
+    "addSubtitle": "Draw it, type your full name in a handwriting style, or upload an image of it.",
+    "back": "Back",
+    "methods": "How to add your Signature",
+    "drawn": "Draw",
+    "typed": "Type",
+    "uploaded": "Upload",
+    "pad": "Signature pad: draw with your mouse or finger",
+    "pen": "Pen",
+    "pens": {
+      "fine": "Fine",
+      "medium": "Medium",
+      "bold": "Bold"
+    },
+    "ink": "Ink",
+    "inks": {
+      "black": "Black",
+      "blue": "Blue"
+    },
+    "clear": "Clear",
+    "name": "Your full name",
+    "hand": "Handwriting",
+    "hands": {
+      "flowing": "Flowing",
+      "upright": "Upright"
+    },
+    "preview": "Preview",
+    "file": "Image of your Signature",
+    "fileHelp": "A PNG or JPEG image, up to 512 KB.",
+    "save": "Save Signature",
+    "empty": "Draw, type or upload your Signature first.",
+    "refusals": {
+      "invalid_signature_image": "That image isn't a PNG or JPEG. Choose another.",
+      "file_type": "Choose a PNG or JPEG image.",
+      "file_too_large": "That image is larger than 512 KB. Choose a smaller one.",
+      "unavailable": "That didn't work. Try again."
+    },
+    "required": {
+      "title": "Add your Signature first",
+      "body": "Every Transition you take records your Signature. Add it in your profile, and you'll come back here to carry on.",
+      "notNow": "Not now",
+      "close": "Close"
+    }
   },
   "settings": {
     "heading": "Project settings",

@@ -4,6 +4,7 @@ import { backwardKinds, type Locale, type WorkItemActions as Actions } from "@ra
 import { Button } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { SignatureRequired } from "@/components/signature";
 import { TransitionDialog, useWorkItemCalls } from "@/components/transition-dialog";
 
 type Transition = Actions["transitions"][number];
@@ -11,7 +12,9 @@ type Transition = Actions["transitions"][number];
 /**
  * Exactly the buttons the viewer may press on a Work Item, as the API lists them.
  * Each Transition opens its pop-up first (`TransitionDialog`, the same one a
- * Kanban move opens); Pick up and Return to pool are taken at once.
+ * Kanban move opens), or, while the viewer has no Signature, the pop-up that
+ * sends them to Add Signature and back (RP-85); Pick up and Return to pool are
+ * taken at once.
  */
 export function WorkItemActions({
   workItemId,
@@ -25,6 +28,8 @@ export function WorkItemActions({
   const t = useTranslations("workItems.actions");
   const calls = useWorkItemCalls(workItemId);
   const [asking, setAsking] = useState<Transition | null>(null);
+  // No Signature, no Transition (RP-85): the pop-up asks for one before the Action Form opens.
+  const [needsSignature, setNeedsSignature] = useState(false);
 
   const none = !actions.pickUp && !actions.returnToPool && actions.transitions.length === 0;
   if (none) return null;
@@ -37,7 +42,7 @@ export function WorkItemActions({
             key={tr.key}
             variant={backwardKinds.includes(tr.kind) ? "secondary" : "primary"}
             disabled={calls.pending}
-            onClick={() => setAsking(tr)}
+            onClick={() => (actions.signatureRequired ? setNeedsSignature(true) : setAsking(tr))}
           >
             {tr.label[locale]}
           </Button>
@@ -62,6 +67,7 @@ export function WorkItemActions({
       {asking && (
         <TransitionDialog key={asking.key} transition={asking} calls={calls} locale={locale} idPrefix="transition" onClose={() => setAsking(null)} />
       )}
+      <SignatureRequired open={needsSignature} onOpenChange={setNeedsSignature} returnTo={`/work-items/${workItemId}`} />
     </section>
   );
 }

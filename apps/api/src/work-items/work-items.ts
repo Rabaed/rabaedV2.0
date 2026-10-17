@@ -1157,6 +1157,17 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
   return rows;
 }
 
+/**
+ * Whether the acting Member has a Signature in force (RP-85): their own row of
+ * member_signature, the only one RLS shows them. app.take_transition checks the same row.
+ */
+async function hasSignature(trx: Trx): Promise<boolean> {
+  const { rows } = await sql<{ found: boolean }>`
+    select exists (select 1 from member_signature where member_id = app.current_member_id() and active_to is null) as found
+  `.execute(trx);
+  return rows[0]!.found;
+}
+
 /** What the acting Member may press on a visible item now. */
 async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft">> {
   const rows = await actionRows(trx, workItemId);
@@ -1169,6 +1180,8 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
   return {
     pickUp: rows.some((r) => r.action === "pick_up"),
     returnToPool: rows.some((r) => r.action === "return_to_pool"),
+    // No Signature, no Transition (RP-85): the pop-up asks for one before the Action Form.
+    signatureRequired: transitions.length > 0 && !(await hasSignature(trx)),
     transitions: transitions.map((r, i) => {
       const actionForm = parseActionForm(r.action_form);
       const prefill = actionForm ? prefilled(actionForm, arrival) : {};
@@ -1277,6 +1290,7 @@ const transitionRefusals = [
   "action_not_allowed",
   "recommended_code_not_offered",
   "not_confirmed",
+  "no_signature",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
@@ -1370,6 +1384,9 @@ export function takeTransition(
     // Only a Transition the Member may take is checked here, so anyone else is told why
     // they can't act (by the database), never what its Action Form or the Form lacks.
     const [taking] = await actionRows(trx, workItemId, input.transition);
+    // No Signature, no Transition (RP-85): refused before its answers are checked, as the
+    // pop-up asks for one before its Action Form. Only for a Transition they may take.
+    if (taking && !(await hasSignature(trx))) return { ok: false, reason: "no_signature" };
     const routed = taking ? await routedTransition(trx, workItemId, input.transition, input.answers) : null;
     if (taking && !routed) return { ok: false, reason: "no_route" };
     const actionForm = routed ? parseActionForm(routed.action_form) : null;

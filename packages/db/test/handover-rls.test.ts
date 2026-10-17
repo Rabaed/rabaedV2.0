@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, joinProject, testDatabaseUrls, withSignature } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -33,8 +33,11 @@ async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
 }
 
+/** A Member's insert, with an active Signature (RP-85: no Signature, no Transition). */
+const signedMember = async (text: string, values: unknown[]) => withSignature((t, v) => migrator.query(t, v), await one(text, values));
+
 async function member(companyId: string, who: string): Promise<string> {
-  return one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
+  return signedMember("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
     companyId,
     email(who),
     JSON.stringify({ en: who, ar: who }),
@@ -49,7 +52,7 @@ async function company(engineer: string, name: string): Promise<Company> {
     `3${digits(13)}3`,
     engineer,
   ]);
-  const ap = await one(
+  const ap = await signedMember(
     "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', true) returning id",
     [id, email("ap"), JSON.stringify({ en: `${name} AP`, ar: `${name} AP` })],
   );

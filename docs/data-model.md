@@ -87,8 +87,8 @@ A Member never moves between Companies. Changing employer means a new Member.
 Identity tables record who created a row through `company.onboarded_by`, `invitation.invited_by_*` and `admin_action` instead of a generic `created_by`.
 
 **member_signature**
-`id`, `member_id`, `file_id → stored_file`, `method {drawn, typed, uploaded}`, `active_from`, `active_to`.
-This table is versioned: every signing event points at the exact signature row that was in force, so replacing a signature never changes old records. Signing is blocked while a Member has no active row. Profile → Add Signature draws it (pen styles and colours), types it in a handwriting style, or uploads an image; each is stored as an image.
+`id`, `member_id`, `file_id → stored_file` (unique), `method {drawn, typed, uploaded}`, `active_from`, `active_to` (null while in force; at most one such row per Member, `member_signature_one_active`).
+This table is versioned: every signing event points at the exact signature row that was in force, so replacing a signature never changes old records. Signing is blocked while a Member has no active row. Profile → Add Signature draws it (pen styles and colours), types it in a handwriting style, or uploads an image; each is stored as an image. As built (RP-85, `20270513100000_member_signature.sql`): the api checks the image (PNG or JPEG by its first bytes, at most 512 KB), stores it at `members/<member>/signatures/<id>.png|jpg` and calls `app.set_member_signature(storage_key, sha256, size, mime, method, now)`, which ends the row in force and adds the new one with its `stored_file`, under a lock on the Member's row. Read only by its own Member through the app role (row security; the policy `member_reads_own_signature_files` lets them read its `stored_file` rows too); the record job reads others' as the owner. The app role writes neither table. A row changes once, when replaced (`active_to` set), and is never removed (trigger `member_signature_versioned`). `GET /v1/me/signature` gives the Member's own with a short-lived link to the image; `PUT /v1/me/signature` saves a new one (`invalid_signature_image`, 422, for bytes that aren't the image named or are too large). The demo seed gives every demo Member one.
 
 **authorized_person_transfer**
 `company_id`, `from_member_id`, `to_member_id`, `by_engineer_id`, `reason`, `at`.
@@ -185,7 +185,7 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 - `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable. `draft_name i18n` (RP-427): a draft's new name for the Workflow, given to `workflow_definition.name` when it is published and then cleared, so nobody but the draft's authors reads it before (V20). A definition with no published Version is read by its authors only.
 
 **workflow_step**
-`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool` (read by nothing: every Transition is signed, ADR 0017), `outcome_mode {none, recommend_code, issue_code, inspection_result, confirm_code}` (`confirm_code`: the Owner's review, which issues the Code Recommended to it, ADR 0022, RP-593), `edits_form bool` (nullable), `drafts_visible_to {company, author}` (nullable), `after_send_back {comment, edit_form}` (nullable).
+`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb` (its old `is_signing` dropped by RP-85: every Transition is signed, ADR 0017), `outcome_mode {none, recommend_code, issue_code, inspection_result, confirm_code}` (`confirm_code`: the Owner's review, which issues the Code Recommended to it, ADR 0022, RP-593), `edits_form bool` (nullable), `drafts_visible_to {company, author}` (nullable), `after_send_back {comment, edit_form}` (nullable).
 - `edits_form` (RP-514, ADR 0019): whether the raiser's Form is edited at the Step, by the Member holding it, before the first Submit (or at a Step a Send Back leads to). Null is the default, `app.step_edits_form`: a Step of the Draft Step's role held with the Draft Step's Function Permission (form-engine.md §4).
 - `drafts_visible_to` (RP-514, ADR 0019): on the Draft Step only; null is `company`. `author`: a Draft is seen by the Member holding it alone (visibility.md V1).
 - `after_send_back` (as built, RP-580; ADR 0021): on a raiser's Step a `send_back` leads to, what the raiser may change after a Send Back to it, until the next Submit: `comment` (nothing of the Form) or `edit_form`. Every Version saved or published since RP-580 sets it there (`comment` when left out; `app.publish_workflow_draft` fills it on every publish); null, only on Versions published before, is `edit_form` (form-engine.md §4).
@@ -395,7 +395,7 @@ Each created Draft carries `import_id` for traceability.
 | `payload jsonb` | Action Form answers, code, note text |
 | `audience` | `shared` or `internal` |
 | `audience_participant_id` | set when `audience = internal` |
-| `signature_id → member_signature` | set on every Transition once RP-85 builds the Signature (ADR 0017) |
+| `signature_id → member_signature` | the Signature in force when the Member took the Transition, on its `transition` or `issue_code` event (RP-85, ADR 0017); null on other events and on events written before RP-85. Not granted to the app role, and not in the hash |
 | `content_sha256` | on a Transition: hash of the item's Subject, answers, outcome and Documents at that moment (`app.work_item_content_sha256`, workflow-engine.md §7). Not granted to the app role, nor are `prev_hash` and `hash` (RP-448 review) |
 | `prev_hash`, `hash` | hash chain → tamper-evident |
 | `created_at` | |

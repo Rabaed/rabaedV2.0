@@ -28,6 +28,7 @@ import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
 import { approvedSupplierRoutes } from "./routes/approved-suppliers.ts";
 import { companyDefaultRoutes } from "./routes/company-defaults.ts";
+import { signatureRoutes } from "./routes/signature.ts";
 import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
@@ -172,5 +173,6 @@ export async function buildApp({
   await app.register(outcomeRoutes(context));
   await app.register(screenRoutes(context));
   await app.register(companyDefaultRoutes(context));
+  await app.register(signatureRoutes(context));
   return app;
 }

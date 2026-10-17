@@ -65,6 +65,7 @@ export function useWorkItemCalls(workItemId: string) {
     form_incomplete: t("formIncomplete"),
     form_not_checked: t("tryAgain"),
     not_confirmed: t("tryAgain"),
+    no_signature: t("noSignature"),
   };
 
   /** POSTs to the item's `path`: true when done, else the refusal, its message shown as `error`. */
