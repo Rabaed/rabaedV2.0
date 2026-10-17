@@ -187,7 +187,7 @@ describe("a Consultant's Snag reaches exactly K1 and C1", () => {
     expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await take(c1Pm, id, "start_work")).toBe("applied");
     expect(await pickUp(c1Pm, id)).toBe("picked_up");
-    expect(await take(c1Pm, id, "hold")).toBe("applied");
+    expect(await take(c1Pm, id, "put_on_hold_in_progress")).toBe("applied");
 
     const inside = (await stepAsSeen(c1.member, id))!;
     expect(inside.stage_key).toBe("on_hold");

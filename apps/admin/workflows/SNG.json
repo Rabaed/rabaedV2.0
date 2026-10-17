@@ -75,7 +75,7 @@
       "actionForm": null
     },
     {
-      "key": "hold",
+      "key": "put_on_hold_in_progress",
       "label": { "en": "Put on hold", "ar": "تعليق" },
       "kind": "send",
       "from": "in_progress",
@@ -105,7 +105,7 @@
       "actionForm": null
     },
     {
-      "key": "reopen",
+      "key": "back_to_open_on_hold",
       "label": { "en": "Back to Open", "ar": "إرجاع إلى مفتوحة" },
       "kind": "return",
       "from": "on_hold",

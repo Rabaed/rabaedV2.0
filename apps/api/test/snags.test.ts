@@ -37,13 +37,13 @@ const board = async (by: Caller): Promise<WorkItemBoard> =>
 const history = async (by: Caller, id: string): Promise<WorkItemHistory["events"]> => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
 
 /** K1's manager's Draft Snag on Building A, Electrical, with `photos` photos. */
-async function draftSnag(title: string, { photos = 0, location = at.buildingA } = {}): Promise<string> {
+async function draftSnag(title: string, { photos = 0 } = {}): Promise<string> {
   const id = (
     await ok(
       at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, {
         type: "SNG",
         title,
-        answers: { description: `${title}: see the photos`, trade: at.electrical, location },
+        answers: { description: `${title}: see the photos`, trade: at.electrical, location: at.buildingA },
       }),
       201,
     )
@@ -97,14 +97,14 @@ describe("a Consultant's Snag on the one Contractor covering it (seam 1)", () =>
     expect(documents.documents.filter((d) => d.fieldKey === "photos")).toHaveLength(2);
   });
 
-  it("C1 moves it In Progress → On Hold → Open, resolves it with a note, K1 returns it to C1, C1 resolves it again and K1 closes it", async () => {
-    const id = await raised("Rubbish on floor 3");
+  it("raised with two photos, C1 moves it In Progress → On Hold → Open, resolves it with a note, K1 returns it to C1, C1 resolves it again and K1 closes it", async () => {
+    const id = await raised("Rubbish on floor 3", 2);
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await move(id, "start_work");
     expect((await detail(at.c1Pm, id)).stage.key).toBe("in_progress");
-    await move(id, "hold");
+    await move(id, "put_on_hold_in_progress");
     expect((await detail(at.c1Pm, id)).stage.key).toBe("on_hold");
-    await move(id, "reopen");
+    await move(id, "back_to_open_on_hold");
     expect((await detail(at.c1Pm, id)).stage.key).toBe("open");
 
     // Resolving asks for the resolution note, C1's reply in the Resolve Screen (ADR 0019).
@@ -122,7 +122,10 @@ describe("a Consultant's Snag on the one Contractor covering it (seam 1)", () =>
     await take(at.k1Manager, id, "return_to_open", { reason: "The bonding jumper is missing at the riser" });
     const back = await detail(at.c1Pm, id);
     expect(back.step.key).toBe("open");
-    // Back with C1, held again by the PM who held Open before (§3.3 rule 1).
+    // Back with C1, held again by the PM who held Open before (§3.3 rule 1), not pooled.
+    expect(back.actions.pickUp).toBe(false);
+    expect(back.heldBy?.memberName).not.toBeNull();
+    expect((await detail(at.c1Engineer, id)).actions.transitions).toEqual([]);
     expect(back.actions.transitions.map((t) => t.key)).toEqual(expect.arrayContaining(["start_work", "put_on_hold", "resolve"]));
 
     await move(id, "start_work");
@@ -148,7 +151,7 @@ describe("a Consultant's Snag on the one Contractor covering it (seam 1)", () =>
 });
 
 describe("Step Age of a Snag inside C1 and as K1 sees it (V14)", () => {
-  it("restarts inside C1 at each move; K1 counts it from when the Snag reached C1 and sees it Open", async () => {
+  it("RP-90-3: restarts inside C1 at each move; K1 counts it from when the Snag reached C1 and sees it Open", async () => {
     const id = await raised("Slab level");
     const reached = (await detail(at.k1Manager, id)).stepEnteredAt;
     expect(reached).not.toBeNull();
@@ -156,8 +159,8 @@ describe("Step Age of a Snag inside C1 and as K1 sees it (V14)", () => {
 
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     let previous = reached!;
-    for (const step of ["start_work", "hold", "resume"]) {
-      await move(id, step);
+    for (const transition of ["start_work", "put_on_hold_in_progress", "resume"]) {
+      await move(id, transition);
       const inside = (await detail(at.c1Pm, id)).stepEnteredAt!;
       expect(Date.parse(inside)).toBeGreaterThan(Date.parse(previous));
       previous = inside;
@@ -168,13 +171,21 @@ describe("Step Age of a Snag inside C1 and as K1 sees it (V14)", () => {
   });
 });
 
-describe("a Snag where two Contractors cover its Trade and Location", () => {
-  it("is not raised: the Raise is refused with the Visibility Overlap's answer, and nothing reaches either Contractor", async () => {
-    // A third Contractor of the same Trade, covering Building A too (a Visibility Overlap).
+describe("a Snag where two Contractors cover its Trade and Location (a Visibility Overlap)", () => {
+  // A third Contractor of the same Trade; each test widens it over Building A, then narrows it back.
+  let c3Participant = "";
+  let c3Engineer: Caller;
+  const c3Covers = (location: typeof all) => ok(c1.caller.request("PUT", `/v1/participants/${c3Participant}/visibility`, { trade: all, location }));
+  beforeAll(async () => {
     const c3 = await api.authorizedPerson();
-    const c3Participant = await api.addParticipant(c1.caller, at.projectId, c3.company, "contractor");
-    const c3Engineer = await projectMember(api, c3, c3Participant, ["engineer"]);
-    await ok(c1.caller.request("PUT", `/v1/participants/${c3Participant}/visibility`, { trade: all, location: all }));
+    c3Participant = await api.addParticipant(c1.caller, at.projectId, c3.company, "contractor");
+    await c3Covers(only(buildingB));
+    c3Engineer = await projectMember(api, c3, c3Participant, ["engineer"]);
+  });
+
+  // The Consultant picking the Contractor in the Raise's Action Form is RP-658 (SNAG-12).
+  it("is not raised: the Raise is refused with the Visibility Overlap's answer, and nothing reaches either Contractor", async () => {
+    await c3Covers(all);
     try {
       const id = await draftSnag("Two Contractors");
       expect((await detail(at.k1Manager, id)).actions.transitions.map((t) => t.key)).not.toContain("raise");
@@ -183,7 +194,27 @@ describe("a Snag where two Contractors cover its Trade and Location", () => {
       await expectHidden(at.c1Pm.get(`/v1/work-items/${id}`));
       await expectHidden(c3Engineer.get(`/v1/work-items/${id}`));
     } finally {
-      await ok(c1.caller.request("PUT", `/v1/participants/${c3Participant}/visibility`, { trade: all, location: only(buildingB) }));
+      await c3Covers(only(buildingB));
+    }
+  });
+
+  it("RP-90-4: once raised on C1, stays with C1 at every move, Resolve and Return, though C3 covers it too; C3 never sees it", async () => {
+    const id = await raised("Overlap after the Raise");
+    await c3Covers(all);
+    try {
+      await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+      for (const transition of ["start_work", "put_on_hold_in_progress", "resume", "back_to_open", "put_on_hold", "back_to_open_on_hold"]) {
+        expect((await detail(at.c1Pm, id)).actions.transitions.map((t) => t.key), transition).toContain(transition);
+        await move(id, transition);
+        await expectHidden(c3Engineer.get(`/v1/work-items/${id}`), transition);
+      }
+      await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Done" } });
+      await take(at.k1Manager, id, "return_to_open", { reason: "Not yet" });
+      expect((await detail(at.c1Pm, id)).actions.transitions.map((t) => t.key)).toContain("start_work");
+      await expectHidden(c3Engineer.get(`/v1/work-items/${id}`));
+      expect((await snags(c3Engineer)).items.map((i) => i.id)).not.toContain(id);
+    } finally {
+      await c3Covers(only(buildingB));
     }
   });
 });

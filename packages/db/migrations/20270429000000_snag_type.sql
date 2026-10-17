@@ -10,7 +10,7 @@
 -- * The Snag List's Rabaed Default Stages gain In Progress and On Hold (category
 --   in_progress) after Open: Draft, Open, In Progress, On Hold, Resolved, Closed. Every
 --   existing Project gets them after its own Open, its later Stages moved down two places
---   (a Project with no Open Stage gets them at the end, as app.copy_rabaed_stages copies);
+--   (a Project with no Open Stage gets them at the end);
 --   a new Project copies them with the rest. The Comment Workflow doesn't use them.
 -- * Function Permissions in the Snag List: the Contractor's engineer and project manager
 --   gain `create` and `close` (a Contractor raises and verifies its own Snags from SNAG-2,
@@ -29,28 +29,30 @@ insert into stage (owner_kind, module_key, key, name, category, sort) values
   ('rabaed', 'snag_list', 'in_progress', '{"en": "In Progress", "ar": "قيد التنفيذ"}', 'in_progress', 3),
   ('rabaed', 'snag_list', 'on_hold', '{"en": "On Hold", "ar": "معلّقة"}', 'in_progress', 4);
 
+-- Only these two: app.copy_rabaed_stages would also bring back any Stage a Project Admin
+-- removed. A Project that already has one of the keys keeps it and gets only the other.
 do $$
   declare
-    v_open record;
     v_project uuid;
+    v_after integer;
+    v_missing text[];
   begin
-    for v_open in
-      select s.project_id, s.sort from stage s
-      where s.owner_kind = 'project' and s.module_key = 'snag_list' and s.key = 'open'
-        and not exists (
-          select 1 from stage x
-          where x.project_id = s.project_id and x.module_key = 'snag_list' and x.key in ('in_progress', 'on_hold')
-        )
-    loop
-      update stage set sort = sort + 2, updated_at = now()
-      where project_id = v_open.project_id and module_key = 'snag_list' and sort > v_open.sort;
-      insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
-      select 'project', v_open.project_id, d.module_key, d.key, d.name, d.category, v_open.sort + d.n
+    for v_project in select id from project order by id loop
+      select array_agg(k.key order by k.n) into v_missing
       from (values ('in_progress', 1), ('on_hold', 2)) as k (key, n)
-      join stage d on d.owner_kind = 'rabaed' and d.module_key = 'snag_list' and d.key = k.key;
-    end loop;
-    for v_project in select id from project loop
-      perform app.copy_rabaed_stages(v_project);
+      where not exists (select 1 from stage x where x.project_id = v_project and x.module_key = 'snag_list' and x.key = k.key);
+      continue when v_missing is null;
+      v_after := coalesce(
+        (select sort from stage where project_id = v_project and module_key = 'snag_list' and key = 'open'),
+        (select max(sort) from stage where project_id = v_project and module_key = 'snag_list'),
+        0
+      );
+      update stage set sort = sort + cardinality(v_missing), updated_at = now()
+      where project_id = v_project and module_key = 'snag_list' and sort > v_after;
+      insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
+      select 'project', v_project, d.module_key, d.key, d.name, d.category, v_after + m.n
+      from unnest(v_missing) with ordinality as m (key, n)
+      join stage d on d.owner_kind = 'rabaed' and d.module_key = 'snag_list' and d.key = m.key;
     end loop;
   end
 $$;
