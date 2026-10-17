@@ -310,6 +310,17 @@ export interface ScopeTable {
 }
 
 /**
+ * A link question a Project makes required on its items of one Type (RP-82), such as
+ * the WIR's Approved submittals. Only the columns the app role may read; who set it,
+ * and when, are the database's own. Written through `app.set_project_required_field`.
+ */
+export interface ProjectRequiredFieldTable {
+  project_id: string;
+  work_item_type_id: string;
+  field_key: string;
+}
+
+/**
  * A supplier on a Project's Approved Supplier List (RP-592). Only the columns
  * the app role may read (V10); `source`, `source_work_item_id` and who added or
  * withdrew it, and when, are the database's own. Written through
@@ -705,6 +716,7 @@ export interface Database {
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
+  project_required_field: ProjectRequiredFieldTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;
