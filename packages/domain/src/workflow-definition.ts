@@ -40,17 +40,8 @@ export type OutcomeMode = (typeof outcomeModes)[number];
  * item, whatever its role; RP-622, workflow-engine.md §3.1), the Function Permission its
  * Step Pool holds, and optionally the Positions it is narrowed to.
  */
-const roleRule = z.strictObject({
-  role: z.enum(baseRoles),
-  permission: z.enum(functionPermissions),
-  positions: z.array(key).min(1).optional(),
-});
-const raiserRule = z.strictObject({
-  raiser: z.literal(true),
-  permission: z.enum(functionPermissions),
-  positions: z.array(key).min(1).optional(),
-});
-const actorRule = z.union([roleRule, raiserRule]);
+const pool = z.strictObject({ permission: z.enum(functionPermissions), positions: z.array(key).min(1).optional() });
+const actorRule = z.union([pool.extend({ role: z.enum(baseRoles) }), pool.extend({ raiser: z.literal(true) })]);
 export type ActorRule = z.infer<typeof actorRule>;
 
 /** Who holds a Step as the checks compare them: a Participant role, or the raiser as its own holder. */

@@ -198,4 +198,27 @@ describe("a Snag started on a Version whose Steps name roles (seam 1)", () => {
     await take(at.c1Pm, own, "close");
     expect((await detail(at.c1Pm, own)).outcome).toBe("closed");
   });
+
+  it("a Send Back into a Step held by the raiser goes to the raiser: C1 sends K1's Snag back to its Draft, and K1 holds it", async () => {
+    const askRaiser = {
+      key: "ask_raiser",
+      label: bilingual("Ask the raiser"),
+      kind: "send_back" as const,
+      from: "open",
+      to: "draft",
+      outcome: null,
+      permission: "submit" as const,
+      actionForm: null,
+    };
+    await publish({ ...raiserHeld, transitions: [...raiserHeld.transitions, askRaiser] });
+    const id = await draftSnag(at.k1Manager, "Which riser?");
+    await take(at.k1Manager, id, "raise");
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(at.c1Pm, id, "ask_raiser");
+    const back = await detail(at.k1Manager, id);
+    expect(back.step.key).toBe("draft");
+    expect(back.workflow.versionNo).toBe(3);
+    expect(back.actions.transitions.map((t) => t.key)).toContain("raise");
+    expect(await offered(at.c1Pm, id)).toEqual([]);
+  });
 });
