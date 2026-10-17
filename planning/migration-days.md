@@ -38,3 +38,13 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270415 | RP-646 | 1A | Bulk Transitions from the Package page |
 | 20270416 | RP-647 | 1B | Package filter and Comments on the Package page |
 | 20270417 | spec RP-616 | 1A | Review fixes |
+| 20270418 | RP-170 | 4A | WIR Workflow Version 2 (Engineer → Manager, Recommended Result) |
+| 20270419 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 |
+| 20270420 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
+| 20270421 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
+| 20270422 | RP-577 | 4A | Snags from failed check items |
+| 20270423 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
+| 20270424 | RP-652 | 4C | Show Inspections in the Submittals tab |
+| 20270425 | RP-656 | 4D | Annotated photo beside the original |
+| 20270426 | spec RP-649 | 4A | Review fixes |
+| 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
