@@ -355,6 +355,8 @@ Every Form Version carries a `pdf` block: its sections' `include`, `width` and `
 
 **Languages:** with record language `bilingual` (the default), headings are Arabic with their English label beside them, as in the samples; `ar` prints Arabic only, `en` English only. Dates are Gregorian, with the Hijri date beside them when the Project turns it on (off by default). A **Working Copy** prints the same layout from the shared read, with Companies by name only, no names, Signatures, Stamps or Verification Code, and the Project's watermark on every page.
 
+**As built (RP-620, layout version 1):** the bare tracer of this layout, in `apps/worker/src/record/layout.ts`, printed from the Record Data only: the title block (the Type's names and code, the Project, the Subject, the Document Number with its Revision, left to right), the outcome with the date it closed, the Verification Code and the verification link, and the approval flow (each Transition on the path: its label, the Member's name and Positions, their Company, the date and time in Riyadh time, its content hash), bilingual (Arabic, then English on its own line), Latin digits, and on every page "Issued electronically through Rabaed", the Verification Code and page X of Y. RP-151 builds page 1 and the Form, RP-650 the cards, Stamps, Review Comments, endings and the Disclaimer, RP-147 the appendix.
+
 ### PDF Templates
 
 Retired (2026-10-16, ADR 0023): a Form no longer has several PDF Templates, and there are no paper-matching templates. The term now names the one Rabaed layout above (GLOSSARY.md).
