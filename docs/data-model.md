@@ -265,7 +265,7 @@ A number names the Trade and Location it was issued with, so those never change 
 | `discarded_at` | a discarded Draft: closed `cancelled`, its access rows removed, seen by nobody. A Draft Revision (RP-316, `app.discard_revision`) or, from RP-409, any Draft that never left Draft (the List's Delete, `app.discard_draft`, below); check `work_item_discarded_closed`: a discarded row is closed |
 | `duplicated_from_id`, `duplicate_member_id`, `duplicate_key` | the List's Duplicate (RP-409): the item a Draft was duplicated from, and the duplicating Member and their request key. Not granted to the app role. One live Draft per (`duplicate_member_id`, `duplicate_key`) (unique index `work_item_duplicate_key`, where not discarded), so a repeated request answers with the same Draft; a discarded one frees its key. No time: it never tells when the Draft was started (scenario 61) |
 | `parent_id` | Subtask; check: parent's `parent_id` is null |
-| `package_id` | nullable |
+| `package_id` | nullable: its Package, at most one (RP-636). Never granted to the app role: another Company sees the owner's Submitted items, and their `package_id` would tell of a Package it may not see. Read through `app.work_item_package`, written only by the Package functions (below) |
 | `current_step_id`, `current_stage_key`, `step_entered_at` | `step_entered_at` feeds **Step Age** inside the holding Participant |
 | `participant_entered_at`, `participant_entered_step_id` | when, and at which Step, the item reached the holding Participant (or closed): what every other Company sees (V14) |
 | `outcome` | a closing outcome of its Type's set on its Project (**outcome**), or `cancelled`; null while open. Trigger `work_item_outcome_in_set` refuses any other, whoever writes it (RP-429) |
@@ -310,9 +310,35 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 **chat_message**
 `id`, `work_item_id`, `author_member_id`, `participant_id`, `body`, `file_ids`, `created_at`. Insert-only.
 
-**package**
-`id`, `project_id`, `participant_id`, `seq` (per Project, shown PKG-001), `name i18n`, `status {open, in_progress, done}`.
-Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (to be specified, RP-588).
+**package** (as built, RP-636, `20270410000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenario RP-588-1)
+
+| column | notes |
+|---|---|
+| `id`, `project_id` | |
+| `participant_id` | the owning Participant (usually the Contractor); `(participant_id, project_id)` references `participant` |
+| `seq` | per Project **and owning Participant**, shown `PKG-` and three digits (`packageNumber` in `@rabaed/domain`), left-to-right; unique `(project_id, participant_id, seq)`, never reused (a discarded Package keeps its row). Not one count per Project: its gaps would tell each Company how many Packages the others hold, Open ones included (RP-588-1, as Document Numbers count by Participant Code) |
+| `name` | i18n, English and Arabic (`app.is_bilingual`) |
+| `status` | `open`, `in_progress`, `done`; stored. RP-636 leaves it `open`: Submit Package (RP-638) and the closures, Revisions and replacements (RP-642) recompute it in the same transaction |
+| `created_by_member_id`, `created_at` | not granted to the app role |
+| `discarded_at` | an Open Package deleted (the Package's Delete, discarded as a Draft is, `app.discard_draft`): nobody sees it again; check: only an `open` one. Not granted to the app role |
+
+The app role reads `id`, `project_id`, `participant_id`, `seq`, `name`, `status`, under the policy `app.sees_package(id)`, and writes nothing. Reads:
+- `app.sees_package(package)`: a Member of the owning Participant, while it is not discarded. RP-641 extends it to a Member who sees at least one of its items.
+- `app.package_items(package)`: the ids of its items the caller sees (`app.sees_work_item`); nothing when they don't see the Package. Every list or count of a Package comes from these.
+- `app.work_item_package(item)`: the item's Package (`package_id`, `seq`, `name`) where the caller sees both the item and the Package; else no row. The work item query gives it on each row (`package`).
+
+Writes (security definer, each re-checking the caller; a Package the caller doesn't see is `not_found`, a Project not active `project_closed`):
+- `app.create_package(project, name, now)` → (`outcome`, `package_id`, `seq`): any Member of a Participant on the Project, for their Participant; `created`, `not_found`, `project_closed`, `invalid_name`. The next `seq` under an advisory lock per Project and Participant.
+- `app.rename_package(package, name, now)`: `renamed`, `not_found`, `project_closed`, `invalid_name`.
+- `app.add_package_item(package, item, now)`: only a submittal (a Type of the Submittals Module) the owning Participant raised, that the caller sees and that isn't discarded, else `item_not_offered` (one answer whatever the reason); `in_another_package` when it is in another; `not_editable` for a Draft (no Document Number) the caller may not edit (`app.can_save_answers`); `added`, also when it already is in this one.
+- `app.remove_package_item(package, item, now)`: while `open`; `removed`, `package_not_open`, `item_not_in_package` (not in it, or not seen).
+- `app.discard_package(package, now)` (the Package's Delete): while `open`; its items keep everything but their Package; `discarded`, `package_not_open`.
+- Helpers, not for the app role: `app.package_for_write(package)` (the row locked, if the caller sees it) and `app.write_package_event`.
+
+**package_event** (RP-636)
+`id`, `project_id`, `package_id`, `type {created, renamed, item_added, item_removed, submitted, discarded}`, `work_item_id` (set exactly for `item_added` and `item_removed`), `actor_member_id`, `actor_participant_id` (the owning Participant), `payload` (`created`: the name; `renamed`: `from` and `to`), `created_at`. The Package's own trail, internal to the owning Participant. Append-only (trigger), and not readable through the app role until a reader is built.
+
+Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (RP-642).
 
 ## 6. Documents, signing, Documental Records
 

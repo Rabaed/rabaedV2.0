@@ -24,6 +24,7 @@ export * from "./project.ts";
 export * from "./schedule.ts";
 export * from "./scope.ts";
 export * from "./approved-supplier.ts";
+export * from "./package.ts";
 export * from "./step-age.ts";
 export * from "./visibility.ts";
 export * from "./watch.ts";

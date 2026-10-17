@@ -324,6 +324,23 @@ export interface ApprovedSupplierTable {
   status: Generated<"approved" | "withdrawn">;
 }
 
+/**
+ * A Package (RP-636): a named group of submittals of one Participant. Only the
+ * columns the app role may read, under `app.sees_package`; who created it, when,
+ * and whether it was discarded are the database's own. An item's Package is read through
+ * `app.work_item_package` (work_item.package_id is never granted), its items
+ * through `app.package_items`. Written through the app.* functions of the
+ * open_package migration.
+ */
+export interface PackageTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  seq: number;
+  name: ColumnType<Bilingual, string, string>;
+  status: Generated<"open" | "in_progress" | "done">;
+}
+
 export type ModuleKey = "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
 export type StageCategory = "draft" | "in_progress" | "closed_positive" | "closed_negative" | "cancelled";
 type OwnerKind = "rabaed" | "project";
@@ -705,6 +722,7 @@ export interface Database {
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
+  package: PackageTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;
