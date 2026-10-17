@@ -26,7 +26,7 @@ The flow:
 ### 2. Consultant Engineer on site (phone first)
 - One card per check item: the item text, a large **Pass / Fail / N/A** segmented control, comment, and photos. On a Fail, comment and photo show "(required)" when the template asks for them.
 - **Adding a photo**, from the browser: **"Take photo"** (opens the phone's camera) or **"Upload"** (picks from the phone's gallery or files). Thumbnails under the item, with remove.
-- **Annotate a photo:** tapping a thumbnail opens it full screen with simple markup tools: **arrow, circle / rectangle, freehand pen, and a text label**, a few colours (red by default), undo, and **Save**. The saved photo shows a small "annotated" mark on its thumbnail. Large touch targets; works in portrait.
+- **Annotate a photo:** tapping a thumbnail opens it full screen with simple markup tools: **arrow, circle / rectangle, freehand pen, and a text label**, a few colours (red by default), undo, and **Save**. Saving keeps the **original photo untouched** and adds the annotated copy beside it: the thumbnail shows the annotated copy with a small "annotated" mark, and opening it offers **Annotated / Original** to switch between the two. Large touch targets; works in portrait. This is the same photo tool everywhere in Rabaed (Snags, Site Reports, attachments), so design it as one reusable component.
 - On a failed item, a **"Raise a Snag"** tick, **on by default**; the Engineer can untick it (e.g. a minor failure fixed on the spot).
 - The WIR's linked approved submittals, by Document Number and Subject (an Engineer who can't open one still sees those two).
 - A sticky summary: **"18 Pass / 2 Fail / 1 N/A"**, and progress "21 of 24 answered".
