@@ -1,9 +1,10 @@
 # Parallel Claude Code sessions (lanes)
 
-**5 Mains × lanes A–D** (RP-602). Each **Main** is a planning session; each Main has four implementing **lanes, A–D**. Each implementing session works on **one ticket** in its **own app-made worktree**, so the desktop app binds its PR and sends CI / PR notifications.
+**An Orchestrator, 5 Mains × lanes A–D** (RP-602). The **Orchestrator** decides which Main grills which epic and keeps the rules; each **Main** is a planning session for its epics, with four implementing **lanes, A–D**. Each implementing session works on **one ticket** in its **own app-made worktree**, so the desktop app binds its PR and sends CI / PR notifications.
 
 | Session | Job | `pnpm lane:env N` | Jira label | Web |
 |---|---|---|---|---|
+| **Orchestrator** | Assigns epics to Mains, keeps the rule files, settles claims between Mains, housekeeping ("How the Orchestrator works"). No lanes; never grills a product epic. | `0`, only if it runs the app | — | localhost:3000 |
 | **Main m** (m = 1–5) | Planning only: grilling, `/to-spec`, `/to-tickets`, reviews, questions, design prompts, for the epics labelled `main-m`. It edits docs in its own worktree, never in the main folder ("How a Main works"). | `m0` (only to run the app) | — | lane`m0`.localhost:3`m`00 |
 | **Main m, lane A** | Implements Main m's tickets labelled `lane-ma` | `m1` | `lane-ma` | lane`m1`.localhost:3`m`10 |
 | **Main m, lane B** | … labelled `lane-mb` | `m2` | `lane-mb` | lane`m2`.localhost:3`m`20 |
@@ -14,7 +15,7 @@ So Main 3's lane B runs `pnpm lane:env 32`, takes tickets labelled `lane-3b`, an
 
 **Capacity** (measured 2026-10-16, RP-613): 20 lane stacks (60 containers) started at once all came up healthy and used about 3 GB of Docker's 15 GB; no lane port is in a range Windows reserves (`netsh interface ipv4 show excludedportrange protocol=tcp`); the pnpm store is on G:, so a worktree's `node_modules` are hard links. What runs out first is the host's 32 GB, under the dev servers and test runs of 20 sessions: start a lane's containers and servers only while it works, and stop them when it is done (`pnpm servers:stop`). `pnpm storybook` asks for port 6006 and, with `--ci`, takes the next free one when another lane holds it (without `--ci` it asked whether to move, got no answer from an agent's shell and exited without starting): read the port it prints.
 
-**Epics per Main.** Main 1 assigns each epic to a Main by labelling the Epic `main-1` … `main-5` (`project = RP AND issuetype = Epic AND labels = main-3`). A Main works only on its own epics, takes each from grilling to spec to tickets, and labels the tickets `lane-ma` … `lane-md` with its own number, never another Main's. Every Main also implements through its lanes, Main 1 included.
+**Epics per Main.** The Orchestrator assigns each epic to a Main by labelling the Epic `main-1` … `main-5` (`project = RP AND issuetype = Epic AND labels = main-3`): e.g. Packages to Main 1, the next to Main 2. A Main works only on its own epics, takes each from grilling to spec to tickets, and labels the tickets `lane-ma` … `lane-md` with its own number, never another Main's. All five Mains work alike, and each implements through its own lanes.
 
 **Shared modules are claimed across Mains** (rule 12): before a Main's lane changes a shared module (the list is in `docs/agents/issue-tracker.md`, "Ticket: shared files"), it comments `CLAIM <files> — Main m, lane-mx, RP-nnn` on the standing **Shared module claims** issue, RP-603, and `RELEASE <files> — RP-nnn (PR #n)` when the PR merges. Read the open claims first: a module another Main has claimed waits, or the two Mains agree there who goes first and the second merges `main` before its PR.
 
@@ -37,7 +38,16 @@ Every session, Mains and lanes alike, reads `main` and merges into `main`. A Mai
 3. **Decisions PR.** Open a docs-only PR from that branch as soon as the grilling ends, and queue it: `pnpm queue <number> --no-review --wait` (with RP-606 on `main`, label it `docs-only` first: every file it changes is a `.md`). Add the spec's migration days to `planning/migration-days.md` in the same PR or one like it, so the other Mains see them on `main`.
 4. **Spec and tickets** only after the decisions PR has merged: `/to-spec` and `/to-tickets`, pointing at `main`'s paths, never a branch (`docs/agents/issue-tracker.md`, "Specs"). Label the tickets `lane-ma` … `lane-md`; a ticket that changes a shared module names it, and its lane claims it on RP-603 (rule 12).
 5. **Lanes** start from `origin/main` and merge `main` when it moves (rule 6), so they always read the latest decisions.
-6. **Rule files.** Main 1 owns the agents' own docs: `CODING_STANDARDS.md`, this file and `docs/agents/*`, and the standing epic RP-567 (Agent tooling & retro). Main 1 also assigns each epic to a Main (`main-m` on the Epic). Another Main that wants a rule changed files a Task under RP-567 instead of editing them.
+6. **Rule files.** A Main never edits `CODING_STANDARDS.md`, this file or `docs/agents/*`: it files a Task under RP-567 and the Orchestrator makes the change.
+
+## How the Orchestrator works
+
+One session named `Orchestrator`, in its own worktree (`EnterWorktree` named `orchestrator-<topic>`), never the main folder. It has no lanes and never grills a product epic or writes a spec.
+
+1. **Assigns epics.** The owner says which Main grills which epic; the Orchestrator labels the Epic `main-m` and moves it when the owner reassigns it. A Main whose epic is done gets its next one here.
+2. **Keeps the rule files:** `CODING_STANDARDS.md`, this file and `docs/agents/*`, in docs-only PRs of its own (label `docs-only`, `pnpm queue <number> --no-review`). It owns the standing epic RP-567 (Agent tooling & retro): it files the retro and tooling Tasks there and hands RP-567 to a Main with room like any other epic, whose lanes build them.
+3. **Settles claims between Mains** on RP-603 when two Mains need the same shared module (rule 12), and decides who merges first.
+4. **Housekeeping**, from its own worktree (the prune never removes the stack of the folder it runs in): `pnpm worktrees:prune`, `pnpm lanes:prune`, archiving finished sessions, checking that the lanes' ports and stacks are free.
 
 ## How to start every implementing ticket
 
@@ -71,7 +81,7 @@ Every session, Mains and lanes alike, reads `main` and merges into `main`. A Mai
 
 Never run `docker compose down -v` (or `--volumes`, or `docker volume rm rabaed-*`) by hand: it deletes a lane's database volume, and the committed `.claude/settings.json` denies those commands for agents. Free a lane only with `pnpm lanes:prune --lane N` (or `pnpm worktrees:prune` after merges), which confirm first and keep a live worktree's lane.
 
-Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from a Main after archiving its finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch (or a detached HEAD) already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 32`) to free only `rabaed-lane32`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
+Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. The Orchestrator runs it after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch (or a detached HEAD) already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 32`) to free only `rabaed-lane32`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
 
 `pnpm lane:env N --force` does not need a prune to take lane N over from a worktree that is gone, or whose branch is merged into `origin/main` (on a detached HEAD: whose HEAD commit is in `origin/main`, RP-601) and has no uncommitted changes (RP-500): it removes that project's containers, keeps its volumes (the database), and says which worktree it came from; the next `docker compose up` recreates the containers under the new worktree. A holder that is not merged, has uncommitted changes, is locked by a session that still runs, or is a folder git does not list still refuses, as does a not-merged worktree that has the project in its `.env`. A `--db` run never takes a lane over.
 
@@ -134,7 +144,7 @@ Every implementing session and implementer subagent follows these, on top of the
 
 `/mattpocock-skills:retro` looks back at the session and suggests changes to the agents' environment, not the code. A mistake that a rule could catch becomes a check (a lint rule, a pre-commit hook or a CI job). A judgement call becomes a line in `CODING_STANDARDS.md`. Each accepted suggestion becomes a `ready-for-agent` Task, as RP-287 did. A new required CI check also has to be added to the `main` ruleset.
 
-Retro Tasks go under RP-567, with the label `retro`, whichever Main's lane ran the session. Only Main 1 edits `CODING_STANDARDS.md` (rule 9 below). A Task that brings a standards line quotes the line; the lane builds only the check, and Main 1 adds the line, with its "(checked: …)" mark, in a docs-only PR once the check is on `main`.
+Retro Tasks go under RP-567, with the label `retro`, whichever Main's lane ran the session. Only the Orchestrator edits `CODING_STANDARDS.md` (rule 9 below). A Task that brings a standards line quotes the line; the lane builds only the check, and the Orchestrator adds the line, with its "(checked: …)" mark, in a docs-only PR once the check is on `main`.
 
 ## Epic review when a spec is finished
 
@@ -155,7 +165,7 @@ Every ticket already gets a `/code-review` inside `/implement`; when the review 
 7. Parallel sessions multiply usage — close finished sessions.
 8. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the spec's Main comments on the integration PR.
 9. Docs have owners. Replaying the last 60 merges (2026-10-06), 9 of the 24 conflicted files were docs; the translation catalogues and the packages' `index.ts` files, though changed by nearly every PR, conflicted once or never.
-   1. `CODING_STANDARDS.md`, this file and `docs/agents/*`: only Main 1 edits them (see "Retro before archiving" and "How a Main works", step 6). `GLOSSARY.md`, `docs/adr/` and `planning/migration-days.md`: any Main, in a decisions PR.
+   1. `CODING_STANDARDS.md`, this file and `docs/agents/*`: only the Orchestrator edits them (see "Retro before archiving" and "How the Orchestrator works"). `GLOSSARY.md`, `docs/adr/` and `planning/migration-days.md`: any Main, in a decisions PR.
    2. `docs/data-model.md`, `docs/workflow-engine.md`, `docs/form-engine.md`, `docs/visibility.md`: the lane writes them for what it builds, in the same PR. A grilling session records its decisions in a new ADR and in tickets, never in these files directly; a decision that builds nothing gets a small docs-only ticket.
    3. A new scenario in the `docs/visibility.md` matrix takes its ID from the ticket key (`RP-412-1`), never the next number (RP-397). When two branches add rows at the end of the table, keep both. When a merge stops on `docs/visibility.md`, run `node scripts/resolve-visibility.ts` in the merging worktree (RP-562): it merges rows the two sides changed apart (different rows, or the same row changed identically), and leaves git's markers, naming the row or line, on any row or line both sides changed differently; it never merges inside a row. Read the diff, then `git add` it.
    4. Add a new rule at the end of a numbered list; never renumber, since tickets cite rules by number.
