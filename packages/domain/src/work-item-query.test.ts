@@ -337,3 +337,15 @@ describe("the List's web path", () => {
     expect(workItemListHref(project, { module: "submittals", codeC: ["awaitingRevision"] })).toBe(`/projects/${project}/work-items?codeC=awaitingRevision`);
   });
 });
+
+describe("a Stage filter in the Submittals tab that lists Inspections too (RP-652)", () => {
+  it("takes a Stage of another Module by `<module>:<key>`, beside the Module's own keys", () => {
+    expect(workItemQuery.parse({ stage: ["draft", "inspections:pending_inspection"] }).stage).toEqual(["draft", "inspections:pending_inspection"]);
+  });
+
+  it("refuses a key that is neither", () => {
+    expect(workItemQuery.safeParse({ stage: ["inspections:"] }).success).toBe(false);
+    expect(workItemQuery.safeParse({ stage: ["a:b:c"] }).success).toBe(false);
+    expect(workItemQuery.safeParse({ stage: [":draft"] }).success).toBe(false);
+  });
+});

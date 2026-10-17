@@ -1501,9 +1501,25 @@
     "screens": "Screens",
     "stages": "Stages",
     "outcomes": "Outcomes",
+    "modules": "Modules",
     "requiredLinks": "Required links"
   },
   "projectSettings": {
+    "modules": {
+      "title": "Modules",
+      "intro": "Where the Project's Modules show.",
+      "inspections": {
+        "title": "Inspections",
+        "description": "Inspections stays its own Module either way: its Document Numbers, permissions, Workflows, Stages and item links do not change.",
+        "label": "Show Inspections in Submittals",
+        "help": "Off: Inspections has its own place in the Project's navigation. On: it is hidden there and Submittals lists the WIRs too, with their own type and Stage groups."
+      },
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed."
+      }
+    },
     "approvedSuppliers": {
       "title": "Approved Supplier List",
       "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. A Material Approval Request (MAR) chooses its supplier from here. Every company on the Project sees this list.",
