@@ -23,10 +23,17 @@
       "editsForm": true
     },
     {
-      "key": "consultant_inspection",
-      "name": { "en": "Consultant inspection", "ar": "معاينة الاستشاري" },
+      "key": "consultant_engineer",
+      "name": { "en": "Consultant Engineer", "ar": "مهندس الاستشاري" },
       "stage": "pending_inspection",
-      "actor": { "role": "consultant", "permission": "approve" },
+      "actor": { "role": "consultant", "permission": "review", "positions": ["engineer"] },
+      "outcomeMode": "recommend_code"
+    },
+    {
+      "key": "consultant_manager",
+      "name": { "en": "Consultant Manager", "ar": "مدير الاستشاري" },
+      "stage": "pending_inspection",
+      "actor": { "role": "consultant", "permission": "approve", "positions": ["manager"] },
       "outcomeMode": "issue_outcome"
     },
     {
@@ -104,17 +111,54 @@
       "label": { "en": "Submit", "ar": "تقديم" },
       "kind": "submit",
       "from": "internal_review",
-      "to": "consultant_inspection",
+      "to": "consultant_engineer",
       "outcome": null,
       "permission": "submit",
       "actionForm": null,
       "screen": "cover_note"
     },
     {
+      "key": "send_to_manager",
+      "label": { "en": "Send to Manager", "ar": "إرسال للمدير" },
+      "kind": "send",
+      "from": "consultant_engineer",
+      "to": "consultant_manager",
+      "outcome": null,
+      "permission": "review",
+      "actionForm": null
+    },
+    {
+      "key": "return_to_engineer",
+      "label": { "en": "Return to Engineer", "ar": "إعادة للمهندس" },
+      "kind": "return",
+      "from": "consultant_manager",
+      "to": "consultant_engineer",
+      "outcome": null,
+      "permission": "approve",
+      "actionForm": {
+        "sections": [
+          {
+            "key": "return",
+            "title": { "en": "Return to Engineer", "ar": "إعادة للمهندس" },
+            "fields": [
+              {
+                "key": "reason",
+                "type": "textarea",
+                "required": true,
+                "maxLength": 2000,
+                "label": { "en": "Reason", "ar": "السبب" },
+                "help": { "en": "Only your Company sees this.", "ar": "لا يراه إلا شركتك." }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "key": "pass",
       "label": { "en": "Passed", "ar": "ناجح" },
       "kind": "close",
-      "from": "consultant_inspection",
+      "from": "consultant_manager",
       "to": "passed",
       "outcome": "passed",
       "permission": "approve",
@@ -125,7 +169,7 @@
       "key": "pass_with_comments",
       "label": { "en": "Passed with Comments", "ar": "ناجح مع ملاحظات" },
       "kind": "close",
-      "from": "consultant_inspection",
+      "from": "consultant_manager",
       "to": "passed",
       "outcome": "passed_with_comments",
       "permission": "approve",
@@ -136,7 +180,7 @@
       "key": "fail",
       "label": { "en": "Failed", "ar": "راسب" },
       "kind": "close",
-      "from": "consultant_inspection",
+      "from": "consultant_manager",
       "to": "failed",
       "outcome": "failed",
       "permission": "approve",
