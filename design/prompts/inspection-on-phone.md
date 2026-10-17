@@ -1,4 +1,4 @@
-Design **Inspections (WIR)** for Rabaed, a B2B construction management web app used in Saudi Arabia (Arabic and English, full RTL support, Latin digits). The inspection itself happens **on a phone on site**; the request and the review also work on desktop. Use the Rabaed Claude Design kit (app shell, page templates, tokens) already in the project. RP-118 (INSP-8), spec RP-649.
+Design **Inspections (WIR)** for Rabaed, a B2B construction management web app used in Saudi Arabia (Arabic and English, full RTL support, Latin digits). The inspection itself happens **on a phone on site**; the request and the review also work on desktop. **This is not a native app:** it is the same Rabaed web app, opened in the phone's browser and laid out for a small screen (ADR 0004: responsive web first). Design it as a responsive web page, not with native-app patterns such as an app store install, push-only flows or offline sync. Use the Rabaed Claude Design kit (app shell, page templates, tokens) already in the project. RP-118 (INSP-8), spec RP-649.
 
 ## Context
 A **Work Inspection Request (WIR)** is how the Contractor asks the Consultant to inspect finished work at a Location and Trade before covering it up, e.g. "Inspect conduits before plastering, Tower 1 Floor 3".
@@ -21,10 +21,12 @@ The flow:
 - Description, Trade, Location (Zone → Building → Floor), **Requested for** (date and time).
 - **Checklist Template** picker, filtered by the chosen Trade, with a preview of its items.
 - **Approved submittals**: pick from the submittals the raiser can see that closed at Code A or B only, shown with their Code badge. Optional, unless the Project makes it required.
-- Attachments and photos (camera on phone).
+- Attachments and photos: **"Take photo"** or **"Upload"**, and the same annotate tool as on site.
 
 ### 2. Consultant Engineer on site (phone first)
-- One card per check item: the item text, a large **Pass / Fail / N/A** segmented control, comment, and photos (camera first). On a Fail, comment and photo show "(required)" when the template asks for them.
+- One card per check item: the item text, a large **Pass / Fail / N/A** segmented control, comment, and photos. On a Fail, comment and photo show "(required)" when the template asks for them.
+- **Adding a photo**, from the browser: **"Take photo"** (opens the phone's camera) or **"Upload"** (picks from the phone's gallery or files). Thumbnails under the item, with remove.
+- **Annotate a photo:** tapping a thumbnail opens it full screen with simple markup tools: **arrow, circle / rectangle, freehand pen, and a text label**, a few colours (red by default), undo, and **Save**. The saved photo shows a small "annotated" mark on its thumbnail. Large touch targets; works in portrait.
 - On a failed item, a **"Raise a Snag"** tick, **on by default**; the Engineer can untick it (e.g. a minor failure fixed on the spot).
 - The WIR's linked approved submittals, by Document Number and Subject (an Engineer who can't open one still sees those two).
 - A sticky summary: **"18 Pass / 2 Fail / 1 N/A"**, and progress "21 of 24 answered".
@@ -46,7 +48,8 @@ The flow:
 
 ## Screens to produce
 - The WIR request on desktop and on a phone.
-- The Engineer's checklist on a phone: an item answered Pass, an item answered Fail with comment, photo and the Snag tick, the summary bar, and Send to Manager.
+- The Engineer's checklist on a phone (in the browser): an item answered Pass, an item answered Fail with comment, photo and the Snag tick, the summary bar, and Send to Manager.
+- The photo flow: the "Take photo / Upload" choice, and the annotate screen with an arrow and a text label drawn on a photo.
 - The Manager's three Result pop-ups and Return to Engineer.
 - The WIR page after the Result, and a Revision.
 - Every screen in **English and Arabic (RTL)**. Document Numbers (`TWR-DCL-CV-WIR-007`) stay LTR inside Arabic text.
