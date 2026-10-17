@@ -17,6 +17,19 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270407 | RP-596 | B | Eight default Workflows |
 | 20270408 | RP-597 | B | Demo |
 | 20270409 | spec RP-598 | B | Review fixes; RP-593's and RP-594's migrations, moved here to sort after RP-591's on `main` |
+| 20270429 | RP-90 | 3A | Snag Type, Snag List Stages and permissions, Snag Workflow Version 1 |
+| 20270430 | RP-622 | 3A | The raiser as a Step holder; Snag Workflow Version 2 |
+| 20270501 | RP-623 | 3B | Photos and attachments in another Participant's section; After photos |
+| 20270502 | RP-624 | 3C | Raised-from counts by Type |
+| 20270503 | RP-94 | 3D | Snag List desktop views |
+| 20270504 | RP-625 | 3A | Informed Participants; Snag Workflow Version 3 |
+| 20270505 | RP-626 | 3B | Question Types (QSN, QSC) |
+| 20270506 | RP-627 | 3A | Site Observation Type and the "General" Trade |
+| 20270507 | RP-628 | 3C | Snag item detail |
+| 20270508 | RP-629 | 3D | Snag List bulk actions and exports |
+| 20270509 | RP-630 | 3D | Snag List on a phone |
+| 20270510 | RP-658 | 3A | Pick one of several covering Participants at a Submit |
+| 20270511 | spec RP-619 | 3A | Review fixes |
 | 20270410 | RP-636 | 1A | Build an Open Package |
 | 20270411 | RP-638 | 1A | Submit Package |
 | 20270412 | RP-641 | 1A | Packages board and each viewer's counts |
@@ -25,3 +38,25 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270415 | RP-646 | 1A | Bulk Transitions from the Package page |
 | 20270416 | RP-647 | 1B | Package filter and Comments on the Package page |
 | 20270417 | spec RP-616 | 1A | Review fixes |
+| 20270512 | RP-618 | 24 | File fingerprints in the content hash |
+| 20270513 | RP-85 | 21 | The Signature; no Signature, no Transition |
+| 20270514 | RP-620 | 22 | Tracer: sealed Documental Record |
+| 20270515 | RP-617 | 21 | Company logo and Stamp; no Stamp, no Transition |
+| 20270516 | RP-151 | 22 | Record page 1 and Form body; record language, Hijri dates |
+| 20270517 | RP-155 | 23 | Record checks, record ready, Re-produce |
+| 20270518 | RP-650 | 22 | Signature cards, Stamps, Review Comments, Disclaimer |
+| 20270519 | RP-621 | 24 | Working Copy |
+| 20270520 | RP-157 | 23 | Verification page |
+| 20270521 | RP-147 | 22 | The record's appendix |
+| 20270522 | spec RP-632 | 22 | Review fixes |
+| 20270523 | spec RP-632 | 21 | Merge-with-`main` reconciliation of `app.take_transition` (rule 11.1) |
+| 20270418 | RP-170 | 4A | WIR Workflow Version 2 (Engineer → Manager, Recommended Result) |
+| 20270419 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 |
+| 20270420 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
+| 20270421 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
+| 20270422 | RP-577 | 4A | Snags from failed check items |
+| 20270423 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
+| 20270424 | RP-652 | 4C | Show Inspections in the Submittals tab |
+| 20270425 | RP-656 | 4D | Annotated photo beside the original |
+| 20270426 | spec RP-649 | 4A | Review fixes |
+| 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
