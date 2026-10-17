@@ -16,6 +16,7 @@ import {
   isHiddenLinkChoice,
   linkAccepts,
   offeredChoices,
+  requiredByProject,
   type SupplierChoice,
   parseActionForm,
   stepAgeWeeks,
@@ -60,6 +61,7 @@ import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
+import { projectRequiredKeys } from "../projects/required-fields.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -122,10 +124,21 @@ function toFormVersion(r: FormVersionRow): FormVersion {
  * Type's Rabaed Default Form (RP-554), as app.create_work_item checks it.
  */
 async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
-  const { rows } = await sql<FormVersionRow>`
-    select id, version_no, schema from form_version where id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
+  const { rows } = await sql<FormVersionRow & { type_id: string | null }>`
+    select v.id, v.version_no, v.schema,
+      (select t.id from work_item_type t where t.code = ${typeCode} and (t.project_id = ${projectId}::uuid or t.project_id is null)
+       order by t.project_id is null, t.id limit 1) as type_id
+    from form_version v where v.id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
   `.execute(trx);
-  return rows[0] ? toFormVersion(rows[0]) : null;
+  const r = rows[0];
+  if (!r) return null;
+  return withProjectRequired(trx, toFormVersion(r), projectId, r.type_id);
+}
+
+/** `form` with the link questions its Project makes required on the Type `typeId` required (RP-82, requiredByProject). */
+async function withProjectRequired(trx: Trx, form: FormVersion, projectId: string, typeId: string | null): Promise<FormVersion> {
+  if (typeId === null || !formFields(form.schema).some((f) => f.type === "work_item_ref")) return form;
+  return { ...form, schema: requiredByProject(form.schema, await projectRequiredKeys(trx, projectId, typeId)) };
 }
 
 /** The Project's Scopes and Sub-scopes, which the validator checks `scopes` against. */
@@ -270,9 +283,10 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       can_save: boolean;
       workflow_version_id: string;
       step_key: string;
+      work_item_type_id: string;
     }
   >`
-    select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
+    select v.id, v.version_no, v.schema, w.project_id, w.work_item_type_id, app.work_item_answers(w.id) as data,
       app.answers_sha256(w.id) as data_sha256, app.can_save_answers(w.id) as can_save,
       w.workflow_version_id, s.key as step_key
     from work_item w
@@ -285,7 +299,8 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
-  const form = toFormVersion(r);
+  // Its Project may make a link question required (RP-82): read so wherever its answers are checked.
+  const form = await withProjectRequired(trx, toFormVersion(r), r.project_id, r.work_item_type_id);
   // app.answers_sha256 is also given to the holder of the raiser's Step who may not save (their Submit, RP-525).
   const canSave = r.can_save;
   const steps = await workflowSteps(trx, r.workflow_version_id);

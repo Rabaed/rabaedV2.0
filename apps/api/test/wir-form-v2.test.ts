@@ -4,13 +4,15 @@
 // Code A or B, so its Link search offers those and nothing else, and a save naming
 // another is refused like an unknown option. A link question without `accepts`
 // still offers any Submitted item. Requested for is a plain date and time the WIR
-// can't leave Draft without; nothing compares it with today.
+// can't leave Draft without; nothing compares it with today. A Project Admin can make
+// Approved submittals required on their Project (Project Settings → Required links):
+// then a WIR there can't leave Draft without one.
 //
 // The submittals are a test-only Type on the test Workflow with Code B
 // (addSendBackType), closed by K1's manager at A, B or C.
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, publishProblems, type FormVersion, type LinkSearchResults } from "@rabaed/domain";
+import { formSchema, publishProblems, type FormVersion, type LinkSearchResults, type ProjectRequiredFields } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
@@ -35,6 +37,8 @@ const classification = {
   ],
 };
 
+let c1: Company;
+let k1: Company;
 let tower: Tower;
 const item = { a: "", b: "", c: "", open: "" };
 const requestedFor = "2026-11-02T05:30:00.000Z";
@@ -106,8 +110,8 @@ beforeAll(async () => {
       { withApproveB: true },
     );
   }
-  const c1: Company = await api.projectCreator();
-  const k1 = await api.authorizedPerson();
+  c1 = await api.projectCreator();
+  k1 = await api.authorizedPerson();
   tower = await buildTower(api, { c1, k1 }, "WV2");
   item.a = await closedWith("Cable trays, Code A", "approve_a");
   item.b = await closedWith("Cable ladders, Code B", "approve_b");
@@ -165,7 +169,7 @@ describe("Link search with a link question's `accepts`", () => {
   });
 
   it("refuses a Type or outcome that isn't one", async () => {
-    for (const extra of [{ types: "mar" }, { outcomes: "1A" }]) {
+    for (const extra of [{ types: "mar" }, { outcomes: "1A" }] as Record<string, string>[]) {
       const res = await tower.c1Engineer.get(`/v1/projects/${tower.projectId}/work-items/link-search?${new URLSearchParams({ q: "Cable", ...extra }).toString()}`);
       expect(res.statusCode).toBe(400);
     }
@@ -191,6 +195,89 @@ describe("a WIR's Approved submittals", () => {
   it("is optional: a WIR without one is sent for review", async () => {
     const id = (await ok(createWir(), 201)).json().id as string;
     await take(tower.c1Engineer, id, "send_for_review");
+  });
+});
+
+describe("Project Settings → Required links: \"Approved submittals required\"", () => {
+  const settings = async (by: Caller): Promise<ProjectRequiredFields> =>
+    (await ok(by.get(`/v1/projects/${tower.projectId}/required-fields`), 200)).json();
+  const set = (by: Caller, body: Record<string, unknown>) => by.request("PUT", `/v1/projects/${tower.projectId}/required-fields`, body);
+  const approvedSubmittals = (s: ProjectRequiredFields) => s.fields.find((f) => f.type === "WIR" && f.key === "approved_submittals");
+  const sendForReview = async (extra: Record<string, unknown> = {}) => {
+    const id = (await ok(createWir(extra), 201)).json().id as string;
+    return tryTake(tower.c1Engineer, id, "send_for_review");
+  };
+
+  it("lists every link question of the Project's Types, off until a Project Admin turns it on; every Project Member reads it", async () => {
+    const forEngineer = await settings(tower.c1Engineer);
+    expect(forEngineer.canEdit).toBe(false);
+    expect(approvedSubmittals(forEngineer)).toEqual({
+      type: "WIR",
+      typeName: { en: "Work Inspection Request", ar: "طلب معاينة أعمال" },
+      key: "approved_submittals",
+      label: { en: "Approved submittals", ar: "الاعتمادات الموافق عليها" },
+      requiredByForm: false,
+      required: false,
+    });
+    expect(forEngineer.fields.map((f) => [f.type, f.key])).toContainEqual(["MAR", "related_submittals"]);
+    expect((await settings(tower.k1Manager)).fields).toEqual(forEngineer.fields);
+    expect((await settings(tower.admin!)).canEdit).toBe(true);
+  });
+
+  it("is changed by a Project Admin only: anyone else is told it isn't there", async () => {
+    for (const by of [tower.c1Engineer, tower.k1Manager]) {
+      const res = await set(by, { type: "WIR", key: "approved_submittals", required: true });
+      expect(res.statusCode).toBe(404);
+    }
+    expect(approvedSubmittals(await settings(tower.c1Engineer))!.required).toBe(false);
+  });
+
+  it("names only a link question of a Type's Form", async () => {
+    for (const [body, error] of [
+      [{ type: "WIR", key: "description", required: true }, "field_not_found"],
+      [{ type: "WIR", key: "made_up", required: true }, "field_not_found"],
+      [{ type: "ZZZ", key: "approved_submittals", required: true }, "type_not_found"],
+    ] as const) {
+      const res = await set(tower.admin!, body);
+      expect({ status: res.statusCode, error: res.json().error }).toEqual({ status: 422, error });
+    }
+  });
+
+  it("on, a WIR without an approved submittal can't be sent for review, naming the field; with one, or off, it can", async () => {
+    await ok(set(tower.admin!, { type: "WIR", key: "approved_submittals", required: true }));
+    expect(approvedSubmittals(await settings(tower.c1Engineer))!.required).toBe(true);
+    // The Form a new WIR gets says so, for the asterisk.
+    const form: FormVersion = (await ok(tower.c1Engineer.get(`/v1/projects/${tower.projectId}/work-item-types/WIR/form`), 200)).json();
+    expect(form.schema.sections.flatMap((s) => s.fields).find((f) => f.key === "approved_submittals")).toMatchObject({ required: true });
+
+    const refused = await sendForReview();
+    expect({ status: refused.statusCode, body: refused.json() }).toEqual({
+      status: 422,
+      body: { error: "form_incomplete", fields: [{ key: "approved_submittals", code: "required" }] },
+    });
+    // A Draft still saves without one.
+    expect((await createWir()).statusCode).toBe(201);
+    expect((await sendForReview({ approved_submittals: [item.a] })).statusCode).toBe(204);
+
+    await ok(set(tower.admin!, { type: "WIR", key: "approved_submittals", required: false }));
+    expect((await sendForReview()).statusCode).toBe(204);
+  });
+
+  it("is the Project's own: another Project's WIRs are as the Form says", async () => {
+    await ok(set(tower.admin!, { type: "WIR", key: "approved_submittals", required: true }));
+    const other = await buildTower(api, { c1, k1 }, "WV3");
+    const id = (
+      await ok(
+        other.c1Engineer.post(`/v1/projects/${other.projectId}/work-items`, {
+          type: "WIR",
+          title: "Cable trays, elsewhere",
+          answers: { description: "Trays", requested_for: requestedFor, trade: other.electrical, location: other.buildingA },
+        }),
+        201,
+      )
+    ).json().id as string;
+    expect((await tryTake(other.c1Engineer, id, "send_for_review")).statusCode).toBe(204);
+    await ok(set(tower.admin!, { type: "WIR", key: "approved_submittals", required: false }));
   });
 });
 
