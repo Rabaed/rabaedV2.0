@@ -71,6 +71,7 @@ def formats_xlsx():
     sheet.append(["0.3", 0.1 + 0.2])
     sheet.append(["0012", 12])
     sheet["B4"].number_format = "0000"
+    sheet.append(["0012", "0012"])
     sheet.append(["15%", 0.15])
     sheet["B5"].number_format = "0%"
     # A reference typed as text that only looks like a number: never rounded.

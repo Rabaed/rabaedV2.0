@@ -55,11 +55,17 @@ describe("an .xlsx register", () => {
     expect(rows.map((row) => row.values)).toEqual([
       ["09:30", "09:30"],
       ["0.3", "0.3"],
-      // Not as shown: the reader can't apply a cell's number format (type a reference number as text to keep its zeros).
       ["0012", "12"],
+      ["0012", "0012"],
       ["15%", "0.15"],
       ["12345678901234567890", "12345678901234567890"],
     ]);
+  });
+
+  it("reads cells as stored, not as shown (RP-631's owner, 2026-10-17): 12 formatted 0000 is 12, 0012 typed as text is 0012", async () => {
+    const { rows } = (await openSpreadsheet(fixture("formats.xlsx"))).table();
+    expect(rows[2]!.values[1]).toBe("12");
+    expect(rows[3]!.values[1]).toBe("0012");
   });
 
   it("counts only the rows below the chosen header row", async () => {

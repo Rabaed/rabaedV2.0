@@ -7,8 +7,9 @@ import readXlsxFile, { InvalidInputError } from "read-excel-file/universal";
 // never trimmed or translated. Nothing here knows about Submittals; the import maps
 // the columns.
 //
-// Cells that aren't text become text this way, since the reader can't apply a cell's
-// display format:
+// Cells are read as stored, not as shown: the reader can't apply a cell's display
+// format, and spec RP-631's owner chose this over a library that can (RP-631 comment
+// 14098). Text cells are exactly as written. Other cells become text this way:
 // - a number is the number stored in the file ("7", "1.5"), rounded to the 15 digits
 //   Excel shows, so a cell shown as "1.50" reads "1.5", "15%" reads "0.15" and a
 //   number formatted "0000" reads "12", not "0012"; a number typed as text stays as typed;
