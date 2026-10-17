@@ -173,8 +173,9 @@ export const workItemRow = workItemSummary.extend({
     .nullable()
     .optional(),
   /**
-   * The Snag List's thumbnail (RP-94): the first photo of its `photos` field that the viewer
-   * sees (RLS on Documents), in upload order. Null when there is none; left out by reads of other Modules.
+   * The Snag List's thumbnail (RP-94): the first image in one of its Form's file fields (not a
+   * checklist item's evidence, nor an annotated copy) that the viewer sees (RLS on Documents), in
+   * upload order. Null when there is none; left out by reads of other Modules.
    */
   photo: z.object({ documentId: z.uuid(), contentType: z.string() }).nullable().optional(),
 });

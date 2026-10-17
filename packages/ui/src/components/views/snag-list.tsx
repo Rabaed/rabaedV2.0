@@ -7,8 +7,6 @@ import {
   raisedFromManual,
   searchMaxLength,
   withoutFilters,
-  workItemPageSize,
-  workItemPageSizes,
   type BilingualText,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
@@ -26,7 +24,6 @@ import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
-import { NumberedPager } from "../list/numbered-pager.tsx";
 import { TableCard } from "../list/table-card.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
@@ -35,7 +32,7 @@ import { StageDot, StagePill } from "../status/stage-pill.tsx";
 import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { ownerOf, placesOf } from "./work-item-board.tsx";
-import { locationLevels } from "./work-item-list.tsx";
+import { locationLevels, WorkItemPager } from "./work-item-list.tsx";
 
 // The Snag List's desktop views (RP-94, SNAG-8; design/reference/claude-design/ui_kits/app/snag-list.html):
 // a toolbar ("+ New" with only the Types the viewer may raise, search, Filters, Need My Action,
@@ -149,7 +146,7 @@ const otherType = { icon: "tag" as IconName, classes: "bg-neutral-tint text-neut
 const lookOf = (code: string) => typeLooks[code] ?? otherType;
 
 /** An item's Type, as a chip: its shape, its name. */
-export function SnagTypeChip({ code, name, className }: { code: string; name: string; className?: string }) {
+function SnagTypeChip({ code, name, className }: { code: string; name: string; className?: string }) {
   const look = lookOf(code);
   return (
     <span className={cn("inline-flex h-[22px] items-center gap-1 rounded-[6px] px-1.5 text-caption font-semibold whitespace-nowrap", look.classes, className)}>
@@ -481,8 +478,8 @@ function Thumbnail({ row, urls, labels }: { row: WorkItemRow; urls: Readonly<Rec
   );
 }
 
-const cell = "h-12 border-b border-border-subtle bg-surface px-3 align-middle whitespace-nowrap group-hover/row:bg-hover";
-const head = "sticky top-0 z-[3] h-[42px] border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+const cell = "h-12 border-b border-border-subtle bg-surface px-2 align-middle whitespace-nowrap group-hover/row:bg-hover";
+const head = "sticky top-0 z-[3] h-[42px] border-b border-border-subtle bg-surface-subtle px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 
 /** The List: the page's rows under a folding header per Stage, in the Project's Stage order, each with its count. */
 function SnagTable({
@@ -515,25 +512,7 @@ function SnagTable({
   const groups = list.stages
     .map((stage) => ({ stage, rows: list.items.filter((r) => r.stage.key === stage.key) }))
     .filter((g) => g.rows.length > 0);
-  const page = list.page?.number ?? query.page ?? 1;
-  const size = list.page?.size ?? query.pageSize ?? workItemPageSize;
-  const total = query.q === undefined ? list.stages.reduce((sum, s) => sum + s.count, 0) : null;
-  const lastPage = total === null ? null : Math.max(1, Math.ceil(total / size));
-  const pager = (
-    <NumberedPager
-      page={page}
-      lastPage={lastPage}
-      hasNext={list.page?.hasNext ?? (lastPage !== null && page < lastPage)}
-      pageSize={size}
-      pageSizes={workItemPageSizes}
-      summary={[lastPage === null ? labels.page(n(page)) : labels.pageOf(n(page), n(lastPage)), total === null ? null : labels.items(n(total), total)].filter((p) => p !== null).join(" · ")}
-      labels={{ pages: labels.pages, rowsPerPage: labels.rowsPerPage, first: labels.firstPage, previous: labels.previousPage, next: labels.nextPage, last: labels.lastPage, page: labels.page }}
-      number={n}
-      hrefFor={(p) => hrefFor({ ...query, page: p })}
-      onPageSize={(pageSize) => onQueryChange({ pageSize: pageSize as WorkItemQuery["pageSize"] })}
-      linkAs={Link}
-    />
-  );
+  const pager = <WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} linkAs={Link} onQueryChange={onQueryChange} />;
   return (
     <TableCard footer={pager}>
       <div role="region" aria-label={labels.table} tabIndex={0} className={cn("relative overflow-x-auto", focusRing)}>
@@ -599,7 +578,7 @@ function SnagTable({
                           data-item-link=""
                           dir="auto"
                           title={row.title}
-                          className={cn("block max-w-[300px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
+                          className={cn("block max-w-[190px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
                         >
                           {row.title}
                         </Link>
@@ -610,11 +589,11 @@ function SnagTable({
                       <td className={cell}>
                         <span className={cn("inline-flex h-[22px] items-center rounded-[6px] px-1.5 text-caption font-semibold", tradeChipClass(row.trade.code))}>{row.trade.name[locale]}</span>
                       </td>
-                      <td className={cn(cell, "max-w-[150px] min-w-[120px] text-[12.5px] leading-tight whitespace-normal text-text-secondary")}>{placeText(row, places, locale) ?? dash}</td>
+                      <td className={cn(cell, "max-w-[140px] min-w-[110px] text-[12.5px] leading-tight whitespace-normal text-text-secondary")}>{placeText(row, places, locale) ?? dash}</td>
                       <td className={cell}>
                         <RaisedFrom row={row} locale={locale} labels={labels} itemHref={itemHref} linkAs={Link} />
                       </td>
-                      <td className={cn(cell, "max-w-[190px]")}>
+                      <td className={cn(cell, "max-w-[150px]")}>
                         <With row={row} locale={locale} labels={labels} />
                       </td>
                       <td className={cell}>{isOpenStageCategory(row.stage.category) && row.stepAgeWeeks !== null ? <AgeDots weeks={row.stepAgeWeeks} locale={locale} /> : dash}</td>

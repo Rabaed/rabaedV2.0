@@ -6,47 +6,16 @@ import {
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemList as WorkItemListData,
   type WorkItemQuery,
-  type WorkItemRow,
   type WorkItemView,
 } from "@rabaed/domain";
 import { SnagList, WorkItemViewSwitch, type SnagListLabels, type SnagNewType } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname).
 import NextLink from "next/link";
 import { getPathname } from "@/i18n/navigation";
+import { usePhotoUrls } from "@/components/use-documents";
 import { listSearchParams, snagListSort } from "@/lib/list-url";
-
-/** Browsers show these image types; a HEIC photo shows an icon. */
-const shownImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-/**
- * The thumbnails' short-lived image URLs, by Document id: the same download URLs the API
- * signs for opening a Document, asked only for the photos the rows carry (those the viewer sees).
- */
-function usePhotoUrls(rows: readonly WorkItemRow[]): Readonly<Record<string, string>> {
-  const [urls, setUrls] = useState<Readonly<Record<string, string>>>({});
-  const wanted = rows.flatMap((r) => (r.photo && shownImageTypes.has(r.photo.contentType) ? [`${r.id}/${r.photo.documentId}`] : []));
-  const missing = wanted.filter((key) => !(key.split("/")[1]! in urls)).join(",");
-  useEffect(() => {
-    if (!missing) return;
-    let current = true;
-    void Promise.all(
-      missing.split(",").map(async (key) => {
-        const [itemId, documentId] = key.split("/") as [string, string];
-        const res = await fetch(`/api/v1/work-items/${itemId}/documents/${documentId}/download`).catch(() => null);
-        return res?.ok ? ([documentId, ((await res.json()) as { url: string }).url] as const) : null;
-      }),
-    ).then((found) => {
-      if (current) setUrls((known) => ({ ...known, ...Object.fromEntries(found.filter((f) => f !== null)) }));
-    });
-    return () => {
-      current = false;
-    };
-  }, [missing]);
-  return urls;
-}
 
 /** The views' words, from the app's messages. */
 function useSnagLabels(tableLabel: string): SnagListLabels {
@@ -147,7 +116,8 @@ export function SnagListView(
     return search ? `${pathname}?${search}` : pathname;
   };
   const rows = props.view === "list" ? props.list.items : props.board.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards));
-  const photoUrls = usePhotoUrls(rows);
+  // The thumbnails: only the photos the rows carry, those the viewer sees.
+  const photoUrls = usePhotoUrls(rows.flatMap((r) => (r.photo ? [{ workItemId: r.id, documentId: r.photo.documentId, contentType: r.photo.contentType }] : [])));
   return (
     <SnagList
       data={props.view === "list" ? { view: "list", list: props.list } : { view: "kanban", board: props.board }}

@@ -762,7 +762,7 @@ function WorkItemListBody({
  * page), so the line says the page alone, there is no last page, and the numbers grow as the
  * pages are read.
  */
-function WorkItemPager({
+export function WorkItemPager({
   list,
   query,
   labels,
@@ -770,7 +770,11 @@ function WorkItemPager({
   hrefFor,
   linkAs,
   onQueryChange,
-}: Pick<WorkItemListProps, "list" | "query" | "labels" | "locale" | "hrefFor" | "linkAs"> & { onQueryChange: (next: Partial<WorkItemQuery>) => void }) {
+}: Pick<WorkItemListProps, "query" | "locale" | "hrefFor" | "linkAs"> & {
+  list: Pick<WorkItemListProps["list"], "page" | "stages">;
+  labels: Pick<WorkItemListLabels, "page" | "pageOf" | "items" | "pages" | "rowsPerPage" | "firstPage" | "previousPage" | "nextPage" | "lastPage">;
+  onQueryChange: (next: Partial<WorkItemQuery>) => void;
+}) {
   const n = (value: number) => formatNumber(value, locale);
   const page = list.page?.number ?? query.page ?? 1;
   const size = list.page?.size ?? query.pageSize ?? workItemPageSize;

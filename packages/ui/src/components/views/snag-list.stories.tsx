@@ -35,7 +35,7 @@ const labels: Record<Locale, SnagListLabels> = {
     company: "Company",
     raisedFrom: "Raised from",
     level: (n) => `Level ${n}`,
-    raisedManually: "Raised by hand",
+    raisedManually: "By hand",
     table: "Snag List",
     columns: {
       documentNumber: "Document Number",

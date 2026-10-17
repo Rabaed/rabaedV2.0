@@ -704,14 +704,19 @@ export async function queryWorkItems(
   const { cursor, page: number, size, orderBy } = pagingOf(q);
   const after = cursor ? afterCursor(cursor) : noFilter;
   const { rows: page } = await sql<Row>`
-    with r as (${rows})
-    select r.*, ${holderColumns}${snag.columns}
-    from r
-    ${holderJoins}
+    with r as (${rows}), shown as (
+      select r.*, ${holderColumns}, row_number() over (order by ${orderBy}) as shown_seq
+      from r
+      ${holderJoins}
+      where ${where} and ${after}
+      order by ${orderBy}
+      limit ${size + 1} offset ${number === null ? 0 : (number - 1) * size}
+    )
+    -- The Snag List's source and photo (snagReads) are read for the page's rows only.
+    select r.*${snag.columns}
+    from shown r
     ${snag.joins}
-    where ${where} and ${after}
-    order by ${orderBy}
-    limit ${size + 1} offset ${number === null ? 0 : (number - 1) * size}
+    order by r.shown_seq
   `.execute(trx);
   const shown = page.slice(0, size);
   const more = page.length > size;
@@ -793,9 +798,9 @@ async function typeCounts(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
   if (scope.moduleKey !== "snag_list" || q.q !== undefined) return {};
   const { rows } = await sql<{ code: string; count: number }>`
     with r as (${visibleRows(scope, q.allRevisions)})
-    select r.type_code as code, count(*)::int as count from r where ${matching({ ...q, type: [] }, now, scope)} group by r.type_code
+    select r.type_code as code, count(*)::int as count from r where ${matching({ ...q, type: [] }, now, scope)} group by r.type_code order by r.type_code collate "C"
   `.execute(trx);
-  return { typeCounts: rows.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)) };
+  return { typeCounts: rows };
 }
 
 /**
@@ -815,17 +820,19 @@ async function snagChoices(trx: Trx, scope: QueryScope): Promise<Pick<WorkItemLi
   `.execute(trx);
   const { rows: sources } = await sql<{ document_number: string; subject: string }>`
     with r as (${visibleRows(scope, false)})
-    select distinct l.document_number, l.subject
-    from r
-    cross join lateral app.work_item_links(r.id) l
-    where l.kind = 'raised_from' and ${bucketOfRow} is not null
+    select s.* from (
+      select distinct l.document_number, l.subject
+      from r
+      cross join lateral app.work_item_links(r.id) l
+      where l.kind = 'raised_from' and ${bucketOfRow} is not null
+    ) s
+    order by s.document_number collate "C", s.subject collate "C"
   `.execute(trx);
-  const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   return {
     companies: holders
       .map((h) => ({ participantId: h.participant_id, name: h.name, own: h.own }))
       .sort((a, b) => Number(b.own) - Number(a.own) || a.name.en.localeCompare(b.name.en)),
-    raisedFrom: sources.map((s) => ({ documentNumber: s.document_number, subject: s.subject })).sort((a, b) => byText(a.documentNumber, b.documentNumber)),
+    raisedFrom: sources.map((s) => ({ documentNumber: s.document_number, subject: s.subject })),
   };
 }
 
