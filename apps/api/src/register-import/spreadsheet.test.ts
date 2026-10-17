@@ -177,6 +177,14 @@ describe("a file it can't read", () => {
     expect((await refusalOf(() => openSpreadsheet({ fileName: "register.xlsx", bytes: Buffer.from("plain text, not a workbook") }))).reason).toBe("unreadable");
   });
 
+  it("reads bytes that are a view into a larger buffer (as Node's pooled Buffers are)", async () => {
+    const { bytes } = fixture("register.xlsx");
+    const larger = new Uint8Array(bytes.length + 200).fill(0x50);
+    larger.set(bytes, 100);
+    const view = Buffer.from(larger.buffer, 100, bytes.length);
+    expect((await openSpreadsheet({ fileName: "register.xlsx", bytes: view })).sheets).toEqual(["Notes", "Register"]);
+  });
+
   it("names the extension in any case", async () => {
     expect((await openSpreadsheet({ ...fixture("register.xlsx"), fileName: "REGISTER.XLSX" })).sheets).toEqual(["Notes", "Register"]);
   });

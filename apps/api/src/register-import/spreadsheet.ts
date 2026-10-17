@@ -155,7 +155,9 @@ async function readXlsx(bytes: Uint8Array): Promise<TextSheet[]> {
     // the parts hold (a part that inflates further is cut short, and fails to parse). The Node
     // build streams the parts by their local headers instead, which this check doesn't read.
     // Numbers come back as the text stored in the file, so "0.1" never turns into 0.1000000001.
-    sheets = await readXlsxFile<StoredNumber>(bytes.slice().buffer, { trim: false, parseNumber: (stored) => ({ stored }) });
+    // A copy that is exactly the file: a Buffer is often a view into a larger pool, and Buffer#slice doesn't copy.
+    const file = new Uint8Array(bytes).buffer;
+    sheets = await readXlsxFile<StoredNumber>(file, { trim: false, parseNumber: (stored) => ({ stored }) });
   } catch (error) {
     if (error instanceof InvalidInputError && error.code === "XLS_FILE_NOT_SUPPORTED") throw unsupported();
     throw new SpreadsheetError("unreadable", "The file isn't an .xlsx workbook that can be read.");
