@@ -182,18 +182,26 @@ async function suppliersFor(trx: Trx, schema: FormSchema, projectId: string): Pr
 /**
  * The Checklist Template Versions a `checklist_template` field may hold on the item
  * `workItemId` (none for a new one), when the Form has such a field (RP-651): the latest
- * Version of each of the Project's templates, and the Versions the item already holds.
- * Read through RLS: every Project Member reads the templates (V20).
+ * Version of each of the Project's templates, the Versions the item holds a copy of, and
+ * those its `held` answers name without one yet (a Revision's, copied from the item it
+ * revises). Read through RLS: every Project Member reads the templates (V20).
  */
 async function checklistTemplatesFor(
   trx: Trx,
   schema: FormSchema,
   projectId: string,
   workItemId: string | null,
+  held: Readonly<Record<string, unknown>> = {},
 ): Promise<ChecklistTemplateChoice[] | undefined> {
-  if (!formFields(schema).some((f) => f.type === "checklist_template")) return undefined;
-  const copies = workItemId ? await itemChecklistCopies(trx, workItemId) : [];
-  return checklistTemplateChoices(await projectChecklistTemplates(trx, projectId), copies);
+  const fields = formFields(schema).filter((f) => f.type === "checklist_template");
+  if (fields.length === 0) return undefined;
+  const choices = checklistTemplateChoices(await projectChecklistTemplates(trx, projectId), workItemId ? await itemChecklistCopies(trx, workItemId) : []);
+  const named = fields.map((f) => held[f.key]).filter((v): v is string => typeof v === "string" && isUuid(v) && !choices.some((c) => c.id === v));
+  if (named.length === 0) return choices;
+  const { rows } = await sql<{ id: string; trade_value_id: string; name: BilingualText }>`
+    select id, trade_value_id, name from checklist_template_version where id = any(${named}::uuid[]) and project_id = ${projectId}::uuid
+  `.execute(trx);
+  return [...choices, ...rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, offered: false, name: r.name }))];
 }
 
 /**
@@ -1478,7 +1486,7 @@ export function takeTransition(
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
         suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
-        checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId),
+        checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
         files: await fieldFileCounts(trx, workItemId),
       });
     // Moving on by a Member who may save the answers now (other than a cancel or a Return),
@@ -1572,7 +1580,7 @@ export function saveAnswers(
       held: pinned.data,
       linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
       suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
-      checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId),
+      checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     // The Checklist Template picks, and so their copies, are fixed at the first Submit (RP-651),

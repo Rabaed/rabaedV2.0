@@ -117,6 +117,29 @@ export type ChecklistTemplateFieldProps = {
 const noChoice = "-";
 
 /**
+ * What the select offers: the active templates of the Trade, sorted in the viewer's
+ * alphabet, and first the one already picked when it isn't one of them any more. None
+ * means there is no select, only a line saying why.
+ */
+export function templateOptions(
+  value: unknown,
+  tradeId: string,
+  choices: readonly ChecklistTemplateChoice[],
+  locale: Locale,
+  text: ChecklistTemplateFieldLabels,
+): { value: string; label: string }[] {
+  const current = typeof value === "string" ? value : "";
+  const picked = choices.find((c) => c.id === current);
+  const collator = new Intl.Collator(intlLocaleOf(locale));
+  const options = choices
+    .filter((c) => c.offered && c.tradeId === tradeId && c.name)
+    .map((c) => ({ value: c.id, label: c.name![locale] }))
+    .toSorted((a, b) => collator.compare(a.label, b.label));
+  if (picked?.name && !options.some((o) => o.value === current)) options.unshift({ value: current, label: text.kept(picked.name[locale]) });
+  return options;
+}
+
+/**
  * The pick: in edit mode, a select of the active templates of the Trade, and the
  * one already picked, kept while the Trade is the same; then the picked Version's
  * items. In read mode, the picked template's name and its items.
@@ -137,12 +160,7 @@ export function ChecklistTemplateField({ value, tradeId, choices, required, mode
     );
   }
 
-  const collator = new Intl.Collator(intlLocaleOf(locale));
-  const options = choices
-    .filter((c) => c.offered && c.tradeId === tradeId && c.name)
-    .map((c) => ({ value: c.id, label: c.name![locale] }))
-    .toSorted((a, b) => collator.compare(a.label, b.label));
-  if (picked?.name && !options.some((o) => o.value === current)) options.unshift({ value: current, label: text.kept(picked.name[locale]) });
+  const options = templateOptions(value, tradeId, choices, locale, text);
   if (options.length === 0) return <p className="text-body text-muted">{tradeId === "" ? text.chooseTradeFirst : text.noneForTrade}</p>;
   return (
     <div className="flex flex-col gap-3">

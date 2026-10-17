@@ -54,7 +54,7 @@ import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices, type BuiltInFieldLabels } from "./built-in-fields.tsx";
 import { AttachmentsField, attachmentsLimits, takesUpload, type AttachmentsFieldLabels } from "./attachments-field.tsx";
 import { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./checklist-field.tsx";
-import { ChecklistTemplateField, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
+import { ChecklistTemplateField, templateOptions, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
 import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabels } from "./link-question-field.tsx";
 import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
@@ -708,7 +708,8 @@ export function FormRenderer({
   /** A `checklist_template` field: the active templates of the chosen Trade, the one already picked, and its items below. */
   function checklistTemplateControl(field: Extract<AnswerField, { type: "checklist_template" }>): { element: ReactNode; group?: boolean } {
     return {
-      group: true,
+      // The Field labels the select; with nothing to offer, it labels the line saying why.
+      group: templateOptions(answers[field.key], textOf(answers.trade), checklistTemplates, locale, labels.checklistTemplate).length === 0,
       element: (
         <ChecklistTemplateField
           name={field.key}
