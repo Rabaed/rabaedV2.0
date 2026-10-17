@@ -57,6 +57,7 @@ const photo = (id: string, fileName: string, taken: Pick<DocumentSummary, "taken
   frozen,
   fieldKey: "sample_photos",
   itemKey: null,
+  annotatedFromId: null,
   ...taken,
 });
 

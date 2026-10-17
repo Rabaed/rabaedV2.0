@@ -109,6 +109,11 @@ import {
   IconTemplate,
   IconMail,
   IconDeviceMobile,
+  IconArrowUpRight,
+  IconCircle,
+  IconPencil,
+  IconSquare,
+  IconTypography,
   type Icon as TablerIcon,
 } from "@tabler/icons-react";
 import type { ComponentProps } from "react";
@@ -231,6 +236,12 @@ const icons = {
   template: IconTemplate,
   mail: IconMail,
   "device-mobile": IconDeviceMobile,
+  // The annotate view's tools (RP-656).
+  "arrow-up-right": IconArrowUpRight,
+  circle: IconCircle,
+  square: IconSquare,
+  pencil: IconPencil,
+  typography: IconTypography,
 } satisfies Record<string, TablerIcon>;
 
 export type IconName = keyof typeof icons;
@@ -241,6 +252,7 @@ export const directionalIconNames: ReadonlySet<IconName> = new Set<IconName>([
   "arrow-back-up",
   "arrow-forward-up",
   "arrow-left",
+  "arrow-up-right",
   "arrow-right",
   "chevron-left",
   "chevron-right",
