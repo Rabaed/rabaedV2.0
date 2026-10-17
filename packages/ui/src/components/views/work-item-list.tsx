@@ -588,9 +588,9 @@ function WorkItemListBody({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
-          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter or grouping on.
+          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter, grouping or the ⋯ menu on.
           hintWide={!board}
-          className={board ? undefined : cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
+          className={board ? undefined : cn(filtered || groupBy !== null || moreActions ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu

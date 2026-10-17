@@ -84,6 +84,7 @@ export function RegisterImportWizard({
   locale,
   types,
   trades,
+  initialPreview = null,
 }: {
   projectId: string;
   locale: Locale;
@@ -91,15 +92,17 @@ export function RegisterImportWizard({
   types: { code: string; name: BilingualText }[];
   /** The Trades their Visibility covers, for one Trade for every row. */
   trades: { id: string; code: string; name: BilingualText }[];
+  /** The Member's own preview, reopened at Validate (`?preview=`): confirm it, or start again with the register. */
+  initialPreview?: RegisterImport | null;
 }) {
   const t = useTranslations("registerImport");
-  const [step, setStep] = useState<Step>("upload");
+  const [step, setStep] = useState<Step>(initialPreview ? "validate" : "upload");
   const [file, setFile] = useState<Uploaded | null>(null);
   const [sheet, setSheet] = useState<RegisterSheet | null>(null);
   const [subject, setSubject] = useState<number | null>(null);
   const [type, setType] = useState<Source>({ from: "column", column: null });
   const [trade, setTrade] = useState<Source>({ from: "column", column: null });
-  const [preview, setPreview] = useState<RegisterImport | null>(null);
+  const [preview, setPreview] = useState<RegisterImport | null>(initialPreview);
   const [created, setCreated] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -169,8 +172,11 @@ export function RegisterImportWizard({
       setError(refusal(result.error));
       return;
     }
-    setPreview(result.body as RegisterImport);
+    const previewed = result.body as RegisterImport;
+    setPreview(previewed);
     setStep("validate");
+    // A reload reopens this preview at Validate.
+    window.history.replaceState(null, "", `?preview=${previewed.id}`);
   }
 
   async function confirm() {
@@ -488,10 +494,12 @@ export function RegisterImportWizard({
             <p className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-4 py-3 text-[14px]">
               <Icon name="alert-triangle" size={18} className="text-danger-fg" />
               <span className="flex-1">{t("validate.fixHint", { good: n(preview.rowsTotal - preview.rowsRejected), count: preview.rowsTotal - preview.rowsRejected })}</span>
-              <Button variant="ghost" size="sm" onClick={() => void validate()} disabled={busy}>
-                <Icon name="refresh" />
-                {t("validate.again")}
-              </Button>
+              {file && (
+                <Button variant="ghost" size="sm" onClick={() => void validate()} disabled={busy}>
+                  <Icon name="refresh" />
+                  {t("validate.again")}
+                </Button>
+              )}
             </p>
           )}
           <Tabs defaultValue={preview.rowsRejected > 0 ? "errors" : "imported"}>
@@ -505,7 +513,7 @@ export function RegisterImportWizard({
             </TabsList>
             <TabsContent value="errors" className="pt-4">
               <div className="overflow-hidden rounded-md border border-border bg-surface">
-                <ErrorRows rows={preview.rows.filter((r) => r.reasons.length > 0)} label={t("validate.errors")} onFixMapping={() => setStep("map")} />
+                <ErrorRows rows={preview.rows.filter((r) => r.reasons.length > 0)} label={t("validate.errors")} onFixMapping={file ? () => setStep("map") : undefined} />
               </div>
             </TabsContent>
             <TabsContent value="imported" className="pt-4">
@@ -515,7 +523,7 @@ export function RegisterImportWizard({
             </TabsContent>
           </Tabs>
           <div className="flex items-center justify-between">
-            {back("map")}
+            {back(file && sheet ? "map" : "upload")}
             <Button onClick={() => void confirm()} disabled={busy || preview.rowsTotal === preview.rowsRejected}>
               <Icon name="check" />
               {t("validate.confirm", { count: preview.rowsTotal - preview.rowsRejected, n: n(preview.rowsTotal - preview.rowsRejected) })}

@@ -2,26 +2,29 @@
 
 import { formatNumber, type Locale, type RegisterImportRow, type RegisterImportRowReason } from "@rabaed/domain";
 import { Badge, EmptyState, Icon, Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "@rabaed/ui";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 
 // The rows of a Submittal Register Import (RP-637): the wizard's Validate step (its
 // errors, and what will be imported) and an import's own page (each row's result).
 
 /** The value a reason names: what the row's cell held. */
-function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason): string {
+function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, locale: Locale): string {
+  // A Trade it matched outside the Visibility is named as the Project names it.
+  if (reason === "trade_outside_visibility" && row.trade.match) return row.trade.match.name[locale];
   return reason.startsWith("type_") ? row.type.text : row.trade.text;
 }
 
 /** Every reason a row is bad, one a line, each with the value it names. */
 export function RowReasons({ row }: { row: RegisterImportRow }) {
+  const locale = useLocale() as Locale;
   const t = useTranslations("registerImport.reasons");
   return (
     <ul className="space-y-0.5">
       {row.reasons.map((reason) => (
         <li key={reason} className="flex items-start gap-1.5 text-[13px] font-medium text-danger-fg">
           <Icon name="circle-x" size={14} className="mt-0.5" />
-          <span>{t(reason, { value: reasonValue(row, reason) })}</span>
+          <span>{t(reason, { value: reasonValue(row, reason, locale) })}</span>
         </li>
       ))}
     </ul>
@@ -42,7 +45,7 @@ export function ErrorRows({ rows, label, onFixMapping }: { rows: RegisterImportR
         <TableRow>
           <TableHead className="w-20">{t("row")}</TableHead>
           <TableHead>{t("subject")}</TableHead>
-          <TableHead>{t("errors")}</TableHead>
+          <TableHead className="min-w-64">{t("errors")}</TableHead>
           <TableHead className="w-48">{t("whereToFix")}</TableHead>
         </TableRow>
       </TableHeader>
@@ -55,7 +58,7 @@ export function ErrorRows({ rows, label, onFixMapping }: { rows: RegisterImportR
           rows.map((row) => (
             <TableRow key={row.rowNo} className="bg-danger-tint/40">
               <TableCell className="tabular-nums text-muted">{row.rowNo}</TableCell>
-              <TableCell className="font-semibold">{subjectOf(row)}</TableCell>
+              <TableCell className="max-w-96 font-semibold [overflow-wrap:anywhere]">{subjectOf(row)}</TableCell>
               <TableCell>
                 <RowReasons row={row} />
               </TableCell>
@@ -118,7 +121,7 @@ export function ImportRows({
           rows.map((row) => (
             <TableRow key={row.rowNo}>
               <TableCell className="tabular-nums text-muted">{formatNumber(row.rowNo, locale)}</TableCell>
-              <TableCell className="font-semibold">{subjectOf(row)}</TableCell>
+              <TableCell className="max-w-96 font-semibold [overflow-wrap:anywhere]">{subjectOf(row)}</TableCell>
               <TableCell>
                 {row.type.match ? (
                   <Badge>
