@@ -3,7 +3,9 @@
 --
 -- app.next_step_holder, after the raiser's own Steps: when the Step a Transition leads to
 -- is of the acting Participant's role, that Participant holds it, as the raiser holds its
--- own role's Steps; with nobody of its Step Pool, `no_step_pool`. Until now such a Step
+-- own role's Steps; with nobody of its Step Pool, `next_step_unavailable`, the one answer every
+-- refusal to hand over gets outside the raiser's own Steps (visibility.md, "Refusals of a
+-- Transition"). Until now such a Step
 -- was resolved among every Participant of that role covering the item, so a move inside
 -- the Contractor holding a Snag (Open ⇄ In Progress ⇄ On Hold) was refused once another
 -- Contractor covered it too, and would have gone to it with a pick. Submittals' moves
@@ -58,7 +60,7 @@ create or replace function app.next_step_holder(p_work_item_id uuid, p_transitio
         if exists (select 1 from app.transition_step_pool(p_work_item_id, p_transition_id, v_actor, v_actor)) then
           return query select 'ok'::text, v_actor;
         else
-          return query select 'no_step_pool'::text, null::uuid;
+          return query select 'next_step_unavailable'::text, null::uuid;
         end if;
         return;
       end if;
