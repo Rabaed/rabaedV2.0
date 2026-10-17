@@ -49,6 +49,8 @@ create function app.set_project_required_field(p_project_id uuid, p_type_code te
       if not exists (select 1 from app.current_admin_project_ids() x where x = p_project_id) then
         return 'not_found';
       end if;
+      -- The Project row, shared, so it can't close between this check and the write.
+      perform 1 from project where id = p_project_id for share;
       if exists (select 1 from project where id = p_project_id and status = 'closed') then
         return 'project_closed';
       end if;

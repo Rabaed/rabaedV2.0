@@ -10,12 +10,13 @@
 //
 // The submittals are a test-only Type on the test Workflow with Code B
 // (addSendBackType), closed by K1's manager at A, B or C.
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, publishProblems, type FormVersion, type LinkSearchResults, type ProjectRequiredFields } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, ok, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
@@ -224,11 +225,23 @@ describe("Project Settings → Required links: \"Approved submittals required\""
     expect((await settings(tower.admin!)).canEdit).toBe(true);
   });
 
-  it("is changed by a Project Admin only: anyone else is told it isn't there", async () => {
-    for (const by of [tower.c1Engineer, tower.k1Manager]) {
-      const res = await set(by, { type: "WIR", key: "approved_submittals", required: true });
-      expect(res.statusCode).toBe(404);
+  it("is changed by a Project Admin only: anyone else is told it isn't there, whatever they name", async () => {
+    const outsider = await api.projectCreator();
+    await api.createProject(outsider.caller, { code: "WVX" });
+    for (const by of [tower.c1Engineer, tower.k1Manager, outsider.caller]) {
+      for (const body of [
+        { type: "WIR", key: "approved_submittals", required: true },
+        // A made-up Type or field is the same 404: the refusal names nothing to anyone but a Project Admin.
+        { type: "ZZZ", key: "approved_submittals", required: true },
+        { type: "WIR", key: "made_up", required: true },
+      ]) {
+        await expectHidden(set(by, body), JSON.stringify(body));
+      }
     }
+    // A Member of no Participant here reads nothing either, and a made-up Project is the same 404.
+    await expectHidden(outsider.caller.get(`/v1/projects/${tower.projectId}/required-fields`));
+    await expectHidden(tower.admin!.get(`/v1/projects/${randomUUID()}/required-fields`));
+    await expectHidden(tower.admin!.request("PUT", `/v1/projects/${randomUUID()}/required-fields`, { type: "WIR", key: "approved_submittals", required: true }));
     expect(approvedSubmittals(await settings(tower.c1Engineer))!.required).toBe(false);
   });
 
