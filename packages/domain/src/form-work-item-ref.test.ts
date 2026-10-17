@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatFormValue } from "./form-display.ts";
-import { formSchema, validateAnswers, type FormSchema, type ValidationContext } from "./form.ts";
+import { formSchema, linkAccepts, requiredByProject, validateAnswers, type FormSchema, type ValidationContext } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
 
 // Seam 3: the link question, `work_item_ref` (RP-293, spec RP-289; form-engine.md
@@ -33,9 +33,29 @@ const errorsOf = (schema: FormSchema, answers: Record<string, unknown>, mode: "d
 };
 
 describe("the work_item_ref field's settings", () => {
-  it("takes the usual field settings and nothing about Types or outcomes", () => {
+  it("takes the usual field settings, and no limit by Type or outcome unless it says `accepts`", () => {
     expect(build([related()]).sections[0]!.fields[0]).toMatchObject({ type: "work_item_ref", required: false });
+    expect(build([related()]).sections[0]!.fields[0]).not.toHaveProperty("accepts");
     expect(build([related({ required: true })]).sections[0]!.fields[0]).toMatchObject({ required: true });
+  });
+
+  it("takes `accepts`: Work Item Types and/or outcomes, each at least one, no duplicates (RP-82)", () => {
+    for (const accepts of [{ outcomes: ["A", "B"] }, { types: ["MAR"] }, { types: ["MAR", "SAR"], outcomes: ["A"] }, { outcomes: ["passed_with_comments"] }]) {
+      expect(build([related({ accepts })]).sections[0]!.fields[0]).toMatchObject({ accepts });
+    }
+    for (const accepts of [
+      {},
+      { types: [] },
+      { outcomes: [] },
+      { outcomes: ["A", "A"] },
+      { types: ["MAR", "MAR"] },
+      { types: ["mar"] },
+      { outcomes: ["1A"] },
+      { outcomes: ["cancelled"] },
+      { outcomes: ["A"], stages: ["passed"] },
+    ]) {
+      expect(formSchema.safeParse({ sections: [{ key: "main", title: label("Main"), fields: [related({ accepts })] }, classification] }).success).toBe(false);
+    }
   });
 
   it("passes the publish checks like any field", () => {
@@ -46,6 +66,54 @@ describe("the work_item_ref field's settings", () => {
       ],
     });
     expect(publishProblems(schema)).toEqual([]);
+  });
+
+  describe("with `accepts`, checked against the Types and their outcomes when publishing passes them", () => {
+    const types = new Map([
+      ["MAR", new Set(["A", "B", "C", "D"])],
+      ["WIR", new Set(["passed", "passed_with_comments", "failed"])],
+    ]);
+    const problemsOf = (accepts: unknown) => publishProblems(build([related({ accepts })]), [], { types });
+
+    it("passes Types that exist, and outcomes one of them has", () => {
+      expect(problemsOf({ outcomes: ["A", "B"] })).toEqual([]);
+      expect(problemsOf({ types: ["MAR", "WIR"] })).toEqual([]);
+      expect(problemsOf({ types: ["WIR"], outcomes: ["passed"] })).toEqual([]);
+    });
+
+    it("refuses a Type that doesn't exist, and an outcome no Type it names (or none at all) has", () => {
+      expect(problemsOf({ types: ["NCR"] })).toEqual([{ key: "related", code: "unknown_link_type" }]);
+      expect(problemsOf({ outcomes: ["E"] })).toEqual([{ key: "related", code: "unknown_link_outcome" }]);
+      expect(problemsOf({ types: ["WIR"], outcomes: ["A"] })).toEqual([{ key: "related", code: "unknown_link_outcome" }]);
+    });
+
+    it("isn't checked without the Types", () => {
+      expect(publishProblems(build([related({ accepts: { types: ["NCR"], outcomes: ["E"] } })]))).toEqual([]);
+    });
+  });
+});
+
+describe("linkAccepts: whether a link question's `accepts` takes an item (RP-82)", () => {
+  const closedA = { type: "MAR", outcome: "A", closed: true };
+
+  it("takes any item without `accepts`", () => {
+    expect(linkAccepts(undefined, { type: "MAR", outcome: null, closed: false })).toBe(true);
+  });
+
+  it("with outcomes, takes only a closed item with one of them", () => {
+    const accepts = { outcomes: ["A", "B"] };
+    expect(linkAccepts(accepts, closedA)).toBe(true);
+    expect(linkAccepts(accepts, { type: "SAR", outcome: "B", closed: true })).toBe(true);
+    expect(linkAccepts(accepts, { type: "MAR", outcome: "C", closed: true })).toBe(false);
+    expect(linkAccepts(accepts, { type: "MAR", outcome: null, closed: false })).toBe(false);
+    expect(linkAccepts(accepts, { type: "MAR", outcome: "A", closed: false })).toBe(false);
+  });
+
+  it("with Types, takes only an item of one of them, open or closed unless outcomes are named too", () => {
+    expect(linkAccepts({ types: ["MAR"] }, { type: "MAR", outcome: null, closed: false })).toBe(true);
+    expect(linkAccepts({ types: ["MAR"] }, { type: "DAR", outcome: "A", closed: true })).toBe(false);
+    expect(linkAccepts({ types: ["MAR"], outcomes: ["A"] }, closedA)).toBe(true);
+    expect(linkAccepts({ types: ["DAR"], outcomes: ["A"] }, closedA)).toBe(false);
   });
 });
 
@@ -65,14 +133,16 @@ describe("a work_item_ref answer", () => {
     }
   });
 
-  it("takes only the items the filler could have found (linkable), like an unknown option otherwise", () => {
-    const linkable = new Set([a]);
+  it("takes only the items the filler could have found for that field (linkable), like an unknown option otherwise", () => {
+    const linkable = { related: new Set([a]) };
     expect(errorsOf(schema, { related: [a] }, "draft", { linkable })).toEqual([]);
     expect(errorsOf(schema, { related: [a, b] }, "draft", { linkable })).toEqual([{ key: "related", code: "unknown_option" }]);
+    // Another field's items are not this one's: each link question has its own (its `accepts`).
+    expect(errorsOf(schema, { related: [a] }, "draft", { linkable: { other: new Set([a]) } })).toEqual([{ key: "related", code: "unknown_option" }]);
   });
 
   it("saves again a chosen item the filler can't see, as it came: number and Subject, never checked as an id", () => {
-    const result = validateAnswers(schema, { ...trade, related: [hidden, a] }, "draft", { linkable: new Set([a]) });
+    const result = validateAnswers(schema, { ...trade, related: [hidden, a] }, "draft", { linkable: { related: new Set([a]) } });
     expect(result).toEqual({ ok: true, answers: { ...trade, related: [hidden, a] } });
     expect(errorsOf(schema, { related: [hidden, hidden] })).toEqual([{ key: "related", code: "wrong_type" }]);
     expect(errorsOf(schema, { related: [{ ...hidden, id: a }] })).toEqual([{ key: "related", code: "wrong_type" }]);
@@ -88,6 +158,29 @@ describe("a required work_item_ref", () => {
     expect(errorsOf(schema, { related: [a] }, "complete")).toEqual([]);
     expect(errorsOf(schema, { related: [hidden] }, "complete")).toEqual([]);
     expect(errorsOf(schema, {}, "draft")).toEqual([]);
+  });
+});
+
+describe("requiredByProject: a link question the Project makes required (RP-82)", () => {
+  const schema = build([related(), { key: "notes", type: "text", label: label("Notes") }]);
+
+  it("makes the named link questions required, and nothing else", () => {
+    const required = requiredByProject(schema, ["related", "notes", "missing"]);
+    expect(errorsOf(required, {}, "complete")).toEqual([{ key: "related", code: "required" }]);
+    expect(errorsOf(required, { related: [a] }, "complete")).toEqual([]);
+    expect(errorsOf(required, {}, "draft")).toEqual([]);
+  });
+
+  it("leaves the schema as it is with none, and never touches the one given", () => {
+    expect(requiredByProject(schema, [])).toBe(schema);
+    requiredByProject(schema, ["related"]);
+    expect(errorsOf(schema, {}, "complete")).toEqual([]);
+  });
+
+  it("makes it always required, even where its own conditional rule wouldn't", () => {
+    const conditional = build([{ key: "relies", type: "yes_no", label: label("Relies") }, related({ required: { field: "relies", op: "=", value: true } })]);
+    const required = requiredByProject(conditional, ["related"]);
+    expect(errorsOf(required, { relies: false }, "complete")).toEqual([{ key: "related", code: "required" }]);
   });
 });
 

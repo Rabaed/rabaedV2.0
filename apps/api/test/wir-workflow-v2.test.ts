@@ -46,7 +46,15 @@ const RECOMMENDATION_NOTE = "Engineer: rebar spacing out of tolerance at gridlin
 /** A WIR raised by Hafiz and sent for review. */
 async function inReview(title: string) {
   const id = (
-    await ok(hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "WIR", title, answers: { description: "Slab rebar, Level 2", trade: electrical, location: buildingA } }), 201)
+    await ok(
+      hafiz.post(`/v1/projects/${projectId}/work-items`, {
+        type: "WIR",
+        title,
+        // The WIR Form Version 2 asks when the work is ready (RP-82).
+        answers: { description: "Slab rebar, Level 2", requested_for: "2026-11-02T05:30:00.000Z", trade: electrical, location: buildingA },
+      }),
+      201,
+    )
   ).json().id as string;
   await take(hafiz, id, "send_for_review");
   return id;

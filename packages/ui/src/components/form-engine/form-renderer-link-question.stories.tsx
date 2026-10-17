@@ -124,6 +124,68 @@ export const Edit: Story = {
 };
 
 /**
+ * A link question that accepts only items closed with Code A or B (RP-82, the WIR's
+ * Approved submittals): Link search is asked for those only, and offers what the API
+ * answers. A free search (no `accepts`) asks for no limit.
+ */
+const searchedWith = fn();
+export const Accepts: Story = {
+  args: {
+    schema: formSchema.parse({
+      sections: [
+        {
+          key: "references",
+          title: { en: "References", ar: "المراجع" },
+          fields: [
+            {
+              key: "approved_submittals",
+              type: "work_item_ref",
+              accepts: { outcomes: ["A", "B"] },
+              label: { en: "Approved submittals", ar: "الاعتمادات الموافق عليها" },
+              help: { en: "The submittals approved with Code A or B that this work relies on.", ar: "الاعتمادات الموافق عليها بالرمز A أو B التي تعتمد عليها هذه الأعمال." },
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  render: function Render(args, context) {
+    const locale = storyLocale(context);
+    const [values, setValues] = useState<Record<string, unknown>>({});
+    const base = links(locale);
+    return (
+      <FormRenderer
+        {...args}
+        locale={locale}
+        labels={formRendererLabels[locale]}
+        answers={values}
+        // The API offers only the approved ones: Cable trays (A) and Cable ladders (B).
+        links={{
+          ...base,
+          search: async (query, page, accepts) => {
+            searchedWith(accepts);
+            const found = await base.search(query, page);
+            return accepts ? { ...found, links: found.links.filter((l) => l.id === itemId(0) || l.id === itemId(3)) } : found;
+          },
+        }}
+        onChange={(changes) => {
+          args.onChange?.(changes);
+          setValues((current) => ({ ...current, ...changes }));
+        }}
+      />
+    );
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    const label = storyText(context, { en: "Approved submittals", ar: "الاعتمادات الموافق عليها" });
+    await userEvent.type(canvas.getByRole("searchbox", { name: new RegExp(label) }), storyText(context, copy.cable));
+    const results = await canvas.findByRole("list", { name: storyText(context, copy.results) });
+    await expect(searchedWith).toHaveBeenLastCalledWith({ outcomes: ["A", "B"] });
+    await expect(within(results).getAllByRole("button")).toHaveLength(2);
+  },
+};
+
+/**
  * A chosen item the filler can't see: its number and Subject only, marked; opening it
  * says only that they may not see its details. It can be removed, and stays otherwise.
  */

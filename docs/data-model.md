@@ -227,6 +227,9 @@ A Work Item Type's outcome set: `id` (random), `owner_kind {rabaed, project}`, `
 **step_default_holder**
 `project_id`, `participant_id`, `work_item_type_id`, `step_key`, `member_id`. Set by each Participant for its own Steps.
 
+**project_required_field** (Required links; as built, RP-82; form-engine.md §2.13)
+`project_id`, `work_item_type_id`, `field_key`, `set_by_member_id`, `set_at`; primary key `(project_id, work_item_type_id, field_key)`. One row while a Project makes a link question (`work_item_ref`) of one of its Types required on its items, such as the WIR's Approved submittals; turning it off deletes the row. Every Project Member of every Participant reads the Project, Type and key (V20); the app role reads no one who set it, nor when. Written only through `app.set_project_required_field(project, type code, key, required, now)` → `set` (also when it already was so) / `not_found` (anyone but the Project's Project Admins) / `project_closed` / `type_not_found` (the Type is `app.project_type_id`'s). The API checks the key is a link question of the Form a new item of the Type gets there (`field_not_found`, 422), and reads the Form of the Project's items of the Type with it required (`requiredByProject`). API: `GET|PUT /v1/projects/:id/required-fields`.
+
 **outbox**
 `id`, `kind` (`notification`, `email`, `digest`, `step_age_report` as built; documental_record, package_recompute… to come), `project_id` (null for a row that spans Projects, such as a Member's daily digest), `payload jsonb` (ids only, never customer text), `created_at`, `available_at` (next due), `processed_at`, `attempts`, `last_error`, `dead_at` (dead-lettered after the last attempt). Written in the same transaction as the command that caused it, or by a scheduled job; the worker takes one due row at a time (`FOR UPDATE SKIP LOCKED`).
 
