@@ -66,7 +66,17 @@ export const startDocumentUploadRequest = z.object({
     .regex(/^[a-z][a-z0-9_]*$/)
     .max(64)
     .optional(),
-}).refine((file) => file.itemKey === undefined || file.fieldKey !== undefined, "An item needs its checklist field");
+  /**
+   * The photo this file is the annotated copy of (RP-656): the image drawn in the
+   * annotate view. It goes in the original's field and checklist item, so it names neither.
+   */
+  annotatedFromId: z.uuid().optional(),
+})
+  .refine((file) => file.itemKey === undefined || file.fieldKey !== undefined, "An item needs its checklist field")
+  .refine(
+    (file) => file.annotatedFromId === undefined || (file.fieldKey === undefined && file.itemKey === undefined),
+    "An annotated copy goes where its original is",
+  );
 export type StartDocumentUploadRequest = z.infer<typeof startDocumentUploadRequest>;
 
 /** A short-lived signed URL. */
@@ -107,10 +117,25 @@ export const documentSummary = z.object({
   fieldKey: z.string().nullable(),
   /** The checklist item it is evidence for (RP-285); null for any other Document. */
   itemKey: z.string().nullable(),
+  /**
+   * For an annotated copy (RP-656), the original photo it was drawn on, which
+   * stays untouched beside it; null for any other Document. A copy has its
+   * original's field, checklist item, time and place.
+   */
+  annotatedFromId: z.uuid().nullable(),
   /** An image's time and place, from its EXIF; null for any other file, or an image without them (visibility.md V13). */
   ...photoMetadata.shape,
 });
 export type DocumentSummary = z.infer<typeof documentSummary>;
+
+/** A photo and its annotated copy (RP-656), if it has one. */
+export type AnnotatedPhoto = { original: DocumentSummary; annotated: DocumentSummary | null };
+
+/** The originals among `documents`, in their order, each with its annotated copy beside it; a copy whose original isn't among them is left out. */
+export function withAnnotatedCopies(documents: readonly DocumentSummary[]): AnnotatedPhoto[] {
+  const copies = new Map(documents.filter((d) => d.annotatedFromId !== null).map((d) => [d.annotatedFromId!, d]));
+  return documents.filter((d) => d.annotatedFromId === null).map((original) => ({ original, annotated: copies.get(original.id) ?? null }));
+}
 
 export const documentList = z.object({
   documents: z.array(documentSummary),
