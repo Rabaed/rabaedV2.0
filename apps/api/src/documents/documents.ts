@@ -113,16 +113,14 @@ export function startUpload(
   now: Date,
 ): Promise<StartUploadResult> {
   return withMember(db, memberId, async (trx): Promise<StartUploadResult> => {
-    const { rows } = await (file.annotatedFromId
-      ? sql<{ outcome: string; document_id: string | null; storage_key: string | null }>`
-          select outcome, document_id, storage_key from app.start_annotated_copy_upload(
-            ${workItemId}::uuid, ${file.annotatedFromId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})
-        `
-      : sql<{ outcome: string; document_id: string | null; storage_key: string | null }>`
-          select outcome, document_id, storage_key from app.start_document_upload(
-            ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null}, ${file.itemKey ?? null})
-        `
-    ).execute(trx);
+    const start = file.annotatedFromId
+      ? sql`app.start_annotated_copy_upload(
+          ${workItemId}::uuid, ${file.annotatedFromId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
+      : sql`app.start_document_upload(
+          ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null}, ${file.itemKey ?? null})`;
+    const { rows } = await sql<{ outcome: string; document_id: string | null; storage_key: string | null }>`
+      select outcome, document_id, storage_key from ${start}
+    `.execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["started", ...startRefusals]);
     if (outcome !== "started") return { ok: false, reason: outcome };
     // Who may upload, and when, before what is wrong with the file. Thrown, so the row is rolled back.

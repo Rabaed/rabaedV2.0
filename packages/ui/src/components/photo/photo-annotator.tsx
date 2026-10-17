@@ -1,12 +1,12 @@
 "use client";
 
-import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
+import { PhotoScreen, onBar } from "./photo-screen.tsx";
 import { drawMarks, fittedSize, isMark, markColours, markTools, type Mark, type MarkColourKey, type MarkTool, type Point } from "./annotate-marks.ts";
 
 // The annotate view (RP-656): a photo full screen, to mark up with an arrow, a
@@ -87,12 +87,15 @@ function fitted(natural: Size | null, stage: Size | null): Size | null {
   return { width: Math.floor(natural.width * scale), height: Math.floor(natural.height * scale) };
 }
 
-/** A button on the view's dark bar. */
-const onBar = "text-on-inverse hover:bg-on-inverse/10 active:bg-on-inverse/20 disabled:bg-transparent disabled:text-on-inverse/40";
-
 export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels: text, onSave, defaultMarks = [] }: PhotoAnnotatorProps) {
   const [marks, setMarks] = useState<readonly Mark[]>(defaultMarks);
-  const [draft, setDraft] = useState<Mark | null>(null);
+  // The mark being drawn: kept in a ref too, as pointer moves can come faster than renders.
+  const [draft, setDraftState] = useState<Mark | null>(null);
+  const drawing = useRef<Mark | null>(null);
+  const setDraft = (mark: Mark | null) => {
+    drawing.current = mark;
+    setDraftState(mark);
+  };
   const [tool, setTool] = useState<MarkTool>("arrow");
   const [colour, setColour] = useState<MarkColourKey>("red");
   const [labelAt, setLabelAt] = useState<Point>({ x: 0.5, y: 0.5 });
@@ -113,6 +116,7 @@ export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels:
     if (!open) return;
     setMarks(defaultMarks);
     setDraft(null);
+    setLabelAt({ x: 0.5, y: 0.5 });
     setLabel("");
     setFailed(false);
     setNatural(null);
@@ -162,12 +166,14 @@ export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels:
     setDraft(tool === "pen" ? { tool, colour: value, points: [at] } : { tool, colour: value, from: at, to: at });
   };
   const move = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!draft) return;
+    const current = drawing.current;
+    if (!current) return;
     const at = pointOf(event);
-    setDraft(draft.tool === "pen" ? { ...draft, points: [...draft.points, at] } : draft.tool === "text" ? draft : { ...draft, to: at });
+    setDraft(current.tool === "pen" ? { ...current, points: [...current.points, at] } : current.tool === "text" ? current : { ...current, to: at });
   };
   const up = () => {
-    if (draft && isMark(draft)) setMarks([...marks, draft]);
+    const finished = drawing.current;
+    if (finished && isMark(finished)) setMarks((all) => [...all, finished]);
     setDraft(null);
   };
 
@@ -192,144 +198,138 @@ export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels:
   };
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Content
-          aria-describedby={undefined}
-          className="fixed inset-0 z-50 flex h-dvh flex-col bg-inverse text-on-inverse focus-visible:outline-none"
-        >
-          <header className="flex items-center gap-2 p-2">
-            <DialogPrimitive.Close asChild>
-              <IconButton label={text.cancel} disabled={saving} className={onBar}>
-                <Icon name="x" />
-              </IconButton>
-            </DialogPrimitive.Close>
-            <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-body font-semibold">{text.title(fileName)}</DialogPrimitive.Title>
-            <IconButton label={text.undo} disabled={marks.length === 0 || saving} onClick={() => setMarks(marks.slice(0, -1))} className={onBar}>
-              <Icon name="arrow-back-up" />
-            </IconButton>
-            <Button onClick={save} disabled={marks.length === 0 || saving}>
-              {saving ? text.saving : text.save}
-            </Button>
-          </header>
-
-          {/* A photo has no reading direction: its marks keep their place in either language. */}
-          <div ref={setStage} dir="ltr" className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-            {!natural && (
-              <img
-                src={imageUrl}
-                alt=""
-                crossOrigin="anonymous"
-                onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
-                className="invisible absolute"
+    <PhotoScreen
+      open={open}
+      onOpenChange={onOpenChange}
+      title={text.title(fileName)}
+      closeLabel={text.cancel}
+      locked={saving}
+      actions={
+        <>
+          <IconButton label={text.undo} disabled={marks.length === 0 || saving} onClick={() => setMarks(marks.slice(0, -1))} className={onBar}>
+            <Icon name="arrow-back-up" />
+          </IconButton>
+          <Button onClick={save} disabled={marks.length === 0 || saving}>
+            {saving ? text.saving : text.save}
+          </Button>
+        </>
+      }
+    >
+      {/* A photo has no reading direction: its marks keep their place in either language. */}
+      <div ref={setStage} dir="ltr" className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        {!natural && (
+          <img
+            src={imageUrl}
+            alt=""
+            crossOrigin="anonymous"
+            onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+            className="invisible absolute"
+          />
+        )}
+        {box && (
+          <div className="relative" style={{ width: box.width, height: box.height }}>
+            <img src={imageUrl} alt="" crossOrigin="anonymous" draggable={false} className="absolute inset-0 size-full select-none" />
+            <canvas
+              ref={canvas}
+              role="img"
+              aria-label={text.canvas}
+              onPointerDown={down}
+              onPointerMove={move}
+              onPointerUp={up}
+              onPointerCancel={up}
+              className="absolute inset-0 size-full touch-none"
+            />
+            {tool === "text" && (
+              // Where the next label goes.
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-on-inverse bg-inverse/60"
+                style={{ insetInlineStart: `${labelAt.x * 100}%`, top: `${labelAt.y * 100}%` }}
               />
             )}
-            {box && (
-              <div className="relative" style={{ width: box.width, height: box.height }}>
-                <img src={imageUrl} alt="" crossOrigin="anonymous" draggable={false} className="absolute inset-0 size-full select-none" />
-                <canvas
-                  ref={canvas}
-                  role="img"
-                  aria-label={text.canvas}
-                  onPointerDown={down}
-                  onPointerMove={move}
-                  onPointerUp={up}
-                  onPointerCancel={up}
-                  className="absolute inset-0 size-full touch-none"
-                />
-                {tool === "text" && (
-                  // Where the next label goes.
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-on-inverse bg-inverse/60"
-                    style={{ insetInlineStart: `${labelAt.x * 100}%`, top: `${labelAt.y * 100}%` }}
-                  />
-                )}
-              </div>
-            )}
           </div>
+        )}
+      </div>
 
-          {failed && (
-            <p role="alert" className="mx-3 rounded-sm bg-danger-tint px-3 py-2 text-sm text-danger-fg">
-              {text.failed}
-            </p>
-          )}
+      {failed && (
+        <p role="alert" className="mx-3 rounded-sm bg-danger-tint px-3 py-2 text-sm text-danger-fg">
+          {text.failed}
+        </p>
+      )}
 
-          <div className="flex flex-col gap-2 px-3 pt-2 pb-4">
-            {tool === "text" && (
-              <form
-                className="flex gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  addLabel();
-                }}
-              >
-                <label htmlFor={labelId} className="sr-only">
-                  {text.labelText}
-                </label>
-                <input
-                  id={labelId}
-                  value={label}
-                  onChange={(event) => setLabel(event.target.value)}
-                  placeholder={text.labelText}
-                  maxLength={80}
-                  className={cn(
-                    "h-11 min-w-0 flex-1 rounded-sm border border-on-inverse/60 bg-on-inverse/10 px-3 text-body text-on-inverse placeholder:text-on-inverse/80",
-                    focusRing,
-                  )}
-                />
-                <Button type="submit" variant="secondary" disabled={label.trim() === ""} className="h-11">
-                  {text.addLabel}
-                </Button>
-              </form>
-            )}
-            <RadioGroupPrimitive.Root
-              aria-label={text.tools}
-              value={tool}
-              onValueChange={(next) => setTool(next as MarkTool)}
-              orientation="horizontal"
-              className="grid grid-cols-5 gap-1"
+      <div className="flex flex-col gap-2 px-3 pt-2 pb-4">
+        {tool === "text" && (
+          <form
+            className="flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              addLabel();
+            }}
+          >
+            <label htmlFor={labelId} className="sr-only">
+              {text.labelText}
+            </label>
+            <input
+              id={labelId}
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+              placeholder={text.labelText}
+              maxLength={80}
+              className={cn(
+                "h-11 min-w-0 flex-1 rounded-sm border border-on-inverse/60 bg-on-inverse/10 px-3 text-body text-on-inverse placeholder:text-on-inverse/80",
+                focusRing,
+              )}
+            />
+            <Button type="submit" variant="secondary" disabled={label.trim() === ""} className="h-11">
+              {text.addLabel}
+            </Button>
+          </form>
+        )}
+        <RadioGroupPrimitive.Root
+          aria-label={text.tools}
+          value={tool}
+          onValueChange={(next) => setTool(next as MarkTool)}
+          orientation="horizontal"
+          className="grid grid-cols-5 gap-1"
+        >
+          {markTools.map((t) => (
+            <RadioGroupPrimitive.Item
+              key={t}
+              value={t}
+              className={cn(
+                "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-sm text-xs text-on-inverse",
+                "hover:bg-on-inverse/10 data-[state=checked]:bg-on-inverse/20 data-[state=checked]:font-semibold",
+                focusRing,
+              )}
             >
-              {markTools.map((t) => (
-                <RadioGroupPrimitive.Item
-                  key={t}
-                  value={t}
-                  className={cn(
-                    "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-sm text-xs text-on-inverse",
-                    "hover:bg-on-inverse/10 data-[state=checked]:bg-on-inverse/20 data-[state=checked]:font-semibold",
-                    focusRing,
-                  )}
-                >
-                  <Icon name={toolIcons[t]} size={22} />
-                  {text.tool[t]}
-                </RadioGroupPrimitive.Item>
-              ))}
-            </RadioGroupPrimitive.Root>
-            <RadioGroupPrimitive.Root
-              aria-label={text.colours}
-              value={colour}
-              onValueChange={(next) => setColour(next as MarkColourKey)}
-              orientation="horizontal"
-              className="flex justify-center gap-1"
+              <Icon name={toolIcons[t]} size={22} />
+              {text.tool[t]}
+            </RadioGroupPrimitive.Item>
+          ))}
+        </RadioGroupPrimitive.Root>
+        <RadioGroupPrimitive.Root
+          aria-label={text.colours}
+          value={colour}
+          onValueChange={(next) => setColour(next as MarkColourKey)}
+          orientation="horizontal"
+          className="flex justify-center gap-1"
+        >
+          {markColours.map((c) => (
+            <RadioGroupPrimitive.Item
+              key={c.key}
+              value={c.key}
+              aria-label={text.colour[c.key]}
+              className={cn("group flex size-11 items-center justify-center rounded-full data-[state=checked]:bg-on-inverse/20", focusRing)}
             >
-              {markColours.map((c) => (
-                <RadioGroupPrimitive.Item
-                  key={c.key}
-                  value={c.key}
-                  aria-label={text.colour[c.key]}
-                  className={cn("group flex size-11 items-center justify-center rounded-full data-[state=checked]:bg-on-inverse/20", focusRing)}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="size-7 rounded-full border-2 border-on-inverse/60 group-data-[state=checked]:border-on-inverse group-data-[state=checked]:ring-2 group-data-[state=checked]:ring-on-inverse"
-                    style={{ backgroundColor: c.value }}
-                  />
-                </RadioGroupPrimitive.Item>
-              ))}
-            </RadioGroupPrimitive.Root>
-          </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+              <span
+                aria-hidden="true"
+                className="size-7 rounded-full border-2 border-on-inverse/60 group-data-[state=checked]:border-on-inverse group-data-[state=checked]:ring-2 group-data-[state=checked]:ring-on-inverse"
+                style={{ backgroundColor: c.value }}
+              />
+            </RadioGroupPrimitive.Item>
+          ))}
+        </RadioGroupPrimitive.Root>
+      </div>
+    </PhotoScreen>
   );
 }

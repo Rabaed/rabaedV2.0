@@ -18,7 +18,8 @@
 --   its copy. A copy takes its original's time and place: the drawn image has
 --   no EXIF of its own.
 -- * Copies don't count toward a field's maximum of files, nor a checklist
---   item's 10 photos (app.field_document_refusal).
+--   item's 10 photos, and a field's file types apply to the original only
+--   (app.field_document_refusal).
 -- * A Revision copies an item's Documents, copies with them; the new copy is
 --   linked to the new original (a trigger on document_copy, so the functions
 --   that copy are not redefined).
@@ -168,7 +169,8 @@ create trigger document_copy_links_annotated_copy after insert on document_copy
 
 -- As in the plpgsql_definer_helpers migration, except that annotated copies
 -- don't count toward the field's (or the checklist item's) maximum, and a copy
--- being confirmed is never refused for it: its original already counts.
+-- being confirmed is checked for its field only: its original already counts,
+-- and was checked for its type (a PNG-only field takes a photo's JPEG copy).
 create or replace function app.field_document_refusal(p_work_item_id uuid, p_field_key text, p_content_type text, p_document_id uuid, p_item_key text default null) returns text
   language plpgsql stable security definer
   set search_path = pg_catalog, public
@@ -193,6 +195,8 @@ create or replace function app.field_document_refusal(p_work_item_id uuid, p_fie
         select case
           when not exists (select 1 from field) then 'field_not_found'
           when p_item_key is not null and not exists (select 1 from item) then 'field_not_found'
+          -- An annotated copy goes where its original is, whatever its own type: the original was checked.
+          when exists (select 1 from document c where c.id = p_document_id and c.annotated_from_id is not null) then null
           when (p_item_key is not null or (select f ->> 'type' from field) = 'photos')
             and p_content_type <> all (array['image/jpeg', 'image/png', 'image/webp', 'image/heic']) then 'content_type_not_allowed'
           when p_item_key is null and (select f ? 'contentTypes' and not (f -> 'contentTypes') ? p_content_type from field)
@@ -204,8 +208,7 @@ create or replace function app.field_document_refusal(p_work_item_id uuid, p_fie
               and d.confirmed_at is not null and d.removed_at is null
               and d.annotated_from_id is null
               and d.id is distinct from p_document_id
-          ) and not exists (select 1 from document c where c.id = p_document_id and c.annotated_from_id is not null)
-            then 'too_many_files'
+          ) then 'too_many_files'
         end
       );
     end

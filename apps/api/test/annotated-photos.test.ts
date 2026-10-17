@@ -27,14 +27,24 @@ afterAll(async () => {
   await migrator.destroy();
 });
 
-const TYPE = "MARAN";
+const TYPE = "MARAP";
 
 const schema = {
   sections: [
     {
       key: "photos",
       title: { en: "Photos", ar: "الصور" },
-      fields: [{ key: "site_photos", type: "photos", label: { en: "Site photos", ar: "صور الموقع" }, maxFiles: 2 }],
+      fields: [
+        { key: "site_photos", type: "photos", label: { en: "Site photos", ar: "صور الموقع" }, maxFiles: 2 },
+        // Takes PNG screenshots only: a photo's annotated copy, drawn as a JPEG, still goes beside it.
+        { key: "screenshots", type: "attachments", label: { en: "Screenshots", ar: "لقطات الشاشة" }, contentTypes: ["image/png"] },
+        {
+          key: "ceiling_check",
+          type: "checklist",
+          label: { en: "Ceiling check", ar: "فحص السقف" },
+          items: [{ key: "void", text: bilingual("Ceiling void"), answers: "pass_fail_na", comment: "optional", photo: "optional" }],
+        },
+      ],
     },
     {
       // The Built-in Fields every Form places (RP-270).
@@ -107,8 +117,8 @@ const startCopy = (by: Caller, itemId: string, originalId: string, body: Buffer 
   });
 
 /** Saves an annotated copy of `originalId` as the browser does; returns its id. */
-async function annotate(itemId: string, originalId: string, body: Buffer = drawn("arrow")): Promise<string> {
-  const started: StartedDocumentUpload = (await ok(startCopy(engineer, itemId, originalId, body), 201)).json();
+async function annotate(itemId: string, originalId: string, body: Buffer = drawn("arrow"), extra: Record<string, unknown> = {}): Promise<string> {
+  const started: StartedDocumentUpload = (await ok(startCopy(engineer, itemId, originalId, body, extra), 201)).json();
   const stored = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body });
   expect(stored.status).toBe(200);
   await ok(engineer.post(`${documentUrl(itemId, started.id)}/confirm`));
@@ -202,6 +212,24 @@ describe("saving an annotated copy", () => {
     });
   });
 
+  it("doesn't count toward a checklist item's 10 photos", async () => {
+    const id = await draft();
+    const item = { fieldKey: "ceiling_check", itemKey: "void", fileName: "void.jpg", contentType: "image/jpeg", body: jpegWithExif() };
+    const photos = [];
+    for (let i = 0; i < 10; i++) photos.push(await uploadDocument(engineer, id, item));
+    for (const original of photos.slice(0, 3)) {
+      expect(await ofItem(engineer, id, await annotate(id, original))).toMatchObject({ fieldKey: "ceiling_check", itemKey: "void" });
+    }
+    expect((await refusedWith(engineer.post(documentsUrl(id), { ...item, body: undefined, sizeBytes: 4 }))).body).toEqual({ error: "too_many_files" });
+  });
+
+  it("goes beside its original in a field whose file types don't include the copy's", async () => {
+    const id = await draft();
+    const screenshot = await uploadDocument(engineer, id, { fieldKey: "screenshots", fileName: "panel.png", contentType: "image/png", body: drawn("panel") });
+    const copy = await annotate(id, screenshot, Buffer.from("JPEG drawn"), { fileName: "panel-annotated.jpg", contentType: "image/jpeg" });
+    expect(await ofItem(engineer, id, copy)).toMatchObject({ annotatedFromId: screenshot, fieldKey: "screenshots", contentType: "image/jpeg" });
+  });
+
   it("is removed with its original", async () => {
     const id = await draft();
     const original = await photo(id);
@@ -269,6 +297,12 @@ describe("once Submitted", () => {
     id = await draft();
     original = await photo(id);
     copy = await annotate(id, original);
+    // While it is C1's Draft, nobody outside C1 reads either.
+    for (const who of [consultant, c2Engineer]) {
+      await expectHidden(who.get(documentsUrl(id)));
+      await expectHidden(who.get(`${documentUrl(id, original)}/download`));
+      await expectHidden(who.get(`${documentUrl(id, copy)}/download`));
+    }
     await submit(id);
   });
 

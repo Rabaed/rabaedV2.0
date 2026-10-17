@@ -131,10 +131,16 @@ export type DocumentSummary = z.infer<typeof documentSummary>;
 /** A photo and its annotated copy (RP-656), if it has one. */
 export type AnnotatedPhoto = { original: DocumentSummary; annotated: DocumentSummary | null };
 
+/**
+ * Whether a Document is a photo's annotated copy (RP-656): shown beside its
+ * original by the photo tool, never as a file of its own.
+ */
+export const isAnnotatedCopy = (document: Pick<DocumentSummary, "annotatedFromId">): boolean => document.annotatedFromId !== null;
+
 /** The originals among `documents`, in their order, each with its annotated copy beside it; a copy whose original isn't among them is left out. */
 export function withAnnotatedCopies(documents: readonly DocumentSummary[]): AnnotatedPhoto[] {
-  const copies = new Map(documents.filter((d) => d.annotatedFromId !== null).map((d) => [d.annotatedFromId!, d]));
-  return documents.filter((d) => d.annotatedFromId === null).map((original) => ({ original, annotated: copies.get(original.id) ?? null }));
+  const copies = new Map(documents.filter(isAnnotatedCopy).map((d) => [d.annotatedFromId!, d]));
+  return documents.filter((d) => !isAnnotatedCopy(d)).map((original) => ({ original, annotated: copies.get(original.id) ?? null }));
 }
 
 export const documentList = z.object({

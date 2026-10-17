@@ -130,7 +130,12 @@ export function PhotoTool({
                     focusRing,
                   )}
                 >
-                  {url ? <img src={url} alt="" className="size-full object-cover" /> : <Icon name="photo" size={32} className="text-muted" />}
+                  {/* Loaded with CORS, as the annotate view loads it: a cached copy without CORS would stop it drawing the photo. */}
+                  {url ? (
+                    <img src={url} alt="" crossOrigin="anonymous" className="size-full object-cover" />
+                  ) : (
+                    <Icon name="photo" size={32} className="text-muted" />
+                  )}
                 </button>
                 {annotated && (
                   <Badge className="pointer-events-none absolute start-1 bottom-1">

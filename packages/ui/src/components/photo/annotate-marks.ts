@@ -4,6 +4,8 @@
 // fitted view and on the photo's own pixels when the annotated copy is saved.
 // Drawn in this order, last on top; undo drops the last one.
 
+import { markColours } from "../../tokens/mark-colours.ts";
+
 /** A point on the image, as fractions of its width and height. */
 export type Point = { x: number; y: number };
 
@@ -17,19 +19,7 @@ export type Mark =
   | { tool: "pen"; colour: string; points: Point[] }
   | { tool: "text"; colour: string; at: Point; text: string };
 
-/**
- * The colours to mark with; red, the first, by default. Fixed, not themed: they
- * are drawn into the photo's pixels, which look the same in every theme.
- */
-/* eslint-disable rabaed/no-hardcoded-colour -- the marks' colours are drawn into the photo itself, not the page */
-export const markColours = [
-  { key: "red", value: "#e5322d" },
-  { key: "yellow", value: "#ffd400" },
-  { key: "blue", value: "#1e6fff" },
-  { key: "white", value: "#ffffff" },
-  { key: "black", value: "#111111" },
-] as const;
-/* eslint-enable rabaed/no-hardcoded-colour */
+export { markColours };
 export type MarkColourKey = (typeof markColours)[number]["key"];
 const [white, black] = [markColours[3].value, markColours[4].value];
 

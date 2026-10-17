@@ -17,6 +17,7 @@ import {
   isRequired,
   isUnanswered,
   parseNumberInput,
+  isAnnotatedCopy,
   scopesFittingTrade,
   toLatinDigits,
   toProjectWallTime,
@@ -215,7 +216,7 @@ export type FormFiles = {
 /** One file field's files, out of the Form's (never a checklist item's evidence). */
 const filesOf = (files: FormFiles | undefined, key: string): PhotosFieldFiles | undefined =>
   files && {
-    documents: files.documents.filter((d) => d.fieldKey === key && d.itemKey === null && d.annotatedFromId === null),
+    documents: files.documents.filter((d) => d.fieldKey === key && d.itemKey === null && !isAnnotatedCopy(d)),
     canChange: files.canChange,
     pending: files.pending?.has(key),
     imageUrls: files.imageUrls,
@@ -742,7 +743,7 @@ export function FormRenderer({
   function checklistFiles(field: ChecklistFieldSchema): ChecklistFiles | undefined {
     if (!files) return undefined;
     return {
-      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null && d.annotatedFromId === null),
+      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null && !isAnnotatedCopy(d)),
       canChange: files.canChange,
       pendingItems: new Set(field.items.filter((i) => files.pending?.has(checklistItemFilesKey(field.key, i.key))).map((i) => i.key)),
       imageUrls: files.imageUrls,
