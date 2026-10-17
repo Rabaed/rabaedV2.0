@@ -124,6 +124,7 @@ create or replace function app.copy_duplicate_documents(p_work_item_id uuid, p_s
             and app.item_row_seen(d.work_item_id, d.arrival, false)
             and d.uploaded_by_participant_id in (select app.current_participant_ids())
             and (d.field_key is null or d.field_key = any (p_field_keys))
+          -- hidden-sort-key: gives only the upload order, which app.document_times' seq already shows the Member, never a time (as in list_row_commands).
           order by d.confirmed_at, d.id
         ), copied as (
           insert into document (
