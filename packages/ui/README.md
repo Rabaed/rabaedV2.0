@@ -22,6 +22,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `notifications/` | `NotificationSettings` |
 | `numbering/` | Document Numbering settings: `DocumentNumbering`, `NumberingCounters`, `NumberingVersions`, `ParticipantCodes`, pattern editor |
 | `overlay/` | `Dialog`, `Sheet`, `Popover`, `Tooltip`, `ToastProvider`, `useToast` |
+| `photo/` | The one photo tool (RP-656): `PhotoTool` (Take photo / Upload, thumbnails), `PhotoViewer` (Annotated / Original), `PhotoAnnotator` (the annotate view); `annotate-marks.ts` |
 | `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
 | `settings/` | `SettingsLayout` (the Project Settings frame) |
 | `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
@@ -34,7 +35,7 @@ Elsewhere (the paths in the first column are checked to exist):
 
 | Path | What it holds |
 |---|---|
-| `src/tokens/` | Palette, themes, scales, contrast; `src/styles/tokens.css` is generated from it |
+| `src/tokens/` | Palette, themes, scales, contrast; `src/styles/tokens.css` is generated from it. `mark-colours.ts`: the annotate view's colours, drawn into photos, so the same in every theme |
 | `src/styles/` | CSS entry (`index.css`) and the generated `tokens.css` |
 | `src/fonts/` | `prepareArabicFont()` |
 | `src/lib/` | `cn`, direction helpers, `useMediaQuery`, module names |

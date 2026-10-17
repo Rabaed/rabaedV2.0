@@ -17,6 +17,7 @@ import {
   isRequired,
   isUnanswered,
   parseNumberInput,
+  isAnnotatedCopy,
   scopesFittingTrade,
   toLatinDigits,
   toProjectWallTime,
@@ -192,7 +193,10 @@ export type FormRendererProps = {
 
 /** The files of a Form's `attachments`, `photos` and `checklist` fields, and what the page does with them (RP-281, RP-284, RP-285). */
 export type FormFiles = {
-  /** The item's confirmed Documents tied to a field (`fieldKey`), and a checklist's to an item (`itemKey`); others are ignored. */
+  /**
+   * The item's confirmed Documents tied to a field (`fieldKey`), and a checklist's to an item (`itemKey`); others are
+   * ignored, annotated copies too (RP-656: shown by PhotoTool, beside their originals, not as files of their own).
+   */
   documents: readonly DocumentSummary[];
   /** Files may be uploaded and removed now (the raiser's Company, in Draft, with Attach). */
   canChange: boolean;
@@ -212,7 +216,7 @@ export type FormFiles = {
 /** One file field's files, out of the Form's (never a checklist item's evidence). */
 const filesOf = (files: FormFiles | undefined, key: string): PhotosFieldFiles | undefined =>
   files && {
-    documents: files.documents.filter((d) => d.fieldKey === key && d.itemKey === null),
+    documents: files.documents.filter((d) => d.fieldKey === key && d.itemKey === null && !isAnnotatedCopy(d)),
     canChange: files.canChange,
     pending: files.pending?.has(key),
     imageUrls: files.imageUrls,
@@ -739,7 +743,7 @@ export function FormRenderer({
   function checklistFiles(field: ChecklistFieldSchema): ChecklistFiles | undefined {
     if (!files) return undefined;
     return {
-      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null),
+      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null && !isAnnotatedCopy(d)),
       canChange: files.canChange,
       pendingItems: new Set(field.items.filter((i) => files.pending?.has(checklistItemFilesKey(field.key, i.key))).map((i) => i.key)),
       imageUrls: files.imageUrls,
