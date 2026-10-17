@@ -1,0 +1,3 @@
+# The tests read these bytes as written: a CRLF, a BOM and a Windows-1256 file must survive checkout.
+*.csv binary
+*.xlsx binary

@@ -29,6 +29,7 @@ export const rabaedDefaultScreens = [
   "inspection_passed_with_comments",
   "inspection_failed",
   "comment_resolution",
+  "snag_resolution",
 ] as const;
 
 /**
@@ -110,6 +111,7 @@ export const rabaedDefaultTypes = [
   { type: "DAR", form: "DAR.json", workflow: "submittal-1-1-owner.json", variants: submittalWorkflows, history: null },
   { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null, history: ["WIR-1.json"] },
   { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null, history: null },
+  { type: "SNG", form: "SNG.json", workflow: "SNG.json", variants: null, history: null },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>
