@@ -48,7 +48,7 @@ export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabel
     photoRequired: (answer) => `صورة مطلوبة عند ${answer}`,
     commentOptional: "التعليق اختياري",
     photoOptional: "الصور اختيارية",
-    raisesSnag: (answer) => `${answer} تُنشئ ملاحظة`,
+    raisesSnag: (answer) => `عند ${answer} تُنشأ ملاحظة`,
   },
 };
 

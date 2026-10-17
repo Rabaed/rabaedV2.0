@@ -1514,7 +1514,7 @@
       "status": "Availability",
       "statuses": {
         "active": "Active",
-        "retired": "The Checklist Template was retired."
+        "retired": "Retired"
       },
       "activeCount": "{count, plural, =0 {No active templates} one {1 active} other {{n} active}}",
       "tableLabel": "Checklist Templates for {trade}",
@@ -1566,7 +1566,7 @@
       "retireTitle": "Retire {name}?",
       "retireHelp": "No new WIR can pick it. WIRs that already copied it keep its items.",
       "retireSubmit": "Retire Checklist Template",
-      "retired": "The template was retired.",
+      "retired": "The Checklist Template was retired.",
       "cancel": "Cancel",
       "close": "Close",
       "errors": {

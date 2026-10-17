@@ -855,7 +855,7 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "raisesSnag": "{answer} تُنشئ ملاحظة"
+        "raisesSnag": "عند {answer} تُنشأ ملاحظة"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
@@ -1537,16 +1537,16 @@
       "checkEn": "البند (بالإنجليزية)",
       "checkAr": "البند (بالعربية)",
       "answers": "الإجابات",
-      "passFail": "مطابق / غير مطابق / لا ينطبق",
+      "passFail": "مقبول / مرفوض / لا ينطبق",
       "yesNo": "نعم / لا / لا ينطبق",
       "comment": "التعليق",
       "photo": "الصور",
       "evidence": {
         "off": "لا شيء",
         "optional": "اختياري",
-        "required_on_negative": "مطلوب عند عدم المطابقة أو لا"
+        "required_on_negative": "مطلوب عند مرفوض أو لا"
       },
-      "onNegative": "عند عدم المطابقة أو لا",
+      "onNegative": "عند مرفوض أو لا",
       "negative": {
         "create_snag": "إنشاء ملاحظة",
         "none": "لا شيء"

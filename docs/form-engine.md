@@ -31,7 +31,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
   - **2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)**: read when a link question limits its items by Type or outcome, or a Project makes one required.
 - **3. Checklists**: read when you work on `checklist` fields and their check items.
   - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
-  - **3.2 Project Checklist Templates and the Checklist Template choice (RP-651)**: read when you work on Checklist Templates, the `checklist_template` field or an item's copied checklist.
+  - **3.2 Project Checklist Templates and the Checklist Template choice (as built, RP-651, spec RP-649)**: read when you work on Checklist Templates, the `checklist_template` field or an item's copied checklist.
 - **4. Who fills what: section editability**: read when you change which Participant fills a Form Section, and at which Step.
   - **Settled 2026-10-05 (part 3)**: read when you need the rule of one Participant per Form Section.
   - **Settled 2026-10-10: the Form belongs to the raiser (ADR 0019)**: read when you work on who may edit the raiser's Form.
