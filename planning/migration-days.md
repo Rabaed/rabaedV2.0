@@ -17,3 +17,15 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270407 | RP-596 | B | Eight default Workflows |
 | 20270408 | RP-597 | B | Demo |
 | 20270409 | spec RP-598 | B | Review fixes; RP-593's and RP-594's migrations, moved here to sort after RP-591's on `main` |
+| 20270410 | RP-618 | 24 | File fingerprints in the content hash |
+| 20270411 | RP-85 | 21 | The Signature; no Signature, no Transition |
+| 20270412 | RP-620 | 22 | Tracer: sealed Documental Record |
+| 20270413 | RP-617 | 21 | Company logo and Stamp; no Stamp, no Transition |
+| 20270414 | RP-151 | 22 | Record page 1 and Form body; record language, Hijri dates |
+| 20270415 | RP-155 | 23 | Record checks, record ready, Re-produce |
+| 20270416 | RP-650 | 22 | Signature cards, Stamps, Review Comments, Disclaimer |
+| 20270417 | RP-621 | 24 | Working Copy |
+| 20270418 | RP-157 | 23 | Verification page |
+| 20270419 | RP-147 | 22 | The record's appendix |
+| 20270420 | spec RP-632 | 22 | Review fixes |
+| 20270421 | spec RP-632 | 21 | Merge-with-`main` reconciliation of `app.take_transition` (rule 11.1) |
