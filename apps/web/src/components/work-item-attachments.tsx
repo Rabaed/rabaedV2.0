@@ -17,7 +17,7 @@ export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: 
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const { upload, open, remove, size, message, systemPending: pending } = useDocuments(workItemId, list.limits);
-  const documents = list.documents.filter((d) => d.fieldKey === null);
+  const documents = list.documents.filter((d) => d.fieldKey === null && d.annotatedFromId === null);
 
   return (
     <section className="space-y-3" aria-labelledby={`${inputId}-title`} data-testid="work-item-attachments">
