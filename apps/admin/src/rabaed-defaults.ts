@@ -163,12 +163,14 @@ export async function publishRabaedDefaults(migratorDb: Db, { engineerId, reason
     const { type, workflow } = entry;
     // The Type's earlier Versions (RP-170), before the Workflow it runs publishes the next.
     for (const [index, file] of (entry.history ?? []).entries()) {
+      const [versionNo, name] = [index + 1, `${type}@${index + 1}`];
       const definitionId = await ensureRabaedWorkflow(migratorDb, type, null, true);
-      const latest = definitionId ? await readLatestPublishedDefinition(migratorDb, definitionId) : null;
-      if (latest && latest.versionNo >= index + 1) continue;
+      if (!definitionId) continue;
+      const latest = await readLatestPublishedDefinition(migratorDb, definitionId);
+      if (latest && latest.versionNo >= versionNo) continue;
       const result = await writeRabaedWorkflow(migratorDb, engineerId, type, { definition: rabaedWorkflowFile(file), reason }, { publish: true, workflowId: definitionId });
-      if (!result.ok) return { ok: false, kind: "workflow", name: `${type}@${index + 1}`, result };
-      done.push({ kind: "workflow", name: `${type}@${index + 1}`, versionNo: result.versionNo, published: true, warnings: result.warnings.map((w) => `${w.code}: ${w.message.en}`) });
+      if (!result.ok) return { ok: false, kind: "workflow", name, result };
+      done.push({ kind: "workflow", name, versionNo: result.versionNo, published: true, warnings: result.warnings.map((w) => `${w.code}: ${w.message.en}`) });
     }
     // The Workflow the Type runs, then the Type's other Rabaed Defaults (RP-596).
     const targets: { name: string; file: string; variant: SubmittalWorkflow | null }[] = [
