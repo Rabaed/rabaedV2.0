@@ -1,7 +1,16 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import { moduleTabOrder, type BilingualText, type CreateProjectRequest, type ModuleKey, type MyProjects, type ProjectSummary } from "@rabaed/domain";
+import {
+  moduleTabOrder,
+  projectSettingRefusals,
+  type BilingualText,
+  type CreateProjectRequest,
+  type ModuleKey,
+  type MyProjects,
+  type ProjectSummary,
+} from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { projectAdminCommand } from "./project-admin.ts";
 import { submittalCounts } from "./submittal-counts.ts";
 
 export type CreateProjectResult = { ok: true; projectId: string; projectNumber: number } | Forbidden;
@@ -42,6 +51,7 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
       "p.code",
       "p.name",
       "p.status",
+      "p.show_inspections_in_submittals as showInspectionsInSubmittals",
       // Every Member of the Project sees the Host Company's name (V15).
       sql<BilingualText>`app.project_host_company_name(p.id)`.as("hostName"),
       "r.base_role as baseRole",
@@ -124,3 +134,17 @@ export function getProject(db: Db, memberId: string, projectId: string): Promise
     return row ? (await summaries(trx, [row]))[0]! : null;
   });
 }
+
+/**
+ * A Project Admin turns "Show Inspections in the Submittals tab" on or off (RP-652): the Inspections tab is
+ * hidden and the Submittals tab lists the Inspections Module's items too. app.set_show_inspections_in_submittals
+ * checks the Admin and tells anyone else 'not_found'. The change is not written to setup_event yet.
+ */
+export const setShowInspectionsInSubmittals = (db: Db, memberId: string, projectId: string, show: boolean) =>
+  projectAdminCommand(
+    db,
+    memberId,
+    sql`select app.set_show_inspections_in_submittals(${projectId}::uuid, ${show}) as outcome`,
+    "set",
+    projectSettingRefusals,
+  );

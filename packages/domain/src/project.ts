@@ -62,8 +62,13 @@ export const projectSummary = z.object({
    * Drafts. 0 on a closed Project.
    */
   needMyAction: z.number().int().nonnegative(),
-  /** The Modules the Project has a Work Item Type in, in tab order: each gets a tab. */
+  /** The Modules the Project has a Work Item Type in, in tab order: each gets a tab, unless `showInspectionsInSubmittals` hides Inspections'. */
   modules: z.array(moduleKeySchema),
+  /**
+   * The Project setting "Show Inspections in the Submittals tab" (RP-652): the Inspections tab is hidden and the
+   * Submittals tab also lists the Inspections Module's items. Inspections stays its own Module either way.
+   */
+  showInspectionsInSubmittals: z.boolean(),
 });
 export type ProjectSummary = z.infer<typeof projectSummary>;
 
@@ -73,3 +78,24 @@ export const myProjects = z.object({
   submittals: z.record(z.uuid(), z.number().int().nonnegative()),
 });
 export type MyProjects = z.infer<typeof myProjects>;
+
+/**
+ * Whether the Project's Inspections show in its Submittals tab (RP-652): the setting is on and the Project has a
+ * Submittals tab to show them in. A Project with Inspections and no Submittals Type keeps the Inspections tab.
+ */
+export const inspectionsInSubmittals = (project: Pick<ProjectSummary, "modules" | "showInspectionsInSubmittals">): boolean =>
+  project.showInspectionsInSubmittals && project.modules.includes("submittals");
+
+/**
+ * The Modules that get a tab on the Project (RP-346): the Modules it has a Work Item Type in, but not Inspections
+ * while the Project shows it in the Submittals tab (RP-652).
+ */
+export const projectTabModules = (project: Pick<ProjectSummary, "modules" | "showInspectionsInSubmittals">): ModuleKey[] =>
+  inspectionsInSubmittals(project) ? project.modules.filter((m) => m !== "inspections") : project.modules;
+
+/** A Project Admin turns "Show Inspections in the Submittals tab" on or off (RP-652). */
+export const showInspectionsInSubmittalsRequest = z.object({ show: z.boolean() });
+export type ShowInspectionsInSubmittalsRequest = z.infer<typeof showInspectionsInSubmittalsRequest>;
+
+/** What app.set_show_inspections_in_submittals refuses with: a Member who is no Project Admin of it is told `not_found`. */
+export const projectSettingRefusals = ["not_found", "project_closed"] as const;

@@ -51,15 +51,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270522 | spec RP-632 | 22 | Review fixes |
 | 20270523 | spec RP-632 | 21 | Merge-with-`main` reconciliation of `app.take_transition` (rule 11.1) |
 | 20270418 | RP-170 | 4A | WIR Workflow Version 2 (Engineer → Manager, Recommended Result) |
-| 20270419 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 |
-| 20270420 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
-| 20270421 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
-| 20270422 | RP-577 | 4A | Snags from failed check items |
-| 20270423 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
-| 20270424 | RP-652 | 4C | Show Inspections in the Submittals tab |
-| 20270425 | RP-656 | 4D | Annotated photo beside the original |
-| 20270426 | spec RP-649 | 4A | Review fixes |
-| 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270524 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
 | 20270525 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
 | 20270526 | RP-640 | 5C | Register Import: Assign to |
@@ -68,3 +59,12 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270529 | spec RP-631 | 5A | Review fixes |
 | 20270530 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
 | 20270609 | RP-622 | 3A | The raiser as a Step holder (20270430 sorted before main's 20270531 by then) |
+| 20270531 | RP-656 | 4D | Annotated photo beside the original (moved from 20270425: RP-90's 20270429 is on `main`) |
+| 20270601 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 (moved from 20270419) |
+| 20270602 | RP-652 | 4C | Show Inspections in the Submittals tab (moved from 20270424) |
+| 20270603 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
+| 20270604 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
+| 20270605 | RP-577 | 4A | Snags from failed check items |
+| 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
+| 20270607 | spec RP-649 | 4A | Review fixes |
+| 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
