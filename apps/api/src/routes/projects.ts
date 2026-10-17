@@ -1,9 +1,10 @@
-import { createdProject, createProjectRequest, myProjects, projectSummary } from "@rabaed/domain";
+import { createdProject, createProjectRequest, myProjects, projectSummary, showInspectionsInSubmittalsRequest } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { forbidden, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
-import { createProject, getProject, listMyProjects } from "../projects/projects.ts";
+import { createProject, getProject, listMyProjects, setShowInspectionsInSubmittals } from "../projects/projects.ts";
+import { throwIfRefused } from "../refusals.ts";
 
 // Projects. Only Project Creators create one; only a Project's Members see it,
 // and to anyone else it is a 404 exactly like an id that doesn't exist.
@@ -32,6 +33,18 @@ export const projectRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getProject(ctx.db, memberId, idOrNotFound(request.params.projectId)));
+      },
+    );
+
+    // A Project Admin shows Inspections in the Submittals tab, or back in their own (RP-652). Anyone else, or
+    // anyone outside the Project, gets a 404 exactly like a made-up id.
+    app.put(
+      "/v1/projects/:projectId/settings/show-inspections-in-submittals",
+      { schema: { params: z.object({ projectId: z.string() }), body: showInspectionsInSubmittalsRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        throwIfRefused(await setShowInspectionsInSubmittals(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body.show));
+        return reply.code(204).send();
       },
     );
   };

@@ -14,7 +14,9 @@ import {
   mergeFieldAnswers,
   formSchema,
   isHiddenLinkChoice,
+  linkAccepts,
   offeredChoices,
+  requiredByProject,
   type SupplierChoice,
   parseActionForm,
   stepAgeWeeks,
@@ -49,6 +51,7 @@ import {
   type WorkItemDetail,
   type WorkItemHistory,
   type WorkItemOutcome,
+  type WorkItemRefField,
   type WorkItemSummary,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
@@ -58,6 +61,7 @@ import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
+import { projectRequiredKeys } from "../projects/required-fields.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -120,10 +124,21 @@ function toFormVersion(r: FormVersionRow): FormVersion {
  * Type's Rabaed Default Form (RP-554), as app.create_work_item checks it.
  */
 async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
-  const { rows } = await sql<FormVersionRow>`
-    select id, version_no, schema from form_version where id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
+  const { rows } = await sql<FormVersionRow & { type_id: string | null }>`
+    select v.id, v.version_no, v.schema,
+      (select t.id from work_item_type t where t.code = ${typeCode} and (t.project_id = ${projectId}::uuid or t.project_id is null)
+       order by t.project_id is null, t.id limit 1) as type_id
+    from form_version v where v.id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
   `.execute(trx);
-  return rows[0] ? toFormVersion(rows[0]) : null;
+  const r = rows[0];
+  if (!r) return null;
+  return withProjectRequired(trx, toFormVersion(r), projectId, r.type_id);
+}
+
+/** `form` with the link questions its Project makes required on the Type `typeId` required (RP-82, requiredByProject). */
+async function withProjectRequired(trx: Trx, form: FormVersion, projectId: string, typeId: string | null): Promise<FormVersion> {
+  if (typeId === null || !formFields(form.schema).some((f) => f.type === "work_item_ref")) return form;
+  return { ...form, schema: requiredByProject(form.schema, await projectRequiredKeys(trx, projectId, typeId)) };
 }
 
 /** The Project's Scopes and Sub-scopes, which the validator checks `scopes` against. */
@@ -169,8 +184,11 @@ function storedAnswers({ trade, location, scopes, ...data }: Record<string, unkn
   };
 }
 
+/** A Form's link questions. */
+const linkQuestions = (schema: FormSchema) => formFields(schema).filter((f): f is WorkItemRefField => f.type === "work_item_ref");
+
 /** The keys of a Form's link questions. */
-const linkQuestionKeys = (schema: FormSchema) => formFields(schema).flatMap((f) => (f.type === "work_item_ref" ? [f.key] : []));
+const linkQuestionKeys = (schema: FormSchema) => linkQuestions(schema).map((f) => f.key);
 
 /** A link question's item as app.work_item_answers gives one the reader can't see. */
 type HiddenFromDb = { document_number: string; subject: string };
@@ -195,11 +213,12 @@ const answersToDb = (schema: FormSchema, answers: Record<string, unknown>) =>
   mapLinkItems(schema, answers, (item) => (isHiddenLinkChoice(item) ? { document_number: item.documentNumber, subject: item.subject } : item));
 
 /**
- * The ids given in the link questions of `answers` that the acting Member may
- * choose: those Link search could have offered them (Submitted, visible, in the
- * Project, not `workItemId` itself), and those the field already holds in
- * `held` (as they may read it) while they still see them, even if they have
- * gone back to a Draft. Undefined when the Form has no link question.
+ * The ids given in each link question of `answers` that the acting Member may
+ * choose there, by field key: those Link search could have offered them for it
+ * (Submitted, visible, in the Project, not `workItemId` itself, what its
+ * `accepts` takes), and those the field already holds in `held` (as they may
+ * read it) while they still see them, even if they have gone back to a Draft or
+ * no longer fit `accepts`. Undefined when the Form has no link question.
  */
 async function linkableIds(
   trx: Trx,
@@ -208,20 +227,28 @@ async function linkableIds(
   workItemId: string | null,
   answers: unknown,
   held: Readonly<Record<string, unknown>> = {},
-): Promise<Set<string> | undefined> {
-  const keys = linkQuestionKeys(schema);
-  if (keys.length === 0) return undefined;
+): Promise<Record<string, Set<string>> | undefined> {
+  const fields = linkQuestions(schema);
+  if (fields.length === 0) return undefined;
   const given: Record<string, unknown> = typeof answers === "object" && answers !== null ? { ...answers } : {};
   const idsIn = (items: unknown) => (Array.isArray(items) ? items : []).filter((v): v is string => typeof v === "string" && isUuid(v));
-  const ids = keys.flatMap((key) => idsIn(given[key]));
-  if (ids.length === 0) return new Set();
-  const kept = keys.flatMap((key) => idsIn(held[key]).filter((id) => idsIn(given[key]).includes(id)));
-  const { rows } = await sql<{ id: string }>`
-    select t.id from work_item t
+  const keptIn = (key: string) => idsIn(held[key]).filter((id) => idsIn(given[key]).includes(id));
+  const ids = fields.flatMap((f) => idsIn(given[f.key]));
+  if (ids.length === 0) return Object.fromEntries(fields.map((f) => [f.key, new Set<string>()]));
+  const kept = fields.flatMap((f) => keptIn(f.key));
+  const { rows } = await sql<{ id: string; type: string; outcome: string | null; closed: boolean; submitted: boolean }>`
+    select t.id, ty.code as type, t.outcome, t.closed_at is not null as closed, app.work_item_submitted(t.id) as submitted
+    from work_item t
+    join work_item_type ty on ty.id = t.work_item_type_id
     where t.id = any(${ids}::uuid[]) and t.project_id = ${projectId} and t.id is distinct from ${workItemId}::uuid
       and (app.work_item_submitted(t.id) or (t.id = any(${kept}::uuid[]) and app.sees_work_item(t.id)))
   `.execute(trx);
-  return new Set(rows.map((r) => r.id));
+  return Object.fromEntries(
+    fields.map((f) => {
+      const keep = new Set(keptIn(f.key));
+      return [f.key, new Set(rows.filter((r) => keep.has(r.id) || (r.submitted && linkAccepts(f.accepts, r))).map((r) => r.id))];
+    }),
+  );
 }
 
 /** A visible item's Form as the acting Member may work with it. */
@@ -256,9 +283,10 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       can_save: boolean;
       workflow_version_id: string;
       step_key: string;
+      work_item_type_id: string;
     }
   >`
-    select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
+    select v.id, v.version_no, v.schema, w.project_id, w.work_item_type_id, app.work_item_answers(w.id) as data,
       app.answers_sha256(w.id) as data_sha256, app.can_save_answers(w.id) as can_save,
       w.workflow_version_id, s.key as step_key
     from work_item w
@@ -271,7 +299,8 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
-  const form = toFormVersion(r);
+  // Its Project may make a link question required (RP-82): read so wherever its answers are checked.
+  const form = await withProjectRequired(trx, toFormVersion(r), r.project_id, r.work_item_type_id);
   // app.answers_sha256 is also given to the holder of the raiser's Step who may not save (their Submit, RP-525).
   const canSave = r.can_save;
   const steps = await workflowSteps(trx, r.workflow_version_id);
@@ -590,7 +619,8 @@ const containsPattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\
  * Submitted first (the Submission Date, which every caller who sees an item may
  * read; never when its Draft was started), one page at a time. Only items the Member sees (RLS, the list's own
  * path) that have been Submitted (app.work_item_submitted): never a Draft or an
- * item in internal review. One row more than the page is read only to tell
+ * item in internal review. With a link question's `accepts` (`types`,
+ * `outcomes`; RP-82), only those it takes. One row more than the page is read only to tell
  * whether there is a next page; there is no total, so nothing counts hidden
  * matches. Null when it isn't one of the Member's Projects.
  */
@@ -599,11 +629,17 @@ export function searchLinkTargets(db: Db, memberId: string, projectId: string, q
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
     const pattern = containsPattern(query.q);
+    // A link question's `accepts` (form.ts linkAccepts): its Types, and with outcomes only closed items with one.
+    const types = query.types ?? null;
+    const outcomes = query.outcomes ?? null;
     const { rows } = await sql<{ id: string; document_number: string; title: string }>`
       select w.id, w.document_number, w.title
       from work_item w
+      join work_item_type ty on ty.id = w.work_item_type_id
       where w.project_id = ${projectId} and app.work_item_submitted(w.id)
         and (w.document_number ilike ${pattern} or w.title ilike ${pattern})
+        and (${types}::text[] is null or ty.code = any(${types}::text[]))
+        and (${outcomes}::text[] is null or (w.closed_at is not null and w.outcome = any(${outcomes}::text[])))
       order by w.submitted_at desc nulls last, w.id desc
       limit ${query.limit + 1} offset ${(query.page - 1) * query.limit}
     `.execute(trx);
@@ -1050,12 +1086,13 @@ async function sharedDocuments(trx: Trx, workItemId: string): Promise<SharedWork
     frozen: boolean;
     field_key: string | null;
     item_key: string | null;
+    annotated_from_id: string | null;
     taken_at: Date | null;
     taken_latitude: number | null;
     taken_longitude: number | null;
   }>`
     select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
-      d.frozen_at is not null as frozen, d.field_key, d.item_key, d.taken_at, d.taken_latitude, d.taken_longitude
+      d.frozen_at is not null as frozen, d.field_key, d.item_key, d.annotated_from_id, d.taken_at, d.taken_latitude, d.taken_longitude
     from document d
     join app.document_times(${workItemId}::uuid) t on t.document_id = d.id
     join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
@@ -1072,6 +1109,7 @@ async function sharedDocuments(trx: Trx, workItemId: string): Promise<SharedWork
     frozen: r.frozen,
     fieldKey: r.field_key,
     itemKey: r.item_key,
+    annotatedFromId: r.annotated_from_id,
     takenAt: r.taken_at?.toISOString() ?? null,
     takenWhere: r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
   }));
@@ -1334,12 +1372,12 @@ function validationRefused(rule: Validation, form: FormSchema, actionForm: FormS
  * How many confirmed files each `attachments` or `photos` field of a visible
  * item has, by field key, and each checklist item's photos, by
  * checklistItemFilesKey (RLS shows only confirmed, unremoved Documents), for
- * leaving Draft.
+ * leaving Draft. An annotated copy is not a file of its own (RP-656).
  */
 async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<string, number>> {
   const { rows } = await sql<{ field_key: string; item_key: string | null; files: number }>`
     select field_key, item_key, count(*)::integer as files from document
-    where work_item_id = ${workItemId} and field_key is not null
+    where work_item_id = ${workItemId} and field_key is not null and annotated_from_id is null
     group by field_key, item_key
   `.execute(trx);
   return Object.fromEntries(rows.map((r) => [r.item_key === null ? r.field_key : checklistItemFilesKey(r.field_key, r.item_key), r.files]));
