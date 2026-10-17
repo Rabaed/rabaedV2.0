@@ -67,4 +67,3 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270528 | RP-644 | 5D | Register Import: Packages from an import, downloads and saved mappings |
 | 20270529 | spec RP-631 | 5A | Review fixes |
 | 20270530 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
-| 20270531 | RP-82 | 4B | Required links (`project_required_field`), moved from 20270419: main's 20270429 sorts after that day |
