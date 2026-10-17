@@ -106,7 +106,7 @@ export type BoardCardLayoutChange = z.infer<typeof boardCardLayoutChange>;
  * cards it shows (a closed column only those closed in the last
  * `closedColumnDays` days; an open one all of them). The cursor is not used.
  */
-export const workItemBoard = workItemList.pick({ stages: true, filters: true }).extend({
+export const workItemBoard = workItemList.pick({ stages: true, filters: true, typeCounts: true }).extend({
   columns: z.array(
     z.object({
       stageKey: z.string(),
