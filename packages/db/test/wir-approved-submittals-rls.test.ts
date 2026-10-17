@@ -204,7 +204,7 @@ describe("RP-82-1: an inspector reads an Approved submittal they can't see as it
     });
     expect(JSON.stringify(read)).not.toContain(mar);
     // Nor can they open the MAR itself.
-    expect(await call(inspector, sql`select id from work_item where id = ${mar}::uuid`)).toEqual([]);
+    expect(await call(inspector, sql<object>`select id from work_item where id = ${mar}::uuid`)).toEqual([]);
   });
 
   it("gives a reader who sees the MAR its id", async () => {
@@ -226,13 +226,13 @@ describe("RP-82-2: which link questions a Project makes required", () => {
   });
 
   it("names no one who set it, and the app role writes no row itself", async () => {
-    await expect(call(c1.ap, sql`select set_by_member_id from project_required_field`)).rejects.toThrow(/permission denied/);
-    await expect(call(c1.ap, sql`select set_at from project_required_field`)).rejects.toThrow(/permission denied/);
+    await expect(call(c1.ap, sql<object>`select set_by_member_id from project_required_field`)).rejects.toThrow(/permission denied/);
+    await expect(call(c1.ap, sql<object>`select set_at from project_required_field`)).rejects.toThrow(/permission denied/);
     const typeId = (await migrator.query("select id from work_item_type where code = $1", [TYPE])).rows[0].id as string;
     await expect(
-      call(c1.ap, sql`insert into project_required_field (project_id, work_item_type_id, field_key, set_by_member_id) values (${projectId}::uuid, ${typeId}::uuid, 'x', ${c1.ap}::uuid)`),
+      call(c1.ap, sql<object>`insert into project_required_field (project_id, work_item_type_id, field_key, set_by_member_id) values (${projectId}::uuid, ${typeId}::uuid, 'x', ${c1.ap}::uuid)`),
     ).rejects.toThrow(/permission denied/);
-    await expect(call(c1.ap, sql`delete from project_required_field where project_id = ${projectId}::uuid`)).rejects.toThrow(/permission denied/);
+    await expect(call(c1.ap, sql<object>`delete from project_required_field where project_id = ${projectId}::uuid`)).rejects.toThrow(/permission denied/);
   });
 
   it("is changed by the Project's Project Admins only: anyone else is told 'not_found', and nothing changes", async () => {
