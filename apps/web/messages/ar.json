@@ -725,7 +725,7 @@
       "notPickedUpYet": "{company} · لم تُستلَم بعد: {names}{more, plural, =0 {} other { +#}}",
       "raisedBy": "أنشأه",
       "issuedCode": "الرمز الصادر",
-      "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "ملاحظات الموقع" },
+      "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب" },
       "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة"
     },
     "invalid": "أدخل موضوعًا واختر تخصصًا.",
