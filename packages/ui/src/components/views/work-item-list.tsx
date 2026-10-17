@@ -222,6 +222,8 @@ export type WorkItemListProps = {
   action?: ReactNode;
   /** At the toolbar's end: the List / Kanban switch. */
   viewSwitch?: ReactNode;
+  /** After the switch: the ⋯ "More actions" menu (`MoreActionsMenu`), e.g. Import register and Imports (RP-637). */
+  moreActions?: ReactNode;
   /** The link component for items and pages, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
   /** The Kanban (`WorkItemBoard`), shown under the toolbar in place of the Stage counts, table and pages. */
@@ -281,6 +283,7 @@ function WorkItemListBody({
   onQueryChange,
   action,
   viewSwitch,
+  moreActions,
   linkAs: Link = "a",
   board,
   hints,
@@ -569,6 +572,7 @@ function WorkItemListBody({
             {groupMenu}
             {exportMenu}
             {viewSwitch}
+            {moreActions}
           </>
         }
         className={board ? "gap-3" : "gap-1.5"}
