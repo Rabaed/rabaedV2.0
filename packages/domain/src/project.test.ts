@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { moduleKeys } from "./module.ts";
-import { moduleOfTabPath, moduleTabOrder, moduleTabPaths, projectCode } from "./project.ts";
+import { moduleKeys, type ModuleKey } from "./module.ts";
+import { moduleOfTabPath, moduleTabOrder, moduleTabPaths, projectCode, projectTabModules } from "./project.ts";
 
 describe("Project code", () => {
   it("is 2 to 10 letters or digits", () => {
@@ -29,5 +29,17 @@ describe("Module tab paths", () => {
     expect(moduleOfTabPath("submittals")).toBeNull();
     expect(moduleOfTabPath("settings")).toBeNull();
     expect(moduleOfTabPath("snag_list")).toBeNull();
+  });
+});
+
+describe("Module tabs", () => {
+  const project = { modules: ["submittals", "inspections", "snag_list"] as ModuleKey[] };
+
+  it("are the Project's Modules while Inspections have their own tab", () => {
+    expect(projectTabModules({ ...project, showInspectionsInSubmittals: false })).toEqual(["submittals", "inspections", "snag_list"]);
+  });
+
+  it("leave out Inspections while the Project shows it in the Submittals tab (RP-652), and nothing else", () => {
+    expect(projectTabModules({ ...project, showInspectionsInSubmittals: true })).toEqual(["submittals", "snag_list"]);
   });
 });
