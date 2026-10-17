@@ -17,7 +17,7 @@ Design the **Submittal create / detail page and its action pop-ups** for Rabaed,
 ### Every submittal has system fields (always shown, placed by the engine, not by the Form)
 - Title
 - **Trade** (exactly one), **Scopes / Sub-scopes** within that Trade (one or more), and **Location** (Zone → Building → Floor, one or more)
-- **Package** (optional), e.g. "Bathrooms – Tower 1"
+- **Package** is **not** a field here: a submittal joins a Package from the Package page (or from a Submittal Register Import), and shows it as a chip, e.g. `PKG-004` "Bathrooms – Tower 1" (see `packages.md`)
 - **Links** to other Work Items: related, "depends on", and "replaces"
 - **Subtasks** (one level only)
 - **Document Number**, assigned **only when the item first leaves Draft**, e.g. `TWR-TMC-EL-MAR-041`. Before that it shows "Number assigned on send". Document Numbers are always shown left to right, even in Arabic.
@@ -74,7 +74,7 @@ Each Form section says at which Workflow Steps it can be edited:
 - **Header:** Type picker (MAR, SAR, DAR, Method Statement) when creating, the Title, and "Draft · Number assigned on send".
 - **Left:** the Form as collapsible sections, with a section navigator and a "3 of 5 sections complete" indicator.
 - **Autosave:** "Saved 10:42". Errors are shown inline, plus a summary at the top when Send is blocked.
-- **System fields panel:** Trade, Scopes (chips), Location (tree picker), Package, Links (search Work Items by number or title, and show linked items with their Stage and Code), and Subtasks (add, then list with Stage).
+- **System fields panel:** Trade, Scopes (chips), Location (tree picker), the Package chip (read-only, links to the Package page), Links (search Work Items by number or title, and show linked items with their Stage and Code), and Subtasks (add, then list with Stage).
 - **Attachments:**
   - drag-drop, with file tiles showing type, size and version;
   - a PDF preview on click;
