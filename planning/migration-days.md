@@ -60,3 +60,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270425 | RP-656 | 4D | Annotated photo beside the original |
 | 20270426 | spec RP-649 | 4A | Review fixes |
 | 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
+| 20270611 | RP-85 | 21 | stored_file |
