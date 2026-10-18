@@ -22,7 +22,7 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270501 | RP-623 | 3B | Photos and attachments in another Participant's section; After photos |
 | 20270502 | RP-624 | 3C | Raised-from counts by Type |
 | 20270503 | RP-94 | 3D | Snag List desktop views |
-| 20270504 | RP-625 | 3A | Informed Participants; Snag Workflow Version 3 |
+| 20270504 | RP-625 | 3A | Unused: the migration moved to 20270706, after main's later days |
 | 20270505 | RP-626 | 3B | Question Types (QSN, QSC) |
 | 20270506 | RP-627 | 3A | Site Observation Type and the "General" Trade |
 | 20270507 | RP-628 | 3C | Snag item detail |
@@ -72,5 +72,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
 | 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
 | 20270628 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524, 20270609 and 20270613 overtaken on main) |
-| 20270706 | RP-625 | 31 | informed_participants |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
+| 20270706 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, which sorts before main's migrations) |

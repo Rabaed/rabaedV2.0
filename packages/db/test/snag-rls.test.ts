@@ -1,10 +1,10 @@
-// Seam 2 for the Snag (RP-90, SNAG-1; spec RP-619; workflow-engine.md Ãƒâ€šÃ‚Â§3, Ãƒâ€šÃ‚Â§10;
+// Seam 2 for the Snag (RP-90, SNAG-1; spec RP-619; workflow-engine.md §3, §10;
 // visibility.md V3, V5, V14 and scenarios RP-90-1 to RP-90-3), as the app role. K1, the
 // Consultant, raises a Snag (the Rabaed Default Snag Workflow) on C1, the one Contractor
 // covering its Trade and Location; C1 moves it inside its own Company and resolves it, and
 // K1 verifies it. C2, another Contractor of the same Trade covering another Location, never
 // reads it; each Company reads the other's work only through the shared Transitions.
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -102,7 +102,7 @@ beforeAll(async () => {
 
   const [created] = await call<{ project_id: string }>(
     c1.ap,
-    sql`select project_id from app.create_project('{"en": "Tower", "ar": "ÃƒËœÃ‚Â¨ÃƒËœÃ‚Â±ÃƒËœÃ‚Â¬"}'::jsonb, 'SGT', 'contractor')`,
+    sql`select project_id from app.create_project('{"en": "Tower", "ar": "برج"}'::jsonb, 'SGT', 'contractor')`,
   );
   projectId = created!.project_id;
   participant = {
@@ -205,7 +205,7 @@ describe("a Consultant's Snag reaches exactly K1 and C1", () => {
 });
 
 // RP-622 (SNAG-2): the Snag's Draft and Verify are held by the raiser. C1 raises a Snag on
-// itself: Open is of its own role, so C1 holds every Step (workflow-engine.md Ãƒâ€šÃ‚Â§3.1).
+// itself: Open is of its own role, so C1 holds every Step (workflow-engine.md §3.1).
 describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () => {
   /** C1's PM's Draft Snag on Building A. */
   async function drafted(title: string): Promise<string> {
@@ -343,6 +343,28 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     // C2 never reads it (V3).
     expect(await seen(c2.member, id)).toEqual([]);
     expect(await events(c2.member, id)).toEqual([]);
+  });
+
+  it("RP-625-1: K1 reads its Documents as they left C1 at the Raise: the Draft's photo, frozen, and nothing added after", async () => {
+    const id = await drafted("Cracked tile");
+    const [started] = await call<{ outcome: string; document_id: string }>(
+      c1Pm,
+      sql`select outcome, document_id from app.start_document_upload(${id}::uuid, 'before.jpg', 10, 'image/jpeg', now(), 'photos')`,
+    );
+    expect(started!.outcome).toBe("started");
+    const fingerprint = createHash("sha256").update("before.jpg", "utf8").digest();
+    expect(
+      await outcome(c1Pm, sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'image/jpeg', ${fingerprint}, now()) as outcome`),
+    ).toBe("confirmed");
+    const documents = (who: string) => call<{ id: string; frozen: boolean }>(who, sql`select id, frozen_at is not null as frozen from document where work_item_id = ${id}::uuid`);
+    expect(await documents(k1.member)).toEqual([]);
+
+    await move(id, "raise");
+    expect(await documents(k1.member)).toEqual([{ id: started!.document_id, frozen: true }]);
+    // Nobody adds to them once they have reached another Company (ADR 0020).
+    const [after] = await call<{ outcome: string }>(c1Pm, sql`select outcome from app.start_document_upload(${id}::uuid, 'after.jpg', 10, 'image/jpeg', now(), 'photos')`);
+    expect(after!.outcome).not.toBe("started");
+    expect(await documents(k1.member)).toEqual([{ id: started!.document_id, frozen: true }]);
   });
 
   it("RP-625-1: Need My Action never counts it for K1", async () => {
