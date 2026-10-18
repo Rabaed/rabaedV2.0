@@ -3,7 +3,7 @@
 // Company profile; every Member of the Company sees them, nobody else. While the Company has no
 // Stamp none of its Members takes a Transition: the item read says so, so the message shows
 // before the Action Form, and taking it is refused `no_stamp`, with nothing written and nobody
-// notified (scenario RP-23-5). The logo is optional and never blocks.
+// notified (scenarios RP-23-5, RP-617-1). The logo is optional and never blocks.
 import { createDb, withMember } from "@rabaed/db";
 import { LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import { COMPANY_IMAGE_MAX_BYTES, type MyCompany } from "@rabaed/domain";
@@ -42,7 +42,7 @@ const outboxCount = async () =>
 const eventCount = async (id: string) =>
   Number((await sql<{ n: string }>`select count(*) as n from work_item_event where work_item_id = ${id}::uuid`.execute(migrator)).rows[0]!.n);
 
-describe("the Company profile's logo and Stamp", () => {
+describe("the Company profile's logo and Stamp (RP-617-1)", () => {
   let companyId = "";
   let ap: Caller;
   let colleague: Caller;
