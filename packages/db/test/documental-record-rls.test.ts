@@ -80,9 +80,39 @@ describe("the documental_record table", () => {
     expect(await failure(null, sql`select id from documental_record`)).toBe("42501");
   });
 
+  it("nor is what each signer was when they acted (work_item_event_signer): only the record job reads it", async () => {
+    expect(await failure(seer, sql`select * from work_item_event_signer`)).toBe("42501");
+    expect(await failure(null, sql`select event_id from work_item_event_signer`)).toBe("42501");
+  });
+
   it("is written once: the record can't be changed or removed, even by its owner", async () => {
     await expect(migrator.query("update documental_record set outcome = 'B' where work_item_id = $1", [itemId])).rejects.toMatchObject({ code: "42501" });
     await expect(migrator.query("delete from documental_record where work_item_id = $1", [itemId])).rejects.toMatchObject({ code: "42501" });
+    // A published record never goes back.
+    await expect(migrator.query("update documental_record set status = 'preparing' where work_item_id = $1", [itemId])).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("lets only its status move forward, for RP-155's checks: preparing to failed_checks or published, failed_checks to published", async () => {
+    const status = (to: string, extra = "") => migrator.query(`update documental_record set status = $1${extra} where work_item_id = $2`, [to, itemId]);
+    await migrator.query("begin");
+    try {
+      // The owner, bypassing the trigger for this setup only, puts it back to preparing.
+      await migrator.query("alter table documental_record disable trigger documental_record_written_once");
+      await status("preparing");
+      await migrator.query("alter table documental_record enable trigger documental_record_written_once");
+      const refused = async (to: string, extra = "") => {
+        await migrator.query("savepoint refused");
+        await expect(status(to, extra)).rejects.toMatchObject({ code: "42501" });
+        await migrator.query("rollback to savepoint refused");
+      };
+      await refused("failed_checks", ", outcome = 'B'");
+      await status("failed_checks");
+      await refused("preparing");
+      await status("published");
+      await refused("failed_checks");
+    } finally {
+      await migrator.query("rollback");
+    }
   });
 });
 

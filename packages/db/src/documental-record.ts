@@ -9,13 +9,16 @@ import type { Database } from "./schema.ts";
 
 /** One Transition taken on the item, in order: Returns and the work around them included. */
 export interface TransitionFact {
+  /** The Transition's kind (`send`, `submit`, `return`, `send_back`, `close`, `cancel`). */
+  readonly kind: string;
   readonly fromStepId: string;
   readonly toStepId: string;
   readonly label: BilingualText;
   /** When it was taken (ISO 8601, UTC). */
   readonly at: string;
+  /** The Member's name, Positions and Company as they were when the Transition was taken. */
   readonly memberName: BilingualText;
-  /** The Member's Positions on the Project, in their order. */
+  /** The Member's Positions on the Project then, in their order. */
   readonly positions: readonly BilingualText[];
   readonly companyName: BilingualText;
   /** The item's content hash as the Transition left it (hex), when it has one. */

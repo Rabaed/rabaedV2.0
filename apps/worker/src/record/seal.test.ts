@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
 import { attachedFiles, pdfA3Problems, toPdfA3 } from "./pdfa.ts";
-import { sealPdf, verifySeal } from "./seal.ts";
+import { sealPdf, sealTamperOffsets, verifySeal, withByteChanged } from "./seal.ts";
 import { LOCAL_SEAL_NAME, localSealSigner, type SealSigner } from "./signer.ts";
 import { localTimestampAuthority, type TimestampAuthority } from "./timestamp.ts";
 
@@ -16,6 +16,15 @@ async function plainPdf(): Promise<Uint8Array> {
   const page = doc.addPage([595, 842]);
   page.drawRectangle({ x: 50, y: 700, width: 200, height: 80 });
   return doc.save();
+}
+
+/** The tamper offsets (sealTamperOffsets) where one changed byte still verifies: none, for a sound seal. */
+async function tamperedBytesThatStillVerify(pdf: Uint8Array): Promise<string[]> {
+  const kept: string[] = [];
+  for (const [where, index] of Object.entries(sealTamperOffsets(pdf))) {
+    if ((await verifySeal(withByteChanged(pdf, index))).valid) kept.push(where);
+  }
+  return kept;
 }
 
 let signer: SealSigner;
@@ -43,13 +52,12 @@ describe("the seal", () => {
   });
 
   it("breaks when any one byte it covers changes", async () => {
-    const text = new TextDecoder("latin1").decode(sealed);
-    // Near the start, in the middle, and the last byte before the seal's own signature.
-    for (const index of [20, Math.floor(text.indexOf("/Contents <") / 2), text.indexOf("/Contents <") - 1]) {
-      const changed = sealed.slice();
-      changed[index] = changed[index]! ^ 0x01;
-      expect((await verifySeal(changed)).valid, `byte ${index}`).toBe(false);
-    }
+    expect(await tamperedBytesThatStillVerify(sealed)).toEqual([]);
+  });
+
+  it("breaks when a byte is added after it, as another revision", async () => {
+    const appended = new Uint8Array([...sealed, ...new TextEncoder().encode("\n% another revision\n")]);
+    expect((await verifySeal(appended)).valid).toBe(false);
   });
 
   it("is refused on an unsealed PDF", async () => {

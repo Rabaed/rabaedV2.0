@@ -18,6 +18,8 @@ export function DownloadRecordButton({ workItemId }: { workItemId: string }) {
     setMessage(null);
     // Opened at once, so the browser treats it as the click's own window; the URL follows.
     const opened = window.open("", "_blank");
+    // The new tab can't reach back into this page.
+    if (opened) opened.opener = null;
     try {
       const res = await fetch(`/api/v1/work-items/${workItemId}/documental-record`);
       if (!res.ok) {

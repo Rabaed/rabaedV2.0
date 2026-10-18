@@ -239,4 +239,22 @@ describe("keys", () => {
     }
     expect(uses).toEqual([{ roles: ["rabaed-dev-worker-task"], actions: ["kms:Sign"] }]);
   });
+
+  it("its key policy refuses kms:Sign to every principal but the worker's task role, whatever IAM grants", () => {
+    const policy = keysByName.PdfSealingKey!.resource.Properties?.KeyPolicy as { Statement: Statement[] };
+    const deny = policy.Statement.filter((s) => s.Effect === "Deny");
+    expect(render(deny)).toEqual([
+      expect.objectContaining({
+        Principal: { AWS: "*" },
+        Action: "kms:Sign",
+        Resource: "*",
+        Condition: { StringNotEquals: { "aws:PrincipalArn": "arn:aws:iam::${AWS::AccountId}:role/rabaed-dev-worker-task" } },
+      }),
+    ]);
+  });
+
+  it("carries the tag the permissions boundary allows kms:Sign by", () => {
+    expect(keys.PdfSealingKey!.Tags).toContainEqual({ Key: "rabaed-purpose", Value: "pdf-sealing" });
+    expect(keys.StorageKey!.Tags ?? []).not.toContainEqual({ Key: "rabaed-purpose", Value: "pdf-sealing" });
+  });
 });

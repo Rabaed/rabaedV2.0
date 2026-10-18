@@ -9,17 +9,22 @@
 --   app.take_transition and app.transition_effects are unchanged. The worker runs it like
 --   any outbox row: a failure is retried, then dead-lettered, and never rolls the closure
 --   back. Its payload is the item's id only, under `closed_work_item_id`.
+-- * work_item_event_signer: the Member's name, Positions and Company as they were when each
+--   Transition was taken, kept by a trigger on work_item_event (so a later change of
+--   Position or name never changes a record made afterwards).
 -- * app.documental_record_facts: what the worker reads to write the Record Data, as the
 --   worker (no Member set): the item's Document Number, Revision, Subject, Type and
---   outcome, and every Transition taken on it, in order, with the Member's name, Positions
---   and Company, its time and the content hash (which only this owner read gives). The
---   worker leaves out the Returns and the work around them (recordPath, apps/worker).
+--   outcome, and every Transition taken on it, in order, with its kind, the Member's name,
+--   Positions and Company as they were then, its time and the content hash (which only
+--   this owner read gives). The worker leaves out the Returns and Send Backs and the work
+--   around them (recordPath, apps/worker).
 --   Internal Notes, Recommended Codes and answers are never read here at all. Null once
 --   the item has its record, so a retried row does nothing.
 -- * app.save_documental_record: the worker's write, once the PDF is sealed and both files
 --   are stored: one stored_file row for each (stored by Rabaed: no uploader) and the
 --   documental_record row, published. A second save for the item does nothing.
--- * documental_record: one per item, never changed. Not granted to the app role: its
+-- * documental_record: one per item, never changed but for its status moving forward
+--   (RP-155's checks). Not granted to the app role: its
 --   storage keys, fingerprints and verification hash are read only through the functions
 --   here. app.documental_record_file gives a Member the PDF's storage key and its file
 --   name for a closed item they see (the download's signed link, apps/api), and nothing
@@ -54,18 +59,74 @@ create table documental_record (
 alter table documental_record enable row level security;
 revoke all on documental_record from rabaed_app;
 
--- Written once (RP-155's Re-produce will replace the PDF through its own function, keeping
--- the replaced one in documental_record_reproduction).
+-- Written once. The one change allowed is its status moving forward, for RP-155's checks:
+-- preparing to published or failed_checks, and failed_checks to published; every other
+-- column stays as written, and no row is removed. (RP-155's Re-produce replaces the PDF
+-- through its own function, keeping the replaced one in documental_record_reproduction.)
 create function app.refuse_documental_record_change() returns trigger
   language plpgsql
   as $$
     begin
+      if tg_op = 'UPDATE'
+        and (to_jsonb(old) - 'status') = (to_jsonb(new) - 'status')
+        and (old.status, new.status) in (('preparing', 'published'), ('preparing', 'failed_checks'), ('failed_checks', 'published'))
+      then
+        return new;
+      end if;
       raise exception 'documental_record is written once' using errcode = '42501';
     end
   $$;
 revoke all on function app.refuse_documental_record_change() from public;
 create trigger documental_record_written_once before update or delete on documental_record
   for each row execute function app.refuse_documental_record_change();
+
+-- Who took each Transition, as they were then (V7): the Member's name, their Positions on
+-- the Project and their Company's name, kept when the event is written, so a later
+-- rename, a change of Position or a removal never changes a record made afterwards. A
+-- trigger on work_item_event, so app.take_transition is unchanged. Not granted to the app
+-- role; only the record job reads it (app.documental_record_facts).
+create table work_item_event_signer (
+  event_id uuid primary key references work_item_event (id),
+  project_id uuid not null references project (id),
+  member_name jsonb not null,
+  positions jsonb not null check (jsonb_typeof(positions) = 'array'),
+  company_name jsonb not null
+);
+alter table work_item_event_signer enable row level security;
+revoke all on work_item_event_signer from rabaed_app;
+
+create function app.record_event_signer() returns trigger
+  language plpgsql security definer
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      insert into work_item_event_signer (event_id, project_id, member_name, positions, company_name)
+      select new.id, new.project_id, m.full_name,
+        coalesce((
+          select jsonb_agg(po.name order by po.sort)
+          from project_member pm
+          join project_member_position pmp on pmp.project_member_id = pm.id
+          join position po on po.id = pmp.position_id
+          where pm.participant_id = new.actor_participant_id and pm.member_id = new.actor_member_id
+        ), '[]'::jsonb),
+        c.legal_name
+      from member m, participant p join company c on c.id = p.company_id
+      where m.id = new.actor_member_id and p.id = new.actor_participant_id;
+      return null;
+    end
+  $$;
+revoke all on function app.record_event_signer() from public;
+create trigger work_item_event_records_signer after insert on work_item_event
+  for each row
+  when (new.type in ('transition', 'issue_code') and new.actor_member_id is not null)
+  execute function app.record_event_signer();
+
+-- An instant as the Record Data writes it: ISO 8601 in UTC, to the millisecond.
+create function app.iso_utc(p_at timestamptz) returns text
+  language sql immutable
+  set search_path = pg_catalog, public
+  as $$ select to_char(p_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') $$;
+revoke all on function app.iso_utc(timestamptz) from public;
 
 -- The record job, in the closing transaction: one outbox row for the item.
 create function app.queue_documental_record() returns trigger
@@ -122,7 +183,7 @@ create function app.documental_record_facts(p_outbox_id uuid) returns jsonb
           'revisionNo', w.revision_no,
           'subject', w.title,
           'outcome', w.outcome,
-          'closedAt', to_char(w.closed_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'closedAt', app.iso_utc(w.closed_at),
           'transitions', coalesce((
             -- The Owner's review writes one copy of a move for each side of it: one is enough.
             select jsonb_agg(x.fact order by x.seq)
@@ -131,17 +192,20 @@ create function app.documental_record_facts(p_outbox_id uuid) returns jsonb
                 jsonb_build_object(
                   'fromStepId', e.from_step_id,
                   'toStepId', e.to_step_id,
+                  'kind', tr.kind,
                   'label', tr.label,
-                  'at', to_char(e.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
-                  'memberName', m.full_name,
-                  'positions', coalesce((
+                  'at', app.iso_utc(e.created_at),
+                  -- As the event's signer row kept them when it was written; an event written
+                  -- before this migration has none, and is read as the Member is now.
+                  'memberName', coalesce(s.member_name, m.full_name),
+                  'positions', coalesce(s.positions, (
                     select jsonb_agg(po.name order by po.sort)
                     from project_member pm
                     join project_member_position pmp on pmp.project_member_id = pm.id
                     join position po on po.id = pmp.position_id
                     where pm.participant_id = e.actor_participant_id and pm.member_id = e.actor_member_id
                   ), '[]'::jsonb),
-                  'companyName', c.legal_name,
+                  'companyName', coalesce(s.company_name, c.legal_name),
                   'contentSha256', encode(e.content_sha256, 'hex')
                 ) as fact
               from work_item_event e
@@ -149,6 +213,7 @@ create function app.documental_record_facts(p_outbox_id uuid) returns jsonb
               join member m on m.id = e.actor_member_id
               join participant p on p.id = e.actor_participant_id
               join company c on c.id = p.company_id
+              left join work_item_event_signer s on s.event_id = e.id
               where e.work_item_id = w.id and e.type in ('transition', 'issue_code')
               order by e.transition_id, e.created_at, e.actor_member_id, e.seq
             ) x

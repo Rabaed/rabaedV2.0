@@ -210,6 +210,38 @@ export async function sealPdf(pdf: Uint8Array, { signer, timestamps, at }: { sig
   return withDss(signed, certificatesOf(cms));
 }
 
+/**
+ * Where a sealed PDF is most likely to be changed unnoticed, by offset: its start, the
+ * middle of what was signed, the last byte before the signature, the signature itself, its
+ * zero padding, the first byte after it, and the Document Security Store update after the
+ * signed revision (its start, middle and end). For the tests that change one byte at each.
+ */
+export function sealTamperOffsets(pdf: Uint8Array): Record<string, number> {
+  const m = /\/ByteRange\s*\[\s*0\s+(\d+)\s+(\d+)\s+(\d+)/.exec(latin1.decode(pdf));
+  if (!m) throw new Error("no seal");
+  const [contentsStart, afterContents, rest] = m.slice(1).map(Number) as [number, number, number];
+  const signedEnd = afterContents + rest;
+  return {
+    start: 20,
+    "middle of what was signed": Math.floor(contentsStart / 2),
+    "last byte before the signature": contentsStart - 1,
+    "the signature": contentsStart + 40,
+    "the signature's padding": afterContents - 3,
+    "first byte after the signature": afterContents,
+    "middle after the signature": afterContents + Math.floor((signedEnd - afterContents) / 2),
+    "start of the security store update": signedEnd + 2,
+    "middle of the security store update": Math.floor((signedEnd + pdf.length) / 2),
+    "end of the file": pdf.length - 8,
+  };
+}
+
+/** `pdf` with the byte at `index` changed: a digit for another inside hex, so it still reads as hex. */
+export function withByteChanged(pdf: Uint8Array, index: number): Uint8Array {
+  const changed = pdf.slice();
+  changed[index] = changed[index] === 0x30 ? 0x31 : changed[index]! ^ 0x01;
+  return changed;
+}
+
 export interface SealCheck {
   /** The signature covers every byte of the signed revision but its own, and verifies, and so does its timestamp. */
   readonly valid: boolean;
@@ -242,7 +274,14 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
   const [a, b, c, d] = m.slice(1).map(Number) as [number, number, number, number];
   if (a !== 0 || c <= b || c + d > pdf.length || pdf[b] !== 0x3c || pdf[c - 1] !== 0x3e) return invalid("the seal does not cover the file");
   const subFilter = /\/SubFilter\s*\/([A-Za-z.]+)/.exec(text)?.[1] ?? null;
-  const cmsHex = latin1.decode(pdf.subarray(b + 1, c - 1)).replace(/(00)+$/, "");
+  // /Contents is exactly the CMS's DER, then zeros: a byte changed in its padding breaks the seal too.
+  const contentsHex = latin1.decode(pdf.subarray(b + 1, c - 1));
+  if (contentsHex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(contentsHex)) return invalid("the seal's signature is not hexadecimal", { subFilter });
+  const contents = new Uint8Array(Buffer.from(contentsHex, "hex"));
+  const read = asn1js.fromBER(toArrayBuffer(contents));
+  if (read.offset === -1) return invalid("the seal does not read", { subFilter });
+  if (contents.subarray(read.offset).some((x) => x !== 0)) return invalid("the seal's signature has bytes after it", { subFilter });
+  const cms = contents.slice(0, read.offset);
   let dssCertificates: number;
   try {
     const doc = await PDFDocument.load(pdf, { updateMetadata: false });
@@ -252,7 +291,6 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
     return invalid("the PDF does not open", { subFilter });
   }
   try {
-    const cms = new Uint8Array(Buffer.from(cmsHex.length % 2 ? `${cmsHex}0` : cmsHex, "hex"));
     const signed = new pkijs.SignedData({ schema: pkijs.ContentInfo.fromBER(toArrayBuffer(cms)).content });
     const data = concat(pdf.subarray(0, b), pdf.subarray(c, c + d));
     const ok = await signed.verify({ signer: 0, data: toArrayBuffer(data), checkChain: false, extendedMode: true });
@@ -271,6 +309,14 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
     const expected = await sha256(signatureValue);
     if (!tokenOk.signatureVerified || Buffer.compare(Buffer.from(imprint), Buffer.from(expected)) !== 0) {
       return invalid("the timestamp does not match the signature", { signer: name, subFilter, dssCertificates });
+    }
+    // After what was signed comes only the Document Security Store update the seal wrote, byte for byte:
+    // any other change, or another revision, breaks the seal.
+    if (c + d < pdf.length) {
+      const expectedFile = await withDss(pdf.slice(0, c + d), certificatesOf(cms));
+      if (Buffer.compare(Buffer.from(expectedFile), Buffer.from(pdf)) !== 0) {
+        return invalid("the file was changed after it was sealed", { signer: name, subFilter, dssCertificates });
+      }
     }
     return { valid: true, problem: null, signer: name, timestampedAt: info.genTime, subFilter, dssCertificates };
   } catch (error) {

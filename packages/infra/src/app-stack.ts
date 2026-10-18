@@ -232,6 +232,7 @@ export class AppStack extends Stack {
         WEB_URL: webUrl,
         ...mail.environment,
         // The Documental Record job (RP-620): where records go, the fonts and certificate, the key and the timestamps.
+        RECORD_SEALING: "kms",
         PROJECT_FILES_BUCKET: storage.projectFiles.bucketName,
         BUILD_ASSETS_BUCKET: storage.buildAssets.bucketName,
         PDF_SEALING_KEY_ID: storage.pdfSealingKey.keyArn,

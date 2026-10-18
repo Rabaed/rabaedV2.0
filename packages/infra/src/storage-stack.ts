@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, RemovalPolicy, Stack, Tags, type StackProps } from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as kms from "aws-cdk-lib/aws-kms";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -18,6 +18,9 @@ export const FONTS_PREFIX = "fonts/";
 
 /** Rabaed's sealing certificate for the `pdf-sealing` key (PEM, chain after it), in the build assets bucket. */
 export const SEALING_PREFIX = "sealing/";
+
+/** The tag on the `pdf-sealing` key; the permissions boundary allows kms:Sign only on a key carrying it. */
+export const PDF_SEALING_TAG = { key: "rabaed-purpose", value: "pdf-sealing" } as const;
 
 /** Where each item's Documental Record lives under its Project's prefix (apps/worker recordKeys). */
 export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
@@ -69,6 +72,20 @@ export class StorageStack extends Stack {
       keyUsage: kms.KeyUsage.SIGN_VERIFY,
       removalPolicy: RemovalPolicy.RETAIN,
     });
+    // Marks it for the permissions boundary, which allows kms:Sign on this key only.
+    Tags.of(this.pdfSealingKey).add(PDF_SEALING_TAG.key, PDF_SEALING_TAG.value);
+    // As the Project files bucket does: whatever any IAM policy says, nobody but
+    // the worker's task role (by name: it lives in the app stack) signs with it.
+    this.pdfSealingKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: "OnlyTheWorkerSigns",
+        effect: iam.Effect.DENY,
+        principals: [new iam.AnyPrincipal()],
+        actions: ["kms:Sign"],
+        resources: ["*"],
+        conditions: { StringNotEquals: { "aws:PrincipalArn": `arn:${this.partition}:iam::${this.account}:role/${names.workerTaskRole}` } },
+      }),
+    );
 
     const privateBucket: s3.BucketProps = {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,

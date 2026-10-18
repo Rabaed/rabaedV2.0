@@ -379,11 +379,15 @@ describe("Project files", () => {
   it("tells the worker the build assets bucket, the sealing key and the public timestamp authority, and nothing else does", () => {
     const environment = (family: string) => Object.fromEntries((container(family).Environment ?? []).map((e) => [e.Name, e.Value]));
     const worker = environment("rabaed-dev-worker");
+    // Sealed with the KMS key, never the local test key (the worker refuses `local` on ECS too).
+    expect(worker.RECORD_SEALING).toBe("kms");
     expect(worker.TIMESTAMP_AUTHORITY_URL).toMatch(/^https:\/\//);
     expect(env.resolve(worker.BUILD_ASSETS_BUCKET, "app").resource.Type).toBe("AWS::S3::Bucket");
     expect(env.resolve(worker.PDF_SEALING_KEY_ID, "app").resource.Properties?.KeySpec).toBe("RSA_3072");
     for (const family of ["rabaed-dev-web", "rabaed-dev-api", "rabaed-dev-admin", "rabaed-dev-migrate"]) {
-      for (const name of ["BUILD_ASSETS_BUCKET", "PDF_SEALING_KEY_ID", "TIMESTAMP_AUTHORITY_URL"]) expect(environment(family), family).not.toHaveProperty(name);
+      for (const name of ["RECORD_SEALING", "BUILD_ASSETS_BUCKET", "PDF_SEALING_KEY_ID", "TIMESTAMP_AUTHORITY_URL"]) {
+        expect(environment(family), family).not.toHaveProperty(name);
+      }
     }
   });
 });

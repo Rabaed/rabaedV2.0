@@ -35,11 +35,15 @@ export interface RecordData {
   readonly verification: { readonly code: string; readonly link: string };
 }
 
+/** The Transitions that give an item back, never on the record (V7): a Return, and a Send Back (a Code the Owner sent back is one). */
+const GIVES_BACK = new Set(["return", "send_back"]);
+
 /**
- * The Transitions on the item's path to its outcome (V7): a Return, a Send
- * Back, or a Code the Owner sent back makes a loop that comes back to a Step
- * the item left before; the loop and the work around it are left out, so each
- * Step appears once, as the item last left it.
+ * The Transitions on the item's path to its outcome (V7). A Return or a Send
+ * Back is never on it, whatever follows. It also makes a loop that comes back
+ * to a Step the item left before; the work around it, up to the Step it left
+ * again, is left out too, so each Step appears once, as the item last left it
+ * (the first entry, "Prepared", is the last send out of the Draft).
  */
 export function recordPath(transitions: readonly TransitionFact[]): TransitionFact[] {
   const path: TransitionFact[] = [];
@@ -48,7 +52,7 @@ export function recordPath(transitions: readonly TransitionFact[]): TransitionFa
     if (back >= 0) path.length = back;
     path.push(t);
   }
-  return path;
+  return path.filter((t) => !GIVES_BACK.has(t.kind));
 }
 
 export function recordDataOf(facts: RecordFacts, verification: RecordData["verification"]): RecordData {

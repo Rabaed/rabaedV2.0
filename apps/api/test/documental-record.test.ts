@@ -21,13 +21,16 @@ import {
   pdfA3Problems,
   projectFilesFromEnv,
   s3RecordFiles,
+  sealTamperOffsets,
   verifySeal,
+  withByteChanged,
   type PdfRenderer,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -47,8 +50,26 @@ const OR_NAME = "Record Owner Representative";
 const SUBJECT = "Cable trays for Building A";
 const INTERNAL_NOTE = "Internal note never printed";
 const RETURN_REASON = "Secret return reason";
+/** A test Type whose Draft may be Cancelled (the test Workflow's `withCancel`). */
+const CANCELLABLE = "RECCN";
+const cancellableSchema = {
+  sections: [
+    { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
+    {
+      key: "classification",
+      title: bilingual("Classification"),
+      fields: [
+        { key: "trade", type: "trade", label: bilingual("Trade") },
+        { key: "location", type: "location", label: bilingual("Location") },
+        { key: "scopes", type: "scopes", label: bilingual("Scopes") },
+      ],
+    },
+  ],
+};
 
 let at: Tower;
+let k1: Company;
+let k1ParticipantId = "";
 let c1Name = "";
 let c1Engineer: Caller;
 let c1Pm: Caller;
@@ -129,15 +150,16 @@ const recordJobs = (id: string) =>
     .then((r) => r.rows);
 
 beforeAll(async () => {
+  await addSendBackType(migrator, CANCELLABLE, { en: "Cancellable record", ar: "سجل قابل للإلغاء" }, cancellableSchema, { withCancel: true });
   const c1 = await api.projectCreator();
-  const k1 = await onboard(K1_NAME);
+  k1 = await onboard(K1_NAME);
   at = await buildTower(api, { c1, k1 }, "REC");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as {
     id: string;
     isOwnCompany: boolean;
     company: { legalName: { en: string } };
   }[];
-  const k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
+  k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
   c1Name = participants.find((p) => p.isOwnCompany)!.company.legalName.en;
   c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
   c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
@@ -244,15 +266,17 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     for (const value of values) expect(text, value).toContain(squeeze(value));
   });
 
-  it("is sealed: the seal verifies, and one changed byte breaks it", async () => {
+  it("is sealed: the seal verifies, and one changed byte anywhere breaks it", async () => {
     const seal = await verifySeal(record);
     expect(seal).toMatchObject({ valid: true, signer: LOCAL_SEAL_NAME, subFilter: "ETSI.CAdES.detached" });
     expect(seal.timestampedAt).toBeInstanceOf(Date);
     expect(seal.dssCertificates).toBeGreaterThanOrEqual(2);
-    const changed = record.slice();
-    const middle = Math.floor(record.length / 3);
-    changed[middle] = changed[middle]! ^ 0x01;
-    expect((await verifySeal(changed)).valid).toBe(false);
+    // The start, the middle, the signature and its padding, and the security store update after it.
+    const stillValid: string[] = [];
+    for (const [where, index] of Object.entries(sealTamperOffsets(record))) {
+      if ((await verifySeal(withByteChanged(record, index))).valid) stillValid.push(where);
+    }
+    expect(stillValid).toEqual([]);
   });
 
   it("validates as PDF/A-3", async () => {
@@ -267,6 +291,47 @@ describe("the record job", () => {
     const { bytes } = await download(c1Pm, id);
     expect(await printed(bytes)).toContain("Cableladders");
     expect((await verifySeal(bytes)).valid).toBe(true);
+  });
+
+  it("is made for a Cancelled item too, for those who see it: inside the raiser's Company, never K1", async () => {
+    const res = await ok(
+      c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+        type: CANCELLABLE,
+        title: "Cancelled cable trays",
+        answers: { model: "CT-100", trade: at.electrical, location: at.buildingA },
+      }),
+      201,
+    );
+    const id = res.json().id as string;
+    await take(c1Engineer, id, "cancel");
+    expect((await detail(c1Engineer, id)).outcome).toBe("cancelled");
+    await drainOutbox(worker, { documental_record: handler });
+    const copies = await Promise.all([c1Engineer, c1Pm].map((by) => download(by, id)));
+    expect(new Set(copies.map((c) => createHash("sha256").update(c.bytes).digest("hex"))).size).toBe(1);
+    const text = await printed(copies[0]!.bytes);
+    expect(text).toContain("Cancelledcabletrays");
+    expect(text).toContain("cancelled");
+    expect((await verifySeal(copies[0]!.bytes)).valid).toBe(true);
+    // Never Submitted: K1 never saw it, and C2 never did.
+    await expectHidden(downloadLink(k1Pm, id), "K1");
+    await expectHidden(downloadLink(c2Engineer, id), "C2");
+  });
+
+  it("names each signer with the Position they held when they acted, not a later one", async () => {
+    const signer = await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Laila Saud" });
+    const id = await draft(at, c1Engineer, "Cable tray covers");
+    await take(c1Engineer, id, "send_for_review");
+    await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(c1Pm, id, "submit");
+    await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
+    await take(signer.caller, id, "approve_a");
+    // Before the record is made, K1 makes her an Engineer instead.
+    await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${signer.id}/positions`, { positions: ["engineer"] }));
+    await drainOutbox(worker, { documental_record: handler });
+    const xml = new TextDecoder().decode((await attachedFiles((await download(c1Pm, id)).bytes))[0]!.bytes);
+    const hers = xml.split("<transition ").find((block) => block.includes("Laila Saud"))!;
+    expect(hers).toContain('<name lang="en">Manager</name>');
+    expect(hers).not.toContain('<name lang="en">Engineer</name>');
   });
 
   it("is never written for a discarded Draft, which nobody sees again", async () => {
