@@ -169,11 +169,14 @@ describe("the Snag List's rows (seam 1)", () => {
     );
   });
 
-  it("'+ New' offers only the Snag List Types the viewer may raise: the Consultant the Snag, the Contractor none", async () => {
+  it("'+ New' offers only the Snag List Types the viewer may raise, never another Module's", async () => {
     const raisable = async (by: Caller, module?: string) =>
       (await ok(by.get(`/v1/projects/${at.projectId}/raisable-types${module ? `?module=${module}` : ""}`), 200)).json().types.map((t: { code: string }) => t.code);
+    // The Consultant raises Snags, and so does the Contractor on its own work (RP-622).
     expect(await raisable(at.k1Manager, "snag_list")).toContain("SNG");
-    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain("SNG");
+    expect(await raisable(at.c1Engineer, "snag_list")).toContain("SNG");
+    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain(REVIEWED);
+    expect(await raisable(at.c1Engineer)).not.toContain("SNG");
     // The Submittals stay the default.
     expect(await raisable(at.c1Engineer)).toEqual(await raisable(at.c1Engineer, "submittals"));
     expect((await at.c1Engineer.get(`/v1/projects/${at.projectId}/raisable-types?module=nothing`)).statusCode).toBe(400);
