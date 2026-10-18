@@ -1495,6 +1495,7 @@
     "screens": "Screens",
     "stages": "Stages",
     "outcomes": "Outcomes",
+    "modules": "Modules",
     "requiredLinks": "Required links",
     "checklistTemplates": "Checklist Templates"
   },
@@ -1576,6 +1577,21 @@
         "tradeNotFound": "That Trade is no longer on this Project. Reload the page.",
         "retired": "This Checklist Template was retired: it can't be edited.",
         "invalid": "Fill in both languages for the template and every item."
+      }
+    },
+    "modules": {
+      "title": "Modules",
+      "intro": "Where the Project's Modules show.",
+      "inspections": {
+        "title": "Inspections",
+        "description": "Inspections stays its own Module either way: its Document Numbers, permissions, Workflows, Stages and item links do not change.",
+        "label": "Show Inspections in Submittals",
+        "help": "Off: Inspections has its own place in the Project's navigation. On: it is hidden there and Submittals lists the WIRs too, with their own type and Stage groups."
+      },
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed."
       }
     },
     "approvedSuppliers": {

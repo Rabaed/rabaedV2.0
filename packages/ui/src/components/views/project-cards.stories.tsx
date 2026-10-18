@@ -28,6 +28,7 @@ const project = (n: number, rest: Partial<ProjectSummary>): ProjectSummary => ({
   isProjectAdmin: false,
   needMyAction: 0,
   modules: ["submittals"],
+  showInspectionsInSubmittals: false,
   ...rest,
 });
 
