@@ -120,6 +120,35 @@ def inflated_xlsx():
         archive.writestr("xl/media/padding.bin", b"\0" * (101 * 1024 * 1024))
 
 
+def import_register_xlsx():
+    """The Register Import's register (RP-637): a "Notes" sheet first, then "Register" with a title
+    block and its header on row 3. Rows 4, 5 and 8 are good on the Tower (Types MAR, SAR, DAR; Trades
+    by name and by code); row 7 has three reasons, row 9 two, row 10 one (a Subject over 200)."""
+    book = Workbook()
+    notes = book.active
+    notes.title = "Notes"
+    notes["A1"] = "Made-up data for the tests"
+    sheet = book.create_sheet("Register")
+    sheet["A1"] = "C1 Contracting: Submittal Register"
+    # Row 2 is empty.
+    for column, header in zip("ABCDE", ["No.", "Description", "Type", "Discipline", "Remarks"]):
+        sheet[f"{column}3"] = header
+    rows = [
+        (4, [1, "Lighting fixtures, Floor 1", "MAR", "Electrical", "Long lead"]),
+        (5, [2, "Fire pump datasheet", "SAR", "Mechanical", None]),
+        # Row 6 is empty.
+        (7, [3, None, "XYZ", "Plumbing", None]),
+        (8, [4, "لوحات التوزيع", "DAR", "EL", None]),
+        (9, [5, "Cable trays", None, None, None]),
+        (10, [6, "S" * 201, "MAR", "Electrical", None]),
+    ]
+    for row, values in rows:
+        for column, value in zip("ABCDE", values):
+            if value is not None:
+                sheet[f"{column}{row}"] = value
+    book.save(path("import-register.xlsx"))
+
+
 def write_bytes(name, data):
     with open(path(name), "wb") as file:
         file.write(data)
@@ -146,9 +175,13 @@ def csv_files():
     write_bytes("register-semicolon.csv", semicolon.encode("utf-8"))
     # Arabic saved as Windows-1256, the encoding Excel's plain "CSV" uses on an Arabic Windows: not UTF-8.
     write_bytes("register-windows-1256.csv", "Subject,الموضوع\nPanels,لوحات التوزيع\n".encode("cp1256"))
+    # The Register Import's .csv (RP-637): Subjects only, imported with one Type and one Trade for the file.
+    subjects = "Subject,Notes\r\nDoors and frames,\r\nأبواب الحريق,Arabic Subject\r\n"
+    write_bytes("import-register.csv", b"\xef\xbb\xbf" + subjects.encode("utf-8"))
 
 
 register_xlsx()
+import_register_xlsx()
 too_many_rows_xlsx()
 formats_xlsx()
 inflated_xlsx()

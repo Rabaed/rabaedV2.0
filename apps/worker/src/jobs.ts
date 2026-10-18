@@ -1,5 +1,6 @@
 import {
   dailyDigestJob,
+  registerImportCleanupJob,
   notificationDigestHandler,
   notificationEmailHandler,
   stepAgeReportHandler,
@@ -18,7 +19,7 @@ import { notificationDigestMessage, notificationMessage, stepAgeReportMessage, t
 // `outboxHandlers` (and to the outbox kind check).
 
 /** Every scheduled job, run by the worker at each poll when due (once per run time). */
-export const scheduledJobs: readonly ScheduledJob[] = [dailyDigestJob, weeklyStepAgeReportJob];
+export const scheduledJobs: readonly ScheduledJob[] = [dailyDigestJob, weeklyStepAgeReportJob, registerImportCleanupJob];
 
 /** The outbox handlers that send email, through `mailer()` (built at the first send), linking to `webUrl`. */
 export function outboxHandlers(mailer: () => Mailer, webUrl: string): Record<string, OutboxHandler> {

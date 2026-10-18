@@ -31,6 +31,8 @@ import type {
   ProjectParticipants,
   ProjectSummary,
   RaisableTypes,
+  RegisterImport,
+  RegisterImports,
   RevisionChain,
   Scopes,
   SignedInMember,
@@ -241,6 +243,16 @@ export function getNewWorkItemForm(projectId: string, typeCode: string): Promise
   return apiGet<FormToFill>(
     `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
   );
+}
+
+/** The Project's Submittal Register Imports of the Member's own Company (RP-637), by file name; null when hidden. */
+export function getRegisterImports(projectId: string): Promise<RegisterImports | null> {
+  return apiGet<RegisterImports>(`/v1/projects/${encodeURIComponent(projectId)}/register-imports`);
+}
+
+/** One Submittal Register Import with its rows; null when the Member doesn't read it. */
+export function getRegisterImport(importId: string): Promise<RegisterImport | null> {
+  return apiGet<RegisterImport>(`/v1/register-imports/${encodeURIComponent(importId)}`);
 }
 
 /** The Types of a Module (the Submittals by default) the signed-in Member may raise on a Project (the Type picker, the MAR first); null when hidden. */
