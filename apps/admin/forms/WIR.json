@@ -65,6 +65,22 @@
         { "key": "location", "type": "location", "required": true, "label": { "en": "Location", "ar": "الموقع" } },
         { "key": "scopes", "type": "scopes", "required": false, "label": { "en": "Scopes", "ar": "النطاقات" } }
       ]
+    },
+    {
+      "key": "checklist",
+      "title": { "en": "Checklist", "ar": "قائمة التحقق" },
+      "fields": [
+        {
+          "key": "checklist_template",
+          "type": "checklist_template",
+          "required": true,
+          "label": { "en": "Checklist Template", "ar": "قالب قائمة التحقق" },
+          "help": {
+            "en": "The Project's official checklist for this work, for the WIR's Trade. Its checks are copied onto the WIR and fixed once it is Submitted.",
+            "ar": "قائمة التحقق المعتمدة في المشروع لهذه الأعمال، حسب تخصص طلب المعاينة. تُنسخ بنودها إلى الطلب وتثبت عند إرساله."
+          }
+        }
+      ]
     }
   ]
 }
