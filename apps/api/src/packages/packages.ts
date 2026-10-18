@@ -14,6 +14,7 @@ import {
 import { sql, type Transaction } from "kysely";
 import type { Database } from "@rabaed/db";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
+import { workItemRowsById } from "../work-items/query.ts";
 import { takeTransitionIn } from "../work-items/work-items.ts";
 
 // Packages (spec RP-616; RP-636 an Open Package). Reads go through the package
@@ -25,9 +26,13 @@ import { takeTransitionIn } from "../work-items/work-items.ts";
 //
 // Submit Package (RP-638) takes each item's own Submit through takeTransitionIn,
 // the single Submit's path, in one transaction; the database moves the Package to
-// In Progress (submit_package migration). Later tickets extend this module: the board's counts (RP-641) come from app.package_summary into
-// PackageSummary; bulk Transitions (RP-646) and the packageId filter (RP-647) read
-// the items the same way.
+// In Progress (submit_package migration).
+//
+// The board and the Package page (RP-641): every Member who sees one of a
+// Package's items sees the Package (app.sees_package), its owner by Company name,
+// and its counts and items of the ones they see only (app.package_summary,
+// app.package_items); only the owning Participant may change it. Bulk Transitions
+// (RP-646) and the packageId filter (RP-647) read the items the same way.
 
 type Trx = Transaction<Database>;
 
@@ -49,20 +54,32 @@ type SummaryRow = {
   name: BilingualText;
   status: PackageStatus;
   company_name: BilingualText;
+  total: number;
+  open: number;
+  codes: Record<string, number>;
+  /** Whether the viewer is of the owning Participant: only they may change it. */
+  owned: boolean;
 };
 
-/** The Packages the viewer sees, as rows: one Project's, or the one Package `packageId`. */
+/**
+ * The Packages the viewer sees (RLS, app.sees_package), as rows: one Project's, or
+ * the one Package `packageId`. Each with its owner's Company name, which every viewer
+ * reads (app.package_owner_name), and its counts of the items the viewer sees only
+ * (app.package_summary, RP-641). Each read per returned row, never inside the work
+ * item query (rp-636: a count there runs for every row).
+ */
 async function summaryRows(trx: Trx, where: { projectId: string } | { packageId: string }): Promise<SummaryRow[]> {
   const condition = "projectId" in where ? sql`k.project_id = ${where.projectId}::uuid` : sql`k.id = ${where.packageId}::uuid`;
   const { rows } = await sql<SummaryRow>`
-    select k.id, k.project_id, k.participant_id, k.seq, k.name, k.status, pp.legal_name as company_name
+    select k.id, k.project_id, k.participant_id, k.seq, k.name, k.status, o.name as company_name,
+      coalesce(s.total, 0) as total, coalesce(s.open, 0) as open, coalesce(s.codes, '{}'::jsonb) as codes,
+      app.owns_package(k.id) as owned
     from package k
     -- The owning Participant's Company by name only (V14).
-    left join lateral (
-      select x.legal_name from app.project_participants(k.project_id) x where x.participant_id = k.participant_id
-    ) pp on true
+    cross join lateral (select app.package_owner_name(k.id) as name) o
+    left join lateral app.package_summary(k.id) s on true
     where ${condition}
-    order by pp.legal_name ->> 'en', k.participant_id, k.seq, k.id
+    order by o.name ->> 'en', k.participant_id, k.seq, k.id
   `.execute(trx);
   return rows;
 }
@@ -74,6 +91,7 @@ const toSummary = (r: SummaryRow): PackageSummary => ({
   name: r.name,
   status: r.status,
   owner: { participantId: r.participant_id, companyName: r.company_name },
+  counts: { total: r.total, open: r.open, codes: r.codes },
 });
 
 /** A Project's Packages the Member sees; null when it isn't one of their Projects. */
@@ -85,24 +103,38 @@ export function listPackages(db: Db, memberId: string, projectId: string): Promi
   });
 }
 
-/** Package `packageId` as the Member reads it, with only the items they see; null when they don't see it. */
-export function getPackage(db: Db, memberId: string, packageId: string): Promise<PackageDetail | null> {
+/**
+ * Package `packageId` as the Member reads it, with only the items they see, each as
+ * the List gives it (its "With" and Review Code, RP-641); null when they don't see
+ * it. A viewer outside the owning Participant is offered nothing.
+ */
+export function getPackage(db: Db, memberId: string, packageId: string, now: Date): Promise<PackageDetail | null> {
   return withMember(db, memberId, async (trx) => {
     const [row] = await summaryRows(trx, { packageId });
     if (!row) return null;
-    const { rows: items } = await sql<{ id: string; document_number: string | null; title: string }>`
-      select w.id, w.document_number, w.title
+    const { rows: ids } = await sql<{ id: string }>`
+      select w.id
       from app.package_items(${packageId}::uuid) i
       join work_item w on w.id = i
       order by w.document_number nulls last, w.title, w.id
     `.execute(trx);
+    const seen = await workItemRowsById(
+      trx,
+      { projectId: row.project_id, moduleKey: "submittals" },
+      ids.map((i) => i.id),
+      now,
+    );
+    const items = ids.flatMap(({ id }) => {
+      const r = seen.get(id);
+      return r ? [{ id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome }] : [];
+    });
     const project = await trx.selectFrom("project").select("status").where("id", "=", row.project_id).executeTakeFirst();
-    const active = project?.status === "active";
+    const active = row.owned && project?.status === "active";
     const open = row.status === "open";
     const submit = active && (await submitReadiness(trx, packageId)).ready;
     return {
       ...toSummary(row),
-      items: items.map((i) => ({ id: i.id, documentNumber: i.document_number, title: i.title })),
+      items,
       actions: { rename: active, addItems: active, removeItems: active && open, delete: active && open, submit },
     };
   });

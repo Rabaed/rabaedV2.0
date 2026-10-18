@@ -132,7 +132,7 @@ describe("building an Open Package", () => {
     await ok(addItem(at.c1Pm, pkg.id, sent));
     const p = await getPackage(at.c1Pm, pkg.id);
     expect(p.items.map((i) => i.id).sort()).toEqual([ownDraft, inReview, sent].sort());
-    expect(p.items.find((i) => i.id === ownDraft)).toEqual({ id: ownDraft, documentNumber: null, title: "PM's own Draft" });
+    expect(p.items.find((i) => i.id === ownDraft)).toMatchObject({ id: ownDraft, documentNumber: null, title: "PM's own Draft" });
     // The work item query gives each its Package, by number and name.
     const mine = await rows(at.c1Pm);
     for (const id of [ownDraft, inReview, sent]) expect(mine.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Lighting") });
@@ -142,7 +142,8 @@ describe("building an Open Package", () => {
 describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () => {
   let pkg = { id: "", number: "" };
   let drafts: string[] = [];
-  let sent = ""; // A Submitted item K1 and the Owner see, in another Open Package of C1's.
+  // Another Open Package of C1's, of an item at C1's internal review. (A Package with a Submitted
+  // item is In Progress since RP-638, and seen by those who see the item since RP-641: RP-588-2.)
   let other = "";
 
   beforeAll(async () => {
@@ -150,8 +151,7 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
     drafts = [await draft(at, at.c1Engineer, "Tiles"), await draft(at, at.c1Engineer, "Sanitary ware")];
     for (const id of drafts) await ok(addItem(at.c1Engineer, pkg.id, id));
     other = (await createPackage(at.c1Pm, "Cables")).id;
-    sent = await submitted(at, at.c1Engineer, at.c1Pm, "Submitted cables");
-    await ok(addItem(at.c1Pm, other, sent));
+    await ok(addItem(at.c1Pm, other, await inInternalReview(at, at.c1Engineer, "Cables at review")));
   });
 
   it("C1's Members read it with its two Drafts", async () => {
@@ -171,19 +171,21 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
       for (const id of [pkg.id, other]) await expectHidden(by.get(`/v1/packages/${id}`), `${who} reads ${id}`);
       const listed = await by.get(`/v1/projects/${at.projectId}/packages`);
       if (listed.statusCode === 200) {
-        expect(listed.json(), who).toEqual({ packages: [] });
-        // The List's rows hold no Package: not of the Submitted item they see, nor any name or number of one.
+        // The In Progress Packages of earlier tests may be listed (RP-588-2); never these.
+        const ids = (listed.json().packages as PackageSummary[]).map((p) => p.id);
+        expect(ids, who).not.toContain(pkg.id);
+        expect(ids, who).not.toContain(other);
+        for (const text of ["Bathrooms – Tower 2", "Cables"]) expect(listed.body, who).not.toContain(text);
+        // The List's rows hold neither, nor their names.
         const seen = await rows(by);
-        for (const r of seen.values()) expect(r.package, who).toBeUndefined();
+        for (const r of seen.values()) expect([pkg.id, other], who).not.toContain(r.package?.id);
         const body = (await by.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`)).body;
-        for (const text of ["Bathrooms", "Cables", "PKG-"]) expect(body, who).not.toContain(text);
+        for (const text of ["Bathrooms – Tower 2", "Cables"]) expect(body, who).not.toContain(text);
       } else {
         // K1's Authorized Person is not a Project Member: the Project itself is hidden.
         await expectHidden(Promise.resolve(listed), who);
       }
     }
-    // The Owner and K1's manager do see the Submitted item itself.
-    for (const by of [at.k1Manager, owner]) expect((await rows(by)).has(sent)).toBe(true);
   });
 
   it("K1, C2 and the Owner can change nothing of it: every command is the same 404", async () => {
@@ -535,6 +537,120 @@ describe("on a Closed Project", () => {
     expect(p).toMatchObject({ name: name("Before closing"), items: [{ id: inIt }] });
     expect(p.actions).toEqual({ rename: false, addItems: false, removeItems: false, delete: false, submit: false });
     expect(await refusal(submitPackage(closing.c1Engineer, pkg.id))).toEqual(closed);
+  });
+});
+
+describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-2, RP-588-3)", () => {
+  let pkg = { id: "", number: "" };
+  let k1Electrical: Caller; // A K1 engineer who sees Electrical only.
+  let c1Name = { en: "", ar: "" };
+  let k1Name = { en: "", ar: "" };
+  const electricalItems: string[] = [];
+  const mechanicalItems: string[] = [];
+  const nothingOffered = { rename: false, addItems: false, removeItems: false, delete: false, submit: false };
+
+  /** The Tower's items whose Subject has "Plant room", as `by` reads them in the List, by id. */
+  async function listed(by: Caller): Promise<Map<string, WorkItemRow>> {
+    const list = (await ok(by.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50&q=${encodeURIComponent("Plant room")}`), 200)).json();
+    return new Map((list.items as WorkItemRow[]).map((r) => [r.id, r]));
+  }
+  const boardEntry = async (by: Caller) => {
+    const entries = (await listPackages(by)).filter((p) => p.id === pkg.id);
+    expect(entries.length).toBeLessThanOrEqual(1);
+    return entries[0];
+  };
+
+  beforeAll(async () => {
+    const participants = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants as {
+      id: string;
+      company: { id: string; legalName: { en: string; ar: string } };
+    }[];
+    const k1Participant = participants.find((p) => p.company.id === k1.company.companyId)!;
+    k1Name = k1Participant.company.legalName;
+    c1Name = participants.find((p) => p.id === at.c1ParticipantId)!.company.legalName;
+    k1Electrical = await projectMember(api, k1, k1Participant.id, ["engineer"], { trade: only(at.electrical) });
+
+    pkg = await createPackage(at.c1Pm, "Plant room – Tower 1");
+    for (let i = 1; i <= 6; i++) electricalItems.push(await readyForPm(`Plant room EL ${i}`));
+    for (let i = 1; i <= 2; i++) mechanicalItems.push(await readyForPm(`Plant room ME ${i}`, at.mechanical));
+    for (const id of [...electricalItems, ...mechanicalItems]) await ok(addItem(at.c1Pm, pkg.id, id));
+    expect((await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(8);
+    // K1's manager codes one of each Trade: an Electrical one A, a Mechanical one C.
+    await ok(at.k1Manager.post(`/v1/work-items/${electricalItems[0]}/pick-up`));
+    await take(at.k1Manager, electricalItems[0]!, "approve_a");
+    await ok(at.k1Manager.post(`/v1/work-items/${mechanicalItems[0]}/pick-up`));
+    await take(at.k1Manager, mechanicalItems[0]!, "revise_c", { remarks: "Resubmit with the pump curves" });
+  });
+
+  it("RP-588-2: K1's PM (Visibility all) reads 8; its engineer narrowed to Electrical reads 6 and the status, never the Mechanical items", async () => {
+    const summary = (counts: PackageSummary["counts"]): PackageSummary => ({
+      id: pkg.id,
+      projectId: at.projectId,
+      number: pkg.number,
+      name: name("Plant room – Tower 1"),
+      status: "in_progress",
+      // The owner by its Company's name, for every viewer (V14).
+      owner: { participantId: at.c1ParticipantId, companyName: c1Name },
+      counts,
+    });
+    const all = summary({ total: 8, open: 6, codes: { A: 1, C: 1 } });
+    for (const by of [at.c1Pm, at.k1Manager, owner]) {
+      expect(await boardEntry(by)).toEqual(all);
+      const p = await getPackage(by, pkg.id);
+      expect(p).toMatchObject(all);
+      expect(p.items).toHaveLength(8);
+    }
+
+    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } });
+    expect(await boardEntry(k1Electrical)).toEqual(narrowed);
+    const p = await getPackage(k1Electrical, pkg.id);
+    expect(p).toMatchObject(narrowed);
+    expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems].sort());
+    for (const i of p.items) expect(i.trade.id).toBe(at.electrical);
+    // Nothing of the Mechanical items: no id, no Subject, no number, no total of 8.
+    const mechanicalNumbers = await Promise.all(mechanicalItems.map(async (id) => (await detail(at.k1Manager, id)).documentNumber!));
+    const bodies = [(await k1Electrical.get(`/v1/projects/${at.projectId}/packages`)).body, (await k1Electrical.get(`/v1/packages/${pkg.id}`)).body];
+    for (const body of bodies) {
+      for (const text of [...mechanicalItems, ...mechanicalNumbers, "Plant room ME", '"total":8']) expect(body).not.toContain(text);
+    }
+    // Each Electrical item's row names its Package for them too.
+    const rowsSeen = await listed(k1Electrical);
+    for (const id of electricalItems) expect(rowsSeen.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Plant room – Tower 1") });
+  });
+
+  it("lists each item the viewer sees with its Document Number, Subject, Trade, 'With' whom and Review Code, as the List gives them", async () => {
+    for (const by of [at.c1Pm, at.k1Manager, k1Electrical]) {
+      const rowsSeen = await listed(by);
+      for (const item of (await getPackage(by, pkg.id)).items) {
+        const r = rowsSeen.get(item.id)!;
+        expect(item).toEqual({ id: r.id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome });
+      }
+    }
+    const items = new Map((await getPackage(at.c1Pm, pkg.id)).items.map((i) => [i.id, i]));
+    expect(items.get(electricalItems[0]!)).toMatchObject({ title: "Plant room EL 1", outcome: "A", with: null });
+    expect(items.get(mechanicalItems[0]!)).toMatchObject({ outcome: "C", with: null });
+    // With K1, by its Company's name only, for C1 (V14).
+    expect(items.get(electricalItems[1]!)).toMatchObject({ outcome: null, with: { kind: "company", companyName: k1Name } });
+    expect(items.get(electricalItems[1]!)!.documentNumber).toMatch(/\S/);
+  });
+
+  it("RP-588-3: C2 reads nothing of it, while K1 and the Owner do; and only C1 may change it", async () => {
+    await expectHidden(c2Engineer.get(`/v1/packages/${pkg.id}`));
+    expect((await listPackages(c2Engineer)).map((p) => p.id)).not.toContain(pkg.id);
+    expect((await c2Engineer.get(`/v1/projects/${at.projectId}/packages`)).body).not.toContain("Plant room");
+    expect((await c2Engineer.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`)).body).not.toContain("Plant room");
+
+    for (const by of [at.k1Manager, k1Electrical, owner]) {
+      expect((await getPackage(by, pkg.id)).actions).toEqual(nothingOffered);
+      await expectHidden(by.patch(`/v1/packages/${pkg.id}`, { name: name("Mine now") }));
+      await expectHidden(addItem(by, pkg.id, electricalItems[1]!));
+      await expectHidden(removeItem(by, pkg.id, electricalItems[1]!));
+      await expectHidden(by.request("DELETE", `/v1/packages/${pkg.id}`));
+      await expectHidden(submitPackage(by, pkg.id));
+    }
+    const p = await getPackage(at.c1Pm, pkg.id);
+    expect(p).toMatchObject({ name: name("Plant room – Tower 1"), actions: { rename: true, addItems: true, removeItems: false, delete: false } });
+    expect(p.items).toHaveLength(8);
   });
 });
 
