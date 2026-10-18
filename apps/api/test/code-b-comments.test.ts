@@ -14,7 +14,7 @@
 import { rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
 import { createDb, rabaedDefaultWorkflowId, readLatestPublishedDefinition } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { parseWorkflowDefinition, type WorkItemBoard, type WorkItemDetail, type WorkItemLinks, type WorkItemList } from "@rabaed/domain";
+import { parseWorkflowDefinition, type WorkItemBoard, type WorkItemLinks, type WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
@@ -59,7 +59,10 @@ const raisedFrom = async (by: Caller, source: string): Promise<WorkItemList["ite
   );
   return links.filter((l) => l.links.links.some((x) => x.kind === "raised_from" && x.workItemId === source)).map((l) => l.c);
 };
-const counts = async (by: Caller, id: string): Promise<WorkItemDetail["comments"]> => (await detail(by, id)).comments;
+const counts = async (by: Caller, id: string): Promise<{ open: number; closed: number }> => {
+  const line = (await detail(by, id)).raisedItems.find((f) => f.type.code === "CMT");
+  return { open: line?.open ?? 0, closed: line?.closed ?? 0 };
+};
 
 /** A MAR-like item of C1's, Submitted to K1 and with K1's manager at the Code, which they then take as B with `rows`. */
 async function closedAtB(title: string, rows: { comment: string; reference?: string }[]): Promise<string> {

@@ -68,3 +68,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
 | 20270607 | spec RP-649 | 4A | Review fixes |
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
+| 20270610 | RP-624 | 33 | raised_item_counts_by_type |
