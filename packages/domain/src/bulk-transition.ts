@@ -17,6 +17,15 @@ export const bulkTransitionRequest = takeTransitionRequest.omit({ recommendedCod
 });
 export type BulkTransitionRequest = z.input<typeof bulkTransitionRequest>;
 
+/**
+ * A Transition the viewer may take on an item in bulk now (it waits on them): its key,
+ * label and which Action Form it shows (`form`: the Screen Version, or the inline
+ * Action Form, as an opaque token). A selection shares a bulk Transition when every
+ * item in it offers one with the same key and `form` (spec RP-616 story 41).
+ */
+export const bulkOffer = z.object({ key: z.string(), label: bilingualText, form: z.string() });
+export type BulkOffer = z.infer<typeof bulkOffer>;
+
 /** A bulk Transition taken: the items it moved, as the Member reads them now. */
 export const bulkTransitionTaken = z.object({ taken: z.array(packageItem) });
 export type BulkTransitionTaken = z.infer<typeof bulkTransitionTaken>;

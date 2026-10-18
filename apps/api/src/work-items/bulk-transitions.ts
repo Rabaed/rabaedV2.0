@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { BulkStop, BulkStopReason, BulkTransitionRequest, PackageItem } from "@rabaed/domain";
+import type { BilingualText, BulkOffer, BulkStop, BulkStopReason, BulkTransitionRequest, PackageItem } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { takeTransitionIn, type TakeTransitionResult } from "./work-items.ts";
 
@@ -20,16 +20,18 @@ type Trx = Transaction<Database>;
 /** An item as the bulk check reads it: whether it waits on the Member, and the Action Form of the Transition they'd take on it. */
 type Candidate = { id: string; document_number: string | null; title: string; need: string | null; form: string | null };
 
+/** Which Action Form Transition `tr` shows: its pinned Screen Version, or its inline Action Form (none too). */
+const formToken = sql<string>`coalesce('screen:' || tr.screen_version_id::text, 'form:' || md5(coalesce(tr.action_form::text, 'none')))`;
+
 /**
  * Items `ids` the acting Member sees, in the order given, each with whether it waits
  * on them (app.need_my_action) and, when they may take `transition` on it now (as
- * the item's own page offers it, app.work_item_actions), its Action Form: the Screen
- * Version it shows, or the inline Action Form itself.
+ * the item's own page offers it, app.work_item_actions), its Action Form (formToken).
  */
 async function candidates(trx: Trx, ids: string[], transition: string): Promise<Candidate[]> {
   const { rows } = await sql<Candidate>`
     select w.id, w.document_number, w.title, app.need_my_action(w.id) as need,
-      (select coalesce('screen:' || tr.screen_version_id::text, 'form:' || md5(coalesce(tr.action_form::text, 'none')))
+      (select ${formToken}
         from app.work_item_actions(w.id) a (action, transition_key, label, transition_kind)
         join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
         where a.action = 'transition' and a.transition_key = ${transition}
@@ -39,6 +41,27 @@ async function candidates(trx: Trx, ids: string[], transition: string): Promise<
     order by u.n
   `.execute(trx);
   return rows;
+}
+
+/**
+ * What the acting Member may take in bulk on each of items `ids` they see (the
+ * Package page's selection, RP-646): on an item waiting on them, each Transition its
+ * own page offers them, with its Action Form; none on any other. By item id.
+ */
+export async function bulkOffers(trx: Trx, ids: string[]): Promise<Map<string, BulkOffer[]>> {
+  const offers = new Map<string, BulkOffer[]>(ids.map((id) => [id, []]));
+  if (ids.length === 0) return offers;
+  const { rows } = await sql<{ id: string; key: string; label: BilingualText; form: string }>`
+    select w.id, a.transition_key as key, a.label, ${formToken} as form
+    from unnest(${ids}::uuid[]) with ordinality as u (id, n)
+    join work_item w on w.id = u.id
+    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, m)
+    join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
+    where a.action = 'transition' and app.need_my_action(w.id) = 'waiting'
+    order by u.n, a.m
+  `.execute(trx);
+  for (const r of rows) offers.get(r.id)?.push({ key: r.key, label: r.label, form: r.form });
+  return offers;
 }
 
 /** The first item that can't take the Transition with the others, and why; null when none. */
@@ -55,7 +78,7 @@ function firstStop(items: Candidate[]): { item: Candidate; reason: BulkStopReaso
 export type BulkTransitionResult =
   | { ok: true; taken: PackageItem[] }
   | { ok: false; reason: "bulk_refused"; stoppedBy: BulkStop }
-  | { ok: false; reason: "not_found" | "not_confirmed" };
+  | { ok: false; reason: "not_found" | "not_confirmed" | "idempotency_key_reused" };
 
 /** Undoes a bulk Transition's transaction, answering `result`. */
 class Rollback extends Error {
@@ -96,11 +119,18 @@ export async function takeBulkTransition(db: Db, memberId: string, input: Requir
   const ids = [...new Set(input.workItemIds)];
   try {
     return await withMember(db, memberId, async (trx): Promise<BulkTransitionResult> => {
+      // The request's key first: the same request again waits for this one to commit, then replays.
+      await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/bulk/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
       const items = await candidates(trx, ids, input.transition);
       // One the Member doesn't see is the plain 404, whichever it is.
       if (items.length !== ids.length) return { ok: false, reason: "not_found" };
       if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
-      const stop = firstStop(items);
+      // Applied before: every item's key is used, and each take below replays. Some only: the key was used for other items.
+      const keys = ids.map((id) => itemKey(input.idempotencyKey, id));
+      const { rows } = await sql<{ used: number }>`select app.command_keys_used(${keys}::uuid[]) as used`.execute(trx);
+      const used = rows[0]!.used;
+      if (used > 0 && used < keys.length) return { ok: false, reason: "idempotency_key_reused" };
+      const stop = used === 0 ? firstStop(items) : null;
       if (stop) return { ok: false, reason: "bulk_refused", stoppedBy: { ...asItem(stop.item), reason: stop.reason } };
 
       for (const item of items) {

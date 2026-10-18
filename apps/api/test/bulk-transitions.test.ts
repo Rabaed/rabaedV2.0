@@ -36,7 +36,7 @@ beforeAll(async () => {
   const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
   c2Engineer = await projectMember(api, c2, c2Participant, ["engineer"]);
-  k1ParticipantId = (await k1.caller.get(`/v1/projects/${at.projectId}/participants`))
+  k1ParticipantId = (await at.k1Manager.get(`/v1/projects/${at.projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
 });
@@ -166,21 +166,127 @@ describe("a bulk Transition is all or nothing", () => {
   it("an item its own Transition refuses undoes the ones taken before it: nothing is Submitted", async () => {
     const costed = await ruledAtPm("Costed", { cost: 12_000 });
     const uncosted = await ruledAtPm("No cost");
+    const before = await detail(at.c1Pm, costed);
     const refused = await refusal(bulk(at.c1Pm, [costed, uncosted], { transition: "submit_costed" }));
     expect(refused.status, JSON.stringify(refused.body)).toBe(409);
     expect(refused.body).toEqual({
       error: "bulk_refused",
       stoppedBy: {
         id: uncosted,
-        documentNumber: null,
+        documentNumber: (await detail(at.c1Pm, uncosted)).documentNumber,
         title: "No cost",
         reason: "validation_failed",
         message: { en: "Enter the cost impact before you submit.", ar: "أدخل الأثر المالي قبل التقديم." },
       },
     });
-    // The first was taken, then undone with the rest: still at C1's review, unnumbered, K1 reads nothing.
-    expect(await detail(at.c1Pm, costed)).toMatchObject({ step: { key: "internal_review" }, documentNumber: null });
+    // The first was taken, then undone with the rest: still at C1's review, as it was, and K1 reads nothing.
+    expect(await detail(at.c1Pm, costed)).toMatchObject({ step: { key: "internal_review" }, documentNumber: before.documentNumber });
     await expectHidden(at.k1Manager.get(`/v1/work-items/${costed}`));
     expect((await history(at.c1Pm, costed)).events.filter((e) => e.type === "transition")).toHaveLength(1);
+  });
+
+  it("the same request again applies nothing and answers the same items", async () => {
+    const items = [await atK1("Twice A"), await atK1("Twice B")];
+    const key = randomUUID();
+    const first = (await ok(bulk(at.k1Manager, items, { transition: "approve_a" }, key), 200)).json();
+    expect((await ok(bulk(at.k1Manager, items, { transition: "approve_a" }, key), 200)).json()).toEqual(first);
+    for (const id of items) expect((await history(at.c1Pm, id)).events.filter((e) => e.outcome === "A")).toHaveLength(1);
+    // The key used for other items is refused, and moves nothing.
+    const other = await atK1("Twice C");
+    const reused = await refusal(bulk(at.k1Manager, [items[0]!, other], { transition: "approve_a" }, key));
+    expect(reused).toEqual({ status: 422, body: { error: "idempotency_key_reused" } });
+    expect(await whereFor(at.k1Manager, other)).toMatchObject({ offered: expect.arrayContaining(["approve_a"]) });
+  });
+});
+
+// A submittal Type on the test Workflow with actions (RP-431): K1's engineer sends it
+// to K1's manager with "Assign to", and its Code A asks for Remarks in an Action Form
+// of its own, unlike the ruled Type's Code A.
+const ACTED = "BULKA";
+
+/** A Draft of `type` raised by C1's engineer, Submitted by C1's PM and picked up by K1's engineer. */
+async function atK1Engineer(type: string, model: string): Promise<string> {
+  const res = await ok(
+    at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type, title: model, answers: { model, trade: at.electrical, location: at.buildingA } }),
+    201,
+  );
+  const id = res.json().id as string;
+  await take(at.c1Engineer, id, "send_for_review");
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(at.c1Pm, id, "submit");
+  await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+  return id;
+}
+
+let k1Engineer: Caller;
+let k1EngineerId = "";
+let k1Approver: Caller; // A K1 manager "Assign to" picks.
+let k1ApproverId = "";
+
+describe('one Action Form and one "Assign to" for all', () => {
+  beforeAll(async () => {
+    await addActionsType(migrator, ACTED);
+    const engineer = await memberOnProject(api, k1, k1ParticipantId, ["engineer"]);
+    k1Engineer = engineer.caller;
+    k1EngineerId = engineer.id;
+    const approver = await memberOnProject(api, k1, k1ParticipantId, ["manager"]);
+    k1Approver = approver.caller;
+    k1ApproverId = approver.id;
+  });
+
+  it('"Assign to" picks one Member for all: each lands with them, waiting on them', async () => {
+    const items = [await atK1Engineer(ACTED, "Assigned A"), await atK1Engineer(ACTED, "Assigned B")];
+    await ok(bulk(k1Engineer, items, { transition: "send_to_manager", assignTo: k1ApproverId }), 200);
+    for (const id of items) expect(await whereFor(k1Approver, id)).toMatchObject({ step: "consultant_approval", offered: expect.arrayContaining(["approve_a"]) });
+    // A pick its Transition doesn't offer stops it at the first item, and nothing moves.
+    const more = [await atK1Engineer(ACTED, "Assigned C"), await atK1Engineer(ACTED, "Assigned D")];
+    const refused = await refusal(bulk(k1Engineer, more, { transition: "send_to_manager", assignTo: k1EngineerId }));
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+    expect(refused.body.stoppedBy).toMatchObject({ id: more[0], reason: "assignee_not_offered" });
+    for (const id of more) expect((await detail(k1Engineer, id)).step.key).toBe("consultant_review");
+  });
+
+  it("is refused when an item offers the Transition with another Action Form (Screen Version)", async () => {
+    const acted = await atK1Engineer(ACTED, "Own Code form");
+    await take(k1Engineer, acted, "send_to_manager", { assignTo: k1ApproverId });
+    const ruled = await atK1Engineer(RULED, "Ruled Code form");
+    await take(k1Engineer, ruled, "send_to_manager");
+    await ok(k1Approver.post(`/v1/work-items/${ruled}/pick-up`));
+    for (const id of [acted, ruled]) expect((await whereFor(k1Approver, id)).offered).toContain("approve_a");
+
+    const refused = await refusal(bulk(k1Approver, [acted, ruled], { transition: "approve_a", answers: { remarks: "Fine" } }));
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+    expect(refused.body.stoppedBy).toMatchObject({ id: ruled, title: "Ruled Code form", reason: "different_action_form" });
+    expect((await detail(k1Approver, acted)).step.key).toBe("consultant_approval");
+  });
+});
+
+describe("the Package's answer says which Transitions each item offers in bulk", () => {
+  it("K1's manager reads Code A on the items waiting on them, with one Action Form; nothing on one still in the pool; C1 nothing on any", async () => {
+    const pkg = (await ok(at.c1Pm.post(`/v1/projects/${at.projectId}/packages`, { name: bilingual("Bulk set") }), 201)).json() as { id: string };
+    const items: string[] = [];
+    for (const title of ["Set A", "Set B", "Set C"]) {
+      const id = await inInternalReview(at, at.c1Engineer, title);
+      await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+      await ok(at.c1Pm.post(`/v1/packages/${pkg.id}/items`, { workItemId: id }));
+      items.push(id);
+    }
+    await ok(at.c1Pm.post(`/v1/packages/${pkg.id}/submit`, { confirmed: true, idempotencyKey: randomUUID() }), 200);
+    const [a, b, pooled] = items as [string, string, string];
+    for (const id of [a, b]) await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+
+    const read = async (by: Caller) => {
+      const p = (await ok(by.get(`/v1/packages/${pkg.id}`), 200)).json() as PackageDetail;
+      return new Map(p.items.map((i) => [i.id, i.bulkTransitions]));
+    };
+    const k1Reads = await read(at.k1Manager);
+    const codeA = k1Reads.get(a)!.find((t) => t.key === "approve_a");
+    expect(codeA).toMatchObject({ key: "approve_a", label: { en: expect.any(String) } });
+    expect(k1Reads.get(b)).toContainEqual(codeA);
+    expect(k1Reads.get(pooled)).toEqual([]);
+    for (const id of items) expect((await read(at.c1Pm)).get(id)).toEqual([]);
+
+    await ok(bulk(at.k1Manager, [a, b], { transition: "approve_a" }), 200);
+    expect((await read(at.k1Manager)).get(a)).toEqual([]);
   });
 });

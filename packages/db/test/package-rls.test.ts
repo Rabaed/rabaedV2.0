@@ -422,3 +422,54 @@ describe("RP-642: Done follows the closures, in the same transaction, and a Revi
     await refused(sql`select package_id from work_item where id = ${item}::uuid`);
   });
 });
+
+describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", () => {
+  type Event = { type: string; audience: string; company_name: { en: string } | null; member_name: { en: string } | null; outcome: string | null };
+  const items: string[] = [];
+  let single = "";
+
+  /** Item `id`'s history as `as` reads it (app.work_item_history), without times. */
+  const historyOf = (as: string, id: string) =>
+    call<Event>(as, sql`select type, audience, company_name, member_name, outcome from app.work_item_history(${id}::uuid) order by seq`);
+
+  beforeAll(async () => {
+    for (const title of ["Bulk 1", "Bulk 2", "Bulk 3", "Single"]) {
+      const id = await draft(c1.member, title);
+      expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+      expect(await pickUp(c1Pm, id)).toBe("picked_up");
+      expect(await take(c1Pm, id, "submit")).toBe("applied");
+      expect(await pickUp(k1.member, id)).toBe("picked_up");
+      expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+      expect(await pickUp(k1.ap, id)).toBe("picked_up");
+      if (title === "Single") single = id;
+      else items.push(id);
+    }
+    // A bulk Code takes each item's own Code through app.take_transition, all in one transaction (as the api does).
+    const outcomes = await withMember(app, k1.ap, async (trx) => {
+      const taken: string[] = [];
+      for (const id of items) {
+        const { rows } = await sql<{ outcome: string }>`
+          select app.take_transition(${id}::uuid, 'approve_a', '{}'::jsonb, 'K1 only', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
+        `.execute(trx);
+        taken.push(rows[0]!.outcome);
+      }
+      return taken;
+    });
+    expect(outcomes).toEqual(["applied", "applied", "applied"]);
+    expect(await take(k1.ap, single, "approve_a")).toBe("applied");
+  });
+
+  it("C1 reads three separate Code events naming K1's Company and the signer, as for a single Code, never K1's internal Steps or Notes", async () => {
+    const control = await historyOf(c1Pm, single);
+    const code = control.filter((e) => e.outcome === "A");
+    expect(code).toHaveLength(1);
+    expect(code[0]).toMatchObject({ audience: "shared", company_name: { en: "K1" }, member_name: { en: "ap" } });
+    for (const id of items) {
+      const reads = await historyOf(c1Pm, id);
+      expect(reads).toEqual(control);
+      // K1's own move to its manager and its Internal Note stay with K1 (V5).
+      expect(reads.some((e) => e.type === "internal_note" || (e.audience === "internal" && e.company_name?.en === "K1"))).toBe(false);
+      expect((await historyOf(k1.ap, id)).filter((e) => e.type === "internal_note")).toHaveLength(1);
+    }
+  });
+});
