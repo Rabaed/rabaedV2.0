@@ -159,6 +159,21 @@ const answers = {
   // Submit Package (RP-638): no item in it is left to Submit. Not ready, it is the route's
   // own 409 `package_not_ready`, listing what stops it.
   nothing_to_submit: () => new HttpError(409, "nothing_to_submit"),
+  // The Submittal Register Import (RP-637): a register the reader can't read, or a sheet or
+  // header row it doesn't have (the body may add the reader's numbers, never a cell); a
+  // mapped column past the header row's; a preview with no good row to create; a preview a
+  // change in the Project has overtaken since (a good row no longer passes: preview again).
+  unsupported_type: () => new HttpError(422, "unsupported_type"),
+  unreadable: () => new HttpError(422, "unreadable"),
+  not_utf8: () => new HttpError(422, "not_utf8"),
+  unpacks_too_large: () => new HttpError(422, "unpacks_too_large"),
+  too_many_rows: () => new HttpError(422, "too_many_rows"),
+  sheet_not_found: () => new HttpError(422, "sheet_not_found"),
+  header_row_not_found: () => new HttpError(422, "header_row_not_found"),
+  empty_header_row: () => new HttpError(422, "empty_header_row"),
+  column_not_found: () => new HttpError(422, "column_not_found"),
+  nothing_to_import: () => new HttpError(409, "nothing_to_import"),
+  preview_outdated: () => new HttpError(409, "preview_outdated"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
@@ -181,9 +196,11 @@ export function refusal(result: {
   steps?: number;
   company?: BilingualText;
   lacking?: OutcomesAndStages;
+  details?: Record<string, number>;
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
+    ...(result.details ?? {}),
     ...(result.errors ? { fields: result.errors } : result.message ? { message: result.message } : {}),
     ...(result.issues ? { issues: result.issues } : {}),
     ...(result.problems ? { problems: result.problems } : {}),
