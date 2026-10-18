@@ -152,7 +152,7 @@ export function PackagePage({
   };
 
   return (
-    <div data-package-page="" className="flex min-w-0 flex-col gap-3.5">
+    <div data-package-page="" className="flex min-w-0 flex-col gap-4">
       <nav aria-label={labels.breadcrumb} className="flex items-center gap-1.5 text-sm text-muted">
         <Link href={backHref} className={cn("inline-flex items-center gap-1.5 rounded-xs font-medium text-text-secondary hover:text-text", focusRing)}>
           <Icon name="arrow-left" size={16} />
@@ -283,7 +283,7 @@ function Counts({ pkg, locale, labels }: { pkg: PackageDetail; locale: Locale; l
   const ring: CSSProperties = { background: `conic-gradient(var(--color-success) ${share}%, var(--color-neutral-tint) 0)` };
   const tile = "flex min-w-[88px] flex-col items-start gap-0.5 rounded-md bg-surface-subtle px-3 py-2";
   return (
-    <section aria-labelledby="package-progress" className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
+    <section aria-labelledby="package-progress" className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-4">
       <h2 id="package-progress" className="text-notes font-bold tracking-wide text-muted uppercase rtl:tracking-normal">
         {labels.progress}
       </h2>
