@@ -30,6 +30,7 @@ export const rabaedDefaultScreens = [
   "inspection_failed",
   "comment_resolution",
   "snag_resolution",
+  "question_answer",
 ] as const;
 
 /**
@@ -112,6 +113,8 @@ export const rabaedDefaultTypes = [
   { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null, history: ["WIR-1.json"] },
   { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null, history: null },
   { type: "SNG", form: "SNG.json", workflow: "SNG.json", variants: null, history: null },
+  { type: "QSN", form: "QST.json", workflow: "QSN.json", variants: null, history: null },
+  { type: "QSC", form: "QST.json", workflow: "QSC.json", variants: null, history: null },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>
