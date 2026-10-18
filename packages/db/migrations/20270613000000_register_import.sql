@@ -120,11 +120,13 @@ create policy member_reads_register_import_rows on submittal_register_import_row
 
 -- Helpers ---------------------------------------------------------------------
 
--- Whether a Member of p_participant_id (base role p_base_role) may raise Work Item Type
--- p_type_id on p_project_id, as app.create_work_item decides it: a Form to start from,
--- and a Workflow bound for the Participant whose Draft Step their base role holds.
+-- Whether Project Member p_project_member_id of p_participant_id (base role p_base_role) may
+-- raise Work Item Type p_type_id on p_project_id, as app.create_work_item decides it
+-- (20270611000000_raiser_step_holder.sql): a Form to start from, and a Workflow bound for the
+-- Participant whose Draft Step is either held by the raiser and asks a Function Permission
+-- the Member holds, or held by their base role.
 create function app.register_import_type_raisable(
-  p_project_id uuid, p_type_id uuid, p_type_code text, p_participant_id uuid, p_base_role text
+  p_project_id uuid, p_type_id uuid, p_type_code text, p_participant_id uuid, p_project_member_id uuid, p_base_role text
 ) returns boolean
   language plpgsql stable security definer
   set search_path = pg_catalog, public
@@ -133,13 +135,17 @@ create function app.register_import_type_raisable(
       return app.new_item_form_version(p_project_id, p_type_code) is not null
         and exists (
           select 1 from workflow_step s
+          join work_item_type t on t.id = p_type_id
           where s.workflow_version_id = app.new_item_workflow_version(p_project_id, p_type_id, p_participant_id)
             and app.is_draft_step(s.id)
-            and s.actor_rule ->> 'base_role' = p_base_role
+            and case
+              when s.actor_rule ? 'raiser' then app.project_member_has_permission(p_project_member_id, t.module_key, s.actor_rule ->> 'permission')
+              else s.actor_rule ->> 'base_role' = p_base_role
+            end
         );
     end
   $$;
-revoke all on function app.register_import_type_raisable(uuid, uuid, text, uuid, text) from public;
+revoke all on function app.register_import_type_raisable(uuid, uuid, text, uuid, uuid, text) from public;
 
 -- The caller as an importer on p_project_id, found as app.create_work_item finds a raiser:
 -- their active Project Member row of their own Company's active Participant. No row off
@@ -179,7 +185,7 @@ create function app.register_import_raisable_types(p_project_id uuid)
         from app.register_importer(p_project_id) i
         cross join work_item_type t
         where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
-          and app.register_import_type_raisable(p_project_id, t.id, t.code, i.participant_id, i.base_role)
+          and app.register_import_type_raisable(p_project_id, t.id, t.code, i.participant_id, i.project_member_id, i.base_role)
         order by t.code;
     end
   $$;

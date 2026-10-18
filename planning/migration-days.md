@@ -58,7 +58,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270528 | RP-644 | 5D | Register Import: Packages from an import, downloads and saved mappings |
 | 20270529 | spec RP-631 | 5A | Review fixes |
 | 20270530 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
-| 20270609 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524 sorts before main's latest migration) |
 | 20270531 | RP-656 | 4D | Annotated photo beside the original (moved from 20270425: RP-90's 20270429 is on `main`) |
 | 20270601 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 (moved from 20270419) |
 | 20270602 | RP-652 | 4C | Show Inspections in the Submittals tab (moved from 20270424) |
@@ -70,3 +69,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270610 | RP-624 | 33 | raised_item_counts_by_type |
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
+| 20270613 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524 and 20270609 sort before main's latest migration) |
