@@ -15,6 +15,7 @@ const project = (code: string, name: ProjectSummary["name"], status: ProjectSumm
   isProjectAdmin: false,
   needMyAction: 0,
   modules: ["submittals"],
+  showInspectionsInSubmittals: false,
 });
 
 const projects = [
