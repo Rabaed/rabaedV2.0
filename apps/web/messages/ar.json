@@ -1021,6 +1021,11 @@
       "unavailable": "لم ينجح ذلك. حاول مرة أخرى."
     }
   },
+  "documentalRecord": {
+    "download": "تنزيل PDF",
+    "notReady": "السجل غير جاهز بعد. حاول مرة أخرى بعد دقيقة.",
+    "unavailable": "لم ينجح ذلك. حاول مرة أخرى."
+  },
   "watch": {
     "watch": "مراقبة",
     "watching": "قيد المراقبة",
