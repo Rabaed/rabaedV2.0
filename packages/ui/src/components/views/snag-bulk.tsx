@@ -109,6 +109,11 @@ export function SnagBulkBar({
   const { labels } = actions;
   const [dialog, setDialog] = useState<"reassign" | "move" | null>(null);
   const n = (value: number) => formatNumber(value, locale);
+  // Once something changed, the rows chosen are not the ones to act on again: the choice starts over.
+  const closeDialog = (changed: boolean) => {
+    setDialog(null);
+    if (changed) onClear();
+  };
   return (
     <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-brand-tint px-[14px] py-2 text-[13px] font-semibold text-brand-fg">
       <span role="status">{labels.selected(n(ids.length), ids.length)}</span>
@@ -128,8 +133,8 @@ export function SnagBulkBar({
       <Button variant="ghost" size="sm" onClick={onClear}>
         {labels.clearSelection}
       </Button>
-      {dialog === "reassign" && <ReassignDialog ids={ids} locale={locale} actions={actions} onClose={() => setDialog(null)} />}
-      {dialog === "move" && <MoveDialog ids={ids} stages={stages} locale={locale} actions={actions} onClose={() => setDialog(null)} />}
+      {dialog === "reassign" && <ReassignDialog ids={ids} locale={locale} actions={actions} onClose={closeDialog} />}
+      {dialog === "move" && <MoveDialog ids={ids} stages={stages} locale={locale} actions={actions} onClose={closeDialog} />}
     </div>
   );
 }
@@ -208,19 +213,20 @@ function BulkDialog({
   description: string;
   labels: SnagBulkLabels;
   phase: Phase;
-  onClose: () => void;
+  onClose: (changed: boolean) => void;
   confirm: { label: string; run: () => void };
   canConfirm: boolean;
   children: ReactNode;
   outcome: ReactNode;
 }) {
   const finished = phase.kind === "done";
+  const changed = phase.kind === "done" && phase.result.done.length > 0;
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose(changed)}>
       <DialogContent title={title} description={description} closeLabel={labels.close}>
         {phase.kind === "done" ? outcome : phase.kind === "failed" ? <p role="alert">{labels.failed}</p> : children}
         <DialogFooter>
-          <Button variant="secondary" onClick={onClose} disabled={phase.kind === "working"}>
+          <Button variant="secondary" onClick={() => onClose(changed)} disabled={phase.kind === "working"}>
             {finished || phase.kind === "failed" ? labels.close : labels.cancel}
           </Button>
           {!finished && phase.kind !== "failed" && (
@@ -235,7 +241,7 @@ function BulkDialog({
 }
 
 /** Reassign: one Member of the viewer's own Company, from the Step Pools of the chosen items they hold. */
-function ReassignDialog({ ids, locale, actions, onClose }: { ids: string[]; locale: Locale; actions: SnagBulkActions; onClose: () => void }) {
+function ReassignDialog({ ids, locale, actions, onClose }: { ids: string[]; locale: Locale; actions: SnagBulkActions; onClose: (changed: boolean) => void }) {
   const { labels } = actions;
   const n = (value: number) => formatNumber(value, locale);
   const [offered, setOffered] = useState<SnagBulkCandidates | null | "loading">("loading");
@@ -290,7 +296,7 @@ function ReassignDialog({ ids, locale, actions, onClose }: { ids: string[]; loca
 }
 
 /** Move Stage: the Stage to move the chosen items to; each goes by the Transition it is offered, if any. */
-function MoveDialog({ ids, stages, locale, actions, onClose }: { ids: string[]; stages: readonly Stage[]; locale: Locale; actions: SnagBulkActions; onClose: () => void }) {
+function MoveDialog({ ids, stages, locale, actions, onClose }: { ids: string[]; stages: readonly Stage[]; locale: Locale; actions: SnagBulkActions; onClose: (changed: boolean) => void }) {
   const { labels } = actions;
   const n = (value: number) => formatNumber(value, locale);
   const [stage, setStage] = useState("");
