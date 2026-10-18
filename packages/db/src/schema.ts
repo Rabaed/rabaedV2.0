@@ -530,6 +530,8 @@ export interface WorkItemTypeTable {
   form_definition_id: string | null;
   /** RP-594: closing at Code A or B adds the item's supplier (Form keys supplier_name_en / _ar) to the Approved Supplier List. The Rabaed Default SAR. */
   adds_approved_supplier: Generated<boolean>;
+  /** RP-668: created only from another item, never raised directly: the Rabaed Default CMT (Code B's Comments). */
+  raised_from_item_only: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
