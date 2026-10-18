@@ -5,7 +5,7 @@ import { parseActionForm } from "./action-form.ts";
 import { formFields, isAnswerField, type FormFieldType, type FormOption, type FormSchema } from "./form.ts";
 import type { StageCategory } from "./chain-bucket.ts";
 import { transitionFieldScope, type WorkflowProblem } from "./workflow-checks.ts";
-import type { Restriction, TransitionAction, Validation, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
+import { actorRole, type Restriction, type TransitionAction, type Validation, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 import type { NotificationRecipient } from "./workflow-definition.ts";
 import type { BaseRole } from "./project.ts";
 
@@ -448,13 +448,13 @@ export type NotificationChoices = {
   holder: { always: true };
   raiser: boolean;
   watchers: boolean;
-  /** The Positions of the acting Participant (the role of the Transition's source Step), ticked when named. */
+  /** The Positions of the acting Participant (the role of the Transition's source Step), ticked when named; none at a Step held by the raiser, whose role is the item's. */
   positions: { key: string; name: BilingualText; on: boolean }[];
 };
 
 export function notificationChoices(t: WorkflowTransition, steps: readonly WorkflowStep[], positions: readonly PositionOption[]): NotificationChoices {
   const named = t.notifications ?? [];
-  const role = steps.find((s) => s.key === t.from)?.actor?.role;
+  const role = actorRole(steps.find((s) => s.key === t.from)?.actor);
   return {
     holder: { always: true },
     raiser: named.some((n) => n.to === "raiser"),

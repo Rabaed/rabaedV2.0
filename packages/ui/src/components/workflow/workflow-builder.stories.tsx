@@ -212,6 +212,21 @@ export const StepSelected: Story = {
   },
 };
 
+/** RP-622: the Draft Step held by the raiser, whatever its role: "The raiser" in the holder select, its pool hint, no Positions. */
+export const StepHeldByRaiser: Story = {
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickStep(canvas, "draft", locale);
+    const editor = editorOf(canvas, labels);
+    await pickOption(editor.getByRole("combobox", { name: labels.role }), labels.map.role("raiser"));
+    await expect(editor.getByText(labels.poolHint(`${labels.map.role("raiser")} · ${labels.map.permission("create")}`))).toBeVisible();
+    await expect(editor.queryByText(labels.positions)).toBeNull();
+    await waitFor(() => expect(args.onChange).toHaveBeenLastCalledWith(expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", actor: { raiser: true, permission: "create" } })]) })));
+  },
+};
+
 /** A Send Back to the Draft Step (ADR 0021): what the raiser may change after it, "Comment only" until set. */
 const sentBackDraft: WorkflowDefinition = {
   ...builderDraft,

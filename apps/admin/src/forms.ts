@@ -72,7 +72,7 @@ export async function publishFormVersion(migratorDb: Db, formDefinitionId: strin
  */
 async function typeWorkflows(db: Db, formDefinitionId: string): Promise<WorkflowStepHolder[][]> {
   const { rows } = await sql<{ type_id: string; key: string; role: string | null; draft: boolean }>`
-    select t.id as type_id, s.key, s.actor_rule ->> 'base_role' as role, app.is_draft_step(s.id) as draft
+    select t.id as type_id, s.key, app.actor_holder(s.actor_rule) as role, app.is_draft_step(s.id) as draft
     from work_item_type t
     join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
       and v.version_no = ${latestPublishedVersionNo(sql.ref("t.workflow_definition_id"))}
