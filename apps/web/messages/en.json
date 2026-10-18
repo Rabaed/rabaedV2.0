@@ -1029,6 +1029,7 @@
     "conditional": "Entered only when a condition holds",
     "error": "Has an error",
     "createsItems": "Creates items in the Snag List",
+    "raiser": "The raiser",
     "everyStep": "Every Company's Steps are shown, including internal ones: a Workflow describes a process, not anyone's work.",
     "newerVersion": "This item runs on Version {version}. The workflow was updated to Version {latest}.",
     "grouped": "Some Steps are grouped because they are internal to another company.",

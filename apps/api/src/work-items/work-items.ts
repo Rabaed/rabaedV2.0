@@ -329,7 +329,7 @@ async function workflowStepsOf(trx: Trx, workflowVersionIds: readonly string[]):
     -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Stage of category draft, in any
     -- Module, of the Stage set the Workflow is published against (RP-428): its Project's for a Project's own
     -- Workflow, the Rabaed Defaults' for any other.
-    select s.workflow_version_id as version_id, s.key, s.actor_rule ->> 'base_role' as role,
+    select s.workflow_version_id as version_id, s.key, app.actor_holder(s.actor_rule) as role,
       exists (
         select 1 from stage st
         where st.key = s.stage_key and st.category = 'draft'
@@ -401,7 +401,8 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
     const steps = await workflowStepsOf(trx, [...new Set(versions)]);
     const types = rows.filter((r) => {
       const draft = r.workflow_version_id ? steps.get(r.workflow_version_id)?.steps.find((s) => s.draft) : undefined;
-      return draft !== undefined && draft.role === r.base_role;
+      // A Draft held by the raiser is any Participant's (RP-622); app.create_work_item checks its permission.
+      return draft !== undefined && (draft.role === r.base_role || draft.role === "raiser");
     });
     return { types: types.map((r) => ({ code: r.code, name: r.name })) };
   });

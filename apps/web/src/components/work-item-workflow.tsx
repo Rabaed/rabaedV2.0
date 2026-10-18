@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, stepAgeLabel, type Locale, type WorkItemWorkflowMap } from "@rabaed/domain";
+import { actorRole, formatNumber, stepAgeLabel, type Locale, type WorkItemWorkflowMap } from "@rabaed/domain";
 import {
   AgeDots,
   Button,
@@ -46,7 +46,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
       canvas: t("canvas"),
       list: t("listName"),
       outcome: t("outcome"),
-      role: (role) => tRoles(role),
+      role: (role) => (role === "raiser" ? t("raiser") : tRoles(role)),
       permission: (permission) => t(`permissions.${permission}`),
       outcomeMode: (mode) => t(`outcomeModes.${mode}`),
       kind: (kind) => t(`kinds.${kind}`),
@@ -64,7 +64,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
   );
   const version = formatNumber(map.versionNo, locale);
   const name = map.name[locale];
-  const folded = map.definition.steps.some((s) => s.actor && s.actor.role !== map.viewerRole);
+  const folded = map.definition.steps.some((s) => s.actor && actorRole(s.actor) !== map.viewerRole);
   const shared = { definition: map.definition, stages: map.stages, locale, labels, viewerRole: map.viewerRole, position: map.position };
   const currentDetail =
     stepAgeWeeks !== null && map.position?.kind !== "closed" ? (

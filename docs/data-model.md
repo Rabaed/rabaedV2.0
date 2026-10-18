@@ -190,7 +190,7 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 - `edits_form` (RP-514, ADR 0019): whether the raiser's Form is edited at the Step, by the Member holding it, before the first Submit (or at a Step a Send Back leads to). Null is the default, `app.step_edits_form`: a Step of the Draft Step's role held with the Draft Step's Function Permission (form-engine.md §4).
 - `drafts_visible_to` (RP-514, ADR 0019): on the Draft Step only; null is `company`. `author`: a Draft is seen by the Member holding it alone (visibility.md V1).
 - `after_send_back` (as built, RP-580; ADR 0021): on a raiser's Step a `send_back` leads to, what the raiser may change after a Send Back to it, until the next Submit: `comment` (nothing of the Form) or `edit_form`. Every Version saved or published since RP-580 sets it there (`comment` when left out; `app.publish_workflow_draft` fills it on every publish); null, only on Versions published before, is `edit_form` (form-engine.md §4).
-- `actor_rule` says who can hold the Step: base role or project role, required permission (e.g. `approve`), and optional default assignee resolution. The Participant is resolved at runtime from the item's Visibility values; that is how "Electrical goes to Consultant A" works.
+- `actor_rule` says who can hold the Step: base role or project role (`base_role`), or the raiser whatever its role (`{"raiser": true, …}`, RP-622, workflow-engine.md §3.1), required permission (e.g. `approve`), and optional default assignee resolution. The Participant is resolved at runtime from the item's Visibility values; that is how "Electrical goes to Consultant A" works.
 - `issue_code` marks the final review Step.
 
 **workflow_transition**
