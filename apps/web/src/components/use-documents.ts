@@ -177,14 +177,25 @@ const shownImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
  * their thumbnails: the same download URLs the API signs for opening them.
  */
 export function useImageUrls(workItemId: string, documents: readonly DocumentSummary[]): Readonly<Record<string, string>> {
+  return usePhotoUrls(documents.map((d) => ({ workItemId, documentId: d.id, contentType: d.contentType })));
+}
+
+/**
+ * Short-lived image URLs for photos of any items, by Document id (an item page's thumbnails,
+ * the Snag List's rows, RP-94): only those of a type the browser shows, each asked once.
+ */
+export function usePhotoUrls(photos: readonly { workItemId: string; documentId: string; contentType: string }[]): Readonly<Record<string, string>> {
   const [urls, setUrls] = useState<Readonly<Record<string, string>>>({});
-  const wanted = documents.filter((d) => shownImageTypes.has(d.contentType)).map((d) => d.id);
-  const missing = wanted.filter((id) => !(id in urls)).join(",");
+  const missing = photos
+    .filter((p) => shownImageTypes.has(p.contentType) && !(p.documentId in urls))
+    .map((p) => `${p.workItemId}/${p.documentId}`)
+    .join(",");
   useEffect(() => {
     if (!missing) return;
     let current = true;
     void Promise.all(
-      missing.split(",").map(async (id) => {
+      missing.split(",").map(async (key) => {
+        const [workItemId, id] = key.split("/") as [string, string];
         const res = await fetch(`/api/v1/work-items/${workItemId}/documents/${id}/download`).catch(() => null);
         return res?.ok ? ([id, ((await res.json()) as { url: string }).url] as const) : null;
       }),
@@ -194,6 +205,6 @@ export function useImageUrls(workItemId: string, documents: readonly DocumentSum
     return () => {
       current = false;
     };
-  }, [workItemId, missing]);
+  }, [missing]);
   return urls;
 }
