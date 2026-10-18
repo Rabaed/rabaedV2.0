@@ -269,7 +269,7 @@ A number names the Trade and Location it was issued with, so those never change 
 | `discarded_at` | a discarded Draft: closed `cancelled`, its access rows removed, seen by nobody. A Draft Revision (RP-316, `app.discard_revision`) or, from RP-409, any Draft that never left Draft (the List's Delete, `app.discard_draft`, below); check `work_item_discarded_closed`: a discarded row is closed |
 | `duplicated_from_id`, `duplicate_member_id`, `duplicate_key` | the List's Duplicate (RP-409): the item a Draft was duplicated from, and the duplicating Member and their request key. Not granted to the app role. One live Draft per (`duplicate_member_id`, `duplicate_key`) (unique index `work_item_duplicate_key`, where not discarded), so a repeated request answers with the same Draft; a discarded one frees its key. No time: it never tells when the Draft was started (scenario 61) |
 | `parent_id` | Subtask; check: parent's `parent_id` is null |
-| `package_id` | nullable: its Package, at most one (RP-636). Never granted to the app role: another Company sees the owner's Submitted items, and their `package_id` would tell of a Package it may not see. Read through `app.work_item_package`, written only by the Package functions (below) |
+| `package_id` | nullable: its Package, at most one (RP-636). Never granted to the app role: another Company sees the owner's Submitted items, and their `package_id` would tell of a Package it may not see. Read through `app.work_item_package`, written only by the Package functions (below) and two triggers (RP-642): a Revision takes its `revision_of_id` item's before insert (`app.revision_joins_package`), and a replacement the replaced item's when its `replaces` link is written (`app.replacement_joins_package`, after insert on `work_item_link`) |
 | `current_step_id`, `current_stage_key`, `step_entered_at` | `step_entered_at` feeds **Step Age** inside the holding Participant |
 | `participant_entered_at`, `participant_entered_step_id` | when, and at which Step, the item reached the holding Participant (or closed): what every other Company sees (V14) |
 | `outcome` | a closing outcome of its Type's set on its Project (**outcome**), or `cancelled`; null while open. Trigger `work_item_outcome_in_set` refuses any other, whoever writes it (RP-429) |
@@ -314,7 +314,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 **chat_message**
 `id`, `work_item_id`, `author_member_id`, `participant_id`, `body`, `file_ids`, `created_at`. Insert-only.
 
-**package** (as built, RP-636, `20270410000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenarios RP-588-1 to RP-588-3)
+**package** (as built, RP-636, `20270620000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenarios RP-588-1 to RP-588-3)
 
 | column | notes |
 |---|---|
@@ -322,7 +322,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 | `participant_id` | the owning Participant (usually the Contractor); `(participant_id, project_id)` references `participant` |
 | `seq` | per Project **and owning Participant**, shown `PKG-` and three digits (`packageNumber` in `@rabaed/domain`), left-to-right; unique `(project_id, participant_id, seq)`, never reused (a discarded Package keeps its row). Not one count per Project: its gaps would tell each Company how many Packages the others hold, Open ones included (RP-588-1, as Document Numbers count by Participant Code) |
 | `name` | i18n, English and Arabic (`app.is_bilingual`) |
-| `status` | `open`, `in_progress`, `done`; stored, recomputed in the same transaction as the change by `app.recompute_package_status` (RP-638, `20270411000000_submit_package.sql`): `in_progress` once any item has `submitted_at` (a trigger on `work_item` after an update of `submitted_at` or `package_id`: an item Submitted, alone or by Submit Package, or an already-Submitted item added), never back to `open`. The closures, Revisions and replacements (RP-642) add `done` |
+| `status` | `open`, `in_progress`, `done`; stored, recomputed in the same transaction as the change by `app.recompute_package_status` (RP-638, `20270621000000_submit_package.sql`): `in_progress` once any item has `submitted_at` (a trigger on `work_item` after an update of `submitted_at` or `package_id`: an item Submitted, alone or by Submit Package, or an already-Submitted item added), never back to `open`. `done` (RP-642, `20270623000000_package_done.sql`): leaving out cancelled and discarded items, at least one item, and the latest Revision of each of its chains (over the whole chain, never per viewer) closed at an outcome that offers no Revision (`app.outcome_offers` … `offer_revision`: Code A, B or D in the Rabaed Defaults; a Code C waits for its Revision); else `in_progress`, so an open item joining a Done Package (a replacement, an item added) puts it back. The trigger now fires on an update of `submitted_at`, `package_id`, `outcome`, `closed_at` or `discarded_at` (an item closing through `app.take_transition`, cancelled, discarded) and on an insert with a `package_id` (a Revision); the recompute locks the Package row first, so two items closing at once count one after the other |
 | `created_by_member_id`, `created_at` | not granted to the app role |
 | `discarded_at` | an Open Package deleted (the Package's Delete, discarded as a Draft is, `app.discard_draft`): nobody sees it again; check: only an `open` one. Not granted to the app role |
 
@@ -352,7 +352,7 @@ Writes (security definer, each re-checking the caller; a Package the caller does
 **package_event** (RP-636)
 `id`, `project_id`, `package_id`, `type {created, renamed, item_added, item_removed, submitted, discarded}`, `work_item_id` (set exactly for `item_added` and `item_removed`), `actor_member_id`, `actor_participant_id` (the owning Participant), `payload` (`created`: the name; `renamed`: `from` and `to`; `submitted`: `work_item_ids` and the request's `idempotency_key`, RP-638), `created_at`. The Package's own trail, internal to the owning Participant. Append-only (trigger), and not readable through the app role until a reader is built.
 
-Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (RP-642).
+Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure, cancel or discard, in the same transaction (as built, RP-642). The Package is Done when every *latest revision* in it closed at A, B or D; cancelled and discarded items are left out.
 
 ## 6. Documents, signing, Documental Records
 

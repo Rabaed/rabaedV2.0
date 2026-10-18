@@ -653,3 +653,128 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     expect(p.items).toHaveLength(8);
   });
 });
+
+// RP-642: when a Package is Done (spec RP-616 stories 21–23, 26–28). Its status follows
+// its submittals by itself: Done once every latest Revision in it has closed at an
+// outcome that offers no Revision (Code A, B or D in the Rabaed Defaults); a Code C
+// keeps it In Progress until its Revision closes. Revisions and replacements join it
+// by themselves; a cancelled or discarded item drops out.
+
+/** K1's manager picks up item `id` and closes it with `transition` (Code A or C). */
+async function codeAs(id: string, transition: "approve_a" | "revise_c") {
+  await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+  await take(at.k1Manager, id, transition, transition === "revise_c" ? { remarks: "Resubmit with 110 lm/W luminaires" } : {});
+}
+
+/** A Package of C1's PM holding `count` MARs, Submitted with Submit Package: the Package and its items. */
+async function submittedPackage(text: string, count: number): Promise<{ id: string; items: string[] }> {
+  const pkg = await createPackage(at.c1Pm, text);
+  const items: string[] = [];
+  for (let i = 1; i <= count; i++) items.push(await readyForPm(`${text} ${i}`));
+  for (const id of items) await ok(addItem(at.c1Pm, pkg.id, id));
+  await ok(submitPackage(at.c1Pm, pkg.id), 200);
+  return { id: pkg.id, items };
+}
+
+/** C1's engineer raises a Revision of `id` (after its Code C): its id. */
+const revisionOf = async (id: string) =>
+  (await ok(at.c1Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
+
+/** C1 sends Draft `id` for review and Submits it. */
+async function submitAlone(id: string) {
+  await take(at.c1Engineer, id, "send_for_review");
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(at.c1Pm, id, "submit");
+}
+
+const statusOf = async (id: string) => (await getPackage(at.c1Pm, id)).status;
+
+describe("RP-642: a Package is Done once every latest item in it has closed", () => {
+  it("stays In Progress while any item is open, and is Done once the last closes at Code A", async () => {
+    const pkg = await submittedPackage("Lighting – Tower 1", 2);
+    const [first, second] = pkg.items as [string, string];
+    await codeAs(first, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+    await codeAs(second, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("done");
+  });
+});
+
+describe("RP-642: a Code C keeps the Package In Progress until its Revision closes", () => {
+  it("the Revision joins the Package by itself, and the Package is Done once it closes at Code A", async () => {
+    const pkg = await submittedPackage("Cables – Tower 1", 2);
+    const [passed, revised] = pkg.items as [string, string];
+    await codeAs(passed, "approve_a");
+    await codeAs(revised, "revise_c");
+    // Every item is closed, but a Code C waits for its Revision.
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+
+    const revision = await revisionOf(revised);
+    expect((await getPackage(at.c1Pm, pkg.id)).items.map((i) => i.id).sort()).toEqual([passed, revised, revision].sort());
+    await submitAlone(revision);
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+    await codeAs(revision, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("done");
+  });
+});
+
+describe("RP-642: a replacement of a Code D item joins its Package", () => {
+  it("a Code D counts as closed; its replacement, raised after the Package is Done, puts it back In Progress until it closes", async () => {
+    const pkg = await submittedPackage("Pumps – Tower 1", 1);
+    const [rejected] = pkg.items as [string];
+    await codeAs(rejected, "revise_c");
+    // The legacy MAR Workflow ends in A and C only; the outcome is set as a Code D Transition would leave it (replacements.test.ts).
+    await sql`update work_item set outcome = 'D' where id = ${rejected}::uuid`.execute(migrator);
+    expect(await statusOf(pkg.id)).toBe("done");
+
+    const replacement = (await ok(at.c1Engineer.post(`/v1/work-items/${rejected}/replacements`, { idempotencyKey: randomUUID() }), 201)).json()
+      .id as string;
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+    expect((await getPackage(at.c1Pm, pkg.id)).items.map((i) => i.id).sort()).toEqual([rejected, replacement].sort());
+    await submitAlone(replacement);
+    await codeAs(replacement, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("done");
+  });
+});
+
+describe("RP-642: a cancelled or discarded item doesn't hold the Package open", () => {
+  /** The legacy MAR Workflow has no Cancel; a Workflow that has one leaves the item so (replacements.test.ts). */
+  const cancel = (id: string) => sql`update work_item set outcome = 'cancelled', closed_at = now() where id = ${id}::uuid`.execute(migrator);
+
+  it("a cancelled item drops out: the rest closed at Code A make it Done; cancelled alone it is not Done", async () => {
+    const pkg = await submittedPackage("Valves – Tower 1", 2);
+    const [passed, cancelled] = pkg.items as [string, string];
+    await codeAs(passed, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+    await cancel(cancelled);
+    expect(await statusOf(pkg.id)).toBe("done");
+
+    // Done needs at least one item that counts.
+    const alone = await submittedPackage("Only cancelled", 1);
+    await cancel(alone.items[0]!);
+    expect(await statusOf(alone.id)).toBe("in_progress");
+  });
+
+  it("a discarded Draft drops out of the Package's list and its status", async () => {
+    const pkg = await submittedPackage("Fans – Tower 1", 1);
+    const d = await draft(at, at.c1Pm, "A Draft never sent");
+    await ok(addItem(at.c1Pm, pkg.id, d));
+    await codeAs(pkg.items[0]!, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+    await ok(at.c1Pm.post(`/v1/work-items/${d}/discard-draft`));
+    const p = await getPackage(at.c1Pm, pkg.id);
+    expect(p).toMatchObject({ status: "done" });
+    expect(p.items.map((i) => i.id)).toEqual(pkg.items);
+  });
+
+  it("a discarded Draft Revision of a Code C leaves the Code C waiting: still In Progress", async () => {
+    const pkg = await submittedPackage("Doors – Tower 1", 1);
+    const [revised] = pkg.items as [string];
+    await codeAs(revised, "revise_c");
+    const revision = await revisionOf(revised);
+    await ok(at.c1Engineer.post(`/v1/work-items/${revision}/discard`));
+    const p = await getPackage(at.c1Pm, pkg.id);
+    expect(p).toMatchObject({ status: "in_progress" });
+    expect(p.items.map((i) => i.id)).toEqual([revised]);
+  });
+});
