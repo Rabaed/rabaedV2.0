@@ -327,7 +327,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 | `discarded_at` | an Open Package deleted (the Package's Delete, discarded as a Draft is, `app.discard_draft`): nobody sees it again; check: only an `open` one. Not granted to the app role |
 
 The app role reads `id`, `project_id`, `participant_id`, `seq`, `name`, `status`, under the policy `app.sees_package(id)`, and writes nothing. Reads:
-- `app.owns_package(package)` (RP-641, `20270412000000_package_viewers.sql`): a Member of the owning Participant, while it is not discarded. Only they change it.
+- `app.owns_package(package)` (RP-641, `20270622000000_package_viewers.sql`): a Member of the owning Participant, while it is not discarded. Only they change it.
 - `app.sees_package(package)`: its owner (`app.owns_package`), or, once it is no longer `open`, a Member who sees (`app.sees_work_item`) at least one of its items (RP-641).
 - `app.package_items(package)`: the ids of its items the caller sees (`app.sees_work_item`); nothing when they don't see the Package. Every list or count of a Package comes from these.
 - `app.package_summary(package)` → (`total`, `open`, `codes`) (RP-641): of the items the caller sees (`app.package_items`), discarded and cancelled ones left out, how many, how many still open, and the closed ones by outcome (the Review Code) as `{"A": 2, "C": 1}`; no row when they don't see the Package. The board's and the Package page's counts.
