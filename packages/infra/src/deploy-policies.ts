@@ -2,6 +2,7 @@ import { DefaultStackSynthesizer, type Stack } from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { resourceNames, stackPattern, type EnvironmentConfig } from "./config.ts";
 import { ROTATION_APPLICATION } from "./data-stack.ts";
+import { PDF_SEALING_TAG } from "./storage-stack.ts";
 
 // The two policies that bound a deploy (RP-242), both in the account stack,
 // which only a person deploys.
@@ -205,6 +206,14 @@ export function boundaryStatements(stack: Stack, config: EnvironmentConfig): iam
         "ec2:UnassignPrivateIpAddresses",
       ],
       resources: ["*"],
+    }),
+    // The worker seals the Documental Records (RP-620): kms:Sign on the pdf-sealing key
+    // only, by its tag (its ARN is made with it, so the boundary can't name it).
+    new iam.PolicyStatement({
+      sid: "SealDocumentalRecords",
+      actions: ["kms:Sign"],
+      resources: ["*"],
+      conditions: { StringEquals: { [`aws:ResourceTag/${PDF_SEALING_TAG.key}`]: PDF_SEALING_TAG.value } },
     }),
     // The deploy role hands over to the CDK's deploy roles; no role assumes any other.
     new iam.PolicyStatement({
