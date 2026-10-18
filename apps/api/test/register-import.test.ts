@@ -716,6 +716,20 @@ describe("Assign to (RP-640)", () => {
     expect(sheet.suggestions.map((s) => s?.field ?? null)).toEqual(["subject", "type", "trade", "assignTo"]);
   });
 
+  it("lists the Assign to column's emails once, with the Member each names exactly, never a suggestion", async () => {
+    const file = csvOf([
+      ["Panels", "MAR", "Electrical", narrowed.email.toUpperCase()],
+      ["Pumps", "MAR", "Mechanical", narrowed.email],
+      ["Doors", "MAR", "Mechanical", `x${colleague.email}`],
+    ]);
+    const mapping: RegisterImportMapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, assignTo: { column: 3 } };
+    const values: RegisterValues = (await ok(at.c1Pm.post(`/v1/projects/${at.projectId}/register-imports/values`, { file, sheet: "assign", headerRow: 1, mapping }), 200)).json();
+    expect(values.fields.find((f) => f.field === "assignTo")!.values.map((v) => [v.rows, v.match, v.how])).toEqual([
+      [2, narrowed.id, "exact"],
+      [1, null, null],
+    ]);
+  });
+
   it("assigns a row by its email in the Assign to column, ignoring case, else by a group rule, else by the default", () => {
     const assignee = Object.fromEntries(previewed.rows.map((r) => [r.subject, r.assignee.match?.id ?? null]));
     expect(assignee).toMatchObject({ Panels: narrowed.id, Pumps: narrowed.id, Fans: narrowed.id, Valves: narrowed.id, Doors: colleague.id, Signage: noCreate.id });

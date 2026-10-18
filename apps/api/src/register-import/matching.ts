@@ -60,7 +60,7 @@ export type RegisterContext = {
   participants: RegisterCandidate[];
   optionLists: OptionList[];
   /** Whom rows may be assigned to (RP-640): the active Members of the Member's own Participant on the Project, by email. */
-  assignees: Map<string, string>;
+  assignees: RegisterCandidate[];
 };
 
 const fillableTypes: readonly string[] = registerFormFieldTypes;
@@ -186,7 +186,7 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
     members: choices.members.map((m) => ({ id: m.id, names: [emailOf.get(m.id) ?? "", ...named(m.name)].filter((n) => n !== "") })),
     participants: choices.participants.map((p) => ({ id: p.id, names: named(p.name) })),
     optionLists,
-    assignees: new Map(assignees.map((a) => [a.email.toLowerCase(), a.id])),
+    assignees: assignees.map((a) => ({ id: a.id, names: [a.email] })),
   };
 }
 
@@ -352,7 +352,7 @@ export function mappedRows(table: SheetTable, mapping: RegisterImportMapping, co
     // first rule naming its Trade or Type, else the default, else the importer (null).
     const email = cell(mapping.assignTo).trim();
     const rule = (assign.rules ?? []).find((r) => (r.by === "trade" ? r.value === tradeId : r.value === typeCode));
-    const assigneeId = email !== "" ? (context.assignees.get(email.toLowerCase()) ?? null) : (rule?.member ?? assign.default ?? null);
+    const assigneeId = email !== "" ? matchRegisterValue(email, context.assignees) : (rule?.member ?? assign.default ?? null);
     return {
       row_no: row.rowNo,
       cells: row.values,
@@ -383,6 +383,7 @@ function valueCandidates(field: string, context: RegisterContext): RegisterCandi
   if (field === "trade") return context.trades;
   if (field === "location") return context.locations;
   if (field === "scopes") return context.scopes.map((s) => ({ id: s.id, names: named(s.name) }));
+  if (field === "assignTo") return context.assignees;
   const fillable = context.fillable.get(field.slice("field:".length));
   return fillable ? fieldCandidates(fillable.field, context) : [];
 }
@@ -393,11 +394,13 @@ function valueCandidates(field: string, context: RegisterContext): RegisterCandi
  */
 export function registerValues(table: SheetTable, mapping: RegisterImportMapping, context: RegisterContext): RegisterValues {
   const manual = mapping.values ?? {};
-  const columns: { field: string; column: number; manual: Readonly<Record<string, string>>; split: boolean }[] = [];
+  const columns: { field: string; column: number; manual: Readonly<Record<string, string>>; split: boolean; suggest?: false }[] = [];
   if ("column" in mapping.type) columns.push({ field: "type", column: mapping.type.column, manual: manual.type ?? {}, split: false });
   if ("column" in mapping.trade) columns.push({ field: "trade", column: mapping.trade.column, manual: manual.trade ?? {}, split: false });
   if (mapping.location) columns.push({ field: "location", column: mapping.location.column, manual: manual.location ?? {}, split: false });
   if (mapping.scopes) columns.push({ field: "scopes", column: mapping.scopes.column, manual: manual.scopes ?? {}, split: true });
+  // The "Assign to" column's emails (RP-640): each matched to a Member exactly, never suggested.
+  if (mapping.assignTo) columns.push({ field: "assignTo", column: mapping.assignTo.column, manual: {}, split: false, suggest: false });
   for (const mapped of mapping.fields ?? []) {
     const type = context.fillable.get(mapped.key)?.field.type;
     if (type === "select" || type === "multi_select" || type === "option_list") {
@@ -405,7 +408,7 @@ export function registerValues(table: SheetTable, mapping: RegisterImportMapping
     }
   }
   return {
-    fields: columns.map(({ field, column, manual: byHand, split }) => {
+    fields: columns.map(({ field, column, manual: byHand, split, suggest }) => {
       const candidates = valueCandidates(field, context);
       const seen = new Map<string, { text: string; rows: number }>();
       for (const row of table.rows) {
@@ -423,7 +426,7 @@ export function registerValues(table: SheetTable, mapping: RegisterImportMapping
         values: [...seen.entries()].map(([key, { text, rows }]) => {
           const manualMatch = byHand[key] !== undefined ? matchRegisterValue(text, candidates, byHand) : null;
           const exact = manualMatch ?? matchRegisterValue(text, candidates);
-          const suggested = exact === null ? suggestRegisterValue(text, candidates) : null;
+          const suggested = exact === null && suggest !== false ? suggestRegisterValue(text, candidates) : null;
           return {
             key,
             text,

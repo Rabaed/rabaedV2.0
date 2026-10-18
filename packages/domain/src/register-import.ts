@@ -270,7 +270,8 @@ export const registerValueFields = ["type", "trade", "location", "scopes"] as co
  * fields): every different value in it, once by registerMatchKey, with how many rows
  * hold it, and what it matches: `exact` by code or name, `manual` by the mapping's
  * `values`, or `suggested` (the most alike value, with its score, which the importer
- * confirms); null when nothing.
+ * confirms); null when nothing. The "Assign to" column (`assignTo`, RP-640) too: each
+ * email and the Member it names exactly (never suggested), for the Assign step's counts.
  */
 export const registerValues = z.object({
   fields: z.array(
