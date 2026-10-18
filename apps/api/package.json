@@ -27,6 +27,8 @@
   },
   "devDependencies": {
     "@rabaed/mailer": "workspace:*",
+    "@rabaed/worker": "workspace:*",
+    "pdfjs-dist": "^6.3.289",
     "tsx": "^4.23.15"
   }
 }

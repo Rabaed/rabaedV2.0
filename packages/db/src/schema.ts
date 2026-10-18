@@ -338,6 +338,43 @@ export interface ApprovedSupplierTable {
 }
 
 /**
+ * A Project's Checklist Template (RP-651): its latest Version and whether it is retired. Only
+ * the columns the app role may read; who created or retired it, and when, are the database's
+ * own. Written through `app.create_checklist_template`, `app.edit_checklist_template` and
+ * `app.retire_checklist_template`.
+ */
+export interface ChecklistTemplateTable {
+  id: Generated<string>;
+  project_id: string;
+  version_no: Generated<number>;
+  status: Generated<"active" | "retired">;
+}
+
+/** One Version of a Checklist Template, never changed (RP-651). Only the columns the app role may read. */
+export interface ChecklistTemplateVersionTable {
+  id: Generated<string>;
+  checklist_template_id: string;
+  project_id: string;
+  version_no: number;
+  name: ColumnType<Bilingual, string, string>;
+  trade_value_id: string;
+  items: ColumnType<unknown, string, string>;
+}
+
+/**
+ * The Checklist Template Version a Work Item's `checklist_template` field picked, copied onto
+ * the item (RP-651). Only the columns the app role may read; written through
+ * `app.sync_work_item_checklists`.
+ */
+export interface WorkItemChecklistTable {
+  work_item_id: string;
+  field_key: string;
+  checklist_template_version_id: string;
+  name: ColumnType<Bilingual, string, string>;
+  items: ColumnType<unknown, string, string>;
+}
+
+/**
  * A Submittal Register Import (RP-637, spec RP-631). Only the columns the app role
  * may read: never its times, which are its Drafts' start (scenario 61). Read by the
  * importing Participant's Members, a `previewed` one by its importer only; written
@@ -404,10 +441,10 @@ export interface WorkflowDefinitionTable {
   updated_at: Generated<Timestamp>;
 }
 
-/** A setup change (Workflow, Form, Screen, Stage, Outcome set, Company default), append-only (RP-450). Not granted to the app role. */
+/** A setup change (Workflow, Form, Screen, Stage, Outcome set, Company default, Checklist Template), append-only (RP-450). Not granted to the app role. */
 export interface SetupEventTable {
   id: Generated<string>;
-  kind: "workflow" | "form" | "screen" | "stage" | "outcome_set" | "company_default";
+  kind: "workflow" | "form" | "screen" | "stage" | "outcome_set" | "company_default" | "checklist_template";
   workflow_definition_id: string | null;
   /** Exactly one of project_id and company_id is set. */
   project_id: string | null;
@@ -758,6 +795,9 @@ export interface Database {
   submittal_register_import: SubmittalRegisterImportTable;
   submittal_register_import_row: SubmittalRegisterImportRowTable;
   project_required_field: ProjectRequiredFieldTable;
+  checklist_template: ChecklistTemplateTable;
+  checklist_template_version: ChecklistTemplateVersionTable;
+  work_item_checklist: WorkItemChecklistTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;
