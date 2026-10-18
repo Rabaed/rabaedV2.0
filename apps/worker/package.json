@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./record": "./src/record/index.ts"
+  },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
     "start": "tsx src/main.ts",
@@ -23,6 +26,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "jsqr": "^1.4.0",
     "tsx": "^4.23.15"
   }
 }
