@@ -11,7 +11,7 @@
 -- * app.set_company_image: the Company's Authorized Person saves its logo or Stamp, the image the
 --   api stored under the key; `set`, `forbidden` for another Member of the Company, `not_found`
 --   for anyone else (another Company's Member, or no acting Member), with nothing written.
--- * app.take_transition: as 20270615000000_member_signature.sql left it, plus check 6's Stamp:
+-- * app.take_transition: as 20270702000000_member_signature.sql left it, plus check 6's Stamp:
 --   a holder whose Company has no Stamp is refused `no_stamp`, right after `no_signature`,
 --   with nothing written. Rabaed notifies nobody.
 
