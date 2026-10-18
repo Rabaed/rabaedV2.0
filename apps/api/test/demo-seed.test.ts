@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, FormToFill, FormVersion, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
+import type { ChecklistTemplates, DocumentList, FormToFill, FormVersion, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CODE_C_TITLE, DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
@@ -96,6 +96,15 @@ describe("the submittals the demo seeds", () => {
     expect(tradeOf("Najd Electrical Supplies")).toBe(electrical);
     expect(tradeOf("Tabuk Cable Industries")).toBe(electrical);
     expect(tradeOf("Al-Rimal Building Materials")).not.toBe(electrical);
+  });
+
+  it("lists two Checklist Templates, Civil and Electrical, so a WIR of either Trade can leave Draft (RP-651)", async () => {
+    const list = (await hafiz.get(`/v1/projects/${projectId}/checklist-templates`)).json() as ChecklistTemplates;
+    expect(list.templates.map((t) => [t.name.en, t.status, t.items.length]).sort()).toEqual([
+      ["Cable trays and containment", "active", 3],
+      ["Concrete pour", "active", 4],
+    ]);
+    expect(list.templates.find((t) => t.name.en === "Cable trays and containment")!.tradeId).toBe(electrical);
   });
 
   it("the SAR is at Code A, and the cable tray MAR chose the supplier it added", async () => {

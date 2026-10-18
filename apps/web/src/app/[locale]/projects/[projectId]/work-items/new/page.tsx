@@ -12,6 +12,7 @@ import {
   getNewWorkItemFormChoices,
   getOptionLists,
   getSupplierChoices,
+  getChecklistTemplateChoices,
   getProject,
   getProjectScopes,
   getRaisableTypes,
@@ -38,7 +39,7 @@ export default async function NewWorkItemPage({
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");
-  const [me, project, mine, scopes, raisable, people, optionLists, suppliers] = await Promise.all([
+  const [me, project, mine, scopes, raisable, people, optionLists, suppliers, checklistTemplates] = await Promise.all([
     getMe(),
     getProject(projectId),
     getMyVisibility(projectId),
@@ -47,6 +48,7 @@ export default async function NewWorkItemPage({
     getNewWorkItemFormChoices(projectId),
     getOptionLists(),
     getSupplierChoices(projectId),
+    getChecklistTemplateChoices(projectId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !mine || !scopes || !raisable || !people) notFound();
@@ -82,6 +84,7 @@ export default async function NewWorkItemPage({
               people={people}
               optionLists={optionLists}
               suppliers={suppliers}
+              checklistTemplates={checklistTemplates}
               locale={locale}
             />
           )}

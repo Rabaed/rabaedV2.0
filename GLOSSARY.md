@@ -153,12 +153,12 @@ A reference from one Work Item to another in the same Project, in any Module, wh
 _Avoid_: Relationship, dependency
 
 **Inspection**:
-A Work Item in the Inspections Module, such as a Work Inspection Request (WIR), in which the Contractor requests an inspection of work at a Location and Trade, and the Consultant carries it out against its Checklist and gives an Inspection Result. A Failed inspection is re-inspected as a Revision.
+A Work Item in the Inspections Module, such as a Work Inspection Request (WIR), in which the Contractor requests an inspection of work at a Location and Trade, and the Consultant carries it out, against its Checklist when its Form has one, and issues a Review Code, as for a submittal. An inspection that ends with Code C is re-inspected as a Revision (ADR 0025).
 _Avoid_: Site visit, check, IR (as a term on its own)
 
 **Inspection Result**:
-The outcome of an Inspection: Passed, Passed with Comments, or Failed. Each Work Item Type uses Review Codes, Inspection Results, or neither.
-_Avoid_: Review Code, grade
+The retired outcome of an Inspection: Passed, Passed with Comments or Failed. Only Inspections started on WIR Workflow Version 1 or 2 end with one; newer Inspections end with a Review Code (ADR 0025).
+_Avoid_: grade
 
 **Expected Frequency**:
 How often a Work Item Type, such as the Daily Site Report, must be issued. A missing one shows as a gap, triggers reminders, and is flagged when the next Weekly report is prepared, where it can be added afterwards or ignored.
@@ -190,10 +190,10 @@ _Avoid_: housekeeping item, NCR
 
 **Question**:
 A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
-_Avoid_: Comment (reserved for Code B and Passed with Comments)
+_Avoid_: Comment (reserved for Code B)
 
 **Comment**:
-A Work Item in the Snag List created from a reviewer's comment on a Code B approval (or a Passed with Comments Inspection), linked to the reviewed Work Item.
+A Work Item in the Snag List created from a reviewer's comment on a Code B approval, of a submittal or an inspection, linked to the reviewed Work Item.
 _Avoid_: Remark (the text written with a Code is Remarks), note, question
 
 **Cancelled**:
@@ -340,15 +340,15 @@ The Forms, Workflows, Screens and Work Item Types that Rabaed supplies ready-mad
 _Avoid_: System template, built-in
 
 **Review Code**:
-The formal outcome of reviewing a Work Item such as a submittal: A (Approved), B (Approved with Comments), C (Revise and Resubmit) or D (Rejected). Every code closes the Work Item; with B, its Comments continue in the Snag List.
+The formal outcome of reviewing a Work Item such as a submittal or an inspection: A (Approved), B (Approved with Comments), C (Revise and Resubmit) or D (Rejected). Every code closes the Work Item; with B, its Comments continue in the Snag List.
 _Avoid_: Status, result
 
 **Outcome**:
-How a Work Item ends, set by the Transition that closes it: a Review Code, an Inspection Result, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B or Passed with Comments, a Revision with Code C, a replacement with Code D.
+How a Work Item ends, set by the Transition that closes it: a Review Code, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B, a Revision with Code C, a replacement with Code D.
 _Avoid_: Status, result
 
 **Recommended Code**:
-A Review Code a reviewer proposes to the next reviewer: inside the Consultant, for information, and the next reviewer can accept it, override it, or send it back; to the Owner, where the Workflow ends with the Owner's review, the Owner confirms it, which issues it, or Sends the item Back to the Consultant. Nobody else sees a Recommended Code. On an Inspection the same proposal is an Inspection Result, the Recommended Result: the Consultant Engineer proposes it to the Consultant Manager, and nobody outside the Consultant sees it.
+A Review Code a reviewer proposes to the next reviewer: inside the Consultant, for information, and the next reviewer can accept it, override it, or send it back; to the Owner, where the Workflow ends with the Owner's review, the Owner confirms it, which issues it, or Sends the item Back to the Consultant. Nobody else sees a Recommended Code. On an inspection, the Consultant Engineer recommends one to the Consultant Manager.
 _Avoid_: Draft code, proposed status
 
 **Issued Code**:
@@ -360,7 +360,7 @@ The shared text the Consultant writes with a Review Code, a field of the Code Tr
 _Avoid_: Comments (reserved for the Snag List), note, recommendation (too close to Recommended Code), highlights
 
 **Revision**:
-A resubmission of a Work Item that ended with Code C, or a re-inspection of an Inspection that Failed: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at its outcome (Code C or Failed), and anyone who sees a Revision can switch to the earlier ones they may see.
+A resubmission of a Work Item that ended with Code C, such as a re-inspection: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
 _Avoid_: Version (reserved for Forms, Workflows, Screens and Numbering Patterns), resubmittal
 
 **Document Number**:
@@ -376,7 +376,7 @@ The short code (2–6 letters or digits) that stands for a Participant in that P
 _Avoid_: Company code, contractor code
 
 **Package**:
-A named group of submittals, numbered in sequence per Project (PKG-001), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done (not Closed) once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement, or a submittal added to it, puts it back In Progress.
+A named group of submittals, numbered in sequence per Project and owning Participant (PKG-001; each Participant counts its own, as Document Numbers do, so a number never reveals how many Packages another Company holds), that a Participant (usually the Contractor) puts together to follow one piece of work (e.g. bathrooms), from its Drafts or straight from a Submittal Register Import. It has no Workflow of its own: the Participant Submits the Package once, which Submits its submittals, and from then on each follows its own Workflow to its own Review Code, while the Package shows their progress. Submittals can be added later, never removed, and Revisions and replacements join it by themselves; Comments raised from its submittals show in it for information but are not part of it. It is Open until Submitted, then In Progress, and Done (not Closed) once every latest submittal in it has closed at Code A, B or D (a Code C waits for its Revision); a later replacement, or a submittal added to it, puts it back In Progress.
 _Avoid_: bundle, batch, transmittal
 
 **Approved Supplier List**:
@@ -422,7 +422,7 @@ A Company's official stamp, uploaded to its Company profile by its owner or Auth
 _Avoid_: Seal (the record's digital seal), company signature
 
 **Documental Record**:
-The sealed PDF produced when a Work Item closes, whatever its outcome (approved, issued, Code C or D, Failed, Cancelled): its Form content, the shared replies and Remarks, the Signature of everyone who acted on its path with their Companies' Stamps, and its Documents as an appendix, in one file nobody can change without it showing (ADR 0023). It is made from the item's Record Data. Internal Communication and Chat are left out. Everyone who can see the closed item may download it, and Signatory Access keeps it for those who signed. It is printed in Arabic, English or both, as the Project's settings choose.
+The sealed PDF produced when a Work Item closes, whatever its outcome (approved, issued, Code C or D, Cancelled): its Form content, the shared replies and Remarks, the Signature of everyone who acted on its path with their Companies' Stamps, and its Documents as an appendix, in one file nobody can change without it showing (ADR 0023). It is made from the item's Record Data. Internal Communication and Chat are left out. Everyone who can see the closed item may download it, and Signatory Access keeps it for those who signed. It is printed in Arabic, English or both, as the Project's settings choose.
 _Avoid_: Output, report, printout
 
 **Record Data**:
