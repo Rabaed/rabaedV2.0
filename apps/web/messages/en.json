@@ -1742,7 +1742,7 @@
       "problemCodes": {
         "invalid_schema": "is not valid",
         "unknown_internal_field": "is marked internal but is not a field of the Screen",
-        "internal_file_field": "holds photos or attachments, which are always shared",
+        "internal_file_field": "holds photos or Documents, which are always shared",
         "duplicate_key": "uses a key another field has",
         "unknown_reference": "reads a field that holds no answer",
         "condition_cycle": "has conditions that depend on each other in a circle",

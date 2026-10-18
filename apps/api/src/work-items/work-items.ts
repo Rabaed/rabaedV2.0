@@ -1622,7 +1622,9 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
       action_form: unknown;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
-    // The reply files each Transition took (ADR 0024) freeze at its event's time, as RLS shows them.
+    // The reply files each Transition took (ADR 0024), as RLS shows them: they freeze at its event's
+    // time (the history names no event id). The Owner's review writes one Transition as two events
+    // of the same time, each read by one Participant, and both name the same files.
     const { rows: taken } = await sql<{ id: string; frozen_at: Date }>`
       select id, frozen_at from document
       where work_item_id = ${workItemId} and reply and reply_event_id is not null

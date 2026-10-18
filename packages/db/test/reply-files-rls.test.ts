@@ -216,5 +216,14 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
       (await call<{ outcome: string }>(c1Pm, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', 'late.jpg', 10, 'image/jpeg', now())`))[0]!
         .outcome,
     ).toBe("not_editable");
+
+    // K1 Returns it to Open: what C1 adds for its next Resolve is C1's alone again.
+    expect(await take(k1.member, id, "return_to_open", { reason: "Still dusty" })).toBe("applied");
+    const next = await addAfterPhoto(c1Pm, id);
+    expect(await afterPhotos(c1.member, id)).toEqual([photo, next].sort());
+    for (const outsider of [k1.member, ow.member]) {
+      expect(await afterPhotos(outsider, id)).toEqual([photo]);
+      expect(await byId(outsider, next)).toEqual([]);
+    }
   });
 });

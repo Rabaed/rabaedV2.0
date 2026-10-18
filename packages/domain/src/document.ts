@@ -165,9 +165,9 @@ export const documentList = z.object({
   canChange: z.boolean(),
   /**
    * The viewer may add and remove the files of the reply Screens' fields now (ADR 0024): a
-   * Member of the Participant holding the item, with Attach. Absent reads as false.
+   * Member of the Participant holding the item, with Attach.
    */
-  canChangeReplies: z.boolean().optional(),
+  canChangeReplies: z.boolean(),
   /** The limits an upload must keep to. */
   limits: z.object({ maxBytes: z.number().int().positive(), contentTypes: z.array(z.string()) }),
 });

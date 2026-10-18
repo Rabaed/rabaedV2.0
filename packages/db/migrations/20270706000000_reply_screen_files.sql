@@ -13,7 +13,7 @@
 --   covers them in its content hash (ADR 0017): `work_item_event_attach_reply_files`,
 --   before `work_item_event_chain`, so the event's chain hash covers that hash. Until then
 --   `app.work_item_content_sha256` leaves them out.
--- * Leaving the Participant any other way (a Send Back, a cancel, a hand-over), or closing,
+-- * Leaving the Participant any other way (a Send Back, a Submit whose Screen lacks the field), or closing,
 --   discards them (`work_item_discards_reply_files`, before
 --   `work_item_freezes_documents_at_submit`).
 -- * One set per Transition: the field's file limit counts the files no Transition has
@@ -39,9 +39,12 @@ grant select (reply, reply_event_id) on document to rabaed_app;
 -- or null. A key the item's Form also uses is never a reply field: Documents are found by
 -- their field's key.
 create function app.reply_file_field(p_work_item_id uuid, p_field_key text) returns jsonb
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
+    #variable_conflict use_column
+    begin
+      return (
     select f
     from work_item w
     join workflow_transition t on t.from_step_id = w.current_step_id
@@ -56,6 +59,8 @@ create function app.reply_file_field(p_work_item_id uuid, p_field_key text) retu
         where v.id = w.form_version_id and ff ->> 'key' = p_field_key)
     order by t.key
     limit 1
+      );
+    end
   $$;
 
 -- Who may change them -------------------------------------------------------------------
@@ -341,8 +346,8 @@ create function app.discard_reply_files_on_leaving() returns trigger
   set search_path = pg_catalog, public
   as $$
     begin
-      update document d set removed_at = new.updated_at,
-        removed_by_member_id = coalesce(app.current_member_id(), d.uploaded_by_member_id)
+      -- Named as removed by its uploader: the Member who took the item away may be another Company's (V14).
+      update document d set removed_at = new.updated_at, removed_by_member_id = d.uploaded_by_member_id
       where d.work_item_id = new.id and d.reply and d.reply_event_id is null
         and d.confirmed_at is not null and d.removed_at is null;
       return null;
@@ -383,6 +388,22 @@ create or replace function app.work_item_content_sha256(p_work_item_id uuid, p_t
             and (not d.reply or d.reply_event_id is not null)), '[]'::jsonb)
       )::text, 'UTF8'));
     end
+  $$;
+
+-- As in the answer_permission_speed migration, without the reply files: they are no answer of
+-- the Form's, and another Member of the holder adding one never makes the Form's hash stale.
+create or replace function app.answers_sha256_of(p_work_item_id uuid, p_open boolean) returns bytea
+  language sql stable
+  set search_path = pg_catalog, public
+  as $$
+    select sha256(convert_to(
+      (case when p_open then app.work_item_full_answers(p_work_item_id)
+        else app.work_item_answers(p_work_item_id) end)::text || coalesce((
+      select string_agg(d.field_key || ':' || d.id::text, ',' order by d.field_key, d.id)
+      from document d
+      where d.work_item_id = p_work_item_id and d.field_key is not null and not d.reply
+        and d.confirmed_at is not null and d.removed_at is null
+    ), ''), 'UTF8'))
   $$;
 
 -- An Action Form's answers --------------------------------------------------------------

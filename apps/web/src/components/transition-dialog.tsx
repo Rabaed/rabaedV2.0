@@ -174,7 +174,7 @@ function useReplyFiles(workItemId: string, actionForm: FormSchema | null) {
     hasFiles && list
       ? {
           documents: waiting,
-          canChange: list.canChangeReplies ?? false,
+          canChange: list.canChangeReplies,
           pending: documents.pending,
           imageUrls,
           onUpload: (fieldKey, picked) => void documents.upload(picked, fieldKey),

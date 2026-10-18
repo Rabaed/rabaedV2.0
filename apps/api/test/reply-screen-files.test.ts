@@ -208,6 +208,29 @@ describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
   });
 });
 
+describe("the Rabaed Default Snag Workflow (seam 1)", () => {
+  it("pins the Resolve Screen's Version with After photos on its three Resolve Transitions", async () => {
+    const { rows } = await sql<{ key: string; pinned: number; latest: number; fields: string[] }>`
+      select t.key, pinned.version_no as pinned,
+        (select max(v.version_no) from screen_version v where v.screen_id = pinned.screen_id and v.status = 'published') as latest,
+        (select array_agg(f ->> 'key' order by f ->> 'key') from jsonb_array_elements(t.action_form -> 'sections') s
+          cross join lateral jsonb_array_elements(s -> 'fields') f) as fields
+      from work_item_type ty
+      join workflow_version wv on wv.workflow_definition_id = ty.workflow_definition_id
+      join workflow_transition t on t.workflow_version_id = wv.id
+      join screen_version pinned on pinned.id = t.screen_version_id
+      where ty.owner_kind = 'rabaed' and ty.code = 'SNG' and t.screen_key = 'snag_resolution'
+        and wv.version_no = (select max(version_no) from workflow_version where workflow_definition_id = ty.workflow_definition_id and status = 'published')
+      order by t.key
+    `.execute(migrator);
+    expect(rows.map((r) => r.key)).toEqual(["resolve", "resolve_in_progress", "resolve_on_hold"]);
+    for (const r of rows) {
+      expect(r.pinned).toBe(r.latest);
+      expect(r.fields).toEqual(["after_photos", "resolution_note"]);
+    }
+  });
+});
+
 describe("files no Transition took are discarded when the item leaves the Participant another way (seam 1)", () => {
   const readWorkflow = async (id: string): Promise<WorkflowRead> => (await ok(c1.caller.get(`/v1/workflows/${id}`), 200)).json();
   let typeId = "";
