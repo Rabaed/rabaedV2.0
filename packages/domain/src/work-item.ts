@@ -693,6 +693,11 @@ export const workItemDetail = workItemSummary.extend({
       closed: z.number().int().nonnegative(),
     }),
   ),
+  /**
+   * Its Package (RP-659, the chip on its page), by number and name: only where the
+   * viewer sees the Package, as on its row (app.work_item_package). Left out otherwise.
+   */
+  package: workItemPackage.optional(),
   /** What the viewer may press now. */
   actions: workItemActions,
 });

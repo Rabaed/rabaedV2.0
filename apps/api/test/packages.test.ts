@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { PackageComments, PackageDetail, PackageSummary, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
+import type { PackageComments, PackageDetail, PackageSummary, WorkItemDetail, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -944,5 +944,35 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
       // Another Package's submittals raised none.
       expect((await comments(tower.c1Pm, other.id)).comments).toEqual([]);
     });
+  });
+});
+
+describe("RP-659: the item page's Package chip", () => {
+  /** Item `id` as `by` reads it on its page. */
+  const itemPage = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
+
+  it("names the item's Package, by number and name, to its owning Participant's Members", async () => {
+    const pkg = await createPackage(at.c1Engineer, "Chip – Open");
+    const d = await draft(at, at.c1Engineer, "Chip Draft");
+    const outside = await draft(at, at.c1Engineer, "Chip Draft in no Package");
+    await ok(addItem(at.c1Engineer, pkg.id, d));
+    expect((await itemPage(at.c1Engineer, d)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – Open") });
+    expect((await itemPage(at.c1Engineer, outside)).package).toBeUndefined();
+    // Removed, or its Package deleted: the item has none again.
+    await ok(removeItem(at.c1Engineer, pkg.id, d));
+    expect((await itemPage(at.c1Engineer, d)).package).toBeUndefined();
+    await ok(addItem(at.c1Engineer, pkg.id, d));
+    await ok(at.c1Engineer.request("DELETE", `/v1/packages/${pkg.id}`));
+    expect((await itemPage(at.c1Engineer, d)).package).toBeUndefined();
+  });
+
+  it("names an In Progress Package to another Company that sees the item, and nothing of it to one that doesn't see the item", async () => {
+    const pkg = await createPackage(at.c1Pm, "Chip – In Progress");
+    const sent = await submitted(at, at.c1Engineer, at.c1Pm, "Chip Submitted");
+    await ok(addItem(at.c1Pm, pkg.id, sent));
+    for (const by of [at.c1Pm, at.k1Manager]) {
+      expect((await itemPage(by, sent)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – In Progress") });
+    }
+    await expectHidden(c2Engineer.get(`/v1/work-items/${sent}`));
   });
 });
