@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { formatNumber, type Locale } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations, setRequestLocale } from "next-intl/server";
 import { MarkNotificationsRead } from "@/components/mark-notifications-read";
@@ -8,7 +8,8 @@ import { getMe, getNotifications } from "@/lib/session";
 
 /**
  * The Member's notifications, newest first. Each shows only the item's number
- * and title as the Member may see them now, and links to the item.
+ * and title as the Member may see them now, and links to the item; Drafts imported
+ * for them (RP-640) say how many, with no time, and link to their Need My Action.
  */
 export default async function NotificationsPage({ params }: { params: Promise<{ locale: Locale }> }) {
   const { locale } = await params;
@@ -30,6 +31,14 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
         <ul className="divide-y divide-border border-y border-border" data-testid="notification-list">
           {list.notifications.map((n) => (
             <li key={n.id} className="flex items-start justify-between gap-4 py-3">
+              {n.kind === "drafts_imported" && n.drafts ? (
+                <div className="space-y-1">
+                  <NotificationLink id={n.id} href={`/projects/${n.drafts.projectId}/work-items?needMyAction=true`} unread={!n.readAt}>
+                    {t("draftsImported", { count: n.drafts.count, n: formatNumber(n.drafts.count, locale) })}
+                  </NotificationLink>
+                  <p className="text-sm text-muted">{t("draftsImportedHelp")}</p>
+                </div>
+              ) : (
               <div className="space-y-1">
                 <NotificationLink id={n.id} href={`/work-items/${n.workItemId}`} unread={!n.readAt}>
                   {n.title}
@@ -50,15 +59,18 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
                       : [n.event.companyName?.[locale], n.event.transition?.[locale] ?? t("cancelled")].filter(Boolean).join(" · "))}
                 </p>
               </div>
+              )}
               <div className="shrink-0 text-end text-sm text-muted">
-                <time dateTime={n.createdAt}>
-                  {format.dateTime(new Date(n.createdAt), {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                    timeZone: "Asia/Riyadh",
-                    numberingSystem: "latn",
-                  })}
-                </time>
+                {n.createdAt && (
+                  <time dateTime={n.createdAt}>
+                    {format.dateTime(new Date(n.createdAt), {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                      timeZone: "Asia/Riyadh",
+                      numberingSystem: "latn",
+                    })}
+                  </time>
+                )}
                 {!n.readAt && <p className="font-semibold text-brand-fg">{t("unread")}</p>}
               </div>
             </li>

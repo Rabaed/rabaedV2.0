@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { drainOutbox, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -579,6 +579,19 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
         [panels],
       );
       expect(rows).toEqual([{ actor_member_id: importer, actor_participant_id: c1Participant, import_id: importId }]);
+    });
+
+    it("tells the assignee, and nobody else, how many Drafts were imported for them", async () => {
+      await drainOutbox(app);
+      const panels = drafts.find((d) => d.row_no === 2)!.work_item_id!;
+      const kinds = (as: string) =>
+        call<{ kind: string; work_item_id: string }>(as, sql`select kind, work_item_id from notification where kind = 'drafts_imported'`);
+      expect(await kinds(c1Narrowed)).toEqual([{ kind: "drafts_imported", work_item_id: panels }]);
+      for (const other of [importer, c1.member, k1.member, c2.member, ow.member]) expect(await kinds(other)).toEqual([]);
+      const count = (as: string) => call<{ n: number | null }>(as, sql`select app.drafts_imported_count(${panels}::uuid) as n`).then((r) => r[0]!.n);
+      expect(await count(c1Narrowed)).toBe(1);
+      for (const other of [importer, k1.member, c2.member]) expect(await count(other)).toBeNull();
+      expect(await failure(c1Narrowed, sql`select app.deliver_drafts_imported(${randomUUID()}::uuid)`)).toBe("42501");
     });
 
     it("lets the assignee read and edit their Draft as their own", async () => {

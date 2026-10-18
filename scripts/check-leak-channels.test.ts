@@ -14,6 +14,9 @@ const allowList: readonly AllowListed[] = [
   { table: "notification", kind: "step_reached", row: "Notifications and emails" },
   { table: "notification", kind: "watched_event", row: "Notifications and emails" },
   { table: "notification", kind: "sent_back", row: "Notifications and emails" },
+  // RP-640: a Register Import's "Drafts were imported for you", and the outbox row that delivers it.
+  { table: "notification", kind: "drafts_imported", row: "Notifications and emails" },
+  { table: "outbox", kind: "drafts_imported", row: "Notifications and emails" },
 ];
 
 function visibility(channels: string[]): string {

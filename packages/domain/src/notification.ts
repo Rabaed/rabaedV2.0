@@ -5,10 +5,10 @@ import { workItemOutcome } from "./work-item.ts";
 
 /**
  * What an in-app notification is about: a Step reached the Member or their
- * pool, something happened on an item they watch, or an item was Sent Back to
- * their Participant.
+ * pool, something happened on an item they watch, an item was Sent Back to
+ * their Participant, or a Register Import made Drafts of theirs (RP-640).
  */
-export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back"] as const;
+export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back", "drafts_imported"] as const;
 
 /** What happened on a watched item. */
 export const watchedEventTypes = ["transition", "issue_code", "revision_created", "cancelled"] as const;
@@ -41,17 +41,23 @@ export const notification = z.object({
       companyName: bilingualText.nullable(),
     })
     .nullable(),
-  createdAt: z.iso.datetime(),
+  /**
+   * Drafts were imported for them (RP-640): how many Drafts a Register Import created
+   * with them as raiser, on which Project. Its item is the first of them.
+   */
+  drafts: z.object({ count: z.int().min(1), projectId: z.uuid() }).nullable(),
+  /** Null for `drafts_imported`: when Drafts were imported is when they were started, which nobody sees (scenario 61). */
+  createdAt: z.iso.datetime().nullable(),
   readAt: z.iso.datetime().nullable(),
 });
 export type Notification = z.infer<typeof notification>;
 
 /**
  * The kinds of notification that can be emailed one by one ("immediately"):
- * the in-app kinds, Sent Back included (RP-356). The weekly report is an email
- * of its own, never a notification row.
+ * the in-app kinds, Sent Back (RP-356) and Drafts imported (RP-640) included.
+ * The weekly report is an email of its own, never a notification row.
  */
-export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back"] as const;
+export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back", "drafts_imported"] as const;
 export type NotificationEmailKind = (typeof notificationEmailKinds)[number];
 
 /**
@@ -78,6 +84,8 @@ export interface NotificationEmailContent {
     /** The person who issued a final Code; null for anything else. */
     signerName: BilingualText | null;
   } | null;
+  /** Drafts were imported for them (RP-640): how many; its item is the first of them. */
+  drafts?: { count: number };
 }
 
 /** One notification email on its way out: to whom, in which language, about what. */
@@ -122,6 +130,7 @@ export interface NotificationDigestEntry {
   kind: NotificationEmailKind;
   step: NotificationEmailContent["step"];
   event: NotificationEmailContent["event"];
+  drafts?: NotificationEmailContent["drafts"];
 }
 
 /** The signed-in Member's notifications, newest first, and how many are unread (the bell). */
