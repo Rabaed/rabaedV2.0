@@ -37,16 +37,23 @@
       "outcomeMode": "issue_outcome"
     },
     {
-      "key": "passed",
-      "name": { "en": "Passed", "ar": "ناجح" },
+      "key": "approved",
+      "name": { "en": "Approved", "ar": "معتمد" },
       "stage": "approved",
       "actor": null,
       "outcomeMode": "none"
     },
     {
-      "key": "failed",
-      "name": { "en": "Failed", "ar": "راسب" },
+      "key": "revise_resubmit",
+      "name": { "en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم" },
       "stage": "revise_resubmit",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "rejected",
+      "name": { "en": "Rejected", "ar": "مرفوض" },
+      "stage": "rejected",
       "actor": null,
       "outcomeMode": "none"
     },
@@ -155,37 +162,48 @@
       }
     },
     {
-      "key": "pass",
-      "label": { "en": "Passed", "ar": "ناجح" },
+      "key": "approve_a",
+      "label": { "en": "Approve · A", "ar": "اعتماد · A" },
       "kind": "close",
       "from": "consultant_manager",
-      "to": "passed",
-      "outcome": "passed",
+      "to": "approved",
+      "outcome": "A",
       "permission": "approve",
       "actionForm": null,
-      "screen": "inspection_passed"
+      "screen": "code_a"
     },
     {
-      "key": "pass_with_comments",
-      "label": { "en": "Passed with Comments", "ar": "ناجح مع ملاحظات" },
+      "key": "approve_b",
+      "label": { "en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B" },
       "kind": "close",
       "from": "consultant_manager",
-      "to": "passed",
-      "outcome": "passed_with_comments",
+      "to": "approved",
+      "outcome": "B",
       "permission": "approve",
       "actionForm": null,
-      "screen": "inspection_passed_with_comments"
+      "screen": "code_b"
     },
     {
-      "key": "fail",
-      "label": { "en": "Failed", "ar": "راسب" },
+      "key": "revise_c",
+      "label": { "en": "Revise & Resubmit · C", "ar": "مراجعة وإعادة تقديم · C" },
       "kind": "close",
       "from": "consultant_manager",
-      "to": "failed",
-      "outcome": "failed",
+      "to": "revise_resubmit",
+      "outcome": "C",
       "permission": "approve",
       "actionForm": null,
-      "screen": "inspection_failed"
+      "screen": "code_c"
+    },
+    {
+      "key": "reject_d",
+      "label": { "en": "Reject · D", "ar": "رفض · D" },
+      "kind": "close",
+      "from": "consultant_manager",
+      "to": "rejected",
+      "outcome": "D",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "code_d"
     },
     {
       "key": "cancel",

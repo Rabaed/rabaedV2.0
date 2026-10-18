@@ -5,9 +5,13 @@
 // Consultant Manager, who may Return to Engineer or issue Passed, Passed with Comments or Failed.
 // A WIR already on Version 1 (one Consultant inspection Step) finishes on Version 1.
 //
+// Since RP-673 (ADR 0025) a new WIR starts on Version 3, which issues Review Codes
+// (wir-workflow-v3.test.ts): each WIR here is pinned to Version 2 when it is raised, as one
+// started on it before, and its Stages are the Submittals' keys the migration moved them to.
+//
 // The seam suites' global setup runs the demo seed, which publishes the Rabaed Defaults.
 import { publishRabaedDefaults, rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
-import { createDb, readLatestPublishedDefinition, withMember } from "@rabaed/db";
+import { createDb, readPublishedVersionDefinition, withMember } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { parseWorkflowDefinition, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
@@ -45,7 +49,30 @@ const transitionKeys = async (by: Caller, id: string) => (await detail(by, id)).
 
 const RECOMMENDATION_NOTE = "Engineer: rebar spacing out of tolerance at gridline 4";
 
-/** A WIR raised by Hafiz and sent for review. */
+/** Pins item `id` to the WIR Workflow's Version `versionNo`, Steps by key, as an item started on it. */
+async function pinToVersion(versionNo: number, id: string) {
+  await sql`
+    with old as (
+      select v.id as version_id, s.key, s.id as step_id from work_item_type t
+      join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.version_no = ${versionNo}
+      join workflow_step s on s.workflow_version_id = v.id
+      where t.owner_kind = 'rabaed' and t.code = 'WIR'
+    ),
+    moved_assignments as (
+      update step_assignment a set step_id = o.step_id
+      from workflow_step cur, old o
+      where a.work_item_id = ${id}::uuid and cur.id = a.step_id and o.key = cur.key
+      returning a.id
+    )
+    update work_item w set
+      workflow_version_id = (select distinct version_id from old),
+      current_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.current_step_id),
+      participant_entered_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.participant_entered_step_id)
+    where w.id = ${id}::uuid
+  `.execute(migrator);
+}
+
+/** A WIR raised by Hafiz on Version 2 and sent for review. */
 async function inReview(title: string) {
   const id = (
     await ok(
@@ -64,6 +91,7 @@ async function inReview(title: string) {
       201,
     )
   ).json().id as string;
+  await pinToVersion(2, id);
   await take(hafiz, id, "send_for_review");
   return id;
 }
@@ -120,15 +148,17 @@ beforeAll(async () => {
 });
 
 describe("the WIR Workflow Version 2 is the document `pnpm defaults:publish` publishes", () => {
-  it("apps/admin/workflows/WIR.json is the latest Version, 2; Version 1 stays published for the items pinned to it", async () => {
+  it("apps/admin/workflows/WIR-2.json is Version 2, published beside Version 1 for the items pinned to them (Version 3 is WIR.json, RP-673)", async () => {
     const definitionId = (
       await migrator.selectFrom("work_item_type").select("workflow_definition_id").where("owner_kind", "=", "rabaed").where("code", "=", "WIR").executeTakeFirstOrThrow()
     ).workflow_definition_id!;
-    const latest = (await readLatestPublishedDefinition(migrator, definitionId))!;
-    expect(latest.versionNo).toBe(2);
-    const file = parseWorkflowDefinition(rabaedWorkflowFile("WIR.json"));
-    expect(file.ok && sameDefinition(latest.definition, file.definition)).toBe(true);
-    expect(latest.definition.steps.map((s) => s.key)).toEqual([
+    const version2 = await sql<{ id: string }>`
+      select id from workflow_version where workflow_definition_id = ${definitionId}::uuid and version_no = 2
+    `.execute(migrator);
+    const stored = (await readPublishedVersionDefinition(migrator, version2.rows[0]!.id))!;
+    const file = parseWorkflowDefinition(rabaedWorkflowFile("WIR-2.json"));
+    expect(file.ok && sameDefinition(stored, file.definition)).toBe(true);
+    expect(stored.steps.map((s) => s.key)).toEqual([
       "draft",
       "internal_review",
       "contractor_engineer",
@@ -144,12 +174,13 @@ describe("the WIR Workflow Version 2 is the document `pnpm defaults:publish` pub
     expect(versions.rows.map((v) => [v.version_no, v.status])).toEqual([
       [1, "published"],
       [2, "published"],
+      [3, "published"],
     ]);
   });
 });
 
 describe("a WIR on Version 2 (seam 1 acceptance)", () => {
-  it("goes Draft → Contractor PM → Return → Contractor Engineer → PM → Submit, a new WIR starting on Version 2", async () => {
+  it("goes Draft → Contractor PM → Return → Contractor Engineer → PM → Submit, on Version 2", async () => {
     const id = await inReview("Returned");
     expect(await detail(ali, id)).toMatchObject({ stage: { key: "internal_review" }, workflow: { versionNo: 2 } });
     await take(ali, id, "return", { reason: "Add the drawing reference" });
@@ -246,32 +277,9 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
 });
 
 describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinned)", () => {
-  /** Pins item `id`, at a Step Version 1 shares with Version 2, to the WIR Workflow's Version 1, Steps by key. */
-  async function pinToVersion1(id: string) {
-    await sql`
-      with old as (
-        select v.id as version_id, s.key, s.id as step_id from work_item_type t
-        join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.version_no = 1
-        join workflow_step s on s.workflow_version_id = v.id
-        where t.owner_kind = 'rabaed' and t.code = 'WIR'
-      ),
-      moved_assignments as (
-        update step_assignment a set step_id = o.step_id
-        from workflow_step cur, old o
-        where a.work_item_id = ${id}::uuid and cur.id = a.step_id and o.key = cur.key
-        returning a.id
-      )
-      update work_item w set
-        workflow_version_id = (select distinct version_id from old),
-        current_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.current_step_id),
-        participant_entered_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.participant_entered_step_id)
-      where w.id = ${id}::uuid
-    `.execute(migrator);
-  }
-
   it("is Submitted to the one Consultant inspection Step and closed by its Result there; publishing again moves nothing", async () => {
     const id = await inReview("In flight on Version 1");
-    await pinToVersion1(id);
+    await pinToVersion(1, id);
     expect(await detail(ali, id)).toMatchObject({ stage: { key: "internal_review" }, workflow: { versionNo: 1 } });
     await take(ali, id, "submit", { answers: { cover_note: "Ready on site" } });
     expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_inspection" }, workflow: { versionNo: 1 } });
