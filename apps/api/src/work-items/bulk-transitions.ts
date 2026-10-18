@@ -10,10 +10,12 @@ import { takeTransitionIn, type TakeTransitionResult } from "./work-items.ts";
 // own events, Issued Code and notifications, exactly as if taken alone. Not tied to
 // Packages: the Package page offers it (packages.ts), the List may later.
 //
-// A Transition that "needs a signature" (spec story 44) is not told apart here:
-// since ADR 0017 every Transition is confirmed and signed, and nothing in a Workflow
-// marks one as signing (`workflow_step.is_signing` is read by nothing, always false,
-// and RP-85 drops it). Each item's own Transition checks the Member's Signature.
+// Each item is signed exactly as in a single Transition, so a bulk action never
+// bypasses a signature (spec story 44, as settled 2026-10-19). There is no signing
+// check of its own: since ADR 0017 every Transition is confirmed and signed, and
+// nothing in a Workflow marks one as signing (`workflow_step.is_signing` is read by
+// nothing, always false, and RP-85 drops it). Each item's own `app.take_transition`
+// checks the Member's Signature, so a Member without one is refused all or nothing.
 
 type Trx = Transaction<Database>;
 
