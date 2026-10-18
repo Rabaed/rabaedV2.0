@@ -208,7 +208,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     await take(mohammed.caller, id, "pass_with_comments", {
       answers: { remarks: "Fix the cover", items_to_create: [{ comment: "Raise the cover to 40 mm" }, { comment: "Tie the lap at gridline 4" }] },
     });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed_with_comments", comments: { open: 2, closed: 0 } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed_with_comments", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
   });
 
   it("Failed closes the WIR Failed and offers the Contractor a Revision, the re-inspection", async () => {
