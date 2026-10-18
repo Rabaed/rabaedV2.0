@@ -35,6 +35,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Watch
 - [ ] Working Copy
 - [ ] Documental Record
+- [ ] Signature
 - [ ] Verification page
 - [ ] Activity Feed
 - [ ] Workflow definitions and bindings
