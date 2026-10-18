@@ -11,6 +11,7 @@ import {
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { RadioGroup } from "../form/radio-group.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -150,7 +151,7 @@ function Outcome({ result, locale, labels }: { result: SnagBulkResult; locale: L
             <Icon name="alert-triangle" className="text-warning-fg" />
             {labels.skippedCount(n(result.skipped.length), result.skipped.length)}
           </p>
-          <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-sm border border-border-subtle p-2 text-[13px]">
+          <ul tabIndex={0} aria-label={labels.skippedCount(n(result.skipped.length), result.skipped.length)} className={cn("flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-sm border border-border-subtle p-2 text-[13px]", focusRing)}>
             {named.map((s) => (
               <li key={s.id} className="flex flex-wrap items-baseline gap-x-2">
                 {s.documentNumber && (

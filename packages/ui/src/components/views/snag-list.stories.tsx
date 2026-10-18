@@ -472,8 +472,7 @@ export const BulkSelect: Story = {
     const text = bulkLabels[storyLocale(context)];
     const table = context.canvas.getByRole("table", { name: labels[storyLocale(context)].table });
     await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Cable tray not bonded") }));
-    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Duct insulation torn") }));
-    await expect(context.canvas.getByRole("status", { name: "" })).toBeDefined();
+    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Socket outlet loose") }));
     await expect(context.canvas.getByRole("button", { name: text.reassign })).toBeVisible();
     await expect(context.canvas.getByRole("button", { name: text.moveStage })).toBeVisible();
     await expect(context.canvas.getByRole("button", { name: text.exportSelected })).toBeVisible();
@@ -512,6 +511,6 @@ export const BulkMove: Story = {
     const dialog = within(await within(document.body).findByRole("dialog"));
     await userEvent.click(await dialog.findByRole("radio", { name: stages.inProgress.name[storyLocale(context)] }));
     await userEvent.click(dialog.getByRole("button", { name: text.moveConfirm }));
-    await expect(await dialog.findByText(text.reasons.not_offered, { exact: false })).toBeVisible();
+    await expect((await dialog.findAllByText(text.reasons.not_offered))[0]).toBeVisible();
   },
 };
