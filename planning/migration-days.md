@@ -69,3 +69,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270610 | RP-624 | 33 | raised_item_counts_by_type |
 | 20270612 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270603) |
+| 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
