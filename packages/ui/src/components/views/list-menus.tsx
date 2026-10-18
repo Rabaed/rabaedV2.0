@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
@@ -147,6 +147,45 @@ export function RowMenu({ subject, load, onAction, labels }: RowMenuProps) {
 export type ExportFormat = "csv" | "excel";
 /** "What you see" (the shown columns) or "the whole table" (every List field), RP-409 owner decision. */
 export type ExportScope = "shown" | "whole";
+
+/** One link of the toolbar's "More actions" menu, with an optional line under its name. */
+export type MoreAction = { key: string; label: string; description?: string; icon: IconName; href: string };
+
+export type MoreActionsMenuProps = {
+  actions: MoreAction[];
+  /** The button's accessible name and the menu's, e.g. "More actions". */
+  label: string;
+  /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
+  linkAs?: ElementType;
+};
+
+/** The toolbar's ⋯ "More actions" menu (RP-637, the owner's design): links such as Import register and Imports. */
+export function MoreActionsMenu({ actions, label, linkAs: Link = "a" }: MoreActionsMenuProps) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" aria-label={label} title={label} className={cn(toolbarButton, toolbarFilled, "px-2 pointer-coarse:min-w-11")}>
+          <Icon name="dots" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent aria-label={label} align="end" className="w-72 rounded-md p-1 shadow-lg">
+        <nav aria-label={label}>
+          {actions.map((action) => (
+            <PopoverClose asChild key={action.key}>
+              <Link href={action.href} className={cn(menuItem, "items-start whitespace-normal")}>
+                <Icon name={action.icon} size={16} className="mt-0.5" />
+                <span className="flex flex-col">
+                  {action.label}
+                  {action.description && <small className="text-[11.5px] text-muted">{action.description}</small>}
+                </span>
+              </Link>
+            </PopoverClose>
+          ))}
+        </nav>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export type ExportMenuProps = {
   onExport: (format: ExportFormat, scope: ExportScope) => void;

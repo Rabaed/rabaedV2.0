@@ -28,6 +28,7 @@ import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
 import { approvedSupplierRoutes } from "./routes/approved-suppliers.ts";
+import { registerImportRoutes } from "./routes/register-imports.ts";
 import { requiredFieldRoutes } from "./routes/required-fields.ts";
 import { companyDefaultRoutes } from "./routes/company-defaults.ts";
 import { screenRoutes } from "./routes/screens.ts";
@@ -161,6 +162,7 @@ export async function buildApp({
   await app.register(scopeRoutes(context));
   await app.register(approvedSupplierRoutes(context));
   await app.register(requiredFieldRoutes(context));
+  await app.register(registerImportRoutes(context));
   await app.register(workItemRoutes(context));
   await app.register(workflowRoutes(context));
   await app.register(workflowSettingsRoutes(context));
