@@ -6,7 +6,7 @@
 // themselves, app.work_item_links, app.work_item_linked_from. What C1 adds or
 // removes is C1's until it Submits the item again; then it is everyone's, and the
 // Transition event's content hash still covers the Subject and the answers.
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -130,6 +130,9 @@ async function submit(id: string) {
   expect(await take(c1Pm, id, "submit")).toBe("applied");
 }
 
+/** The fingerprint the api would take of a test file: here, the SHA-256 of its name (RP-618). */
+const fingerprint = (fileName: string) => createHash("sha256").update(fileName, "utf8").digest();
+
 /** A confirmed Document of item `id`, uploaded by the C1 engineer (into `field`, or the Attachments System Field). */
 async function document(id: string, fileName: string, field: string | null = null): Promise<string> {
   const [started] = await call<{ outcome: string; document_id: string }>(
@@ -138,7 +141,10 @@ async function document(id: string, fileName: string, field: string | null = nul
   );
   expect(started!.outcome).toBe("started");
   expect(
-    await outcome(c1.member, sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'application/pdf', now()) as outcome`),
+    await outcome(
+      c1.member,
+      sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'application/pdf', ${fingerprint(fileName)}, now()) as outcome`,
+    ),
   ).toBe("confirmed");
   return started!.document_id;
 }
@@ -314,6 +320,17 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     }
   });
 
+  // RP-618: a Document's fingerprint goes into that hash, and confirms a guess at
+  // the file's bytes, so it is read by nobody through the app role either, while
+  // the Document itself is (Side channels).
+  it("never lets the app role read a Document's fingerprint, while it reads the Document", async () => {
+    for (const as of [c1.member, k1.member, ow.member]) {
+      const documents = await call<{ id: string }>(as, sql`select id from document where work_item_id = ${id}`);
+      expect(documents.length, as).toBeGreaterThan(0);
+      await expect(call(as, sql<object>`select file_sha256 from document where work_item_id = ${id}`)).rejects.toThrow(/permission denied/);
+    }
+  });
+
   it("makes everything everyone's once C1 Submits it again, the Transition hashing the Subject and the answers", async () => {
     await submit(id);
     const c1Reads = await reads(c1.member, id);
@@ -326,7 +343,8 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     const { rows } = await migrator.query("select count(*)::int as n from work_item_link where from_id = $1", [id]);
     expect(rows[0].n).toBe(2);
     // The item's content as the Submit left it (RP-436: its Documents and outcome
-    // too), worked out here from what C1 put in, not by the database's function.
+    // too; RP-618: each Document's fingerprint), worked out here from what C1 put
+    // in, not by the database's function.
     const file = (docId: string, fileName: string, fieldKey: string | null) => ({
       id: docId,
       field_key: fieldKey,
@@ -335,6 +353,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
       content_type: "application/pdf",
       size_bytes: 10,
       storage_key: `projects/${projectId}/work-items/${id}/documents/${docId}`,
+      file_sha256: fingerprint(fileName).toString("hex"),
     });
     const documents = [
       file(first[0]!, "datasheet-1.pdf", "datasheet"),

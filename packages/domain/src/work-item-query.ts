@@ -132,6 +132,14 @@ export const ownerFilterValue = z
   )
   .transform((v) => v as OwnerFilterValue);
 
+/**
+ * What an item was raised from, as the Snag List's "Raised from" filter has it (RP-94):
+ * `manual` for one raised by hand, else the Document Number its `raised_from` Link names.
+ * A number, never an id: the Link gives the viewer no more than that of an item they can't see (E1).
+ */
+export const raisedFromManual = "manual";
+export const raisedFromFilterValue = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/);
+
 /** The Created date filter (RP-410): items whose date the viewer sees is in the last this many days. */
 export const createdWithinDays = [7, 30, 90] as const;
 
@@ -165,6 +173,13 @@ const queryFields = {
   owner: list(ownerFilterValue),
   /** The role holding it (RP-410): a Step of my own Company, by key; another Company's items match none (V5). */
   role: list(stageKey),
+  /**
+   * The Company holding an open item now (the Snag List's Company filter, RP-94), by its Participant:
+   * my own or another, each as one (V14). A closed item, which nobody holds, matches none.
+   */
+  company: list(uuid),
+  /** What it was raised from (the Snag List, RP-94): `manual`, or the Document Number of its source. */
+  raisedFrom: list(raisedFromFilterValue),
   trade: list(uuid),
   /** A Location takes in the Locations under it. */
   location: list(uuid),
@@ -231,7 +246,7 @@ const queryFields = {
 };
 
 /** The filters that take a list of values; every other key takes one. */
-const listKeys = ["type", "stage", "with", "owner", "role", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
+const listKeys = ["type", "stage", "with", "owner", "role", "company", "raisedFrom", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
 const filterKeys = [...listKeys, "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
 

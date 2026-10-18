@@ -30,14 +30,14 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270509 | RP-630 | 3D | Snag List on a phone |
 | 20270510 | RP-658 | 3A | Pick one of several covering Participants at a Submit |
 | 20270511 | spec RP-619 | 3A | Review fixes |
-| 20270410 | RP-636 | 1A | Build an Open Package |
-| 20270411 | RP-638 | 1A | Submit Package |
-| 20270412 | RP-641 | 1A | Packages board and each viewer's counts |
-| 20270413 | RP-642 | 1B | When a Package is Done |
-| 20270414 | RP-643 | 1C | Grouped notification for a Package Submit |
-| 20270415 | RP-646 | 1A | Bulk Transitions from the Package page |
-| 20270416 | RP-647 | 1B | Package filter and Comments on the Package page |
-| 20270417 | spec RP-616 | 1A | Review fixes |
+| 20270620 | RP-636 | 1A | Build an Open Package (moved from 20270410: main's migrations had passed that block) |
+| 20270621 | RP-638 | 1A | Submit Package |
+| 20270622 | RP-641 | 1A | Packages board and each viewer's counts |
+| 20270623 | RP-642 | 1A | When a Package is Done |
+| 20270624 | RP-643 | 1A | Grouped notification for a Package Submit |
+| 20270625 | RP-646 | 1A | Bulk Transitions from the Package page |
+| 20270626 | RP-647 | 1A | Package filter and Comments on the Package page |
+| 20270627 | spec RP-616 | 1A | Review fixes |
 | 20270512 | RP-618 | 24 | File fingerprints in the content hash |
 | 20270513 | RP-85 | 21 | The Signature; no Signature, no Transition |
 | 20270514 | RP-620 | 22 | Tracer: sealed Documental Record |
@@ -72,3 +72,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270614 | RP-85 | 21 | stored_file |
 | 20270615 | RP-85 | 21 | member_signature |
 | 20270616 | RP-85 | 21 | drop_is_signing |
+| 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |

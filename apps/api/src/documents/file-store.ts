@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -38,6 +39,8 @@ export interface FileStore {
   read(key: string): Promise<Uint8Array | null>;
   /** Stores `bytes` under `key` as `contentType`: a small file the api itself received (a Member's Signature image, RP-85). */
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
+  /** The SHA-256 of the stored file's bytes, read as a stream (a Document's fingerprint, RP-618), or null when nothing is stored under `key`. */
+  sha256(key: string): Promise<Buffer | null>;
   /** Stores a copy of the file under `fromKey` as `toKey` (a Revision's copied Documents; both under the same Project). */
   copy(fromKey: string, toKey: string): Promise<void>;
   /** Deletes the file stored under `key`, if any (a copy whose item was never created). */
@@ -101,6 +104,18 @@ export function contentDisposition(fileName: string, contentType: string): strin
 export function createFileStore(settings: FileStoreSettings): FileStore {
   const s3 = clientFor(settings);
   const expiresAt = (signedAt: Date) => new Date(signedAt.getTime() + SIGNED_URL_TTL_SECONDS * 1000).toISOString();
+  /** The stored object's body, or null when there is none at that key. */
+  const getObjectBody = async (key: string) => {
+    try {
+      const object = await s3.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
+      return object.Body ?? null;
+    } catch (error) {
+      if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
+  };
   return {
     async signUpload(key, file, signedAt) {
       const command = new PutObjectCommand({
@@ -142,15 +157,16 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
     },
 
     async read(key) {
-      try {
-        const object = await s3.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
-        return (await object.Body?.transformToByteArray()) ?? null;
-      } catch (error) {
-        if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
-          return null;
-        }
-        throw error;
-      }
+      const body = await getObjectBody(key);
+      return (await body?.transformToByteArray()) ?? null;
+    },
+
+    async sha256(key) {
+      const body = await getObjectBody(key);
+      if (!body) return null;
+      const hash = createHash("sha256");
+      for await (const chunk of body as AsyncIterable<Uint8Array>) hash.update(chunk);
+      return hash.digest();
     },
 
     async put(key, bytes, contentType) {
@@ -197,6 +213,7 @@ export const noFileStore: FileStore = {
   stat: () => Promise.reject(new Error("No file store configured")),
   read: () => Promise.reject(new Error("No file store configured")),
   put: () => Promise.reject(new Error("No file store configured")),
+  sha256: () => Promise.reject(new Error("No file store configured")),
   copy: () => Promise.reject(new Error("No file store configured")),
   remove: () => Promise.reject(new Error("No file store configured")),
 };
