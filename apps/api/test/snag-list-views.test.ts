@@ -176,6 +176,16 @@ describe("the Snag List's rows (seam 1)", () => {
     expect(await raisable(at.k1Manager, "snag_list")).toContain("SNG");
     expect(await raisable(at.c1Engineer, "snag_list")).toContain("SNG");
     expect(await raisable(at.c1Engineer, "snag_list")).not.toContain(REVIEWED);
+    // A Comment comes only from a Code B, never from "+ New" (RP-668).
+    expect(await raisable(at.k1Manager, "snag_list")).not.toContain("CMT");
+    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain("CMT");
+    const direct = await at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, {
+      type: "CMT",
+      title: "Raised directly",
+      answers: { trade: at.electrical, location: at.buildingA },
+    });
+    expect(direct.statusCode).toBe(422);
+    expect(direct.json().error ?? direct.json().message ?? direct.body).toContain("type_not_found");
     expect(await raisable(at.c1Engineer)).not.toContain("SNG");
     // The Submittals stay the default.
     expect(await raisable(at.c1Engineer)).toEqual(await raisable(at.c1Engineer, "submittals"));

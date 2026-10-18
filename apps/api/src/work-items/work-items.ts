@@ -391,7 +391,7 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
       cross join project_member pm
       join participant p on p.id = pm.participant_id
       join project_role r on r.id = p.project_role_id
-      where t.owner_kind = 'rabaed' and t.module_key = ${module}
+      where t.owner_kind = 'rabaed' and t.module_key = ${module} and not t.raised_from_item_only
         and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
         and pm.participant_id in (select app.current_participant_ids())
         and p.status = 'active' and p.company_id = app.current_company_id()
@@ -421,7 +421,7 @@ async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[
         and pm.participant_id in (select app.current_participant_ids())
     )) as workflow_version_id
     from work_item_type t
-    where t.owner_kind = 'rabaed' and t.code = ${typeCode}
+    where t.owner_kind = 'rabaed' and t.code = ${typeCode} and not t.raised_from_item_only
   `.execute(trx);
   const r = rows[0];
   // No Workflow for the raiser's Participant: the Type isn't theirs to raise (RP-590).
