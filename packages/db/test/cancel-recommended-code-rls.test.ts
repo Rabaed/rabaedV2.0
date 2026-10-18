@@ -222,7 +222,7 @@ describe("scenario RP-433-1: K1's engineer recommends Code A to their manager", 
   it("C1 reads nothing of it: not in the events, their count, the history or the Activity Feed; K1 reads it", async () => {
     const id = await atConsultantReview("Recommended");
     const before = { engineer: await eventsAsRead(c1.member, id), pm: await eventsAsRead(c1Pm, id) };
-    expect(await recommendable(k1.member, id, "send_to_manager")).toEqual(["A", "B", "C", "D"]);
+    expect(await recommendable(k1.member, id, "send_to_manager")).toEqual(["A", "C"]); // the closing outcomes its Workflow Version sets (RP-673)
 
     expect(await take(k1.member, id, "send_to_manager", "A")).toBe("applied");
 

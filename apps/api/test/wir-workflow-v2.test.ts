@@ -158,7 +158,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     expect(returned.actions.transitions.map((t) => t.key).sort()).toEqual(["cancel_engineer", "send_for_review_again"]);
     await take(hafiz, id, "send_for_review_again");
     await take(ali, id, "submit", { answers: { cover_note: "Drawing E-201 attached" } });
-    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_engineer" } });
+    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_engineer" } });
   });
 
   it("the Consultant Engineer Step's pool is the Consultant's Engineers only, so its Engineer holds it at once and the Manager doesn't", async () => {
@@ -176,7 +176,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
       expect(refused.json()).toMatchObject({ error: "recommended_code_not_offered" });
     }
     await sentToManager(id, "failed");
-    expect(await detail(mohammed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_manager" } });
+    expect(await detail(mohammed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_manager" } });
     expect((await detail(mohammed.caller, id)).heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
     expect(await transitionKeys(mohammed.caller, id)).toEqual(["fail", "pass", "pass_with_comments", "return_to_engineer"]);
     // The Engineer no longer holds it, and the Contractor holds nothing of it.
@@ -189,7 +189,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     const noReason = await tryTake(mohammed.caller, id, "return_to_engineer");
     expect(noReason.statusCode, noReason.body).toBe(422);
     await take(mohammed.caller, id, "return_to_engineer", { reason: "Photograph the cover at gridline 4" });
-    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_engineer" } });
+    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_engineer" } });
     expect((await detail(ahmed.caller, id)).heldBy?.memberName?.en).toBe("Ahmed bin Said");
     expect(await transitionKeys(mohammed.caller, id)).toEqual([]);
     await sentToManager(id, "passed");
@@ -207,7 +207,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
   it("Passed closes the WIR Passed, with no Revision offered", async () => {
     const id = await returnedAndSentAgain("Rebar Level 2");
     await take(mohammed.caller, id, "pass", { remarks: "Accepted" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed", actions: { createRevision: false } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "passed", actions: { createRevision: false } });
   });
 
   it("Passed with Comments makes each row of its table a Comment for the Contractor", async () => {
@@ -217,7 +217,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     await take(mohammed.caller, id, "pass_with_comments", {
       answers: { remarks: "Fix the cover", items_to_create: [{ comment: "Raise the cover to 40 mm" }, { comment: "Tie the lap at gridline 4" }] },
     });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed_with_comments", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "passed_with_comments", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
   });
 
   it("Failed closes the WIR Failed and offers the Contractor a Revision, the re-inspection", async () => {
@@ -225,7 +225,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     const none = await tryTake(mohammed.caller, id, "fail");
     expect(none.statusCode, none.body).toBe(422);
     await take(mohammed.caller, id, "fail", { remarks: "Spacing out of tolerance" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "failed" }, outcome: "failed", actions: { createRevision: true } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "failed", actions: { createRevision: true } });
     expect((await detail(mohammed.caller, id)).actions.createRevision).toBe(false);
   });
 
@@ -274,7 +274,7 @@ describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinn
     await pinToVersion1(id);
     expect(await detail(ali, id)).toMatchObject({ stage: { key: "internal_review" }, workflow: { versionNo: 1 } });
     await take(ali, id, "submit", { answers: { cover_note: "Ready on site" } });
-    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_inspection" }, workflow: { versionNo: 1 } });
+    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_inspection" }, workflow: { versionNo: 1 } });
 
     const engineer = await migrator.selectFrom("rabaed_engineer").select("id").where("email", "=", DEMO_ENGINEER_EMAIL).executeTakeFirstOrThrow();
     const again = await publishRabaedDefaults(migrator, { engineerId: engineer.id, reason: "RP-170 test: nothing to publish" });
@@ -285,7 +285,7 @@ describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinn
     await ok(ahmed.caller.post(`/v1/work-items/${id}/pick-up`));
     expect(await transitionKeys(ahmed.caller, id)).toEqual(["fail", "pass", "pass_with_comments"]);
     await take(ahmed.caller, id, "pass", { remarks: "Accepted" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed", workflow: { versionNo: 1 } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "passed", workflow: { versionNo: 1 } });
   });
 });
 

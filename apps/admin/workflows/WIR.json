@@ -25,28 +25,28 @@
     {
       "key": "consultant_engineer",
       "name": { "en": "Consultant Engineer", "ar": "مهندس الاستشاري" },
-      "stage": "pending_inspection",
+      "stage": "pending_approval",
       "actor": { "role": "consultant", "permission": "review", "positions": ["engineer"] },
       "outcomeMode": "recommend_code"
     },
     {
       "key": "consultant_manager",
       "name": { "en": "Consultant Manager", "ar": "مدير الاستشاري" },
-      "stage": "pending_inspection",
+      "stage": "pending_approval",
       "actor": { "role": "consultant", "permission": "approve", "positions": ["manager"] },
       "outcomeMode": "issue_outcome"
     },
     {
       "key": "passed",
       "name": { "en": "Passed", "ar": "ناجح" },
-      "stage": "passed",
+      "stage": "approved",
       "actor": null,
       "outcomeMode": "none"
     },
     {
       "key": "failed",
       "name": { "en": "Failed", "ar": "راسب" },
-      "stage": "failed",
+      "stage": "revise_resubmit",
       "actor": null,
       "outcomeMode": "none"
     },
