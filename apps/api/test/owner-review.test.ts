@@ -140,7 +140,7 @@ describe("scenario RP-593-1: K1 recommends Code B to the Owner, who confirms it"
       expect([d.outcome, d.stage.category]).toEqual(["B", "closed_positive"]);
     }
     expect((await history(at.c1Pm, id)).at(-1)).toMatchObject({ type: "issue_code", outcome: "B" });
-    expect((await detail(at.c1Pm, id)).comments).toEqual({ open: 1, closed: 0 });
+    expect((await detail(at.c1Pm, id)).raisedItems).toMatchObject([{ type: { code: "CMT" }, open: 1, closed: 0 }]);
   });
 });
 

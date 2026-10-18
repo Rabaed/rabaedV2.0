@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  actorHolder,
+  actorRole,
   baseRoles,
   formatNumber,
   formFields,
@@ -14,6 +16,7 @@ import {
   transitionRuleFields,
   updateStep,
   updateTransition,
+  type ActorRule,
   type AfterSendBack,
   type BaseRole,
   type BilingualText,
@@ -218,16 +221,19 @@ function EndEditor(props: SideEditorProps & { step: WorkflowStep }) {
 function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
   const { definition, step, openStages, stages, positions, locale, labels, onCommit, onConnect, onDelete } = props;
   const set = (patch: Partial<Omit<WorkflowStep, "key">>, coalesce: string | null = null) => onCommit(updateStep(definition, step.key, patch), coalesce);
-  const actor = step.actor ?? { role: "contractor" as BaseRole, permission: "review" as const };
+  const actor: ActorRule = step.actor ?? { role: "contractor", permission: "review" };
+  const holder = actorHolder(actor)!;
+  // A role's Positions narrow its Step Pool; the raiser may be of any role, so none are offered for it (RP-622).
+  const role = actorRole(actor);
   const isDraft = stages.find((s) => s.key === step.stage)?.category === "draft";
-  // The raiser's Steps: those of the Draft Step's Participant role (ADR 0019).
-  const raiserRole = definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft")?.actor?.role;
-  const raiser = raiserRole !== undefined && actor.role === raiserRole;
+  // The raiser's Steps: those of the Draft Step's holder, a Participant role or the raiser (ADR 0019, RP-622).
+  const raiserHolder = actorHolder(definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft")?.actor);
+  const raiser = raiserHolder !== null && holder === raiserHolder;
   // What the Step does with the setting left out, stated under it (RP-551).
   const { editsForm: _set, ...unset } = step;
   const editsFormDefault = stepEditsForm(definition, unset, stages);
   const draftsVisibleTo: DraftsVisibleTo = step.draftsVisibleTo ?? "company";
-  const ofRole = positions.filter((p) => p.role === actor.role);
+  const ofRole = role === null ? [] : positions.filter((p) => p.role === role);
   const targets = definition.steps.filter((s) => s.key !== step.key);
   const outs = definition.transitions.filter((t) => t.from === step.key);
   return (
@@ -242,9 +248,11 @@ function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
       <div className="grid grid-cols-2 gap-1.5">
         <Field label={labels.role} className="[&>label]:sr-only">
           <Select
-            value={actor.role}
-            onValueChange={(role) => set({ actor: { role: role as BaseRole, permission: actor.permission } })}
-            options={baseRoles.map((r) => ({ value: r, label: labels.map.role(r) }))}
+            value={holder}
+            onValueChange={(next) =>
+              set({ actor: next === "raiser" ? { raiser: true, permission: actor.permission } : { role: next as BaseRole, permission: actor.permission } })
+            }
+            options={[...baseRoles, "raiser" as const].map((r) => ({ value: r, label: labels.map.role(r) }))}
           />
         </Field>
         <Field label={labels.permission} className="[&>label]:sr-only">
@@ -260,7 +268,7 @@ function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
         {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name: the people who may hold it. */}
         <Icon name="users" size={14} className="mt-px" />
         {labels.poolHint(
-          [labels.map.role(actor.role), labels.map.permission(actor.permission), ...(actor.positions ?? []).map((k) => labels.map.position(k, actor.role))].join(" · "),
+          [labels.map.role(holder), labels.map.permission(actor.permission), ...(actor.positions ?? []).map((k) => (role === null ? k : labels.map.position(k, role)))].join(" · "),
         )}
       </p>
       {ofRole.length > 0 && (
@@ -433,7 +441,7 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
   // What each group of rules may name, as publish check 6 accepts it.
   const ruleFields = transitionRuleFields(form, transition, definition, stages);
   const closes = transition.kind === "close";
-  const actingRole = definition.steps.find((s) => s.key === transition.from)?.actor?.role;
+  const actingRole = actorRole(definition.steps.find((s) => s.key === transition.from)?.actor);
   const actingPositions = positions.filter((p) => p.role === actingRole);
   const closing = outcomes.filter((o) => o.closing);
   // The Type's outcomes are Review Codes when each is a letter: the Outcome says so, as the reference's.

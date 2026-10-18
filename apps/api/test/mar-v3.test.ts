@@ -216,7 +216,7 @@ describe("the MAR Workflow Version 3 (seam 1 acceptance)", () => {
     expect(noRemarks.statusCode, noRemarks.body).toBe(422);
     expect(noRemarks.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "remarks", code: "required" }] });
     await take(mohammed, id, "approve_b", { answers: { ...verified, remarks: "See the Comments", items_to_create: comments } });
-    expect(await detail(hafiz, id)).toMatchObject({ outcome: "B", comments: { open: 2, closed: 0 } });
+    expect(await detail(hafiz, id)).toMatchObject({ outcome: "B", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
   });
 
   it("C: needs its Remarks, and offers the raiser a Revision", async () => {
