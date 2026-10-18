@@ -172,7 +172,7 @@ export function WorkItemBoard({
           const closed = !isOpenStageCategory(stage.category);
           const headingId = `board-column-${stage.key}`;
           // The header names the viewer's own Steps with their counts, so a lane need not repeat them; a Stage with only its own Step has nothing to add (RP-519).
-          const stepsShown = column !== undefined && column.steps.length > 0 && !(column.steps.length === 1 && column.steps[0]!.key === stage.key);
+          const stepsShown = column !== undefined && column.steps.length > 0 && !(column.steps.length === 1 && column.steps[0]!.key === stage.key.slice(stage.key.indexOf(":") + 1));
           // The Step the column is narrowed to, while it is still one of the column's (a Step that left it narrows nothing).
           const narrowedTo = stepsShown ? column!.steps.find((s) => s.key === onlyStep[stage.key]) : undefined;
           // Narrowed, the header counts the cards it shows: that Step's, one of the viewer's own (V14).

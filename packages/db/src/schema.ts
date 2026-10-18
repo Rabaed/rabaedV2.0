@@ -173,6 +173,8 @@ export interface ProjectTable {
   status: Generated<"active" | "closed">;
   closed_at: Timestamp | null;
   creator_member_id: string;
+  /** Project setting (RP-652): the Inspections tab is hidden and the Submittals tab lists Inspections too. */
+  show_inspections_in_submittals: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -307,6 +309,17 @@ export interface ScopeTable {
   sort: Generated<number>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
+}
+
+/**
+ * A link question a Project makes required on its items of one Type (RP-82), such as
+ * the WIR's Approved submittals. Only the columns the app role may read; who set it,
+ * and when, are the database's own. Written through `app.set_project_required_field`.
+ */
+export interface ProjectRequiredFieldTable {
+  project_id: string;
+  work_item_type_id: string;
+  field_key: string;
 }
 
 /**
@@ -705,6 +718,7 @@ export interface Database {
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
+  project_required_field: ProjectRequiredFieldTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;

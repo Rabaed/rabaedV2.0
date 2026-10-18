@@ -2,6 +2,7 @@ import { answerFields, formatNumber, isOpenStageCategory, sortedByName, stepAgeL
 import { AgeDots, DocNo, Outcome, outcomesOfType, SentBackNotice, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
@@ -256,15 +257,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
           <dt className="text-muted">{t("fields.raisedBy")}</dt>
           <dd>{item.raisedBy.companyName[locale]}</dd>
-          {/* Its Comments in the Snag List (Code B's), counting only those the viewer sees. */}
-          {item.comments.open + item.comments.closed > 0 && (
-            <>
-              <dt className="text-muted">{t("fields.comments")}</dt>
-              <dd data-testid="comment-counts">
-                {t("fields.commentCounts", { open: formatNumber(item.comments.open, locale), closed: formatNumber(item.comments.closed, locale) })}
+          {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees. */}
+          {item.raisedItems.map((f) => (
+            <Fragment key={f.type.code}>
+              <dt className="text-muted">{t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale]}</dt>
+              <dd data-testid={`raised-item-counts-${f.type.code}`}>
+                {t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) })}
               </dd>
-            </>
-          )}
+            </Fragment>
+          ))}
         </dl>
 
         {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} locale={locale} />}

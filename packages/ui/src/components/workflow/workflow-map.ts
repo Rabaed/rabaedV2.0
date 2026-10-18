@@ -1,4 +1,4 @@
-import type { BaseRole, BilingualText, StageCategory, WorkItemMapPosition, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import { actorHolder, actorRole, type BaseRole, type BilingualText, type StageCategory, type WorkItemMapPosition, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "@rabaed/domain";
 import type { StageKey } from "../../tokens/themes.ts";
 import { stageColour } from "../status/stage-colour.ts";
 
@@ -105,11 +105,12 @@ export function workflowMap({ definition, stages, dir, viewerRole, position, eve
   const folded = new Map<string, BaseRole>();
   const groups: MapNode[] = [];
   if (viewerRole !== undefined) {
-    const roles = [...new Set(definition.steps.flatMap((s) => (s.actor && !terminal(s) ? [s.actor.role] : [])))];
+    // A Step held by the raiser folds only once the item's map names its role (withRaiserRole, RP-622).
+    const roles = [...new Set(definition.steps.filter((s) => !terminal(s)).flatMap((s) => actorRole(s.actor) ?? []))];
     // Another Participant of the viewer's own role holding the item (a second Contractor's) is folded too.
     const held = position?.kind === "company" ? position.role : null;
     for (const role of roles.filter((r) => r !== viewerRole || r === held)) {
-      const steps = definition.steps.filter((s) => s.actor?.role === role && !terminal(s));
+      const steps = definition.steps.filter((s) => actorRole(s.actor) === role && !terminal(s));
       const own = steps.map((s) => boxes.get(s.key)!);
       const x = Math.min(...own.map((b) => b.x)) - GROUP_PAD;
       const y = Math.min(...own.map((b) => b.y)) - GROUP_PAD;
@@ -241,7 +242,7 @@ function autoLayout(definition: WorkflowDefinition, keys: readonly string[], sta
       lanes.push({
         x: x + i * LANE + (LANE - STEP_WIDTH) / 2,
         // One role's Steps together, so a folded part covers only its own.
-        steps: inBand.filter((s) => (depth.get(s.key) ?? Number.MAX_SAFE_INTEGER) === d).toSorted((a, b) => (a.actor?.role ?? "").localeCompare(b.actor?.role ?? "")),
+        steps: inBand.filter((s) => (depth.get(s.key) ?? Number.MAX_SAFE_INTEGER) === d).toSorted((a, b) => (actorHolder(a.actor) ?? "").localeCompare(actorHolder(b.actor) ?? "")),
       }),
     );
     bands.push(band(key, stages, x, depths.length * LANE));

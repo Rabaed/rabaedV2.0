@@ -221,10 +221,26 @@ export type WorkItemExport = z.infer<typeof workItemExport>;
  * A page holds at most `linkSearchPageMax` items.
  */
 export const linkSearchPageMax = 20;
+/** A comma-separated (or repeated) query parameter, as a list without repeats: undefined when absent or empty. */
+const queryList = <T extends z.ZodType>(item: T) =>
+  z.preprocess(
+    (v) => {
+      const values = (v === undefined ? [] : Array.isArray(v) ? v : [v]).flatMap((s) => (typeof s === "string" ? s.split(",") : [s])).filter((s) => s !== "");
+      return values.length === 0 ? undefined : [...new Set(values)];
+    },
+    z.array(item).max(20).optional(),
+  );
+
 export const linkSearchQuery = z.object({
   q: z.string().trim().min(1).max(200),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(linkSearchPageMax).default(linkSearchPageMax),
+  /**
+   * A link question's `accepts` (RP-82, form.ts linkAccepts): only items of these
+   * Types, and only closed items with these outcomes. Either absent: no limit.
+   */
+  types: queryList(workItemTypeCode),
+  outcomes: queryList(workItemOutcome),
 });
 export type LinkSearchQuery = z.infer<typeof linkSearchQuery>;
 
@@ -617,10 +633,17 @@ export const workItemDetail = workItemSummary.extend({
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**
-   * Its Comments (WF-11: the items raised from it, such as Code B's), open and closed,
-   * counting only those the viewer sees (visibility.md, Lists and counts).
+   * The items raised from it, open and closed, per Work Item Type (its Code B's Comments, the Snags
+   * raised from it), counting only those the viewer sees and never a discarded one (visibility.md,
+   * Lists and counts). A Type with none is absent; ordered by Type code.
    */
-  comments: z.object({ open: z.number().int().nonnegative(), closed: z.number().int().nonnegative() }),
+  raisedItems: z.array(
+    z.object({
+      type: z.object({ code: z.string(), name: bilingualText }),
+      open: z.number().int().nonnegative(),
+      closed: z.number().int().nonnegative(),
+    }),
+  ),
   /** What the viewer may press now. */
   actions: workItemActions,
 });

@@ -1,0 +1,182 @@
+{
+  "steps": [
+    {
+      "key": "draft",
+      "name": { "en": "Draft", "ar": "مسودة" },
+      "stage": "draft",
+      "actor": { "raiser": true, "permission": "create" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "open",
+      "name": { "en": "Open", "ar": "مفتوحة" },
+      "stage": "open",
+      "actor": { "role": "contractor", "permission": "submit" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "in_progress",
+      "name": { "en": "In Progress", "ar": "قيد التنفيذ" },
+      "stage": "in_progress",
+      "actor": { "role": "contractor", "permission": "submit" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "on_hold",
+      "name": { "en": "On Hold", "ar": "معلّقة" },
+      "stage": "on_hold",
+      "actor": { "role": "contractor", "permission": "submit" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "verify",
+      "name": { "en": "Verify", "ar": "التحقق" },
+      "stage": "resolved",
+      "actor": { "raiser": true, "permission": "close" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "closed",
+      "name": { "en": "Closed", "ar": "مغلقة" },
+      "stage": "closed",
+      "actor": null,
+      "outcomeMode": "none"
+    }
+  ],
+  "transitions": [
+    {
+      "key": "raise",
+      "label": { "en": "Raise", "ar": "إصدار" },
+      "kind": "submit",
+      "from": "draft",
+      "to": "open",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "start_work",
+      "label": { "en": "Start work", "ar": "بدء التنفيذ" },
+      "kind": "send",
+      "from": "open",
+      "to": "in_progress",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "put_on_hold",
+      "label": { "en": "Put on hold", "ar": "تعليق" },
+      "kind": "send",
+      "from": "open",
+      "to": "on_hold",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "put_on_hold_in_progress",
+      "label": { "en": "Put on hold", "ar": "تعليق" },
+      "kind": "send",
+      "from": "in_progress",
+      "to": "on_hold",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "back_to_open",
+      "label": { "en": "Back to Open", "ar": "إرجاع إلى مفتوحة" },
+      "kind": "return",
+      "from": "in_progress",
+      "to": "open",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "resume",
+      "label": { "en": "Resume work", "ar": "استئناف التنفيذ" },
+      "kind": "return",
+      "from": "on_hold",
+      "to": "in_progress",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "back_to_open_on_hold",
+      "label": { "en": "Back to Open", "ar": "إرجاع إلى مفتوحة" },
+      "kind": "return",
+      "from": "on_hold",
+      "to": "open",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "resolve",
+      "label": { "en": "Resolve", "ar": "تمت المعالجة" },
+      "kind": "submit",
+      "from": "open",
+      "to": "verify",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null,
+      "screen": "snag_resolution"
+    },
+    {
+      "key": "resolve_in_progress",
+      "label": { "en": "Resolve", "ar": "تمت المعالجة" },
+      "kind": "submit",
+      "from": "in_progress",
+      "to": "verify",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null,
+      "screen": "snag_resolution"
+    },
+    {
+      "key": "resolve_on_hold",
+      "label": { "en": "Resolve", "ar": "تمت المعالجة" },
+      "kind": "submit",
+      "from": "on_hold",
+      "to": "verify",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null,
+      "screen": "snag_resolution"
+    },
+    {
+      "key": "close",
+      "label": { "en": "Close", "ar": "إغلاق" },
+      "kind": "close",
+      "from": "verify",
+      "to": "closed",
+      "outcome": "closed",
+      "permission": "close",
+      "actionForm": null
+    },
+    {
+      "key": "return_to_open",
+      "label": { "en": "Return to Open", "ar": "إعادة فتح" },
+      "kind": "send_back",
+      "from": "verify",
+      "to": "open",
+      "outcome": null,
+      "permission": "close",
+      "actionForm": {
+        "sections": [
+          {
+            "key": "return",
+            "title": { "en": "Return to Open", "ar": "إعادة فتح" },
+            "fields": [
+              { "key": "reason", "type": "textarea", "required": true, "label": { "en": "Reason", "ar": "السبب" } }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "layout": {}
+}

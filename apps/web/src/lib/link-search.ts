@@ -1,11 +1,19 @@
-import type { LinkSearchResults, WorkItemLink } from "@rabaed/domain";
+import type { LinkAccepts, LinkSearchResults, WorkItemLink } from "@rabaed/domain";
 import type { LinkTargetNames } from "@rabaed/ui";
 
-/** Link search on one Project, through the API (only Submitted items the Member sees). */
+/** Link search's query: the words, the page, and a link question's `accepts` (RP-82) as `types` and `outcomes`. */
+export function linkSearchParams(q: string, page: number, accepts?: LinkAccepts): URLSearchParams {
+  const query = new URLSearchParams({ q, page: String(page) });
+  if (accepts?.types) query.set("types", accepts.types.join(","));
+  if (accepts?.outcomes) query.set("outcomes", accepts.outcomes.join(","));
+  return query;
+}
+
+/** Link search on one Project, through the API (only Submitted items the Member sees, and only what `accepts` takes). */
 export const linkSearch =
   (projectId: string) =>
-  async (q: string, page: number): Promise<LinkSearchResults> => {
-    const query = new URLSearchParams({ q, page: String(page) });
+  async (q: string, page: number, accepts?: LinkAccepts): Promise<LinkSearchResults> => {
+    const query = linkSearchParams(q, page, accepts);
     const res = await fetch(`/api/v1/projects/${projectId}/work-items/link-search?${query.toString()}`);
     if (!res.ok) throw new Error(`Link search: ${res.status}`);
     return (await res.json()) as LinkSearchResults;

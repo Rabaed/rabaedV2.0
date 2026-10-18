@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  actorHolder,
   defaultRule,
   defaultSetValue,
   defaultValidationMessage,
@@ -281,8 +282,8 @@ function RuleEditor(props: EditorProps) {
       case "been_through": {
         const byFact = "fact" in rule;
         // A Step of the acting Participant's own role (publish check 6).
-        const role = steps.find((s) => s.key === transition.from)?.actor?.role;
-        const own = steps.filter((s) => s.actor !== null && s.actor.role === role);
+        const role = actorHolder(steps.find((s) => s.key === transition.from)?.actor);
+        const own = steps.filter((s) => s.actor !== null && actorHolder(s.actor) === role);
         return (
           <>
             <Field label={labels.beenThroughOf} group>
