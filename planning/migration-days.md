@@ -67,8 +67,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
 | 20270607 | spec RP-649 | 4A | Review fixes |
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
-| 20270611 | RP-85 | 21 | stored_file |
-| 20270612 | RP-85 | 21 | member_signature |
-| 20270613 | RP-85 | 21 | drop_is_signing |
 | 20270610 | RP-624 | 33 | raised_item_counts_by_type |
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
+| 20270614 | RP-85 | 21 | stored_file |
