@@ -72,5 +72,8 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
 | 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
 | 20270628 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524, 20270609 and 20270613 overtaken on main) |
+| 20270705 | RP-668 | 33 | comment_not_raised_directly |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
 | 20270706 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, which sorts before main's migrations) |
+| 20270708 | RP-85 | 21 | stored_file |
+| 20270709 | RP-620 | 22 | documental_record |
