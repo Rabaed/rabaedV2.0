@@ -1,6 +1,6 @@
 -- RP-626 (SNAG-6, spec RP-619): the Question Types, Question to Consultant (QSN) and Question
 -- to Contractor (QSC) (glossary Question, Snag List, Stage, Step; workflow-engine.md §12;
--- visibility.md scenarios RP-626-1 to RP-626-3).
+-- visibility.md scenarios RP-626-1 to RP-626-4).
 --
 -- Data only, as 20270429000000_snag_type.sql: the two Types and a Function Permission. Their
 -- shared Form (apps/admin/forms/QST.json), Workflows (apps/admin/workflows/QSN.json and
