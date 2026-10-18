@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
-import type { OutcomeKind } from "./outcome.ts";
+import { defaultOutcomeSets, type OutcomeKind } from "./outcome.ts";
 import { condition } from "./condition.ts";
 import type { Locale } from "./locale.ts";
 import { baseRoles, type BaseRole } from "./project.ts";
@@ -283,12 +283,19 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
 
 /**
  * A definition as a Version's rows, for a Work Item Type of `outcomeKind`: an
- * issuing Step issues its Inspection Result for a Type with Inspection Results,
- * else its Review Code. Transitions are sorted as listed, from 1. The outcome
- * kind only names the row's `outcome_mode` word: which outcomes a Transition may
- * set is the Type's own outcome set (RP-429), checked at publish (check 3).
+ * issuing Step issues its Inspection Result for a Type with Inspection Results, or
+ * when every outcome it issues is an Inspection Result (a WIR Workflow Version 1 or
+ * 2, whose Type issues Review Codes since ADR 0025, RP-673), else its Review Code.
+ * Transitions are sorted as listed, from 1. The outcome kind only names the row's
+ * `outcome_mode` word: which outcomes a Transition may set is the Type's own outcome
+ * set (RP-429), checked at publish (check 3).
  */
 export function definitionToRows(definition: WorkflowDefinition, outcomeKind: OutcomeKind): WorkflowVersionRows {
+  const inspectionResults = new Set(defaultOutcomeSets.inspection_result.map((o) => o.code));
+  const issuesInspectionResults = (step: string) => {
+    const issued = definition.transitions.filter((t) => t.from === step && t.outcome !== null);
+    return issued.length > 0 && issued.every((t) => inspectionResults.has(t.outcome!));
+  };
   return {
     layout: definition.layout,
     steps: definition.steps.map((s) => ({
@@ -297,7 +304,12 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       stage_key: s.stage,
       actor_rule: s.actor === null ? {} : ruleFromActor(s.actor),
       is_signing: false,
-      outcome_mode: s.outcomeMode === "issue_outcome" ? (outcomeKind === "inspection_result" ? "inspection_result" : "issue_code") : s.outcomeMode,
+      outcome_mode:
+        s.outcomeMode === "issue_outcome"
+          ? outcomeKind === "inspection_result" || issuesInspectionResults(s.key)
+            ? "inspection_result"
+            : "issue_code"
+          : s.outcomeMode,
       ...(s.editsForm === undefined ? {} : { edits_form: s.editsForm }),
       ...(s.draftsVisibleTo === undefined ? {} : { drafts_visible_to: s.draftsVisibleTo }),
       ...(s.afterSendBack === undefined ? {} : { after_send_back: s.afterSendBack }),

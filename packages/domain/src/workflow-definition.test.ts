@@ -44,6 +44,21 @@ describe("the Workflow definition format", () => {
     expect(definitionFromRows(rows)).toEqual(definitionFromRows(marRows(1)));
   });
 
+  // RP-673 (ADR 0025): the WIR Type now issues Review Codes, but its Versions 1 and 2 still
+  // issue Passed, Passed with Comments or Failed, published again as they were.
+  it("writes a Step that issues Inspection Results as an Inspection Result Step, whatever its Type's outcome kind", () => {
+    const definition = definitionFromRows(marRows(1));
+    const inspected: WorkflowDefinition = {
+      ...definition,
+      transitions: definition.transitions.map((t) => (t.outcome === "A" ? { ...t, outcome: "passed" } : t.outcome === "C" ? { ...t, outcome: "failed" } : t)),
+    };
+    const rows = definitionToRows(inspected, "review_code");
+    expect(rows.steps.find((s) => s.key === "consultant_review")?.outcome_mode).toBe("inspection_result");
+    expect(definitionFromRows(rows)).toEqual(inspected);
+    // A Step issuing Review Codes stays a Review Code Step.
+    expect(definitionToRows(definition, "review_code").steps.find((s) => s.key === "consultant_review")?.outcome_mode).toBe("issue_code");
+  });
+
   it("keeps rules, actions, notifications, Positions and the layout through the rows", () => {
     const definition: WorkflowDefinition = {
       ...definitionFromRows(marRows(2)),
