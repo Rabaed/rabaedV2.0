@@ -80,13 +80,13 @@ describe("which Question Types a Member is offered (seam 1)", () => {
       title: "Asking myself",
       answers: { question: "Why?", trade: at.electrical, location: at.buildingA },
     });
-    expect(own.statusCode, own.body).toBeGreaterThanOrEqual(400);
+    expect(own.statusCode, own.body).toBe(403);
     const other = await at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, {
       type: "QSN",
       title: "Asking myself",
       answers: { question: "Why?", trade: at.electrical, location: at.buildingA },
     });
-    expect(other.statusCode, other.body).toBeGreaterThanOrEqual(400);
+    expect(other.statusCode, other.body).toBe(403);
   });
 });
 
