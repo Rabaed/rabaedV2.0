@@ -10,7 +10,7 @@
 import { rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
 import { createDb, readPublishedVersionDefinition, withMember } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { parseWorkflowDefinition, type TypeOutcomes, type WorkItemBoard, type WorkItemHistory } from "@rabaed/domain";
+import { parseWorkflowDefinition, type Home, type TypeOutcomes, type WorkItemBoard, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checklistTemplate } from "./support/checklist-template.ts";
@@ -282,6 +282,9 @@ describe("a WIR started on Version 2 finishes on Version 2 (the Workflow Version
     const id = await atManagerOnVersion2("Version 2, Failed");
     await take(mohammed.caller, id, "fail", { remarks: "Spacing out of tolerance" });
     expect(await detail(hafiz.caller, id)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "failed", workflow: { versionNo: 2 }, actions: { createRevision: true } });
+    // Home's Recent activity reads it by its name, never "Code failed", though the Type now issues Codes.
+    const home: Home = (await ok(hafiz.caller.get("/v1/home"), 200)).json();
+    expect(home.activity.find((e) => e.workItem.id === id && e.outcome === "failed")?.outcomeName).toEqual({ en: "Failed", ar: "راسب" });
   });
 });
 

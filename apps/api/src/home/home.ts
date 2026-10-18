@@ -115,8 +115,10 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
         actions: OutcomeAction[] | null;
         outcome_name: BilingualText | null;
       }>`
-        -- A Review Code reads "Code B"; any other outcome by its own name.
-        select e.id, t.kind, o.polarity, o.actions, case when wt.outcome_kind <> 'review_code' then o.name end as outcome_name
+        -- A Review Code reads "Code B"; any other outcome by its own name, such as the Inspection
+        -- Result a WIR on Workflow Version 1 or 2 ends with though its Type issues Codes (RP-673).
+        select e.id, t.kind, o.polarity, o.actions,
+          case when wt.outcome_kind <> 'review_code' or length(o.code) > 3 then o.name end as outcome_name
         from work_item_event e
         join work_item w on w.id = e.work_item_id
         join work_item_type wt on wt.id = w.work_item_type_id
