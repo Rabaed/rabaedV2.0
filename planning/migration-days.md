@@ -60,8 +60,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270425 | RP-656 | 4D | Annotated photo beside the original |
 | 20270426 | spec RP-649 | 4A | Review fixes |
 | 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
-| 20270611 | RP-85 | 21 | stored_file |
-| 20270612 | RP-620 | 22 | documental_record |
 | 20270524 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
 | 20270525 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
 | 20270526 | RP-640 | 5C | Register Import: Assign to |
@@ -80,3 +78,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270610 | RP-624 | 33 | raised_item_counts_by_type |
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
+| 20270614 | RP-85 | 21 | stored_file |
