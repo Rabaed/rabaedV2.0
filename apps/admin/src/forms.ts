@@ -45,6 +45,7 @@ export async function publishFormVersion(migratorDb: Db, formDefinitionId: strin
     const problems = publishProblems(parsed.data, earlier, {
       optionListIds: new Set(lists.map((l) => l.id)),
       workflows: await typeWorkflows(trx, formDefinitionId),
+      types: await defaultTypeOutcomes(trx),
     });
     if (problems.length > 0) return { ok: false, reason: "schema_problems", problems };
 
@@ -71,7 +72,7 @@ export async function publishFormVersion(migratorDb: Db, formDefinitionId: strin
  */
 async function typeWorkflows(db: Db, formDefinitionId: string): Promise<WorkflowStepHolder[][]> {
   const { rows } = await sql<{ type_id: string; key: string; role: string | null; draft: boolean }>`
-    select t.id as type_id, s.key, s.actor_rule ->> 'base_role' as role, app.is_draft_step(s.id) as draft
+    select t.id as type_id, s.key, app.actor_holder(s.actor_rule) as role, app.is_draft_step(s.id) as draft
     from work_item_type t
     join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
       and v.version_no = ${latestPublishedVersionNo(sql.ref("t.workflow_definition_id"))}
@@ -82,6 +83,26 @@ async function typeWorkflows(db: Db, formDefinitionId: string): Promise<Workflow
   const byType = new Map<string, WorkflowStepHolder[]>();
   for (const { type_id, key, role, draft } of rows) byType.set(type_id, [...(byType.get(type_id) ?? []), { key, role, draft }]);
   return [...byType.values()];
+}
+
+/**
+ * The Rabaed Default Work Item Types, by code, each with its Rabaed Default outcome
+ * codes: what a link question's `accepts` may name (RP-82).
+ */
+async function defaultTypeOutcomes(db: Db): Promise<Map<string, Set<string>>> {
+  const { rows } = await sql<{ type: string; outcome: string | null }>`
+    select t.code as type, o.code as outcome
+    from work_item_type t
+    left join outcome o on o.work_item_type_id = t.id and o.owner_kind = 'rabaed'
+    where t.owner_kind = 'rabaed'
+  `.execute(db);
+  const types = new Map<string, Set<string>>();
+  for (const { type, outcome } of rows) {
+    const outcomes = types.get(type) ?? new Set<string>();
+    if (outcome !== null) outcomes.add(outcome);
+    types.set(type, outcomes);
+  }
+  return types;
 }
 
 /** The Form of the Rabaed Default Work Item Type `typeCode`, if it has one. */

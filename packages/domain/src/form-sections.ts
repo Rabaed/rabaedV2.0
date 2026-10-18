@@ -11,19 +11,19 @@ import type { FieldError, FormSection } from "./form.ts";
 /** A Step of a Work Item Type's Workflow, as Form Sections are matched to it. */
 export type WorkflowStepHolder = {
   key: string;
-  /** The base role of the Participant that holds it (`contractor`, `consultant`…); null on a terminal Step. */
+  /** The base role of the Participant that holds it (`contractor`, `consultant`…), `raiser` when the raiser does (RP-622); null on a terminal Step. */
   role: string | null;
   /** The Draft Step, where the raiser starts. */
   draft: boolean;
 };
 
-/** The base role of the raiser: the one holding the Draft Step. */
-const raiserRole = (steps: readonly WorkflowStepHolder[]): string | null => steps.find((s) => s.draft)?.role ?? null;
+/** The raiser's holder: the one holding the Draft Step (`raiser` when the Draft names the raiser, RP-622). */
+const raiserHolder = (steps: readonly WorkflowStepHolder[]): string | null => steps.find((s) => s.draft)?.role ?? null;
 
 /** The Steps where `section` is changed: its `editable_at`, or else the raiser's Draft and internal Steps. */
 export function sectionSteps(section: Pick<FormSection, "editable_at">, steps: readonly WorkflowStepHolder[]): string[] {
   if (section.editable_at) return section.editable_at;
-  const raiser = raiserRole(steps);
+  const raiser = raiserHolder(steps);
   return steps.filter((s) => s.role !== null && s.role === raiser).map((s) => s.key);
 }
 
@@ -62,7 +62,7 @@ export function editableSections(
  * raiser, marked "Filled in by the Consultant".
  */
 export function sectionsFilledBy(schema: { sections: readonly FormSection[] }, steps: readonly WorkflowStepHolder[]): Record<string, string> {
-  const raiser = raiserRole(steps);
+  const raiser = raiserHolder(steps);
   return Object.fromEntries(
     schema.sections.flatMap((s) => {
       const first = sectionSteps(s, steps)[0];

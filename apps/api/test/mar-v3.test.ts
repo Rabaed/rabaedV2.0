@@ -123,8 +123,9 @@ describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
         ...others("SAR", "2-2"),
         ["DAR", 1],
         ...others("DAR", "1-1-owner"),
-        ["WIR", 1],
+        ["WIR", 2],
         ["CMT", 2],
+        ["SNG", 1],
       ]);
     } finally {
       await migrator.destroy();
@@ -215,7 +216,7 @@ describe("the MAR Workflow Version 3 (seam 1 acceptance)", () => {
     expect(noRemarks.statusCode, noRemarks.body).toBe(422);
     expect(noRemarks.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "remarks", code: "required" }] });
     await take(mohammed, id, "approve_b", { answers: { ...verified, remarks: "See the Comments", items_to_create: comments } });
-    expect(await detail(hafiz, id)).toMatchObject({ outcome: "B", comments: { open: 2, closed: 0 } });
+    expect(await detail(hafiz, id)).toMatchObject({ outcome: "B", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
   });
 
   it("C: needs its Remarks, and offers the raiser a Revision", async () => {
@@ -333,26 +334,8 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
   });
 });
 
+// A WIR's Workflow, Passed with Comments and Failed: apps/api/test/wir-workflow-v2.test.ts (RP-170).
 describe("the Inspections' Rabaed Defaults (RP-437)", () => {
-  const raiseWir = async (title: string) => {
-    const id = (
-      await ok(hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "WIR", title, answers: { description: "Slab rebar, Level 2", trade: electrical, location: buildingA } }), 201)
-    ).json().id as string;
-    await take(hafiz, id, "send_for_review");
-    await take(ali, id, "submit", { answers: { cover_note: "Ready on site from 09:00" } });
-    await ok(ahmed.post(`/v1/work-items/${id}/pick-up`));
-    return id;
-  };
-
-  it("a WIR Passed with Comments makes its Comments; a Failed one is re-inspected by a Revision", async () => {
-    const passed = await raiseWir("Rebar Level 2");
-    await take(ahmed, passed, "pass_with_comments", { answers: { remarks: "Fix the cover", items_to_create: [{ comment: "Raise the cover to 40 mm" }] } });
-    expect(await detail(hafiz, passed)).toMatchObject({ stage: { key: "passed" }, outcome: "passed_with_comments", comments: { open: 1, closed: 0 } });
-    const failed = await raiseWir("Rebar Level 3");
-    await take(ahmed, failed, "fail", { remarks: "Spacing out of tolerance" });
-    expect(await detail(hafiz, failed)).toMatchObject({ stage: { key: "failed" }, outcome: "failed", actions: { createRevision: true } });
-  });
-
   it("have no NCR: it gets its own Workflow and Form (RP-553)", async () => {
     expect((await hafiz.get(`/v1/projects/${projectId}/work-item-types/WIR/form`)).statusCode).toBe(200);
     expect((await hafiz.get(`/v1/projects/${projectId}/work-item-types/NCR/form`)).statusCode).toBe(404);

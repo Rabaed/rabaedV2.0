@@ -6,7 +6,7 @@ import { formFields, formSchema, type FormField, type FormSchema } from "./form.
 import { sectionSteps, type WorkflowStepHolder } from "./form-sections.ts";
 import { itemsToCreate, itemsToCreateKey, type Outcome, type OutcomeAction } from "./outcome.ts";
 import { isOpenStageCategory } from "./work-item.ts";
-import type { WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
+import { actorHolder, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 import { workflowKindProblems } from "./workflow-publish.ts";
 
 // Every publish check of a Workflow Version (workflow-engine.md §1, §4; RP-425,
@@ -332,7 +332,7 @@ function itemsTableProblems(t: WorkflowTransition, context: WorkflowPublishConte
 /** Checks 4 and 8 (workflowKindProblems) and 7 (workflowActionFormProblems), as built, on the definition. */
 function builtCheckProblems({ steps, transitions, context }: CheckInput): FoundProblem[] {
   const kindProblems = workflowKindProblems(
-    steps.map((s) => ({ key: s.key, role: s.actor?.role ?? null })),
+    steps.map((s) => ({ key: s.key, role: actorHolder(s.actor) })),
     transitions.map((t) => ({ key: t.key, from: t.from, to: t.to, kind: t.kind, outcome: t.outcome })),
   );
   const formProblems = workflowActionFormProblems(
@@ -355,24 +355,24 @@ function sendProblems({ transitions, stepOf, isTerminal }: CheckInput): FoundPro
     .filter((t) => {
       const [from, to] = [stepOf.get(t.from), stepOf.get(t.to)];
       if (t.kind !== "send" || !from?.actor || !to?.actor || isTerminal(to)) return false;
-      return from.actor.role !== to.actor.role;
+      return actorHolder(from.actor) !== actorHolder(to.actor);
     })
     .map((t): FoundProblem => ({ code: "send_crosses_participants", transition: t.key }));
 }
 
-/** The raiser's Participant role: its Draft Step's (ADR 0019). Undefined without a Draft Step. */
-const raiserRole = (steps: readonly WorkflowStep[], categoryOf: (stage: string) => StageCategory | undefined) =>
-  steps.find((s) => categoryOf(s.stage) === "draft")?.actor?.role;
+/** The raiser's holder: its Draft Step's role, or "raiser" for a Draft held by the raiser (ADR 0019, RP-622). Undefined without a Draft Step. */
+const raiserHolder = (steps: readonly WorkflowStep[], categoryOf: (stage: string) => StageCategory | undefined) =>
+  actorHolder(steps.find((s) => categoryOf(s.stage) === "draft")?.actor) ?? undefined;
 
 /** A Cancel leaves only the raiser's own Steps (its Draft Step's role), into a cancelled Stage, with no outcome. */
 function cancelProblems({ steps, transitions, stepOf, categoryOf }: CheckInput): FoundProblem[] {
-  const raiser = raiserRole(steps, categoryOf);
+  const raiser = raiserHolder(steps, categoryOf);
   return transitions
     .filter((t) => t.kind === "cancel")
     .flatMap((t): FoundProblem[] => {
       const [from, to] = [stepOf.get(t.from), stepOf.get(t.to)];
       const codes: WorkflowProblemCode[] = [];
-      if (from !== undefined && (raiser === undefined || from.actor?.role !== raiser)) codes.push("cancel_not_by_raiser");
+      if (from !== undefined && (raiser === undefined || actorHolder(from.actor) !== raiser)) codes.push("cancel_not_by_raiser");
       if (to !== undefined && categoryOf(to.stage) !== "cancelled") codes.push("cancel_not_to_cancelled_stage");
       if (t.outcome !== null) codes.push("cancel_sets_outcome");
       return codes.map((code) => ({ code, transition: t.key }));
@@ -394,7 +394,7 @@ export function stepEditsForm(
   if (step.editsForm !== undefined) return step.editsForm;
   const draftStages = new Set(stages.filter((s) => s.category === "draft").map((s) => s.key));
   return definition.steps.some(
-    (d) => draftStages.has(d.stage) && d.actor !== null && step.actor !== null && d.actor.role === step.actor.role && d.actor.permission === step.actor.permission,
+    (d) => draftStages.has(d.stage) && d.actor !== null && step.actor !== null && actorHolder(d.actor) === actorHolder(step.actor) && d.actor.permission === step.actor.permission,
   );
 }
 
@@ -428,9 +428,9 @@ function formEditingProblems({ steps, transitions, context, categoryOf }: CheckI
  * a `send_back` Transition goes to. "After a Send Back" is set on these only.
  */
 export function sendBackSteps(definition: Pick<WorkflowDefinition, "steps" | "transitions">, stages: WorkflowPublishContext["stages"]): Set<string> {
-  const raiser = raiserRole(definition.steps, (stage) => stages.find((s) => s.key === stage)?.category);
+  const raiser = raiserHolder(definition.steps, (stage) => stages.find((s) => s.key === stage)?.category);
   const targets = new Set(definition.transitions.filter((t) => t.kind === "send_back").map((t) => t.to));
-  return new Set(definition.steps.filter((s) => targets.has(s.key) && raiser !== undefined && s.actor?.role === raiser).map((s) => s.key));
+  return new Set(definition.steps.filter((s) => targets.has(s.key) && raiser !== undefined && actorHolder(s.actor) === raiser).map((s) => s.key));
 }
 
 /**
@@ -518,7 +518,7 @@ export function transitionFieldScope(t: WorkflowTransition, { steps, transitions
   const own = actionFormFields(t.actionForm);
   const group = sharingLabel(transitions, t);
   const routing = group.length < 2 ? [] : [...own.keys()].filter((key) => group.every((g) => actionFormFields(g.actionForm).has(key)));
-  const holders: WorkflowStepHolder[] = steps.map((s) => ({ key: s.key, role: s.actor?.role ?? null, draft: categoryOf(s.stage) === "draft" }));
+  const holders: WorkflowStepHolder[] = steps.map((s) => ({ key: s.key, role: actorHolder(s.actor), draft: categoryOf(s.stage) === "draft" }));
   const filledAtSource = (form?.sections ?? []).filter((section) => sectionSteps(section, holders).includes(t.from)).flatMap((section) => section.fields.map((f) => f.key));
   return {
     fieldOf: (key) => own.get(key) ?? formFieldOf.get(key),
@@ -569,8 +569,8 @@ function ruleProblems({ steps, transitions, context, stepOf, categoryOf, interna
         if ((r.type !== "not_same_person" && r.type !== "been_through") || !("step" in r)) return [];
         const named = stepOf.get(r.step);
         if (named === undefined) return [problemAt("unknown_step", r.step)];
-        const ownRole = stepOf.get(t.from)?.actor?.role;
-        return r.type === "been_through" && named.actor?.role !== ownRole ? [problemAt("been_through_other_participant", r.step)] : [];
+        const ownRole = actorHolder(stepOf.get(t.from)?.actor);
+        return r.type === "been_through" && actorHolder(named.actor) !== ownRole ? [problemAt("been_through_other_participant", r.step)] : [];
       }),
       ...(t.rules?.validate ?? []).flatMap((v): FoundProblem[] => {
         if (v.type === "condition") return conditionReadProblems(v.condition, scope.validate);

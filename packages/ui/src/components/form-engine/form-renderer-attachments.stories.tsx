@@ -50,6 +50,7 @@ const document = (id: string, fieldKey: string | null, fileName: string, sizeByt
   frozen,
   fieldKey,
   itemKey: null,
+  annotatedFromId: null,
   takenAt: null,
   takenWhere: null,
 });

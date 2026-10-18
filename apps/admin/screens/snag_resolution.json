@@ -1,0 +1,26 @@
+{
+  "key": "snag_resolution",
+  "name": { "en": "Resolution", "ar": "المعالجة" },
+  "schema": {
+    "sections": [
+      {
+        "key": "resolution",
+        "title": { "en": "Resolution", "ar": "المعالجة" },
+        "fields": [
+          {
+            "key": "resolution_note",
+            "type": "textarea",
+            "required": true,
+            "maxLength": 4000,
+            "label": { "en": "Resolution note", "ar": "ملاحظة المعالجة" },
+            "help": {
+              "en": "Say what was done to fix the snag. Shared with everyone who sees it.",
+              "ar": "اذكر ما تم لمعالجة العيب. يراها كل من يرى العيب."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "internalFields": []
+}

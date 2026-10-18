@@ -114,7 +114,7 @@ describe("publish checks 4 and 8", () => {
       order by v.id, tr.sort
     `.execute(migrator);
     const steps = await sql<{ version: string; key: string; role: string | null }>`
-      select s.workflow_version_id as version, s.key, s.actor_rule ->> 'base_role' as role
+      select s.workflow_version_id as version, s.key, app.actor_holder(s.actor_rule) as role
       from workflow_step s join workflow_version v on v.id = s.workflow_version_id
       where v.status = 'published'
     `.execute(migrator);
