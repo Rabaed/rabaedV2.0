@@ -185,7 +185,7 @@ describe("the Snag List's rows (seam 1)", () => {
       answers: { trade: at.electrical, location: at.buildingA },
     });
     expect(direct.statusCode).toBe(422);
-    expect(direct.json().error ?? direct.json().message ?? direct.body).toContain("type_not_found");
+    expect(direct.body).toContain("type_not_found");
     expect(await raisable(at.c1Engineer)).not.toContain("SNG");
     // The Submittals stay the default.
     expect(await raisable(at.c1Engineer)).toEqual(await raisable(at.c1Engineer, "submittals"));
