@@ -1,0 +1,1 @@
+-- RP-617: company stamp.

@@ -73,3 +73,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270615 | RP-85 | 21 | member_signature |
 | 20270616 | RP-85 | 21 | drop_is_signing |
 | 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
+| 20270629 | RP-617 | 21 | company_stamp |
