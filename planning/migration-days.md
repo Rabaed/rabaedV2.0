@@ -63,3 +63,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270707 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref) |
 | 20270705 | RP-668 | 33 | comment_not_raised_directly |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
+| 20270713 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee) |

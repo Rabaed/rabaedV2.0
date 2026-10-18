@@ -455,3 +455,145 @@ describe("Matched values, checked again by the database (RP-639)", () => {
     });
   });
 });
+
+// RP-640: a row's raiser is the Member it is assigned to (picked for a group of rows, or
+// by email in an "Assign to" column), an active Member of the importing Participant on
+// the Project who may raise its Type and covers its values; the Draft is their own, and
+// its `created` event names the importer and the import.
+describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
+  let importer = ""; // C1's PM, seeing all of the Project: imports and assigns.
+  let noCreate = ""; // A C1 Member on the Project with no Position: holds no Create.
+  let removed = ""; // A C1 Member taken off the Project.
+
+  const reasonsOf = (as: string, importId: string) =>
+    call<{ row_no: number; reasons: string[] }>(
+      as,
+      sql`select row_no, reasons from submittal_register_import_row where import_id = ${importId}::uuid order by row_no`,
+    ).then((r) => Object.fromEntries(r.map((x) => [x.row_no, x.reasons])));
+  const assigned = (to: string | null, text = "") => ({ assignee: text, assignee_member_id: to });
+
+  beforeAll(async () => {
+    importer = await member(c1.id, "importer");
+    noCreate = await member(c1.id, "no-create");
+    removed = await member(c1.id, "removed");
+    for (const m of [importer, noCreate, removed]) {
+      await call(c1.ap, sql<{ outcome: string }>`select app.add_project_member(${c1Participant}::uuid, ${m}::uuid, now())`);
+      for (const kind of ["trade", "location"]) {
+        await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${m}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`);
+      }
+    }
+    await outcome(c1.ap, sql`select app.set_project_member_positions(${c1Participant}::uuid, ${importer}::uuid, ${["project_manager"]}::text[]) as outcome`);
+    await outcome(c1.ap, sql`select app.set_project_member_positions(${c1Participant}::uuid, ${removed}::uuid, ${["engineer"]}::text[]) as outcome`);
+    await call(c1.ap, sql<{ outcome: string }>`select app.remove_project_member(${c1Participant}::uuid, ${removed}::uuid, now()) as outcome`);
+    // A Submittals Type whose Draft Step its raiser holds with the Create Function Permission
+    // (the Snag's Workflow): a Member with no Position may not raise it.
+    await migrator.query(`
+      insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+      select 'rabaed', 'submittals', 'RGC', '{"en": "Register create", "ar": "Register create"}'::jsonb,
+        (select workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'SNG'), 'review_code',
+        (select form_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR')`);
+    matched.types.push("RGC");
+  });
+
+  it("refuses a Mechanical row assigned to an engineer narrowed to Electrical, and keeps the Electrical one", async () => {
+    const previewed = await preview(importer, [
+      row(2, "Panels", "MAR", "Electrical", assigned(c1Narrowed)),
+      row(3, "Pumps", "SAR", "ME", assigned(c1Narrowed)),
+    ]);
+    expect(await reasonsOf(importer, previewed.import_id!)).toEqual({ 2: [], 3: ["assignee_outside_visibility"] });
+  });
+
+  it("refuses an assignee who isn't an active Member of the importing Participant on the Project, whoever they are", async () => {
+    const previewed = await preview(importer, [
+      row(2, "K1's", "MAR", "Electrical", assigned(k1.member)),
+      row(3, "C2's", "MAR", "Electrical", assigned(c2.member)),
+      row(4, "Taken off", "MAR", "Electrical", assigned(removed)),
+      row(5, "Made up", "MAR", "Electrical", assigned(randomUUID())),
+      row(6, "An email nobody has", "MAR", "Electrical", assigned(null, "nobody@rabaed.test")),
+    ]);
+    expect(await reasonsOf(importer, previewed.import_id!)).toEqual({
+      2: ["assignee_unknown"],
+      3: ["assignee_unknown"],
+      4: ["assignee_unknown"],
+      5: ["assignee_unknown"],
+      6: ["assignee_unknown"],
+    });
+  });
+
+  it("refuses an assignee who may not raise the row's Type, while the importer may", async () => {
+    const previewed = await preview(importer, [
+      row(2, "Theirs to raise", "MAR", "Electrical", assigned(noCreate)),
+      row(3, "Not theirs", "RGC", "Electrical", assigned(noCreate)),
+      row(4, "The importer's", "RGC", "Electrical"),
+    ]);
+    expect(await reasonsOf(importer, previewed.import_id!)).toEqual({ 2: [], 3: ["assignee_cannot_create"], 4: [] });
+  });
+
+  describe("on confirm", () => {
+    let importId = "";
+    let drafts: { row_no: number; work_item_id: string | null }[] = [];
+
+    beforeAll(async () => {
+      importId = (
+        await preview(importer, [
+          row(2, "Panels for the engineer", "MAR", "Electrical", assigned(c1Narrowed)),
+          row(3, "Pumps for the engineer", "SAR", "ME", assigned(c1Narrowed)),
+          row(4, "Kept by the importer", "SAR", "ME"),
+          row(5, "Assigned to the importer", "MAR", "Electrical", assigned(importer)),
+        ])
+      ).import_id!;
+      expect(await confirm(importer, importId)).toEqual({ outcome: "created", rows_created: 3 });
+      drafts = await results(importer, importId);
+    });
+
+    it("makes the assignee the Draft's raiser and holder, and nothing outside their Visibility", async () => {
+      const ids = drafts.map((d) => d.work_item_id);
+      expect(drafts.map((d) => [d.row_no, d.work_item_id !== null])).toEqual([
+        [2, true],
+        [3, false],
+        [4, true],
+        [5, true],
+      ]);
+      const { rows } = await migrator.query(
+        `select w.title, w.created_by_member_id as raiser, w.raised_by_participant_id as participant, a.assignee_member_id as holder, a.status
+         from work_item w join step_assignment a on a.work_item_id = w.id
+         where w.id = any ($1) order by w.title`,
+        [ids.filter((id) => id !== null)],
+      );
+      expect(rows).toEqual([
+        { title: "Assigned to the importer", raiser: importer, participant: c1Participant, holder: importer, status: "picked_up" },
+        { title: "Kept by the importer", raiser: importer, participant: c1Participant, holder: importer, status: "picked_up" },
+        { title: "Panels for the engineer", raiser: c1Narrowed, participant: c1Participant, holder: c1Narrowed, status: "picked_up" },
+      ]);
+      const { rows: outside } = await migrator.query(
+        "select w.id from work_item w where w.import_id = $1 and w.created_by_member_id = $2 and w.title like 'Pumps%'",
+        [importId, c1Narrowed],
+      );
+      expect(outside).toEqual([]);
+    });
+
+    it("names the importer as the actor of the assignee's Draft's `created` event, with the import", async () => {
+      const panels = drafts.find((d) => d.row_no === 2)!.work_item_id!;
+      const { rows } = await migrator.query(
+        "select actor_member_id, actor_participant_id, payload ->> 'import_id' as import_id from work_item_event where work_item_id = $1 and type = 'created'",
+        [panels],
+      );
+      expect(rows).toEqual([{ actor_member_id: importer, actor_participant_id: c1Participant, import_id: importId }]);
+    });
+
+    it("lets the assignee read and edit their Draft as their own", async () => {
+      const panels = drafts.find((d) => d.row_no === 2)!.work_item_id!;
+      expect(await call(c1Narrowed, sql<{ id: string }>`select id from work_item where id = ${panels}::uuid`)).toEqual([{ id: panels }]);
+      expect(await outcome(c1Narrowed, sql`select app.set_work_item_paper_ref(${panels}::uuid, 'RP-640-1', now()) as outcome`)).toBe("saved");
+    });
+  });
+
+  it("refuses the whole confirm when the assignee was narrowed since the preview, creating nothing", async () => {
+    const previewed = await preview(importer, [row(2, "Lighting for the colleague", "MAR", "Electrical", assigned(noCreate)), row(3, "Pumps", "SAR", "ME", assigned(noCreate))]);
+    expect(await reasonsOf(importer, previewed.import_id!)).toEqual({ 2: [], 3: [] });
+    await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${noCreate}::uuid, 'trade', false, ${[electrical]}::uuid[], now()) as outcome`);
+    expect(await confirm(importer, previewed.import_id!)).toEqual({ outcome: "preview_outdated", rows_created: null });
+    const { rows: made } = await migrator.query("select id from work_item where import_id = $1", [previewed.import_id]);
+    expect(made).toEqual([]);
+  });
+});
