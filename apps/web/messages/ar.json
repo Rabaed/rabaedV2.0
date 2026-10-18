@@ -258,7 +258,8 @@
       "revision": "R{n}",
       "code": "Code {code}",
       "createdOn": "أُنشئ في {date}",
-      "submittedOn": "قُدِّم في {date}"
+      "submittedOn": "قُدِّم في {date}",
+      "openPackage": "فتح الحزمة {number} {name}"
     },
     "viewSwitch": {
       "view": "طريقة العرض",
@@ -746,6 +747,7 @@
       "with": "لدى",
       "notPickedUpYet": "{company} · لم تُستلَم بعد: {names}{more, plural, =0 {} other { +#}}",
       "raisedBy": "أنشأه",
+      "package": "الحزمة",
       "issuedCode": "الرمز الصادر",
       "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب" },
       "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة"
@@ -2188,6 +2190,86 @@
       "everyRow": "{value}، لكل الصفوف",
       "rows": "صفوف هذا الاستيراد",
       "worksheetValue": "{worksheet}، أسماء الأعمدة في الصف {row}"
+    }
+  },
+  "packages": {
+    "breadcrumb": "مسار التنقل",
+    "back": "الاعتمادات",
+    "kind": "حزمة",
+    "status": { "open": "مفتوحة", "in_progress": "قيد التنفيذ", "done": "منجزة" },
+    "ownedBy": "المالك",
+    "progress": "التقدم",
+    "closedOf": "{closed} من {total} مغلقة",
+    "code": "Code {code}",
+    "stillOpen": "ما زالت مفتوحة",
+    "submittals": "الاعتمادات",
+    "table": "الاعتمادات في هذه الحزمة",
+    "empty": "لا توجد اعتمادات في هذه الحزمة بعد.",
+    "done": "منجزة: أُغلق كل اعتماد أخير فيها بالرمز A أو B أو D.",
+    "actions": "إجراءات الحزمة",
+    "with": "لدى",
+    "remove": "إزالة {subject} من الحزمة",
+    "close": "إغلاق",
+    "cancel": "إلغاء",
+    "refusals": {
+      "unavailable": "تعذّر ذلك. حاول مرة أخرى.",
+      "in_another_package": "أحدها موجود في حزمة أخرى.",
+      "item_not_offered": "لا يمكن إضافة أحدها إلى هذه الحزمة.",
+      "package_not_open": "لم تعد الحزمة مفتوحة.",
+      "project_closed": "المشروع مغلق.",
+      "nothing_to_submit": "لم يبقَ ما يُقدَّم.",
+      "invalid_name": "أدخل الاسم بالإنجليزية والعربية."
+    },
+    "rename": {
+      "trigger": "إعادة التسمية",
+      "title": "إعادة تسمية الحزمة",
+      "description": "اسمها بالإنجليزية والعربية. بعد أن تصبح قيد التنفيذ تُسجَّل إعادة التسمية.",
+      "nameEn": "الاسم بالإنجليزية",
+      "nameAr": "الاسم بالعربية",
+      "required": "أدخل الاسم بالإنجليزية والعربية.",
+      "save": "حفظ"
+    },
+    "delete": {
+      "trigger": "حذف",
+      "title": "حذف {number}؟",
+      "description": "تبقى اعتماداتها كما هي، دون حزمة.",
+      "confirm": "حذف الحزمة"
+    },
+    "addItems": {
+      "trigger": "إضافة عناصر",
+      "title": "إضافة اعتمادات",
+      "description": "اعتمادات شركتك: المسودات، وما في المراجعة الداخلية، وما قُدِّم. لا يمكن إضافة اعتماد موجود في حزمة أخرى.",
+      "search": "بحث",
+      "searchPlaceholder": "الرقم، الموضوع، التخصص…",
+      "trade": "التخصص",
+      "allTrades": "كل التخصصات",
+      "loading": "جارٍ التحميل…",
+      "noResults": "لا توجد اعتمادات مطابقة.",
+      "results": "الاعتمادات التي وُجدت",
+      "inOther": "في {number}",
+      "inThis": "في هذه الحزمة",
+      "choose": "اختيار {subject}",
+      "add": "{count, plural, one {إضافة اعتماد واحد} other {إضافة # اعتمادات}}",
+      "numberOnSubmit": "الرقم عند التقديم"
+    },
+    "submit": {
+      "trigger": "تقديم الحزمة",
+      "title": "تقديم {number}",
+      "description": "يُقدَّم كل اعتماد أدناه دفعة واحدة ويأخذ رقم مستنده. الكل أو لا شيء: إن لم يكن أحدها جاهزًا فلا يُقدَّم أي منها.",
+      "count": "{count, plural, one {اعتماد واحد للتقديم} other {# اعتمادات للتقديم}}",
+      "confirm": "تقديم الحزمة",
+      "numberOnSubmit": "الرقم عند التقديم",
+      "notReadyTitle": "غير جاهزة",
+      "notReadyIntro": "لم يُقدَّم شيء. هذه تمنع التقديم:",
+      "reasons": {
+        "pick_up_first": "استلمه أولًا: إنه ينتظر في مجموعة خطوتك.",
+        "cannot_submit": "إنه في خطوة لا يمكنك تقديمه منها.",
+        "form_incomplete": "في نموذجه حقل مطلوب لم يُملأ.",
+        "invalid_action_form": "نموذج الإجراء غير مكتمل.",
+        "validation_failed": "قاعدة من قواعد نموذجه غير مستوفاة.",
+        "refused": "رُفض تقديمه."
+      },
+      "othersNotReady": "يمنعه أيضًا اعتماد لا تراه."
     }
   }
 }

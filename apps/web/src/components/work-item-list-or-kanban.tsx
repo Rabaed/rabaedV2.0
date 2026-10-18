@@ -165,6 +165,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       code: (code) => t("board.code", { code }),
       createdOn: (date) => t("board.createdOn", { date }),
       submittedOn: (date) => t("board.submittedOn", { date }),
+      openPackage: (number, name) => t("board.openPackage", { number, name }),
     },
     layout: Object.fromEntries(layoutKeys.map((key) => [key, t(`layout.${key}`)])) as BoardLayoutMenuLabels,
   };
@@ -333,6 +334,8 @@ export function WorkItemListOrKanban(
               className="-mx-4 px-4 sm:-mx-7 sm:px-7"
               listHrefFor={(q) => hrefIn("list", q)}
               itemHref={itemHref}
+              // A card's Package chip, where the API gives the item's Package (RP-659).
+              packageHref={(id) => getPathname({ href: `/packages/${id}`, locale })}
               linkAs={NextLink}
               onMove={(card, move) => setMoving({ card, move })}
             />
