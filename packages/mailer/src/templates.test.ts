@@ -15,6 +15,8 @@ const item = {
 const k1 = { en: "Khatib Consultants", ar: "الخطيب للاستشارات" };
 const khalid = { en: "Khalid Signer", ar: "خالد الموقّع" };
 const codeB = { type: "issue_code", transition: { en: "Issue Code B", ar: "إصدار الرمز B" }, outcome: "B", companyName: k1, signerName: khalid } as const;
+const c1 = { en: "Al Bina Contracting", ar: "البناء للمقاولات" };
+const bathrooms = { id: "0190a1b2-0000-7000-8000-0000000000b1", number: "PKG-007", name: { en: "Bathrooms – Tower 1", ar: "حمامات – البرج 1" }, companyName: c1, count: 8 };
 
 const LIST = "https://rabaed.test/en/projects/0190a1b2-0000-7000-8000-00000000000a/work-items?stage=draft%2Cpending_approval";
 const OLDEST = `${LIST}&stepAgeMin=4`;
@@ -62,6 +64,8 @@ const examples: EmailTemplateValues = {
     ...item,
     event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
   },
+  // The every-notification checks below read its number, Subject and link as an item's.
+  "notification-package-submitted": { ...item, workItemId: null, package: bathrooms },
   "daily-digest": {
     projects: [
       {
@@ -257,6 +261,28 @@ describe("notification emails", () => {
   it("Sent Back says what happened", () => {
     expect(renderEmail("notification-sent-back", "en", examples["notification-sent-back"]).subject.split(" · ")[2]).toBe("Sent Back to you");
   });
+
+  it("a Package Submit (RP-643): the Package's number and name, who Submitted it and how many submittals the recipient sees", () => {
+    const values = {
+      link: "https://rabaed.test/en/packages/0190a1b2-0000-7000-8000-0000000000b1",
+      workItemId: null,
+      documentNumber: bathrooms.number,
+      subject: bathrooms.name.en,
+      step: null,
+      event: null,
+      package: bathrooms,
+    };
+    expect(renderEmail("notification-package-submitted", "en", values).subject).toBe(
+      "\u2066PKG-007\u2069 · Bathrooms – Tower 1 · Al Bina Contracting Submitted 8 submittals",
+    );
+    expect(renderEmail("notification-package-submitted", "en", { ...values, package: { ...bathrooms, count: 1 } }).subject).toContain("Submitted 1 submittal");
+    const ar = renderEmail("notification-package-submitted", "ar", { ...values, subject: bathrooms.name.ar });
+    expect(ar.subject).toBe("\u2066PKG-007\u2069 · حمامات – البرج 1 · قدّم البناء للمقاولات 8 تقديمات");
+    expect(ar.text).toContain(values.link);
+    // Arabic counts: two, eleven and more.
+    expect(renderEmail("notification-package-submitted", "ar", { ...values, package: { ...bathrooms, count: 2 } }).subject).toContain("تقديمان");
+    expect(renderEmail("notification-package-submitted", "ar", { ...values, package: { ...bathrooms, count: 11 } }).subject).toContain("11 تقديمًا");
+  });
 });
 
 describe("the daily digest (RP-358)", () => {
@@ -305,6 +331,30 @@ describe("the daily digest (RP-358)", () => {
       expect(text).toContain(k1[locale]);
       expect(text).toContain(khalid[locale]);
     }
+  });
+
+  it("gives a Package Submit (RP-643) its own line, with its count, linking to the Package", () => {
+    const link = "https://rabaed.test/en/packages/0190a1b2-0000-7000-8000-0000000000b1";
+    const { text } = renderEmail("daily-digest", "en", {
+      projects: [
+        {
+          name: { en: "Tower", ar: "البرج" },
+          items: [
+            {
+              workItemId: null,
+              packageId: bathrooms.id,
+              documentNumber: bathrooms.number,
+              subject: bathrooms.name.en,
+              link,
+              entries: [{ kind: "package_submitted", step: null, event: null, package: { ...bathrooms, count: 6 } }],
+            },
+          ],
+        },
+      ],
+    });
+    expect(text).toContain("\u2066PKG-007\u2069 · Bathrooms – Tower 1");
+    expect(text).toContain("– Al Bina Contracting Submitted 6 submittals");
+    expect(text).toContain(link);
   });
 
   it("escapes values in the HTML body", () => {

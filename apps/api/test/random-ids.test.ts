@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, NotificationList, WorkItemLinks, WorkItemList } from "@rabaed/domain";
+import type { DocumentList, ItemNotification, NotificationList, WorkItemLinks, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
@@ -116,7 +116,7 @@ describe("ids K1 receives once C1 Submits (scenario 73)", () => {
 
   it("are random: the notification it reached K1 with", async () => {
     const bell: NotificationList = (await ok(k1Manager.get("/v1/notifications"), 200)).json();
-    const about = bell.notifications.filter((n) => n.workItemId === item);
+    const about = bell.notifications.filter((n): n is ItemNotification => n.workItemId === item);
     expect(about.length).toBeGreaterThan(0);
     expectRandom(about.flatMap((n) => [n.id, n.workItemId]));
   });

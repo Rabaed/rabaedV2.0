@@ -44,6 +44,8 @@ describe("the defaults", () => {
       ["step_reached", { inApp: true, email: "immediate" }],
       ["watched_event", { inApp: true, email: "digest" }],
       ["sent_back", { inApp: true, email: "immediate" }],
+      // A Package Submit follows "Step reached" (RP-643).
+      ["package_submitted", { inApp: true, email: "immediate" }],
       ["weekly_report", { inApp: false, email: "immediate" }],
     ]);
   });
@@ -150,7 +152,7 @@ describe("every combination", () => {
   );
 
   it("covers every kind, outcome, email choice, tick set, mute and pause", () => {
-    expect(cases).toHaveLength(4 * 12 * 3 * 3 * 2 * 2);
+    expect(cases).toHaveLength(5 * 12 * 3 * 3 * 2 * 2);
   });
 
   it.each(cases)("$kind $outcome email=$email ticks=$ticks muted=$muted paused=$emailPaused", (c) => {
