@@ -71,3 +71,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
 | 20270614 | RP-85 | 21 | stored_file |
 | 20270615 | RP-85 | 21 | member_signature |
+| 20270616 | RP-85 | 21 | drop_is_signing |
