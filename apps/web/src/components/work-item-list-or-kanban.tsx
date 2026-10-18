@@ -19,6 +19,8 @@ import {
 } from "@rabaed/domain";
 import {
   BoardLayoutMenu,
+  MoreActionsMenu,
+  type MoreAction,
   WorkItemBoard,
   WorkItemList,
   WorkItemViewSwitch,
@@ -181,6 +183,8 @@ export function WorkItemListOrKanban(
     tableLabel: string;
     /** The toolbar's primary action, e.g. "New Submittal". */
     action?: ReactNode;
+    /** The toolbar's ⋯ "More actions" menu (RP-637: Import register, Imports), each link with its locale; none, no menu. */
+    moreActions?: MoreAction[];
     /** The Project and Module of the tab: the board's Card view layout and collapsed groups are kept per board. */
     projectId: string;
     module: string;
@@ -190,7 +194,7 @@ export function WorkItemListOrKanban(
     hints?: WorkItemFilterHints;
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
-  const { query, locale, view, action, projectId, module, hints, projectName } = props;
+  const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
   const t = useTranslations("workItemViews");
   const labels = useViewLabels(props.tableLabel, module);
   const router = useRouter();
@@ -292,6 +296,7 @@ export function WorkItemListOrKanban(
       }
       action={action}
       hints={hints}
+      moreActions={moreActions && moreActions.length > 0 && <MoreActionsMenu actions={moreActions} label={t("moreActions")} linkAs={NextLink} />}
       viewSwitch={
         <>
           {props.view === "kanban" && layout && (

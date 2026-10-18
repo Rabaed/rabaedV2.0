@@ -6,6 +6,7 @@ import { phone } from "../../storybook/form.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { workItemListLabels } from "../../storybook/views.ts";
+import { MoreActionsMenu } from "./list-menus.tsx";
 import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 
 // The Submittals List (RP-409, the owner's design; spec RP-344) as a Contractor
@@ -495,6 +496,43 @@ export const RowMenuByKeyboard: Story = {
     await expect(item(b("Open", "فتح"))).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(more).toHaveFocus());
+  },
+};
+
+const more = {
+  label: b("More actions", "إجراءات أخرى"),
+  import: b("Import register", "استيراد السجل"),
+  importHint: b("Create Drafts from your .xlsx / .csv register", "أنشئ مسودات من سجلك بصيغة .xlsx / .csv"),
+  imports: b("Imports", "عمليات الاستيراد"),
+};
+
+/**
+ * The toolbar's ⋯ "More actions" menu after the List / Kanban switch (RP-637, the owner's
+ * design): Import register with its line, and Imports, each a link. Left open for the screenshot.
+ */
+export const MoreActionsOpen: Story = {
+  parameters: overlay,
+  render: (args, context) => (
+    <WorkItemList
+      {...args}
+      locale={storyLocale(context)}
+      labels={workItemListLabels[storyLocale(context)]}
+      moreActions={
+        <MoreActionsMenu
+          label={storyText(context, more.label)}
+          actions={[
+            { key: "import", label: storyText(context, more.import), description: storyText(context, more.importHint), icon: "upload", href: "#import" },
+            { key: "imports", label: storyText(context, more.imports), icon: "history", href: "#imports" },
+          ]}
+        />
+      }
+    />
+  ),
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, more.label) }));
+    const menu = await screen.findByRole("navigation", { name: storyText(context, more.label) });
+    await expect(within(menu).getByRole("link", { name: new RegExp(storyText(context, more.import)) })).toHaveAttribute("href", "#import");
+    await expect(within(menu).getByRole("link", { name: storyText(context, more.imports) })).toHaveAttribute("href", "#imports");
   },
 };
 

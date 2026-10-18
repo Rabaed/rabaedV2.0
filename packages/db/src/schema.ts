@@ -354,6 +354,41 @@ export interface PackageTable {
   status: Generated<"open" | "in_progress" | "done">;
 }
 
+/**
+ * A Submittal Register Import (RP-637, spec RP-631). Only the columns the app role
+ * may read: never its times, which are its Drafts' start (scenario 61). Read by the
+ * importing Participant's Members, a `previewed` one by its importer only; written
+ * through `app.preview_register_import` and `app.confirm_register_import`.
+ */
+export interface SubmittalRegisterImportTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  run_by_member_id: string;
+  file_name: string;
+  sheet: string;
+  header_row: number;
+  headers: ColumnType<string[], string, string>;
+  mapping: ColumnType<unknown, string, string>;
+  status: Generated<"previewed" | "created">;
+  rows_total: number;
+  rows_rejected: number;
+  rows_created: number | null;
+}
+
+/** One row of an import as read, with every reason it is bad. Its Draft only through `app.register_import_results`. */
+export interface SubmittalRegisterImportRowTable {
+  import_id: string;
+  row_no: number;
+  cells: ColumnType<string[], string, string>;
+  subject: string;
+  type_text: string;
+  trade_text: string;
+  work_item_type_id: string | null;
+  trade_id: string | null;
+  reasons: string[];
+}
+
 export type ModuleKey = "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
 export type StageCategory = "draft" | "in_progress" | "closed_positive" | "closed_negative" | "cancelled";
 type OwnerKind = "rabaed" | "project";
@@ -738,6 +773,8 @@ export interface Database {
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
   package: PackageTable;
+  submittal_register_import: SubmittalRegisterImportTable;
+  submittal_register_import_row: SubmittalRegisterImportRowTable;
   project_required_field: ProjectRequiredFieldTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;

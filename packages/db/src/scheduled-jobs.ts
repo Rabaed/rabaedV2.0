@@ -1,4 +1,4 @@
-import { dailyDigestSchedule, dueRun, type WeeklySchedule } from "@rabaed/domain";
+import { dailyDigestSchedule, dueRun, registerImportCleanupSchedule, type WeeklySchedule } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "./client.ts";
 import type { Database } from "./schema.ts";
@@ -57,5 +57,18 @@ export const dailyDigestJob: ScheduledJob = {
   schedule: dailyDigestSchedule,
   run: async (trx) => {
     await sql`select app.enqueue_notification_digests()`.execute(trx);
+  },
+};
+
+/**
+ * The daily clean-up of Submittal Register Import previews (RP-637, spec RP-631): a
+ * preview never confirmed is deleted with its rows after 7 days. It sends nothing, so
+ * it writes no outbox row.
+ */
+export const registerImportCleanupJob: ScheduledJob = {
+  name: "register_import_cleanup",
+  schedule: registerImportCleanupSchedule,
+  run: async (trx, runAt) => {
+    await sql`select app.clean_previewed_register_imports(${runAt})`.execute(trx);
   },
 };
