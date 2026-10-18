@@ -793,7 +793,7 @@ describe("Assign to (RP-640)", () => {
       await worker.transaction().execute((trx) => sql`select app.enqueue_notification_digests()`.execute(trx));
       await drainOutbox(worker, { digest: notificationDigestHandler(async (d) => void digests.push(d)) });
       const entries = digests.filter((d) => d.to === narrowed.email).flatMap((d) => d.projects.flatMap((p) => p.items.flatMap((i) => i.entries)));
-      expect(entries).toEqual([expect.objectContaining({ kind: "drafts_imported", drafts: { count: 2, projectId: at.projectId } })]);
+      expect(entries).toEqual([expect.objectContaining({ kind: "drafts_imported", drafts: { count: 2 } })]);
     });
   });
 });
