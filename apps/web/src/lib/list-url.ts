@@ -9,6 +9,9 @@ type SearchParamsLike = URLSearchParams | Record<string, string | string[] | und
 
 const listSort: WorkItemQuery["sort"] = "documentNumber";
 
+/** The Snag List's List sorts by Stage, so each Stage's group holds its rows together across pages (RP-94). */
+export const snagListSort: WorkItemQuery["sort"] = "stage";
+
 const has = (params: SearchParamsLike, key: string) => (params instanceof URLSearchParams ? params.has(key) : params[key] !== undefined);
 
 /** The List's query from its URL: its page, size and sort filled in. */
