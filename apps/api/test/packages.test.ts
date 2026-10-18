@@ -9,18 +9,23 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { PackageDetail, PackageSummary, WorkItemRow } from "@rabaed/domain";
+import type { PackageDetail, PackageSummary, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { addSendBackType } from "./support/send-back.ts";
 import {
   all,
+  bilingual,
   buildTower,
+  detail,
   draft,
   inInternalReview,
   ok,
+  only,
   projectMember,
   submitted,
+  take,
   type Company,
   type Tower,
 } from "./support/tower.ts";
@@ -39,6 +44,23 @@ let c2Engineer: Caller; // Another Contractor's engineer.
 let owner: Caller; // The Owner's representative.
 
 const name = (text: string) => ({ en: text, ar: `${text} ع` });
+
+// A submittal Type the Consultant may Send Back (RP-638).
+const SEND_BACK_TYPE = "PKGSB";
+const sendBackSchema = {
+  sections: [
+    { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
+    {
+      key: "classification",
+      title: bilingual("Classification"),
+      fields: [
+        { key: "trade", type: "trade", label: bilingual("Trade") },
+        { key: "location", type: "location", label: bilingual("Location") },
+        { key: "scopes", type: "scopes", label: bilingual("Scopes") },
+      ],
+    },
+  ],
+};
 
 /** `by` creates a Package named `text` on the Tower: its id and number. */
 async function createPackage(by: Caller, text: string, projectId = at.projectId): Promise<{ id: string; number: string }> {
@@ -67,6 +89,7 @@ const refusal = async (res: ReturnType<Caller["post"]>) => {
 };
 
 beforeAll(async () => {
+  await addSendBackType(migrator, SEND_BACK_TYPE, { en: "Package Send Back submittal", ar: "اعتماد حزمة مُرجع" }, sendBackSchema);
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "TWP");
@@ -263,7 +286,7 @@ describe("reshaping an Open Package", () => {
     expect((await getPackage(at.c1Engineer, pkg.id)).name).toEqual(name("Renamed"));
     expect((await rows(at.c1Engineer)).get(kept)?.package?.name).toEqual(name("Renamed"));
 
-    expect((await getPackage(at.c1Engineer, pkg.id)).actions).toEqual({ rename: true, addItems: true, removeItems: true, delete: true });
+    expect((await getPackage(at.c1Engineer, pkg.id)).actions).toEqual({ rename: true, addItems: true, removeItems: true, delete: true, submit: false });
     await ok(at.c1Pm.request("DELETE", `/v1/packages/${pkg.id}`));
     for (const by of [at.c1Engineer, at.c1Pm]) {
       await expectHidden(by.get(`/v1/packages/${pkg.id}`));
@@ -274,6 +297,204 @@ describe("reshaping an Open Package", () => {
     expect((await rows(at.c1Engineer)).get(kept)?.package).toBeUndefined();
     await ok(addItem(at.c1Engineer, other.id, kept));
     await expectHidden(addItem(at.c1Engineer, pkg.id, kept));
+  });
+});
+
+/** `by` Submits Package `id`, confirmed in its pop-up (ADR 0017), with key `key`. */
+const submitPackage = (by: Caller, id: string, key: string = randomUUID()) =>
+  by.post(`/v1/packages/${id}/submit`, { confirmed: true, idempotencyKey: key });
+
+/** A MAR at C1's internal review, picked up by C1's PM: ready for them to Submit. */
+async function readyForPm(title: string, trade = at.electrical): Promise<string> {
+  const id = await inInternalReview(at, at.c1Engineer, title, { trade });
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  return id;
+}
+
+/** What K1's manager reads of item `id` that a Submit decides: where it is, its number, its history's event types. */
+async function asK1Reads(id: string) {
+  const d = await detail(at.k1Manager, id);
+  const history = (await ok(at.k1Manager.get(`/v1/work-items/${id}/history`), 200)).json() as WorkItemHistory;
+  return { step: d.step.key, numbered: d.documentNumber !== null, events: history.events.map((e) => e.type) };
+}
+
+describe("Submit Package", () => {
+  it("takes each not-yet-Submitted item's own Submit in one go, exactly as a single Submit", async () => {
+    const pkg = await createPackage(at.c1Pm, "Bathrooms – Tower 3");
+    const items = [await readyForPm("Tiles T3"), await readyForPm("Sanitary ware T3")];
+    const earlier = await submitted(at, at.c1Engineer, at.c1Pm, "Already sent T3");
+    for (const id of [...items, earlier]) await ok(addItem(at.c1Pm, pkg.id, id));
+    expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(true);
+    // The engineer holds none of them: nothing for them to Submit.
+    expect((await getPackage(at.c1Engineer, pkg.id)).actions.submit).toBe(false);
+    // A control item, Submitted alone.
+    const single = await submitted(at, at.c1Engineer, at.c1Pm, "Single T3");
+
+    const res = await ok(submitPackage(at.c1Pm, pkg.id), 200);
+    const answer = res.json() as { submitted: { id: string; documentNumber: string | null }[] };
+    expect(answer.submitted.map((i) => i.id).sort()).toEqual([...items].sort());
+    for (const i of answer.submitted) expect(i.documentNumber).toBe((await detail(at.c1Pm, i.id)).documentNumber);
+    const control = await asK1Reads(single);
+    for (const id of items) {
+      expect((await detail(at.c1Pm, id)).documentNumber).toMatch(/\S/);
+      expect(await asK1Reads(id)).toEqual(control);
+    }
+    // Nothing left to Submit: no longer offered, and refused.
+    const after = await getPackage(at.c1Pm, pkg.id);
+    expect(after.status).toBe("in_progress");
+    expect(after.actions.submit).toBe(false);
+    expect(await refusal(submitPackage(at.c1Pm, pkg.id))).toEqual({ status: 409, body: { error: "nothing_to_submit" } });
+  });
+
+  it("is all or nothing: one item not ready and nothing is Submitted; the answer lists the ones not ready, and why", async () => {
+    // A second PM: C1's review is a Step Pool of two, picked up rather than held by its only Member.
+    await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
+    const pkg = await createPackage(at.c1Pm, "Partly ready");
+    const ready = await readyForPm("Ready one");
+    const pooled = await inInternalReview(at, at.c1Engineer, "Waiting in the pool");
+    for (const id of [ready, pooled]) await ok(addItem(at.c1Pm, pkg.id, id));
+    // The engineer's Draft: C1's PM can't Submit it from where it is.
+    const engineersDraft = await draft(at, at.c1Engineer, "Still a Draft");
+    await ok(addItem(at.c1Engineer, pkg.id, engineersDraft));
+    expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(false);
+
+    const refused = await refusal(submitPackage(at.c1Pm, pkg.id));
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toBe("package_not_ready");
+    expect(refused.body.othersNotReady, JSON.stringify(refused.body)).toBe(false);
+    expect(refused.body.notReady, JSON.stringify(refused.body)).toHaveLength(2);
+    expect(new Map(refused.body.notReady.map((i: { id: string; reason: string }) => [i.id, i.reason]))).toEqual(
+      new Map([
+        [pooled, "pick_up_first"],
+        [engineersDraft, "cannot_submit"],
+      ]),
+    );
+    expect(refused.body.notReady.find((i: { id: string }) => i.id === pooled)).toMatchObject({ title: "Waiting in the pool" });
+    // Nothing was taken: the ready one is where it was, and the Package still Open.
+    expect(await detail(at.c1Pm, ready)).toMatchObject({ step: { key: "internal_review" } });
+    await expectHidden(at.k1Manager.get(`/v1/work-items/${ready}`));
+    expect((await getPackage(at.c1Pm, pkg.id)).status).toBe("open");
+
+    // Once each waits for the PM, Submit Package is offered and takes all three.
+    await ok(at.c1Pm.post(`/v1/work-items/${pooled}/pick-up`));
+    await take(at.c1Engineer, engineersDraft, "send_for_review");
+    await ok(at.c1Pm.post(`/v1/work-items/${engineersDraft}/pick-up`));
+    expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(true);
+    expect((await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(3);
+  });
+
+  it("the same request again applies nothing and answers the same; nobody outside C1 may Submit it", async () => {
+    const pkg = await createPackage(at.c1Pm, "Twice");
+    const id = await readyForPm("Sent once");
+    await ok(addItem(at.c1Pm, pkg.id, id));
+    for (const by of [at.k1Manager, c2Engineer, owner]) await expectHidden(submitPackage(by, pkg.id));
+    // Unconfirmed, nothing moves.
+    const unconfirmed = await at.c1Pm.post(`/v1/packages/${pkg.id}/submit`, { idempotencyKey: randomUUID() });
+    expect({ status: unconfirmed.statusCode, body: unconfirmed.json() }).toEqual({ status: 422, body: { error: "not_confirmed" } });
+    const key = randomUUID();
+    const first = (await ok(submitPackage(at.c1Pm, pkg.id, key), 200)).json();
+    expect(first.submitted.map((i: { id: string }) => i.id)).toEqual([id]);
+    expect((await ok(submitPackage(at.c1Pm, pkg.id, key), 200)).json()).toEqual(first);
+    const history = (await ok(at.k1Manager.get(`/v1/work-items/${id}/history`), 200)).json() as WorkItemHistory;
+    expect(history.events.filter((e) => e.type === "transition")).toHaveLength(1);
+  });
+});
+
+describe("an In Progress Package", () => {
+  it("is In Progress once any item in it is Submitted, alone too; then items are added, never removed, and it is never deleted", async () => {
+    const pkg = await createPackage(at.c1Pm, "Grows");
+    const first = await readyForPm("First in");
+    const other = await readyForPm("Second in");
+    for (const id of [first, other]) await ok(addItem(at.c1Pm, pkg.id, id));
+    // A single Submit of one of its items, not Submit Package.
+    await take(at.c1Pm, first, "submit");
+    const p = await getPackage(at.c1Pm, pkg.id);
+    expect(p.status).toBe("in_progress");
+    expect(p.actions).toEqual({ rename: true, addItems: true, removeItems: false, delete: false, submit: true });
+
+    const notOpen = { status: 409, body: { error: "package_not_open" } };
+    for (const id of [first, other]) expect(await refusal(removeItem(at.c1Pm, pkg.id, id))).toEqual(notOpen);
+    expect(await refusal(at.c1Pm.request("DELETE", `/v1/packages/${pkg.id}`))).toEqual(notOpen);
+    // A forgotten item joins it, and goes with the rest.
+    const late = await readyForPm("Forgotten one");
+    await ok(addItem(at.c1Pm, pkg.id, late));
+    const sent = (await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted.map((i: { id: string }) => i.id);
+    expect(sent.sort()).toEqual([other, late].sort());
+    await ok(at.c1Pm.patch(`/v1/packages/${pkg.id}`, { name: name("Grown") }));
+    expect(await getPackage(at.c1Pm, pkg.id)).toMatchObject({ name: name("Grown"), status: "in_progress" });
+    expect((await getPackage(at.c1Pm, pkg.id)).items.map((i) => i.id).sort()).toEqual([first, other, late].sort());
+  });
+
+  it("an already-Submitted item added to an Open Package makes it In Progress", async () => {
+    const pkg = await createPackage(at.c1Pm, "Starts with a sent one");
+    const d = await draft(at, at.c1Pm, "A Draft of the PM's");
+    await ok(addItem(at.c1Pm, pkg.id, d));
+    expect((await getPackage(at.c1Pm, pkg.id)).status).toBe("open");
+    await ok(addItem(at.c1Pm, pkg.id, await submitted(at, at.c1Engineer, at.c1Pm, "Sent before")));
+    expect((await getPackage(at.c1Pm, pkg.id)).status).toBe("in_progress");
+    expect(await refusal(removeItem(at.c1Pm, pkg.id, d))).toEqual({ status: 409, body: { error: "package_not_open" } });
+  });
+
+  it("a submittal Sent Back comes back alone, and is re-Submitted alone; the others stay where they are", async () => {
+    const pkg = await createPackage(at.c1Pm, "Pumps");
+    const items: string[] = [];
+    for (const model of ["P1", "P2"]) {
+      const res = await ok(
+        at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+          type: SEND_BACK_TYPE,
+          title: `Pump ${model}`,
+          answers: { model, trade: at.electrical, location: at.buildingA },
+        }),
+        201,
+      );
+      const id = res.json().id as string;
+      await take(at.c1Engineer, id, "send_for_review");
+      await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+      await ok(addItem(at.c1Pm, pkg.id, id));
+      items.push(id);
+    }
+    await ok(submitPackage(at.c1Pm, pkg.id), 200);
+    const [back, stays] = items as [string, string];
+    await ok(at.k1Manager.post(`/v1/work-items/${back}/pick-up`));
+    await take(at.k1Manager, back, "send_back");
+
+    expect(await detail(at.c1Pm, back)).toMatchObject({ step: { key: "internal_review" } });
+    const where = (await detail(at.k1Manager, stays)).step.key;
+    expect(where).not.toBe("internal_review");
+    // Still In Progress, with both; Submit Package has nothing to take (the Sent Back one was Submitted).
+    const p = await getPackage(at.c1Pm, pkg.id);
+    expect(p).toMatchObject({ status: "in_progress", actions: { submit: false, removeItems: false } });
+    expect(p.items.map((i) => i.id).sort()).toEqual([...items].sort());
+    // It is re-Submitted alone.
+    await ok(at.c1Pm.post(`/v1/work-items/${back}/pick-up`));
+    await take(at.c1Pm, back, "submit");
+    expect((await detail(at.k1Manager, back)).step.key).toBe(where);
+    expect((await detail(at.k1Manager, stays)).step.key).toBe(where);
+  });
+});
+
+describe("an item still to Submit that the Member doesn't see", () => {
+  it("stops their Submit Package without naming it", async () => {
+    const narrowedPm = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"], { trade: only(at.mechanical) });
+    const pkg = await createPackage(at.c1Pm, "Mixed trades");
+    const electrical = await readyForPm("Electrical, unseen by the narrowed PM");
+    const mechanical = await inInternalReview(at, at.c1Engineer, "Mechanical one", { trade: at.mechanical });
+    await ok(narrowedPm.post(`/v1/work-items/${mechanical}/pick-up`));
+    for (const id of [electrical, mechanical]) await ok(addItem(at.c1Pm, pkg.id, id));
+
+    const p = await getPackage(narrowedPm, pkg.id);
+    expect(p.items.map((i) => i.id)).toEqual([mechanical]);
+    expect(p.actions.submit).toBe(false);
+    const res = await submitPackage(narrowedPm, pkg.id);
+    expect({ status: res.statusCode, body: res.json() }).toEqual({
+      status: 409,
+      body: { error: "package_not_ready", notReady: [], othersNotReady: true },
+    });
+    expect(res.body).not.toContain(electrical);
+    // Once C1's PM has Submitted the Electrical one, only theirs is left.
+    await take(at.c1Pm, electrical, "submit");
+    expect((await getPackage(narrowedPm, pkg.id)).actions.submit).toBe(true);
+    expect((await ok(submitPackage(narrowedPm, pkg.id), 200)).json().submitted.map((i: { id: string }) => i.id)).toEqual([mechanical]);
   });
 });
 
@@ -312,6 +533,7 @@ describe("on a Closed Project", () => {
     // It is still read, as it was, and offers nothing.
     const p = await getPackage(closing.c1Engineer, pkg.id);
     expect(p).toMatchObject({ name: name("Before closing"), items: [{ id: inIt }] });
-    expect(p.actions).toEqual({ rename: false, addItems: false, removeItems: false, delete: false });
+    expect(p.actions).toEqual({ rename: false, addItems: false, removeItems: false, delete: false, submit: false });
+    expect(await refusal(submitPackage(closing.c1Engineer, pkg.id))).toEqual(closed);
   });
 });

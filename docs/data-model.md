@@ -322,7 +322,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 | `participant_id` | the owning Participant (usually the Contractor); `(participant_id, project_id)` references `participant` |
 | `seq` | per Project **and owning Participant**, shown `PKG-` and three digits (`packageNumber` in `@rabaed/domain`), left-to-right; unique `(project_id, participant_id, seq)`, never reused (a discarded Package keeps its row). Not one count per Project: its gaps would tell each Company how many Packages the others hold, Open ones included (RP-588-1, as Document Numbers count by Participant Code) |
 | `name` | i18n, English and Arabic (`app.is_bilingual`) |
-| `status` | `open`, `in_progress`, `done`; stored. RP-636 leaves it `open`: Submit Package (RP-638) and the closures, Revisions and replacements (RP-642) recompute it in the same transaction |
+| `status` | `open`, `in_progress`, `done`; stored, recomputed in the same transaction as the change by `app.recompute_package_status` (RP-638, `20270411000000_submit_package.sql`): `in_progress` once any item has `submitted_at` (a trigger on `work_item` after an update of `submitted_at` or `package_id`: an item Submitted, alone or by Submit Package, or an already-Submitted item added), never back to `open`. The closures, Revisions and replacements (RP-642) add `done` |
 | `created_by_member_id`, `created_at` | not granted to the app role |
 | `discarded_at` | an Open Package deleted (the Package's Delete, discarded as a Draft is, `app.discard_draft`): nobody sees it again; check: only an `open` one. Not granted to the app role |
 
@@ -337,10 +337,15 @@ Writes (security definer, each re-checking the caller; a Package the caller does
 - `app.add_package_item(package, item, now)`: only a submittal (a Type of the Submittals Module) the owning Participant raised, that the caller sees and that isn't discarded, else `item_not_offered` (one answer whatever the reason); `in_another_package` when it is in another; `not_editable` for a Draft (no Document Number) the caller may not edit (`app.can_save_answers`); `added`, also when it already is in this one.
 - `app.remove_package_item(package, item, now)`: while `open`; `removed`, `package_not_open`, `item_not_in_package` (not in it, or not seen).
 - `app.discard_package(package, now)` (the Package's Delete): while `open`; its items keep everything but their Package; `discarded`, `package_not_open`.
-- Helpers, not for the app role: `app.package_for_write(package)` (the row locked, if the caller sees it) and `app.write_package_event`.
+- Helpers, not for the app role: `app.package_for_write(package)` (the row locked, if the caller sees it), `app.write_package_event` and `app.recompute_package_status(package)`.
+
+**Submit Package** (RP-638) is a command of the api (`submitPackage` in `apps/api/src/packages/packages.ts`), not of the database: for each item of the Package the caller sees without `submitted_at` (and not closed), their Submit Transition (kind `submit`, from `app.work_item_actions`) taken through `takeTransitionIn`, the single Submit's path and its `app.take_transition`, all in one transaction; any refusal rolls back all of them. Each item's key is derived from the request's key and the item. The database gives it:
+- `app.begin_package_submit(package, key)` → (`outcome`, `work_item_ids`): the Package locked; `ready`, `replayed` with the items the caller's same key Submitted before, `not_found`, `project_closed`.
+- `app.record_package_submit(package, items, key, now)`: the `submitted` event of the trail, once each item is in the Package and Submitted; `recorded`, `not_found`, `item_not_submitted`.
+- `app.package_hides_unsubmitted(package)`: whether an item still to Submit is one the caller doesn't see; such an item stops their Submit Package, which says so without naming it.
 
 **package_event** (RP-636)
-`id`, `project_id`, `package_id`, `type {created, renamed, item_added, item_removed, submitted, discarded}`, `work_item_id` (set exactly for `item_added` and `item_removed`), `actor_member_id`, `actor_participant_id` (the owning Participant), `payload` (`created`: the name; `renamed`: `from` and `to`), `created_at`. The Package's own trail, internal to the owning Participant. Append-only (trigger), and not readable through the app role until a reader is built.
+`id`, `project_id`, `package_id`, `type {created, renamed, item_added, item_removed, submitted, discarded}`, `work_item_id` (set exactly for `item_added` and `item_removed`), `actor_member_id`, `actor_participant_id` (the owning Participant), `payload` (`created`: the name; `renamed`: `from` and `to`; `submitted`: `work_item_ids` and the request's `idempotency_key`, RP-638), `created_at`. The Package's own trail, internal to the owning Participant. Append-only (trigger), and not readable through the app role until a reader is built.
 
 Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure. The Package is Done when every *latest revision* in it closed at A, B or D (RP-642).
 

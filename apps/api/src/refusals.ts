@@ -156,6 +156,9 @@ const answers = {
   in_another_package: () => new HttpError(409, "in_another_package"),
   package_not_open: () => new HttpError(409, "package_not_open"),
   item_not_in_package: () => new HttpError(422, "item_not_in_package"),
+  // Submit Package (RP-638): no item in it is left to Submit. Not ready, it is the route's
+  // own 409 `package_not_ready`, listing what stops it.
+  nothing_to_submit: () => new HttpError(409, "nothing_to_submit"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

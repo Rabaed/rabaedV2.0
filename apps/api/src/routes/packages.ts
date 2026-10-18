@@ -1,8 +1,16 @@
-import { addPackageItemRequest, createdPackage, packageDetail, packageList, packageNameRequest } from "@rabaed/domain";
+import {
+  addPackageItemRequest,
+  createdPackage,
+  packageDetail,
+  packageList,
+  packageNameRequest,
+  submitPackageRequest,
+  submittedPackage,
+} from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
+import { HttpError, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import {
   addPackageItem,
   createPackage,
@@ -11,6 +19,7 @@ import {
   listPackages,
   removePackageItem,
   renamePackage,
+  submitPackage,
 } from "../packages/packages.ts";
 import { refusal, throwIfRefused } from "../refusals.ts";
 
@@ -66,6 +75,22 @@ export const packageRoutes =
         const memberId = ctx.requireMember(request);
         throwIfRefused(await addPackageItem(ctx.db, memberId, idOrNotFound(request.params.packageId), request.body.workItemId, ctx.now()));
         return reply.code(204).send();
+      },
+    );
+
+    // Submit Package (RP-638): each not-yet-Submitted item's own Submit, all or
+    // nothing. Not ready, the 409 lists the items that stop it the Member sees.
+    app.post(
+      "/v1/packages/:packageId/submit",
+      { schema: { params: packageParams, body: submitPackageRequest, response: { 200: submittedPackage } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const result = await submitPackage(ctx.db, memberId, idOrNotFound(request.params.packageId), request.body, ctx.now());
+        if (result.ok) return { submitted: result.submitted };
+        if (result.reason === "package_not_ready") {
+          throw new HttpError(409, "package_not_ready", { notReady: result.notReady, othersNotReady: result.othersNotReady });
+        }
+        throw refusal(result);
       },
     );
 

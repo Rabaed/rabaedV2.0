@@ -212,3 +212,58 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
     }
   });
 });
+
+const take = (as: string, id: string, transition: string) =>
+  outcome(
+    as,
+    sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+  );
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
+const statusOf = async (as: string, id: string) =>
+  (await call<{ status: string }>(as, sql`select status from package where id = ${id}::uuid`))[0]?.status;
+
+describe("Submit Package (RP-638): the status follows the items", () => {
+  let packageId = "";
+  let sent = "";
+  let left = "";
+
+  beforeAll(async () => {
+    packageId = (await createPackage(c1Pm, "Submitted together")).package_id;
+    [sent, left] = [await draft(c1.member, "Sent"), await draft(c1.member, "Left")];
+    for (const item of [sent, left]) {
+      expect(await take(c1.member, item, "send_for_review")).toBe("applied");
+      expect(await pickUp(c1Pm, item)).toBe("picked_up");
+      expect(await addItem(c1Pm, packageId, item)).toBe("added");
+    }
+  });
+
+  it("an item Submitted through app.take_transition makes it In Progress, in the same transaction; then no removal, no delete", async () => {
+    expect(await statusOf(c1Pm, packageId)).toBe("open");
+    expect(await take(c1Pm, sent, "submit")).toBe("applied");
+    expect(await statusOf(c1Pm, packageId)).toBe("in_progress");
+    expect(await outcome(c1Pm, sql`select app.remove_package_item(${packageId}::uuid, ${left}::uuid, now()) as outcome`)).toBe("package_not_open");
+    expect(await outcome(c1Pm, sql`select app.discard_package(${packageId}::uuid, now()) as outcome`)).toBe("package_not_open");
+    // Adding stays open to it.
+    expect(await addItem(c1Pm, packageId, await draft(c1Pm, "Added late"))).toBe("added");
+  });
+
+  it("is written only by the database: no status write, no call of its recompute, and no trail for anyone outside C1", async () => {
+    const refused = async (as: string, query: ReturnType<typeof sql>) =>
+      expect(withMember(app, as, (trx) => query.execute(trx))).rejects.toThrow(/permission denied/);
+    await refused(c1Pm, sql`update package set status = 'open' where id = ${packageId}::uuid`);
+    await refused(c1Pm, sql`select app.recompute_package_status(${packageId}::uuid)`);
+    await refused(c1Pm, sql`select app.write_package_event(${packageId}::uuid, 'submitted', null, '{}'::jsonb, now())`);
+    for (const who of [k1.member, c2.member, ow.member]) {
+      const [begun] = await call<{ outcome: string }>(who, sql`select outcome from app.begin_package_submit(${packageId}::uuid, ${randomUUID()}::uuid)`);
+      expect(begun!.outcome).toBe("not_found");
+      expect(
+        await outcome(who, sql`select app.record_package_submit(${packageId}::uuid, ${[sent]}::uuid[], ${randomUUID()}::uuid, now()) as outcome`),
+      ).toBe("not_found");
+      expect((await call<{ hides: boolean }>(who, sql`select app.package_hides_unsubmitted(${packageId}::uuid) as hides`))[0]!.hides).toBe(false);
+    }
+    // C1 records only items of the Package that have been Submitted.
+    expect(
+      await outcome(c1Pm, sql`select app.record_package_submit(${packageId}::uuid, ${[left]}::uuid[], ${randomUUID()}::uuid, now()) as outcome`),
+    ).toBe("item_not_submitted");
+  });
+});

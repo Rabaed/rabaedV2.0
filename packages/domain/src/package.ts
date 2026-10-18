@@ -56,6 +56,12 @@ export const packageDetail = packageSummary.extend({
     removeItems: z.boolean(),
     /** Delete it: only while Open; its submittals stay, without a Package. */
     delete: z.boolean(),
+    /**
+     * Submit Package: each not-yet-Submitted submittal's own Submit at once. Only
+     * when there is one, and every one of them waits at a Step where the viewer
+     * can Submit it (RP-638).
+     */
+    submit: z.boolean(),
   }),
 });
 export type PackageDetail = z.infer<typeof packageDetail>;
@@ -75,3 +81,35 @@ export type AddPackageItemRequest = z.infer<typeof addPackageItemRequest>;
 /** A new Package: its id and number. */
 export const createdPackage = z.object({ id: z.uuid(), number: z.string() });
 export type CreatedPackage = z.infer<typeof createdPackage>;
+
+/**
+ * Submit Package (RP-638), confirmed in its pop-up (ADR 0017). The key makes a
+ * repeated request apply only once, answering with the same items.
+ */
+export const submitPackageRequest = z.object({ confirmed: z.boolean().default(false), idempotencyKey: z.uuid() });
+export type SubmitPackageRequest = z.input<typeof submitPackageRequest>;
+
+/** A Submit Package taken: the submittals it Submitted, each with its new Document Number. */
+export const submittedPackage = z.object({ submitted: z.array(packageItem) });
+export type SubmittedPackage = z.infer<typeof submittedPackage>;
+
+/**
+ * Why a submittal stops a Submit Package: it waits in the viewer's Step Pool
+ * (`pick_up_first`), it is at no Step where they can Submit it (`cannot_submit`),
+ * or its Submit refuses it as a single Submit would: its Form incomplete, its
+ * Action Form, a Validate rule, or another refusal of the engine (`refused`).
+ */
+export const packageNotReadyReasons = [
+  "pick_up_first",
+  "cannot_submit",
+  "form_incomplete",
+  "invalid_action_form",
+  "validation_failed",
+  "refused",
+] as const;
+export const packageNotReadyReason = z.enum(packageNotReadyReasons);
+export type PackageNotReadyReason = z.infer<typeof packageNotReadyReason>;
+
+/** A submittal the viewer sees that stops a Submit Package, and why. */
+export const packageNotReadyItem = packageItem.extend({ reason: packageNotReadyReason });
+export type PackageNotReadyItem = z.infer<typeof packageNotReadyItem>;
