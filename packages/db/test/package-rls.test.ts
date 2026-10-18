@@ -267,3 +267,48 @@ describe("Submit Package (RP-638): the status follows the items", () => {
     ).toBe("item_not_submitted");
   });
 });
+
+describe("RP-642: Done follows the closures, in the same transaction, and a Revision joins by itself", () => {
+  let packageId = "";
+  let item = "";
+
+  /** C1 Submits `id`; K1's engineer sends it to K1's manager, who picks it up. */
+  async function atK1Manager(id: string) {
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
+    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.ap, id)).toBe("picked_up");
+  }
+
+  beforeAll(async () => {
+    packageId = (await createPackage(c1Pm, "Closed together")).package_id;
+    item = await draft(c1.member, "Coded");
+    expect(await addItem(c1.member, packageId, item)).toBe("added");
+    await atK1Manager(item);
+  });
+
+  it("a Code C closes the item and keeps it In Progress; its Revision joins the Package; Code A on it makes it Done", async () => {
+    expect(await take(k1.ap, item, "revise_c")).toBe("applied");
+    expect(await statusOf(c1Pm, packageId)).toBe("in_progress");
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_revision(${item}::uuid, ${randomUUID()}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    const revision = created!.work_item_id;
+    expect((await readsOf(c1.member, packageId, [revision])).itemPackages).toEqual([{ package_id: packageId }]);
+    await atK1Manager(revision);
+    expect(await take(k1.ap, revision, "approve_a")).toBe("applied");
+    expect(await statusOf(c1Pm, packageId)).toBe("done");
+  });
+
+  it("is written only by the database: the app role calls none of the triggers' helpers", async () => {
+    const refused = async (query: ReturnType<typeof sql>) =>
+      expect(withMember(app, c1Pm, (trx) => query.execute(trx))).rejects.toThrow(/permission denied/);
+    await refused(sql`select app.recompute_package_status(${packageId}::uuid)`);
+    await refused(sql`update package set status = 'in_progress' where id = ${packageId}::uuid`);
+    await refused(sql`select package_id from work_item where id = ${item}::uuid`);
+  });
+});
