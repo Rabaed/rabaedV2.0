@@ -88,6 +88,8 @@ export const workflowProblemCodes = [
   "cancel_not_by_raiser",
   "cancel_not_to_cancelled_stage",
   "cancel_sets_outcome",
+  // Informed Participants (RP-625)
+  "inform_not_on_submit",
   // Who edits the raiser's Form (ADR 0019, RP-514)
   "form_edited_after_submit",
   "drafts_visible_to_not_on_draft",
@@ -165,6 +167,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     ...builtCheckProblems(input),
     ...sendProblems(input),
     ...cancelProblems(input),
+    ...informProblems(input),
     ...formEditingProblems(input),
     ...ruleProblems(input),
     ...routingWarnings(input),
@@ -377,6 +380,11 @@ function cancelProblems({ steps, transitions, stepOf, categoryOf }: CheckInput):
       if (t.outcome !== null) codes.push("cancel_sets_outcome");
       return codes.map((code) => ({ code, transition: t.key }));
     });
+}
+
+/** Only a Submit informs (RP-625): it is the shared move that puts the item before other Participants. */
+function informProblems({ transitions }: CheckInput): FoundProblem[] {
+  return transitions.filter((t) => t.inform !== undefined && t.kind !== "submit").map((t): FoundProblem => ({ code: "inform_not_on_submit", transition: t.key }));
 }
 
 /**
@@ -850,6 +858,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   cancel_sets_outcome: (names) => ({
     en: `${names.transition.en} is a Cancel, which sets no outcome.`,
     ar: `${names.transition.ar} إلغاء، ولا يضع أي نتيجة.`,
+  }),
+  inform_not_on_submit: (names) => ({
+    en: `${names.transition.en} informs other Participants, which only a Submit may.`,
+    ar: `${names.transition.ar} يُطلع مشاركين آخرين، ولا يجوز ذلك إلا للتقديم.`,
   }),
   form_edited_after_submit: (names) => ({
     en: `${names.step.en} edits the raiser's Form, but an item reaches it after a Submit. Only the raiser's Steps an item is Sent Back to may.`,
