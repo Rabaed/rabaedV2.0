@@ -139,15 +139,22 @@ export function templateOptions(
   return options;
 }
 
+/** The picked Version's items, read-only, or null when nothing (or nothing known) is picked. */
+export function PickedTemplateItems({ value, choices, locale, labels }: { value: unknown; choices: readonly ChecklistTemplateChoice[]; locale: Locale; labels: ChecklistTemplateFieldLabels }) {
+  const picked = typeof value === "string" ? choices.find((c) => c.id === value) : undefined;
+  return picked?.items && picked.items.length > 0 ? <ChecklistTemplateItems items={picked.items} locale={locale} labels={labels} /> : null;
+}
+
 /**
  * The pick: in edit mode, a select of the active templates of the Trade, and the
- * one already picked, kept while the Trade is the same; then the picked Version's
- * items. In read mode, the picked template's name and its items.
+ * one already picked, kept while the Trade is the same; the form renders the picked
+ * Version's items after the field (PickedTemplateItems), below its help. In read mode,
+ * the picked template's name and its items.
  */
 export function ChecklistTemplateField({ value, tradeId, choices, required, mode, locale, labels: text, name, onChange }: ChecklistTemplateFieldProps) {
   const current = typeof value === "string" ? value : "";
   const picked = choices.find((c) => c.id === current);
-  const items = picked?.items && picked.items.length > 0 ? <ChecklistTemplateItems items={picked.items} locale={locale} labels={text} /> : null;
+  const items = <PickedTemplateItems value={value} choices={choices} locale={locale} labels={text} />;
   if (mode === "read") {
     if (!picked?.name) return null;
     return (
@@ -163,15 +170,12 @@ export function ChecklistTemplateField({ value, tradeId, choices, required, mode
   const options = templateOptions(value, tradeId, choices, locale, text);
   if (options.length === 0) return <p className="text-body text-muted">{tradeId === "" ? text.chooseTradeFirst : text.noneForTrade}</p>;
   return (
-    <div className="flex flex-col gap-3">
-      <Select
-        name={name}
-        placeholder={text.choose}
-        options={required ? options : [{ value: noChoice, label: text.none }, ...options]}
-        value={current}
-        onValueChange={(v) => onChange?.(v === noChoice ? undefined : v)}
-      />
-      {items}
-    </div>
+    <Select
+      name={name}
+      placeholder={text.choose}
+      options={required ? options : [{ value: noChoice, label: text.none }, ...options]}
+      value={current}
+      onValueChange={(v) => onChange?.(v === noChoice ? undefined : v)}
+    />
   );
 }
