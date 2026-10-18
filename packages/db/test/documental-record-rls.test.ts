@@ -1,5 +1,5 @@
 // Seam 2 for the Documental Record (RP-620, spec RP-632; ADR 0023;
-// migration 20270514000000_documental_record.sql), as the app role: the record
+// migration 20270612000000_documental_record.sql), as the app role: the record
 // table and its files' fingerprints are never read directly; a Member gets a
 // record's storage key only for an item they see (app.documental_record_file),
 // and only the worker, with no Member set, reads what the Record Data is
