@@ -1,13 +1,12 @@
 "use client";
 
-import { COMPANY_IMAGE_MAX_BYTES, companyImageTypes, type CompanyImageKind, type CompanyImageType, type SaveCompanyImageRequest } from "@rabaed/domain";
-import { useState, type ChangeEvent } from "react";
+import { COMPANY_IMAGE_MAX_BYTES, isImageFileType, type CompanyImageKind, type SaveCompanyImageRequest } from "@rabaed/domain";
+import { useId, useState, type ChangeEvent } from "react";
 import { cn } from "../../lib/cn.ts";
 import { TitledCard } from "../data/titled-card.tsx";
 import { toneClasses } from "../data/tone.ts";
-import { Field } from "../form/field.tsx";
-import { Input } from "../form/input.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { ImageFileButton } from "./image-file-button.tsx";
 
 // The Company profile's logo and Stamp (RP-617, ADR 0023): two cards side by side, each with the
 // image in force. Only the Company's Authorized Person uploads or replaces them; every other
@@ -22,7 +21,7 @@ export type CompanyImageCardLabels = {
   badge: string;
   /** What shows while there is none. */
   none: string;
-  /** The file control's label: "Upload Stamp", or "Replace Stamp" once there is one. */
+  /** The file button's words: "Upload Stamp", or "Replace Stamp" once there is one. */
   upload: string;
   replace: string;
   /** Under the file control: the types and size it takes. */
@@ -62,7 +61,6 @@ export type CompanyImagesProps = {
   onUpload: SaveCompanyImageCall;
 };
 
-const isImageType = (type: string): type is CompanyImageType => (companyImageTypes as readonly string[]).includes(type);
 const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(",") + 1);
 
 function readAsDataUrl(file: File): Promise<string> {
@@ -91,6 +89,7 @@ function CompanyImageCard({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const id = `company-${kind}${useId().replaceAll(":", "")}`;
 
   async function choose(event: ChangeEvent<HTMLInputElement>) {
     const input = event.target;
@@ -98,7 +97,7 @@ function CompanyImageCard({
     setError(null);
     if (!file) return;
     try {
-      if (!isImageType(file.type)) return setError(all.refusals.file_type);
+      if (!isImageFileType(file.type)) return setError(all.refusals.file_type);
       if (file.size > COMPANY_IMAGE_MAX_BYTES) return setError(all.refusals.file_too_large);
       setPending(true);
       const result = await onUpload(kind, { contentType: file.type, data: base64Of(await readAsDataUrl(file)) });
@@ -130,9 +129,24 @@ function CompanyImageCard({
           )}
         </div>
         {canManage && (
-          <Field label={image ? labels.replace : labels.upload} help={labels.fileHelp} error={error ?? undefined}>
-            <Input type="file" accept={companyImageTypes.join(",")} onChange={(event) => void choose(event)} disabled={pending} />
-          </Field>
+          // The button's own words name the control, so it needs no Field label beside it.
+          <div className="flex flex-col gap-1.5">
+            <ImageFileButton
+              text={image ? labels.replace : labels.upload}
+              onChange={(event) => void choose(event)}
+              disabled={pending}
+              aria-describedby={error ? `${id}-help ${id}-error` : `${id}-help`}
+            />
+            <p id={`${id}-help`} className="text-sm text-muted">
+              {labels.fileHelp}
+            </p>
+            {error && (
+              <p id={`${id}-error`} className="flex items-start gap-1 text-sm text-danger-fg">
+                <Icon name="alert-circle" size={16} className="mt-0.5" />
+                <span>{error}</span>
+              </p>
+            )}
+          </div>
         )}
         {pending && (
           <p role="status" className="text-sm text-muted">

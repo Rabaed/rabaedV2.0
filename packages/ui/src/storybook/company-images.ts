@@ -13,13 +13,13 @@ export const stampRequiredLabels: Record<"member" | "authorizedPerson", Record<L
   member: {
     en: {
       title: "Al Noor Contracting has no Stamp yet",
-      body: "Its Members can't take any Transition until it is added. Ask Al Noor Contracting's owner or Authorized Person to add it in the Company profile.",
+      body: "Its Members can't take any Transition until it is added. Ask Al Noor Contracting's Authorized Person to add it in the Company profile.",
       dismiss: "OK",
       close: "Close",
     },
     ar: {
       title: "لا يوجد ختم لشركة النور للمقاولات بعد",
-      body: "لا يستطيع أعضاؤها اتخاذ أي انتقال حتى يُضاف. اطلب من مالك النور للمقاولات أو المفوض إضافته في ملف الشركة.",
+      body: "لا يستطيع أعضاؤها اتخاذ أي انتقال حتى يُضاف. اطلب من المفوض عن النور للمقاولات إضافته في ملف الشركة.",
       dismiss: "حسنًا",
       close: "إغلاق",
     },

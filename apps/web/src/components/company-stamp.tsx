@@ -3,8 +3,9 @@
 import type { CompanyImageKind, Locale, MyCompany, SaveCompanyImageRequest } from "@rabaed/domain";
 import { buttonVariants, CompanyImages as CompanyImagesView, StampRequiredDialog, type CompanyImagesLabels, type SaveCompanyImageCall } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
+import type { Reading } from "@/lib/transition-gate";
+import { useApiRead } from "@/lib/use-api-read";
 
 // The Company's logo and Stamp (RP-617, ADR 0023): the Company profile's cards, which its
 // Authorized Person uploads them in, and the message a Member whose Company has no Stamp gets
@@ -64,21 +65,15 @@ export function CompanyImages({ company }: { company: MyCompany }) {
   );
 }
 
+/** The signed-in Member's own Company profile, read when `enabled`: loading until answered, or failed. */
+export function useMyCompanyRead(enabled: boolean): Reading<MyCompany> {
+  return useApiRead<MyCompany>("/v1/me/company", enabled);
+}
+
 /** The signed-in Member's own Company profile, read when `enabled`: null until answered, or when unavailable. */
 export function useMyCompany(enabled: boolean): MyCompany | null {
-  const [company, setCompany] = useState<MyCompany | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let current = true;
-    fetch("/api/v1/me/company")
-      .then((res) => (res.ok ? (res.json() as Promise<MyCompany>) : null))
-      .then((mine) => current && setCompany(mine))
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [enabled]);
-  return company;
+  const reading = useMyCompanyRead(enabled);
+  return reading.state === "loaded" ? reading.value : null;
 }
 
 /**

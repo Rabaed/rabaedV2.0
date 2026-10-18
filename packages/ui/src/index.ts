@@ -102,6 +102,7 @@ export { WatchButton, type WatchButtonLabels, type WatchButtonProps, type WatchC
 export { SignatureEditor, type SaveSignatureCall, type SignatureEditorLabels, type SignatureEditorProps } from "./components/signature/signature-editor.tsx";
 export { SignatureRequiredDialog, type SignatureRequiredDialogProps, type SignatureRequiredLabels } from "./components/signature/signature-required-dialog.tsx";
 export { StampRequiredDialog, type StampRequiredDialogProps, type StampRequiredLabels } from "./components/signature/stamp-required-dialog.tsx";
+export { ImageFileButton } from "./components/signature/image-file-button.tsx";
 export {
   CompanyImages,
   type CompanyImageCardLabels,

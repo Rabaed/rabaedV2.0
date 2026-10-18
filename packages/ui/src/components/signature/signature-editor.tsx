@@ -1,14 +1,14 @@
 "use client";
 
 import {
+  isImageFileType,
   SIGNATURE_MAX_BYTES,
   signatureHands,
-  signatureImageTypes,
   signatureInks,
   signaturePens,
+  type ImageFileType,
   type SaveSignatureRequest,
   type SignatureHand,
-  type SignatureImageType,
   type SignatureInk,
   type SignatureMethod,
   type SignaturePen,
@@ -18,6 +18,7 @@ import { Button } from "../button/button.tsx";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
+import { ImageFileButton } from "./image-file-button.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 
 // Profile → Add Signature (RP-85, ADR 0023): the Member draws their Signature with the
@@ -45,6 +46,8 @@ export type SignatureEditorLabels = {
   /** The typed Signature's preview, e.g. "Preview". */
   preview: string;
   file: string;
+  /** The file button's own words, e.g. "Choose image": never the browser's "Choose File". */
+  chooseFile: string;
   /** e.g. "A PNG or JPEG image, up to 512 KB." */
   fileHelp: string;
   save: string;
@@ -78,7 +81,6 @@ const WIDTH = 900;
 const HEIGHT = 300;
 
 const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(",") + 1);
-const isImageType = (type: string): type is SignatureImageType => (signatureImageTypes as readonly string[]).includes(type);
 
 /** The typed name drawn in `hand` and `ink` on a transparent canvas. */
 function drawTyped(canvas: HTMLCanvasElement, name: string, hand: SignatureHand, ink: SignatureInk) {
@@ -107,7 +109,7 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
   const [drawn, setDrawn] = useState(false);
   const [name, setName] = useState(defaultName);
   const [hand, setHand] = useState<SignatureHand>("flowing");
-  const [upload, setUpload] = useState<{ contentType: SignatureImageType; dataUrl: string } | null>(null);
+  const [upload, setUpload] = useState<{ contentType: ImageFileType; dataUrl: string } | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pad = useRef<HTMLCanvasElement>(null);
@@ -151,10 +153,11 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
     setError(null);
     setUpload(null);
     if (!file) return;
-    if (!isImageType(file.type)) return setError(labels.refusals.file_type);
+    const contentType = file.type;
+    if (!isImageFileType(contentType)) return setError(labels.refusals.file_type);
     if (file.size > SIGNATURE_MAX_BYTES) return setError(labels.refusals.file_too_large);
     const reader = new FileReader();
-    reader.onload = () => setUpload({ contentType: file.type as SignatureImageType, dataUrl: String(reader.result) });
+    reader.onload = () => setUpload({ contentType, dataUrl: String(reader.result) });
     reader.readAsDataURL(file);
   }
 
@@ -267,7 +270,7 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
         </TabsContent>
         <TabsContent value="uploaded" className="space-y-4 pt-4 data-[state=inactive]:hidden" forceMount>
           <Field label={labels.file} help={labels.fileHelp}>
-            <Input type="file" accept={signatureImageTypes.join(",")} onChange={chooseFile} />
+            <ImageFileButton text={labels.chooseFile} onChange={chooseFile} />
           </Field>
           {upload && <img src={upload.dataUrl} alt={labels.preview} className={`${surface} object-contain`} />}
         </TabsContent>

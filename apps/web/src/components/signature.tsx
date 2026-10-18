@@ -1,9 +1,11 @@
 "use client";
 
-import type { SaveSignatureRequest } from "@rabaed/domain";
+import type { MySignature, SaveSignatureRequest } from "@rabaed/domain";
 import { buttonVariants, SignatureEditor, SignatureRequiredDialog, type SaveSignatureCall, type SignatureEditorLabels } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
+import type { Reading } from "@/lib/transition-gate";
+import { useApiRead } from "@/lib/use-api-read";
 
 // The Signature (RP-85, ADR 0023): Profile → Add Signature, and the pop-up that sends a Member
 // without one there from a Transition, and back.
@@ -26,6 +28,7 @@ function useEditorLabels(): SignatureEditorLabels {
     hands: { flowing: t("hands.flowing"), upright: t("hands.upright") },
     preview: t("preview"),
     file: t("file"),
+    chooseFile: t("chooseFile"),
     fileHelp: t("fileHelp"),
     save: t("save"),
     empty: t("empty"),
@@ -72,6 +75,11 @@ export function AddSignature({ defaultName, returnTo }: { defaultName: string; r
       }
     />
   );
+}
+
+/** The signed-in Member's own Signature, read when `enabled`: loading until answered, or failed. */
+export function useMySignatureRead(enabled: boolean): Reading<MySignature> {
+  return useApiRead<MySignature>("/v1/me/signature", enabled);
 }
 
 /**

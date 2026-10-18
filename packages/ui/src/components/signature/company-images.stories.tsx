@@ -35,6 +35,24 @@ export const NoStampYet: Story = {
   },
 };
 
+/**
+ * Each file control is a button in the page's language, never the browser's own "Choose File":
+ * the input itself is visually hidden inside the button that names it, and its help describes it.
+ */
+export const FileButtonsInThePageLanguage: Story = {
+  play: async (context) => {
+    const l = companyImagesLabels[storyLocale(context)];
+    const canvas = within(context.canvasElement);
+    for (const card of [l.logo, l.stamp]) {
+      const input = canvas.getByLabelText(card.upload);
+      await expect(input).toHaveAttribute("type", "file");
+      await expect(input.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+      await expect(within(input.closest("label")!).getByText(card.upload)).toBeVisible();
+      await expect(input).toHaveAccessibleDescription(card.fileHelp);
+    }
+  },
+};
+
 /** Choosing a file uploads it as the Stamp, as base64. */
 export const UploadsTheStamp: Story = {
   play: async (context) => {

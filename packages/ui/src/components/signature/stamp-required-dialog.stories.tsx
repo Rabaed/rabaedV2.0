@@ -21,8 +21,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * A Member: names only their own Company, says its owner or Authorized Person must add the
- * Stamp, and offers nothing to do but close it. No Action Form. Left open for the screenshot.
+ * A Member: names only their own Company, says its Authorized Person must add the Stamp, and offers nothing to do but close it. No Action Form. Left open for the screenshot.
  */
 export const ForAMember: Story = {
   play: async (context) => {

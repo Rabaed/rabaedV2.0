@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, waitFor } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { signatureEditorLabels } from "../../storybook/signature.ts";
@@ -102,6 +102,10 @@ export const Upload: Story = {
     const l = labelsOf(context);
     await userEvent.click(canvas.getByRole("tab", { name: l.uploaded }));
     const input = canvas.getByLabelText(l.file);
+    // A button in the page's language, never the browser's own "Choose File": the input is hidden inside it.
+    await expect(input.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    await expect(within(input.closest("label")!).getByText(l.chooseFile)).toBeVisible();
+    await expect(input).toHaveAccessibleDescription(l.fileHelp);
     await userEvent.upload(input, new File(["<svg/>"], "signature.svg", { type: "image/svg+xml" }), { applyAccept: false });
     await expect(await canvas.findByRole("alert")).toHaveTextContent(l.refusals.file_type);
     await userEvent.upload(input, new File([tinyPng], "signature.png", { type: "image/png" }));

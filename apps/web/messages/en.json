@@ -911,8 +911,9 @@
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
       "tryAgain": "The answers changed meanwhile. Try again.",
       "noSignature": "Add your Signature in your profile before you take a Transition.",
-      "noStamp": "Your Company has no Stamp yet. Its owner or Authorized Person must add it in the Company profile.",
+      "noStamp": "Your Company has no Stamp yet. Its Authorized Person must add it in the Company profile.",
       "unavailable": "Something went wrong. Try again.",
+      "gateUnavailable": "Your Signature and your Company's Stamp couldn't be checked, so the Transition didn't open. Try again.",
       "internalNote": "Internal Note",
       "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
     },
@@ -1550,6 +1551,7 @@
     },
     "preview": "Preview",
     "file": "Image of your Signature",
+    "chooseFile": "Choose image",
     "fileHelp": "A PNG or JPEG image, up to 512 KB.",
     "save": "Save Signature",
     "empty": "Draw, type or upload your Signature first.",
@@ -1602,7 +1604,7 @@
     },
     "required": {
       "memberTitle": "{company} has no Stamp yet",
-      "memberBody": "Its Members can't take any Transition until it is added. Ask {company}'s owner or Authorized Person to add it in the Company profile.",
+      "memberBody": "Its Members can't take any Transition until it is added. Ask {company}'s Authorized Person to add it in the Company profile.",
       "ok": "OK",
       "authorizedPersonTitle": "Add {company}'s Stamp to act",
       "authorizedPersonBody": "None of {company}'s Members can take a Transition until its Stamp is in the Company profile.",
