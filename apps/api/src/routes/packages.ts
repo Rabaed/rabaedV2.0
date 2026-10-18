@@ -1,6 +1,7 @@
 import {
   addPackageItemRequest,
   createdPackage,
+  packageComments,
   packageDetail,
   packageList,
   packageNameRequest,
@@ -16,6 +17,7 @@ import {
   createPackage,
   discardPackage,
   getPackage,
+  getPackageComments,
   listPackages,
   removePackageItem,
   renamePackage,
@@ -56,6 +58,13 @@ export const packageRoutes =
     app.get("/v1/packages/:packageId", { schema: { params: packageParams, response: { 200: packageDetail } } }, async (request) => {
       const memberId = ctx.requireMember(request);
       return visibleOrNotFound(getPackage(ctx.db, memberId, idOrNotFound(request.params.packageId), ctx.now()));
+    });
+
+    // The Comments raised from its submittals' Code B (RP-647), for information: only the ones the
+    // Member sees; a Package they don't see is the same 404.
+    app.get("/v1/packages/:packageId/comments", { schema: { params: packageParams, response: { 200: packageComments } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      return visibleOrNotFound(getPackageComments(ctx.db, memberId, idOrNotFound(request.params.packageId), ctx.now()));
     });
 
     app.patch("/v1/packages/:packageId", { schema: { params: packageParams, body: packageNameRequest } }, async (request, reply) => {

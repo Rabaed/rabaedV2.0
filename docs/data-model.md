@@ -314,7 +314,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 **chat_message**
 `id`, `work_item_id`, `author_member_id`, `participant_id`, `body`, `file_ids`, `created_at`. Insert-only.
 
-**package** (as built, RP-636, `20270620000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenarios RP-588-1 to RP-588-3)
+**package** (as built, RP-636, `20270620000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenarios RP-588-1 to RP-588-3, RP-647-1)
 
 | column | notes |
 |---|---|
@@ -333,6 +333,9 @@ The app role reads `id`, `project_id`, `participant_id`, `seq`, `name`, `status`
 - `app.package_summary(package)` → (`total`, `open`, `codes`) (RP-641): of the items the caller sees (`app.package_items`), discarded and cancelled ones left out, how many, how many still open, and the closed ones by outcome (the Review Code) as `{"A": 2, "C": 1}`; no row when they don't see the Package. The board's and the Package page's counts.
 - `app.package_owner_name(package)` (RP-641): the owning Participant's Company name (V14), for every Member who sees the Package; else null.
 - `app.work_item_package(item)`: the item's Package (`package_id`, `seq`, `name`) where the caller sees both the item and the Package; else no row. The work item query gives it on each row (`package`).
+- `app.package_comments(package)` → (`work_item_id`, `raised_from_id`) (RP-647, `20270626000000_package_comments.sql`): the Comments (Type `CMT`, raised by Code B, RP-434) whose `raised_from` link names one of the items the caller sees (`app.package_items`), each one the caller sees (`app.sees_work_item`, as `app.work_item_comment_counts` counts them), never a discarded one; nothing when they don't see the Package. A Comment has no `package_id`: it is never one of the Package's items, nor in its counts or status.
+
+The work item query's `packageId` filter (RP-647) keeps the rows in `app.package_items(package)`: a Package the caller doesn't see filters to nothing, the same answer as a made-up id. `GET /v1/packages/:id/comments` gives `PackageComments` (`forInformation: true`, each Comment as the Snag List's row gives it, with the submittal it was raised from), or the plain 404.
 
 The api's board (`GET /v1/projects/:id/packages`) and Package page (`GET /v1/packages/:id`) give each Package as `PackageSummary` (with `counts`), the page its items as `PackageDetailItem`: each item's Document Number, Subject, Trade, `with` and `outcome` from the work item query's own row (`workItemRowsById`), so "With" follows V14 as in the List. A viewer outside the owning Participant is offered no action.
 
