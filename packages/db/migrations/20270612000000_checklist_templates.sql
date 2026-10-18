@@ -148,13 +148,15 @@ create policy member_reads_work_item_checklists on work_item_checklist for selec
 
 -- Whether p_trade_id is a Trade of the Project p_project_id.
 create function app.is_project_trade(p_project_id uuid, p_trade_id uuid) returns boolean
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select exists (
-      select 1 from dimension_value v join visibility_dimension d on d.id = v.dimension_id
-      where v.id = p_trade_id and v.project_id = p_project_id and d.kind = 'trade'
-    )
+    begin
+      return exists (
+        select 1 from dimension_value v join visibility_dimension d on d.id = v.dimension_id
+        where v.id = p_trade_id and v.project_id = p_project_id and d.kind = 'trade'
+      );
+    end
   $$;
 
 -- A Project Admin creates a Checklist Template on their Project, as its Version 1. Outcome:
@@ -295,7 +297,7 @@ create function app.sync_work_item_checklists(p_work_item_id uuid, p_now timesta
       v_held uuid;
       v_version checklist_template_version;
     begin
-      if not app.can_save_answers(p_work_item_id) then
+      if not app.sees_work_item(p_work_item_id) or not app.can_save_answers(p_work_item_id) then
         return 'not_editable';
       end if;
       select * into v_item from work_item where id = p_work_item_id;
