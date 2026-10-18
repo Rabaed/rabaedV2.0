@@ -88,8 +88,12 @@ export interface SheetTable {
 export interface Spreadsheet {
   /** The sheet names, in the workbook's order; a .csv has one, named after the file. */
   sheets: string[];
+  /** How many non-empty rows each sheet has, in the same order. */
+  rowCounts: number[];
   /** The chosen sheet read from the chosen header row. */
   table(choice?: SheetChoice): SheetTable;
+  /** A sheet's first `limit` rows from row 1, empty ones too (as ""), each as wide as its last non-empty cell. */
+  top(sheet: string | undefined, limit: number): SheetRow[];
 }
 
 const unsupported = () => new SpreadsheetError("unsupported_type", "Only .xlsx and .csv files can be read.");
@@ -104,13 +108,19 @@ export async function openSpreadsheet(file: SpreadsheetFile): Promise<Spreadshee
   const extension = /\.([^.]+)$/.exec(file.fileName)?.[1]?.toLowerCase();
   const sheets = extension === "xlsx" ? await readXlsx(bytes) : extension === "csv" ? [readCsv(file.fileName, bytes)] : null;
   if (!sheets) throw unsupported();
+  const sheetNamed = (name: string | undefined) => {
+    const sheet = name === undefined ? sheets[0] : sheets.find((each) => each.name === name);
+    if (!sheet) throw new SpreadsheetError("sheet_not_found", "The workbook has no sheet of that name.");
+    return sheet;
+  };
   return {
     sheets: sheets.map((sheet) => sheet.name),
-    table: (choice = {}) => {
-      const sheet = choice.sheet === undefined ? sheets[0] : sheets.find((each) => each.name === choice.sheet);
-      if (!sheet) throw new SpreadsheetError("sheet_not_found", "The workbook has no sheet of that name.");
-      return tableOf(sheet, choice.headerRow ?? 1);
-    },
+    rowCounts: sheets.map((sheet) => sheet.rows.filter((row) => row.some((cell) => cell !== "")).length),
+    table: (choice = {}) => tableOf(sheetNamed(choice.sheet), choice.headerRow ?? 1),
+    top: (name, limit) =>
+      sheetNamed(name)
+        .rows.slice(0, limit)
+        .map((values, index) => ({ rowNo: index + 1, values: values.slice(0, values.findLastIndex((cell) => cell !== "") + 1) })),
   };
 }
 

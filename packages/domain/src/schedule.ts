@@ -34,6 +34,14 @@ export const weeklyStepAgeReportSchedule: WeeklySchedule = {
   timeZone: riyadh,
 };
 
+/** The clean-up of Submittal Register Import previews never confirmed (RP-637): every day at 03:00 Riyadh. */
+export const registerImportCleanupSchedule: WeeklySchedule = {
+  days: weekdays,
+  hour: 3,
+  minute: 0,
+  timeZone: riyadh,
+};
+
 /** How late a missed run may still go (the worker was down at its time): the same working day, never the next. */
 export const MAX_LATE_MS = 12 * 3_600_000;
 
