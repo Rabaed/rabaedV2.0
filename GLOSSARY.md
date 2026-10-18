@@ -156,6 +156,10 @@ _Avoid_: Relationship, dependency
 A Work Item in the Inspections Module, such as a Work Inspection Request (WIR), in which the Contractor requests an inspection of work at a Location and Trade, and the Consultant carries it out, against its Checklist when its Form has one, and issues a Review Code, as for a submittal. An inspection that ends with Code C is re-inspected as a Revision (ADR 0025).
 _Avoid_: Site visit, check, IR (as a term on its own)
 
+**Inspection Result**:
+The retired outcome of an Inspection: Passed, Passed with Comments or Failed. Only Inspections started on WIR Workflow Version 1 or 2 end with one; newer Inspections end with a Review Code (ADR 0025).
+_Avoid_: grade
+
 **Expected Frequency**:
 How often a Work Item Type, such as the Daily Site Report, must be issued. A missing one shows as a gap, triggers reminders, and is flagged when the next Weekly report is prepared, where it can be added afterwards or ignored.
 _Avoid_: Recurrence, schedule

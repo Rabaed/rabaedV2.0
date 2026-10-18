@@ -20,5 +20,5 @@ We decided (2026-10-17/19, with the product owner, grilling of RP-27):
 - A WIR Workflow Version 3 issues codes (`issue_code`) instead of `inspection_result`; Version 1 and 2 items finish on their Versions. The WIR Type's outcome kind becomes the Review Code, and the Inspections Stages move to the Submittals set, mapping Pending Inspection → Pending Approval, Passed → Approved, Failed → Revise & Resubmit.
 - RP-652's separate "Inspections · …" columns become the shared columns, matched by Stage key.
 - RP-86, RP-577 and RP-653 are rewritten for codes; RP-86 also takes ADR 0024 (the Engineer fills the checklist in a reply Screen).
-- Once the code no longer uses it, the building ticket adds "Inspection Result" to the Review Code's _Avoid_ in `GLOSSARY.md`.
+- `GLOSSARY.md` keeps "Inspection Result" as a retired term, because Inspections started on WIR Workflow Version 1 or 2 still end with one.
 - The building PRs update workflow-engine.md, form-engine.md, data-model.md and visibility.md, not the planning session.
