@@ -28,6 +28,7 @@ export * from "./approved-supplier.ts";
 export * from "./package.ts";
 export * from "./package-detail.ts";
 export * from "./bulk-transition.ts";
+export * from "./register-import.ts";
 export * from "./step-age.ts";
 export * from "./visibility.ts";
 export * from "./watch.ts";
