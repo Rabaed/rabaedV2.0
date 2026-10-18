@@ -1,5 +1,8 @@
 import "server-only";
 import type {
+  ChecklistCopy,
+  ChecklistTemplateChoice,
+  ChecklistTemplates,
   SupplierChoice,
   ApprovedSuppliers,
   ProjectRequiredFields,
@@ -57,7 +60,7 @@ import type {
   WorkflowSettings,
   WorkflowVersionRead,
 } from "@rabaed/domain";
-import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
+import { activityFeedSearchParams, checklistTemplateChoices, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { apiUrl } from "./api-url.ts";
@@ -138,6 +141,20 @@ export function getProjectDimensions(projectId: string): Promise<DimensionValues
 /** A Project's Scopes and Sub-scopes; null if it isn't one of the signed-in Member's Projects. */
 export function getProjectScopes(projectId: string): Promise<Scopes | null> {
   return apiGet<Scopes>(`/v1/projects/${encodeURIComponent(projectId)}/scopes`);
+}
+
+/** The Project's Checklist Templates (RP-651), for its Members; null for anyone else. */
+export function getChecklistTemplates(projectId: string): Promise<ChecklistTemplates | null> {
+  return apiGet<ChecklistTemplates>(`/v1/projects/${encodeURIComponent(projectId)}/checklist-templates`);
+}
+
+/**
+ * What a `checklist_template` field offers and names (RP-651): the Project's templates, each
+ * one's latest Version, and the Versions an item already holds (`copies`).
+ */
+export async function getChecklistTemplateChoices(projectId: string, copies: readonly ChecklistCopy[] = []): Promise<ChecklistTemplateChoice[]> {
+  const list = await getChecklistTemplates(projectId);
+  return checklistTemplateChoices(list?.templates ?? [], copies);
 }
 
 /** The Project's Approved Supplier List (RP-592), for its Members; null for anyone else. */

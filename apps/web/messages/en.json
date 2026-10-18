@@ -865,6 +865,21 @@
         "none": "No approved supplier for this Trade yet",
         "withdrawn": "\u2068{name}\u2069 (withdrawn)"
       },
+      "checklistTemplateField": {
+        "choose": "Choose\u2026",
+        "none": "None",
+        "chooseTradeFirst": "Choose a Trade first.",
+        "noneForTrade": "No Checklist Template for this Trade yet",
+        "kept": "\u2068{name}\u2069 (as picked)",
+        "checks": "{count, plural, one {1 item} other {{n} items}}",
+        "filledOnSite": "answered by the Consultant on site",
+        "itemNumber": "{n} of {of}",
+        "commentRequired": "Comment required on {answer}",
+        "photoRequired": "Photo required on {answer}",
+        "commentOptional": "Comment optional",
+        "photoOptional": "Photos optional",
+        "raisesSnag": "{answer} raises a Snag"
+      },
       "linkQuestion": {
         "remove": "Remove {number}"
       }
@@ -1609,9 +1624,89 @@
     "stages": "Stages",
     "outcomes": "Outcomes",
     "modules": "Modules",
-    "requiredLinks": "Required links"
+    "requiredLinks": "Required links",
+    "checklistTemplates": "Checklist Templates"
   },
   "projectSettings": {
+    "checklistTemplates": {
+      "title": "Checklist Templates",
+      "intro": "The Project's official checklists, per Trade. A WIR picks one of its Trade's Checklist Templates, and its items are copied onto the WIR. Every company on the Project sees them.",
+      "new": "New Checklist Template",
+      "newTitle": "New Checklist Template",
+      "newIntro": "Label it in English and Arabic, choose its Trade and add its items. A WIR of that Trade can pick it once it is saved.",
+      "editorIntro": "Saving makes the next Version: WIRs that already copied an earlier one keep its items.",
+      "backToList": "All Checklist Templates",
+      "name": "Checklist Template",
+      "checks": "Items",
+      "version": "Version",
+      "versionNo": "Version {n}",
+      "status": "Availability",
+      "statuses": {
+        "active": "Active",
+        "retired": "Retired"
+      },
+      "activeCount": "{count, plural, =0 {No active templates} one {1 active} other {{n} active}}",
+      "tableLabel": "Checklist Templates for {trade}",
+      "noTemplates": "No templates for this Trade yet.",
+      "noTrades": "This Project has no Trades yet. Add them in Trades & Locations first.",
+      "open": "Open",
+      "edit": "Edit",
+      "view": "View",
+      "editNamed": "Edit {name}",
+      "viewNamed": "View {name}",
+      "detailsTitle": "Checklist Template",
+      "detailsIntro": "In English and Arabic, and the Trade whose WIRs may pick it.",
+      "nameEn": "Name (English)",
+      "nameAr": "Name (Arabic)",
+      "trade": "Trade",
+      "tradeHelp": "Only WIRs of this Trade are offered it.",
+      "checksTitle": "{count, plural, one {1 item} other {{n} items}}",
+      "checksIntro": "Each item is answered on site. Say what it takes as evidence, and whether a failed item raises a Snag.",
+      "checkNo": "Item {n}",
+      "checkEn": "Item (English)",
+      "checkAr": "Item (Arabic)",
+      "answers": "Answers",
+      "passFail": "Pass / Fail / N/A",
+      "yesNo": "Yes / No / N/A",
+      "comment": "Comment",
+      "photo": "Photos",
+      "evidence": {
+        "off": "None",
+        "optional": "Optional",
+        "required_on_negative": "Required on Fail or No"
+      },
+      "onNegative": "On Fail or No",
+      "negative": {
+        "create_snag": "Raise a Snag",
+        "none": "Nothing"
+      },
+      "moveUp": "Move item {n} up",
+      "moveDown": "Move item {n} down",
+      "removeCheck": "Remove item {n}",
+      "addCheck": "Add item",
+      "create": "Create Checklist Template",
+      "saveVersion": "Save as Version {n}",
+      "incomplete": "Fill in both languages for the template and every item.",
+      "created": "The Checklist Template was created.",
+      "saved": "Saved as Version {n}.",
+      "previewTitle": "As a WIR shows it",
+      "previewIntro": "The items the Contractor sees when picking it, which the Consultant answers on site.",
+      "retire": "Retire",
+      "retireTitle": "Retire {name}?",
+      "retireHelp": "No new WIR can pick it. WIRs that already copied it keep its items.",
+      "retireSubmit": "Retire Checklist Template",
+      "retired": "The Checklist Template was retired.",
+      "cancel": "Cancel",
+      "close": "Close",
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed.",
+        "tradeNotFound": "That Trade is no longer on this Project. Reload the page.",
+        "retired": "This Checklist Template was retired: it can't be edited.",
+        "invalid": "Fill in both languages for the template and every item."
+      }
+    },
     "modules": {
       "title": "Modules",
       "intro": "Where the Project's Modules show.",

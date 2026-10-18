@@ -8,6 +8,7 @@ import {
   type ChecklistCount,
   type HiddenLinkChoice,
   type NamedAnswer,
+  type ChecklistTemplateChoice,
   type SupplierChoice,
   type TableColumn,
 } from "./form.ts";
@@ -160,6 +161,7 @@ export function formatFormValue(
   optionLists: readonly OptionList[] = [],
   linkTargets: Readonly<Record<string, HiddenLinkChoice>> = {},
   suppliers: readonly SupplierChoice[] = [],
+  checklistTemplates: readonly ChecklistTemplateChoice[] = [],
 ): string {
   switch (field.type) {
     case "date":
@@ -223,6 +225,9 @@ export function formatFormValue(
     // The supplier's name only, whatever its status (V10); one the list doesn't name is left out, never shown as an id.
     case "approved_supplier":
       return suppliers.find((s) => s.id === value)?.name?.[locale] ?? "";
+    // The picked template's name; one the page doesn't name is left out, never shown as an id.
+    case "checklist_template":
+      return checklistTemplates.find((t) => t.id === value)?.name?.[locale] ?? "";
     case "member":
     case "participant":
       return (named?.memberName ?? named?.companyName)?.[locale] ?? anotherCompany[locale];
