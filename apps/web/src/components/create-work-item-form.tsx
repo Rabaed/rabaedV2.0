@@ -11,6 +11,7 @@ import {
   type Locale,
   type OptionList,
   type SupplierChoice,
+  type ChecklistTemplateChoice,
 } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
@@ -33,6 +34,7 @@ export function CreateWorkItemForm({
   people,
   optionLists,
   suppliers,
+  checklistTemplates,
   locale,
 }: {
   projectId: string;
@@ -46,6 +48,8 @@ export function CreateWorkItemForm({
   optionLists: readonly OptionList[];
   /** The Project's Approved Supplier List: its `approved_supplier` fields offer the Trade's approved ones. */
   suppliers: readonly SupplierChoice[];
+  /** The Project's Checklist Templates: its `checklist_template` fields offer the Trade's active ones (RP-651). */
+  checklistTemplates: readonly ChecklistTemplateChoice[];
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
@@ -67,6 +71,7 @@ export function CreateWorkItemForm({
       // Lists that didn't load (empty) aren't checked here: the server is the authority.
       optionLists: optionLists.length > 0 ? optionLists : undefined,
       suppliers: suppliers.length > 0 ? suppliers : undefined,
+      checklistTemplates: checklistTemplates.length > 0 ? checklistTemplates : undefined,
     });
     setFieldErrors(checked.ok ? [] : checked.errors.filter((e) => e.code !== "required"));
   }
@@ -133,6 +138,7 @@ export function CreateWorkItemForm({
         people={people}
         optionLists={optionLists}
         suppliers={suppliers}
+        checklistTemplates={checklistTemplates}
         onChange={change}
         idPrefix="answer"
         links={{ targets: {}, search: linkSearch(projectId), hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : null), linkAs: Link }}

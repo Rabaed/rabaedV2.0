@@ -61,15 +61,17 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270531 | RP-656 | 4D | Annotated photo beside the original (moved from 20270425: RP-90's 20270429 is on `main`) |
 | 20270601 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 (moved from 20270419) |
 | 20270602 | RP-652 | 4C | Show Inspections in the Submittals tab (moved from 20270424) |
-| 20270603 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
+| 20270603 | RP-651 | 4B | Unused: the migration moved to 20270630 (via 20270612), after main's later days |
 | 20270604 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
 | 20270605 | RP-577 | 4A | Snags from failed check items |
 | 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
 | 20270607 | spec RP-649 | 4A | Review fixes |
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270610 | RP-624 | 33 | raised_item_counts_by_type |
+| 20270612 | RP-651 | 42 | Unused: the migration moved to 20270630, after 20270613 and 20270628 on main |
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
 | 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
 | 20270628 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524, 20270609 and 20270613 overtaken on main) |
 | 20270701 | RP-85 | 21 | stored_file |
 | 20270705 | RP-620 | 22 | documental_record |
+| 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
