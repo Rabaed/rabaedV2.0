@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  actorRole,
   addStep,
   connectSteps,
   formatDate,
@@ -10,6 +11,7 @@ import {
   removeTransition,
   updateStep,
   updateTransition,
+  type ActorRule,
   type BaseRole,
   type BilingualText,
   type FormSchema,
@@ -303,7 +305,10 @@ function Builder(props: WorkflowBuilderProps) {
     }
     const into = stage && openStages.some((s) => s.key === stage) ? stage : openStages.filter((s) => s.category === "in_progress").at(-1)?.key;
     if (!into) return;
-    const step = addStep(definition, { name: labels.names.newStep, stage: into, actor: { role: source.actor?.role ?? "contractor", permission: "review" }, at });
+    // Held as the Step it comes from: by the same role, or by the raiser (RP-622).
+    const role = actorRole(source.actor);
+    const actor: ActorRule = role === null && source.actor ? { raiser: true, permission: "review" } : { role: role ?? "contractor", permission: "review" };
+    const step = addStep(definition, { name: labels.names.newStep, stage: into, actor, at });
     const added = withTransition(step.definition, from, step.key);
     if (!added) return;
     commit(added.definition);

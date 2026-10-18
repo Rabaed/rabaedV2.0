@@ -222,6 +222,8 @@ export type WorkItemListProps = {
   action?: ReactNode;
   /** At the toolbar's end: the List / Kanban switch. */
   viewSwitch?: ReactNode;
+  /** After the switch: the ⋯ "More actions" menu (`MoreActionsMenu`), e.g. Import register and Imports (RP-637). */
+  moreActions?: ReactNode;
   /** The link component for items and pages, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
   /** The Kanban (`WorkItemBoard`), shown under the toolbar in place of the Stage counts, table and pages. */
@@ -281,6 +283,7 @@ function WorkItemListBody({
   onQueryChange,
   action,
   viewSwitch,
+  moreActions,
   linkAs: Link = "a",
   board,
   hints,
@@ -569,6 +572,7 @@ function WorkItemListBody({
             {groupMenu}
             {exportMenu}
             {viewSwitch}
+            {moreActions}
           </>
         }
         className={board ? "gap-3" : "gap-1.5"}
@@ -584,9 +588,9 @@ function WorkItemListBody({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
-          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter or grouping on.
+          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter, grouping or the ⋯ menu on.
           hintWide={!board}
-          className={board ? undefined : cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
+          className={board ? undefined : cn(filtered || groupBy !== null || moreActions ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
@@ -762,7 +766,7 @@ function WorkItemListBody({
  * page), so the line says the page alone, there is no last page, and the numbers grow as the
  * pages are read.
  */
-function WorkItemPager({
+export function WorkItemPager({
   list,
   query,
   labels,
@@ -770,7 +774,11 @@ function WorkItemPager({
   hrefFor,
   linkAs,
   onQueryChange,
-}: Pick<WorkItemListProps, "list" | "query" | "labels" | "locale" | "hrefFor" | "linkAs"> & { onQueryChange: (next: Partial<WorkItemQuery>) => void }) {
+}: Pick<WorkItemListProps, "query" | "locale" | "hrefFor" | "linkAs"> & {
+  list: Pick<WorkItemListProps["list"], "page" | "stages">;
+  labels: Pick<WorkItemListLabels, "page" | "pageOf" | "items" | "pages" | "rowsPerPage" | "firstPage" | "previousPage" | "nextPage" | "lastPage">;
+  onQueryChange: (next: Partial<WorkItemQuery>) => void;
+}) {
   const n = (value: number) => formatNumber(value, locale);
   const page = list.page?.number ?? query.page ?? 1;
   const size = list.page?.size ?? query.pageSize ?? workItemPageSize;
@@ -812,7 +820,7 @@ const roleDots = ["bg-stage-internal-dot", "bg-stage-pending-dot", "bg-trade-el-
  * by its level, its values the Locations at that level, each with the ones above
  * it after its name so it reads in place (Floor 1 · Building 1).
  */
-function locationLevels(locations: WorkItemListData["filters"]["locations"], locale: Locale, labels: WorkItemListLabels) {
+export function locationLevels(locations: WorkItemListData["filters"]["locations"], locale: Locale, labels: Pick<WorkItemListLabels, "level">) {
   const byId = new Map(locations.map((l) => [l.id, l]));
   const above = (id: string | null, seen = new Set<string>()): BilingualText[] => {
     const l = id ? byId.get(id) : undefined;

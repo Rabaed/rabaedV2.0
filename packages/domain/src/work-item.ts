@@ -157,6 +157,27 @@ export const workItemRow = workItemSummary.extend({
     ])
     .nullable()
     .optional(),
+  /**
+   * The Snag List's "Raised from" (RP-94): the item its `raised_from` Link names, by Document
+   * Number and Subject (E1). Its id and its outcome (the Review Code or Inspection Result, with how
+   * a badge shows it) only when the viewer sees that item: a Link never carries its live data.
+   * Null when it was raised by hand; left out by reads of other Modules.
+   */
+  raisedFrom: z
+    .object({
+      documentNumber: z.string(),
+      subject: z.string(),
+      workItemId: z.uuid().nullable(),
+      outcome: z.object({ code: workItemOutcome, name: bilingualText, look: z.enum(["a", "b", "c", "d"]) }).nullable(),
+    })
+    .nullable()
+    .optional(),
+  /**
+   * The Snag List's thumbnail (RP-94): the first image in one of its Form's file fields (not a
+   * checklist item's evidence, nor an annotated copy) that the viewer sees (RLS on Documents), in
+   * upload order. Null when there is none; left out by reads of other Modules.
+   */
+  photo: z.object({ documentId: z.uuid(), contentType: z.string() }).nullable().optional(),
 });
 export type WorkItemRow = z.infer<typeof workItemRow>;
 
@@ -180,6 +201,12 @@ export const workItemList = z.object({
   page: z.object({ number: z.number().int().positive(), size: z.number().int().positive(), hasNext: z.boolean() }).optional(),
   /** The Member's own List columns for the Module (RP-409), when they saved some; else the design's. */
   columnLayout: listColumnLayout.optional(),
+  /**
+   * The Snag List's type chips (RP-94): how many of the visible items matching every filter but
+   * the Type are of each Type, by code; a Type with none is left out. Left out under a search
+   * (nothing counts beyond what it shows) and by reads of other Modules.
+   */
+  typeCounts: z.array(z.object({ code: z.string(), count: z.number().int().positive() })).optional(),
   filters: z.object({
     types: z.array(z.object({ code: z.string(), name: bilingualText })),
     /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */
@@ -199,6 +226,16 @@ export const workItemList = z.object({
      * only, from `with.companies` (V14).
      */
     owners: z.array(z.object({ memberId: z.uuid(), name: bilingualText })),
+    /**
+     * The Snag List's Company filter (RP-94): the Companies holding one of the viewer's visible
+     * open items, each by name only (V14), the viewer's own marked `own`. Left out by reads of other Modules.
+     */
+    companies: z.array(z.object({ participantId: z.uuid(), name: bilingualText, own: z.boolean() })).optional(),
+    /**
+     * The Snag List's "Raised from" filter (RP-94): the items the viewer's visible items were raised
+     * from, by Document Number and Subject only (E1). Left out by reads of other Modules.
+     */
+    raisedFrom: z.array(z.object({ documentNumber: z.string(), subject: z.string() })).optional(),
   }),
 });
 export type WorkItemList = z.infer<typeof workItemList>;
@@ -633,10 +670,17 @@ export const workItemDetail = workItemSummary.extend({
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**
-   * Its Comments (WF-11: the items raised from it, such as Code B's), open and closed,
-   * counting only those the viewer sees (visibility.md, Lists and counts).
+   * The items raised from it, open and closed, per Work Item Type (its Code B's Comments, the Snags
+   * raised from it), counting only those the viewer sees and never a discarded one (visibility.md,
+   * Lists and counts). A Type with none is absent; ordered by Type code.
    */
-  comments: z.object({ open: z.number().int().nonnegative(), closed: z.number().int().nonnegative() }),
+  raisedItems: z.array(
+    z.object({
+      type: z.object({ code: z.string(), name: bilingualText }),
+      open: z.number().int().nonnegative(),
+      closed: z.number().int().nonnegative(),
+    }),
+  ),
   /** What the viewer may press now. */
   actions: workItemActions,
 });

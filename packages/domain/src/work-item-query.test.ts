@@ -23,6 +23,8 @@ const defaults: WorkItemQuery = {
   with: [],
   owner: [],
   role: [],
+  company: [],
+  raisedFrom: [],
   trade: [],
   location: [],
   outcome: [],
@@ -120,6 +122,8 @@ describe("the query in the URL", () => {
     with: ["not_picked_up", `company:${participant}`],
     owner: [`member:${row}`, `company:${participant}`],
     role: ["internal_review"],
+    company: [participant],
+    raisedFrom: ["manual", "TWR-C1-EL-MAR-0041"],
     trade: [trade],
     location: [location],
     outcome: ["C", "passed_with_comments"],
@@ -331,5 +335,17 @@ describe("the List's web path", () => {
     expect(workItemListHref(project, { module: "snag_list", type: ["SNAG"], bucket: ["pending"] })).toBe(`/projects/${project}/snag-list?type=SNAG&bucket=pending`);
     expect(workItemListHref(project, { ...defaults })).toBe(`/projects/${project}/work-items`);
     expect(workItemListHref(project, { module: "submittals", codeC: ["awaitingRevision"] })).toBe(`/projects/${project}/work-items?codeC=awaitingRevision`);
+  });
+});
+
+describe("a Stage filter in the Submittals tab that lists Inspections too (RP-652)", () => {
+  it("takes a Stage of another Module by `<module>:<key>`, beside the Module's own keys", () => {
+    expect(workItemQuery.parse({ stage: ["draft", "inspections:pending_inspection"] }).stage).toEqual(["draft", "inspections:pending_inspection"]);
+  });
+
+  it("refuses a key that is neither", () => {
+    expect(workItemQuery.safeParse({ stage: ["inspections:"] }).success).toBe(false);
+    expect(workItemQuery.safeParse({ stage: ["a:b:c"] }).success).toBe(false);
+    expect(workItemQuery.safeParse({ stage: [":draft"] }).success).toBe(false);
   });
 });

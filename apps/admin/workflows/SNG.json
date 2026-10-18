@@ -4,7 +4,7 @@
       "key": "draft",
       "name": { "en": "Draft", "ar": "مسودة" },
       "stage": "draft",
-      "actor": { "role": "consultant", "permission": "create" },
+      "actor": { "raiser": true, "permission": "create" },
       "outcomeMode": "none"
     },
     {
@@ -32,7 +32,7 @@
       "key": "verify",
       "name": { "en": "Verify", "ar": "التحقق" },
       "stage": "resolved",
-      "actor": { "role": "consultant", "permission": "close" },
+      "actor": { "raiser": true, "permission": "close" },
       "outcomeMode": "none"
     },
     {

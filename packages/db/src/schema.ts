@@ -173,6 +173,8 @@ export interface ProjectTable {
   status: Generated<"active" | "closed">;
   closed_at: Timestamp | null;
   creator_member_id: string;
+  /** Project setting (RP-652): the Inspections tab is hidden and the Submittals tab lists Inspections too. */
+  show_inspections_in_submittals: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -333,6 +335,41 @@ export interface ApprovedSupplierTable {
   trade_value_id: string;
   scope_id: string | null;
   status: Generated<"approved" | "withdrawn">;
+}
+
+/**
+ * A Submittal Register Import (RP-637, spec RP-631). Only the columns the app role
+ * may read: never its times, which are its Drafts' start (scenario 61). Read by the
+ * importing Participant's Members, a `previewed` one by its importer only; written
+ * through `app.preview_register_import` and `app.confirm_register_import`.
+ */
+export interface SubmittalRegisterImportTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  run_by_member_id: string;
+  file_name: string;
+  sheet: string;
+  header_row: number;
+  headers: ColumnType<string[], string, string>;
+  mapping: ColumnType<unknown, string, string>;
+  status: Generated<"previewed" | "created">;
+  rows_total: number;
+  rows_rejected: number;
+  rows_created: number | null;
+}
+
+/** One row of an import as read, with every reason it is bad. Its Draft only through `app.register_import_results`. */
+export interface SubmittalRegisterImportRowTable {
+  import_id: string;
+  row_no: number;
+  cells: ColumnType<string[], string, string>;
+  subject: string;
+  type_text: string;
+  trade_text: string;
+  work_item_type_id: string | null;
+  trade_id: string | null;
+  reasons: string[];
 }
 
 export type ModuleKey = "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
@@ -546,6 +583,8 @@ export interface DocumentTable {
   taken_at: Timestamp | null;
   taken_latitude: number | null;
   taken_longitude: number | null;
+  /** The SHA-256 of the file's bytes, taken by the api at confirming; copies carry their source's. Never the app role's (RP-618). */
+  file_sha256: Buffer | null;
   /** The item's `arrivals` when it was added (a trigger sets it): until the item leaves, only its holder sees it (RP-309). */
   arrival: Generated<number>;
 }
@@ -716,6 +755,8 @@ export interface Database {
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
+  submittal_register_import: SubmittalRegisterImportTable;
+  submittal_register_import_row: SubmittalRegisterImportRowTable;
   project_required_field: ProjectRequiredFieldTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;

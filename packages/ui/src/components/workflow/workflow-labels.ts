@@ -1,4 +1,4 @@
-import type { BaseRole, FunctionPermission, OutcomeMode, TransitionKind } from "@rabaed/domain";
+import type { BaseRole, FunctionPermission, OutcomeMode, StepHolder, TransitionKind } from "@rabaed/domain";
 
 /**
  * The Workflow canvas's and Step list's words, in the viewer's language, from the
@@ -11,8 +11,8 @@ export type WorkflowLabels = {
   list: string;
   /** The band of the terminal Steps, e.g. "Outcome". */
   outcome: string;
-  /** A Participant role, e.g. "Consultant". */
-  role: (role: BaseRole) => string;
+  /** A Participant role, e.g. "Consultant", or "The raiser" (RP-622). */
+  role: (role: StepHolder) => string;
   /** A Function Permission, e.g. "Approve". */
   permission: (permission: FunctionPermission) => string;
   /** What a Step does about the outcome, e.g. "Issues the outcome"; not called for `none`. */

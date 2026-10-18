@@ -30,14 +30,14 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270509 | RP-630 | 3D | Snag List on a phone |
 | 20270510 | RP-658 | 3A | Pick one of several covering Participants at a Submit |
 | 20270511 | spec RP-619 | 3A | Review fixes |
-| 20270410 | RP-636 | 1A | Build an Open Package |
-| 20270411 | RP-638 | 1A | Submit Package |
-| 20270412 | RP-641 | 1A | Packages board and each viewer's counts |
-| 20270413 | RP-642 | 1B | When a Package is Done |
-| 20270414 | RP-643 | 1C | Grouped notification for a Package Submit |
-| 20270415 | RP-646 | 1A | Bulk Transitions from the Package page |
-| 20270416 | RP-647 | 1B | Package filter and Comments on the Package page |
-| 20270417 | spec RP-616 | 1A | Review fixes |
+| 20270620 | RP-636 | 1A | Build an Open Package (moved from 20270410: main's migrations had passed that block) |
+| 20270621 | RP-638 | 1A | Submit Package |
+| 20270622 | RP-641 | 1A | Packages board and each viewer's counts |
+| 20270623 | RP-642 | 1A | When a Package is Done |
+| 20270624 | RP-643 | 1A | Grouped notification for a Package Submit |
+| 20270625 | RP-646 | 1A | Bulk Transitions from the Package page |
+| 20270626 | RP-647 | 1A | Package filter and Comments on the Package page |
+| 20270627 | spec RP-616 | 1A | Review fixes |
 | 20270512 | RP-618 | 24 | File fingerprints in the content hash |
 | 20270513 | RP-85 | 21 | The Signature; no Signature, no Transition |
 | 20270514 | RP-620 | 22 | Tracer: sealed Documental Record |
@@ -51,15 +51,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270522 | spec RP-632 | 22 | Review fixes |
 | 20270523 | spec RP-632 | 21 | Merge-with-`main` reconciliation of `app.take_transition` (rule 11.1) |
 | 20270418 | RP-170 | 4A | WIR Workflow Version 2 (Engineer → Manager, Recommended Result) |
-| 20270419 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 |
-| 20270420 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
-| 20270421 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
-| 20270422 | RP-577 | 4A | Snags from failed check items |
-| 20270423 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
-| 20270424 | RP-652 | 4C | Show Inspections in the Submittals tab |
-| 20270425 | RP-656 | 4D | Annotated photo beside the original |
-| 20270426 | spec RP-649 | 4A | Review fixes |
-| 20270427 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270524 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
 | 20270525 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
 | 20270526 | RP-640 | 5C | Register Import: Assign to |
@@ -67,3 +58,16 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270528 | RP-644 | 5D | Register Import: Packages from an import, downloads and saved mappings |
 | 20270529 | spec RP-631 | 5A | Review fixes |
 | 20270530 | spec RP-631 | 5A | Merge-with-`main` reconciliation of the import's confirm function (rule 11.1) |
+| 20270531 | RP-656 | 4D | Annotated photo beside the original (moved from 20270425: RP-90's 20270429 is on `main`) |
+| 20270601 | RP-82 | 4B | Link questions that accept chosen outcomes; WIR Form Version 2 (moved from 20270419) |
+| 20270602 | RP-652 | 4C | Show Inspections in the Submittals tab (moved from 20270424) |
+| 20270603 | RP-651 | 4B | Project Checklist Templates and the Checklist Template choice |
+| 20270604 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
+| 20270605 | RP-577 | 4A | Snags from failed check items |
+| 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
+| 20270607 | spec RP-649 | 4A | Review fixes |
+| 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
+| 20270610 | RP-624 | 33 | raised_item_counts_by_type |
+| 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
+| 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
+| 20270628 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524, 20270609 and 20270613 overtaken on main) |
