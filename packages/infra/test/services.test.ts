@@ -241,7 +241,8 @@ describe("services", () => {
       "rabaed-dev-web": { launchType: "FARGATE", desired: 1, cpu: "256", memory: "1024" },
       "rabaed-dev-api": { launchType: "FARGATE", desired: 1, cpu: "256", memory: "512" },
       "rabaed-dev-admin": { launchType: "FARGATE", desired: 1, cpu: "256", memory: "512" },
-      "rabaed-dev-worker": { launchType: "FARGATE", desired: 1, cpu: "256", memory: "512" },
+      // Headless Chromium renders the Documental Records (RP-620).
+      "rabaed-dev-worker": { launchType: "FARGATE", desired: 1, cpu: "512", memory: "1024" },
     });
   });
 
@@ -356,19 +357,37 @@ describe("secrets", () => {
   it("puts no password in plain environment variables", () => {
     for (const family of taskDefinitions.keys()) {
       const names = (container(family).Environment ?? []).map((e) => e.Name);
-      // Allowed: API_URL and WEB_URL (addresses), secret ARNs (not secret), and DATABASE_ROLE_PASSWORDS (a mode, "on-create").
-      const allowed = (n: string) => ["API_URL", "WEB_URL", "DATABASE_ROLE_PASSWORDS"].includes(n) || n.endsWith("_SECRET_ARN");
+      // Allowed: API_URL, WEB_URL and TIMESTAMP_AUTHORITY_URL (addresses; the last a public service's),
+      // secret ARNs (not secret), and DATABASE_ROLE_PASSWORDS (a mode, "on-create").
+      const allowed = (n: string) =>
+        ["API_URL", "WEB_URL", "TIMESTAMP_AUTHORITY_URL", "DATABASE_ROLE_PASSWORDS"].includes(n) || n.endsWith("_SECRET_ARN");
       expect(names.filter((n) => /PASSWORD|SECRET|_URL$/.test(n) && !allowed(n)), family).toEqual([]);
     }
   });
 });
 
 describe("Project files", () => {
-  it("the api knows its bucket; nothing else does", () => {
+  it("the api and the worker (for the Documental Records, RP-620) know the bucket; nothing else does", () => {
     const names = (family: string) => (container(family).Environment ?? []).map((e) => e.Name);
     expect(names("rabaed-dev-api")).toContain("PROJECT_FILES_BUCKET");
-    for (const family of ["rabaed-dev-web", "rabaed-dev-admin", "rabaed-dev-worker", "rabaed-dev-migrate"]) {
+    expect(names("rabaed-dev-worker")).toContain("PROJECT_FILES_BUCKET");
+    for (const family of ["rabaed-dev-web", "rabaed-dev-admin", "rabaed-dev-migrate"]) {
       expect(names(family)).not.toContain("PROJECT_FILES_BUCKET");
+    }
+  });
+
+  it("tells the worker the build assets bucket, the sealing key and the public timestamp authority, and nothing else does", () => {
+    const environment = (family: string) => Object.fromEntries((container(family).Environment ?? []).map((e) => [e.Name, e.Value]));
+    const worker = environment("rabaed-dev-worker");
+    // Sealed with the KMS key, never the local test key (the worker refuses `local` on ECS too).
+    expect(worker.RECORD_SEALING).toBe("kms");
+    expect(worker.TIMESTAMP_AUTHORITY_URL).toMatch(/^https:\/\//);
+    expect(env.resolve(worker.BUILD_ASSETS_BUCKET, "app").resource.Type).toBe("AWS::S3::Bucket");
+    expect(env.resolve(worker.PDF_SEALING_KEY_ID, "app").resource.Properties?.KeySpec).toBe("RSA_3072");
+    for (const family of ["rabaed-dev-web", "rabaed-dev-api", "rabaed-dev-admin", "rabaed-dev-migrate"]) {
+      for (const name of ["RECORD_SEALING", "BUILD_ASSETS_BUCKET", "PDF_SEALING_KEY_ID", "TIMESTAMP_AUTHORITY_URL"]) {
+        expect(environment(family), family).not.toHaveProperty(name);
+      }
     }
   });
 });
