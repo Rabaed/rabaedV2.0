@@ -222,6 +222,13 @@ describe("permissions boundary", () => {
     for (const action of new Set(granted)) expect(allowsAction(boundary, action), action).toBe(true);
   });
 
+  it("allows kms:Sign only on a key tagged for sealing the Documental Records (RP-620)", () => {
+    const signing = boundary.filter((s) => actions([s]).includes("kms:Sign"));
+    expect(signing).toEqual([
+      expect.objectContaining({ Effect: "Allow", Action: "kms:Sign", Condition: { StringEquals: { "aws:ResourceTag/rabaed-purpose": "pdf-sealing" } } }),
+    ]);
+  });
+
   it("lets no role change IAM, or assume any role but the CDK bootstrap roles; IAM it may only read, to simulate the two task roles", () => {
     for (const action of actions(boundary)) {
       expect(action).not.toMatch(/^[^:]*$|:\*$/);
