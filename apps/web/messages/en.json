@@ -1525,9 +1525,33 @@
     "outcomes": "Outcomes",
     "modules": "Modules",
     "requiredLinks": "Required links",
+    "record": "Documental Record",
     "checklistTemplates": "Checklist Templates"
   },
   "projectSettings": {
+    "record": {
+      "title": "Documental Record",
+      "intro": "How this Project's records are printed. A change applies to records made afterwards; records already made stay as they were.",
+      "language": {
+        "title": "Language",
+        "description": "Every record the Project makes is printed in this language.",
+        "label": "Record language",
+        "bilingual": "Arabic and English: Arabic headings with their English label",
+        "ar": "Arabic only",
+        "en": "English only"
+      },
+      "hijri": {
+        "title": "Hijri dates",
+        "description": "Government Owners often ask for the Hijri date beside the Gregorian one.",
+        "label": "Show Hijri dates",
+        "help": "Off: dates are Gregorian only. On: every date on the record has its Hijri date beside it."
+      },
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed."
+      }
+    },
     "checklistTemplates": {
       "title": "Checklist Templates",
       "intro": "The Project's official checklists, per Trade. A WIR picks one of its Trade's Checklist Templates, and its items are copied onto the WIR. Every company on the Project sees them.",

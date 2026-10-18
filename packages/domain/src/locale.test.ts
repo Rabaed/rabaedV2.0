@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale, riyadhDay, sortedByName } from "./locale.ts";
+import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatHijriDate, formatNumber, isLocale, riyadhDay, sortedByName } from "./locale.ts";
 
 describe("locale", () => {
   it("knows English and Arabic only", () => {
@@ -92,6 +92,21 @@ describe("formatDayMonthYear", () => {
     expect(ar).toContain("10");
     expect(ar).toContain("2026");
     expect(ar).not.toMatch(/[٠-٩]/);
+  });
+});
+
+describe("formatHijriDate", () => {
+  // 1 Muharram 1448 was 16 June 2026 (Umm al-Qura), so 18 October 2026 is 7 Jumada I.
+  const at = new Date("2026-10-18T09:00:00Z");
+
+  it("writes the Umm al-Qura date in the language, in Latin digits", () => {
+    expect(formatHijriDate(at, "ar")).toBe("7 جمادى الأولى 1448 هـ");
+    expect(formatHijriDate(at, "en")).toBe("Jumada I 7, 1448 AH");
+  });
+
+  it("reads the Riyadh day, also late in the UTC day", () => {
+    // 22:30 UTC on the 18th is 01:30 on the 19th in Riyadh.
+    expect(formatHijriDate(new Date("2026-10-18T22:30:00Z"), "en")).toBe("Jumada I 8, 1448 AH");
   });
 });
 

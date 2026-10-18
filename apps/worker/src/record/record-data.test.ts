@@ -1,6 +1,7 @@
 import type { TransitionFact } from "@rabaed/db";
 import { describe, expect, it } from "vitest";
-import { recordPath } from "./record-data.ts";
+import { goldenFacts } from "./golden-fixtures.ts";
+import { recordDataOf, recordPath } from "./record-data.ts";
 
 // The path to the outcome the Record Data names (V7; workflow-engine.md §7).
 
@@ -14,6 +15,10 @@ const t = (n: number, kind: string, from: string, to: string): TransitionFact =>
   positions: [],
   companyName: { en: "C", ar: "C" },
   contentSha256: null,
+  outcomeMode: null,
+  remarks: null,
+  participantId: "p",
+  roleName: { en: "Contractor", ar: "مقاول" },
 });
 const labels = (path: TransitionFact[]) => path.map((p) => p.label.en);
 
@@ -54,5 +59,33 @@ describe("recordPath", () => {
       t(5, "close", "owner", "approved"),
     ]);
     expect(labels(path)).toEqual(["T1", "T4", "T5"]);
+  });
+});
+
+describe("the reply on page 1", () => {
+  const verification = { code: "7K2M-9QXD", link: "https://rabaed.test/verify/x" };
+  const base = goldenFacts("A", "en");
+  const remarksOf = (facts: typeof base) => recordDataOf(facts, verification).reply;
+
+  it("is the Remarks of the Code that is the outcome", () => {
+    expect(remarksOf(base)).toContain("Approved as submitted.");
+  });
+
+  it("is none for a Cancel, whatever Code's Remarks the events held", () => {
+    expect(remarksOf({ ...base, outcome: "cancelled" })).toBeNull();
+  });
+
+  it("is never the Remarks of a Code off the path, such as one the Owner sent back", () => {
+    const stale = { ...base.transitions[3]!, fromStepId: "owner", kind: "send", remarks: "A Code the Owner sent back" };
+    const sentBack = { ...base.transitions[3]!, fromStepId: "owner", toStepId: "consultant", kind: "send_back", outcomeMode: null, remarks: null };
+    const cancel = { ...base.transitions[3]!, fromStepId: "consultant", toStepId: "cancelled", kind: "cancel", outcomeMode: null, remarks: null };
+    const facts = { ...base, outcome: "cancelled", transitions: [...base.transitions.slice(0, 2), { ...stale, fromStepId: "consultant" }, sentBack, cancel] };
+    expect(recordDataOf(facts, verification).reply).toBeNull();
+    // Even if the outcome were a Code, the last entry on the path is what counts.
+    expect(remarksOf({ ...base, transitions: [{ ...stale, fromStepId: "consultant" }, sentBack, { ...cancel, kind: "close", outcomeMode: "issue_code", remarks: "The Code that closed it" }] })).toBe("The Code that closed it");
+  });
+
+  it("is none when the closing Transition gave no Code", () => {
+    expect(remarksOf({ ...base, transitions: base.transitions.map((t, i) => (i === 3 ? { ...t, outcomeMode: null } : t)) })).toBeNull();
   });
 });

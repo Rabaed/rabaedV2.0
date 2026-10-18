@@ -7,6 +7,7 @@ import {
   type ModuleKey,
   type MyProjects,
   type ProjectSummary,
+  type RecordSettingsRequest,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
@@ -52,6 +53,8 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
       "p.name",
       "p.status",
       "p.show_inspections_in_submittals as showInspectionsInSubmittals",
+      "p.record_language as recordLanguage",
+      "p.record_hijri_dates as recordHijriDates",
       // Every Member of the Project sees the Host Company's name (V15).
       sql<BilingualText>`app.project_host_company_name(p.id)`.as("hostName"),
       "r.base_role as baseRole",
@@ -134,6 +137,20 @@ export function getProject(db: Db, memberId: string, projectId: string): Promise
     return row ? (await summaries(trx, [row]))[0]! : null;
   });
 }
+
+/**
+ * A Project Admin sets the language Documental Records are printed in and whether they show Hijri dates (RP-151).
+ * They apply to records made afterwards. app.set_project_record_settings checks the Admin and tells anyone else
+ * 'not_found'.
+ */
+export const setRecordSettings = (db: Db, memberId: string, projectId: string, input: RecordSettingsRequest) =>
+  projectAdminCommand(
+    db,
+    memberId,
+    sql`select app.set_project_record_settings(${projectId}::uuid, ${input.language}, ${input.hijriDates}) as outcome`,
+    "set",
+    projectSettingRefusals,
+  );
 
 /**
  * A Project Admin turns "Show Inspections in the Submittals tab" on or off (RP-652): the Inspections tab is
