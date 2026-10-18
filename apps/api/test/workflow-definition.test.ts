@@ -45,6 +45,8 @@ type Version = {
 
 let versions: Version[] = [];
 let rows: Map<string, WorkflowVersionRows>;
+/** The Screen each Transition names (RP-516), by Version id and Transition key: its row keeps a copy of the Screen's schema. */
+let screens: Map<string, string>;
 
 beforeAll(async () => {
   // A Workflow with rules (WF-7) is among them, whichever tests ran first.
@@ -105,7 +107,7 @@ beforeAll(async () => {
   `.execute(migrator);
   const transitions = await sql<WorkflowVersionRows["transitions"][number] & { version: string }>`
     select tr.workflow_version_id as version, tr.key, f.key as from_step_key, s.key as to_step_key, tr.label, tr.kind, tr.outcome,
-      tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions
+      tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions, tr.screen_key
     from workflow_transition tr
     join workflow_version v on v.id = tr.workflow_version_id
     join workflow_step f on f.id = tr.from_step_id
@@ -113,6 +115,7 @@ beforeAll(async () => {
     where v.status = 'published'
     order by tr.sort
   `.execute(migrator);
+  screens = new Map(transitions.rows.flatMap((t) => (t.screen_key == null ? [] : [[`${t.version}/${t.key}`, t.screen_key] as const])));
   rows = new Map(
     versions.map((v) => [
       v.id,
@@ -122,7 +125,7 @@ beforeAll(async () => {
         // A Transition without rules or actions has a null column, and no such key as a row.
         transitions: transitions.rows
           .filter((t) => t.version === v.id)
-          .map(({ version: _, rules, actions, ...t }) => ({ ...t, ...(rules === null ? {} : { rules }), ...(actions === null ? {} : { actions }) })),
+          .map(({ version: _, rules, actions, screen_key: _screen, ...t }) => ({ ...t, ...(rules === null ? {} : { rules }), ...(actions === null ? {} : { actions }) })),
       },
     ]),
   );
@@ -156,14 +159,25 @@ describe("every published Workflow Version", () => {
       select work_item_type_id as "typeId", project_id as "projectId", code, closing, actions from outcome order by sort
     `.execute(migrator);
     const problems = versions.flatMap((v) =>
-      workflowPublishProblems(definitionFromRows(rows.get(v.id)!), {
-        // The Type's outcome set it is published against (RP-429): its Project's copy for a Project's own Workflow, else the Rabaed Default set.
-        outcomes: outcomes.rows.filter((o) => o.typeId === v.typeId && o.projectId === v.ownerProjectId),
-        // The Stage set it is published against (RP-428): its Project's for a Project's own Workflow, else the Rabaed Defaults'.
-        stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && s.projectId === v.ownerProjectId),
-        form: v.form === null ? null : formSchema.parse(v.form),
-        optionListIds: new Set(lists.rows.map((l) => l.id)),
-      })
+      workflowPublishProblems(
+        // A Transition that names a Screen is checked as one, as at publish (its row's schema is the
+        // Screen's copy, which may hold the Screen's files: ADR 0024).
+        ((definition) => ({
+          ...definition,
+          transitions: definition.transitions.map((t) => {
+            const screen = screens.get(`${v.id}/${t.key}`);
+            return screen === undefined ? t : { ...t, screen };
+          }),
+        }))(definitionFromRows(rows.get(v.id)!)),
+        {
+          // The Type's outcome set it is published against (RP-429): its Project's copy for a Project's own Workflow, else the Rabaed Default set.
+          outcomes: outcomes.rows.filter((o) => o.typeId === v.typeId && o.projectId === v.ownerProjectId),
+          // The Stage set it is published against (RP-428): its Project's for a Project's own Workflow, else the Rabaed Defaults'.
+          stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && s.projectId === v.ownerProjectId),
+          form: v.form === null ? null : formSchema.parse(v.form),
+          optionListIds: new Set(lists.rows.map((l) => l.id)),
+        },
+      )
         // A Version published before ADR 0020's check keeps its Return to the Draft (a
         // published Version never changes): MAR Versions 1 and 2, and the seam suites' test
         // Workflows written as data. Publishing refuses it from now on (RP-437).
