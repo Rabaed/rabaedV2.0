@@ -221,6 +221,7 @@ export {
   type KanbanCardProps,
 } from "./components/views/kanban-card.tsx";
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
+export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
 export { outcomesOfType } from "./components/views/outcomes-of-type.ts";
 export {
   WorkItemBoard,
