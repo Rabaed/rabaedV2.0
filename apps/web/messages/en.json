@@ -75,6 +75,27 @@
     "activity": "Activity Feed",
     "settings": "Settings"
   },
+  "snagList": {
+    "newItem": "New",
+    "newOfType": "New {type}",
+    "types": "Types",
+    "allTypes": "All",
+    "company": "Company",
+    "raisedFrom": "Raised from",
+    "raisedManually": "By hand",
+    "photo": "Photo",
+    "hideGroup": "Hide {stage}",
+    "showGroup": "Show {stage}",
+    "code": "Code {code}",
+    "photoOf": "Photo of {subject}",
+    "noItems": "Nothing here",
+    "emptyTitle": "No snags. Nice work.",
+    "emptyBody": "Snags and Comments appear here when they are raised on site, from failed inspections or from Code B reviews.",
+    "noMatchTitle": "Nothing you can see matches these filters",
+    "noSearchMatchTitle": "Nothing you can see matches this search",
+    "clearFilters": "Clear filters",
+    "searchPlaceholder": "Search number or Subject"
+  },
   "workItemViews": {
     "list": {
       "toolbar": "Filters and sort",

@@ -1,4 +1,4 @@
-import { withMember, type Database, type Db } from "@rabaed/db";
+import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
   answerFields,
   backwardKinds,
@@ -421,12 +421,13 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
 }
 
 /**
- * The Submittals Types the Member may raise on one of their Projects (RP-590): each
- * has a published Workflow bound for their Participant (app.new_item_workflow_version),
- * whose Draft Step their base role holds, as app.create_work_item checks it. The MAR
- * first, then the SAR and DAR. Null when it isn't one of their Projects.
+ * The Types of a Module (the Submittals unless named) the Member may raise on one of their
+ * Projects (RP-590; the Snag List's "+ New", RP-94): each has a published Workflow bound for
+ * their Participant (app.new_item_workflow_version), whose Draft Step their base role holds,
+ * as app.create_work_item checks it. The MAR first, then the SAR and DAR; other Types by code.
+ * Null when it isn't one of their Projects.
  */
-export function getRaisableTypes(db: Db, memberId: string, projectId: string): Promise<RaisableTypes | null> {
+export function getRaisableTypes(db: Db, memberId: string, projectId: string, module: ModuleKey = "submittals"): Promise<RaisableTypes | null> {
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
@@ -437,7 +438,7 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string): P
       cross join project_member pm
       join participant p on p.id = pm.participant_id
       join project_role r on r.id = p.project_role_id
-      where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
+      where t.owner_kind = 'rabaed' and t.module_key = ${module}
         and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
         and pm.participant_id in (select app.current_participant_ids())
         and p.status = 'active' and p.company_id = app.current_company_id()
