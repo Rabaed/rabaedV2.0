@@ -7,6 +7,7 @@
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { buildTower, draft, ok, projectMember, take, all, type Tower } from "./support/tower.ts";
 
@@ -62,8 +63,14 @@ beforeAll(async () => {
       c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
         type: "WIR",
         title: "Rebar Level 2",
-        // WIR Form Version 2 asks when the work will be ready (a value only).
-        answers: { description: "Slab rebar, Level 2", requested_for: "2026-11-02T05:30:00.000Z", trade: tower.electrical, location: tower.buildingA },
+        // WIR Form Version 2 asks when the work will be ready (a value only); Version 3 for a Checklist Template (RP-651).
+        answers: {
+          description: "Slab rebar, Level 2",
+          requested_for: "2026-11-02T05:30:00.000Z",
+          trade: tower.electrical,
+          location: tower.buildingA,
+          checklist_template: await checklistTemplate(admin, projectId, tower.electrical),
+        },
       }),
       201,
     )
