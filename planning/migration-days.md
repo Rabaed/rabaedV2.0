@@ -64,4 +64,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270702 | RP-85 | 21 | member_signature |
 | 20270703 | RP-85 | 21 | drop_is_signing |
 | 20270704 | RP-617 | 21 | company_stamp |
+| 20270705 | RP-668 | 33 | comment_not_raised_directly |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
