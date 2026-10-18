@@ -100,6 +100,14 @@ export {
 export { WatchButton, type WatchButtonLabels, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
 export { SignatureEditor, type SaveSignatureCall, type SignatureEditorLabels, type SignatureEditorProps } from "./components/signature/signature-editor.tsx";
 export { SignatureRequiredDialog, type SignatureRequiredDialogProps, type SignatureRequiredLabels } from "./components/signature/signature-required-dialog.tsx";
+export { StampRequiredDialog, type StampRequiredDialogProps, type StampRequiredLabels } from "./components/signature/stamp-required-dialog.tsx";
+export {
+  CompanyImages,
+  type CompanyImageCardLabels,
+  type CompanyImagesLabels,
+  type CompanyImagesProps,
+  type SaveCompanyImageCall,
+} from "./components/signature/company-images.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";
