@@ -10,7 +10,7 @@ import { redirect } from "@/i18n/navigation";
 import { readingChoices } from "@/lib/built-in-choices";
 import { codeAfterLabel } from "@/lib/history-code";
 import { linkTargetNames } from "@/lib/link-search";
-import { getMe, getOptionLists, getSharedWorkItem, getSupplierChoices, getWorkItemForm } from "@/lib/session";
+import { getMe, getOptionLists, getSharedWorkItem, getSupplierChoices, getWorkItemForm, getChecklistTemplateChoices } from "@/lib/session";
 
 /**
  * Download (RP-409, owner decision B): the item's final output, laid out to print, which the
@@ -29,7 +29,10 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
   const [me, item, form, optionLists] = await Promise.all([getMe(), getSharedWorkItem(workItemId), getWorkItemForm(workItemId), getOptionLists()]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form) notFound();
-  const suppliers = await getSupplierChoices(item.projectId);
+  const [suppliers, checklistTemplates] = await Promise.all([
+    getSupplierChoices(item.projectId),
+    getChecklistTemplateChoices(item.projectId, item.checklistCopies),
+  ]);
   const date = (iso: string) => formatDayMonthYear(new Date(iso), locale, { month: "short" });
   // Read only: nothing is uploaded here, so no limits apply.
   const readOnly = { documents: item.documents, canChange: false, canChangeReplies: false, limits: { maxBytes: 1, contentTypes: [] } };
@@ -51,6 +54,7 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
       people={{ members: [], participants: [] }}
       optionLists={optionLists}
       suppliers={suppliers}
+      checklistTemplates={checklistTemplates}
       answers={item.answers}
       named={item.namedAnswers}
       editable={false}

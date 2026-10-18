@@ -21,6 +21,7 @@ export const notInActionForm = [
   "member",
   "participant",
   "approved_supplier",
+  "checklist_template",
   "work_item_ref",
   "attachments",
   "photos",

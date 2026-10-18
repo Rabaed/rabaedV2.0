@@ -101,6 +101,26 @@ export function useFormRendererLabels(): FormRendererLabels {
     },
     linkQuestion: { remove: (number) => t("linkQuestion.remove", { number }), item, search },
     approvedSupplier: { none: t("approvedSupplierField.none"), withdrawn: (name) => t("approvedSupplierField.withdrawn", { name }) },
+    checklistTemplate: checklistTemplateLabels(t),
+  };
+}
+
+/** A `checklist_template` field's words (RP-651), also the template editor's preview. */
+export function checklistTemplateLabels(t: Translate): FormRendererLabels["checklistTemplate"] {
+  return {
+    choose: t("checklistTemplateField.choose"),
+    none: t("checklistTemplateField.none"),
+    chooseTradeFirst: t("checklistTemplateField.chooseTradeFirst"),
+    noneForTrade: t("checklistTemplateField.noneForTrade"),
+    kept: (name) => t("checklistTemplateField.kept", { name }),
+    checks: (n, count) => t("checklistTemplateField.checks", { n, count }),
+    filledOnSite: t("checklistTemplateField.filledOnSite"),
+    itemNumber: (n, of) => t("checklistTemplateField.itemNumber", { n, of }),
+    commentRequired: (answer) => t("checklistTemplateField.commentRequired", { answer }),
+    photoRequired: (answer) => t("checklistTemplateField.photoRequired", { answer }),
+    commentOptional: t("checklistTemplateField.commentOptional"),
+    photoOptional: t("checklistTemplateField.photoOptional"),
+    raisesSnag: (answer) => t("checklistTemplateField.raisesSnag", { answer }),
   };
 }
 

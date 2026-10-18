@@ -2,6 +2,9 @@ import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
   answerFields,
   backwardKinds,
+  changedChecklistTemplates,
+  checklistTemplateChoices,
+  type ChecklistTemplateChoice,
   discardDraftRefusals,
   duplicateMaxFileBytes,
   duplicateRefusals,
@@ -33,6 +36,7 @@ import {
   type FieldStamps,
   type FormChoices,
   type FormSchema,
+  type FormField,
   type FormFieldType,
   type LinkKind,
   type FormToFill,
@@ -61,6 +65,7 @@ import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
+import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
@@ -174,6 +179,44 @@ async function suppliersFor(trx: Trx, schema: FormSchema, projectId: string): Pr
   return rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, status: r.status }));
 }
 
+/**
+ * The Checklist Template Versions a `checklist_template` field may hold on the item
+ * `workItemId` (none for a new one), when the Form has such a field (RP-651): the latest
+ * Version of each of the Project's templates, the Versions the item holds a copy of, and
+ * those its `held` answers name without one yet (a Revision's, copied from the item it
+ * revises). Read through RLS: every Project Member reads the templates (V20).
+ */
+async function checklistTemplatesFor(
+  trx: Trx,
+  schema: FormSchema,
+  projectId: string,
+  workItemId: string | null,
+  held: Readonly<Record<string, unknown>> = {},
+): Promise<ChecklistTemplateChoice[] | undefined> {
+  const fields = formFields(schema).filter((f) => f.type === "checklist_template");
+  if (fields.length === 0) return undefined;
+  const choices = checklistTemplateChoices(await projectChecklistTemplates(trx, projectId), workItemId ? await itemChecklistCopies(trx, workItemId) : []);
+  const named = fields.map((f) => held[f.key]).filter((v): v is string => typeof v === "string" && isUuid(v) && !choices.some((c) => c.id === v));
+  if (named.length === 0) return choices;
+  const { rows } = await sql<{ id: string; trade_value_id: string; name: BilingualText }>`
+    select id, trade_value_id, name from checklist_template_version where id = any(${named}::uuid[]) and project_id = ${projectId}::uuid
+  `.execute(trx);
+  return [...choices, ...rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, offered: false, name: r.name }))];
+}
+
+/**
+ * Copies onto the item the Checklist Template Versions its `checklist_template` answers
+ * pick, in the same transaction as the save (app.sync_work_item_checklists). The answers
+ * were checked first, so anything but synced is unexpected: it throws, and nothing is saved.
+ */
+async function syncChecklists(trx: Trx, schema: FormSchema, workItemId: string, now: Date): Promise<void> {
+  if (!formFields(schema).some((f) => f.type === "checklist_template")) return;
+  const { rows } = await sql<{ outcome: string }>`
+    select app.sync_work_item_checklists(${workItemId}::uuid, ${now}) as outcome
+  `.execute(trx);
+  checkedOutcome(rows[0]!.outcome, ["synced"]);
+}
+
 /** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
 function storedAnswers({ trade, location, scopes, ...data }: Record<string, unknown>) {
   return {
@@ -267,6 +310,8 @@ type PinnedForm = {
   dataSha256: Buffer | null;
   /** They may save its answers now (app.can_save_answers). */
   canSave: boolean;
+  /** It has been Submitted at least once: its Checklist Template picks are fixed (RP-651). */
+  submitted: boolean;
   /** The Form as they may fill it now: the sections they may change, and who fills the others. */
   toFill: FormToFill;
   /** The sections the Step the Member sees is filled at (a Submit checks them, whoever takes it). */
@@ -281,6 +326,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       data: Record<string, unknown>;
       data_sha256: Buffer | null;
       can_save: boolean;
+      submitted: boolean;
       workflow_version_id: string;
       step_key: string;
       work_item_type_id: string;
@@ -288,7 +334,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   >`
     select v.id, v.version_no, v.schema, w.project_id, w.work_item_type_id, app.work_item_answers(w.id) as data,
       app.answers_sha256(w.id) as data_sha256, app.can_save_answers(w.id) as can_save,
-      w.workflow_version_id, s.key as step_key
+      w.submitted_at is not null as submitted, w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
     -- The Step as the Member sees it (V14): the current one whenever they may save,
@@ -310,6 +356,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     data: answersFromDb(form.schema, r.data),
     dataSha256: r.data_sha256,
     canSave,
+    submitted: r.submitted,
     toFill: formToFillAt(form, steps, { step: r.step_key, canSave }),
     sectionsAtStep: [...editableSections(form.schema, steps.steps, { step: r.step_key, canSave: true })],
   };
@@ -391,7 +438,7 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
       cross join project_member pm
       join participant p on p.id = pm.participant_id
       join project_role r on r.id = p.project_role_id
-      where t.owner_kind = 'rabaed' and t.module_key = ${module}
+      where t.owner_kind = 'rabaed' and t.module_key = ${module} and not t.raised_from_item_only
         and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
         and pm.participant_id in (select app.current_participant_ids())
         and p.status = 'active' and p.company_id = app.current_company_id()
@@ -421,7 +468,7 @@ async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[
         and pm.participant_id in (select app.current_participant_ids())
     )) as workflow_version_id
     from work_item_type t
-    where t.owner_kind = 'rabaed' and t.code = ${typeCode}
+    where t.owner_kind = 'rabaed' and t.code = ${typeCode} and not t.raised_from_item_only
   `.execute(trx);
   const r = rows[0];
   // No Workflow for the raiser's Participant: the Type isn't theirs to raise (RP-590).
@@ -585,6 +632,7 @@ async function createWorkItemIn(trx: Trx, projectId: string, input: Required<Cre
     optionLists: await optionListsFor(trx, form.schema),
     linkable: await linkableIds(trx, form.schema, projectId, null, input.answers),
     suppliers: await suppliersFor(trx, form.schema, projectId),
+    checklistTemplates: await checklistTemplatesFor(trx, form.schema, projectId, null),
   });
   if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
   // A link question's items are saved with their Links, by app.save_work_item_answers below.
@@ -608,6 +656,7 @@ async function createWorkItemIn(trx: Trx, projectId: string, input: Required<Cre
     `.execute(trx);
     checkedOutcome(saved[0]!.outcome, ["saved"]);
   }
+  await syncChecklists(trx, form.schema, work_item_id!, now);
   await recordFieldTimes(trx, work_item_id!, now);
   return { ok: true, id: work_item_id! };
 }
@@ -737,6 +786,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
+      checklistCopies: await itemChecklistCopies(trx, workItemId),
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
       sentBackForComment: d.sent_back_for_comment,
@@ -915,7 +965,11 @@ function duplicateIn({
         .flatMap((s) => s.fields)
         .filter((f) => isAnswerField(f) && wasType.get(f.key) === f.type);
       // A file or photo field has no answer, only Documents; a checklist both.
-      const kept = atDraftFields.filter((f) => answers[f.key] !== undefined && ownWritten.has(f.key));
+      // A Checklist Template pick is kept only while it is still offered (the latest Version of an
+      // active template): a Duplicate is a new request, and copies what the template says now (RP-651).
+      const templates = await checklistTemplatesFor(trx, newForm.schema, item.project_id, null);
+      const offered = (f: FormField) => f.type !== "checklist_template" || templates?.some((t) => t.offered && t.id === answers[f.key]);
+      const kept = atDraftFields.filter((f) => answers[f.key] !== undefined && ownWritten.has(f.key) && offered(f));
       const fileKeys = atDraftFields.filter((f) => documentFieldTypes.includes(f.type)).map((f) => f.key);
       const created = await createWorkItemIn(
         trx,
@@ -1030,6 +1084,7 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string, 
       answers,
       // A Company by its name; nobody's name, whoever reads it.
       namedAnswers: Object.fromEntries(named.map((n) => [n.field_key, { companyName: n.company_name, memberName: null }])),
+      checklistCopies: await itemChecklistCopies(trx, workItemId),
       documents: await sharedDocuments(trx, workItemId),
       links: await sharedLinks(trx, workItemId),
       history: events
@@ -1451,6 +1506,7 @@ export function takeTransition(
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
         suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
+        checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
         files: await fieldFileCounts(trx, workItemId),
       });
     // Moving on by a Member who may save the answers now (other than a cancel or a Return),
@@ -1544,8 +1600,14 @@ export function saveAnswers(
       held: pinned.data,
       linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
       suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
+      checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
+    // The Checklist Template picks, and so their copies, are fixed at the first Submit (RP-651),
+    // after a Send Back that lets the raiser edit the Form too; a Trade change would clear one.
+    if (pinned.submitted && changedChecklistTemplates(pinned.form.schema, pinned.data, checked.answers).length > 0) {
+      return { ok: false, reason: "not_editable" };
+    }
     const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));
     const { rows } = await sql<{ outcome: string }>`
       select app.save_work_item_answers(
@@ -1554,6 +1616,7 @@ export function saveAnswers(
     `.execute(trx);
     const result = commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
     if (!result.ok) return result;
+    await syncChecklists(trx, pinned.form.schema, workItemId, now);
     await recordFieldTimes(trx, workItemId, now);
     if (!merge) return { ok: true, saved: null };
     const after = await fieldStamps(trx, workItemId, false);

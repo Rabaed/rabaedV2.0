@@ -16,6 +16,7 @@ import {
   type SavedAnswers,
   type OptionList,
   type SupplierChoice,
+  type ChecklistTemplateChoice,
 } from "@rabaed/domain";
 import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
@@ -52,6 +53,8 @@ type WorkItemFormState = {
   optionLists: readonly OptionList[];
   /** The Project's Approved Supplier List, for its `approved_supplier` fields (V10). */
   suppliers: readonly SupplierChoice[];
+  /** The Project's Checklist Templates and the Versions the item holds, for its `checklist_template` fields (RP-651). */
+  checklistTemplates: readonly ChecklistTemplateChoice[];
   /** Its Project, which a link question's Link search searches. */
   projectId: string;
   /** The item's Document Number; none while it is a Draft (a Revision Draft included). */
@@ -106,6 +109,7 @@ export function WorkItemFormProvider({
   people,
   optionLists,
   suppliers = [],
+  checklistTemplates = [],
   editable,
   editableSections,
   fixedByNumber = [],
@@ -126,6 +130,7 @@ export function WorkItemFormProvider({
   people: FormChoices;
   optionLists: readonly OptionList[];
   suppliers?: readonly SupplierChoice[];
+  checklistTemplates?: readonly ChecklistTemplateChoice[];
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   editableSections: readonly string[];
@@ -170,6 +175,7 @@ export function WorkItemFormProvider({
       optionLists: optionLists.length > 0 ? optionLists : undefined,
       held: saved,
       suppliers: suppliers.length > 0 ? suppliers : undefined,
+      checklistTemplates: checklistTemplates.length > 0 ? checklistTemplates : undefined,
     });
     setErrors(checked.ok ? [] : checked.errors);
   }
@@ -255,6 +261,7 @@ export function WorkItemFormProvider({
         people,
         optionLists,
         suppliers,
+        checklistTemplates,
         projectId,
         documentNumber,
         linkTargets,
@@ -315,6 +322,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         people={form.people}
         optionLists={form.optionLists}
         suppliers={form.suppliers}
+        checklistTemplates={form.checklistTemplates}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         editableSections={form.editableSections}
