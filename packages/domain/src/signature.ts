@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { signedUrl } from "./document.ts";
+import { imageFileTypes, type ImageFileType } from "./image-file.ts";
 
 /**
  * A Member's Signature (RP-85, ADR 0023): the image every Transition they take records.
@@ -11,9 +12,9 @@ import { signedUrl } from "./document.ts";
 export const signatureMethods = ["drawn", "typed", "uploaded"] as const;
 export type SignatureMethod = (typeof signatureMethods)[number];
 
-/** The image types a Signature is saved as. */
-export const signatureImageTypes = ["image/png", "image/jpeg"] as const;
-export type SignatureImageType = (typeof signatureImageTypes)[number];
+/** The image types a Signature is saved as: an image file's (kept for callers of the older name). */
+export const signatureImageTypes = imageFileTypes;
+export type SignatureImageType = ImageFileType;
 
 /** The largest Signature image: 512 KB. */
 export const SIGNATURE_MAX_BYTES = 512 * 1024;
@@ -47,7 +48,7 @@ export type SignatureHand = keyof typeof signatureHands;
  */
 export const saveSignatureRequest = z.object({
   method: z.enum(signatureMethods),
-  contentType: z.enum(signatureImageTypes),
+  contentType: z.enum(imageFileTypes),
   // Base64 of at most SIGNATURE_MAX_BYTES bytes.
   data: z.base64().max(Math.ceil(SIGNATURE_MAX_BYTES / 3) * 4),
 });

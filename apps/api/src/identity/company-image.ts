@@ -1,9 +1,9 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { withMember, type Db } from "@rabaed/db";
-import { COMPANY_IMAGE_MAX_BYTES, type CompanyImage, type CompanyImageKind, type MyCompany, type SaveCompanyImageRequest } from "@rabaed/domain";
+import { COMPANY_IMAGE_MAX_BYTES, imageFileExtension, type CompanyImage, type CompanyImageKind, type MyCompany, type ImageFileType, type SaveCompanyImageRequest } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { FileStore } from "../documents/file-store.ts";
-import { isImageOf } from "./signature.ts";
+import { isImageOf, storeImage } from "./stored-image.ts";
 
 // A Company's logo and Stamp (RP-617, ADR 0023; data-model.md §1 company). The image is stored by
 // the api under the Company's own key, then app.set_company_image points the Company at it, for
@@ -36,28 +36,22 @@ export async function saveCompanyImage(
   if (!own.manages) return { ok: false, reason: "forbidden" };
   const bytes = Buffer.from(request.data, "base64");
   if (!isImageOf(bytes, request.contentType, COMPANY_IMAGE_MAX_BYTES)) return { ok: false, reason: "invalid_company_image" };
-  const key = `companies/${companyId}/${kind}/${randomUUID()}.${request.contentType === "image/png" ? "png" : "jpg"}`;
-  await files.put(key, bytes, request.contentType);
-  try {
-    const outcome = await withMember(db, memberId, (trx) =>
-      sql<{ outcome: string }>`
-        select app.set_company_image(
-          ${companyId}::uuid, ${kind}, ${key}, ${createHash("sha256").update(bytes).digest()}, ${bytes.byteLength},
-          ${request.contentType}, ${now}) as outcome
-      `
-        .execute(trx)
-        .then((r) => r.rows[0]!.outcome),
-    );
-    if (outcome !== "set") {
-      await files.remove(key);
-      return { ok: false, reason: outcome === "forbidden" ? "forbidden" : "not_found" };
-    }
-    return { ok: true };
-  } catch (error) {
-    // Nothing points at the stored image: remove it.
-    await files.remove(key).catch(() => undefined);
-    throw error;
-  }
+  const key = `companies/${companyId}/${kind}/${randomUUID()}.${imageFileExtension(request.contentType)}`;
+  const outcome = await storeImage(
+    files,
+    { key, bytes, contentType: request.contentType },
+    (image) =>
+      withMember(db, memberId, (trx) =>
+        sql<{ outcome: string }>`
+          select app.set_company_image(${companyId}::uuid, ${kind}, ${image.key}, ${image.sha256}, ${image.size}, ${image.mime}, ${now}) as outcome
+        `
+          .execute(trx)
+          .then((r) => r.rows[0]!.outcome),
+      ),
+    (saved) => saved === "set",
+  );
+  if (outcome === "set") return { ok: true };
+  return { ok: false, reason: outcome === "forbidden" ? "forbidden" : "not_found" };
 }
 
 /** The signed-in Member's own Company profile: its logo and Stamp in force, with short-lived links; null if signed out. */
@@ -71,11 +65,11 @@ export async function myCompany(db: Db, files: FileStore, memberId: string, now:
       manages: boolean;
       logo_id: string | null;
       logo_key: string | null;
-      logo_mime: string | null;
+      logo_mime: ImageFileType | null;
       logo_at: Date | null;
       stamp_id: string | null;
       stamp_key: string | null;
-      stamp_mime: string | null;
+      stamp_mime: ImageFileType | null;
       stamp_at: Date | null;
     }>`
       select c.id, c.legal_name, c.cr_number, c.vat_number, c.authorized_person_id = app.current_member_id() as manages,
@@ -90,12 +84,12 @@ export async function myCompany(db: Db, files: FileStore, memberId: string, now:
       .then((r) => r.rows[0]),
   );
   if (!row) return null;
-  const image = async (kind: CompanyImageKind, id: string | null, key: string | null, mime: string | null, at: Date | null): Promise<CompanyImage | null> =>
+  const image = async (kind: CompanyImageKind, id: string | null, key: string | null, mime: ImageFileType | null, at: Date | null): Promise<CompanyImage | null> =>
     id && key && mime && at
       ? {
           id,
           uploadedAt: at.toISOString(),
-          image: await files.signDownload(key, { fileName: `${kind}.${mime === "image/png" ? "png" : "jpg"}`, contentType: mime }, now),
+          image: await files.signDownload(key, { fileName: `${kind}.${imageFileExtension(mime)}`, contentType: mime }, now),
         }
       : null;
   return {

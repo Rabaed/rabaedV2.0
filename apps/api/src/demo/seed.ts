@@ -146,6 +146,16 @@ export async function seedDemo(
   // With a file store the Member saves it through the api, as Profile → Add Signature does.
   // Without one (the cloud demo's migration task, which may not write the Project files
   // bucket) it is recorded as the owner with no image stored: the profile shows none.
+  /** A demo image recorded as the owner, with no image stored: its stored_file row, uploaded by `uploaderId`. */
+  async function storedFileAsOwner(key: string, png: Buffer, uploaderId: string): Promise<string> {
+    const { rows } = await sql<{ id: string }>`
+      insert into stored_file (storage_key, sha256, size, mime, uploaded_by_member_id)
+      values (${key}, sha256(${png}), ${png.byteLength}, 'image/png', ${uploaderId}::uuid)
+      returning id
+    `.execute(databases.migrator);
+    return rows[0]!.id;
+  }
+
   let signatures = 0;
   async function sign(caller: Call, memberId: string) {
     const png = demoSignaturePng(signatures++);
@@ -153,14 +163,9 @@ export async function seedDemo(
       await caller("PUT", "/v1/me/signature", { method: "drawn", contentType: "image/png", data: png.toString("base64") });
       return;
     }
+    const fileId = await storedFileAsOwner(`members/${memberId}/signatures/${randomUUID()}.png`, png, memberId);
     await sql`
-      with file as (
-        insert into stored_file (storage_key, sha256, size, mime, uploaded_by_member_id)
-        values (${`members/${memberId}/signatures/${randomUUID()}.png`}, sha256(${png}), ${png.byteLength}, 'image/png', ${memberId}::uuid)
-        returning id
-      )
-      insert into member_signature (member_id, file_id, method, active_from)
-      select ${memberId}::uuid, file.id, 'drawn', now() from file
+      insert into member_signature (member_id, file_id, method, active_from) values (${memberId}::uuid, ${fileId}::uuid, 'drawn', now())
     `.execute(databases.migrator);
   }
 
@@ -178,15 +183,11 @@ export async function seedDemo(
         await caller("PUT", `/v1/companies/${companyId}/${kind}`, { contentType: "image/png", data: png.toString("base64") });
         continue;
       }
+      const fileId = await storedFileAsOwner(`companies/${companyId}/${kind}/${randomUUID()}.png`, png, authorizedPersonId);
       await sql`
-        with file as (
-          insert into stored_file (storage_key, sha256, size, mime, uploaded_by_member_id)
-          values (${`companies/${companyId}/${kind}/${randomUUID()}.png`}, sha256(${png}), ${png.byteLength}, 'image/png', ${authorizedPersonId}::uuid)
-          returning id
-        )
-        update company set logo_file_id = case when ${kind} = 'logo' then file.id else logo_file_id end,
-          stamp_file_id = case when ${kind} = 'stamp' then file.id else stamp_file_id end
-        from file where company.id = ${companyId}::uuid
+        update company set logo_file_id = case when ${kind} = 'logo' then ${fileId}::uuid else logo_file_id end,
+          stamp_file_id = case when ${kind} = 'stamp' then ${fileId}::uuid else stamp_file_id end
+        where id = ${companyId}::uuid
       `.execute(databases.migrator);
     }
   }

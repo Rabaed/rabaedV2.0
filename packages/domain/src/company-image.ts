@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { signedUrl } from "./document.ts";
-import { signatureImageTypes } from "./signature.ts";
+import { imageFileTypes, type ImageFileType } from "./image-file.ts";
 
 /**
  * A Company's logo and Stamp (RP-617, ADR 0023), in its Company profile. Its Authorized Person
@@ -14,16 +14,16 @@ import { signatureImageTypes } from "./signature.ts";
 export const companyImageKinds = ["logo", "stamp"] as const;
 export type CompanyImageKind = (typeof companyImageKinds)[number];
 
-/** The image types a logo or Stamp is saved as: the Signature's. */
-export const companyImageTypes = signatureImageTypes;
-export type CompanyImageType = (typeof companyImageTypes)[number];
+/** The image types a logo or Stamp is saved as: an image file's, as a Signature's (kept for callers of the older name). */
+export const companyImageTypes = imageFileTypes;
+export type CompanyImageType = ImageFileType;
 
 /** The largest logo or Stamp image: 1 MB. */
 export const COMPANY_IMAGE_MAX_BYTES = 1024 * 1024;
 
 /** Upload a logo or Stamp: its image, base64-encoded. The api checks the bytes are the PNG or JPEG named. */
 export const saveCompanyImageRequest = z.object({
-  contentType: z.enum(companyImageTypes),
+  contentType: z.enum(imageFileTypes),
   // Base64 of at most COMPANY_IMAGE_MAX_BYTES bytes.
   data: z.base64().max(Math.ceil(COMPANY_IMAGE_MAX_BYTES / 3) * 4),
 });

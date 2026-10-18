@@ -1252,24 +1252,20 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /**
- * Whether the acting Member has a Signature in force (RP-85): their own row of
- * member_signature, the only one RLS shows them. app.take_transition checks the same row.
+ * Whether the acting Member has a Signature in force (RP-85): the gate app.take_transition
+ * checks, app.active_signature_id, which answers for the acting Member only.
  */
 async function hasSignature(trx: Trx): Promise<boolean> {
-  const { rows } = await sql<{ found: boolean }>`
-    select exists (select 1 from member_signature where member_id = app.current_member_id() and active_to is null) as found
-  `.execute(trx);
+  const { rows } = await sql<{ found: boolean }>`select app.active_signature_id(app.current_member_id()) is not null as found`.execute(trx);
   return rows[0]!.found;
 }
 
 /**
- * Whether the acting Member's Company has a Stamp in force (RP-617): its own row of company,
- * the only one RLS shows them. app.take_transition checks the same column.
+ * Whether the acting Member's Company has a Stamp in force (RP-617): the gate app.take_transition
+ * checks, app.member_company_has_stamp, which answers for the acting Member's own Company only.
  */
 async function hasStamp(trx: Trx): Promise<boolean> {
-  const { rows } = await sql<{ found: boolean }>`
-    select exists (select 1 from company where id = app.current_company_id() and stamp_file_id is not null) as found
-  `.execute(trx);
+  const { rows } = await sql<{ found: boolean }>`select app.member_company_has_stamp(app.current_member_id()) as found`.execute(trx);
   return rows[0]!.found;
 }
 
