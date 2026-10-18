@@ -132,7 +132,7 @@ async function fillProject(projectId: string, creator: string) {
   );
   expect(upload.outcome).toBe("started");
   await expectOutcome(
-    sql`select app.confirm_document_upload(${item}::uuid, ${upload.document_id}::uuid, 1024, 'application/pdf', now()) as outcome`,
+    sql`select app.confirm_document_upload(${item}::uuid, ${upload.document_id}::uuid, 1024, 'application/pdf', sha256('datasheet.pdf'::bytea), now()) as outcome`,
     "confirmed",
   );
   // Numbers the item, keeps the idempotency key and queues a notification to the Step Pool.
