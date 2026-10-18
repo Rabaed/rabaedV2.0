@@ -235,6 +235,24 @@ export async function seedDemo(
   await addSupplier(civil, bi("Al-Rimal Building Materials", "مواد البناء الرمال"));
   const najd = await addSupplier(electrical, bi("Najd Electrical Supplies", "نجد للتوريدات الكهربائية"));
 
+  // The Project's Checklist Templates (RP-651): a WIR picks one of its Trade's to leave Draft,
+  // and its items are copied onto the WIR for the Consultant to answer on site.
+  const check = (key: string, text: BilingualText, rules: Record<string, string> = {}) => ({ key, text, ...rules });
+  const onFail = { comment: "required_on_negative", photo: "required_on_negative" };
+  const addTemplate = (tradeId: string, name: BilingualText, items: unknown[]) =>
+    tmc.caller("POST", `/v1/projects/${projectId}/checklist-templates`, { name, tradeId, items });
+  await addTemplate(civil, bi("Concrete pour", "صب الخرسانة"), [
+    check("formwork", bi("Formwork level, tight and clean", "القوالب مستوية ومحكمة ونظيفة")),
+    check("rebar_cover", bi("Rebar cover as per drawing", "غطاء حديد التسليح حسب المخطط"), onFail),
+    check("embedded_items", bi("Sleeves and embedded items in place", "الأكمام والقطع المدفونة في أماكنها"), onFail),
+    check("cubes", bi("Cube samples taken", "أُخذت عينات المكعبات"), { answers: "yes_no_na", on_negative: "none" }),
+  ]);
+  await addTemplate(electrical, bi("Cable trays and containment", "حوامل الكابلات والتمديدات"), [
+    check("supports", bi("Supports at the spacing on the drawing", "الدعامات بالمسافات المبينة في المخطط"), onFail),
+    check("earthing", bi("Trays bonded to earth", "الحوامل موصولة بالتأريض"), onFail),
+    check("clearance", bi("Clearance from other services kept", "المسافة عن الخدمات الأخرى محفوظة")),
+  ]);
+
   // Participants, each invited by the Project Admin and accepted by its own
   // Authorized Person (ADR 0009), and what each covers (set by the Project Admin). Beta Build
   // covers exactly what TMC does: only the Company boundary keeps TMC's items from it (V3).
