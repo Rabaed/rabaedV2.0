@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { pinToWorkflowVersion } from "./support/pin-version.ts";
 import { all, bilingual, detail, memberOnProject, ok, tryTake, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -49,29 +50,6 @@ const transitionKeys = async (by: Caller, id: string) => (await detail(by, id)).
 
 const RECOMMENDATION_NOTE = "Engineer: rebar spacing out of tolerance at gridline 4";
 
-/** Pins item `id` to the WIR Workflow's Version `versionNo`, Steps by key, as an item started on it. */
-async function pinToVersion(versionNo: number, id: string) {
-  await sql`
-    with old as (
-      select v.id as version_id, s.key, s.id as step_id from work_item_type t
-      join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.version_no = ${versionNo}
-      join workflow_step s on s.workflow_version_id = v.id
-      where t.owner_kind = 'rabaed' and t.code = 'WIR'
-    ),
-    moved_assignments as (
-      update step_assignment a set step_id = o.step_id
-      from workflow_step cur, old o
-      where a.work_item_id = ${id}::uuid and cur.id = a.step_id and o.key = cur.key
-      returning a.id
-    )
-    update work_item w set
-      workflow_version_id = (select distinct version_id from old),
-      current_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.current_step_id),
-      participant_entered_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.participant_entered_step_id)
-    where w.id = ${id}::uuid
-  `.execute(migrator);
-}
-
 /** A WIR raised by Hafiz on Version 2 and sent for review. */
 async function inReview(title: string) {
   const id = (
@@ -91,7 +69,7 @@ async function inReview(title: string) {
       201,
     )
   ).json().id as string;
-  await pinToVersion(2, id);
+  await pinToWorkflowVersion(migrator, "WIR", 2, id);
   await take(hafiz, id, "send_for_review");
   return id;
 }
@@ -279,7 +257,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
 describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinned)", () => {
   it("is Submitted to the one Consultant inspection Step and closed by its Result there; publishing again moves nothing", async () => {
     const id = await inReview("In flight on Version 1");
-    await pinToVersion(1, id);
+    await pinToWorkflowVersion(migrator, "WIR", 1, id);
     expect(await detail(ali, id)).toMatchObject({ stage: { key: "internal_review" }, workflow: { versionNo: 1 } });
     await take(ali, id, "submit", { answers: { cover_note: "Ready on site" } });
     expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_inspection" }, workflow: { versionNo: 1 } });

@@ -15,6 +15,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { pinToWorkflowVersion } from "./support/pin-version.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -96,26 +97,6 @@ async function versionId(versionNo: number) {
     where t.owner_kind = 'rabaed' and t.code = 'WIR' and v.version_no = ${versionNo} and v.status = 'published'
   `.execute(migrator);
   return rows[0]!.id;
-}
-
-/** Pins item `id`, at a Step Version `versionNo` shares with Version 3, to that Version, Steps by key (as an item started on it). */
-async function pinTo(versionNo: number, id: string) {
-  await sql`
-    with old as (
-      select s.key, s.id as step_id from workflow_step s where s.workflow_version_id = ${await versionId(versionNo)}::uuid
-    ),
-    moved_assignments as (
-      update step_assignment a set step_id = o.step_id
-      from workflow_step cur, old o
-      where a.work_item_id = ${id}::uuid and cur.id = a.step_id and o.key = cur.key
-      returning a.id
-    )
-    update work_item w set
-      workflow_version_id = ${await versionId(versionNo)}::uuid,
-      current_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.current_step_id),
-      participant_entered_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.participant_entered_step_id)
-    where w.id = ${id}::uuid
-  `.execute(migrator);
 }
 
 beforeAll(async () => {
@@ -246,17 +227,18 @@ describe("a WIR on Version 3 (seam 1 acceptance)", () => {
     expect((await detail(mohammed.caller, id)).actions.createRevision).toBe(false);
   });
 
-  it("Code D closes it Rejected, with no Revision", async () => {
+  it("Code D closes it Rejected, with no Revision and a replacement offered", async () => {
     const id = await returnedAndSentAgain("Rebar Level 5");
     await take(mohammed.caller, id, "reject_d", { answers: VERIFIED, remarks: "Wrong slab" });
-    expect(await detail(hafiz.caller, id)).toMatchObject({ stage: { key: "rejected" }, outcome: "D", actions: { createRevision: false } });
+    // As a submittal's Code D: no Revision, a replacement offered (the Rabaed Default Review Codes).
+    expect(await detail(hafiz.caller, id)).toMatchObject({ stage: { key: "rejected" }, outcome: "D", actions: { createRevision: false, createReplacement: true } });
   });
 });
 
 describe("a WIR started on Version 2 finishes on Version 2 (the Workflow Version it pinned)", () => {
   async function atManagerOnVersion2(title: string) {
     const id = await submitted(title);
-    await pinTo(2, id);
+    await pinToWorkflowVersion(migrator, "WIR", 2, id);
     expect(await detail(ahmed.caller, id)).toMatchObject({ step: { key: "consultant_engineer" }, workflow: { versionNo: 2 } });
     const toManager = (await detail(ahmed.caller, id)).actions.transitions.find((t) => t.key === "send_to_manager")!;
     expect(toManager.recommendCode?.map((o) => o.code)).toEqual(["passed", "passed_with_comments", "failed"]);
@@ -416,6 +398,32 @@ describe("the Inspections Stages are the Submittals set (ADR 0025)", () => {
           where t.module_key = 'inspections' and s.stage_key = 'pending_inspection'
         `.execute(trx);
         expect(steps.rows[0]!.n).toBe(0);
+        throw rollback;
+      })
+      .catch((e: unknown) => {
+        if (e !== rollback) throw e;
+      });
+    expect(await detail(hafiz.caller, id)).toMatchObject({ stage: { key: "pending_approval" } });
+  });
+
+  it("joins a Stage the Project already has under the new key: the Project's own stays, the moved one is dropped, its items join it", async () => {
+    const id = await submitted("Joins the Project's own Stage");
+    const rollback = new Error("rolled back");
+    await migrator
+      .transaction()
+      .execute(async (trx) => {
+        await sql`
+          insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
+          values ('project', ${projectId}::uuid, 'inspections', 'on_site', ${JSON.stringify({ en: "On Site", ar: "في الموقع" })}::jsonb, 'in_progress', 8)
+        `.execute(trx);
+        await sql`select app.move_stage_key('inspections', 'pending_approval', 'on_site', ${JSON.stringify({ en: "On Site (default)", ar: "في الموقع" })}::jsonb)`.execute(trx);
+
+        const item = await trx.selectFrom("work_item").select("current_stage_key").where("id", "=", id).executeTakeFirstOrThrow();
+        expect(item.current_stage_key).toBe("on_site");
+        const own = await sql<{ key: string; name: { en: string } }>`
+          select key, name from stage where project_id = ${projectId}::uuid and module_key = 'inspections' and key in ('pending_approval', 'on_site')
+        `.execute(trx);
+        expect(own.rows.map((r) => [r.key, r.name.en])).toEqual([["on_site", "On Site"]]);
         throw rollback;
       })
       .catch((e: unknown) => {

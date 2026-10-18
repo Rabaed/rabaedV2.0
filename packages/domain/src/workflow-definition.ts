@@ -296,6 +296,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
     const issued = definition.transitions.filter((t) => t.from === step && t.outcome !== null);
     return issued.length > 0 && issued.every((t) => inspectionResults.has(t.outcome!));
   };
+  const issuingMode = (step: string) => (outcomeKind === "inspection_result" || issuesInspectionResults(step) ? "inspection_result" : "issue_code");
   return {
     layout: definition.layout,
     steps: definition.steps.map((s) => ({
@@ -304,12 +305,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       stage_key: s.stage,
       actor_rule: s.actor === null ? {} : ruleFromActor(s.actor),
       is_signing: false,
-      outcome_mode:
-        s.outcomeMode === "issue_outcome"
-          ? outcomeKind === "inspection_result" || issuesInspectionResults(s.key)
-            ? "inspection_result"
-            : "issue_code"
-          : s.outcomeMode,
+      outcome_mode: s.outcomeMode === "issue_outcome" ? issuingMode(s.key) : s.outcomeMode,
       ...(s.editsForm === undefined ? {} : { edits_form: s.editsForm }),
       ...(s.draftsVisibleTo === undefined ? {} : { drafts_visible_to: s.draftsVisibleTo }),
       ...(s.afterSendBack === undefined ? {} : { after_send_back: s.afterSendBack }),

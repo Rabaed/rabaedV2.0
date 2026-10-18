@@ -73,7 +73,13 @@ select app.move_stage_key('inspections', 'failed', 'revise_resubmit', '{"en": "R
 
 insert into stage (owner_kind, module_key, key, name, category, sort) values
   ('rabaed', 'inspections', 'rejected', '{"en": "Rejected", "ar": "مرفوض"}', 'closed_negative', 7);
-select app.copy_rabaed_stages(p.id) from project p;
+-- Only Rejected: app.copy_rabaed_stages would also bring back any Stage a Project Admin removed.
+-- A Project that already has a Rejected Stage of its own keeps it. Last in its order.
+insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
+select 'project', p.id, 'inspections', 'rejected', '{"en": "Rejected", "ar": "مرفوض"}', 'closed_negative',
+  coalesce((select max(x.sort) from stage x where x.project_id = p.id and x.module_key = 'inspections'), 0) + 1
+from project p
+where not exists (select 1 from stage x where x.project_id = p.id and x.module_key = 'inspections' and x.key = 'rejected');
 
 -- The WIR's outcomes ------------------------------------------------------------------------
 
