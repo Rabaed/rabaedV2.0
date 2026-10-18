@@ -69,7 +69,7 @@ export const paperRefMaxLength = 100;
  * The fields a column can fill (the Map fields step's choices, and the suggestions):
  * these, and `field:<key>` for a Form field of a mapped Type (registerFormFieldId).
  */
-export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "paperRef"] as const;
+export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "paperRef", "assignTo"] as const;
 export type RegisterFieldId = (typeof registerFieldIds)[number] | `field:${string}`;
 /** A Form field's id among the fields a column can fill. */
 export const registerFormFieldId = (key: string): RegisterFieldId => `field:${key}`;
@@ -87,11 +87,28 @@ const matchesOf = <T extends z.ZodType<string>>(value: T) =>
   z.record(z.string().max(500), value).refine((matches) => Object.keys(matches).length <= 2000, "At most 2,000 matches");
 
 /**
+ * Who raises a row's Draft (RP-640, story 24), besides its email in the "Assign to"
+ * column: the first rule naming the row's Trade (an id) or Type (a code), else the
+ * default; each a Member of the importer's own Participant on the Project (their id).
+ * Neither: the importer.
+ */
+export const registerImportAssign = z.object({
+  default: z.uuid().optional(),
+  rules: z
+    .array(z.object({ by: z.enum(["trade", "type"]), value: z.string().min(1).max(64), member: z.uuid() }))
+    .max(200)
+    .optional(),
+});
+export type RegisterImportAssign = z.infer<typeof registerImportAssign>;
+
+/**
  * Which column gives each field: the Subject from a column, the Type and the Trade
  * each from a column or one value for every row (a Type code; a Trade's id), and the
- * optional Scopes, Location, Paper ref and Form fields (a Form field's `label` is
- * filled in by the preview, as the Form names it). `values` holds the values matched
- * by hand: a Type code, an id, or an option's value. Columns not mapped are ignored.
+ * optional Scopes, Location, Paper ref, "Assign to" (each row's assignee by email) and
+ * Form fields (a Form field's `label` is filled in by the preview, as the Form names
+ * it). `values` holds the values matched by hand: a Type code, an id, or an option's
+ * value. `assign` picks the assignee of the rows the "Assign to" column leaves empty
+ * (RP-640). Columns not mapped are ignored.
  */
 export const registerImportMapping = z.object({
   subject: column,
@@ -100,6 +117,7 @@ export const registerImportMapping = z.object({
   scopes: column.optional(),
   location: column.optional(),
   paperRef: column.optional(),
+  assignTo: column.optional(),
   fields: z
     .array(column.extend({ key: formKey, label: bilingualText.optional() }))
     .max(100)
@@ -115,6 +133,7 @@ export const registerImportMapping = z.object({
     })
     .partial()
     .optional(),
+  assign: registerImportAssign.optional(),
 });
 export type RegisterImportMapping = z.infer<typeof registerImportMapping>;
 
@@ -148,6 +167,9 @@ export const registerImportRowReasons = [
   "paper_ref_too_long",
   "paper_ref_repeated",
   "paper_ref_taken",
+  "assignee_unknown",
+  "assignee_cannot_create",
+  "assignee_outside_visibility",
 ] as const;
 export const registerImportRowReason = z.enum(registerImportRowReasons);
 export type RegisterImportRowReason = z.infer<typeof registerImportRowReason>;
@@ -169,6 +191,12 @@ export const registerImportRow = z.object({
   paperRef: z.string(),
   /** The mapped Form fields of the row's Type, each cell as read, and whether its value doesn't fit the field. */
   fields: z.array(z.object({ key: formKey, text: z.string(), invalid: z.boolean() })),
+  /**
+   * Who raises its Draft (RP-640): the "Assign to" cell as read ("" when the Member was
+   * picked, or none), and the Member of the importer's own Company it is assigned to;
+   * null for the importer, or when the cell names nobody who may take it.
+   */
+  assignee: z.object({ text: z.string(), match: z.object({ id: z.uuid(), name: bilingualText }).nullable() }),
   /** Empty for a good row. */
   reasons: z.array(registerImportRowReason),
   /** Whether confirm created a Draft from it. */
@@ -229,6 +257,8 @@ export const registerImportFields = z.object({
       options: z.array(z.object({ value: z.string(), label: bilingualText })),
     }),
   ),
+  /** The active Members of the Member's own Participant on the Project: whom rows may be assigned to (RP-640). */
+  members: z.array(z.object({ id: z.uuid(), name: bilingualText, email: z.string() })),
 });
 export type RegisterImportFields = z.infer<typeof registerImportFields>;
 

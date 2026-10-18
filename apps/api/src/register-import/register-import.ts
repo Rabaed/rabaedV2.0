@@ -106,7 +106,7 @@ export async function getRegisterImportFields(db: Db, memberId: string, projectI
 
 /** Every column the mapping names. */
 const mappedColumns = (mapping: RegisterImportMapping) =>
-  [mapping.subject, mapping.type, mapping.trade, mapping.scopes, mapping.location, mapping.paperRef, ...(mapping.fields ?? [])].flatMap((field) =>
+  [mapping.subject, mapping.type, mapping.trade, mapping.scopes, mapping.location, mapping.paperRef, mapping.assignTo, ...(mapping.fields ?? [])].flatMap((field) =>
     field && "column" in field ? [field.column] : [],
   );
 
@@ -262,6 +262,9 @@ export function getRegisterImport(db: Db, memberId: string, importId: string): P
       paper_ref: string;
       field_cells: Record<string, string>;
       invalid_fields: string[];
+      assignee_text: string;
+      assignee_id: string | null;
+      assignee_name: BilingualText | null;
       reasons: RegisterImportRowReason[];
       created: boolean;
       work_item_id: string | null;
@@ -273,13 +276,14 @@ export function getRegisterImport(db: Db, memberId: string, importId: string): P
           select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name) order by x.n)
           from unnest(r.scope_ids) with ordinality x (id, n) join scope s on s.id = x.id
         ), '[]'::jsonb) as scopes,
-        r.paper_ref, r.field_cells, r.invalid_fields, r.reasons,
+        r.paper_ref, r.field_cells, r.invalid_fields, r.assignee_text, am.id as assignee_id, am.full_name as assignee_name, r.reasons,
         res.created, res.work_item_id
       from submittal_register_import_row r
       join app.register_import_results(${importId}::uuid) res on res.row_no = r.row_no
       left join work_item_type t on t.id = r.work_item_type_id
       left join dimension_value tv on tv.id = r.trade_id
       left join dimension_value lv on lv.id = r.location_id
+      left join member am on am.id = r.assignee_member_id
       where r.import_id = ${importId}::uuid
       order by r.row_no
     `.execute(trx);
@@ -305,6 +309,7 @@ export function getRegisterImport(db: Db, memberId: string, importId: string): P
         fields: fieldKeys
           .filter((key) => key in row.field_cells)
           .map((key) => ({ key, text: row.field_cells[key]!, invalid: row.invalid_fields.includes(key) })),
+        assignee: { text: row.assignee_text, match: row.assignee_id ? { id: row.assignee_id, name: row.assignee_name! } : null },
         reasons: row.reasons,
         created: row.created,
         workItemId: row.work_item_id,

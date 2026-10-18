@@ -59,6 +59,8 @@ export type RegisterContext = {
   members: RegisterCandidate[];
   participants: RegisterCandidate[];
   optionLists: OptionList[];
+  /** Whom rows may be assigned to (RP-640): the active Members of the Member's own Participant on the Project, by email. */
+  assignees: Map<string, string>;
 };
 
 const fillableTypes: readonly string[] = registerFormFieldTypes;
@@ -151,6 +153,15 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
   `.execute(trx);
   const emailOf = new Map(emails.map((e) => [e.id, e.email]));
 
+  // RP-640: whom rows may be assigned to. The preview checks each again.
+  const { rows: assignees } = await sql<{ id: string; name: BilingualText; email: string }>`
+    select m.id, m.full_name as name, m.email
+    from project_member pm join member m on m.id = pm.member_id
+    where pm.project_id = ${projectId}::uuid and pm.status = 'active' and m.status = 'active'
+      and pm.participant_id in (select app.current_participant_ids())
+    order by m.full_name ->> 'en', m.email
+  `.execute(trx);
+
   return {
     fields: {
       types: raisable.map((t) => ({ code: t.code, name: t.name })),
@@ -164,6 +175,7 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
         types: of,
         options: optionsOf(field, optionLists),
       })),
+      members: assignees,
     },
     types: types.map((t) => ({ id: t.code, names: [t.code, ...named(t.name)] })),
     trades: trades.map((t) => ({ id: t.id, names: [t.code, ...named(t.name)] })),
@@ -174,6 +186,7 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
     members: choices.members.map((m) => ({ id: m.id, names: [emailOf.get(m.id) ?? "", ...named(m.name)].filter((n) => n !== "") })),
     participants: choices.participants.map((p) => ({ id: p.id, names: named(p.name) })),
     optionLists,
+    assignees: new Map(assignees.map((a) => [a.email.toLowerCase(), a.id])),
   };
 }
 
@@ -186,6 +199,7 @@ const builtInTargets: RegisterFieldTarget[] = [
   { field: "scopes", names: ["Scope", "Scopes", "Scope of work", "النطاق", "نطاق العمل"] },
   { field: "location", names: ["Location", "Zone", "Building", "Floor", "الموقع", "المكان"] },
   { field: "paperRef", names: ["Paper ref", "Ref", "Reference", "Ref no", "Reference no", "Paper number", "المرجع", "رقم المرجع"] },
+  { field: "assignTo", names: ["Assign to", "Assigned to", "Assignee", "Responsible", "Email", "مسند إلى", "المسؤول", "البريد الإلكتروني"] },
 ];
 
 /** Every field a column can fill on the Project, with the headings that name it. */
@@ -221,6 +235,9 @@ export type MappedRow = {
   invalid_fields: string[];
   form_version_id: string | null;
   answers: Record<string, unknown>;
+  /** The "Assign to" cell as read ("" when the Member was picked, or none), and the Member it names or was picked (RP-640). */
+  assignee: string;
+  assignee_member_id: string | null;
 };
 
 /**
@@ -297,6 +314,7 @@ function answerOf(field: AnswerField, text: string, context: RegisterContext, ma
 /** Every row of the sheet as app.preview_register_import takes it: each mapped cell, what it matched, and the checked answers. */
 export function mappedRows(table: SheetTable, mapping: RegisterImportMapping, context: RegisterContext): MappedRow[] {
   const manual = mapping.values ?? {};
+  const assign = mapping.assign ?? {};
   return table.rows.map((row) => {
     const cell = (column: { column: number } | undefined) => cellOf(row.values, column);
     const typeText = "column" in mapping.type ? cell(mapping.type) : "";
@@ -329,6 +347,12 @@ export function mappedRows(table: SheetTable, mapping: RegisterImportMapping, co
       if (checked.ok) answers = JSON.parse(storedAnswers(checked.answers).data) as Record<string, unknown>;
       else for (const error of checked.errors) if (error.key in given) invalid.add(error.key);
     }
+
+    // Who raises it (RP-640): the email in the "Assign to" column (ignoring case), else the
+    // first rule naming its Trade or Type, else the default, else the importer (null).
+    const email = cell(mapping.assignTo).trim();
+    const rule = (assign.rules ?? []).find((r) => (r.by === "trade" ? r.value === tradeId : r.value === typeCode));
+    const assigneeId = email !== "" ? (context.assignees.get(email.toLowerCase()) ?? null) : (rule?.member ?? assign.default ?? null);
     return {
       row_no: row.rowNo,
       cells: row.values,
@@ -347,6 +371,8 @@ export function mappedRows(table: SheetTable, mapping: RegisterImportMapping, co
       invalid_fields: (mapping.fields ?? []).map((f) => f.key).filter((key) => invalid.has(key)),
       form_version_id: draft && Object.keys(answers).length > 0 ? draft.form.id : null,
       answers: invalid.size > 0 ? {} : answers,
+      assignee: email,
+      assignee_member_id: assigneeId,
     };
   });
 }

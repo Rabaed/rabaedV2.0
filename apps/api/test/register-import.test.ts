@@ -6,9 +6,17 @@
 // C1's Members read the import; C2, K1 and the Owner read nothing of it.
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { RegisterImport, RegisterImportFields, RegisterImportMapping, RegisterSheet, RegisterValues, WorkItemDetail } from "@rabaed/domain";
+import { createDb, notificationDigestHandler } from "@rabaed/db";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import type {
+  NotificationDigest,
+  RegisterImport,
+  RegisterImportFields,
+  RegisterImportMapping,
+  RegisterSheet,
+  RegisterValues,
+  WorkItemDetail,
+} from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -615,6 +623,177 @@ describe("Values, optional fields and Paper ref (RP-639)", () => {
       expect(refused.json()).toEqual({ error: "not_editable" });
       await expectHidden(setRef(at.k1Manager, mine, "OLD-81"));
       await expectHidden(setRef(at.c1Engineer, randomUUID(), "OLD-82"));
+    });
+  });
+});
+
+// RP-640 (stories 24–26; visibility.md RP-589-2): a row is raised by the Member it is
+// assigned to, by email in an "Assign to" column, else by a group rule (by Trade or
+// Type), else by the default, else by the importer. The assignee must be an active Member
+// of the importing Participant on the Project who may raise the row's Type and covers its
+// values; the Draft is their own, and each assignee but the importer hears of it once.
+describe("Assign to (RP-640)", () => {
+  type Person = Awaited<ReturnType<typeof memberOnProject>>;
+  let at: Tower;
+  let c1Co: Company;
+  /** A C1 engineer whose Trade Visibility is Electrical only. */
+  let narrowed: Person;
+  let colleague: Person;
+  /** A C1 Member on the Project with no Position: holds no Create, so may not raise a DAR there. */
+  let noCreate: Person;
+  let leaver: Person;
+  let deactivated: Person;
+  let k1Person: Person;
+  let previewed: RegisterImport;
+
+  // The worker connects as the app role, with no Member set.
+  const worker = createDb(testDatabaseUrls().app, { max: 1 });
+  afterAll(() => worker.destroy());
+
+  const csvOf = (rows: string[][]) => ({
+    fileName: "assign.csv",
+    content: Buffer.from(["Subject,Type,Trade,Assign to", ...rows.map((r) => r.join(","))].join("\r\n")).toString("base64"),
+  });
+  const notifications = async (by: Caller) => (await ok(by.get("/v1/notifications"), 200)).json().notifications as Record<string, unknown>[];
+
+  beforeAll(async () => {
+    c1Co = await api.projectCreator();
+    const k1Co = await api.authorizedPerson();
+    at = await buildTower(api, { c1: c1Co, k1: k1Co }, "ASG");
+    const k1ParticipantId = (await c1Co.caller.get(`/v1/projects/${at.projectId}/participants`))
+      .json()
+      .participants.find((p: { projectRole: { baseRole: string } }) => p.projectRole.baseRole === "consultant").id;
+    narrowed = await memberOnProject(api, c1Co, at.c1ParticipantId, ["engineer"], { trade: only(at.electrical), name: "Faisal Narrowed" });
+    colleague = await memberOnProject(api, c1Co, at.c1ParticipantId, ["engineer"], { name: "Omar Colleague" });
+    noCreate = await memberOnProject(api, c1Co, at.c1ParticipantId, [], { name: "Sami No Create" });
+    leaver = await memberOnProject(api, c1Co, at.c1ParticipantId, ["engineer"]);
+    deactivated = await memberOnProject(api, c1Co, at.c1ParticipantId, ["engineer"]);
+    k1Person = await memberOnProject(api, k1Co, k1ParticipantId, ["engineer"]);
+    await ok(c1Co.caller.delete(`/v1/participants/${at.c1ParticipantId}/members/${leaver.id}`));
+    await ok(c1Co.caller.post(`/v1/members/${deactivated.id}/deactivate`, {}), 200);
+    // On this Project, C1's DAR runs on the Snag's Workflow, whose Draft its raiser holds
+    // with the Create Function Permission (RP-622): a Member with no Position may not raise one.
+    await sql`
+      insert into workflow_binding (project_id, work_item_type_id, raising_participant_id, workflow_definition_id)
+      select ${at.projectId}::uuid, t.id, ${at.c1ParticipantId}::uuid,
+        (select s.workflow_definition_id from work_item_type s where s.owner_kind = 'rabaed' and s.code = 'SNG')
+      from work_item_type t where t.owner_kind = 'rabaed' and t.code = 'DAR'
+    `.execute(migrator);
+
+    const file = csvOf([
+      ["Panels", "MAR", "Electrical", narrowed.email.toUpperCase()],
+      ["Pumps", "MAR", "Mechanical", ` ${narrowed.email} `],
+      ["Fans", "SAR", "Electrical", ""],
+      ["Valves", "SAR", "Mechanical", ""],
+      ["Doors", "MAR", "Mechanical", ""],
+      ["Signage", "DAR", "Electrical", noCreate.email],
+      ["Railings", "MAR", "Electrical", k1Person.email],
+      ["Glazing", "MAR", "Electrical", leaver.email],
+      ["Ceilings", "MAR", "Electrical", deactivated.email],
+      ["Paint", "MAR", "Electrical", "nobody@rabaed.test"],
+    ]);
+    const mapping: RegisterImportMapping = {
+      subject: { column: 0 },
+      type: { column: 1 },
+      trade: { column: 2 },
+      assignTo: { column: 3 },
+      assign: { default: colleague.id, rules: [{ by: "type", value: "SAR", member: narrowed.id }] },
+    };
+    previewed = (await ok(tryPreview(at.c1Pm, { file, sheet: "assign", headerRow: 1, mapping }, at.projectId), 201)).json();
+  });
+
+  it("offers the active Members of the importer's own Participant on the Project to assign rows to, and nobody else", async () => {
+    const fields: RegisterImportFields = (await ok(at.c1Pm.get(`/v1/projects/${at.projectId}/register-imports/fields`), 200)).json();
+    const ids = fields.members.map((m) => m.id);
+    expect(ids).toEqual(expect.arrayContaining([narrowed.id, colleague.id, noCreate.id]));
+    expect(fields.members.find((m) => m.id === narrowed.id)).toEqual({ id: narrowed.id, name: bilingual("Faisal Narrowed"), email: narrowed.email });
+    for (const gone of [leaver.id, deactivated.id, k1Person.id]) expect(ids).not.toContain(gone);
+  });
+
+  it("suggests the Assign to field for an \"Assign to\" column", async () => {
+    const file = csvOf([["Panels", "MAR", "Electrical", narrowed.email]]);
+    const sheet: RegisterSheet = (await ok(read(at.c1Pm, { file }, at.projectId), 200)).json();
+    expect(sheet.suggestions.map((s) => s?.field ?? null)).toEqual(["subject", "type", "trade", "assignTo"]);
+  });
+
+  it("assigns a row by its email in the Assign to column, ignoring case, else by a group rule, else by the default", () => {
+    const assignee = Object.fromEntries(previewed.rows.map((r) => [r.subject, r.assignee.match?.id ?? null]));
+    expect(assignee).toMatchObject({ Panels: narrowed.id, Pumps: narrowed.id, Fans: narrowed.id, Valves: narrowed.id, Doors: colleague.id, Signage: noCreate.id });
+    expect(previewed.rows.find((r) => r.subject === "Panels")!.assignee).toEqual({
+      text: narrowed.email.toUpperCase(),
+      match: { id: narrowed.id, name: bilingual("Faisal Narrowed") },
+    });
+    expect(previewed.rows.find((r) => r.subject === "Fans")!.assignee.text).toBe("");
+  });
+
+  it("RP-589-2: refuses the Mechanical rows assigned to the engineer narrowed to Electrical, and an assignee who may not raise the Type", () => {
+    expect(reasonsByRow(previewed)).toEqual({
+      2: [],
+      3: ["assignee_outside_visibility"],
+      4: [],
+      5: ["assignee_outside_visibility"],
+      6: [],
+      7: ["assignee_cannot_create"],
+      8: ["assignee_unknown"],
+      9: ["assignee_unknown"],
+      10: ["assignee_unknown"],
+      11: ["assignee_unknown"],
+    });
+  });
+
+  it("refuses an email of another Company's Member, a Member taken off the Project or deactivated, and an unknown one alike, naming nobody", () => {
+    for (const subject of ["Railings", "Glazing", "Ceilings", "Paint"]) {
+      expect(previewed.rows.find((r) => r.subject === subject)!.assignee.match).toBeNull();
+    }
+  });
+
+  describe("on confirm", () => {
+    let record: RegisterImport;
+    const draftOf = (subject: string) => record.rows.find((r) => r.subject === subject)!.workItemId!;
+
+    beforeAll(async () => {
+      expect((await ok(confirm(at.c1Pm, previewed.id), 200)).json()).toEqual({ rowsCreated: 3 });
+      record = (await ok(getImport(at.c1Pm, previewed.id), 200)).json();
+      await drainOutbox(worker);
+    });
+
+    it("RP-589-2: creates the assignee's Drafts inside their Visibility only", async () => {
+      expect(record.rows.filter((r) => r.created).map((r) => r.subject)).toEqual(["Panels", "Fans", "Doors"]);
+      const theirs = (await ok(narrowed.caller.get(`/v1/projects/${at.projectId}/modules/submittals/work-items?pageSize=50`), 200)).json().items;
+      expect(theirs.map((i: { title: string }) => i.title).sort()).toEqual(["Fans", "Panels"]);
+    });
+
+    it("makes the Draft the assignee's own: in their Need My Action, never counted, and theirs to edit", async () => {
+      const mine = (await ok(narrowed.caller.get(`/v1/projects/${at.projectId}/work-items?needMyAction=true`), 200)).json().items;
+      expect(mine.map((i: { id: string }) => i.id).sort()).toEqual([draftOf("Panels"), draftOf("Fans")].sort());
+      const projects = (await ok(narrowed.caller.get("/v1/projects"), 200)).json().projects;
+      expect(projects.find((p: { id: string }) => p.id === at.projectId).needMyAction).toBe(0);
+      const panels = await detail(narrowed.caller, draftOf("Panels"));
+      expect(panels.actions).toMatchObject({ saveAnswers: true, editPaperRef: true, discardDraft: true });
+      expect(panels.stage.category).toBe("draft");
+      // Not the importer's: it is in nobody else's Need My Action.
+      const importers = (await ok(at.c1Pm.get(`/v1/projects/${at.projectId}/work-items?needMyAction=true`), 200)).json().items;
+      expect(importers.map((i: { id: string }) => i.id)).not.toContain(draftOf("Panels"));
+    });
+
+    it("tells each assignee but the importer once how many Drafts were imported for them, and nobody else", async () => {
+      const ofKind = async (by: Caller) => (await notifications(by)).filter((n) => n.kind === "drafts_imported");
+      expect(await ofKind(narrowed.caller)).toEqual([expect.objectContaining({ kind: "drafts_imported", drafts: { count: 2, projectId: at.projectId }, readAt: null })]);
+      expect(await ofKind(colleague.caller)).toEqual([expect.objectContaining({ drafts: { count: 1, projectId: at.projectId } })]);
+      for (const by of [at.c1Pm, noCreate.caller, k1Person.caller, at.k1Manager]) expect(await ofKind(by)).toEqual([]);
+    });
+
+    it("shows no time on the notification: when Drafts were imported is when they were started (scenario 61)", async () => {
+      const [n] = (await notifications(narrowed.caller)).filter((x) => x.kind === "drafts_imported");
+      expect(n!.createdAt).toBeNull();
+    });
+
+    it("routes it like any other notification: a digest by default", async () => {
+      const digests: NotificationDigest[] = [];
+      await worker.transaction().execute((trx) => sql`select app.enqueue_notification_digests()`.execute(trx));
+      await drainOutbox(worker, { digest: notificationDigestHandler(async (d) => void digests.push(d)) });
+      const entries = digests.filter((d) => d.to === narrowed.email).flatMap((d) => d.projects.flatMap((p) => p.items.flatMap((i) => i.entries)));
+      expect(entries).toEqual([expect.objectContaining({ kind: "drafts_imported", drafts: { count: 2, projectId: at.projectId } })]);
     });
   });
 });
