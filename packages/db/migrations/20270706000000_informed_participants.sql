@@ -1,5 +1,5 @@
 -- RP-625 (SNAG-3, spec RP-619): Informed Participants (workflow-engine.md §1, §5.1; visibility.md
--- layer 3, V2, V3, V5, V14, V19; scenarios RP-625-1 to RP-625-4).
+-- layer 3, V2, V3, V5, V14, V19; scenarios RP-625-1 to RP-625-5).
 --
 -- A Submit may name roles to inform (`inform` in the definition, `@rabaed/domain`
 -- `workflow-definition.ts`). It has no column of its own: it is stored in
