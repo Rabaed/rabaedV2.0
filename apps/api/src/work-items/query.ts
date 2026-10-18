@@ -800,6 +800,23 @@ export function exportWorkItems(
   });
 }
 
+/**
+ * Items `ids` of the scope as the viewer reads them in the List, every Revision (not only the
+ * latest), by id; one they don't see is absent. A Package's page (RP-641) reads its items through
+ * this, so their "With" (V14) and Review Code are the List's own.
+ */
+export async function workItemRowsById(trx: Trx, scope: QueryScope, ids: readonly string[], now: Date): Promise<Map<string, WorkItemRow>> {
+  if (ids.length === 0) return new Map();
+  const { rows } = await sql<Row>`
+    with r as (${visibleRows(scope, true)})
+    select r.*, ${holderColumns}
+    from r
+    ${holderJoins}
+    where r.id = any(${ids}::uuid[])
+  `.execute(trx);
+  return new Map(rows.map((r) => [r.id, toRow(r, now)]));
+}
+
 function pageCounts(rows: Row[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.stage_key, (counts.get(r.stage_key) ?? 0) + 1);

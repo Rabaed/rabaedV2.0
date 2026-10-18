@@ -18,7 +18,26 @@ export function packageNumber(seq: number): string {
   return `PKG-${String(seq).padStart(3, "0")}`;
 }
 
-/** A Package as a list shows it: what every Member who sees it reads. */
+/**
+ * A Package's counts as one viewer reads them (RP-641): of the submittals they see only,
+ * never a total that includes one they don't (visibility.md RP-588-2). Cancelled and
+ * discarded submittals are left out.
+ */
+export const packageCounts = z.object({
+  /** The submittals the viewer sees. */
+  total: z.number().int().nonnegative(),
+  /** Of those, the ones still open. */
+  open: z.number().int().nonnegative(),
+  /** Of those, the closed ones by Review Code (or other outcome), e.g. `{ A: 2, C: 1 }`; a code with none is absent. */
+  codes: z.record(z.string(), z.number().int().positive()),
+});
+export type PackageCounts = z.infer<typeof packageCounts>;
+
+/**
+ * A Package as the board shows it (RP-641): what every Member who sees it reads. Its
+ * status comes from all its submittals, one word for everyone (spec RP-616 "Status");
+ * its counts from the ones the viewer sees.
+ */
 export const packageSummary = z.object({
   id: z.uuid(),
   projectId: z.uuid(),
@@ -26,8 +45,9 @@ export const packageSummary = z.object({
   number: z.string(),
   name: bilingualText,
   status: packageStatus,
-  /** The owning Participant, by its Company's name only (V14). */
+  /** The owning Participant, by its Company's name only (V14), for every viewer. */
   owner: z.object({ participantId: z.uuid(), companyName: bilingualText }),
+  counts: packageCounts,
 });
 export type PackageSummary = z.infer<typeof packageSummary>;
 
@@ -43,28 +63,6 @@ export const packageItem = z.object({
   title: z.string(),
 });
 export type PackageItem = z.infer<typeof packageItem>;
-
-/** One Package as the viewer reads it: only the submittals they see, and what they may do with it. */
-export const packageDetail = packageSummary.extend({
-  items: z.array(packageItem),
-  actions: z.object({
-    /** Rename it (also once In Progress, recorded). */
-    rename: z.boolean(),
-    /** Add a submittal of the owning Participant. */
-    addItems: z.boolean(),
-    /** Remove a submittal: only while Open. */
-    removeItems: z.boolean(),
-    /** Delete it: only while Open; its submittals stay, without a Package. */
-    delete: z.boolean(),
-    /**
-     * Submit Package: each not-yet-Submitted submittal's own Submit at once. Only
-     * when there is one, and every one of them waits at a Step where the viewer
-     * can Submit it (RP-638).
-     */
-    submit: z.boolean(),
-  }),
-});
-export type PackageDetail = z.infer<typeof packageDetail>;
 
 /** The Package of a Work Item, where the viewer sees the Package: the chip on its row. */
 export const workItemPackage = z.object({ id: z.uuid(), number: z.string(), name: bilingualText });

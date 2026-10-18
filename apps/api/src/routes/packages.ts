@@ -31,7 +31,9 @@ const packageItemParams = packageParams.extend({ workItemId: z.string() });
 // one and adds its submittals; while it is Open they remove items, rename it or
 // delete it. A Package the Member doesn't see is a 404 that names nothing, exactly
 // like a made-up id (visibility.md "Direct URL or ID"); an Open Package is seen by
-// its owning Participant's Members only (RP-588-1).
+// its owning Participant's Members only (RP-588-1). Once Submitted, a Member who sees
+// one of its items reads it too, with counts and items of the ones they see only, and
+// changes nothing of it: every command is the same 404 (RP-641; RP-588-2, RP-588-3).
 export const packageRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
@@ -53,7 +55,7 @@ export const packageRoutes =
 
     app.get("/v1/packages/:packageId", { schema: { params: packageParams, response: { 200: packageDetail } } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      return visibleOrNotFound(getPackage(ctx.db, memberId, idOrNotFound(request.params.packageId)));
+      return visibleOrNotFound(getPackage(ctx.db, memberId, idOrNotFound(request.params.packageId), ctx.now()));
     });
 
     app.patch("/v1/packages/:packageId", { schema: { params: packageParams, body: packageNameRequest } }, async (request, reply) => {

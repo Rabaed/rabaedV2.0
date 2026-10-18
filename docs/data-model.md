@@ -314,7 +314,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 **chat_message**
 `id`, `work_item_id`, `author_member_id`, `participant_id`, `body`, `file_ids`, `created_at`. Insert-only.
 
-**package** (as built, RP-636, `20270410000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenario RP-588-1)
+**package** (as built, RP-636, `20270410000000_open_package.sql`; spec RP-616; visibility.md "Packages", scenarios RP-588-1 to RP-588-3)
 
 | column | notes |
 |---|---|
@@ -327,22 +327,27 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 | `discarded_at` | an Open Package deleted (the Package's Delete, discarded as a Draft is, `app.discard_draft`): nobody sees it again; check: only an `open` one. Not granted to the app role |
 
 The app role reads `id`, `project_id`, `participant_id`, `seq`, `name`, `status`, under the policy `app.sees_package(id)`, and writes nothing. Reads:
-- `app.sees_package(package)`: a Member of the owning Participant, while it is not discarded. RP-641 extends it to a Member who sees at least one of its items.
+- `app.owns_package(package)` (RP-641, `20270412000000_package_viewers.sql`): a Member of the owning Participant, while it is not discarded. Only they change it.
+- `app.sees_package(package)`: its owner (`app.owns_package`), or, once it is no longer `open`, a Member who sees (`app.sees_work_item`) at least one of its items (RP-641).
 - `app.package_items(package)`: the ids of its items the caller sees (`app.sees_work_item`); nothing when they don't see the Package. Every list or count of a Package comes from these.
+- `app.package_summary(package)` → (`total`, `open`, `codes`) (RP-641): of the items the caller sees (`app.package_items`), discarded and cancelled ones left out, how many, how many still open, and the closed ones by outcome (the Review Code) as `{"A": 2, "C": 1}`; no row when they don't see the Package. The board's and the Package page's counts.
+- `app.package_owner_name(package)` (RP-641): the owning Participant's Company name (V14), for every Member who sees the Package; else null.
 - `app.work_item_package(item)`: the item's Package (`package_id`, `seq`, `name`) where the caller sees both the item and the Package; else no row. The work item query gives it on each row (`package`).
 
-Writes (security definer, each re-checking the caller; a Package the caller doesn't see is `not_found`, a Project not active `project_closed`):
+The api's board (`GET /v1/projects/:id/packages`) and Package page (`GET /v1/packages/:id`) give each Package as `PackageSummary` (with `counts`), the page its items as `PackageDetailItem`: each item's Document Number, Subject, Trade, `with` and `outcome` from the work item query's own row (`workItemRowsById`), so "With" follows V14 as in the List. A viewer outside the owning Participant is offered no action.
+
+Writes (security definer, each re-checking the caller; a Package the caller doesn't own is `not_found`, whether or not they see it, a Project not active `project_closed`):
 - `app.create_package(project, name, now)` → (`outcome`, `package_id`, `seq`): any Member of a Participant on the Project, for their Participant; `created`, `not_found`, `project_closed`, `invalid_name`. The next `seq` under an advisory lock per Project and Participant.
 - `app.rename_package(package, name, now)`: `renamed`, `not_found`, `project_closed`, `invalid_name`.
 - `app.add_package_item(package, item, now)`: only a submittal (a Type of the Submittals Module) the owning Participant raised, that the caller sees and that isn't discarded, else `item_not_offered` (one answer whatever the reason); `in_another_package` when it is in another; `not_editable` for a Draft (no Document Number) the caller may not edit (`app.can_save_answers`); `added`, also when it already is in this one.
 - `app.remove_package_item(package, item, now)`: while `open`; `removed`, `package_not_open`, `item_not_in_package` (not in it, or not seen).
 - `app.discard_package(package, now)` (the Package's Delete): while `open`; its items keep everything but their Package; `discarded`, `package_not_open`.
-- Helpers, not for the app role: `app.package_for_write(package)` (the row locked, if the caller sees it), `app.write_package_event` and `app.recompute_package_status(package)`.
+- Helpers, not for the app role: `app.package_for_write(package)` (the row locked, if the caller owns it: `app.owns_package` since RP-641), `app.write_package_event` and `app.recompute_package_status(package)`.
 
 **Submit Package** (RP-638) is a command of the api (`submitPackage` in `apps/api/src/packages/packages.ts`), not of the database: for each item of the Package the caller sees without `submitted_at` (and not closed), their Submit Transition (kind `submit`, from `app.work_item_actions`) taken through `takeTransitionIn`, the single Submit's path and its `app.take_transition`, all in one transaction; any refusal rolls back all of them. Each item's key is derived from the request's key and the item. The database gives it:
 - `app.begin_package_submit(package, key)` → (`outcome`, `work_item_ids`): the Package locked; `ready`, `replayed` with the items the caller's same key Submitted before, `not_found`, `project_closed`.
 - `app.record_package_submit(package, items, key, now)`: the `submitted` event of the trail, once each item is in the Package and Submitted; `recorded`, `not_found`, `item_not_submitted`.
-- `app.package_hides_unsubmitted(package)`: whether an item still to Submit is one the caller doesn't see; such an item stops their Submit Package, which says so without naming it.
+- `app.package_hides_unsubmitted(package)`: whether an item still to Submit is one the caller doesn't see; such an item stops their Submit Package, which says so without naming it. False for anyone but the owner (`app.owns_package`, RP-641), so a viewer of another Company never learns an item is still to Submit.
 
 **package_event** (RP-636)
 `id`, `project_id`, `package_id`, `type {created, renamed, item_added, item_removed, submitted, discarded}`, `work_item_id` (set exactly for `item_added` and `item_removed`), `actor_member_id`, `actor_participant_id` (the owning Participant), `payload` (`created`: the name; `renamed`: `from` and `to`; `submitted`: `work_item_ids` and the request's `idempotency_key`, RP-638), `created_at`. The Package's own trail, internal to the owning Participant. Append-only (trigger), and not readable through the app role until a reader is built.

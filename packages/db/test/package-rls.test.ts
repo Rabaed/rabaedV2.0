@@ -267,3 +267,113 @@ describe("Submit Package (RP-638): the status follows the items", () => {
     ).toBe("item_not_submitted");
   });
 });
+
+describe("RP-641: who sees a Submitted Package, and each viewer's counts (scenarios RP-588-2, RP-588-3)", () => {
+  let packageId = "";
+  let mechanical = "";
+  let k1Narrowed = ""; // A K1 engineer who sees Electrical only.
+  const electricalItems: string[] = [];
+  const mechanicalItems: string[] = [];
+
+  /** A Draft of the test submittal Type in Trade `trade`, raised by C1's engineer. */
+  async function draftIn(trade: string, title: string): Promise<string> {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, ${title}, app.latest_form_version(${TYPE}), ${JSON.stringify({ model: title })}::jsonb,
+        ${trade}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    return created!.work_item_id;
+  }
+
+  /** K1 closes item `id` with Code `code` (A or C): its engineer sends it to its manager, who codes it. */
+  async function code(id: string, transition: "approve_a" | "revise_c") {
+    await pickUp(k1.member, id);
+    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+    await pickUp(k1.ap, id);
+    expect(await take(k1.ap, id, transition)).toBe("applied");
+  }
+
+  const summary = (as: string) =>
+    call<{ total: number; open: number; codes: Record<string, number> }>(as, sql`select total, open, codes from app.package_summary(${packageId}::uuid)`);
+  const ownerName = async (as: string) =>
+    (await call<{ name: { en: string } | null }>(as, sql`select app.package_owner_name(${packageId}::uuid) as name`))[0]!.name;
+
+  beforeAll(async () => {
+    mechanical = (
+      await call<{ value_id: string }>(
+        c1.ap,
+        sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'trade', null, 'ME', ${JSON.stringify({ en: "ME", ar: "ME" })}::jsonb)`,
+      )
+    )[0]!.value_id;
+    const k1Participant = (await migrator.query("select id from participant where project_id = $1 and company_id = $2", [projectId, k1.id])).rows[0]
+      .id as string;
+    k1Narrowed = await member(k1.id, "narrowed");
+    await call(k1.ap, sql<{ outcome: string }>`select app.add_project_member(${k1Participant}::uuid, ${k1Narrowed}::uuid, now())`);
+    expect(
+      await outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${k1Narrowed}::uuid, 'trade', false, ${[electrical]}::uuid[], now()) as outcome`),
+    ).toBe("set");
+    expect(
+      await outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${k1Narrowed}::uuid, 'location', true, '{}'::uuid[], now()) as outcome`),
+    ).toBe("set");
+    expect(
+      await outcome(k1.ap, sql`select app.set_project_member_positions(${k1Participant}::uuid, ${k1Narrowed}::uuid, ${["engineer"]}::text[]) as outcome`),
+    ).toBe("set");
+
+    packageId = (await createPackage(c1Pm, "Electrical and Mechanical")).package_id;
+    for (let i = 1; i <= 6; i++) electricalItems.push(await draftIn(electrical, `EL ${i}`));
+    for (let i = 1; i <= 2; i++) mechanicalItems.push(await draftIn(mechanical, `ME ${i}`));
+    for (const item of [...electricalItems, ...mechanicalItems]) {
+      expect(await take(c1.member, item, "send_for_review")).toBe("applied");
+      expect(await pickUp(c1Pm, item)).toBe("picked_up");
+      expect(await addItem(c1Pm, packageId, item)).toBe("added");
+    }
+    // Submit Package takes each item's own Submit (RP-638): here one by one, as the api does in one transaction.
+    for (const item of [...electricalItems, ...mechanicalItems]) expect(await take(c1Pm, item, "submit")).toBe("applied");
+    await code(electricalItems[0]!, "approve_a");
+    await code(mechanicalItems[0]!, "revise_c");
+    electricalItems.sort();
+  });
+
+  it("RP-588-2: K1's manager (Visibility all) counts 8; its engineer narrowed to Electrical counts 6, never the Mechanical items", async () => {
+    for (const who of [c1Pm, k1.ap, k1.member]) {
+      expect(await summary(who)).toEqual([{ total: 8, open: 6, codes: { A: 1, C: 1 } }]);
+    }
+    expect(await summary(k1Narrowed)).toEqual([{ total: 6, open: 5, codes: { A: 1 } }]);
+    const reads = await readsOf(k1Narrowed, packageId, mechanicalItems);
+    expect(reads).toEqual({ rows: [{ id: packageId }], sees: true, items: electricalItems, itemPackages: [] });
+    // The overall status, from all its items, as one word.
+    expect(await statusOf(k1Narrowed, packageId)).toBe("in_progress");
+    expect((await readsOf(k1Narrowed, packageId, electricalItems)).itemPackages).toHaveLength(6);
+  });
+
+  it("RP-588-3: C2 sees none of its items and reads nothing of it, while K1 and the Owner do", async () => {
+    expect(await readsOf(c2.member, packageId, electricalItems)).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
+    expect(await call(c2.member, sql<{ id: string }>`select id from package where project_id = ${projectId}::uuid`)).toEqual([]);
+    expect(await summary(c2.member)).toEqual([]);
+    expect(await ownerName(c2.member)).toBeNull();
+    for (const who of [k1.member, k1.ap, k1Narrowed, ow.member]) {
+      expect((await readsOf(who, packageId, [])).sees, who).toBe(true);
+      // The owner by its Company's name, for every viewer of the Package.
+      expect((await ownerName(who))?.en).toBe("C1");
+    }
+  });
+
+  it("K1 sees it but changes nothing of it: every write is the owner's alone, the same 'not_found'", async () => {
+    for (const who of [k1.ap, k1Narrowed, ow.member]) {
+      expect(await outcome(who, sql`select app.rename_package(${packageId}::uuid, ${JSON.stringify(name("Mine now"))}::jsonb, now()) as outcome`)).toBe(
+        "not_found",
+      );
+      expect(await addItem(who, packageId, electricalItems[1]!)).toBe("not_found");
+      expect(await outcome(who, sql`select app.remove_package_item(${packageId}::uuid, ${electricalItems[1]}::uuid, now()) as outcome`)).toBe("not_found");
+      expect(await outcome(who, sql`select app.discard_package(${packageId}::uuid, now()) as outcome`)).toBe("not_found");
+      const [begun] = await call<{ outcome: string }>(who, sql`select outcome from app.begin_package_submit(${packageId}::uuid, ${randomUUID()}::uuid)`);
+      expect(begun!.outcome).toBe("not_found");
+      expect((await call<{ hides: boolean }>(who, sql`select app.package_hides_unsubmitted(${packageId}::uuid) as hides`))[0]!.hides).toBe(false);
+      expect((await call<{ owns: boolean }>(who, sql`select app.owns_package(${packageId}::uuid) as owns`))[0]!.owns).toBe(false);
+    }
+    expect((await call<{ owns: boolean }>(c1.member, sql`select app.owns_package(${packageId}::uuid) as owns`))[0]!.owns).toBe(true);
+    expect(await call(c1Pm, sql<{ name: unknown }>`select name from package where id = ${packageId}::uuid`)).toEqual([{ name: name("Electrical and Mechanical") }]);
+  });
+});
