@@ -15,7 +15,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls, withSignature } from "../test-support/index.ts";
+import { testDatabaseUrls } from "../test-support/index.ts";
 
 type Case = { name: string; pattern: NumberingPattern; item: NumberingAttributes; seq: number };
 const cases = JSON.parse(readFileSync(new URL("../../domain/src/numbering-cases.json", import.meta.url), "utf8")) as Case[];
@@ -35,9 +35,6 @@ async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
 }
 
-/** A Member's insert, with an active Signature (RP-85: no Signature, no Transition). */
-const signedMember = async (text: string, values: unknown[]) => withSignature((t, v) => migrator.query(t, v), await one(text, values));
-
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
@@ -47,7 +44,7 @@ beforeAll(async () => {
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
     [JSON.stringify({ en: "C1", ar: "C1" }), digits(10), `3${digits(13)}3`, engineer],
   );
-  adminId = await signedMember(
+  adminId = await one(
     "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', true) returning id",
     [company, email("ap"), JSON.stringify({ en: "ap", ar: "ap" })],
   );

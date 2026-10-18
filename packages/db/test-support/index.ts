@@ -15,9 +15,11 @@
  *   actionsFormSchema               actions-workflow.ts: the Form that Workflow is published with.
  *   addOwnerReviewWorkflow(run)     owner-review-workflow.ts: a 1→1→1 Workflow ending with the Owner's review (ADR 0022).
  *   expectedContentSha256, jsonbText   content-hash.ts: the content hash a closed item must carry.
- *   withSignature(run, memberId)    signature.ts: gives a Member an active Signature, as the owner (RP-85: no
- *                                   Signature, no Transition); returns the id, to wrap a Member's insert.
- *   withoutSignature(run, memberId) signature.ts: ends the Member's Signature in force.
+ *   withSignature(run, memberId)    signature.ts: gives a Member a new active Signature, as the owner; returns the id.
+ *   withoutSignature(run, memberId) signature.ts: ends the Member's Signature in force, for a test of the gate.
+ *   runAsOwner(db)                  signature.ts: a Kysely db (the migrator's) as the `run` those take.
+ * Every Member of the test database has a Signature by default (RP-85: no Signature, no Transition):
+ *   test-defaults.ts installs it when the database is reset; RP-617's Stamp joins it there.
  * Defined below:
  *   rolledBack(db, fn)              runs fn in a transaction that is always rolled back.
  *   testDatabaseUrls()              the environment's URLs, pointed at `<database>_test`.

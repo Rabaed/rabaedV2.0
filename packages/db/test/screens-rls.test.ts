@@ -12,7 +12,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, approveBActionForm, joinProject, testDatabaseUrls, withSignature } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, approveBActionForm, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -60,11 +60,8 @@ async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
 }
 
-/** A Member's insert, with an active Signature (RP-85: no Signature, no Transition). */
-const signedMember = async (text: string, values: unknown[]) => withSignature((t, v) => migrator.query(t, v), await one(text, values));
-
 async function member(companyId: string, who: string, creator = false): Promise<string> {
-  return signedMember(
+  return one(
     "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', $4) returning id",
     [companyId, email(who), JSON.stringify({ en: who, ar: who }), creator],
   );

@@ -1,8 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { closeOnboardingLead, createEngineer, listOnboardingLeads, onboardCompany, type CloseLeadResult } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { sql } from "kysely";
-import { runAsOwner, testDatabaseUrls, withSignature, withoutSignature } from "@rabaed/db/test-support";
+import { runAsOwner, testDatabaseUrls, withoutSignature } from "@rabaed/db/test-support";
 import type {
   BaseRole,
   CreateProjectRequest,
@@ -126,8 +125,9 @@ export interface TestApi {
   /** A Rabaed Engineer closes an open onboarding lead, with a reason, through Rabaed Admin's service. */
   closeOnboardingLead(leadId: string, reason: string): Promise<CloseLeadResult>;
   /**
-   * Accepts an invitation and returns the signed-in caller. The Member is given a Signature
-   * (RP-85: no Signature, no Transition), as every demo Member has one; `withoutSignature` ends it.
+   * Accepts an invitation and returns the signed-in caller. Like every Member of the test
+   * database, they have a Signature by default (RP-85, @rabaed/db/test-support test-defaults.ts);
+   * `withoutSignature` ends it, for a test of the gate.
    */
   acceptInvitation(token: string, password?: string): Promise<Caller>;
   /** Ends the Member's Signature in force, as the owner: they have none until they add one (RP-85). */
@@ -295,12 +295,6 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       // A token this api did not issue has no known email: that caller is not signed in again by `later`.
       const email = invitedEmails.get(token);
       if (email) signedIn.set(caller, { email, password });
-      // Their Signature (RP-85), recorded as the owner: the Member accepting is the one invited.
-      const { rows } = await sql<{ id: string }>`
-        select m.id from invitation i join member m on m.id = i.member_id
-        where i.token_hash = sha256(convert_to(${token}, 'UTF8'))
-      `.execute(migratorDb);
-      if (rows[0]) await withSignature(runAsOwner(migratorDb), rows[0].id);
       return caller;
     },
 

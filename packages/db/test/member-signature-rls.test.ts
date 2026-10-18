@@ -2,13 +2,14 @@
 // app role. A Member reads only their own Signature rows and the stored_file rows they point
 // at, never a colleague's nor another Company's; the record job reads anyone's as the owner.
 // Nobody writes them directly, app.set_member_signature saves the acting Member's own, and
-// replacing it ends the old row, which stays as it was.
+// replacing it ends the old row, which stays as it was. The test database gives every Member a
+// Signature (test-defaults.ts); these Members start without one.
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { testDatabaseUrls, withoutSignature } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -27,7 +28,7 @@ const rowsAs = <T = Record<string, unknown>>(memberId: string | null, query: Raw
     ? query.execute(app).then((r) => r.rows as T[])
     : withMember(app, memberId, (trx) => query.execute(trx)).then((r) => r.rows as T[]);
 
-/** A Company and `count` of its Members. */
+/** A Company and `count` of its Members, none with a Signature in force. */
 async function company(engineer: string, name: string, count: number): Promise<string[]> {
   const companyId = await one(
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
@@ -35,13 +36,13 @@ async function company(engineer: string, name: string, count: number): Promise<s
   );
   const members: string[] = [];
   for (let i = 0; i < count; i++) {
-    members.push(
-      await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
-        companyId,
-        email(`m${i}`),
-        JSON.stringify({ en: `M${i}`, ar: `M${i}` }),
-      ]),
-    );
+    const id = await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
+      companyId,
+      email(`m${i}`),
+      JSON.stringify({ en: `M${i}`, ar: `M${i}` }),
+    ]);
+    await withoutSignature((text, values) => migrator.query(text, values), id);
+    members.push(id);
   }
   return members;
 }
@@ -55,6 +56,17 @@ const save = (memberId: string | null, method = "drawn", mime = "image/png") => 
     sql`select app.set_member_signature(${key}, ${sha}, ${1234}, ${mime}, ${method}, now()) as id`,
   ).then((r) => r[0]!.id);
 };
+
+/** The Signature rows `reader` reads, by whose they are. */
+const ownersRead = async (reader: string) =>
+  [...new Set((await rowsAs<{ member_id: string }>(reader, sql`select member_id from member_signature`)).map((r) => r.member_id))];
+
+/** The stored_file rows `reader` reads, by who uploaded them (read as the owner). */
+async function fileUploadersRead(reader: string): Promise<string[]> {
+  const ids = (await rowsAs<{ id: string }>(reader, sql`select id from stored_file`)).map((r) => r.id);
+  const { rows } = await migrator.query("select distinct uploaded_by_member_id as who from stored_file where id = any($1::uuid[])", [ids]);
+  return rows.map((r) => r.who as string);
+}
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -75,25 +87,25 @@ afterAll(async () => {
 
 describe("member_signature", () => {
   it("is read by its own Member, with the file it points at", async () => {
-    const own = await rowsAs<{ member_id: string; method: string; active_to: Date | null; file_id: string }>(
+    const own = await rowsAs<{ member_id: string; method: string; file_id: string }>(
       people.a,
-      sql`select member_id, method, active_to, file_id from member_signature`,
+      sql`select member_id, method, file_id from member_signature where active_to is null`,
     );
-    expect(own).toEqual([{ member_id: people.a, method: "typed", active_to: null, file_id: expect.any(String) }]);
-    expect(await rowsAs(people.a, sql`select id, mime, size from stored_file`)).toEqual([
-      { id: own[0]!.file_id, mime: "image/png", size: "1234" },
+    expect(own).toEqual([{ member_id: people.a, method: "typed", file_id: expect.any(String) }]);
+    expect(await rowsAs(people.a, sql`select mime, size from stored_file where id = ${own[0]!.file_id}::uuid`)).toEqual([
+      { mime: "image/png", size: "1234" },
     ]);
   });
 
   it("is read by nobody else: not a colleague of the same Company, nor another Company's Member", async () => {
-    expect(await rowsAs(people.colleague, sql`select 1 from member_signature`)).toEqual([]);
-    expect(await rowsAs(people.colleague, sql`select 1 from stored_file`)).toEqual([]);
-    expect(await rowsAs(people.b, sql`select member_id from member_signature`)).toEqual([{ member_id: people.b }]);
-    expect(await rowsAs(people.b, sql`select mime from stored_file`)).toEqual([{ mime: "image/jpeg" }]);
+    for (const reader of [people.a, people.colleague, people.b]) {
+      expect(await ownersRead(reader), reader).toEqual([reader]);
+      expect(await fileUploadersRead(reader), reader).toEqual([reader]);
+    }
   });
 
   it("is read by the owner, as the record job reads it: everyone's", async () => {
-    const { rows } = await migrator.query("select member_id from member_signature where member_id = any($1::uuid[])", [
+    const { rows } = await migrator.query("select distinct member_id from member_signature where member_id = any($1::uuid[])", [
       [people.a, people.b],
     ]);
     expect(rows.map((r) => r.member_id).sort()).toEqual([people.a, people.b].sort());
@@ -116,13 +128,12 @@ describe("member_signature", () => {
   });
 
   it("replacing it ends the old row, kept as it was, and makes the new one the only one in force", async () => {
-    const [before] = await rowsAs<{ id: string }>(people.colleague, sql`select id from member_signature`);
-    expect(before).toBeUndefined();
+    expect(await rowsAs(people.colleague, sql`select 1 from member_signature where active_to is null`)).toEqual([]);
     const first = await save(people.colleague, "drawn");
     const second = await save(people.colleague, "uploaded");
     const rows = await rowsAs<{ id: string; method: string; ended: boolean }>(
       people.colleague,
-      sql`select id, method, active_to is not null as ended from member_signature order by active_from, id`,
+      sql`select id, method, active_to is not null as ended from member_signature where id in (${first}::uuid, ${second}::uuid) order by active_from, id`,
     );
     expect(rows).toEqual([
       { id: first, method: "drawn", ended: true },
@@ -147,5 +158,22 @@ describe("member_signature", () => {
     await expect(save(people.a, "drawn", "image/svg+xml")).rejects.toThrow();
     await expect(save(people.a, "scanned")).rejects.toThrow();
     expect(await rowsAs(people.a, sql`select method from member_signature where active_to is null`)).toEqual([{ method: "typed" }]);
+  });
+});
+
+describe("the test database's defaults (test-defaults.ts)", () => {
+  it("give a Member inserted by any route a Signature in force, which a test of the gate ends", async () => {
+    const companyId = await one(
+      "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, (select id from rabaed_engineer limit 1)) returning id",
+      [JSON.stringify({ en: "Defaults", ar: "Defaults" }), digits(10), `3${digits(13)}3`],
+    );
+    const id = await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
+      companyId,
+      email("default"),
+      JSON.stringify({ en: "D", ar: "D" }),
+    ]);
+    expect(await rowsAs(id, sql`select method from member_signature where active_to is null`)).toEqual([{ method: "drawn" }]);
+    await withoutSignature((text, values) => migrator.query(text, values), id);
+    expect(await rowsAs(id, sql`select 1 from member_signature where active_to is null`)).toEqual([]);
   });
 });
