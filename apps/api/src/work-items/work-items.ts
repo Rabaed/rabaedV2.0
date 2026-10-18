@@ -123,7 +123,7 @@ function toFormVersion(r: FormVersionRow): FormVersion {
  * one: the latest published Version of the Project's own Form for the Type, else of the
  * Type's Rabaed Default Form (RP-554), as app.create_work_item checks it.
  */
-async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
+export async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
   const { rows } = await sql<FormVersionRow & { type_id: string | null }>`
     select v.id, v.version_no, v.schema,
       (select t.id from work_item_type t where t.code = ${typeCode} and (t.project_id = ${projectId}::uuid or t.project_id is null)
@@ -142,7 +142,7 @@ async function withProjectRequired(trx: Trx, form: FormVersion, projectId: strin
 }
 
 /** The Project's Scopes and Sub-scopes, which the validator checks `scopes` against. */
-async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]> {
+export async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]> {
   const { rows } = await sql<{ id: string; trade_value_id: string; parent_id: string | null }>`
     select id, trade_value_id, parent_id from scope where project_id = ${projectId}
   `.execute(trx);
@@ -154,7 +154,7 @@ async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]
  * that uses one. They are never copied into a Form (RP-282), so an option added
  * since the Form Version was published is offered at once.
  */
-async function optionListsFor(trx: Trx, schema: FormSchema) {
+export async function optionListsFor(trx: Trx, schema: FormSchema) {
   const uses = formFields(schema).some(
     (f) => f.type === "option_list" || (f.type === "table" && f.columns.some((c) => c.type === "option_list")),
   );
@@ -175,7 +175,7 @@ async function suppliersFor(trx: Trx, schema: FormSchema, projectId: string): Pr
 }
 
 /** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
-function storedAnswers({ trade, location, scopes, ...data }: Record<string, unknown>) {
+export function storedAnswers({ trade, location, scopes, ...data }: Record<string, unknown>) {
   return {
     data: JSON.stringify(data),
     tradeId: (trade as string | undefined) ?? null,
@@ -351,7 +351,7 @@ async function workflowStepsOf(trx: Trx, workflowVersionIds: readonly string[]):
 }
 
 /** `form` as it is filled in at `step`: the sections editable there. */
-function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEditContext): FormToFill {
+export function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEditContext): FormToFill {
   return { ...form, editableSections: [...editableSections(form.schema, steps, at)] };
 }
 
@@ -413,7 +413,7 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
  * on `projectId` starts on, and its Draft: the latest published Version of the
  * Workflow bound for their Participant, as app.create_work_item resolves it (RP-426).
  */
-async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
+export async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
   const { rows } = await sql<{ type_id: string; workflow_version_id: string | null }>`
     select t.id as type_id, app.new_item_workflow_version(${projectId}::uuid, t.id, (
       select pm.participant_id from project_member pm
@@ -438,7 +438,7 @@ async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[
  * one else's); their own Participant, the Host Company's and, on an item, those
  * on it (app.form_participant_choices).
  */
-async function formChoices(trx: Trx, projectId: string, workItemId: string | null): Promise<FormChoices> {
+export async function formChoices(trx: Trx, projectId: string, workItemId: string | null): Promise<FormChoices> {
   const { rows: members } = await sql<{ id: string; name: BilingualText }>`
     select m.id, m.full_name as name
     from project_member pm
@@ -681,8 +681,12 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       can_discard_draft: boolean;
       workflow_name: BilingualText;
       workflow_version_no: number;
+      paper_ref: string | null;
+      draft_step: boolean;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
+        -- The Paper ref (RP-639): everyone who sees the item reads it; it changes only while a Draft.
+        w.paper_ref, coalesce(st.category = 'draft', false) as draft_step,
         wf.name as workflow_name, wf.version_no as workflow_version_no,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
@@ -695,6 +699,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
+      join work_item_type ty on ty.id = w.work_item_type_id
+      left join stage st on st.project_id = w.project_id and st.module_key = ty.module_key and st.key = seen.stage_key
       -- Its Workflow's name and Version, for whoever sees the item, whatever Workflow rows they read (V20).
       left join lateral app.work_item_workflow(w.id) wf on true
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
@@ -759,6 +765,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       duplicatedFrom: source[0]
         ? { workItemId: source[0].work_item_id, documentNumber: source[0].document_number, subject: source[0].subject }
         : null,
+      paperRef: d.paper_ref,
       raisedItems: raisedItems.map((f) => ({ type: { code: f.type_code, name: f.type_name }, open: f.open_count, closed: f.closed_count })),
       actions: {
         ...(await actions(trx, workItemId)),
@@ -768,6 +775,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         discardRevision: d.can_discard_revision,
         duplicate: d.can_duplicate,
         discardDraft: d.can_discard_draft,
+        // As app.set_work_item_paper_ref decides it: a Draft never numbered, which they may edit now.
+        editPaperRef: d.can_save_answers && d.draft_step && row.document_number === null,
       },
     };
   });
@@ -946,6 +955,21 @@ export function discardDraft(db: Db, memberId: string, workItemId: string, now: 
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`select app.discard_draft(${workItemId}::uuid, ${now}) as outcome`.execute(trx);
     return commandResult(rows[0]!.outcome, "discarded", discardDraftRefusals);
+  });
+}
+
+const setPaperRefRefusals = ["not_found", "project_closed", "not_editable", "paper_ref_too_long", "paper_ref_taken"] as const;
+
+/**
+ * The Paper ref (RP-639, spec RP-631 story 27): the raiser sets or clears it while the item
+ * is a Draft they may edit (app.set_work_item_paper_ref); one per Participant on the Project.
+ */
+export function setPaperRef(db: Db, memberId: string, workItemId: string, paperRef: string | null, now: Date) {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_work_item_paper_ref(${workItemId}::uuid, ${paperRef}, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "saved", setPaperRefRefusals);
   });
 }
 
@@ -1197,7 +1221,7 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft" | "editPaperRef">> {
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));

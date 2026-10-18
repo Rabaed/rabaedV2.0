@@ -517,6 +517,10 @@ export type CreateRevisionRequest = z.infer<typeof createRevisionRequest>;
 export const createReplacementRequest = z.object({ idempotencyKey: z.uuid() });
 export type CreateReplacementRequest = z.infer<typeof createReplacementRequest>;
 
+/** Set a Draft's Paper ref (RP-639), or clear it with null or blank. At most 100 characters once trimmed. */
+export const setPaperRefRequest = z.object({ paperRef: z.string().max(1000).nullable() });
+export type SetPaperRefRequest = z.infer<typeof setPaperRefRequest>;
+
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
@@ -550,6 +554,8 @@ export const workItemActions = z.object({
    * Revision, while it has no Document Number, for a Member of the raiser's Participant.
    */
   discardDraft: z.boolean(),
+  /** Change the Paper ref (RP-639): the viewer may edit the Draft now, and it has no Document Number. */
+  editPaperRef: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),
@@ -667,6 +673,12 @@ export const workItemDetail = workItemSummary.extend({
    * and Subject. It has no time, so it never tells when the Draft was started.
    */
   duplicatedFrom: z.object({ workItemId: z.uuid(), documentNumber: z.string().nullable(), subject: z.string() }).nullable(),
+  /**
+   * The Paper ref (RP-639, spec RP-631 story 27): the old paper number of a submittal
+   * brought in from a register while still under review on paper. Never its Document
+   * Number. Everyone who sees the item reads it; it changes only while a Draft. Null when none.
+   */
+  paperRef: z.string().nullable(),
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**
