@@ -725,8 +725,8 @@
       "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +#}}",
       "raisedBy": "Raised by",
       "issuedCode": "Issued Code",
-      "comments": "Comments",
-      "commentCounts": "{open} open / {closed} closed"
+      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags" },
+      "raisedItemCounts": "{open} open / {closed} closed"
     },
     "invalid": "Give a Subject and a Trade.",
     "notContractor": "Only a Contractor can raise this Submittal.",
@@ -1009,6 +1009,7 @@
     "conditional": "Entered only when a condition holds",
     "error": "Has an error",
     "createsItems": "Creates items in the Snag List",
+    "raiser": "The raiser",
     "everyStep": "Every Company's Steps are shown, including internal ones: a Workflow describes a process, not anyone's work.",
     "newerVersion": "This item runs on Version {version}. The workflow was updated to Version {latest}.",
     "grouped": "Some Steps are grouped because they are internal to another company.",

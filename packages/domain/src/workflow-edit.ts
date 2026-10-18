@@ -1,6 +1,6 @@
 import type { BilingualText } from "./company.ts";
 import type { TransitionKind } from "./work-item.ts";
-import type { ActorRule, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
+import { actorHolder, type ActorRule, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 
 // The Workflow builder's edits (RP-439, WF-16; workflow-engine.md §11): each takes a
 // draft definition and gives a new one, never changing the one it was given (the
@@ -48,7 +48,7 @@ export function connectSteps(definition: WorkflowDefinition, from: string, to: s
   const kind: TransitionKind =
     target.actor === null
       ? "close"
-      : source.actor?.role !== target.actor.role
+      : actorHolder(source.actor) !== actorHolder(target.actor)
         ? "submit"
         : leadsTo(definition, to, from)
           ? "return"

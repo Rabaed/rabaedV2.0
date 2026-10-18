@@ -3,7 +3,7 @@ import { bilingualText, type BilingualText } from "./company.ts";
 import type { OutcomeKind } from "./outcome.ts";
 import { condition } from "./condition.ts";
 import type { Locale } from "./locale.ts";
-import { baseRoles } from "./project.ts";
+import { baseRoles, type BaseRole } from "./project.ts";
 import { transitionKinds, type TransitionKind } from "./work-item.ts";
 
 // The Workflow definition format (workflow-engine.md §1, §11; RP-425, spec RP-423;
@@ -36,15 +36,23 @@ export const outcomeModes = ["none", "recommend_code", "issue_outcome", "confirm
 export type OutcomeMode = (typeof outcomeModes)[number];
 
 /**
- * Who may hold a Step: a Participant role, the Function Permission its Step Pool
- * holds, and optionally the Positions it is narrowed to.
+ * Who may hold a Step: a Participant role, or the raiser (the Participant that raised the
+ * item, whatever its role; RP-622, workflow-engine.md §3.1), the Function Permission its
+ * Step Pool holds, and optionally the Positions it is narrowed to.
  */
-const actorRule = z.strictObject({
-  role: z.enum(baseRoles),
-  permission: z.enum(functionPermissions),
-  positions: z.array(key).min(1).optional(),
-});
+const pool = z.strictObject({ permission: z.enum(functionPermissions), positions: z.array(key).min(1).optional() });
+const actorRule = z.union([pool.extend({ role: z.enum(baseRoles) }), pool.extend({ raiser: z.literal(true) })]);
 export type ActorRule = z.infer<typeof actorRule>;
+
+/** Who holds a Step as the checks compare them: a Participant role, or the raiser as its own holder. */
+export type StepHolder = BaseRole | "raiser";
+
+/** The holder an actor rule names; null on a terminal Step. */
+export const actorHolder = (actor: ActorRule | null | undefined): StepHolder | null =>
+  actor == null ? null : "raiser" in actor ? "raiser" : actor.role;
+
+/** The role an actor rule names, null for the raiser (whose role is the item's) and on a terminal Step. */
+export const actorRole = (actor: ActorRule | null | undefined): BaseRole | null => (actor == null || "raiser" in actor ? null : actor.role);
 
 /** Who of the raiser's Company reads a Draft: all its Members who see the item, or only the Member holding it (ADR 0019). */
 export const draftsVisibleTo = ["company", "author"] as const;
@@ -202,7 +210,7 @@ export type WorkflowStepRow = {
   key: string;
   name: BilingualText;
   stage_key: string;
-  /** `{ base_role, permission, positions? }`; `{}` on a terminal Step. */
+  /** `{ base_role, permission, positions? }`, or `{ raiser: true, permission, positions? }` (RP-622); `{}` on a terminal Step. */
   actor_rule: Record<string, unknown>;
   outcome_mode: "none" | "recommend_code" | "issue_code" | "inspection_result" | "confirm_code";
   /** Null (left out): the default (RP-514). */
@@ -307,9 +315,13 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
   };
 }
 
-/** An actor rule as stored names its role `base_role`; the definition calls it `role`. */
-const actorFromRule = ({ base_role, ...rest }: Record<string, unknown>) => ({ role: base_role, ...rest });
-const ruleFromActor = ({ role, ...rest }: ActorRule): Record<string, unknown> => ({ base_role: role, ...rest });
+/** An actor rule as stored names its role `base_role`; the definition calls it `role`. A raiser rule is stored as it is. */
+const actorFromRule = ({ base_role, ...rest }: Record<string, unknown>) => (base_role === undefined ? rest : { role: base_role, ...rest });
+const ruleFromActor = (actor: ActorRule): Record<string, unknown> => {
+  if ("raiser" in actor) return { ...actor };
+  const { role, ...rest } = actor;
+  return { base_role: role, ...rest };
+};
 
 type TransitionParts = Pick<WorkflowTransitionRow, "rules" | "actions" | "notifications">;
 
