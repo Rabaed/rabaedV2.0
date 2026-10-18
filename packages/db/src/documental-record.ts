@@ -3,7 +3,7 @@ import { sql, type Transaction } from "kysely";
 import type { Database } from "./schema.ts";
 
 // The Documental Record's reads and writes for the worker's record job
-// (RP-620; migration 20270612000000_documental_record.sql; workflow-engine.md
+// (RP-620; migration 20270617000000_documental_record.sql; workflow-engine.md
 // §7). The job itself, which makes and seals the PDF, is the worker's
 // (apps/worker/src/record). Both run as the app role with no Member set.
 
