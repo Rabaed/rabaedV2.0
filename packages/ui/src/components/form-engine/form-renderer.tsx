@@ -38,6 +38,7 @@ import {
   type DocumentSummary,
   type OptionList,
   type SupplierChoice,
+  type ChecklistTemplateChoice,
   type TableColumn,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
@@ -53,6 +54,7 @@ import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices, type BuiltInFieldLabels } from "./built-in-fields.tsx";
 import { AttachmentsField, attachmentsLimits, takesUpload, type AttachmentsFieldLabels } from "./attachments-field.tsx";
 import { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./checklist-field.tsx";
+import { ChecklistTemplateField, templateOptions, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
 import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabels } from "./link-question-field.tsx";
 import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
@@ -118,6 +120,7 @@ export type FormRendererLabels = {
     /** A saved supplier since withdrawn, named: it stays the choice until another is chosen. */
     withdrawn: (name: string) => string;
   };
+  checklistTemplate: ChecklistTemplateFieldLabels;
 };
 
 export type FormRendererProps = {
@@ -175,6 +178,12 @@ export type FormRendererProps = {
    * supplier, withdrawn too, is named (read mode).
    */
   suppliers?: readonly SupplierChoice[];
+  /**
+   * The Project's Checklist Templates (each one's latest Version) and the Versions the
+   * item holds, for `checklist_template` fields (RP-651): the active ones of the chosen
+   * Trade are offered (edit mode), and the picked one's name and items are shown.
+   */
+  checklistTemplates?: readonly ChecklistTemplateChoice[];
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
@@ -354,6 +363,7 @@ function currencySymbol(currency: string, locale: Locale): string {
 const noPeople: FormChoices = { members: [], participants: [] };
 const noOptionLists: readonly OptionList[] = [];
 const noSuppliers: readonly SupplierChoice[] = [];
+const noTemplates: readonly ChecklistTemplateChoice[] = [];
 
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
@@ -376,7 +386,7 @@ const withNone = (field: { required: unknown }, options: { value: string; label:
 function control(
   // A file field holds files, not a value, and a checklist's photos are files too: FormRenderer draws them
   // (attachmentsControl, photosControl, checklistControl), and a link question too (linkQuestionControl).
-  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" | "approved_supplier" }> | TableColumn,
+  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" | "approved_supplier" | "checklist_template" }> | TableColumn,
   value: unknown,
   locale: Locale,
   text: FormRendererLabels,
@@ -594,6 +604,7 @@ export function FormRenderer({
   files,
   links = noLinks,
   suppliers = noSuppliers,
+  checklistTemplates = noTemplates,
   onChange,
   idPrefix = "form",
   sectionTitles = "shown",
@@ -680,14 +691,39 @@ export function FormRenderer({
     };
   }
 
-  /** Clears the suppliers chosen for another Trade than `trade`: changing the Trade clears them (form-engine.md §2.12). */
+  /**
+   * Clears the suppliers and Checklist Templates chosen for another Trade than `trade`: changing
+   * the Trade clears them (form-engine.md §2.12, §3.2).
+   */
   function suppliersOfOtherTrades(trade: string): Record<string, undefined> {
     const cleared: Record<string, undefined> = {};
     for (const field of byKey.values()) {
-      const chosen = suppliers.find((s) => s.id === answers[field.key]);
-      if (field.type === "approved_supplier" && chosen && chosen.tradeId !== trade) cleared[field.key] = undefined;
+      const choices = field.type === "approved_supplier" ? suppliers : field.type === "checklist_template" ? checklistTemplates : [];
+      const chosen = choices.find((c) => c.id === answers[field.key]);
+      if (chosen && chosen.tradeId !== trade) cleared[field.key] = undefined;
     }
     return cleared;
+  }
+
+  /** A `checklist_template` field: the active templates of the chosen Trade, the one already picked, and its items below. */
+  function checklistTemplateControl(field: Extract<AnswerField, { type: "checklist_template" }>): { element: ReactNode; group?: boolean } {
+    return {
+      // The Field labels the select; with nothing to offer, it labels the line saying why.
+      group: templateOptions(answers[field.key], textOf(answers.trade), checklistTemplates, locale, labels.checklistTemplate).length === 0,
+      element: (
+        <ChecklistTemplateField
+          name={field.key}
+          value={answers[field.key]}
+          tradeId={textOf(answers.trade)}
+          choices={checklistTemplates}
+          required={field.required === true}
+          mode="edit"
+          locale={locale}
+          labels={labels.checklistTemplate}
+          onChange={(v) => onChange?.({ [field.key]: v })}
+        />
+      ),
+    };
   }
 
   /** An `approved_supplier` field: the approved suppliers of the chosen Trade, and the one already chosen, withdrawn or not. */
@@ -830,6 +866,19 @@ export function FormRenderer({
         <ChecklistField field={field} value={value} mode="read" locale={locale} labels={labels.checklist} files={own} onOpen={files?.onOpen} />
       ) : null;
     }
+    if (field.type === "checklist_template") {
+      return !checklistTemplates.some((t) => t.id === value && t.name) ? null : (
+        <ChecklistTemplateField
+          value={value}
+          tradeId={textOf(answers.trade)}
+          choices={checklistTemplates}
+          required={false}
+          mode="read"
+          locale={locale}
+          labels={labels.checklistTemplate}
+        />
+      );
+    }
     if (field.type === "work_item_ref") {
       return linkChoicesOf(value).length > 0 ? (
         <LinkQuestionField label={field.label[locale]} value={value} mode="read" locale={locale} labels={labels.linkQuestion} links={links} />
@@ -916,7 +965,9 @@ export function FormRenderer({
                           ? linkQuestionControl(field)
                           : field.type === "approved_supplier"
                             ? supplierControl(field)
-                            : control(
+                            : field.type === "checklist_template"
+                              ? checklistTemplateControl(field)
+                              : control(
                         field,
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],

@@ -331,6 +331,10 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
             ) select 1 from up where ${named(sql.ref("up.name"))}))`;
     conditions.push(sql`(r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text)) or ${onCard})`);
   }
+  // One Package's submittals (RP-647), through app.package_items: the items of a Package the viewer
+  // sees that they see too, none of one they don't (work_item.package_id is not theirs to read). So a
+  // Package they don't see matches nothing, exactly like a made-up id.
+  if (q.packageId !== undefined) conditions.push(sql`r.id in (select app.package_items(${q.packageId}::uuid))`);
   if (q.type.length > 0) conditions.push(sql`r.type_code = any(${q.type}::text[])`);
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);

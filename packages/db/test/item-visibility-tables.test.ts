@@ -27,6 +27,8 @@ const REVIEWED: Record<string, string> = {
     "The item's Documents (V19 arrivals apply). created_at and confirmed_at are not granted: they keep the real time of a Document added during the Draft; app.document_times gives the upload time, no earlier than the Creation Date once numbered (RP-399).",
   work_item_link:
     "The item's Links (V19 arrivals apply); the linked item's id only through app.work_item_links. created_at is not granted: app.work_item_links gives it no earlier than the Creation Date once numbered (RP-399).",
+  work_item_checklist:
+    "The Checklist Template Version the item picked and its copied name and items (RP-651): Project content every Project Member reads anyway (V20), fixed from the first Submit, so it never changes while a Send Back has the item back at its raiser (no V19 arrivals). copied_at is not granted: it keeps the real time of a pick made during the Draft.",
 };
 
 // Tables of that shape with a column that reaches viewers it shouldn't, kept

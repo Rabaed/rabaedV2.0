@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { PackageDetail, PackageSummary, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
+import type { PackageComments, PackageDetail, PackageSummary, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -776,5 +776,173 @@ describe("RP-642: a cancelled or discarded item doesn't hold the Package open", 
     const p = await getPackage(at.c1Pm, pkg.id);
     expect(p).toMatchObject({ status: "in_progress" });
     expect(p.items.map((i) => i.id)).toEqual([revised]);
+  });
+});
+
+// RP-647: filter Submittals by Package, and the Comments raised from a Package's
+// submittals on its page (spec RP-616 stories 35, 37; visibility.md RP-647-1). On a
+// Tower of its own, with a submittal Type whose Workflow has Code B: its rows become
+// Comments, raised_from-linked to the item, seen where the item is (RP-434).
+describe("RP-647: the packageId filter and the Package's Comments (scenario RP-647-1)", () => {
+  const CODE_B_TYPE = "PKGCB";
+  let tower: Tower;
+  let k1Electrical: Caller; // A K1 engineer who sees Electrical only.
+  let c2: Caller; // Another Contractor's engineer, who sees none of the Package's items.
+  let pkg = { id: "", number: "" };
+  let other = { id: "", number: "" }; // Another Package of C1's.
+  let electricalItems: string[] = [];
+  let mechanicalItem = "";
+  let loose = ""; // A submittal in no Package.
+
+  /** The ids of the Submittals List `by` reads with `query`. */
+  const listedIds = async (by: Caller, query: string) => {
+    const res = await ok(by.get(`/v1/projects/${tower.projectId}/work-items?page=1&pageSize=50&${query}`), 200);
+    return ((res.json().items as WorkItemRow[]).map((r) => r.id)).sort();
+  };
+
+  /** A submittal of the Code B Type raised by C1's engineer, at C1's PM's internal review, picked up. */
+  async function readyForPmB(title: string, trade: string): Promise<string> {
+    const id = (
+      await ok(
+        tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, {
+          type: CODE_B_TYPE,
+          title,
+          answers: { model: title, trade, location: tower.buildingA },
+        }),
+        201,
+      )
+    ).json().id as string;
+    await take(tower.c1Engineer, id, "send_for_review");
+    await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    return id;
+  }
+
+  /** K1's manager closes Submitted item `id` with Code B, its table of comments `rows`. */
+  async function codeB(id: string, rows: string[]) {
+    await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+    await take(tower.k1Manager, id, "send_to_manager");
+    await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+    await take(tower.k1Manager, id, "approve_b", { answers: { remarks: "Approved with comments", items_to_create: rows.map((comment) => ({ comment })) } });
+  }
+
+  beforeAll(async () => {
+    await addSendBackType(migrator, CODE_B_TYPE, { en: "Package Code B submittal", ar: "اعتماد حزمة بملاحظات" }, sendBackSchema, { withApproveB: true });
+    tower = await buildTower(api, { c1, k1 }, "TWK");
+    const participants = (await c1.caller.get(`/v1/projects/${tower.projectId}/participants`)).json().participants as {
+      id: string;
+      company: { id: string };
+    }[];
+    const k1Participant = participants.find((p) => p.company.id === k1.company.companyId)!.id;
+    k1Electrical = await projectMember(api, k1, k1Participant, ["engineer"], { trade: only(tower.electrical) });
+    const c2Company = await api.authorizedPerson();
+    const c2Participant = await api.addParticipant(c1.caller, tower.projectId, c2Company.company, "contractor");
+    await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
+    c2 = await projectMember(api, c2Company, c2Participant, ["engineer"]);
+    await ok(
+      c2.post(`/v1/projects/${tower.projectId}/work-items`, {
+        type: CODE_B_TYPE,
+        title: "C2's own",
+        answers: { model: "C2's own", trade: tower.electrical, location: tower.buildingA },
+      }),
+      201,
+    );
+
+    pkg = await createPackage(tower.c1Pm, "Switchgear – Tower 2", tower.projectId);
+    electricalItems = [await readyForPmB("Switchgear EL 1", tower.electrical), await readyForPmB("Switchgear EL 2", tower.electrical)];
+    mechanicalItem = await readyForPmB("Switchgear ME 1", tower.mechanical);
+    for (const id of [...electricalItems, mechanicalItem]) await ok(addItem(tower.c1Pm, pkg.id, id));
+    expect((await ok(submitPackage(tower.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(3);
+
+    other = await createPackage(tower.c1Pm, "Other set", tower.projectId);
+    const inOther = await readyForPmB("Other set EL", tower.electrical);
+    await ok(addItem(tower.c1Pm, other.id, inOther));
+    await ok(submitPackage(tower.c1Pm, other.id), 200);
+    loose = await readyForPmB("Loose EL", tower.electrical);
+    await take(tower.c1Pm, loose, "submit");
+    electricalItems.sort();
+  });
+
+  it("filters the List to the Package's submittals the viewer sees", async () => {
+    const q = `packageId=${pkg.id}`;
+    for (const by of [tower.c1Pm, tower.k1Manager]) expect(await listedIds(by, q)).toEqual([...electricalItems, mechanicalItem].sort());
+    expect(await listedIds(k1Electrical, q)).toEqual(electricalItems);
+    // Unfiltered, the other Package's item and the loose one are listed too.
+    expect(await listedIds(tower.k1Manager, "")).toEqual(expect.arrayContaining([loose]));
+    expect((await listedIds(tower.k1Manager, "")).length).toBe(5);
+  });
+
+  it("RP-647-1: a Package the viewer doesn't see filters to nothing, the same answer as a made-up id", async () => {
+    const path = (id: string) => `/v1/projects/${tower.projectId}/work-items?page=1&pageSize=50&packageId=${id}`;
+    // C2 has its own Draft in the List, and sees none of the Package's items.
+    expect((await listedIds(c2, "")).length).toBe(1);
+    // C1's Open Package holds a Draft: K1 sees neither.
+    const open = await createPackage(tower.c1Pm, "Still open", tower.projectId);
+    await ok(addItem(tower.c1Pm, open.id, await readyForPmB("Still open EL", tower.electrical)));
+    expect(await listedIds(tower.c1Pm, `packageId=${open.id}`)).toHaveLength(1);
+    for (const [by, id] of [
+      [c2, pkg.id],
+      [tower.k1Manager, open.id],
+      [k1Electrical, open.id],
+    ] as const) {
+      const unseen = await ok(by.get(path(id)), 200);
+      expect(unseen.json().items).toEqual([]);
+      expect(unseen.body).toBe((await ok(by.get(path(randomUUID())), 200)).body);
+      expect(unseen.body).not.toContain(id);
+    }
+    expect((await c2.get(path("not-an-id"))).statusCode).toBe(400);
+  });
+
+  describe("the Comments raised from its submittals' Code B", () => {
+    const comments = async (by: Caller, id = pkg.id): Promise<PackageComments> => (await ok(by.get(`/v1/packages/${id}/comments`), 200)).json();
+    let numbers = new Map<string, string>(); // Each item's Document Number.
+
+    beforeAll(async () => {
+      await codeB(electricalItems[0]!, ["Add the short-circuit rating", "Confirm the IP class"]);
+      await codeB(electricalItems[1]!, ["Label the feeders"]);
+      await codeB(mechanicalItem, ["Show the ventilation louvres"]);
+      await codeB(loose, ["Not in any Package"]);
+      numbers = new Map(
+        await Promise.all([...electricalItems, mechanicalItem].map(async (id) => [id, (await detail(tower.k1Manager, id)).documentNumber!] as const)),
+      );
+    });
+
+    it("lists each Comment the viewer sees, with the submittal it was raised from, for information", async () => {
+      for (const by of [tower.c1Pm, tower.k1Manager]) {
+        const read = await comments(by);
+        expect(read.forInformation).toBe(true);
+        expect(read.comments.map((c) => [c.title, c.raisedFrom]).sort()).toEqual(
+          [
+            ["Add the short-circuit rating", { id: electricalItems[0], documentNumber: numbers.get(electricalItems[0]!) }],
+            ["Confirm the IP class", { id: electricalItems[0], documentNumber: numbers.get(electricalItems[0]!) }],
+            ["Label the feeders", { id: electricalItems[1], documentNumber: numbers.get(electricalItems[1]!) }],
+            ["Show the ventilation louvres", { id: mechanicalItem, documentNumber: numbers.get(mechanicalItem) }],
+          ].sort(),
+        );
+        for (const c of read.comments) {
+          expect(c.type.code).toBe("CMT");
+          expect(c.documentNumber).toMatch(/\S/);
+          expect(c.stage.key).toBe("open");
+        }
+      }
+    });
+
+    it("are not part of the Package: not in its items, its counts or its status, which is Done", async () => {
+      const p = await getPackage(tower.k1Manager, pkg.id);
+      expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems, mechanicalItem].sort());
+      expect(p).toMatchObject({ status: "done", counts: { total: 3, open: 0, codes: { B: 3 } } });
+      expect(await listedIds(tower.k1Manager, `packageId=${pkg.id}`)).toEqual([...electricalItems, mechanicalItem].sort());
+    });
+
+    it("RP-647-1: a Member who doesn't see a Comment doesn't read it there; one who sees no item reads the plain 404", async () => {
+      const narrowed = await comments(k1Electrical);
+      expect(narrowed.comments.map((c) => c.title).sort()).toEqual(["Add the short-circuit rating", "Confirm the IP class", "Label the feeders"]);
+      const body = (await k1Electrical.get(`/v1/packages/${pkg.id}/comments`)).body;
+      for (const text of ["ventilation", mechanicalItem, numbers.get(mechanicalItem)!, "Not in any Package"]) expect(body).not.toContain(text);
+
+      await expectHidden(c2.get(`/v1/packages/${pkg.id}/comments`));
+      await expectHidden(c2.get(`/v1/packages/${randomUUID()}/comments`));
+      // Another Package's submittals raised none.
+      expect((await comments(tower.c1Pm, other.id)).comments).toEqual([]);
+    });
   });
 });

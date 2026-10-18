@@ -26,6 +26,8 @@ const answers = {
   // The Approved Supplier List (RP-592): not an active Scope of the supplier's Trade; a supplier the Trade already lists.
   scope_not_found: () => new HttpError(422, "scope_not_found"),
   supplier_exists: () => new HttpError(409, "supplier_exists"),
+  // A Checklist Template retired: it takes no new Version (RP-651).
+  template_retired: () => new HttpError(409, "template_retired"),
   too_deep: () => new HttpError(422, "too_deep"),
   value_not_found: () => new HttpError(422, "value_not_found"),
   exceeds_participant: () => new HttpError(422, "exceeds_participant"),
