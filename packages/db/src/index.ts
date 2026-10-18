@@ -2,6 +2,7 @@ export * from "./app-role-check.ts";
 export * from "./bootstrap.ts";
 export * from "./client.ts";
 export * from "./config.ts";
+export * from "./documental-record.ts";
 export * from "./local-database.ts";
 export * from "./migrate.ts";
 export * from "./numbering.ts";

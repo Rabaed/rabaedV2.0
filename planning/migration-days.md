@@ -63,3 +63,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270706 | RP-623 | 32 | reply_screen_files |
 | 20270705 | RP-668 | 33 | comment_not_raised_directly |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
+| 20270708 | RP-85 | 21 | stored_file |
+| 20270709 | RP-620 | 22 | documental_record |
