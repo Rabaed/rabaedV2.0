@@ -1425,7 +1425,8 @@
     "unavailable": "حدث خطأ. حاول مرة أخرى.",
     "revisionCreated": "مراجعة جديدة",
     "cancelled": "ملغى",
-    "sentBack": "أرجعته إليكم {company}"
+    "sentBack": "أرجعته إليكم {company}",
+    "packageSubmitted": "قدّم {company} {count, plural, one {تقديم واحد} two {تقديمان} few {{n} تقديمات} many {{n} تقديمًا} other {{n} تقديم}}"
   },
   "handover": {
     "title": "تسليم خطوات {name}",

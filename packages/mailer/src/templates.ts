@@ -1,6 +1,7 @@
 import {
   directionOf,
   formatNumber,
+  intlLocaleOf,
   isWatchOutcome,
   stepAgeReportGroups,
   watchOutcomeNames,
@@ -39,6 +40,8 @@ export interface EmailTemplateValues {
   "notification-watched-event": NotificationEmailValues;
   /** An item was Sent Back to the Member's Participant (RP-356). */
   "notification-sent-back": NotificationEmailValues;
+  /** A Package's submittals reached the Member with one Submit Package (RP-643). */
+  "notification-package-submitted": NotificationEmailValues;
   /** The daily digest of the notifications routed to it (RP-358). */
   "daily-digest": DailyDigestValues;
   /** The weekly Step Age report (RP-359). */
@@ -176,6 +179,8 @@ const notificationCopy = {
     updated: "Updated",
     by: (company: string) => `By ${company}.`,
     signedBy: (name: string) => `Signed by ${name}.`,
+    packageSubmitted: (company: string, count: number) =>
+      `${company} Submitted ${count === 1 ? "1 submittal" : `${formatNumber(count, "en")} submittals`}`,
     open: "Open it on Rabaed:",
     settings: "You choose which emails you get in your notification settings on Rabaed.",
     digestSubject: "Your Rabaed daily digest",
@@ -190,6 +195,7 @@ const notificationCopy = {
     updated: "حُدّث",
     by: (company: string) => `من ${company}.`,
     signedBy: (name: string) => `وقّعه ${name}.`,
+    packageSubmitted: (company: string, count: number) => `قدّم ${company} ${arabicSubmittals(count)}`,
     open: "افتحه على ربائد:",
     settings: "تختار الرسائل التي تصلك من إعدادات الإشعارات على ربائد.",
     digestSubject: "ملخصك اليومي من ربائد",
@@ -236,7 +242,12 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   };
 }
 
-type Happening = Pick<NotificationEmailContent, "step" | "event">;
+type Happening = Pick<NotificationEmailContent, "step" | "event" | "package">;
+
+/** A Package Submit: who Submitted it (the owning Company, by name) and how many of its submittals the recipient sees. */
+function packageHappened(locale: Locale, { package: pkg }: Happening): string {
+  return pkg ? notificationCopy[locale].packageSubmitted(pkg.companyName[locale], pkg.count) : notificationCopy[locale].updated;
+}
 
 /**
  * Each kind of notification: the template it is emailed with; what happened, in
@@ -258,6 +269,11 @@ const notificationKinds = {
     template: "notification-sent-back",
     happened: (locale: Locale) => notificationCopy[locale].sentBack,
     details: (locale: Locale, { event }: Happening) => actedBy(locale, event),
+  },
+  package_submitted: {
+    template: "notification-package-submitted",
+    happened: packageHappened,
+    details: (): Paragraph[] => [],
   },
 } as const satisfies Record<
   NotificationEmailKind,
@@ -374,6 +390,23 @@ export const emailTemplates = Object.keys(templates) as EmailTemplate[];
 // Arabic counts 3 to 10 with the plural, and 11 and up (and 1, 2) with the singular.
 function arabicMinutes(count: number): string {
   return count >= 3 && count <= 10 ? "دقائق" : "دقيقة";
+}
+
+// A count of submittals in Arabic, as the web says it (messages/ar.json "submittals").
+function arabicSubmittals(count: number): string {
+  const n = formatNumber(count, "ar");
+  switch (new Intl.PluralRules(intlLocaleOf("ar")).select(count)) {
+    case "one":
+      return "تقديم واحد";
+    case "two":
+      return "تقديمان";
+    case "few":
+      return `${n} تقديمات`;
+    case "many":
+      return `${n} تقديمًا`;
+    default:
+      return `${n} تقديم`;
+  }
 }
 
 /** Only web links go in an email; anything else (javascript:, data:) is a bug upstream. */

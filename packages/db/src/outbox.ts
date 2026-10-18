@@ -7,7 +7,9 @@ import type {
   NotificationEmail,
   NotificationEmailContent,
   NotificationEmailKind,
+  NotificationEmailPackage,
 } from "@rabaed/domain";
+import { packageNumber } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "./client.ts";
 import type { Database } from "./schema.ts";
@@ -43,15 +45,39 @@ interface NotificationRow {
   to_address: string;
   language: Locale;
   kind: NotificationEmailKind;
-  work_item_id: string;
+  /** Null for a Package Submit's, with the package_* columns instead (RP-643). */
+  work_item_id: string | null;
   document_number: string | null;
-  subject: string;
+  subject: string | null;
   step_name: BilingualText | null;
   event_type: NotificationEvent["type"] | null;
   transition_label: BilingualText | null;
   outcome: string | null;
   company_name: BilingualText | null;
   signer_name: BilingualText | null;
+  package_id: string | null;
+  package_seq: number | null;
+  package_name: BilingualText | null;
+  package_company_name: BilingualText | null;
+  item_count: number | null;
+}
+
+/** A Package Submit's Package, as its recipient sees it; null for any other notification. */
+function packageOf(row: NotificationRow): NotificationEmailPackage | null {
+  return row.package_id
+    ? { id: row.package_id, number: packageNumber(row.package_seq!), name: row.package_name!, companyName: row.package_company_name!, count: row.item_count! }
+    : null;
+}
+
+/**
+ * What a notification email says of its subject: the item's number and Subject, or a
+ * Package Submit's Package number and name (in `language`).
+ */
+function aboutOf(row: NotificationRow, language: Locale): Pick<NotificationEmailContent, "workItemId" | "documentNumber" | "subject" | "package"> {
+  const pkg = packageOf(row);
+  return pkg
+    ? { workItemId: null, documentNumber: pkg.number, subject: pkg.name[language], package: pkg }
+    : { workItemId: row.work_item_id, documentNumber: row.document_number, subject: row.subject ?? "" };
 }
 
 /** What happened, for a notification about an event; null for one about a Step. */
@@ -81,9 +107,7 @@ export function notificationEmailHandler(send: SendNotificationEmail): OutboxHan
       language: email.language,
       kind: email.kind,
       content: {
-        workItemId: email.work_item_id,
-        documentNumber: email.document_number,
-        subject: email.subject,
+        ...aboutOf(email, email.language),
         step: email.step_name,
         event: eventOf(email),
       },
@@ -114,13 +138,22 @@ export function notificationDigestHandler(send: SendNotificationDigest): OutboxH
     for (const r of rows) {
       let project = projects.get(r.project_id);
       if (!project) projects.set(r.project_id, (project = { projectId: r.project_id, name: r.project_name, items: [] }));
-      let item = items.get(r.work_item_id);
+      const about = aboutOf(r, first.language);
+      // An item's entries together; a Package Submit's on its own line, by its Package.
+      const key = about.package ? `package:${about.package.id}` : `item:${r.work_item_id}`;
+      let item = items.get(key);
       if (!item) {
-        item = { workItemId: r.work_item_id, documentNumber: r.document_number, subject: r.subject, entries: [] };
-        items.set(r.work_item_id, item);
+        item = {
+          workItemId: about.workItemId,
+          ...(about.package ? { packageId: about.package.id } : {}),
+          documentNumber: about.documentNumber,
+          subject: about.subject,
+          entries: [],
+        };
+        items.set(key, item);
         project.items.push(item);
       }
-      item.entries.push({ kind: r.kind, step: r.step_name, event: eventOf(r) });
+      item.entries.push({ kind: r.kind, step: r.step_name, event: eventOf(r), ...(about.package ? { package: about.package } : {}) });
     }
     await send({ to: first.to_address, language: first.language, projects: [...projects.values()] });
   };

@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, drainOutbox, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -265,5 +265,102 @@ describe("Submit Package (RP-638): the status follows the items", () => {
     expect(
       await outcome(c1Pm, sql`select app.record_package_submit(${packageId}::uuid, ${[left]}::uuid[], ${randomUUID()}::uuid, now()) as outcome`),
     ).toBe("item_not_submitted");
+  });
+});
+
+describe("scenario RP-588-2 (RP-643: notification): a Package Submit's one notification counts what its Member sees", () => {
+  let packageId = "";
+  const items: string[] = [];
+  let k1Electrical = ""; // A K1 engineer narrowed to Electrical.
+  let k1Participant = "";
+  const notificationOf = async (as: string) =>
+    call<{ id: string; work_item_id: string | null }>(
+      as,
+      sql`select id, work_item_id from notification where kind = 'package_submitted' and package_id = ${packageId}::uuid`,
+    );
+  const packageOf = async (as: string, notificationId: string) =>
+    call<{ package_id: string; seq: number; name: unknown; company_name: unknown; item_count: number }>(
+      as,
+      sql`select * from app.notification_package(${notificationId}::uuid)`,
+    );
+  const setTrade = (values: string[]) =>
+    outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${k1Electrical}::uuid, 'trade', false, ${values}::uuid[], now()) as outcome`);
+
+  beforeAll(async () => {
+    const mechanical = (
+      await call<{ value_id: string }>(
+        c1.ap,
+        sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'trade', null, 'ME', '{"en": "ME", "ar": "ME"}'::jsonb)`,
+      )
+    )[0]!.value_id;
+    k1Participant = (await migrator.query("select id from participant where project_id = $1 and company_id = $2", [projectId, k1.id])).rows[0].id;
+    k1Electrical = await member(k1.id, "electrical engineer");
+    await call(k1.ap, sql<{ outcome: string }>`select app.add_project_member(${k1Participant}::uuid, ${k1Electrical}::uuid, now())`);
+    expect(await outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${k1Electrical}::uuid, 'location', true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+    expect(await setTrade([electrical])).toBe("set");
+    expect(await outcome(k1.ap, sql`select app.set_project_member_positions(${k1Participant}::uuid, ${k1Electrical}::uuid, ${["engineer"]}::text[]) as outcome`)).toBe("set");
+
+    packageId = (await createPackage(c1Pm, "Bathrooms – Tower 1, seam 2")).package_id;
+    for (const [title, trade] of [["E1", electrical], ["E2", electrical], ["E3", electrical], ["M1", mechanical]] as const) {
+      const [created] = await call<{ outcome: string; work_item_id: string }>(
+        c1.member,
+        sql`select outcome, work_item_id from app.create_work_item(
+          ${projectId}::uuid, ${TYPE}, ${title}, app.latest_form_version(${TYPE}), ${JSON.stringify({ model: title })}::jsonb,
+          ${trade}::uuid, ${buildingA}::uuid, now())`,
+      );
+      const id = created!.work_item_id;
+      expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+      expect(await pickUp(c1Pm, id)).toBe("picked_up");
+      expect(await addItem(c1Pm, packageId, id)).toBe("added");
+      items.push(id);
+    }
+    await drainOutbox(app);
+    // Submit Package: each item's Submit, then its record, in one transaction (as the api does).
+    await withMember(app, c1Pm, async (trx) => {
+      for (const id of items) {
+        const r = await sql<{ outcome: string }>`
+          select app.take_transition(${id}::uuid, 'submit', '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
+        `.execute(trx);
+        expect(r.rows[0]!.outcome).toBe("applied");
+      }
+      const r = await sql<{ outcome: string }>`
+        select app.record_package_submit(${packageId}::uuid, ${items}::uuid[], ${randomUUID()}::uuid, now()) as outcome
+      `.execute(trx);
+      expect(r.rows[0]!.outcome).toBe("recorded");
+    });
+    await drainOutbox(app);
+  });
+
+  it("the Electrical engineer reads one, of 3, never 4; K1's engineer who sees everything one of 4; neither a Step reached of its items", async () => {
+    const [narrowed] = await notificationOf(k1Electrical);
+    expect(narrowed).toMatchObject({ work_item_id: null });
+    expect(await packageOf(k1Electrical, narrowed!.id)).toEqual([
+      { package_id: packageId, seq: expect.any(Number), name: name("Bathrooms – Tower 1, seam 2"), company_name: { en: "C1", ar: "C1" }, item_count: 3 },
+    ]);
+    const [everything] = await notificationOf(k1.member);
+    expect((await packageOf(k1.member, everything!.id))[0]!.item_count).toBe(4);
+    for (const who of [k1Electrical, k1.member]) {
+      expect(await call(who, sql<{ id: string }>`select id from notification where work_item_id = any (${items}::uuid[])`)).toEqual([]);
+    }
+  });
+
+  it("reads nothing of another Member's, nor which items a notification holds", async () => {
+    const [everything] = await notificationOf(k1.member);
+    expect(await packageOf(k1Electrical, everything!.id)).toEqual([]);
+    expect(
+      (await call<{ n: number }>(k1Electrical, sql`select app.package_notification_count(${everything!.id}::uuid) as n`))[0]!.n,
+    ).toBe(0);
+    await expect(
+      withMember(app, k1Electrical, (trx) => sql`select work_item_id from notification_package_item`.execute(trx)),
+    ).rejects.toThrow(/permission denied/);
+    // C2 and the Owner got none.
+    for (const who of [c2.member, ow.member]) expect(await notificationOf(who)).toEqual([]);
+  });
+
+  it("is gone from the bell once its Member sees none of its items", async () => {
+    expect(await setTrade([])).toBe("set");
+    expect(await notificationOf(k1Electrical)).toEqual([]);
+    expect(await setTrade([electrical])).toBe("set");
+    expect(await notificationOf(k1Electrical)).toHaveLength(1);
   });
 });

@@ -1425,7 +1425,8 @@
     "unavailable": "Something went wrong. Try again.",
     "revisionCreated": "New Revision",
     "cancelled": "Cancelled",
-    "sentBack": "Sent Back to you by {company}"
+    "sentBack": "Sent Back to you by {company}",
+    "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}"
   },
   "handover": {
     "title": "Hand over {name}'s Steps",
