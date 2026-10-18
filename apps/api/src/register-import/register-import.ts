@@ -1,4 +1,4 @@
-import { withMember, type Db } from "@rabaed/db";
+import { withMember, type Database, type Db } from "@rabaed/db";
 import {
   registerImportMapping,
   registerTopRows,
@@ -12,9 +12,8 @@ import {
   type RegisterImportSummary,
   type RegisterSheet,
 } from "@rabaed/domain";
-import { sql } from "kysely";
+import { sql, type RawBuilder, type Transaction } from "kysely";
 import { checkedOutcome } from "../outcomes.ts";
-import { getRaisableTypes } from "../work-items/work-items.ts";
 import { openSpreadsheet, SpreadsheetError, type SheetTable, type Spreadsheet, type SpreadsheetRefusal } from "./spreadsheet.ts";
 
 // The Submittal Register Import (RP-637, spec RP-631). The api reads the register
@@ -41,11 +40,19 @@ export type PreviewRegisterImportResult =
 const confirmRefusals = ["not_found", "project_closed", "nothing_to_import", "preview_outdated"] as const;
 export type ConfirmRegisterImportResult = { ok: true; rowsCreated: number } | { ok: false; reason: (typeof confirmRefusals)[number] };
 
-/** Whether the Member may import on the Project: one of their Projects, with a Submittals Type they may raise. */
-async function mayImport(db: Db, memberId: string, projectId: string): Promise<NotTheirs | null> {
-  const raisable = await getRaisableTypes(db, memberId, projectId);
-  if (!raisable) return { ok: false, reason: "not_found" };
-  return raisable.types.length === 0 ? { ok: false, reason: "forbidden" } : null;
+/**
+ * Whether the Member may import on the Project: one of their Projects, with a Submittals Type
+ * they may raise by the rule the preview and the confirm check (app.register_import_raisable_types).
+ */
+function mayImport(db: Db, memberId: string, projectId: string): Promise<NotTheirs | null> {
+  return withMember(db, memberId, async (trx) => {
+    const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    if (!project) return { ok: false, reason: "not_found" };
+    const { rows } = await sql<{ raisable: number }>`
+      select count(*)::int as raisable from app.register_import_raisable_types(${projectId}::uuid)
+    `.execute(trx);
+    return rows[0]!.raisable === 0 ? { ok: false, reason: "forbidden" } : null;
+  });
 }
 
 /** Runs `read` on the uploaded register, answering the reader's refusal as a result. */
@@ -123,8 +130,9 @@ export async function previewRegisterImport(
   });
 }
 
-type SummaryRow = {
+type ImportRow = {
   id: string;
+  project_id: string;
   file_name: string;
   status: "previewed" | "created";
   run_by_member_id: string;
@@ -132,7 +140,27 @@ type SummaryRow = {
   rows_total: number;
   rows_rejected: number;
   rows_created: number | null;
+  sheet: string;
+  header_row: number;
+  headers: string[];
+  mapping: unknown;
 };
+type Trx = Transaction<Database>;
+type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping">;
+
+/** The imports the Member reads (row-level security) matching `where`, by file name, with who ran each. */
+function importsWhere(trx: Trx, where: RawBuilder<unknown>): Promise<ImportRow[]> {
+  return sql<ImportRow>`
+    select i.id, i.project_id, i.file_name, i.status, i.run_by_member_id, m.full_name as run_by_name,
+      i.rows_total, i.rows_rejected, i.rows_created, i.sheet, i.header_row, i.headers, i.mapping
+    from submittal_register_import i
+    join member m on m.id = i.run_by_member_id
+    where ${where}
+    order by lower(i.file_name), i.id
+  `
+    .execute(trx)
+    .then((r) => r.rows);
+}
 
 const toSummary = (r: SummaryRow): RegisterImportSummary => ({
   id: r.id,
@@ -153,28 +181,14 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
   return withMember(db, memberId, async (trx) => {
     const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!project) return null;
-    const { rows } = await sql<SummaryRow>`
-      select i.id, i.file_name, i.status, i.run_by_member_id, m.full_name as run_by_name, i.rows_total, i.rows_rejected, i.rows_created
-      from submittal_register_import i
-      join member m on m.id = i.run_by_member_id
-      where i.project_id = ${projectId}::uuid and i.status = 'created'
-      order by lower(i.file_name), i.id
-    `.execute(trx);
-    return rows.map(toSummary);
+    return (await importsWhere(trx, sql`i.project_id = ${projectId}::uuid and i.status = 'created'`)).map(toSummary);
   });
 }
 
 /** One import the Member reads, with its rows; null when they don't (another Company's, a colleague's preview, or none). */
 export function getRegisterImport(db: Db, memberId: string, importId: string): Promise<RegisterImport | null> {
   return withMember(db, memberId, async (trx) => {
-    const { rows: found } = await sql<SummaryRow & { project_id: string; sheet: string; header_row: number; headers: string[]; mapping: unknown }>`
-      select i.id, i.project_id, i.file_name, i.status, i.run_by_member_id, m.full_name as run_by_name,
-        i.rows_total, i.rows_rejected, i.rows_created, i.sheet, i.header_row, i.headers, i.mapping
-      from submittal_register_import i
-      join member m on m.id = i.run_by_member_id
-      where i.id = ${importId}::uuid
-    `.execute(trx);
-    const r = found[0];
+    const [r] = await importsWhere(trx, sql`i.id = ${importId}::uuid`);
     if (!r) return null;
     const { rows } = await sql<{
       row_no: number;

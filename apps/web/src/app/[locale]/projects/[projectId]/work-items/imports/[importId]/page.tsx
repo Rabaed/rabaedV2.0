@@ -38,8 +38,7 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
         <KeyValues
           items={[
             { key: "by", label: t("list.importedBy"), value: record.runBy.name[locale] },
-            { key: "sheet", label: t("detail.sheet"), value: <bdi>{record.sheet}</bdi> },
-            { key: "headerRow", label: t("detail.headerRow"), value: n(record.headerRow) },
+            { key: "sheet", label: t("detail.sheet"), value: <bdi>{t("detail.worksheetValue", { worksheet: record.sheet, row: n(record.headerRow) })}</bdi> },
             { key: "subject", label: t("fields.subject"), value: <bdi>{columnOf(record.mapping.subject, () => "—")}</bdi> },
             { key: "type", label: t("fields.type"), value: <bdi>{columnOf(record.mapping.type, (v) => t("detail.everyRow", { value: v }))}</bdi> },
             { key: "trade", label: t("fields.trade"), value: <bdi>{columnOf(record.mapping.trade, (v) => t("detail.everyRow", { value: fixedTrade(v) }))}</bdi> },

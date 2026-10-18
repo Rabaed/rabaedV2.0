@@ -54,6 +54,8 @@ create table submittal_register_import (
 create index submittal_register_import_project_id_idx on submittal_register_import (project_id);
 create index submittal_register_import_participant_id_idx on submittal_register_import (participant_id);
 create index submittal_register_import_run_by_member_id_idx on submittal_register_import (run_by_member_id);
+-- The created-event trigger looks an import up by it on every `created` event: set on none but a running confirm.
+create index submittal_register_import_confirm_txid_idx on submittal_register_import (confirm_txid) where confirm_txid is not null;
 
 create table submittal_register_import_row (
   import_id uuid not null references submittal_register_import (id) on delete cascade,
@@ -139,6 +141,51 @@ create function app.register_import_type_raisable(
   $$;
 revoke all on function app.register_import_type_raisable(uuid, uuid, text, uuid, text) from public;
 
+-- The caller as an importer on p_project_id, found as app.create_work_item finds a raiser:
+-- their active Project Member row of their own Company's active Participant. No row off
+-- their Projects.
+create function app.register_importer(p_project_id uuid)
+  returns table (project_member_id uuid, participant_id uuid, base_role text)
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      return query
+        select pm.id, pm.participant_id, r.base_role
+        from project_member pm
+        join participant p on p.id = pm.participant_id
+        join project_role r on r.id = p.project_role_id
+        where pm.project_id = p_project_id and pm.member_id = app.current_member_id() and pm.status = 'active'
+          and p.status = 'active' and p.company_id = app.current_company_id()
+          and p_project_id in (select app.current_project_ids());
+    end
+  $$;
+revoke all on function app.register_importer(uuid) from public;
+
+-- The Submittals Types the caller may raise on p_project_id, by the rule above: the one
+-- definition the import uses, in the preview, the confirm and the api's "may import".
+-- (app.create_work_item keeps its own copy of the rule, which it checks again on confirm.)
+-- None off their Projects.
+create function app.register_import_raisable_types(p_project_id uuid)
+  returns table (work_item_type_id uuid, code text)
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      return query
+        select t.id, t.code::text
+        from app.register_importer(p_project_id) i
+        cross join work_item_type t
+        where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
+          and app.register_import_type_raisable(p_project_id, t.id, t.code, i.participant_id, i.base_role)
+        order by t.code;
+    end
+  $$;
+revoke all on function app.register_import_raisable_types(uuid) from public;
+grant execute on function app.register_import_raisable_types(uuid) to rabaed_app;
+
 -- Preview ---------------------------------------------------------------------
 
 -- Checks the rows the api read from a register and keeps them as a `previewed`
@@ -161,14 +208,16 @@ create function app.preview_register_import(
       v_at timestamptz := greatest(p_now, now());
       v_project_member_id uuid;
       v_participant_id uuid;
-      v_base_role text;
       v_trade_dimension uuid;
       v_raisable uuid[];
       v_fixed_type_id uuid;
       v_import_id uuid;
       v_row jsonb;
       v_subject text;
+      -- A row's Type and Trade as recorded (the cell, or a fixed value), and trimmed to match.
+      v_type_cell text;
       v_type_text text;
+      v_trade_cell text;
       v_trade_text text;
       v_type_id uuid;
       v_trade_id uuid;
@@ -176,14 +225,8 @@ create function app.preview_register_import(
       v_total integer := 0;
       v_rejected integer := 0;
     begin
-      -- The caller, as app.create_work_item finds them.
-      select pm.id, pm.participant_id, r.base_role into v_project_member_id, v_participant_id, v_base_role
-      from project_member pm
-      join participant p on p.id = pm.participant_id
-      join project_role r on r.id = p.project_role_id
-      where pm.project_id = p_project_id and pm.member_id = app.current_member_id() and pm.status = 'active'
-        and p.status = 'active' and p.company_id = app.current_company_id()
-        and p_project_id in (select app.current_project_ids());
+      select i.project_member_id, i.participant_id into v_project_member_id, v_participant_id
+      from app.register_importer(p_project_id) i;
       if v_project_member_id is null then
         return query select 'not_found'::text, null::uuid;
         return;
@@ -198,11 +241,7 @@ create function app.preview_register_import(
         raise exception 'a register import takes an array of at most 2000 rows' using errcode = '22023';
       end if;
 
-      v_raisable := array(
-        select t.id from work_item_type t
-        where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
-          and app.register_import_type_raisable(p_project_id, t.id, t.code, v_participant_id, v_base_role)
-      );
+      v_raisable := array(select r.work_item_type_id from app.register_import_raisable_types(p_project_id) r);
       if cardinality(v_raisable) = 0 then
         return query select 'forbidden'::text, null::uuid;
         return;
@@ -241,7 +280,8 @@ create function app.preview_register_import(
         end if;
 
         -- The Type: a Submittals Type by its code or its English or Arabic name, as written.
-        v_type_text := case when p_fixed_type is null then btrim(coalesce(v_row ->> 'type', '')) else p_fixed_type end;
+        v_type_cell := case when p_fixed_type is null then coalesce(v_row ->> 'type', '') else p_fixed_type end;
+        v_type_text := btrim(v_type_cell);
         v_type_id := v_fixed_type_id;
         if p_fixed_type is null then
           select t.id into v_type_id from work_item_type t
@@ -261,12 +301,15 @@ create function app.preview_register_import(
         -- written; then within the importer's Visibility, as app.create_work_item checks it.
         v_trade_id := p_fixed_trade_id;
         if p_fixed_trade_id is null then
-          v_trade_text := btrim(coalesce(v_row ->> 'trade', ''));
+          v_trade_cell := coalesce(v_row ->> 'trade', '');
+          v_trade_text := btrim(v_trade_cell);
           select dv.id into v_trade_id from dimension_value dv
           where dv.dimension_id = v_trade_dimension and v_trade_text in (dv.code, dv.name ->> 'en', dv.name ->> 'ar')
           order by dv.sort, dv.code limit 1;
         else
-          select dv.code into v_trade_text from dimension_value dv where dv.id = p_fixed_trade_id;
+          -- A fixed Trade is recorded as its code.
+          select dv.code into v_trade_cell from dimension_value dv where dv.id = p_fixed_trade_id;
+          v_trade_text := v_trade_cell;
         end if;
         if v_trade_text = '' then
           v_reasons := array_append(v_reasons, 'trade_missing');
@@ -280,9 +323,7 @@ create function app.preview_register_import(
           import_id, row_no, cells, subject, type_text, trade_text, work_item_type_id, trade_id, reasons
         ) values (
           v_import_id, (v_row ->> 'row_no')::integer, coalesce(v_row -> 'cells', '[]'), coalesce(v_row ->> 'subject', ''),
-          case when p_fixed_type is null then coalesce(v_row ->> 'type', '') else p_fixed_type end,
-          case when p_fixed_trade_id is null then coalesce(v_row ->> 'trade', '') else v_trade_text end,
-          v_type_id, v_trade_id, v_reasons
+          v_type_cell, v_trade_cell, v_type_id, v_trade_id, v_reasons
         );
         v_total := v_total + 1;
         if cardinality(v_reasons) > 0 then
@@ -368,14 +409,22 @@ create function app.confirm_register_import(p_import_id uuid, p_now timestamptz)
       end if;
 
       update submittal_register_import set confirm_txid = txid_current() where id = p_import_id;
+      -- SQLSTATE RI001 ("a previewed row no longer passes") is raised and caught only here:
+      -- the block's Drafts are undone and the import answers 'preview_outdated'.
       begin
         for v_row in
-          select r.row_no, btrim(r.subject) as subject, t.code as type_code, r.trade_id
+          select r.row_no, btrim(r.subject) as subject, t.code as type_code, r.trade_id,
+            t.id in (select x.work_item_type_id from app.register_import_raisable_types(v_import.project_id) x) as raisable
           from submittal_register_import_row r
           join work_item_type t on t.id = r.work_item_type_id
           where r.import_id = p_import_id and cardinality(r.reasons) = 0
           order by r.row_no
         loop
+          -- Its Type is checked again by the preview's rule first, so app.create_work_item's
+          -- own refusal of a role (42501) is never mistaken for an outdated row.
+          if not v_row.raisable then
+            raise exception 'a previewed row no longer passes' using errcode = 'RI001';
+          end if;
           -- The same path as a single Draft (apps/api createWorkItem): the Type's Form to
           -- start from, no answers yet, the Trade, then the answers' times.
           select c.outcome, c.work_item_id into v_created
@@ -393,7 +442,7 @@ create function app.confirm_register_import(p_import_id uuid, p_now timestamptz)
           where import_id = p_import_id and row_no = v_row.row_no;
           v_count := v_count + 1;
         end loop;
-      exception when sqlstate 'RI001' or insufficient_privilege then
+      exception when sqlstate 'RI001' then
         -- The block's writes are undone; only the working column is left to clear.
         update submittal_register_import set confirm_txid = null where id = p_import_id;
         return query select 'preview_outdated'::text, null::integer;

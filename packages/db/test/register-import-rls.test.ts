@@ -250,6 +250,43 @@ describe("RP-589-1: only the importing Participant reads an import", () => {
   });
 });
 
+describe("A created row's Draft is given only to a reader who sees it", () => {
+  it("names the Electrical Draft to a C1 colleague narrowed to Electrical, and not the Mechanical one, though both were created", async () => {
+    const imported = (await preview(c1.member)).import_id!;
+    expect((await confirm(c1.member, imported)).outcome).toBe("created");
+    const all = await results(c1.member, imported);
+    const narrowed = await results(c1Narrowed, imported);
+    expect(narrowed.map((r) => [r.row_no, r.created, r.work_item_id !== null])).toEqual([
+      [2, true, true],
+      [3, true, false],
+      [4, false, false],
+    ]);
+    expect(narrowed[0]!.work_item_id).toBe(all[0]!.work_item_id);
+    expect(all[1]!.work_item_id).not.toBeNull();
+  });
+});
+
+describe("A Type the importer may not raise", () => {
+  it("makes its rows bad, beside the reasons of the rest", async () => {
+    // A Submittals Type with no Workflow: known by its code, raisable by nobody.
+    await migrator.query(`
+      with d as (insert into workflow_definition (owner_kind, name) values ('rabaed', '{"en": "No Workflow", "ar": "No Workflow"}'::jsonb) returning id)
+      insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+      select 'rabaed', 'submittals', 'RGX', '{"en": "Register test", "ar": "Register test"}'::jsonb, d.id, 'review_code',
+        (select form_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR')
+      from d`);
+    const previewed = await preview(c1.member, [row(2, "Panels", "RGX", "Electrical"), row(3, "", "RGX", "Nope")]);
+    const reasons = await call<{ row_no: number; reasons: string[] }>(
+      c1.member,
+      sql`select row_no, reasons from submittal_register_import_row where import_id = ${previewed.import_id}::uuid order by row_no`,
+    );
+    expect(reasons).toEqual([
+      { row_no: 2, reasons: ["type_not_allowed"] },
+      { row_no: 3, reasons: ["subject_missing", "type_not_allowed", "trade_unknown"] },
+    ]);
+  });
+});
+
 describe("A row is never created outside its raiser's Visibility", () => {
   it("makes the row bad at the preview", async () => {
     const previewed = await preview(c1Narrowed);

@@ -1947,7 +1947,7 @@
       "asText": "تُقرأ الخلايا كما خُزّنت لا كما تظهر: اكتب الأرقام المرجعية كنص، ليبقى 0012 كما هو."
     },
     "sheet": {
-      "fileDetail": "{worksheets, plural, one {ورقة واحدة} two {ورقتان} few {# أوراق} many {# ورقة} other {# ورقة}} · {size} MB",
+      "fileDetail": "{worksheets, plural, one {ورقة واحدة} two {ورقتان} few {{n} أوراق} many {{n} ورقة} other {{n} ورقة}} · {size} ميغابايت",
       "sheet": "الورقة",
       "rows": "{count, plural, one {صف واحد} other {{n} صف}}",
       "headerRow": "أسماء الأعمدة في الصف",
@@ -2000,7 +2000,7 @@
       "unsupportedType": "يمكن استيراد ملفات .xlsx و.csv فقط.",
       "unreadable": "لا يمكن قراءة هذا الملف كمصنف .xlsx أو ملف .csv.",
       "notUtf8": "هذا الملف .csv ليس بترميز UTF-8. احفظه في Excel بصيغة \"CSV UTF-8\" وحاول مجددًا.",
-      "tooLarge": "هذا الملف كبير جدًا. الحد الأقصى {size} MB.",
+      "tooLarge": "هذا الملف كبير جدًا. الحد الأقصى {size} ميغابايت.",
       "tooManyRows": "في هذه الورقة أكثر من 2,000 صف. قسّمها إلى ملفات أصغر.",
       "headerRowNotFound": "لا يوجد صف كهذا في الورقة.",
       "emptyHeaderRow": "هذا الصف فارغ: اختر الصف الذي فيه أسماء الأعمدة.",
@@ -2037,7 +2037,8 @@
       "result": "المسودة",
       "nothingToImport": "لا يوجد صف جاهز للاستيراد.",
       "openDraft": "فتح المسودة",
-      "draftCreated": "تم إنشاء المسودة"
+      "draftCreated": "تم إنشاء المسودة",
+      "notYours": "لا يستورده إلا عضو يمكنه إنشاؤه"
     },
     "list": {
       "file": "الملف",
@@ -2052,7 +2053,8 @@
       "sheet": "الورقة",
       "headerRow": "أسماء الأعمدة في الصف",
       "everyRow": "{value}، لكل الصفوف",
-      "rows": "صفوف هذا الاستيراد"
+      "rows": "صفوف هذا الاستيراد",
+      "worksheetValue": "{worksheet}، أسماء الأعمدة في الصف {row}"
     }
   }
 }

@@ -1947,7 +1947,7 @@
       "asText": "Cells are read as stored, not as shown: type references you need kept as written as text, so 0012 stays 0012."
     },
     "sheet": {
-      "fileDetail": "{worksheets, plural, one {1 worksheet} other {# worksheets}} · {size} MB",
+      "fileDetail": "{worksheets, plural, one {1 worksheet} other {{n} worksheets}} · {size} MB",
       "sheet": "Worksheet",
       "rows": "{count, plural, one {{n} row} other {{n} rows}}",
       "headerRow": "Column headings are in row",
@@ -2037,7 +2037,8 @@
       "result": "Draft",
       "nothingToImport": "No row is ready to import.",
       "openDraft": "Open the Draft",
-      "draftCreated": "Draft created"
+      "draftCreated": "Draft created",
+      "notYours": "Only a Member who may raise it can import it"
     },
     "list": {
       "file": "Register",
@@ -2052,7 +2053,8 @@
       "sheet": "Worksheet",
       "headerRow": "Column headings in row",
       "everyRow": "{value}, every row",
-      "rows": "Rows of this import"
+      "rows": "Rows of this import",
+      "worksheetValue": "{worksheet}, column headings in row {row}"
     }
   }
 }

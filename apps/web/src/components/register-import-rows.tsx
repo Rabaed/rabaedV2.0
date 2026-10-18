@@ -36,9 +36,26 @@ const subjectOf = (row: RegisterImportRow) => row.subject.trim() || "—";
 /** A matched value's name in the reader's language, else the cell as read. */
 const nameOr = (match: { name: { en: string; ar: string } } | null, text: string, locale: Locale) => match?.name[locale] ?? (text || "—");
 
+/**
+ * Where each reason is fixed: in the register; in the register or the mapping (a column
+ * mapped to the wrong field); or not by this Member (a Type they may not raise, a Trade
+ * outside their Visibility).
+ */
+const fixOf: Record<RegisterImportRowReason, "file" | "mapping" | "notYours"> = {
+  subject_missing: "file",
+  subject_too_long: "file",
+  type_missing: "mapping",
+  type_unknown: "mapping",
+  type_not_allowed: "notYours",
+  trade_missing: "mapping",
+  trade_unknown: "mapping",
+  trade_outside_visibility: "notYours",
+};
+
 /** The bad rows: Row, Subject, every reason, and where to fix it. */
 export function ErrorRows({ rows, label, onFixMapping }: { rows: RegisterImportRow[]; label: string; onFixMapping?: () => void }) {
   const t = useTranslations("registerImport.rows");
+  const locale = useLocale() as Locale;
   return (
     <Table label={label}>
       <TableHeader>
@@ -55,29 +72,40 @@ export function ErrorRows({ rows, label, onFixMapping }: { rows: RegisterImportR
             <EmptyState icon="circle-check" title={t("noErrors")} />
           </TableEmpty>
         ) : (
-          rows.map((row) => (
-            <TableRow key={row.rowNo} className="bg-danger-tint/40">
-              <TableCell className="tabular-nums text-muted">{row.rowNo}</TableCell>
-              <TableCell className="max-w-96 font-semibold [overflow-wrap:anywhere]">{subjectOf(row)}</TableCell>
-              <TableCell>
-                <RowReasons row={row} />
-              </TableCell>
-              <TableCell>
-                <span className="flex flex-col items-start gap-1.5 text-[12.5px] text-muted">
-                  <span className="inline-flex items-center gap-1">
-                    <Icon name="file" size={14} />
-                    {t("fixInFile")}
+          rows.map((row) => {
+            const fixes = new Set(row.reasons.map((reason) => fixOf[reason]));
+            return (
+              <TableRow key={row.rowNo} className="bg-danger-tint/40">
+                <TableCell className="tabular-nums text-muted">{formatNumber(row.rowNo, locale)}</TableCell>
+                <TableCell className="max-w-96 font-semibold [overflow-wrap:anywhere]">{subjectOf(row)}</TableCell>
+                <TableCell className="py-2.5">
+                  <RowReasons row={row} />
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <span className="flex flex-col items-start gap-1.5 text-[12.5px] text-muted">
+                    {(fixes.has("file") || fixes.has("mapping")) && (
+                      <span className="inline-flex items-center gap-1">
+                        <Icon name="file" size={14} />
+                        {t("fixInFile")}
+                      </span>
+                    )}
+                    {onFixMapping && fixes.has("mapping") && (
+                      <button type="button" onClick={onFixMapping} className="inline-flex items-center gap-1 rounded-xs border border-border px-2 py-0.5 font-semibold text-brand-fg hover:bg-hover">
+                        {t("mapFields")}
+                        <Icon name="arrow-right" size={14} />
+                      </button>
+                    )}
+                    {fixes.has("notYours") && (
+                      <span className="inline-flex items-center gap-1">
+                        <Icon name="lock" size={14} />
+                        {t("notYours")}
+                      </span>
+                    )}
                   </span>
-                  {onFixMapping && row.reasons.some((r) => r.startsWith("type_") || r.startsWith("trade_")) && (
-                    <button type="button" onClick={onFixMapping} className="inline-flex items-center gap-1 rounded-xs border border-border px-2 py-0.5 font-semibold text-brand-fg hover:bg-hover">
-                      {t("mapFields")}
-                      <Icon name="arrow-right" size={14} />
-                    </button>
-                  )}
-                </span>
-              </TableCell>
-            </TableRow>
-          ))
+                </TableCell>
+              </TableRow>
+            );
+          })
         )}
       </TableBody>
     </Table>
@@ -132,7 +160,19 @@ export function ImportRows({
                 )}
               </TableCell>
               <TableCell>
-                <bdi>{nameOr(row.trade.match, row.trade.text, locale)}</bdi>
+                {results ? (
+                  // The record: the cell as read, and the Trade it matched when they differ.
+                  <span className="flex flex-col">
+                    <bdi>{row.trade.text || "—"}</bdi>
+                    {row.trade.match && row.trade.match.name[locale] !== row.trade.text && (
+                      <small className="text-[12px] text-muted">
+                        <bdi>{row.trade.match.name[locale]}</bdi>
+                      </small>
+                    )}
+                  </span>
+                ) : (
+                  <bdi>{nameOr(row.trade.match, row.trade.text, locale)}</bdi>
+                )}
               </TableCell>
               {results && (
                 <TableCell>

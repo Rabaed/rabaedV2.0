@@ -312,7 +312,7 @@ export function RegisterImportWizard({
       {step === "sheet" && sheet && file && (
         <section aria-label={t("step.sheet")} className="flex flex-col gap-4">
           {fileCard(
-            t("sheet.fileDetail", { worksheets: sheet.sheets.length, size: n(Math.max(0.1, Math.round((file.sizeBytes / (1024 * 1024)) * 10) / 10)) }),
+            t("sheet.fileDetail", { worksheets: sheet.sheets.length, n: n(sheet.sheets.length), size: n(Math.max(0.1, Math.round((file.sizeBytes / (1024 * 1024)) * 10) / 10)) }),
             <Button variant="ghost" size="sm" onClick={startAgain}>
               {t("changeFile")}
             </Button>,
@@ -353,14 +353,14 @@ export function RegisterImportWizard({
               <p className="text-[13px] text-muted">{t("sheet.headerHelp")}</p>
             </div>
             <div className="flex min-w-0 flex-col gap-2">
-              <SheetGrid sheet={sheet} label={t("sheet.preview")} />
+              <SheetGrid sheet={sheet} label={t("sheet.preview")} n={n} />
               <div className="flex flex-wrap items-center gap-4 text-[12.5px] text-muted">
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden className="size-3 rounded-xs bg-brand-tint ring-1 ring-brand" />
                   {t("sheet.headerLegend")}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span aria-hidden className="size-3 rounded-xs bg-surface-subtle ring-1 ring-border" />
+                  <span aria-hidden className="size-3 rounded-xs bg-[repeating-linear-gradient(135deg,var(--color-surface-subtle)_0_2px,var(--color-surface)_2px_4px)] ring-1 ring-border" />
                   {t("sheet.skipped")}
                 </span>
                 <span className="ms-auto">{t("sheet.showing", { shown: n(sheet.top.length), rows: n(sheet.dataRows), count: sheet.dataRows })}</span>
@@ -629,7 +629,7 @@ function FixedChoice({
 }
 
 /** The chosen sheet's top rows as a grid, the header row marked and the rows above it skipped. */
-function SheetGrid({ sheet, label }: { sheet: RegisterSheet; label: string }) {
+function SheetGrid({ sheet, label, n }: { sheet: RegisterSheet; label: string; n: (value: number) => string }) {
   const width = Math.max(1, ...sheet.top.map((r) => r.cells.length));
   return (
     <div role="region" aria-label={label} tabIndex={0} className="overflow-auto rounded-md border border-border bg-surface">
@@ -655,14 +655,15 @@ function SheetGrid({ sheet, label }: { sheet: RegisterSheet; label: string }) {
                 className={cn(
                   "border-t border-border-subtle",
                   header && "bg-brand-tint font-semibold text-brand-fg",
-                  skipped && "bg-surface-subtle text-muted",
+                  // Skipped rows hatched, as the design draws them.
+                  skipped && "bg-[repeating-linear-gradient(135deg,var(--color-surface-subtle)_0_6px,var(--color-surface)_6px_12px)] text-muted",
                 )}
               >
                 <th scope="row" className={cn("border-e border-border-subtle px-2 py-1.5 text-center text-[12px] font-normal", header ? "bg-primary text-on-primary" : "text-muted")}>
-                  {row.rowNo}
+                  {n(row.rowNo)}
                 </th>
                 {Array.from({ length: width }, (_, column) => (
-                  <td key={column} className="max-w-64 truncate border-e border-border-subtle px-3 py-1.5">
+                  <td key={column} dir="auto" className="max-w-64 truncate border-e border-border-subtle px-3 py-1.5 text-start">
                     <bdi>{row.cells[column] ?? ""}</bdi>
                   </td>
                 ))}
