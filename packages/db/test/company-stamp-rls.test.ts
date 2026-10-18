@@ -52,8 +52,7 @@ async function company(engineer: string, name: string, others: number): Promise<
 }
 
 /** Saves the Company's logo or Stamp as `memberId`, as the api does once it stored the image under its key. */
-const save = (memberId: string | null, companyId: string, kind: string, mime = "image/png") => {
-  const key = `companies/${companyId}/${kind}/${randomUUID()}.png`;
+const save = (memberId: string | null, companyId: string, kind: string, mime = "image/png", key = `companies/${companyId}/${kind}/${randomUUID()}.png`) => {
   const sha = createHash("sha256").update(key).digest();
   return rowsAs<{ outcome: string }>(
     memberId,
@@ -121,6 +120,38 @@ describe("app.set_company_image", () => {
     const after = (await filesOf(companies.a)).stamp!;
     expect(after).not.toBe(before);
     expect((await migrator.query("select storage_key, sha256 from stored_file where id = $1", [before])).rows[0]).toEqual(kept);
+  });
+
+  it("refuses an image stored anywhere but under the Company's own folder for that kind, and changes nothing", async () => {
+    const before = await filesOf(companies.a);
+    for (const [kind, key] of [
+      ["stamp", `companies/${companies.b}/stamp/${randomUUID()}.png`],
+      ["stamp", `companies/${companies.a}/logo/${randomUUID()}.png`],
+      ["logo", `companies/${companies.a}/stamp/${randomUUID()}.png`],
+      ["stamp", `companies/${companies.a}/stamp`],
+      ["stamp", `companies/${companies.a}/stamps/${randomUUID()}.png`],
+      ["stamp", `companies/${companies.a}/stamp/../../${companies.b}/stamp/${randomUUID()}.png`],
+      ["stamp", `members/${people.ap}/signatures/${randomUUID()}.png`],
+      ["stamp", `x/companies/${companies.a}/stamp/${randomUUID()}.png`],
+    ] as const) {
+      await expect(save(people.ap, companies.a, kind, "image/png", key), key).rejects.toThrow(/stored under the Company's own/);
+    }
+    expect(await filesOf(companies.a)).toEqual(before);
+  });
+
+  it("still answers another Company's Member not_found, whatever the key, so it reveals nothing", async () => {
+    expect(await save(people.other, companies.a, "stamp", "image/png", `companies/${companies.b}/stamp/${randomUUID()}.png`)).toBe("not_found");
+  });
+});
+
+describe("app.member_company_has_stamp, as the app role", () => {
+  it("answers for the acting Member's own Company, and false for anyone else's", async () => {
+    expect(await save(people.ap, companies.a, "stamp")).toBe("set");
+    expect(await rowsAs(people.colleague, sql`select app.member_company_has_stamp(${people.colleague}::uuid) as has`)).toEqual([{ has: true }]);
+    // Company A has a Stamp, but another Company's Member reads it as nobody's.
+    expect(await rowsAs(people.other, sql`select app.member_company_has_stamp(${people.ap}::uuid) as has`)).toEqual([{ has: false }]);
+    expect(await rowsAs(null, sql`select app.member_company_has_stamp(${people.ap}::uuid) as has`)).toEqual([{ has: false }]);
+    expect(await rowsAs(people.other, sql`select app.member_company_has_stamp(${people.other}::uuid) as has`)).toEqual([{ has: false }]);
   });
 });
 

@@ -50,8 +50,7 @@ async function company(engineer: string, name: string, count: number): Promise<s
 }
 
 /** Saves a Signature as `memberId`, as the api does once it stored the image under its key. */
-const save = (memberId: string | null, method = "drawn", mime = "image/png") => {
-  const key = `members/${memberId}/signatures/${randomUUID()}.png`;
+const save = (memberId: string | null, method = "drawn", mime = "image/png", key = `members/${memberId}/signatures/${randomUUID()}.png`) => {
   const sha = createHash("sha256").update(key).digest();
   return rowsAs<{ id: string | null }>(
     memberId,
@@ -160,6 +159,33 @@ describe("member_signature", () => {
     await expect(save(people.a, "drawn", "image/svg+xml")).rejects.toThrow();
     await expect(save(people.a, "scanned")).rejects.toThrow();
     expect(await rowsAs(people.a, sql`select method from member_signature where active_to is null`)).toEqual([{ method: "typed" }]);
+  });
+
+  it("refuses an image stored anywhere but under the acting Member's own Signatures, and saves nothing", async () => {
+    const before = await rowsAs(people.a, sql`select id from member_signature where active_to is null`);
+    for (const key of [
+      `members/${people.b}/signatures/${randomUUID()}.png`,
+      `members/${people.colleague}/signatures/${randomUUID()}.png`,
+      `members/${people.a}/signatures`,
+      `members/${people.a}/signatures-old/${randomUUID()}.png`,
+      `members/${people.a}/stamp/${randomUUID()}.png`,
+      `members/${people.a}/signatures/../../${people.b}/signatures/${randomUUID()}.png`,
+      `companies/${people.a}/stamp/${randomUUID()}.png`,
+      `x/members/${people.a}/signatures/${randomUUID()}.png`,
+    ]) {
+      await expect(save(people.a, "drawn", "image/png", key), key).rejects.toThrow(/stored under the Member's own Signatures/);
+    }
+    expect(await rowsAs(people.a, sql`select id from member_signature where active_to is null`)).toEqual(before);
+  });
+});
+
+describe("app.active_signature_id, as the app role", () => {
+  it("gives the acting Member their own Signature in force, and nobody else's", async () => {
+    const own = await rowsAs<{ id: string }>(people.a, sql`select id from member_signature where active_to is null`);
+    expect(await rowsAs(people.a, sql`select app.active_signature_id(${people.a}::uuid) as id`)).toEqual(own);
+    // people.b has one in force, but the app role reads it as nobody's.
+    expect(await rowsAs(people.a, sql`select app.active_signature_id(${people.b}::uuid) as id`)).toEqual([{ id: null }]);
+    expect(await rowsAs(null, sql`select app.active_signature_id(${people.b}::uuid) as id`)).toEqual([{ id: null }]);
   });
 });
 

@@ -66,3 +66,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270710 | RP-85 | 21 | member_signature |
 | 20270711 | RP-85 | 21 | drop_is_signing |
 | 20270712 | RP-617 | 21 | company_stamp |
+| 20270713 | RP-632 | 21 | review_fixes |
