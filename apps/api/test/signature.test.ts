@@ -103,7 +103,8 @@ describe("Add Signature", () => {
     expect(res.statusCode, res.body).toBe(200);
     const { signature } = await mine(member.caller);
     expect(signature).toMatchObject({ method: "drawn", id: expect.any(String), activeFrom: expect.any(String) });
-    expect(res.json()).toEqual({ signature });
+    // The save answers with the same Signature (its link signed a moment earlier).
+    expect(res.json()).toMatchObject({ signature: { id: signature!.id, method: "drawn", activeFrom: signature!.activeFrom } });
     const stored = await fetch(signature!.image.url);
     expect(stored.status).toBe(200);
     expect(stored.headers.get("content-type")).toBe("image/png");
