@@ -762,7 +762,7 @@ function WorkItemListBody({
  * page), so the line says the page alone, there is no last page, and the numbers grow as the
  * pages are read.
  */
-function WorkItemPager({
+export function WorkItemPager({
   list,
   query,
   labels,
@@ -770,7 +770,11 @@ function WorkItemPager({
   hrefFor,
   linkAs,
   onQueryChange,
-}: Pick<WorkItemListProps, "list" | "query" | "labels" | "locale" | "hrefFor" | "linkAs"> & { onQueryChange: (next: Partial<WorkItemQuery>) => void }) {
+}: Pick<WorkItemListProps, "query" | "locale" | "hrefFor" | "linkAs"> & {
+  list: Pick<WorkItemListProps["list"], "page" | "stages">;
+  labels: Pick<WorkItemListLabels, "page" | "pageOf" | "items" | "pages" | "rowsPerPage" | "firstPage" | "previousPage" | "nextPage" | "lastPage">;
+  onQueryChange: (next: Partial<WorkItemQuery>) => void;
+}) {
   const n = (value: number) => formatNumber(value, locale);
   const page = list.page?.number ?? query.page ?? 1;
   const size = list.page?.size ?? query.pageSize ?? workItemPageSize;
@@ -812,7 +816,7 @@ const roleDots = ["bg-stage-internal-dot", "bg-stage-pending-dot", "bg-trade-el-
  * by its level, its values the Locations at that level, each with the ones above
  * it after its name so it reads in place (Floor 1 · Building 1).
  */
-function locationLevels(locations: WorkItemListData["filters"]["locations"], locale: Locale, labels: WorkItemListLabels) {
+export function locationLevels(locations: WorkItemListData["filters"]["locations"], locale: Locale, labels: Pick<WorkItemListLabels, "level">) {
   const byId = new Map(locations.map((l) => [l.id, l]));
   const above = (id: string | null, seen = new Set<string>()): BilingualText[] => {
     const l = id ? byId.get(id) : undefined;
