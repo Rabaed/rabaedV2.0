@@ -23,6 +23,9 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/activity/page.tsx` | `/projects/:projectId/activity` | Activity Feed at full height |
 | `projects/[projectId]/work-items/page.tsx` | `/projects/:projectId/work-items` | Submittals tab: List or Kanban |
 | `projects/[projectId]/work-items/new/page.tsx` | `/projects/:projectId/work-items/new` | Create a Submittal in Draft: Type picker, `?type=` (RP-590) |
+| `projects/[projectId]/work-items/import/page.tsx` | `/projects/:projectId/work-items/import` | Import register: the Submittal Register Import wizard (RP-637) |
+| `projects/[projectId]/work-items/imports/page.tsx` | `/projects/:projectId/work-items/imports` | Imports: the Company's Submittal Register Imports on the Project (RP-637) |
+| `projects/[projectId]/work-items/imports/[importId]/page.tsx` | `/projects/:projectId/work-items/imports/:importId` | One import: its mapping and each row's Draft or reasons (RP-637) |
 | `projects/[projectId]/[moduleTab]/page.tsx` | `/projects/:projectId/:moduleTab` | Any other Module's tab (Inspections, Snag List...), same List or Kanban |
 | `projects/[projectId]/settings/page.tsx` | `/projects/:projectId/settings` | Redirects to Document Numbering |
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |

@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
 import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
-import { Link, redirect } from "@/i18n/navigation";
+import { Link, getPathname, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
 /**
@@ -53,8 +53,9 @@ export async function ModuleWorkItemsPage({
     // Names sort in the reader's language.
     view === "list" ? getWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? getWorkItemBoard(projectId, module, query) : null,
-    // "+ New" offers only the Types the viewer may raise (RP-94).
-    snags ? getRaisableTypes(projectId, module) : null,
+    // The Snag List's "+ New" offers only the Types the viewer may raise (RP-94); the Submittals'
+    // Import register only to a Member who may raise one of its Types (RP-637).
+    snags || module === "submittals" ? getRaisableTypes(projectId, module) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !(list ?? board)) notFound();
@@ -78,6 +79,22 @@ export async function ModuleWorkItemsPage({
         {t("addSubmittal")}
       </Link>
     ) : undefined;
+  // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
+  // (the API refuses anyone else), with its Imports page, their Company's own.
+  const imports = await getTranslations("registerImport");
+  const moreActions =
+    raisable && raisable.types.length > 0
+      ? [
+          {
+            key: "import",
+            label: imports("importRegister"),
+            description: imports("importRegisterHint"),
+            icon: "upload" as const,
+            href: getPathname({ href: `/projects/${project.id}/work-items/import`, locale }),
+          },
+          { key: "imports", label: imports("imports"), icon: "history" as const, href: getPathname({ href: `/projects/${project.id}/work-items/imports`, locale }) },
+        ]
+      : undefined;
 
   return (
     <>
@@ -91,6 +108,7 @@ export async function ModuleWorkItemsPage({
           locale={locale}
           tableLabel={title}
           action={action}
+          moreActions={moreActions}
           projectId={project.id}
           module={module}
           hints={hints}
@@ -104,6 +122,7 @@ export async function ModuleWorkItemsPage({
             locale={locale}
             tableLabel={title}
             action={action}
+            moreActions={moreActions}
             projectId={project.id}
             module={module}
             projectName={project.name[locale]}

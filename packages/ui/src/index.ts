@@ -203,6 +203,8 @@ export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } f
 export { type WholeTableLabels } from "./components/views/work-item-export.ts";
 export {
   ExportMenu,
+  MoreActionsMenu,
+  type MoreAction,
   GroupMenu,
   type ExportScope,
   type ExportFormat,

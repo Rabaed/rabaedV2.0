@@ -97,6 +97,7 @@
     "searchPlaceholder": "Search number or Subject"
   },
   "workItemViews": {
+    "moreActions": "More actions",
     "list": {
       "toolbar": "Filters and sort",
       "all": "All",
@@ -2052,5 +2053,141 @@
     "invalid": "Give the copy both names, English and Arabic.",
     "notAllowed": "Only your Company's Authorized Person can save to the Library.",
     "failed": "It couldn't be saved. Try again."
+  },
+  "registerImport": {
+    "importRegister": "Import register",
+    "importRegisterHint": "Create Drafts from your .xlsx / .csv register",
+    "imports": "Imports",
+    "importsHint": "Your Company's registers imported into this Project, and what each created.",
+    "backToSubmittals": "Submittals",
+    "newImport": "New import",
+    "subtitle": "Each good row of your register becomes a Draft raised by you. Nothing is created until you confirm.",
+    "breadcrumb": "Where you are",
+    "steps": "Steps",
+    "step": {
+      "upload": "Upload",
+      "sheet": "Worksheet & column headings",
+      "map": "Map fields",
+      "validate": "Validate"
+    },
+    "back": "Back",
+    "next": "Next",
+    "changeFile": "Change register",
+    "upload": {
+      "drop": "Drop your submittal register here",
+      "browse": "Browse",
+      "anyLayout": "Any order of columns works: you map them next. Nothing is created until you confirm.",
+      "asText": "Cells are read as stored, not as shown: type references you need kept as written as text, so 0012 stays 0012."
+    },
+    "sheet": {
+      "fileDetail": "{worksheets, plural, one {1 worksheet} other {{n} worksheets}} · {size} MB",
+      "sheet": "Worksheet",
+      "rows": "{count, plural, one {{n} row} other {{n} rows}}",
+      "headerRow": "Column headings are in row",
+      "headerHelp": "Rows above it are skipped. Rows below it are read as submittals.",
+      "preview": "The worksheet's first rows",
+      "headerLegend": "Column headings",
+      "skipped": "Skipped",
+      "showing": "Showing the first {shown} rows · {count, plural, one {{rows} row} other {{rows} rows}} below the column headings"
+    },
+    "map": {
+      "fileDetail": "{worksheet} · column headings in row {headerRow} · {rows} rows · {columns} columns",
+      "required": "Required. Columns you don't map are ignored.",
+      "caption": "Each column of your register and the Rabaed field it fills",
+      "column": "Column in your register",
+      "field": "Rabaed field",
+      "example": "e.g.",
+      "fieldFor": "Rabaed field for {column}",
+      "dontMap": "Don't map this column",
+      "oneValue": "Or use one value for every row",
+      "fromColumn": "From column {column}",
+      "sameForEvery": "Same for every row",
+      "choose": "Choose…",
+      "validate": "Validate"
+    },
+    "fields": {
+      "subject": "Subject",
+      "type": "Type",
+      "trade": "Trade"
+    },
+    "validate": {
+      "checked": "rows checked",
+      "ready": "ready to import",
+      "leftOut": "rows with errors, left out",
+      "fixHint": "Fix the errors in your register, or in the earlier steps, then validate again; or import the {count, plural, one {good row} other {{good} good rows}} now.",
+      "again": "Validate again",
+      "tabs": "Rows",
+      "errors": "Errors",
+      "imported": "What will be imported",
+      "confirm": "{count, plural, one {Import 1 Draft} other {Import {n} Drafts}}"
+    },
+    "result": {
+      "created": "{count, plural, one {1 Draft created} other {{n} Drafts created}}",
+      "draftsLabel": "Drafts",
+      "leftOut": "Left out",
+      "open": "{count, plural, one {Open the Draft} other {Open the {n} Drafts}}",
+      "another": "Import another register",
+      "leftOutHelp": "Fix the rows left out in your register and import them in a new import."
+    },
+    "errors": {
+      "unsupportedType": "Only .xlsx and .csv registers can be imported.",
+      "unreadable": "This register can't be read as an .xlsx workbook or a .csv.",
+      "notUtf8": "This .csv isn't UTF-8. In Excel, save it as \"CSV UTF-8\" and try again.",
+      "tooLarge": "This register is too large. The limit is {size} MB.",
+      "tooManyRows": "This worksheet has over 2,000 rows. Split it into smaller registers.",
+      "headerRowNotFound": "The worksheet has no such row.",
+      "emptyHeaderRow": "That row is empty: choose the row with your column headings.",
+      "columnNotFound": "A mapped column isn't in the register any more. Map the fields again.",
+      "nothingToImport": "No row is ready to import.",
+      "previewOutdated": "Something in the Project changed since you validated. Validate again.",
+      "typeNotFound": "You can't raise that Type.",
+      "tradeNotFound": "That Trade isn't in this Project.",
+      "forbidden": "You can't raise Submittals on this Project.",
+      "notFound": "This Project isn't available.",
+      "projectClosed": "This Project is closed.",
+      "unavailable": "It couldn't be done. Try again."
+    },
+    "reasons": {
+      "subject_missing": "Subject empty",
+      "subject_too_long": "Subject over 200 characters",
+      "type_missing": "Type empty",
+      "type_unknown": "Type ‘{value}’ unknown",
+      "type_not_allowed": "You can't raise {value}",
+      "trade_missing": "Trade empty",
+      "trade_unknown": "Trade ‘{value}’ not in this Project",
+      "trade_outside_visibility": "Trade {value} is outside your Visibility"
+    },
+    "rows": {
+      "row": "Row",
+      "subject": "Subject",
+      "errors": "Errors",
+      "whereToFix": "Where to fix",
+      "noErrors": "Every row is ready to import.",
+      "fixInFile": "Fix in your register",
+      "mapFields": "Map fields",
+      "type": "Type",
+      "trade": "Trade",
+      "result": "Draft",
+      "nothingToImport": "No row is ready to import.",
+      "openDraft": "Open the Draft",
+      "draftCreated": "Draft created",
+      "notYours": "Only a Member who may raise it can import it"
+    },
+    "list": {
+      "file": "Register",
+      "importedBy": "Imported by",
+      "rows": "Rows",
+      "created": "Drafts created",
+      "leftOut": "Left out",
+      "emptyTitle": "No imports yet",
+      "empty": "Import your submittal register to create its Drafts at once."
+    },
+    "detail": {
+      "sheet": "Worksheet",
+      "headerRow": "Column headings in row",
+      "everyRow": "{value}, every row",
+      "rows": "Rows of this import",
+      "worksheetValue": "{worksheet}, column headings in row {row}"
+    }
   }
 }
