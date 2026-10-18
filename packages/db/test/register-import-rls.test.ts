@@ -443,7 +443,7 @@ describe("Matched values, checked again by the database (RP-639)", () => {
       expect(await outcome(c1Colleague, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_editable");
       for (const other of [k1.member, c2.member, ow.member]) {
         expect(await outcome(other, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_found");
-        expect(await call(other, sql`select paper_ref from work_item where id = ${draft}::uuid`)).toEqual([]);
+        expect(await call(other, sql<{ paper_ref: string }>`select paper_ref from work_item where id = ${draft}::uuid`)).toEqual([]);
       }
       expect(await outcome(c1.member, sql`select app.set_work_item_paper_ref(${draft}::uuid, ${"P".repeat(101)}, now()) as outcome`)).toBe("paper_ref_too_long");
       // The unique index keeps one per Participant even past the function's own check.
