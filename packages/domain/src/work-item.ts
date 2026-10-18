@@ -670,10 +670,17 @@ export const workItemDetail = workItemSummary.extend({
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**
-   * Its Comments (WF-11: the items raised from it, such as Code B's), open and closed,
-   * counting only those the viewer sees (visibility.md, Lists and counts).
+   * The items raised from it, open and closed, per Work Item Type (its Code B's Comments, the Snags
+   * raised from it), counting only those the viewer sees and never a discarded one (visibility.md,
+   * Lists and counts). A Type with none is absent; ordered by Type code.
    */
-  comments: z.object({ open: z.number().int().nonnegative(), closed: z.number().int().nonnegative() }),
+  raisedItems: z.array(
+    z.object({
+      type: z.object({ code: z.string(), name: bilingualText }),
+      open: z.number().int().nonnegative(),
+      closed: z.number().int().nonnegative(),
+    }),
+  ),
   /** What the viewer may press now. */
   actions: workItemActions,
 });
