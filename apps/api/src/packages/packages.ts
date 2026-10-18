@@ -3,6 +3,7 @@ import { withMember, type Db } from "@rabaed/db";
 import {
   packageNumber,
   type BilingualText,
+  type PackageComments,
   type PackageDetail,
   type PackageItem,
   type PackageNotReadyItem,
@@ -139,6 +140,54 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
     };
   });
 }
+
+/**
+ * The Comments raised from Package `packageId`'s submittals by their Code B (RP-647), for
+ * information: only the ones the Member sees, from the items they see (app.package_comments),
+ * each as the Snag List gives it, with the submittal it was raised from. Null when they don't
+ * see the Package.
+ */
+export function getPackageComments(db: Db, memberId: string, packageId: string, now: Date): Promise<PackageComments | null> {
+  return withMember(db, memberId, async (trx) => {
+    const pkg = await trx.selectFrom("package").select("project_id").where("id", "=", packageId).executeTakeFirst();
+    if (!pkg) return null;
+    const { rows: raised } = await sql<{ work_item_id: string; raised_from_id: string }>`
+      select work_item_id, raised_from_id from app.package_comments(${packageId}::uuid)
+    `.execute(trx);
+    const seen = await workItemRowsById(
+      trx,
+      { projectId: pkg.project_id, moduleKey: "snag_list" },
+      raised.map((r) => r.work_item_id),
+      now,
+    );
+    const sources = new Map((await itemsById(trx, [...new Set(raised.map((r) => r.raised_from_id))])).map((i) => [i.id, i]));
+    const comments = raised.flatMap(({ work_item_id, raised_from_id }) => {
+      const c = seen.get(work_item_id);
+      const source = sources.get(raised_from_id);
+      if (!c || !source) return [];
+      return [
+        {
+          id: c.id,
+          type: c.type,
+          documentNumber: c.documentNumber,
+          title: c.title,
+          stage: c.stage,
+          with: c.with,
+          outcome: c.outcome,
+          raisedFrom: { id: source.id, documentNumber: source.documentNumber },
+        },
+      ];
+    });
+    comments.sort(
+      (a, b) =>
+        compareText(a.raisedFrom.documentNumber, b.raisedFrom.documentNumber) || compareText(a.documentNumber, b.documentNumber) || compareText(a.id, b.id),
+    );
+    return { forInformation: true as const, comments };
+  });
+}
+
+/** Byte by byte, a missing value last. */
+const compareText = (a: string | null, b: string | null) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1);
 
 /** A Member creates a Package of their Participant on a Project. */
 export function createPackage(db: Db, memberId: string, projectId: string, name: BilingualText, now: Date): Promise<CreatePackageResult> {

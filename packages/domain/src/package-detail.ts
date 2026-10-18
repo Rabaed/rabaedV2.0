@@ -35,3 +35,20 @@ export const packageDetail = packageSummary.extend({
   }),
 });
 export type PackageDetail = z.infer<typeof packageDetail>;
+
+/**
+ * A Comment raised from one of a Package's submittals by its Code B (RP-647), as the
+ * viewer reads it in the Snag List, and the submittal it was raised from.
+ */
+export const packageComment = workItemRow
+  .pick({ id: true, type: true, documentNumber: true, title: true, stage: true, with: true, outcome: true })
+  .extend({ raisedFrom: packageItem.pick({ id: true, documentNumber: true }) });
+export type PackageComment = z.infer<typeof packageComment>;
+
+/**
+ * The Comments on a Package's page (spec RP-616 story 35): only those the viewer sees,
+ * raised from its submittals they see. For information: they are not part of the
+ * Package, and count in none of its counts or its status.
+ */
+export const packageComments = z.object({ forInformation: z.literal(true), comments: z.array(packageComment) });
+export type PackageComments = z.infer<typeof packageComments>;
