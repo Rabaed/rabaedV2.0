@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { actionFormProblems } from "./action-form.ts";
+import { actionFormProblems, isScreenFileField } from "./action-form.ts";
 import { bilingualText, type BilingualText } from "./company.ts";
-import { answerFields, formSchema, type FormSchema } from "./form.ts";
+import { answerFields, formFields, formSchema, type FormSchema } from "./form.ts";
 import type { PublishContext, SchemaProblemCode } from "./form-publish.ts";
 
 // Screens (ADR 0019, RP-516; workflow-engine.md §5.7; data-model.md screen). A Screen is
@@ -34,20 +34,24 @@ export const saveScreenDraftRequest = screenContent;
 export type SaveScreenDraftRequest = z.infer<typeof saveScreenDraftRequest>;
 
 /** One thing stopping a Screen Version from being published, about its field `key` (`invalid_schema`: `key` is the path). */
-export type ScreenProblem = { key: string; code: SchemaProblemCode | "invalid_schema" | "unknown_internal_field" };
+export type ScreenProblem = { key: string; code: SchemaProblemCode | "invalid_schema" | "unknown_internal_field" | "internal_file_field" };
 
 /**
  * What stops `schema`, with `internalFields` internal, from being published as a Screen
- * Version: where it isn't a Form schema, else the Action Form checks (publish check 7),
- * then every internal key that isn't one of its answer fields. Empty when there is nothing.
+ * Version: where it isn't a Form schema, else the Action Form checks (publish check 7, a
+ * Screen's file fields taken: ADR 0024), then every internal key that isn't one of its
+ * answer fields, and every internal file field (its files are shared once the Transition
+ * takes them). Empty when there is nothing.
  */
 export function screenProblems(schema: unknown, internalFields: readonly string[], context: PublishContext = {}): ScreenProblem[] {
   const parsed = formSchema.safeParse(schema);
   if (!parsed.success) return parsed.error.issues.map((i) => ({ key: i.path.join(".") || "(schema)", code: "invalid_schema" }));
   const answered = new Set(answerFields(parsed.data).map((f) => f.key));
+  const files = new Set(formFields(parsed.data).filter(isScreenFileField).map((f) => f.key));
   return [
-    ...actionFormProblems(parsed.data, context),
+    ...actionFormProblems(parsed.data, context, { screen: true }),
     ...internalFields.filter((key) => !answered.has(key)).map((key): ScreenProblem => ({ key, code: "unknown_internal_field" })),
+    ...internalFields.filter((key) => files.has(key)).map((key): ScreenProblem => ({ key, code: "internal_file_field" })),
   ];
 }
 

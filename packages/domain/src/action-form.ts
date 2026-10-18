@@ -28,9 +28,22 @@ export const notInActionForm = [
 
 /**
  * A checklist is taken (Screens, RP-516) while none of its items asks for photos: a
- * photo is a Document, and an Action Form holds no files.
+ * photo is a Document, and an Action Form holds no files of a checklist (Inspections, RP-27).
  */
 const takesPhotos = (field: FormField): boolean => field.type === "checklist" && field.items.some((i) => i.photo !== "off");
+
+/**
+ * The file fields a reply Screen may hold (ADR 0024, RP-623): their files are Documents on
+ * the item, added by the Participant holding it before the Transition and taken by it, never
+ * part of its event's payload. An Action Form of a Transition's own (no Screen) holds none.
+ */
+export const screenFileFieldTypes = ["attachments", "photos"] as const satisfies readonly FormFieldType[];
+
+/** Whether `field` is a file field a reply Screen may hold. */
+export const isScreenFileField = (field: FormField): boolean => (screenFileFieldTypes as readonly string[]).includes(field.type);
+
+/** What an Action Form is checked as: `screen` when a Screen gives it, which may hold file fields. */
+export type ActionFormOptions = { screen?: boolean };
 
 /** Keys the engine itself writes in a Transition's event, or beside it: no Action Form field takes them. */
 export const actionFormReservedKeys = ["document_number", "outcome", "internal_note"] as const;
@@ -38,14 +51,17 @@ export const actionFormReservedKeys = ["document_number", "outcome", "internal_n
 /**
  * What stops `schema` from being a Transition's Action Form: the Form's publish
  * checks (formSchemaProblems) less the Built-in Fields' (an Action Form has
- * none), then `not_in_action_form` and `reserved_key`. Empty when there is nothing.
+ * none), then `not_in_action_form` (a Screen's file fields excepted) and `reserved_key`.
+ * Empty when there is nothing.
  */
-export function actionFormProblems(schema: FormSchema, context: PublishContext = {}): SchemaProblem[] {
+export function actionFormProblems(schema: FormSchema, context: PublishContext = {}, options: ActionFormOptions = {}): SchemaProblem[] {
   const fields = formFields(schema);
+  const refused = (f: FormField) =>
+    ((notInActionForm as readonly string[]).includes(f.type) && !(options.screen === true && isScreenFileField(f))) || takesPhotos(f);
   return [
     ...formSchemaProblems(schema, context).filter((p) => !p.code.startsWith("built_in_")),
     ...fields
-      .filter((f) => (notInActionForm as readonly string[]).includes(f.type) || takesPhotos(f))
+      .filter(refused)
       .map((f): SchemaProblem => ({ key: f.key, code: "not_in_action_form" })),
     ...[...schema.sections, ...fields]
       .filter((item) => (actionFormReservedKeys as readonly string[]).includes(item.key))
@@ -53,8 +69,8 @@ export function actionFormProblems(schema: FormSchema, context: PublishContext =
   ];
 }
 
-/** A Transition of a Workflow Version as published: its key and its Action Form, if it has one. */
-export type TransitionActionForm = { key: string; actionForm: unknown };
+/** A Transition of a Workflow Version as published: its key and its Action Form, if it has one (`screen`: a Screen gives it). */
+export type TransitionActionForm = { key: string; actionForm: unknown; screen?: boolean };
 
 /** One problem with one Transition's Action Form: `invalid_schema` when it isn't a Form schema at all (`key` is the path). */
 export type ActionFormProblem = { transition: string; key: string; code: SchemaProblem["code"] | "invalid_schema" };
@@ -68,13 +84,13 @@ export function workflowActionFormProblems(
   transitions: readonly TransitionActionForm[],
   context: PublishContext = {},
 ): ActionFormProblem[] {
-  return transitions.flatMap(({ key: transition, actionForm }): ActionFormProblem[] => {
+  return transitions.flatMap(({ key: transition, actionForm, screen }): ActionFormProblem[] => {
     if (actionForm === null || actionForm === undefined) return [];
     const parsed = formSchema.safeParse(actionForm);
     if (!parsed.success) {
       return parsed.error.issues.map((i) => ({ transition, key: i.path.join(".") || "(schema)", code: "invalid_schema" }));
     }
-    return actionFormProblems(parsed.data, context).map((p) => ({ transition, ...p }));
+    return actionFormProblems(parsed.data, context, { screen: screen === true }).map((p) => ({ transition, ...p }));
   });
 }
 

@@ -336,7 +336,7 @@ function builtCheckProblems({ steps, transitions, context }: CheckInput): FoundP
     transitions.map((t) => ({ key: t.key, from: t.from, to: t.to, kind: t.kind, outcome: t.outcome })),
   );
   const formProblems = workflowActionFormProblems(
-    transitions.map((t) => ({ key: t.key, actionForm: t.actionForm })),
+    transitions.map((t) => ({ key: t.key, actionForm: t.actionForm, screen: t.screen !== undefined })),
     context.optionListIds === undefined ? {} : { optionListIds: context.optionListIds },
   );
   return [

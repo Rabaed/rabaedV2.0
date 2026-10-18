@@ -1741,6 +1741,7 @@
       "problemCodes": {
         "invalid_schema": "غير صالح",
         "unknown_internal_field": "مُعلَّم داخليًا وليس حقلًا في الشاشة",
+        "internal_file_field": "حقل ملفات، وهو مشترك دائمًا",
         "duplicate_key": "يستخدم مفتاحًا لحقل آخر",
         "unknown_reference": "يقرأ حقلًا لا يحمل إجابة",
         "condition_cycle": "له شروط يعتمد بعضها على بعض في حلقة",

@@ -71,8 +71,17 @@ export const startDocumentUploadRequest = z.object({
    * annotate view. It goes in the original's field and checklist item, so it names neither.
    */
   annotatedFromId: z.uuid().optional(),
+  /**
+   * The file is for the field `fieldKey` of a reply Screen a Transition out of the item's
+   * Step shows (ADR 0024, RP-623), not the Form's: added by the Participant holding the item.
+   */
+  reply: z.boolean().optional(),
 })
   .refine((file) => file.itemKey === undefined || file.fieldKey !== undefined, "An item needs its checklist field")
+  .refine(
+    (file) => file.reply !== true || (file.fieldKey !== undefined && file.itemKey === undefined && file.annotatedFromId === undefined),
+    "A reply file names its Screen field, and only that",
+  )
   .refine(
     (file) => file.annotatedFromId === undefined || (file.fieldKey === undefined && file.itemKey === undefined),
     "An annotated copy goes where its original is",
@@ -125,6 +134,13 @@ export const documentSummary = z.object({
   annotatedFromId: z.uuid().nullable(),
   /** An image's time and place, from its EXIF; null for any other file, or an image without them (visibility.md V13). */
   ...photoMetadata.shape,
+  /**
+   * For a file of a reply Screen's field (ADR 0024, RP-623; `fieldKey` is the Screen's):
+   * whether a Transition took it (frozen, and listed on that Transition in the history), or
+   * it still waits for one, seen only by the Participant holding the item. Absent for the
+   * Form's files and the Attachments'.
+   */
+  reply: z.object({ taken: z.boolean() }).optional(),
 });
 export type DocumentSummary = z.infer<typeof documentSummary>;
 
@@ -147,6 +163,11 @@ export const documentList = z.object({
   documents: z.array(documentSummary),
   /** The viewer may upload and remove Documents now (the raiser's Company, in Draft, with Attach). */
   canChange: z.boolean(),
+  /**
+   * The viewer may add and remove the files of the reply Screens' fields now (ADR 0024): a
+   * Member of the Participant holding the item, with Attach. Absent reads as false.
+   */
+  canChangeReplies: z.boolean().optional(),
   /** The limits an upload must keep to. */
   limits: z.object({ maxBytes: z.number().int().positive(), contentTypes: z.array(z.string()) }),
 });
