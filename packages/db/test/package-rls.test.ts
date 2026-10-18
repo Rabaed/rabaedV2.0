@@ -442,12 +442,14 @@ describe("scenario RP-588-2 (RP-643: notification): a Package Submit's one notif
     outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${k1Electrical}::uuid, 'trade', false, ${values}::uuid[], now()) as outcome`);
 
   beforeAll(async () => {
+    // A second Trade of its own (RP-641's describe adds ME).
     const mechanical = (
       await call<{ value_id: string }>(
         c1.ap,
-        sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'trade', null, 'ME', '{"en": "ME", "ar": "ME"}'::jsonb)`,
+        sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'trade', null, 'HV', '{"en": "HVAC", "ar": "HVAC"}'::jsonb)`,
       )
     )[0]!.value_id;
+    expect(mechanical).toBeTruthy();
     k1Participant = (await migrator.query("select id from participant where project_id = $1 and company_id = $2", [projectId, k1.id])).rows[0].id;
     k1Electrical = await member(k1.id, "electrical engineer");
     await call(k1.ap, sql<{ outcome: string }>`select app.add_project_member(${k1Participant}::uuid, ${k1Electrical}::uuid, now())`);
