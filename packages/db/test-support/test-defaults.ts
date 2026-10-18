@@ -11,8 +11,11 @@ import type { DatabaseUrls } from "../src/config.ts";
  *   test that takes a Transition needs nothing more. No image is stored. A test of the gate
  *   opts out: `withoutSignature(run, memberId)` (signature.ts), or the seam-1 harness's
  *   `api.withoutSignature(memberId)`.
- * - **A Stamp**, when RP-617 builds it: a `test_defaults.company_stamp` trigger on `company`
- *   beside this one, with its own opt-out.
+ * - **A Stamp** (RP-617: no Stamp, no Transition). Every Company inserted, by any role and any
+ *   route (Rabaed Admin's onboarding, a seam-2 test's raw `insert into company`), gets a
+ *   `stored_file` its `stamp_file_id` points at, unless the insert names one. No logo (it is
+ *   optional), and no image is stored. A test of the gate opts out: `withoutStamp(run, companyId)`
+ *   (stamp.ts), or the seam-1 harness's `api.withoutStamp(companyId)`.
  *
  * In a schema of its own, `test_defaults`, which no migration and no role but the owner
  * uses; never in a real database.
@@ -39,6 +42,23 @@ const sql = `
   revoke all on function test_defaults.member_signature() from public;
   create trigger test_default_member_signature after insert on member
     for each row execute function test_defaults.member_signature();
+
+  create function test_defaults.company_stamp() returns trigger
+    language plpgsql security definer
+    set search_path = pg_catalog, public
+    as $$
+      begin
+        if new.stamp_file_id is null then
+          insert into stored_file (storage_key, sha256, size, mime)
+          values ('companies/' || new.id || '/stamp/test-default.png', sha256(convert_to('stamp/' || new.id, 'UTF8')), 68, 'image/png')
+          returning id into new.stamp_file_id;
+        end if;
+        return new;
+      end
+    $$;
+  revoke all on function test_defaults.company_stamp() from public;
+  create trigger test_default_company_stamp before insert on company
+    for each row execute function test_defaults.company_stamp();
 `;
 
 /** Installs the test defaults into the (just migrated) test database, as its owner. */

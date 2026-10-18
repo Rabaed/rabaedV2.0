@@ -9,7 +9,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls, withoutSignature } from "../test-support/index.ts";
+import { testDatabaseUrls, withoutSignature, withoutStamp } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -34,6 +34,8 @@ async function company(engineer: string, name: string, count: number): Promise<s
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
     [JSON.stringify({ en: name, ar: name }), digits(10), `3${digits(13)}3`, engineer],
   );
+  // No Stamp (RP-617), so the only files its Members read are their Signatures'.
+  await withoutStamp((text, values) => migrator.query(text, values), companyId);
   const members: string[] = [];
   for (let i = 0; i < count; i++) {
     const id = await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
