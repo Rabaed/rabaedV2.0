@@ -35,6 +35,14 @@ CMD ["./node_modules/.bin/tsx", "src/server.ts"]
 
 FROM node-service AS worker
 WORKDIR /app/apps/worker
+# Headless Chromium for the Documental Records (RP-620, ADR 0023): Playwright's own build of the
+# version playwright-core expects, with its system libraries, where the node user can run it.
+USER root
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN ./node_modules/.bin/playwright-core install --with-deps --only-shell chromium \
+    && chmod -R a+rX /ms-playwright \
+    && rm -rf /var/lib/apt/lists/*
+USER node
 CMD ["./node_modules/.bin/tsx", "src/main.ts"]
 
 # The licensed Thmanyah fonts, never in the repo or the build context: the
