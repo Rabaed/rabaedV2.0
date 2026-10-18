@@ -13,6 +13,7 @@ import type { SubmitPackageCall } from "./submit-package-dialog.tsx";
 // design/prompts/packages.md): Al Futtaim's PM building an Open Package, the same Package
 // In Progress, a Consultant reading it (no actions), a Done one, and the dialogs. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const labelsOf = (context: { globals: Record<string, unknown> }) => packagePageLabels[storyLocale(context)];
 
 const ownCompany = b("Al Futtaim Contracting", "شركة الفطيم للمقاولات");
@@ -298,9 +299,9 @@ export const Rename: Story = {
     const l = labelsOf(context);
     await userEvent.click(context.canvas.getByRole("button", { name: l.rename.trigger }));
     const dialog = await screen.findByRole("dialog", { name: l.rename.title });
-    const en = within(dialog).getByRole("textbox", { name: new RegExp(l.rename.nameEn) });
+    const en = within(dialog).getByRole("textbox", { name: new RegExp(escaped(l.rename.nameEn)) });
     await expect(en).toHaveValue(name.en);
-    await expect(within(dialog).getByRole("textbox", { name: new RegExp(l.rename.nameAr) })).toHaveValue(name.ar);
+    await expect(within(dialog).getByRole("textbox", { name: new RegExp(escaped(l.rename.nameAr)) })).toHaveValue(name.ar);
     await userEvent.clear(en);
     await userEvent.click(within(dialog).getByRole("button", { name: l.rename.save }));
     // Both names are needed.

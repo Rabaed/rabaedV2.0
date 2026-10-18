@@ -51,7 +51,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     submittals: "Submittals",
     empty: "No submittals in this Package yet.",
     done: "Done: every latest submittal in it has closed at Code A, B or D.",
-    actions: "Package actions",
+    actions: "Manage the Package",
     with: "With",
     remove: (subject) => `Remove ${subject} from the Package`,
     close: "Close",
@@ -61,10 +61,10 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     rename: {
       trigger: "Rename",
       title: "Rename the Package",
-      description: "Its name in English and Arabic. Once In Progress, the rename is recorded.",
-      nameEn: "Name in English",
-      nameAr: "Name in Arabic",
-      required: "Enter the name in English and in Arabic.",
+      description: "In English and in Arabic. Once In Progress, the rename is recorded.",
+      nameEn: "Name (English)",
+      nameAr: "Name (Arabic)",
+      required: "Enter both names, in English and in Arabic.",
       save: "Save",
     },
     delete: {

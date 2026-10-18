@@ -104,7 +104,7 @@ export type PackagePageProps = {
 const statusTone = { open: "neutral", in_progress: "info", done: "success" } as const;
 
 /** The table's columns: Document Number, Subject, Type, Trade, With, Review Code or Stage, Step Age; never a date. */
-const columns: ListColumnLayout = (["documentNumber", "subject", "type", "trade", "owner", "stage", "outcome", "stepAge"] as const).map((key) => ({
+const columns: ListColumnLayout = (["documentNumber", "revision", "subject", "type", "trade", "owner", "stage", "outcome", "stepAge"] as const).map((key) => ({
   key,
   shown: true,
 }));
