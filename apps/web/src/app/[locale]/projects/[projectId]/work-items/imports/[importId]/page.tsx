@@ -42,8 +42,8 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
             { key: "subject", label: t("fields.subject"), value: <bdi>{columnOf(record.mapping.subject, () => "—")}</bdi> },
             { key: "type", label: t("fields.type"), value: <bdi>{columnOf(record.mapping.type, (v) => t("detail.everyRow", { value: v }))}</bdi> },
             { key: "trade", label: t("fields.trade"), value: <bdi>{columnOf(record.mapping.trade, (v) => t("detail.everyRow", { value: fixedTrade(v) }))}</bdi> },
-            // The optional fields it mapped (RP-639): Scopes, Location, Paper ref and Form fields, each by its column.
-            ...(["scopes", "location", "paperRef"] as const).flatMap((field) => {
+            // The optional fields it mapped (RP-639, RP-640): Scopes, Location, Paper ref, Assign to and Form fields, each by its column.
+            ...(["scopes", "location", "paperRef", "assignTo"] as const).flatMap((field) => {
               const mapped = record.mapping[field];
               return mapped ? [{ key: field, label: t(`fields.${field}`), value: <bdi>{columnOf(mapped, () => "—")}</bdi> }] : [];
             }),
@@ -59,7 +59,7 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
         />
       </div>
       <TableCard>
-        <ImportRows rows={record.rows} label={t("detail.rows")} locale={locale} mapping={record.mapping} results />
+        <ImportRows rows={record.rows} label={t("detail.rows")} locale={locale} mapping={record.mapping} importer={record.runBy.name} results />
       </TableCard>
     </div>
   );

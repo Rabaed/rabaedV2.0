@@ -12,7 +12,7 @@ import {
   type RegisterSheet,
   type RegisterValues,
 } from "@rabaed/domain";
-import { Button, Checkbox, Icon, RadioGroup, Select, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@rabaed/ui";
+import { Avatar, Button, Checkbox, Icon, IconButton, RadioGroup, Select, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRef, useState, type ReactNode } from "react";
 import { ErrorRows, ImportRows } from "@/components/register-import-rows";
@@ -24,11 +24,16 @@ import { setupCall } from "@/lib/setup-call";
 // fields (a field suggested for each column from its heading; Subject, Type, Trade,
 // Scopes, Location, Paper ref and the simple Form fields of the Types; a fixed Type or
 // Trade) → Map values (each different value of the ticked columns matched once) →
-// Validate (every row's reasons, the counts) → Result. Nothing is created until the
-// Member confirms. Assign & packages come with RP-640 and RP-644.
+// Assign (RP-640: who raises each row's Draft: the "Assign to" column's email, else a
+// rule by Trade or Type, else the default, else the importer) → Validate (every row's
+// reasons, the counts) → Result. Nothing is created until the Member confirms. The
+// design's "Assign & packages" step gets its Packages with RP-644.
 
-type Step = "upload" | "sheet" | "map" | "values" | "validate" | "result";
-const stepper: Step[] = ["upload", "sheet", "map", "values", "validate"];
+type Step = "upload" | "sheet" | "map" | "values" | "assign" | "validate" | "result";
+const stepper: Step[] = ["upload", "sheet", "map", "values", "assign", "validate"];
+
+/** A group rule of the Assign step: every row of a Trade (its id) or a Type (its code) to a Member. */
+type AssignRule = { by: "trade" | "type"; value: string; member: string };
 
 /** The Type's or the Trade's source: a column, or one value for every row. */
 type Source = { from: "column"; column: number | null } | { from: "value"; value: string | null };
@@ -101,10 +106,13 @@ export function RegisterImportWizard({
   types,
   trades,
   fields,
+  me,
   initialPreview = null,
 }: {
   projectId: string;
   locale: Locale;
+  /** The importer: the raiser of every row nobody else is assigned. */
+  me: { id: string; name: BilingualText };
   /** The Submittals Types the Member may raise, for one Type for every row. */
   types: { code: string; name: BilingualText }[];
   /** The Trades their Visibility covers, for one Trade for every row. */
@@ -128,6 +136,12 @@ export function RegisterImportWizard({
   const [values, setValues] = useState<RegisterValues | null>(null);
   const [valueTab, setValueTab] = useState(0);
   const [matches, setMatches] = useState<Matches>({});
+  /** Every mapped value column's values, the "Assign to" column's too: the Assign step's counts. */
+  const [allValues, setAllValues] = useState<RegisterValues | null>(null);
+  /** The default assignee (a Member's id); null: the importer. */
+  const [defaultAssignee, setDefaultAssignee] = useState<string | null>(null);
+  const [rules, setRules] = useState<AssignRule[]>([]);
+  const [ruleDraft, setRuleDraft] = useState<RuleDraft>({ by: "trade", value: null, member: null });
   const [preview, setPreview] = useState<RegisterImport | null>(initialPreview);
   const [created, setCreated] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -222,15 +236,19 @@ export function RegisterImportWizard({
       ...(columnOf("scopes") ? { scopes: columnOf("scopes") } : {}),
       ...(columnOf("location") ? { location: columnOf("location") } : {}),
       ...(columnOf("paperRef") ? { paperRef: columnOf("paperRef") } : {}),
+      ...(columnOf("assignTo") ? { assignTo: columnOf("assignTo") } : {}),
       ...(formFields.length > 0 ? { fields: formFields } : {}),
       ...(withMatches && Object.keys(valueMatches).length > 0 ? { values: valueMatches } : {}),
+      ...(defaultAssignee || rules.length > 0
+        ? { assign: { ...(defaultAssignee ? { default: defaultAssignee } : {}), ...(rules.length > 0 ? { rules } : {}) } }
+        : {}),
     };
   };
 
-  /** Map values: reads each ticked column's values, each matched as the API matches it; a suggestion is pre-chosen, to confirm. */
-  async function loadValues() {
+  /** Reads every mapped value column's values, as the API matches them; null when it couldn't. */
+  async function fetchValues(): Promise<RegisterValues | null> {
     const chosen = mapping();
-    if (!file || !sheet || !chosen) return;
+    if (!file || !sheet || !chosen) return null;
     setBusy(true);
     setError(null);
     const result = await setupCall("POST", `/projects/${projectId}/register-imports/values`, {
@@ -242,9 +260,22 @@ export function RegisterImportWizard({
     setBusy(false);
     if (!result.ok) {
       setError(refusal(result.error));
-      return;
+      return null;
     }
     const read = result.body as RegisterValues;
+    setAllValues(read);
+    return read;
+  }
+
+  /** Assign (RP-640): its counts come from the register's values as mapped now. */
+  async function openAssign() {
+    if (await fetchValues()) setStep("assign");
+  }
+
+  /** Map values: reads each ticked column's values, each matched as the API matches it; a suggestion is pre-chosen, to confirm. */
+  async function loadValues() {
+    const read = await fetchValues();
+    if (!read) return;
     const shown = { fields: read.fields.filter((f) => ticked[f.column]) };
     setValues(shown);
     setValueTab(0);
@@ -310,6 +341,9 @@ export function RegisterImportWizard({
     setTicked({});
     setMatches({});
     setValues(null);
+    setAllValues(null);
+    setDefaultAssignee(null);
+    setRules([]);
   }
 
   const back = (to: Step) => (
@@ -355,6 +389,7 @@ export function RegisterImportWizard({
     { value: "scopes", label: t("fields.scopes") },
     { value: "location", label: t("fields.location") },
     { value: "paperRef", label: t("fields.paperRef") },
+    { value: "assignTo", label: t("fields.assignTo") },
     ...fields.formFields.map((f) => ({ value: `field:${f.key}`, label: fieldName(`field:${f.key}`) })),
   ];
 
@@ -386,6 +421,13 @@ export function RegisterImportWizard({
     );
 
   const currentValues = values?.fields[valueTab];
+  /** The column mapped to Assign to, by its heading and its letter. */
+  const assignToColumn = (() => {
+    const entry = Object.entries(others).find(([, f]) => f === "assignTo");
+    if (!entry || !sheet) return null;
+    const column = Number(entry[0]);
+    return { name: sheet.headers[column] || columnLetter(column), letter: columnLetter(column) };
+  })();
   const tickedColumns = Object.entries(ticked).filter(([column, on]) => on && fieldOf(Number(column)) !== "none").length;
 
   return (
@@ -662,8 +704,8 @@ export function RegisterImportWizard({
           </section>
           <div className="flex items-center justify-between">
             {back("sheet")}
-            <Button onClick={() => void (tickedColumns > 0 ? loadValues() : validate())} disabled={busy || mapping(false) === null}>
-              {tickedColumns > 0 ? t("map.nextValues") : t("map.validate")}
+            <Button onClick={() => void (tickedColumns > 0 ? loadValues() : openAssign())} disabled={busy || mapping(false) === null}>
+              {tickedColumns > 0 ? t("map.nextValues") : t("map.nextAssign")}
               <Icon name="arrow-right" />
             </Button>
           </div>
@@ -819,13 +861,40 @@ export function RegisterImportWizard({
                 <Icon name="arrow-right" />
               </Button>
             ) : (
-              <Button onClick={() => void validate()} disabled={busy || mapping() === null}>
-                {t("map.validate")}
+              <Button onClick={() => void openAssign()} disabled={busy || mapping() === null}>
+                {t("map.nextAssign")}
                 <Icon name="arrow-right" />
               </Button>
             )}
           </div>
         </section>
+      )}
+
+      {step === "assign" && file && sheet && (
+        <AssignStep
+          fields={fields}
+          locale={locale}
+          me={me}
+          values={allValues}
+          dataRows={sheet.dataRows}
+          assignToColumn={assignToColumn}
+          fixedType={type.from === "value" ? type.value : null}
+          fixedTrade={trade.from === "value" ? trade.value : null}
+          defaultAssignee={defaultAssignee}
+          onDefault={setDefaultAssignee}
+          rules={rules}
+          onRules={setRules}
+          draft={ruleDraft}
+          onDraft={setRuleDraft}
+          n={n}
+          back={back(values && values.fields.length > 0 ? "values" : "map")}
+          next={
+            <Button onClick={() => void validate()} disabled={busy || mapping() === null}>
+              {t("map.validate")}
+              <Icon name="arrow-right" />
+            </Button>
+          }
+        />
       )}
 
       {step === "validate" && preview && (
@@ -864,17 +933,24 @@ export function RegisterImportWizard({
                   mapping={preview.mapping}
                   onFixMapping={file ? () => setStep("map") : undefined}
                   onFixValues={file && values ? () => setStep("values") : undefined}
+                  onFixAssign={file && sheet ? () => void openAssign() : undefined}
                 />
               </div>
             </TabsContent>
             <TabsContent value="imported" className="pt-4">
               <div className="overflow-x-auto rounded-md border border-border bg-surface">
-                <ImportRows rows={preview.rows.filter((r) => r.reasons.length === 0)} label={t("validate.imported")} locale={locale} mapping={preview.mapping} />
+                <ImportRows
+                  rows={preview.rows.filter((r) => r.reasons.length === 0)}
+                  label={t("validate.imported")}
+                  locale={locale}
+                  mapping={preview.mapping}
+                  importer={preview.runBy.name}
+                />
               </div>
             </TabsContent>
           </Tabs>
           <div className="flex items-center justify-between">
-            {back(file && sheet ? (values ? "values" : "map") : "upload")}
+            {back(file && sheet ? "assign" : "upload")}
             <Button onClick={() => void confirm()} disabled={busy || preview.rowsTotal === preview.rowsRejected}>
               <Icon name="check" />
               {t("validate.confirm", { count: preview.rowsTotal - preview.rowsRejected, n: n(preview.rowsTotal - preview.rowsRejected) })}
@@ -920,6 +996,187 @@ export function RegisterImportWizard({
         </section>
       )}
     </div>
+  );
+}
+
+/** The rule being written on the Assign step: a Trade or Type value and a Member, until added. */
+type RuleDraft = { by: "trade" | "type"; value: string | null; member: string | null };
+
+/**
+ * Assign (RP-640; the design's "Assign & packages" › Assign to): who raises each row's
+ * Draft. A row's email in the "Assign to" column comes first, then the first group rule
+ * naming its Trade or Type, then the default (the importer unless another Member is
+ * picked). Only Members of the importer's own Participant on the Project are offered;
+ * Validate refuses an assignee who can't take the row.
+ */
+function AssignStep({
+  fields,
+  locale,
+  me,
+  values,
+  dataRows,
+  assignToColumn,
+  fixedType,
+  fixedTrade,
+  defaultAssignee,
+  onDefault,
+  rules,
+  onRules,
+  draft,
+  onDraft,
+  n,
+  back,
+  next,
+}: {
+  fields: RegisterImportFields;
+  locale: Locale;
+  me: { id: string; name: BilingualText };
+  /** The register's values as mapped now: the counts. */
+  values: RegisterValues | null;
+  dataRows: number;
+  assignToColumn: { name: string; letter: string } | null;
+  fixedType: string | null;
+  fixedTrade: string | null;
+  defaultAssignee: string | null;
+  onDefault: (member: string | null) => void;
+  rules: AssignRule[];
+  onRules: (rules: AssignRule[]) => void;
+  draft: RuleDraft;
+  onDraft: (draft: RuleDraft) => void;
+  n: (value: number) => string;
+  back: ReactNode;
+  next: ReactNode;
+}) {
+  const t = useTranslations("registerImport.assign");
+  const people = new Map(fields.members.map((m) => [m.id, m]));
+  const nameOf = (id: string | null) => (id === null || id === me.id ? me.name[locale] : (people.get(id)?.name[locale] ?? "—"));
+  const valueField = (key: string) => values?.fields.find((f) => f.field === key);
+  /** How many rows hold a Trade (id) or Type (code): every row for the one value of a fixed one. */
+  const rowsOf = (by: "trade" | "type", value: string): number | null => {
+    const fixed = by === "trade" ? fixedTrade : fixedType;
+    if (fixed !== null) return fixed === value ? dataRows : 0;
+    const field = valueField(by);
+    return field ? field.values.filter((v) => v.match === value).reduce((sum, v) => sum + v.rows, 0) : null;
+  };
+  const emails = valueField("assignTo");
+  const emailRows = emails?.values.reduce((sum, v) => sum + v.rows, 0) ?? 0;
+  const unknownEmails = emails?.values.filter((v) => v.match === null).reduce((sum, v) => sum + v.rows, 0) ?? 0;
+  const choices = (by: "trade" | "type") =>
+    by === "trade"
+      ? fields.trades.map((tr) => ({ value: tr.id, label: tr.name[locale] }))
+      : fields.types.map((ty) => ({ value: ty.code, label: `${ty.code} · ${ty.name[locale]}` }));
+  const valueName = (rule: AssignRule) => choices(rule.by).find((c) => c.value === rule.value)?.label ?? rule.value;
+  const memberOptions = fields.members.map((m) => ({ value: m.id, label: m.id === me.id ? t("you", { name: m.name[locale] }) : m.name[locale] }));
+  const add = () => {
+    if (!draft.value || !draft.member) return;
+    const rule: AssignRule = { by: draft.by, value: draft.value, member: draft.member };
+    onRules([...rules.filter((r) => !(r.by === rule.by && r.value === rule.value)), rule]);
+    onDraft({ by: draft.by, value: null, member: null });
+  };
+
+  return (
+    <section aria-label={t("step")} className="flex flex-col gap-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section aria-labelledby="assign-heading" className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-surface p-4">
+          <h2 id="assign-heading" className="flex items-center gap-1.5 text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">
+            {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy */}
+            <Icon name="user" size={14} />
+            {t("title")}
+          </h2>
+          <div className="flex items-center gap-3 rounded-sm bg-surface-subtle px-3 py-2.5">
+            <Avatar name={nameOf(defaultAssignee)} decorative />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[12.5px] text-muted">
+                {t("raisedBy")}
+              </span>
+              <Select
+                aria-label={t("raisedBy")}
+                value={defaultAssignee ?? "importer"}
+                onValueChange={(value) => onDefault(value === "importer" ? null : value)}
+                options={[{ value: "importer", label: t("you", { name: me.name[locale] }) }, ...memberOptions.filter((o) => o.value !== me.id)]}
+              />
+            </div>
+            <span className="self-start text-[12.5px] text-muted">{t("default")}</span>
+          </div>
+          <p className="flex flex-wrap items-center gap-1.5 text-[13px] text-text-secondary">
+            <Icon name="table" size={16} />
+            {assignToColumn ? (
+              <>
+                <span>{t("column", { column: assignToColumn.name })}</span>
+                <span className="inline-flex size-5 items-center justify-center rounded-xs border border-border text-[11px] font-bold">{assignToColumn.letter}</span>
+                <span>{t("columnRule")}</span>
+                <span className="font-bold text-text">{t("rows", { count: emailRows, n: n(emailRows) })}</span>
+                {unknownEmails > 0 && <span className="font-semibold text-danger-fg">{t("unknownEmails", { count: unknownEmails, n: n(unknownEmails) })}</span>}
+              </>
+            ) : (
+              <span>{t("noColumn")}</span>
+            )}
+          </p>
+          {rules.length > 0 && (
+            <ul aria-label={t("rules")} className="flex flex-col gap-2">
+              {rules.map((rule) => {
+                const rows = rowsOf(rule.by, rule.value);
+                return (
+                  <li key={`${rule.by}:${rule.value}`} className="flex flex-wrap items-center gap-2 rounded-sm border border-border px-3 py-2 text-[13.5px]">
+                    <span>{t(rule.by === "trade" ? "ruleTrade" : "ruleType", { value: valueName(rule) })}</span>
+                    <Icon name="arrow-right" size={14} className="text-muted" />
+                    <Avatar name={nameOf(rule.member)} size="sm" decorative />
+                    <span className="font-semibold">{nameOf(rule.member)}</span>
+                    {rows !== null && <span className="ms-auto text-[12.5px] text-muted">{t("rows", { count: rows, n: n(rows) })}</span>}
+                    <IconButton
+                      label={t("remove", { value: valueName(rule) })}
+                      size="sm"
+                      className={rows === null ? "ms-auto" : undefined}
+                      onClick={() => onRules(rules.filter((r) => r !== rule))}
+                    >
+                      <Icon name="x" />
+                    </IconButton>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div role="group" aria-label={t("addRule")} className="flex flex-wrap items-center gap-2">
+            <Select
+              className="w-32"
+              aria-label={t("ruleBy")}
+              value={draft.by}
+              onValueChange={(by) => onDraft({ by: by === "type" ? "type" : "trade", value: null, member: draft.member })}
+              options={[
+                { value: "trade", label: t("byTrade") },
+                { value: "type", label: t("byType") },
+              ]}
+            />
+            <Select
+              className="min-w-36 flex-1"
+              aria-label={t(draft.by === "trade" ? "ruleTradeValue" : "ruleTypeValue")}
+              placeholder={t("choose")}
+              value={draft.value ?? ""}
+              onValueChange={(value) => onDraft({ ...draft, value })}
+              options={choices(draft.by)}
+            />
+            <Icon name="arrow-right" size={14} className="text-muted" />
+            <Select
+              className="min-w-36 flex-1"
+              aria-label={t("ruleMember")}
+              placeholder={t("chooseMember")}
+              value={draft.member ?? ""}
+              onValueChange={(member) => onDraft({ ...draft, member })}
+              options={memberOptions}
+            />
+            <Button variant="secondary" size="sm" onClick={add} disabled={!draft.value || !draft.member}>
+              <Icon name="plus" />
+              {t("add")}
+            </Button>
+          </div>
+          <p className="text-[13px] text-muted">{t("help")}</p>
+        </section>
+      </div>
+      <div className="flex items-center justify-between">
+        {back}
+        {next}
+      </div>
+    </section>
   );
 }
 

@@ -2089,7 +2089,8 @@
       "sheet": "Worksheet & column headings",
       "map": "Map fields",
       "values": "Map values",
-      "validate": "Validate"
+      "validate": "Validate",
+      "assign": "Assign"
     },
     "back": "Back",
     "next": "Next",
@@ -2133,7 +2134,8 @@
       "sameForEvery": "Same for every row",
       "choose": "Choose…",
       "nextValues": "Next: map values",
-      "validate": "Validate"
+      "validate": "Validate",
+      "nextAssign": "Next: assign"
     },
     "values": {
       "fields": "Fields to match",
@@ -2154,13 +2156,41 @@
       "nothing": "No column to match: validate.",
       "next": "Next: {field}"
     },
+    "assign": {
+      "step": "Assign",
+      "title": "Assign to",
+      "raisedBy": "Drafts are raised by",
+      "default": "default",
+      "you": "{name} (you)",
+      "column": "“{column}” column",
+      "columnRule": "(emails) gives each row's assignee ·",
+      "rows": "{count, plural, one {1 row} other {{n} rows}}",
+      "unknownEmails": "{count, plural, one {1 row: its email matches nobody of your Company} other {{n} rows: their email matches nobody of your Company}}",
+      "noColumn": "No column is mapped to Assign to: map one on Map fields to give each row's assignee by email.",
+      "rules": "Group rules",
+      "ruleTrade": "All Trade = {value} rows",
+      "ruleType": "All Type = {value} rows",
+      "remove": "Remove the rule for {value}",
+      "addRule": "Add a group rule",
+      "ruleBy": "Group by",
+      "byTrade": "Trade",
+      "byType": "Type",
+      "ruleTradeValue": "Trade",
+      "ruleTypeValue": "Type",
+      "ruleMember": "Member",
+      "choose": "Choose…",
+      "chooseMember": "Member…",
+      "add": "Add",
+      "help": "Order: the “Assign to” column, then group rules, then the default. Only Members of your Company on this Project can be picked. An assignee who can't create the row's Type, or doesn't cover its Trade or Location, makes the row bad."
+    },
     "fields": {
       "subject": "Subject",
       "type": "Type",
       "trade": "Trade",
       "scopes": "Scopes",
       "location": "Location",
-      "paperRef": "Paper ref"
+      "paperRef": "Paper ref",
+      "assignTo": "Assign to"
     },
     "validate": {
       "checked": "rows checked",
@@ -2216,7 +2246,11 @@
       "field_invalid": "‘{value}’ doesn't fit {field}",
       "paper_ref_too_long": "Paper ref over 100 characters",
       "paper_ref_repeated": "Paper ref ‘{value}’ is on more than one row",
-      "paper_ref_taken": "Paper ref ‘{value}’ is already on a submittal of your Company here"
+      "paper_ref_taken": "Paper ref ‘{value}’ is already on a submittal of your Company here",
+      "assignee_unknown": "‘{value}’ isn't an active Member of your Company on this Project",
+      "assignee_unknown_picked": "The Member picked is no longer an active Member of your Company on this Project",
+      "assignee_cannot_create": "{value} can't create {type}",
+      "assignee_outside_visibility": "{value} doesn't cover {values}"
     },
     "rows": {
       "row": "Row",
@@ -2236,7 +2270,9 @@
       "nothingToImport": "No row is ready to import.",
       "openDraft": "Open the Draft",
       "draftCreated": "Draft created",
-      "notYours": "Only a Member who may raise it can import it"
+      "notYours": "Only a Member who may raise it can import it",
+      "assign": "Assign",
+      "raiser": "Raised by"
     },
     "list": {
       "file": "Register",

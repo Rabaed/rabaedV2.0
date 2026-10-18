@@ -1,11 +1,11 @@
 "use client";
 
-import { formatNumber, type Locale, type RegisterImportMapping, type RegisterImportRow, type RegisterImportRowReason } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type Locale, type RegisterImportMapping, type RegisterImportRow, type RegisterImportRowReason } from "@rabaed/domain";
 import { Badge, EmptyState, Icon, Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 
-// The rows of a Submittal Register Import (RP-637, RP-639): the wizard's Validate step
+// The rows of a Submittal Register Import (RP-637, RP-639, RP-640): the wizard's Validate step
 // (its errors, and what will be imported) and an import's own page (each row's result).
 
 /** The value a reason names: what the row's cell held. */
@@ -13,6 +13,8 @@ function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, lo
   // A value it matched outside the Visibility is named as the Project names it.
   if (reason === "trade_outside_visibility" && row.trade.match) return row.trade.match.name[locale];
   if (reason === "location_outside_visibility" && row.location.match) return row.location.match.name[locale];
+  // The assignee by their name, or the email as read (one that named nobody who may take it).
+  if (reason.startsWith("assignee_")) return row.assignee.match?.name[locale] ?? row.assignee.text;
   if (reason.startsWith("type_")) return row.type.text;
   if (reason.startsWith("trade_")) return row.trade.text;
   if (reason.startsWith("scope_")) return row.scopes.text;
@@ -25,10 +27,21 @@ export function RowReasons({ row, mapping }: { row: RegisterImportRow; mapping: 
   const locale = useLocale() as Locale;
   const t = useTranslations("registerImport.reasons");
   const labelOf = (key: string) => mapping.fields?.find((f) => f.key === key)?.label?.[locale] ?? key;
+  const reasonText = (reason: RegisterImportRowReason) => {
+    const value = reasonValue(row, reason, locale);
+    // An assignee picked on the Assign step who can no longer take rows has no email to quote.
+    if (reason === "assignee_unknown" && value === "") return t("assignee_unknown_picked");
+    if (reason === "assignee_cannot_create") return t(reason, { value, type: row.type.match?.code ?? row.type.text });
+    if (reason === "assignee_outside_visibility") {
+      const values = [row.trade.match?.name[locale], row.location.match?.name[locale]].filter(Boolean).join(" · ");
+      return t(reason, { value, values });
+    }
+    return t(reason, { value });
+  };
   const lines = row.reasons.flatMap((reason) =>
     reason === "field_invalid"
       ? row.fields.filter((f) => f.invalid).map((f) => ({ key: `${reason}:${f.key}`, text: t(reason, { value: f.text, field: labelOf(f.key) }) }))
-      : [{ key: reason, text: t(reason, { value: reasonValue(row, reason, locale) }) }],
+      : [{ key: reason, text: reasonText(reason) }],
   );
   return (
     <ul className="space-y-0.5">
@@ -49,10 +62,11 @@ const nameOr = (match: { name: { en: string; ar: string } } | null, text: string
 
 /**
  * Where each reason is fixed: in the register; in the register or Map fields (a column
- * mapped to the wrong field); on Map values (a value matched to nothing); or not by this
- * Member (a Type they may not raise, a value outside their Visibility).
+ * mapped to the wrong field); on Map values (a value matched to nothing); on Assign (an
+ * assignee who can't take the row, RP-640); or not by this Member (a Type they may not
+ * raise, a value outside their Visibility).
  */
-const fixOf: Record<RegisterImportRowReason, "file" | "mapping" | "values" | "notYours"> = {
+const fixOf: Record<RegisterImportRowReason, "file" | "mapping" | "values" | "assign" | "notYours"> = {
   subject_missing: "file",
   subject_too_long: "file",
   type_missing: "mapping",
@@ -69,6 +83,9 @@ const fixOf: Record<RegisterImportRowReason, "file" | "mapping" | "values" | "no
   paper_ref_too_long: "file",
   paper_ref_repeated: "file",
   paper_ref_taken: "file",
+  assignee_unknown: "assign",
+  assignee_cannot_create: "assign",
+  assignee_outside_visibility: "assign",
 };
 
 /** The bad rows: Row, Subject, every reason, and where to fix it. */
@@ -78,12 +95,14 @@ export function ErrorRows({
   mapping,
   onFixMapping,
   onFixValues,
+  onFixAssign,
 }: {
   rows: RegisterImportRow[];
   label: string;
   mapping: RegisterImportMapping;
   onFixMapping?: () => void;
   onFixValues?: () => void;
+  onFixAssign?: () => void;
 }) {
   const t = useTranslations("registerImport.rows");
   const locale = useLocale() as Locale;
@@ -128,6 +147,16 @@ export function ErrorRows({
                     )}
                     {onFixMapping && fixes.has("mapping") && fixButton(onFixMapping, t("mapFields"))}
                     {fixes.has("values") && (onFixValues ?? onFixMapping) && fixButton((onFixValues ?? onFixMapping)!, t(onFixValues ? "mapValues" : "mapFields"))}
+                    {fixes.has("assign") &&
+                      (onFixAssign ? (
+                        fixButton(onFixAssign, t("assign"))
+                      ) : (
+                        <span className="inline-flex items-center gap-1">
+                          {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy */}
+                          <Icon name="user" size={14} />
+                          {t("assign")}
+                        </span>
+                      ))}
                     {fixes.has("notYours") && (
                       <span className="inline-flex items-center gap-1">
                         <Icon name="lock" size={14} />
@@ -146,8 +175,9 @@ export function ErrorRows({
 }
 
 /**
- * The good rows as their Drafts will be: Row, Subject, Type and Trade, and the Paper ref,
- * Location and Scopes when mapped. With `results` (an import's own page), every row with
+ * The good rows as their Drafts will be: Row, Subject, Type and Trade, the Paper ref,
+ * Location and Scopes when mapped, and who raises each when rows are assigned (RP-640:
+ * the assignee, else `importer`). With `results` (an import's own page), every row with
  * its result: the Draft it created, linked where the reader sees it, or its reasons.
  */
 export function ImportRows({
@@ -155,16 +185,24 @@ export function ImportRows({
   label,
   locale,
   mapping,
+  importer,
   results = false,
 }: {
   rows: RegisterImportRow[];
   label: string;
   locale: Locale;
   mapping: RegisterImportMapping;
+  /** Who imported it: the raiser of every row not assigned. */
+  importer: BilingualText;
   results?: boolean;
 }) {
   const t = useTranslations("registerImport.rows");
-  const columns = { paperRef: mapping.paperRef !== undefined, location: mapping.location !== undefined, scopes: mapping.scopes !== undefined };
+  const columns = {
+    paperRef: mapping.paperRef !== undefined,
+    location: mapping.location !== undefined,
+    scopes: mapping.scopes !== undefined,
+    raiser: mapping.assignTo !== undefined || mapping.assign !== undefined,
+  };
   const span = 4 + Number(results) + Object.values(columns).filter(Boolean).length;
   return (
     <Table label={label}>
@@ -177,6 +215,7 @@ export function ImportRows({
           <TableHead>{t("trade")}</TableHead>
           {columns.location && <TableHead>{t("location")}</TableHead>}
           {columns.scopes && <TableHead>{t("scopes")}</TableHead>}
+          {columns.raiser && <TableHead>{t("raiser")}</TableHead>}
           {results && <TableHead>{t("result")}</TableHead>}
         </TableRow>
       </TableHeader>
@@ -228,6 +267,18 @@ export function ImportRows({
               {columns.scopes && (
                 <TableCell className="max-w-64 [overflow-wrap:anywhere]">
                   {row.scopes.matches.length > 0 ? row.scopes.matches.map((s) => s.name[locale]).join(locale === "ar" ? "، " : ", ") : <span className="text-muted">—</span>}
+                </TableCell>
+              )}
+              {columns.raiser && (
+                <TableCell>
+                  <span className="flex flex-col">
+                    <span className="font-medium">{(row.assignee.match?.name ?? importer)[locale]}</span>
+                    {row.assignee.text && (
+                      <small className="text-[12px] text-muted">
+                        <bdi dir="ltr">{row.assignee.text}</bdi>
+                      </small>
+                    )}
+                  </span>
                 </TableCell>
               )}
               {results && (
