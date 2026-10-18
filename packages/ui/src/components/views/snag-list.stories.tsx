@@ -3,7 +3,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { SnagList, type SnagListLabels, type SnagListProps } from "./snag-list.tsx";
+import type { SnagBulkLabels } from "./snag-bulk.tsx";
+import type { SnagExportLabels } from "./snag-export.ts";
+import { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps } from "./snag-list.tsx";
 
 // The Snag List's desktop views (RP-94, design/reference/claude-design/ui_kits/app/snag-list.html)
 // as TMC's PM sees them: Snags raised by the Consultant on TMC, and Comments raised from
@@ -357,5 +359,159 @@ export const NothingMatches: Story = {
   args: { query: { ...defaults, stage: ["on_hold"], company: [dclId] }, data: { view: "list", list: { ...list, items: [], stages: counts([]), typeCounts: [] } } },
   play: async (context) => {
     await expect(context.canvas.getByRole("link", { name: labels[storyLocale(context)].clearFilters })).toBeVisible();
+  },
+};
+
+/** The bulk bar's and dialogs' words (RP-629). */
+const bulkLabels: Record<Locale, SnagBulkLabels> = {
+  en: {
+    selected: (n, count) => (count === 1 ? "1 selected" : `${n} selected`),
+    clearSelection: "Clear selection",
+    selectAll: "Select all on this page",
+    selectRow: (subject) => `Select ${subject}`,
+    reassign: "Reassign",
+    moveStage: "Move Stage",
+    exportSelected: "Export selected",
+    exportAll: "Export to Excel",
+    exported: (n, count) => (count === 1 ? "Exported 1 item (Excel)" : `Exported ${n} items (Excel)`),
+    exportedCapped: (n) => `Exported the first ${n} items (Excel)`,
+    exportFailed: "The export could not be made. Try again.",
+    close: "Close",
+    cancel: "Cancel",
+    working: "Working…",
+    reassignTitle: "Reassign within your Company",
+    reassignDescription: (n, count) => (count === 1 ? "Hand the item to a colleague." : `Hand the ${n} chosen items to a colleague.`),
+    reassignTo: "Hand over to",
+    colleague: (name, n, of) => `${name} (${n} of ${of})`,
+    nothingToReassign: "Your Company holds none of these items, or you can't reassign them.",
+    reassignConfirm: "Reassign",
+    moveTitle: "Move Stage",
+    moveDescription: (n, count) => (count === 1 ? "Move the item to a Stage." : `Move the ${n} chosen items to a Stage.`),
+    moveTo: "Move to",
+    moveHint: "Each move is signed and recorded as if you took it on the item's page.",
+    moveConfirm: "Move",
+    doneCount: (n, count) => (count === 1 ? "1 item done" : `${n} items done`),
+    skippedCount: (n, count) => (count === 1 ? "1 item skipped" : `${n} items skipped`),
+    reasons: {
+      not_found: "You can no longer see it",
+      not_offered: "Not offered to you for this item",
+      needs_input: "Needs a note or a choice: do it on the item's page",
+      already_there: "Already at this Stage",
+      refused: "Its rules don't allow it now",
+    },
+    unseen: (n, count) => (count === 1 ? "1 item you can no longer see" : `${n} items you can no longer see`),
+    failed: "That didn't work. Try again.",
+  },
+  ar: {
+    selected: (n) => `${n} محدد`,
+    clearSelection: "مسح التحديد",
+    selectAll: "تحديد الكل في هذه الصفحة",
+    selectRow: (subject) => `تحديد ${subject}`,
+    reassign: "إعادة إسناد",
+    moveStage: "نقل المرحلة",
+    exportSelected: "تصدير المحدد",
+    exportAll: "تصدير إلى Excel",
+    exported: (n) => `تم تصدير ${n} عنصر (Excel)`,
+    exportedCapped: (n) => `تم تصدير أول ${n} عنصر (Excel)`,
+    exportFailed: "تعذّر إنشاء الملف. حاول مرة أخرى.",
+    close: "إغلاق",
+    cancel: "إلغاء",
+    working: "جارٍ التنفيذ…",
+    reassignTitle: "إعادة الإسناد داخل شركتك",
+    reassignDescription: (n) => `سلّم العناصر المحددة (${n}) إلى زميل.`,
+    reassignTo: "تسليم إلى",
+    colleague: (name, n, of) => `${name} (${n} من ${of})`,
+    nothingToReassign: "لا تحتفظ شركتك بأي من هذه العناصر، أو لا يمكنك إعادة إسنادها.",
+    reassignConfirm: "إعادة إسناد",
+    moveTitle: "نقل المرحلة",
+    moveDescription: (n) => `انقل العناصر المحددة (${n}) إلى مرحلة.`,
+    moveTo: "النقل إلى",
+    moveHint: "يُوقَّع كل نقل ويُسجَّل كما لو أجريته من صفحة العنصر.",
+    moveConfirm: "نقل",
+    doneCount: (n) => `تم تنفيذ ${n} عنصر`,
+    skippedCount: (n) => `تم تخطي ${n} عنصر`,
+    reasons: {
+      not_found: "لم يعد ظاهرًا لك",
+      not_offered: "غير متاح لك لهذا العنصر",
+      needs_input: "يحتاج إلى ملاحظة أو اختيار: نفّذه من صفحة العنصر",
+      already_there: "في هذه المرحلة بالفعل",
+      refused: "قواعده لا تسمح به الآن",
+    },
+    unseen: (n) => `${n} عنصر لم يعد ظاهرًا لك`,
+    failed: "لم تنجح العملية. حاول مرة أخرى.",
+  },
+};
+
+const exportLabels: Record<Locale, SnagExportLabels> = {
+  en: { documentNumber: "Document Number", subject: "Subject", type: "Type", trade: "Trade", location: "Location", stage: "Stage", raisedFrom: "Raised from", with: "With", stepAgeWeeks: "Step Age (weeks)", raisedManually: "By hand", notPickedUp: "Not picked up", noNumber: "No number yet", fileName: "Snag List" },
+  ar: { documentNumber: "رقم المستند", subject: "الموضوع", type: "النوع", trade: "التخصص", location: "الموقع", stage: "المرحلة", raisedFrom: "المصدر", with: "لدى", stepAgeWeeks: "عمر الخطوة (بالأسابيع)", raisedManually: "يدويًا", notPickedUp: "لم تُستلَم", noNumber: "بلا رقم بعد", fileName: "قائمة الملاحظات" },
+};
+
+const ali = { memberId: "00000000-0000-4000-8000-0000000000d1", name: b("Ali Sonour", "علي سنور") };
+const khalid = { memberId: "00000000-0000-4000-8000-0000000000d2", name: b("Khalid Bakr", "خالد بكر") };
+
+const bulkFor = (locale: Locale, actions: Partial<SnagBulk["actions"]> = {}): SnagBulk => ({
+  actions: {
+    labels: bulkLabels[locale],
+    candidates: async (ids) => ({ reassignable: ids.length, members: [{ ...ali, items: ids.length }, { ...khalid, items: Math.max(1, ids.length - 1) }] }),
+    reassign: async (ids) => ({ done: ids, skipped: [] }),
+    move: async (ids) => ({ done: ids.slice(0, 1), skipped: ids.slice(1).map((id) => ({ id, documentNumber: "TWR-DCL-EL-SNG-011", title: "Cable tray not bonded", reason: "not_offered" as const })) }),
+    onChanged: fn(),
+    ...actions,
+  },
+  exportLabels: exportLabels[locale],
+  loadExportRows: async () => ({ items: items.slice(0, 3), capped: false }),
+});
+
+/** With rows ticked, the bar says how many, and offers Reassign, Move Stage and Export (RP-629). */
+export const BulkSelect: Story = {
+  render: (args, context) => (
+    <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} bulk={bulkFor(storyLocale(context))} />
+  ),
+  play: async (context) => {
+    const text = bulkLabels[storyLocale(context)];
+    const table = context.canvas.getByRole("table", { name: labels[storyLocale(context)].table });
+    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Cable tray not bonded") }));
+    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Duct insulation torn") }));
+    await expect(context.canvas.getByRole("status", { name: "" })).toBeDefined();
+    await expect(context.canvas.getByRole("button", { name: text.reassign })).toBeVisible();
+    await expect(context.canvas.getByRole("button", { name: text.moveStage })).toBeVisible();
+    await expect(context.canvas.getByRole("button", { name: text.exportSelected })).toBeVisible();
+    await userEvent.click(context.canvas.getByRole("button", { name: text.clearSelection }));
+    await expect(context.canvas.queryByRole("button", { name: text.reassign })).toBeNull();
+  },
+};
+
+/** Reassign: only the colleagues the API offers, then what was done and what was skipped. */
+export const BulkReassign: Story = {
+  render: (args, context) => (
+    <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} bulk={bulkFor(storyLocale(context))} />
+  ),
+  play: async (context) => {
+    const text = bulkLabels[storyLocale(context)];
+    const table = context.canvas.getByRole("table", { name: labels[storyLocale(context)].table });
+    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Cable tray not bonded") }));
+    await userEvent.click(context.canvas.getByRole("button", { name: text.reassign }));
+    const dialog = within(await within(document.body).findByRole("dialog"));
+    await userEvent.click(await dialog.findByRole("radio", { name: text.colleague(ali.name[storyLocale(context)], storyLocale(context) === "ar" ? "1" : "1", "1") }));
+    await userEvent.click(dialog.getByRole("button", { name: text.reassignConfirm }));
+    await expect(await dialog.findByText(text.doneCount("1", 1))).toBeVisible();
+  },
+};
+
+/** Move Stage: the Stage to move to, and the items that could not move, named with their reason. */
+export const BulkMove: Story = {
+  render: (args, context) => (
+    <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} bulk={bulkFor(storyLocale(context))} />
+  ),
+  play: async (context) => {
+    const text = bulkLabels[storyLocale(context)];
+    const table = context.canvas.getByRole("table", { name: labels[storyLocale(context)].table });
+    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectAll }));
+    await userEvent.click(context.canvas.getByRole("button", { name: text.moveStage }));
+    const dialog = within(await within(document.body).findByRole("dialog"));
+    await userEvent.click(await dialog.findByRole("radio", { name: stages.inProgress.name[storyLocale(context)] }));
+    await userEvent.click(dialog.getByRole("button", { name: text.moveConfirm }));
+    await expect(await dialog.findByText(text.reasons.not_offered, { exact: false })).toBeVisible();
   },
 };
