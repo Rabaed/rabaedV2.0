@@ -6,32 +6,40 @@ import {
   type BilingualText,
   type Locale,
   type RegisterImport,
+  type RegisterImportFields,
   type RegisterImportFile,
   type RegisterImportMapping,
   type RegisterSheet,
+  type RegisterValues,
 } from "@rabaed/domain";
-import { Button, Icon, RadioGroup, Select, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@rabaed/ui";
+import { Button, Checkbox, Icon, RadioGroup, Select, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRef, useState, type ReactNode } from "react";
 import { ErrorRows, ImportRows } from "@/components/register-import-rows";
 import { Link } from "@/i18n/navigation";
 import { setupCall } from "@/lib/setup-call";
 
-// The Submittal Register Import wizard (RP-637; the owner's design RP-634, the Admin
-// wizard's steps without Company & reason): Upload → Sheet & header row → Map fields
-// (Subject, Type, Trade; a fixed Type or Trade) → Validate (every row's reasons, the
-// counts) → Result. Nothing is created until the Member confirms. Map values and
-// Assign & packages come with RP-639, RP-640 and RP-644.
+// The Submittal Register Import wizard (RP-637, RP-639; the owner's design RP-634, the
+// Admin wizard's steps without Company & reason): Upload → Sheet & header row → Map
+// fields (a field suggested for each column from its heading; Subject, Type, Trade,
+// Scopes, Location, Paper ref and the simple Form fields of the Types; a fixed Type or
+// Trade) → Map values (each different value of the ticked columns matched once) →
+// Validate (every row's reasons, the counts) → Result. Nothing is created until the
+// Member confirms. Assign & packages come with RP-640 and RP-644.
 
-type Step = "upload" | "sheet" | "map" | "validate" | "result";
-const stepper: Step[] = ["upload", "sheet", "map", "validate"];
+type Step = "upload" | "sheet" | "map" | "values" | "validate" | "result";
+const stepper: Step[] = ["upload", "sheet", "map", "values", "validate"];
 
-/** A field the mapping step maps a column to. */
-type Field = "subject" | "type" | "trade";
 /** The Type's or the Trade's source: a column, or one value for every row. */
 type Source = { from: "column"; column: number | null } | { from: "value"; value: string | null };
 
 type Uploaded = RegisterImportFile & { sizeBytes: number };
+
+/** The optional fields a column fills besides Subject, Type and Trade: Scopes, Location, Paper ref, `field:<key>`. */
+type OtherField = string;
+
+/** The values matched by hand on Map values: by field (`type`, `trade`, `location`, `scopes`, `field:<key>`), by the value's key. */
+type Matches = Record<string, Record<string, string>>;
 
 /** Whether a source names its column or its value. */
 const sourceSet = (source: Source) => (source.from === "column" ? source.column !== null : source.value !== null);
@@ -48,6 +56,7 @@ const refusals: Record<string, string> = {
   header_row_not_found: "headerRowNotFound",
   empty_header_row: "emptyHeaderRow",
   column_not_found: "columnNotFound",
+  field_not_found: "fieldNotFound",
   nothing_to_import: "nothingToImport",
   preview_outdated: "previewOutdated",
   type_not_found: "typeNotFound",
@@ -79,11 +88,19 @@ function base64Of(file: File): Promise<string> {
   });
 }
 
+/** Whether a field's values are matched to the Project's on Map values: the Type, Trade, Location, Scopes and choice fields. */
+function matchesValues(field: string, fields: RegisterImportFields): boolean {
+  if (field === "type" || field === "trade" || field === "location" || field === "scopes") return true;
+  const form = field.startsWith("field:") ? fields.formFields.find((f) => `field:${f.key}` === field) : undefined;
+  return form !== undefined && (form.type === "select" || form.type === "multi_select" || form.type === "option_list");
+}
+
 export function RegisterImportWizard({
   projectId,
   locale,
   types,
   trades,
+  fields,
   initialPreview = null,
 }: {
   projectId: string;
@@ -92,6 +109,8 @@ export function RegisterImportWizard({
   types: { code: string; name: BilingualText }[];
   /** The Trades their Visibility covers, for one Trade for every row. */
   trades: { id: string; code: string; name: BilingualText }[];
+  /** What a register may fill on the Project (RP-639): the Project's values and the Types' simple Form fields. */
+  fields: RegisterImportFields;
   /** The Member's own preview, reopened at Validate (`?preview=`): confirm it, or start again with the register. */
   initialPreview?: RegisterImport | null;
 }) {
@@ -102,6 +121,13 @@ export function RegisterImportWizard({
   const [subject, setSubject] = useState<number | null>(null);
   const [type, setType] = useState<Source>({ from: "column", column: null });
   const [trade, setTrade] = useState<Source>({ from: "column", column: null });
+  /** Scopes, Location, Paper ref and Form fields, by column. */
+  const [others, setOthers] = useState<Record<number, OtherField>>({});
+  /** The columns ticked "Map field value": their values are matched on Map values. */
+  const [ticked, setTicked] = useState<Record<number, boolean>>({});
+  const [values, setValues] = useState<RegisterValues | null>(null);
+  const [valueTab, setValueTab] = useState(0);
+  const [matches, setMatches] = useState<Matches>({});
   const [preview, setPreview] = useState<RegisterImport | null>(initialPreview);
   const [created, setCreated] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +136,14 @@ export function RegisterImportWizard({
   const n = (value: number) => formatNumber(value, locale);
   const refusal = (code: string) => t(`errors.${refusals[code] ?? "unavailable"}`, { size: n(registerImportMaxBytes / (1024 * 1024)) });
 
-  /** Reads the register again for a sheet and header row; the columns' mapping starts afresh with a new header row. */
+  /** A field's name on the Map fields step: Subject, Type… or "Form · its label (its Types)". */
+  const fieldName = (field: string): string => {
+    if (!field.startsWith("field:")) return t(`fields.${field}`);
+    const form = fields.formFields.find((f) => `field:${f.key}` === field);
+    return form ? t("map.formField", { label: form.label[locale], types: form.types.join(" · ") }) : field;
+  };
+
+  /** Reads the register again for a sheet and header row; the mapping starts afresh from the columns' suggestions. */
   async function read(uploaded: Uploaded, choice: { sheet?: string; headerRow?: number }) {
     setBusy(true);
     setError(null);
@@ -125,14 +158,25 @@ export function RegisterImportWizard({
     }
     const read = result.body as RegisterSheet;
     setSheet(read);
-    // A suggestion only: the columns whose header names the field.
-    const find = (words: RegExp) => {
-      const index = read.headers.findIndex((h) => words.test(h));
-      return index === -1 ? null : index;
+    // The suggestions only: the importer changes any of them.
+    const suggested = (field: string) => {
+      const column = read.suggestions.findIndex((s) => s?.field === field);
+      return column === -1 ? null : column;
     };
-    setSubject(find(/subject|description|title|الموضوع|الوصف/i));
-    setType((s) => (s.from === "column" ? { from: "column", column: find(/type|النوع/i) } : s));
-    setTrade((s) => (s.from === "column" ? { from: "column", column: find(/trade|discipline|التخصص/i) } : s));
+    setSubject(suggested("subject"));
+    setType((s) => (s.from === "column" ? { from: "column", column: suggested("type") } : s));
+    setTrade((s) => (s.from === "column" ? { from: "column", column: suggested("trade") } : s));
+    const rest: Record<number, OtherField> = {};
+    const ticks: Record<number, boolean> = {};
+    read.suggestions.forEach((s, column) => {
+      if (!s) return;
+      if (s.field !== "subject" && s.field !== "type" && s.field !== "trade") rest[column] = s.field;
+      ticks[column] = matchesValues(s.field, fields);
+    });
+    setOthers(rest);
+    setTicked(ticks);
+    setMatches({});
+    setValues(null);
     return true;
   }
 
@@ -148,13 +192,73 @@ export function RegisterImportWizard({
     if (await read(uploaded, {})) setStep("sheet");
   }
 
-  const mapping = (): RegisterImportMapping | null => {
+  /** The mapping as the API takes it, with the values matched by hand; null until Subject, Type and Trade are given. */
+  const mapping = (withMatches = true): RegisterImportMapping | null => {
     if (subject === null) return null;
     const typeOf = type.from === "column" ? (type.column === null ? null : { column: type.column }) : type.value === null ? null : { value: type.value };
     const tradeOf =
       trade.from === "column" ? (trade.column === null ? null : { column: trade.column }) : trade.value === null ? null : { value: trade.value };
-    return typeOf && tradeOf ? { subject: { column: subject }, type: typeOf, trade: tradeOf } : null;
+    if (!typeOf || !tradeOf) return null;
+    const columnOf = (field: string) => {
+      const entry = Object.entries(others).find(([, f]) => f === field);
+      return entry ? { column: Number(entry[0]) } : undefined;
+    };
+    const formFields = Object.entries(others)
+      .filter(([, f]) => f.startsWith("field:"))
+      .map(([column, f]) => ({ key: f.slice("field:".length), column: Number(column) }));
+    const byHand = (field: string) => (Object.keys(matches[field] ?? {}).length > 0 ? matches[field] : undefined);
+    const fieldMatches = Object.fromEntries(formFields.flatMap((f) => (byHand(`field:${f.key}`) ? [[f.key, byHand(`field:${f.key}`)!]] : [])));
+    const valueMatches = {
+      ...(byHand("type") ? { type: byHand("type") } : {}),
+      ...(byHand("trade") ? { trade: byHand("trade") } : {}),
+      ...(byHand("location") ? { location: byHand("location") } : {}),
+      ...(byHand("scopes") ? { scopes: byHand("scopes") } : {}),
+      ...(Object.keys(fieldMatches).length > 0 ? { fields: fieldMatches } : {}),
+    };
+    return {
+      subject: { column: subject },
+      type: typeOf,
+      trade: tradeOf,
+      ...(columnOf("scopes") ? { scopes: columnOf("scopes") } : {}),
+      ...(columnOf("location") ? { location: columnOf("location") } : {}),
+      ...(columnOf("paperRef") ? { paperRef: columnOf("paperRef") } : {}),
+      ...(formFields.length > 0 ? { fields: formFields } : {}),
+      ...(withMatches && Object.keys(valueMatches).length > 0 ? { values: valueMatches } : {}),
+    };
   };
+
+  /** Map values: reads each ticked column's values, each matched as the API matches it; a suggestion is pre-chosen, to confirm. */
+  async function loadValues() {
+    const chosen = mapping();
+    if (!file || !sheet || !chosen) return;
+    setBusy(true);
+    setError(null);
+    const result = await setupCall("POST", `/projects/${projectId}/register-imports/values`, {
+      file: { fileName: file.fileName, content: file.content },
+      sheet: sheet.sheet,
+      headerRow: sheet.headerRow,
+      mapping: chosen,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(refusal(result.error));
+      return;
+    }
+    const read = result.body as RegisterValues;
+    const shown = { fields: read.fields.filter((f) => ticked[f.column]) };
+    setValues(shown);
+    setValueTab(0);
+    setMatches((was) => {
+      const next: Matches = { ...was };
+      for (const f of shown.fields) {
+        for (const v of f.values) {
+          if ((v.how === "suggested" || v.how === "manual") && v.match) next[f.field] = { ...next[f.field], [v.key]: v.match };
+        }
+      }
+      return next;
+    });
+    setStep("values");
+  }
 
   async function validate() {
     const chosen = mapping();
@@ -202,6 +306,10 @@ export function RegisterImportWizard({
     setError(null);
     setType({ from: "column", column: null });
     setTrade({ from: "column", column: null });
+    setOthers({});
+    setTicked({});
+    setMatches({});
+    setValues(null);
   }
 
   const back = (to: Step) => (
@@ -211,18 +319,61 @@ export function RegisterImportWizard({
   );
 
   /** Which field a column is mapped to. */
-  const fieldOf = (column: number): Field | "none" =>
-    subject === column ? "subject" : type.from === "column" && type.column === column ? "type" : trade.from === "column" && trade.column === column ? "trade" : "none";
-  /** Maps `column` to `field` (each field takes one column), or unmaps it. */
-  function mapColumn(column: number, field: Field | "none") {
-    const was = fieldOf(column);
-    if (was === "subject") setSubject(null);
-    if (was === "type") setType({ from: "column", column: null });
-    if (was === "trade") setTrade({ from: "column", column: null });
+  const fieldOf = (column: number): string =>
+    subject === column
+      ? "subject"
+      : type.from === "column" && type.column === column
+        ? "type"
+        : trade.from === "column" && trade.column === column
+          ? "trade"
+          : (others[column] ?? "none");
+  /** Maps `column` to `field` (each field takes one column), or unmaps it; a value field is ticked to match its values. */
+  function mapColumn(column: number, field: string) {
+    const clear = (f: string) => {
+      if (f === "subject") setSubject(null);
+      else if (f === "type") setType({ from: "column", column: null });
+      else if (f === "trade") setTrade({ from: "column", column: null });
+    };
+    clear(fieldOf(column));
+    if (field !== "none") clear(field);
+    setOthers((was) => {
+      const next = Object.fromEntries(Object.entries(was).filter(([c, f]) => Number(c) !== column && f !== field));
+      return field === "subject" || field === "type" || field === "trade" || field === "none" ? next : { ...next, [column]: field };
+    });
     if (field === "subject") setSubject(column);
     if (field === "type") setType({ from: "column", column });
     if (field === "trade") setTrade({ from: "column", column });
+    setTicked((was) => ({ ...was, [column]: field !== "none" && matchesValues(field, fields) }));
   }
+
+  /** The fields a column can fill, each once, with the required ones starred. */
+  const fieldOptions = [
+    { value: "none", label: t("map.dontMap") },
+    { value: "subject", label: `${t("fields.subject")} *` },
+    { value: "type", label: `${t("fields.type")} *` },
+    { value: "trade", label: `${t("fields.trade")} *` },
+    { value: "scopes", label: t("fields.scopes") },
+    { value: "location", label: t("fields.location") },
+    { value: "paperRef", label: t("fields.paperRef") },
+    ...fields.formFields.map((f) => ({ value: `field:${f.key}`, label: fieldName(`field:${f.key}`) })),
+  ];
+
+  /** The Project's values a value field's value may be matched to, as Map values offers them. */
+  const valueOptions = (field: string): { value: string; label: string }[] => {
+    if (field === "type") return fields.types.map((ty) => ({ value: ty.code, label: `${ty.code} · ${ty.name[locale]}` }));
+    if (field === "trade") return fields.trades.map((tr) => ({ value: tr.id, label: tr.name[locale] }));
+    if (field === "location") return fields.locations.map((l) => ({ value: l.id, label: l.path[locale] }));
+    if (field === "scopes") {
+      const tradeName = (id: string) => fields.trades.find((tr) => tr.id === id)?.name[locale] ?? "";
+      return fields.scopes.map((s) => ({ value: s.id, label: `${s.name[locale]} · ${tradeName(s.tradeId)}` }));
+    }
+    const form = fields.formFields.find((f) => `field:${f.key}` === field);
+    return (form?.options ?? []).map((o) => ({ value: o.value, label: o.label[locale] }));
+  };
+
+  /** A value's match now: the one chosen by hand, else the API's exact one. */
+  const matchOf = (field: string, value: RegisterValues["fields"][number]["values"][number]) =>
+    matches[field]?.[value.key] ?? (value.how === "exact" ? value.match : null);
 
   const fileCard = (detail: ReactNode, action?: ReactNode) =>
     file && (
@@ -233,6 +384,9 @@ export function RegisterImportWizard({
         {action && <span className="ms-auto">{action}</span>}
       </div>
     );
+
+  const currentValues = values?.fields[valueTab];
+  const tickedColumns = Object.entries(ticked).filter(([column, on]) => on && fieldOf(Number(column)) !== "none").length;
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -400,8 +554,8 @@ export function RegisterImportWizard({
             })}
             {t("map.required")}
           </p>
-          <div className="overflow-hidden rounded-md border border-border bg-surface">
-            <table className="w-full text-[14px]">
+          <div role="region" aria-label={t("map.caption")} tabIndex={0} className="overflow-x-auto rounded-md border border-border bg-surface">
+            <table className="w-full min-w-[640px] text-[14px]">
               <caption className="sr-only">{t("map.caption")}</caption>
               <thead>
                 <tr className="border-b border-border text-start text-[12.5px] font-bold text-text-secondary">
@@ -412,40 +566,73 @@ export function RegisterImportWizard({
                   <th scope="col" className="px-4 py-3 text-start">
                     {t("map.field")}
                   </th>
+                  <th scope="col" className="w-32 px-4 py-3 text-center">
+                    {t("map.matchValues")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {sheet.headers.map((header, column) => (
-                  <tr key={column} className="border-b border-border-subtle last:border-0">
-                    <th scope="row" className="px-4 py-3 text-start font-semibold">
-                      <bdi>{header || columnLetter(column)}</bdi>
-                      {sheet.examples[column] && (
-                        <span className="block text-[12.5px] font-normal text-muted">
-                          {t("map.example")} <bdi>{sheet.examples[column]}</bdi>
+                {sheet.headers.map((header, column) => {
+                  const field = fieldOf(column);
+                  const suggestion = sheet.suggestions[column];
+                  const name = header || columnLetter(column);
+                  return (
+                    <tr key={column} className="border-b border-border-subtle last:border-0">
+                      <th scope="row" className="px-4 py-3 text-start font-semibold">
+                        <bdi>{name}</bdi>
+                        {sheet.examples[column] && (
+                          <span className="block text-[12.5px] font-normal text-muted">
+                            {t("map.example")} <bdi>{sheet.examples[column]}</bdi>
+                          </span>
+                        )}
+                      </th>
+                      <td aria-hidden className="text-muted">
+                        <Icon name="arrow-right" size={16} />
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="flex items-center gap-3">
+                          <Select
+                            className="min-w-0 flex-1"
+                            aria-label={t("map.fieldFor", { column: name })}
+                            value={field}
+                            onValueChange={(value) => mapColumn(column, value)}
+                            options={fieldOptions}
+                          />
+                          {suggestion && suggestion.field === field && (
+                            <span className="inline-flex w-14 shrink-0 items-center gap-1 text-[12.5px] font-bold text-success-fg" title={t("map.suggested")}>
+                              <Icon name="star" size={13} />
+                              <span className="sr-only">{t("map.suggested")}</span>
+                              {t("map.score", { score: n(suggestion.score) })}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </th>
-                    <td aria-hidden className="text-muted">
-                      <Icon name="arrow-right" size={16} />
-                    </td>
-                    <td className="px-4 py-2">
-                      <Select
-                        aria-label={t("map.fieldFor", { column: header || columnLetter(column) })}
-                        value={fieldOf(column)}
-                        onValueChange={(value) => mapColumn(column, value as Field | "none")}
-                        options={[
-                          { value: "none", label: t("map.dontMap") },
-                          { value: "subject", label: `${t("fields.subject")} *` },
-                          { value: "type", label: `${t("fields.type")} *` },
-                          { value: "trade", label: `${t("fields.trade")} *` },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <Checkbox
+                          aria-label={t("map.matchValuesFor", { column: name })}
+                          checked={field !== "none" && matchesValues(field, fields) && (ticked[column] ?? false)}
+                          disabled={field === "none" || !matchesValues(field, fields)}
+                          onCheckedChange={(on) => setTicked((was) => ({ ...was, [column]: on === true }))}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          <p className="flex flex-wrap items-start gap-2 rounded-md bg-info-tint px-4 py-3 text-[13px] text-info-fg">
+            <Icon name="info-circle" size={16} className="mt-0.5" />
+            <span className="flex-1">{t("map.valuesHelp")}</span>
+          </p>
+          <p className="flex items-start gap-2 text-[13px] text-muted">
+            <Icon name="forms" size={16} className="mt-0.5" />
+            {t("map.formFieldsHelp")}
+          </p>
+          <p className="flex items-start gap-2 text-[13px] text-muted">
+            <Icon name="info-circle" size={16} className="mt-0.5" />
+            {t("map.paperRefHelp")}
+          </p>
           <section aria-labelledby="fixed-heading" className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4">
             <h2 id="fixed-heading" className="text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">
               {t("map.oneValue")}
@@ -475,10 +662,168 @@ export function RegisterImportWizard({
           </section>
           <div className="flex items-center justify-between">
             {back("sheet")}
-            <Button onClick={() => void validate()} disabled={busy || mapping() === null}>
-              {t("map.validate")}
+            <Button onClick={() => void (tickedColumns > 0 ? loadValues() : validate())} disabled={busy || mapping(false) === null}>
+              {tickedColumns > 0 ? t("map.nextValues") : t("map.validate")}
               <Icon name="arrow-right" />
             </Button>
+          </div>
+        </section>
+      )}
+
+      {step === "values" && values && file && (
+        <section aria-label={t("step.values")} className="flex flex-col gap-4">
+          {values.fields.length === 0 ? (
+            <p className="rounded-md border border-border bg-surface px-4 py-6 text-center text-[14px] text-muted">{t("values.nothing")}</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface px-3 py-2">
+                <ol aria-label={t("values.fields")} className="flex flex-wrap items-center gap-1">
+                  {values.fields.map((f, index) => (
+                    <li key={f.field} className="flex items-center gap-1">
+                      {index > 0 && <Icon name="chevron-right" size={14} className="text-muted" />}
+                      <button
+                        type="button"
+                        aria-current={index === valueTab ? "step" : undefined}
+                        onClick={() => setValueTab(index)}
+                        className={cn(
+                          "inline-flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[14px] font-semibold hover:bg-hover",
+                          index === valueTab ? "bg-brand-tint text-brand-fg" : "text-text-secondary",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex size-5 items-center justify-center rounded-full text-[11px]",
+                            index === valueTab ? "bg-primary text-on-primary" : "bg-neutral-tint text-muted",
+                          )}
+                        >
+                          {n(index + 1)}
+                        </span>
+                        {fieldName(f.field)}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <span className="ms-auto text-[13px] text-muted">{t("values.fieldOf", { at: n(valueTab + 1), of: n(values.fields.length) })}</span>
+              </div>
+              {currentValues && (
+                <div className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="flex-1">
+                      <h2 className="flex items-center gap-2 text-[16px] font-bold">
+                        <bdi>{sheet?.headers[currentValues.column] || columnLetter(currentValues.column)}</bdi>
+                        <Icon name="arrow-right" size={16} className="text-muted" />
+                        {fieldName(currentValues.field)}
+                      </h2>
+                      <p className="text-[13px] text-muted">
+                        {t("values.summary", {
+                          values: n(currentValues.values.length),
+                          count: currentValues.values.length,
+                          rows: n(currentValues.values.reduce((sum, v) => sum + v.rows, 0)),
+                        })}
+                      </p>
+                    </div>
+                    {(() => {
+                      const unmatched = currentValues.values.filter((v) => matchOf(currentValues.field, v) === null).length;
+                      return unmatched === 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-sm bg-success-tint px-2 py-1 text-[12.5px] font-bold text-success-fg">
+                          <Icon name="check" size={14} />
+                          {t("values.allMatched")}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-sm bg-danger-tint px-2 py-1 text-[12.5px] font-bold text-danger-fg">
+                          <Icon name="alert-triangle" size={14} />
+                          {t("values.unmatched", { count: unmatched, n: n(unmatched) })}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div role="region" aria-label={t("values.caption")} tabIndex={0} className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-[14px]">
+                      <caption className="sr-only">{t("values.caption")}</caption>
+                      <thead>
+                        <tr className="bg-surface-subtle text-[12.5px] font-bold text-text-secondary">
+                          <th scope="col" className="px-3 py-3 text-start">
+                            {t("values.inRegister")}
+                          </th>
+                          <th scope="col" className="w-8" />
+                          <th scope="col" className="px-3 py-3 text-start">
+                            {t("values.rabaedValue")}
+                          </th>
+                          <th scope="col" className="w-24 px-3 py-3" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentValues.values.map((v) => {
+                          const chosen = matchOf(currentValues.field, v);
+                          const suggested = v.how === "suggested" && chosen === v.match;
+                          return (
+                            <tr key={v.key} className={cn("border-t border-border-subtle", suggested && "bg-success-tint/50", chosen === null && "bg-danger-tint/40")}>
+                              <th scope="row" className="px-3 py-2.5 text-start font-semibold">
+                                <bdi>{v.text}</bdi>
+                                <span className="block text-[12.5px] font-normal text-muted">{t("values.rows", { count: v.rows, n: n(v.rows) })}</span>
+                              </th>
+                              <td aria-hidden className="text-muted">
+                                <Icon name="arrow-right" size={16} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Select
+                                  aria-label={t("values.matchFor", { value: v.text })}
+                                  value={chosen ?? "none"}
+                                  onValueChange={(value) =>
+                                    setMatches((was) => {
+                                      const field = { ...was[currentValues.field] };
+                                      if (value === "none") delete field[v.key];
+                                      else field[v.key] = value;
+                                      return { ...was, [currentValues.field]: field };
+                                    })
+                                  }
+                                  options={[{ value: "none", label: t("values.notMatched") }, ...valueOptions(currentValues.field)]}
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-center text-[12.5px]">
+                                {chosen === null ? (
+                                  <span className="font-semibold text-danger-fg">{t("values.none")}</span>
+                                ) : v.how === "exact" && !matches[currentValues.field]?.[v.key] ? (
+                                  <span className="text-muted">{t("values.exact")}</span>
+                                ) : suggested ? (
+                                  <span className="inline-flex items-center gap-1 font-bold text-success-fg">
+                                    <Icon name="star" size={13} />
+                                    <span className="sr-only">{t("map.suggested")}</span>
+                                    {t("map.score", { score: n(v.score ?? 0) })}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted">{t("values.byHand")}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              <p className="flex items-start gap-2 text-[13px] text-muted">
+                <Icon name="info-circle" size={16} className="mt-0.5" />
+                {t("values.help")}
+              </p>
+            </>
+          )}
+          <div className="flex items-center justify-between">
+            <Button variant="secondary" onClick={() => (valueTab > 0 ? setValueTab(valueTab - 1) : setStep("map"))} disabled={busy}>
+              {t("back")}
+            </Button>
+            {valueTab < values.fields.length - 1 ? (
+              <Button onClick={() => setValueTab(valueTab + 1)} disabled={busy}>
+                {t("values.next", { field: fieldName(values.fields[valueTab + 1]!.field) })}
+                <Icon name="arrow-right" />
+              </Button>
+            ) : (
+              <Button onClick={() => void validate()} disabled={busy || mapping() === null}>
+                {t("map.validate")}
+                <Icon name="arrow-right" />
+              </Button>
+            )}
           </div>
         </section>
       )}
@@ -513,17 +858,23 @@ export function RegisterImportWizard({
             </TabsList>
             <TabsContent value="errors" className="pt-4">
               <div className="overflow-hidden rounded-md border border-border bg-surface">
-                <ErrorRows rows={preview.rows.filter((r) => r.reasons.length > 0)} label={t("validate.errors")} onFixMapping={file ? () => setStep("map") : undefined} />
+                <ErrorRows
+                  rows={preview.rows.filter((r) => r.reasons.length > 0)}
+                  label={t("validate.errors")}
+                  mapping={preview.mapping}
+                  onFixMapping={file ? () => setStep("map") : undefined}
+                  onFixValues={file && values ? () => setStep("values") : undefined}
+                />
               </div>
             </TabsContent>
             <TabsContent value="imported" className="pt-4">
-              <div className="overflow-hidden rounded-md border border-border bg-surface">
-                <ImportRows rows={preview.rows.filter((r) => r.reasons.length === 0)} label={t("validate.imported")} locale={locale} />
+              <div className="overflow-x-auto rounded-md border border-border bg-surface">
+                <ImportRows rows={preview.rows.filter((r) => r.reasons.length === 0)} label={t("validate.imported")} locale={locale} mapping={preview.mapping} />
               </div>
             </TabsContent>
           </Tabs>
           <div className="flex items-center justify-between">
-            {back(file && sheet ? "map" : "upload")}
+            {back(file && sheet ? (values ? "values" : "map") : "upload")}
             <Button onClick={() => void confirm()} disabled={busy || preview.rowsTotal === preview.rowsRejected}>
               <Icon name="check" />
               {t("validate.confirm", { count: preview.rowsTotal - preview.rowsRejected, n: n(preview.rowsTotal - preview.rowsRejected) })}

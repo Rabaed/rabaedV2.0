@@ -742,6 +742,7 @@
       "type": "Type",
       "documentNumber": "Document Number",
       "duplicatedFrom": "Duplicated from",
+      "paperRef": "Paper ref",
       "step": "Step",
       "with": "With",
       "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +#}}",
@@ -749,6 +750,23 @@
       "issuedCode": "Issued Code",
       "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags" },
       "raisedItemCounts": "{open} open / {closed} closed"
+    },
+    "paperRef": {
+      "label": "Paper ref",
+      "none": "None",
+      "add": "Add",
+      "change": "Change",
+      "save": "Save",
+      "cancel": "Cancel",
+      "help": "The submittal's old paper number. It is never its Document Number, and can be changed only while it is a Draft.",
+      "errors": {
+        "taken": "Another submittal of your Company on this Project already has this Paper ref.",
+        "tooLong": "A Paper ref takes at most 100 characters.",
+        "notEditable": "The Paper ref can be changed only while it is your Draft.",
+        "notFound": "This item isn't available.",
+        "projectClosed": "This Project is closed.",
+        "unavailable": "It couldn't be saved. Try again."
+      }
     },
     "invalid": "Give a Subject and a Trade.",
     "notContractor": "Only a Contractor can raise this Submittal.",
@@ -1973,6 +1991,7 @@
       "upload": "Upload",
       "sheet": "Worksheet & column headings",
       "map": "Map fields",
+      "values": "Map values",
       "validate": "Validate"
     },
     "back": "Back",
@@ -1982,7 +2001,7 @@
       "drop": "Drop your submittal register here",
       "browse": "Browse",
       "anyLayout": "Any order of columns works: you map them next. Nothing is created until you confirm.",
-      "asText": "Cells are read as stored, not as shown: type references you need kept as written as text, so 0012 stays 0012."
+      "asText": "Cells are read as stored, not as shown: type each Paper ref as text in your register, so 0012 stays 0012."
     },
     "sheet": {
       "fileDetail": "{worksheets, plural, one {1 worksheet} other {{n} worksheets}} · {size} MB",
@@ -2004,16 +2023,47 @@
       "example": "e.g.",
       "fieldFor": "Rabaed field for {column}",
       "dontMap": "Don't map this column",
+      "formField": "Form · {label} ({types})",
+      "matchValues": "Map field value",
+      "matchValuesFor": "Map the values of {column}",
+      "suggested": "Suggested from the column heading",
+      "score": "{score}%",
+      "valuesHelp": "Tick Map field value to match a column's values to Rabaed's on the next step (\"Elec.\" to Electrical, for one). Values are matched by their code, or as Rabaed writes them in English or Arabic, whatever their case and spaces; any other value makes its row bad.",
+      "formFieldsHelp": "Form fields show only the simple fields (text, number, date, list, a Member or Company) of the Types you may raise. A field a row's Type doesn't have is left empty.",
+      "paperRefHelp": "Paper ref is the old paper number of a submittal still under review on paper. Type it as text in your register, so it is read exactly as written.",
       "oneValue": "Or use one value for every row",
       "fromColumn": "From column {column}",
       "sameForEvery": "Same for every row",
       "choose": "Choose…",
+      "nextValues": "Next: map values",
       "validate": "Validate"
+    },
+    "values": {
+      "fields": "Fields to match",
+      "fieldOf": "Field {at} of {of}",
+      "summary": "{count, plural, one {1 value} other {{values} different values}} in {rows} rows: each is matched once.",
+      "allMatched": "All matched",
+      "unmatched": "{count, plural, one {1 value not matched} other {{n} values not matched}}",
+      "caption": "Each value in the column and the Rabaed value it matches",
+      "inRegister": "Value in your register",
+      "rabaedValue": "Rabaed value",
+      "rows": "{count, plural, one {1 row} other {{n} rows}}",
+      "matchFor": "Rabaed value for {value}",
+      "notMatched": "— Not matched —",
+      "none": "Not matched",
+      "exact": "Exact",
+      "byHand": "Chosen",
+      "help": "A suggestion is chosen for you: look it over. A value left not matched makes its rows bad.",
+      "nothing": "No column to match: validate.",
+      "next": "Next: {field}"
     },
     "fields": {
       "subject": "Subject",
       "type": "Type",
-      "trade": "Trade"
+      "trade": "Trade",
+      "scopes": "Scopes",
+      "location": "Location",
+      "paperRef": "Paper ref"
     },
     "validate": {
       "checked": "rows checked",
@@ -2047,6 +2097,7 @@
       "previewOutdated": "Something in the Project changed since you validated. Validate again.",
       "typeNotFound": "You can't raise that Type.",
       "tradeNotFound": "That Trade isn't in this Project.",
+      "fieldNotFound": "A mapped Form field isn't on a Type you may raise any more. Map the fields again.",
       "forbidden": "You can't raise Submittals on this Project.",
       "notFound": "This Project isn't available.",
       "projectClosed": "This Project is closed.",
@@ -2060,7 +2111,15 @@
       "type_not_allowed": "You can't raise {value}",
       "trade_missing": "Trade empty",
       "trade_unknown": "Trade ‘{value}’ not in this Project",
-      "trade_outside_visibility": "Trade {value} is outside your Visibility"
+      "trade_outside_visibility": "Trade {value} is outside your Visibility",
+      "scope_unknown": "Scope ‘{value}’ not in this Project",
+      "scope_not_under_trade": "Scope ‘{value}’ isn't under the row's Trade",
+      "location_unknown": "Location ‘{value}’ not in this Project",
+      "location_outside_visibility": "Location {value} is outside your Visibility",
+      "field_invalid": "‘{value}’ doesn't fit {field}",
+      "paper_ref_too_long": "Paper ref over 100 characters",
+      "paper_ref_repeated": "Paper ref ‘{value}’ is on more than one row",
+      "paper_ref_taken": "Paper ref ‘{value}’ is already on a submittal of your Company here"
     },
     "rows": {
       "row": "Row",
@@ -2070,8 +2129,12 @@
       "noErrors": "Every row is ready to import.",
       "fixInFile": "Fix in your register",
       "mapFields": "Map fields",
+      "mapValues": "Map values",
       "type": "Type",
       "trade": "Trade",
+      "location": "Location",
+      "scopes": "Scopes",
+      "paperRef": "Paper ref",
       "result": "Draft",
       "nothingToImport": "No row is ready to import.",
       "openDraft": "Open the Draft",
@@ -2091,6 +2154,7 @@
       "sheet": "Worksheet",
       "headerRow": "Column headings in row",
       "everyRow": "{value}, every row",
+      "formField": "Form · {label}",
       "rows": "Rows of this import",
       "worksheetValue": "{worksheet}, column headings in row {row}"
     }

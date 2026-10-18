@@ -30,6 +30,7 @@ import type {
   ProjectSummary,
   RaisableTypes,
   RegisterImport,
+  RegisterImportFields,
   RegisterImports,
   RevisionChain,
   Scopes,
@@ -246,6 +247,11 @@ export function getNewWorkItemForm(projectId: string, typeCode: string): Promise
 /** The Project's Submittal Register Imports of the Member's own Company (RP-637), by file name; null when hidden. */
 export function getRegisterImports(projectId: string): Promise<RegisterImports | null> {
   return apiGet<RegisterImports>(`/v1/projects/${encodeURIComponent(projectId)}/register-imports`);
+}
+
+/** What a register may fill on a Project (RP-639): the Types, the Project's values and the simple Form fields; null when the Member may not import there. */
+export function getRegisterImportFields(projectId: string): Promise<RegisterImportFields | null> {
+  return apiGet<RegisterImportFields>(`/v1/projects/${encodeURIComponent(projectId)}/register-imports/fields`);
 }
 
 /** One Submittal Register Import with its rows; null when the Member doesn't read it. */

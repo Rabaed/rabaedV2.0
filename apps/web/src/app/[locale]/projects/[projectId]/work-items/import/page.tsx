@@ -3,13 +3,14 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { RegisterImportWizard } from "@/components/register-import-wizard";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getMyVisibility, getProject, getRaisableTypes, getRegisterImport } from "@/lib/session";
+import { getMe, getMyVisibility, getProject, getRaisableTypes, getRegisterImport, getRegisterImportFields } from "@/lib/session";
 
 /**
  * The Submittals Module's "Import register" (RP-637, spec RP-631): the wizard that
  * creates Drafts from the Member's own register. Only for a Member who may raise a
- * Submittals Type; the fixed Trade offers only the Trades their Visibility covers.
- * `?preview=<id>` reopens the Member's own preview at Validate (the API answers it to
+ * Submittals Type; the fixed Trade offers only the Trades their Visibility covers. What a
+ * register may fill (RP-639: Scopes, Location, Paper ref, Form fields, and the values to
+ * match) comes from the API's register-imports/fields. `?preview=<id>` reopens the Member's own preview at Validate (the API answers it to
  * its importer only).
  */
 export default async function ImportRegisterPage({
@@ -23,15 +24,16 @@ export default async function ImportRegisterPage({
   const { preview: previewId } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("registerImport");
-  const [me, project, raisable, mine, preview] = await Promise.all([
+  const [me, project, raisable, mine, fields, preview] = await Promise.all([
     getMe(),
     getProject(projectId),
     getRaisableTypes(projectId),
     getMyVisibility(projectId),
+    getRegisterImportFields(projectId),
     typeof previewId === "string" ? getRegisterImport(previewId) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !raisable || !mine || raisable.types.length === 0) notFound();
+  if (!project || !raisable || !mine || !fields || raisable.types.length === 0) notFound();
   if (preview && preview.projectId === project.id && preview.status === "created") {
     return redirect({ href: `/projects/${project.id}/work-items/imports/${preview.id}`, locale });
   }
@@ -53,6 +55,7 @@ export default async function ImportRegisterPage({
         projectId={project.id}
         locale={locale}
         types={raisable.types}
+        fields={fields}
         trades={mine.trade.map((v) => ({ id: v.id, code: v.code, name: v.name }))}
         initialPreview={preview && preview.projectId === project.id ? preview : null}
       />
