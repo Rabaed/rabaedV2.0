@@ -32,7 +32,7 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
   const suppliers = await getSupplierChoices(item.projectId);
   const date = (iso: string) => formatDayMonthYear(new Date(iso), locale, { month: "short" });
   // Read only: nothing is uploaded here, so no limits apply.
-  const readOnly = { documents: item.documents, canChange: false, limits: { maxBytes: 1, contentTypes: [] } };
+  const readOnly = { documents: item.documents, canChange: false, canChangeReplies: false, limits: { maxBytes: 1, contentTypes: [] } };
   const links = { links: item.links.map((l) => ({ ...l, workItemId: null })), canChange: false };
   // The Built-in Fields name the item's own values, as on any item read only.
   const choices = readingChoices({ trade: item.trade, location: item.location, scopes: item.scopes } as WorkItemDetail, locale);
