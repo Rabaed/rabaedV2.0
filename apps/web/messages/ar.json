@@ -725,8 +725,8 @@
       "notPickedUpYet": "{company} · لم تُستلَم بعد: {names}{more, plural, =0 {} other { +#}}",
       "raisedBy": "أنشأه",
       "issuedCode": "الرمز الصادر",
-      "comments": "الملاحظات",
-      "commentCounts": "{open} مفتوحة / {closed} مغلقة"
+      "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب" },
+      "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة"
     },
     "invalid": "أدخل موضوعًا واختر تخصصًا.",
     "notContractor": "فقط المقاول يمكنه إنشاء هذا الاعتماد.",
@@ -1008,6 +1008,7 @@
     "conditional": "لا يُدخل إليها إلا عند تحقق شرط",
     "error": "فيه خطأ",
     "createsItems": "يُنشئ عناصر في قائمة الملاحظات",
+    "raiser": "المُنشئ",
     "everyStep": "تظهر خطوات كل الشركات، بما فيها الداخلية: سير العمل وصف لعملية، وليس عمل أحد.",
     "newerVersion": "يعمل هذا البند على الإصدار {version}. تم تحديث سير العمل إلى الإصدار {latest}.",
     "grouped": "بعض الخطوات مجمّعة لأنها داخلية لشركة أخرى.",

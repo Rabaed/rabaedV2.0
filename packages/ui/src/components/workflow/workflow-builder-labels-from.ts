@@ -31,7 +31,7 @@ export function workflowBuilderLabels({
       canvas: tMap("canvas"),
       list: tMap("listName"),
       outcome: tMap("outcome"),
-      role: (role) => tRoles(role),
+      role: (role) => (role === "raiser" ? tMap("raiser") : tRoles(role)),
       permission: (permission) => tMap(`permissions.${permission}`),
       outcomeMode: (mode) => tMap(`outcomeModes.${mode}`),
       kind: (kind) => tMap(`kinds.${kind}`),
