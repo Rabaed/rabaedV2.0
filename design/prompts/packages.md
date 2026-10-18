@@ -4,7 +4,7 @@ Design **Packages** for Rabaed, a B2B construction management web app used in Sa
 Inside every Rabaed project, the **Submittals** module lists submittals (Material, Supplier and Document Approval Requests: MAR, SAR, DAR). Each submittal follows its own Workflow and ends with a **Review Code**: A (Approved), B (Approved with Comments), C (Revise and Resubmit) or D (Rejected).
 
 A **Package** is a named group of submittals that one company (usually the Contractor) puts together to follow one piece of work, e.g. "Bathrooms – Tower 1".
-- Numbered per project, `PKG-001`, `PKG-002`. Numbers are always shown left to right, even in Arabic.
+- Numbered per project and owning company, `PKG-001`, `PKG-002`: each company counts its own, so two companies' Packages can share a number and the card always shows the owning company next to it. Numbers are always shown left to right, even in Arabic.
 - It has **no Workflow of its own**. The Contractor builds it from its Drafts, then **Submits the Package once**, which submits every submittal in it. From then on, each submittal follows its own Workflow to its own Review Code; the Package only shows their progress.
 - Status: **Open** (nothing in it submitted yet) → **In Progress** (as soon as any submittal in it is submitted) → **Done**, once every latest submittal in it has closed at Code A, B or D. A Code C waits for its Revision, which joins the Package by itself, as does the replacement of a Code D. A replacement raised after Done puts it back In Progress. Say **Done**, never "Closed".
 - While **Open**, the owner can add and **remove** submittals, rename it, or delete it (its Drafts stay, just without a Package). Once **In Progress**, submittals can still be **added**, but **never removed**; it can still be renamed (the rename is recorded).
@@ -51,7 +51,7 @@ The product owner's prototype is `design/reference/claude-design/ui_kits/app/pac
 | --- | --- | --- |
 | Where | A separate "Packages" project tab with its own Kanban and List | A **Packages** toggle next to List and Kanban inside the Submittals module |
 | Status | Not started / In progress / Needs attention / Complete; D counted as bad | **Open / In Progress / Done**; Done when every latest item is closed at A, B or D; a C waits for its Revision |
-| Number | `PKG-TWR-TMC-001` | `PKG-001` per Project, LTR |
+| Number | `PKG-TWR-TMC-001` | `PKG-001` per Project and owning Participant, LTR, beside the owning Company |
 | Companies | From → To Companies | The owning Company only |
 | Counts | A/B, C/D, In review, Missing, by Type | One count per Review Code (A–D) plus "still open", only from the submittals the viewer sees |
 | Item table | Number, Title, Type, Trade, Rev, Status, Code, Current owner (a person), Due | Document Number, Subject, Type, Trade, **With** (a Company name for another Company, V14), Review Code or Stage, Step Age dots |
