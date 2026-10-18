@@ -136,6 +136,28 @@ export const checklistItem = z.object({
 });
 export type ChecklistItem = z.infer<typeof checklistItem>;
 
+/** What a failed check item leads to: nothing, or a Snag raised from it (RP-577 builds the Snags). */
+export const negativeActions = ["none", "create_snag"] as const;
+export type NegativeAction = (typeof negativeActions)[number];
+
+/**
+ * One check of a Checklist Template (RP-651): a checklist item, and what a
+ * negative answer to it leads to, `create_snag` unless it says otherwise.
+ */
+export const checklistTemplateItem = checklistItem.extend({ on_negative: z.enum(negativeActions).default("create_snag") });
+export type ChecklistTemplateItem = z.infer<typeof checklistTemplateItem>;
+
+/** 1 to maxChecklistItems items of `item`'s shape, each key once. */
+const checklistItems = <T extends z.ZodType<{ key: string }>>(item: T) =>
+  z
+    .array(item)
+    .min(1)
+    .max(maxChecklistItems)
+    .refine((items) => new Set(items.map((i) => i.key)).size === items.length, "Item keys must be unique");
+
+/** A Checklist Template's items, as a Project Admin writes them and an item copies them. */
+export const checklistTemplateItems = checklistItems(checklistTemplateItem);
+
 /**
  * The key under which `ValidationContext.files` counts a checklist item's confirmed
  * photos: a field key and an item key are never `.`-separated, so it can't clash with a field's own.
@@ -357,15 +379,16 @@ export const formField = z.discriminatedUnion("type", [
    * 2 Fail / 1 N/A) is derived, never stored. `required` asks every item for an
    * answer when the item leaves Draft.
    */
-  z.object({
-    ...fieldBase,
-    type: z.literal("checklist"),
-    items: z
-      .array(checklistItem)
-      .min(1)
-      .max(maxChecklistItems)
-      .refine((items) => new Set(items.map((i) => i.key)).size === items.length, "Item keys must be unique"),
-  }),
+  z.object({ ...fieldBase, type: z.literal("checklist"), items: checklistItems(checklistItem) }),
+  /**
+   * A Checklist Template of the Project (RP-651, form-engine.md §3.2), by the id of
+   * the template's Version picked. A new choice is the latest Version of an active
+   * template of the item's Trade; one the item already holds stays, edited or
+   * retired since, until the Trade changes. The picked Version's items are copied
+   * onto the item (`work_item_checklist`), never into the Form, and are fixed after
+   * the first Submit.
+   */
+  z.object({ ...fieldBase, type: z.literal("checklist_template") }),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -609,10 +632,30 @@ export type ValidationContext = {
    * it an answer is only checked to be an id; the server always passes it.
    */
   suppliers?: readonly SupplierChoice[];
+  /**
+   * The Project's Checklist Template Versions a `checklist_template` field may
+   * hold, for this item (RP-651): the latest Version of each template, and the one
+   * the item already holds. Without it an answer is only checked to be an id; the
+   * server always passes it.
+   */
+  checklistTemplates?: readonly ChecklistTemplateChoice[];
 };
 
 /** A supplier of the Approved Supplier List as the validator and the renderer read it; `name` is for display. */
 export type SupplierChoice = { id: string; tradeId: string; status: "approved" | "withdrawn"; name?: z.infer<typeof bilingualText> };
+
+/**
+ * A Checklist Template Version as a `checklist_template` field reads it (RP-651),
+ * by the Version's id: its template's Trade, and whether it is `offered` as a new
+ * choice (the latest Version of an active template). `name` and `items` are for display.
+ */
+export type ChecklistTemplateChoice = {
+  id: string;
+  tradeId: string;
+  offered: boolean;
+  name?: z.infer<typeof bilingualText>;
+  items?: readonly ChecklistTemplateItem[];
+};
 
 /**
  * The schema with the link questions `keys` names always required: those its
@@ -954,6 +997,14 @@ function checkValue(
       if (!supplier || supplier.tradeId !== given.trade) return "unknown_option";
       return supplier.status === "approved" || context.held?.[field.key] === value ? null : "unknown_option";
     }
+    case "checklist_template": {
+      if (typeof value !== "string") return "wrong_type";
+      if (!context.checklistTemplates) return isId(value) ? null : "unknown_option";
+      const version = context.checklistTemplates.find((t) => t.id === value);
+      // Another Trade's template is refused (a held one was cleared before this check).
+      if (!version || version.tradeId !== given.trade) return "unknown_option";
+      return version.offered || context.held?.[field.key] === value ? null : "unknown_option";
+    }
     case "work_item_ref": {
       if (!Array.isArray(value) || !value.every((v) => isId(v) || isHiddenLinkChoice(v))) return "wrong_type";
       const ids = value.filter((v): v is string => typeof v === "string");
@@ -1147,24 +1198,36 @@ export function tableTotals(field: TableField, rows: unknown): Record<string, nu
 }
 
 /**
- * `answers` without the supplier an `approved_supplier` field already holds when
- * the Trade has changed to another than that supplier's: changing the Trade
- * clears it. A supplier given anew for another Trade is not cleared but refused.
+ * `answers` without the supplier an `approved_supplier` field, or the Checklist
+ * Template a `checklist_template` field, already holds when the Trade has changed
+ * to another than its own: changing the Trade clears it. One given anew for
+ * another Trade is not cleared but refused.
  */
-function clearSuppliersOfOtherTrades(
+function clearChoicesOfOtherTrades(
   fields: readonly AnswerField[],
   answers: Record<string, unknown>,
   context: ValidationContext,
 ): Record<string, unknown> {
-  if (!context.suppliers || !context.held) return answers;
+  if (!context.held) return answers;
   const out = { ...answers };
   for (const field of fields) {
-    if (field.type !== "approved_supplier") continue;
+    const choices = field.type === "approved_supplier" ? context.suppliers : field.type === "checklist_template" ? context.checklistTemplates : undefined;
     const value = out[field.key];
-    const supplier = typeof value === "string" ? context.suppliers.find((s) => s.id === value) : undefined;
-    if (supplier && context.held[field.key] === value && supplier.tradeId !== out.trade) delete out[field.key];
+    const held = choices && typeof value === "string" ? choices.find((c) => c.id === value) : undefined;
+    if (held && context.held[field.key] === value && held.tradeId !== out.trade) delete out[field.key];
   }
   return out;
+}
+
+/**
+ * The keys of the `checklist_template` fields whose answer `answers` changes from
+ * `held`: none may change after the item's first Submit, nor its copy (RP-651).
+ */
+export function changedChecklistTemplates(schema: FormSchema, held: Readonly<Record<string, unknown>>, answers: unknown): string[] {
+  const given = isRow(answers) ? answers : {};
+  return formFields(schema)
+    .filter((f) => f.type === "checklist_template" && (given[f.key] ?? null) !== (held[f.key] ?? null))
+    .map((f) => f.key);
 }
 
 /**
@@ -1187,7 +1250,7 @@ export function validateAnswers(
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
   const fields = answerFields(schema);
-  const given = clearSuppliersOfOtherTrades(fields, answers as Record<string, unknown>, context);
+  const given = clearChoicesOfOtherTrades(fields, answers as Record<string, unknown>, context);
   const visibility = formVisibility(schema, given);
   const errors: FieldError[] = [];
   const clean: Record<string, FormValue> = {};

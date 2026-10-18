@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { checklistCopy } from "./checklist-template.ts";
 import { bilingualText } from "./company.ts";
 import { documentSummary } from "./document.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
@@ -435,6 +436,8 @@ export const sharedWorkItem = z.object({
   answers: formAnswers,
   /** A `participant` answer by its Company's name; a `member` answer names nobody (no people). */
   namedAnswers,
+  /** Its Checklist Template copies (RP-651), fixed since its first Submit. */
+  checklistCopies: z.array(checklistCopy),
   /** Its Documents as of its last arrival, never one added since; the uploader by Company only. */
   documents: z.array(documentSummary),
   /** Its Links as of its last arrival, each linked item by Document Number and Subject only. */
@@ -630,6 +633,8 @@ export const workItemDetail = workItemSummary.extend({
   answers: formAnswers,
   /** The `member` and `participant` answers as the viewer may read them, by field key. */
   namedAnswers,
+  /** The Checklist Template Versions its `checklist_template` fields picked, copied onto it (RP-651). */
+  checklistCopies: z.array(checklistCopy),
   /** When each answer last changed and by whom, by field key; only for a viewer who may save, else empty. */
   fieldTimes: z.record(z.string(), fieldTime),
   /** The web autosaves it: only the first Draft, where saves write no history. */
