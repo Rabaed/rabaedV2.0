@@ -253,9 +253,10 @@ export function getRegisterImport(importId: string): Promise<RegisterImport | nu
   return apiGet<RegisterImport>(`/v1/register-imports/${encodeURIComponent(importId)}`);
 }
 
-/** The Submittals Types the signed-in Member may raise on a Project (the Type picker, the MAR first); null when hidden. */
-export function getRaisableTypes(projectId: string): Promise<RaisableTypes | null> {
-  return apiGet<RaisableTypes>(`/v1/projects/${encodeURIComponent(projectId)}/raisable-types`);
+/** The Types of a Module (the Submittals by default) the signed-in Member may raise on a Project (the Type picker, the MAR first); null when hidden. */
+export function getRaisableTypes(projectId: string, module: ModuleKey = "submittals"): Promise<RaisableTypes | null> {
+  const query = module === "submittals" ? "" : `?module=${module}`;
+  return apiGet<RaisableTypes>(`/v1/projects/${encodeURIComponent(projectId)}/raisable-types${query}`);
 }
 
 /** Who and which Companies the Member may choose in a new item's Form (only those they can see); null when hidden. */

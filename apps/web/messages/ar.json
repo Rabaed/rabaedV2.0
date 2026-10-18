@@ -75,6 +75,27 @@
     "activity": "النشاط",
     "settings": "الإعدادات"
   },
+  "snagList": {
+    "newItem": "جديد",
+    "newOfType": "إضافة {type}",
+    "types": "الأنواع",
+    "allTypes": "الكل",
+    "company": "الشركة",
+    "raisedFrom": "المصدر",
+    "raisedManually": "يدويًا",
+    "photo": "صورة",
+    "hideGroup": "إخفاء {stage}",
+    "showGroup": "إظهار {stage}",
+    "code": "Code {code}",
+    "photoOf": "صورة {subject}",
+    "noItems": "لا شيء هنا",
+    "emptyTitle": "لا توجد ملاحظات. عمل رائع.",
+    "emptyBody": "تظهر الملاحظات والتعليقات هنا عند تسجيلها في الموقع أو من الفحوصات الراسبة أو من مراجعات Code B.",
+    "noMatchTitle": "لا شيء مما تراه يطابق هذه التصفية",
+    "noSearchMatchTitle": "لا شيء مما تراه يطابق هذا البحث",
+    "clearFilters": "مسح التصفية",
+    "searchPlaceholder": "ابحث بالرقم أو الموضوع"
+  },
   "workItemViews": {
     "moreActions": "إجراءات أخرى",
     "list": {

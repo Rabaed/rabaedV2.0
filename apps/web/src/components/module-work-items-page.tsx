@@ -2,8 +2,9 @@ import { workItemQueryFromSearchParams, workItemViewFromSearchParams, type Local
 import { Icon, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
-import { listQueryFromSearchParams } from "@/lib/list-url";
+import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
 import { Link, getPathname, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
@@ -39,18 +40,36 @@ export async function ModuleWorkItemsPage({
   // The tab's path names the Module, whatever the query string says.
   // List or Kanban, kept in the URL as `view`. The List pages by number, sorted by Submittal No. unless the URL says.
   const view = workItemViewFromSearchParams(searchParams);
-  const query = { ...(view === "list" ? listQueryFromSearchParams(searchParams) : workItemQueryFromSearchParams(searchParams)), module };
+  const snags = module === "snag_list";
+  const listQuery = listQueryFromSearchParams(searchParams);
+  // The Snag List's List sorts by Stage unless the URL says, so each Stage's group holds together (RP-94).
+  const query = {
+    ...(view === "list" ? { ...listQuery, sort: snags && searchParams.sort === undefined ? snagListSort : listQuery.sort } : workItemQueryFromSearchParams(searchParams)),
+    module,
+  };
   const [me, project, list, board, raisable] = await Promise.all([
     getMe(),
     getProject(projectId),
     // Names sort in the reader's language.
     view === "list" ? getWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? getWorkItemBoard(projectId, module, query) : null,
-    module === "submittals" ? getRaisableTypes(projectId) : null,
+    // The Snag List's "+ New" offers only the Types the viewer may raise (RP-94); the Submittals'
+    // Import register only to a Member who may raise one of its Types (RP-637).
+    snags || module === "submittals" ? getRaisableTypes(projectId, module) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !(list ?? board)) notFound();
   const title = tabs(module);
+
+  if (snags) {
+    const shared = { query, locale, tableLabel: title, projectId: project.id, newTypes: raisable?.types ?? [] };
+    return (
+      <>
+        <h1 className="sr-only">{title}</h1>
+        {board ? <SnagListView view="kanban" board={board} {...shared} /> : list && <SnagListView view="list" list={list} {...shared} />}
+      </>
+    );
+  }
 
   // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
   const action =
