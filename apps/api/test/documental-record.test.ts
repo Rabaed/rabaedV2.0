@@ -279,6 +279,21 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     expect(stillValid).toEqual([]);
   });
 
+  // Settled 2026-10-18 (Main 2): "the raiser's first Transition" is the first on the path to the
+  // outcome, never the Draft's start; a send out of the Draft that was Returned is off the path.
+  it("dates Prepared at the second send out of the Draft when the first was Returned (sent, Returned, sent again, closed)", async () => {
+    const xml = new TextDecoder().decode((await attachedFiles(record))[0]!.bytes);
+    const firstAt = /<transition n="1" at="([^"]+)"/.exec(xml)![1]!;
+    const { rows } = await sql<{ at: string }>`
+      select app.iso_utc(e.created_at) as at
+      from work_item_event e join workflow_transition tr on tr.id = e.transition_id
+      where e.work_item_id = ${id}::uuid and tr.key = 'send_for_review' order by e.seq
+    `.execute(migrator);
+    expect(rows).toHaveLength(2);
+    expect(firstAt).toBe(rows[1]!.at);
+    expect(xml).not.toContain(rows[0]!.at);
+  });
+
   it("validates as PDF/A-3", async () => {
     expect(await pdfA3Problems(record)).toEqual([]);
   });
