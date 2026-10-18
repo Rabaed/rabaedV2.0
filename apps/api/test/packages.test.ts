@@ -623,7 +623,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       const rowsSeen = await listed(by);
       for (const item of (await getPackage(by, pkg.id)).items) {
         const r = rowsSeen.get(item.id)!;
-        expect(item).toEqual({ id: r.id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome });
+        expect(item).toEqual({ id: r.id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome, bulkTransitions: expect.any(Array) });
       }
     }
     const items = new Map((await getPackage(at.c1Pm, pkg.id)).items.map((i) => [i.id, i]));

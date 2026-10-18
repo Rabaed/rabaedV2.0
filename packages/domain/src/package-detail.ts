@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bulkOffer } from "./bulk-transition.ts";
 import { packageItem, packageSummary } from "./package.ts";
 import { workItemRow } from "./work-item.ts";
 
@@ -10,7 +11,10 @@ import { workItemRow } from "./work-item.ts";
  * Trade, who it is with (as the List gives it, V14) and its Review Code once closed
  * (`outcome`), as the viewer reads it.
  */
-export const packageDetailItem = packageItem.extend(workItemRow.pick({ trade: true, with: true, outcome: true }).shape);
+export const packageDetailItem = packageItem.extend(workItemRow.pick({ trade: true, with: true, outcome: true }).shape).extend({
+  /** The Transitions the viewer may take on it in bulk now, with others offering the same (RP-646); none when it doesn't wait on them. */
+  bulkTransitions: z.array(bulkOffer),
+});
 export type PackageDetailItem = z.infer<typeof packageDetailItem>;
 
 /** One Package as the viewer reads it: only the submittals they see, and what they may do with it. */

@@ -16,6 +16,7 @@ import { sql, type Transaction } from "kysely";
 import type { Database } from "@rabaed/db";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { workItemRowsById } from "../work-items/query.ts";
+import { bulkOffers } from "../work-items/bulk-transitions.ts";
 import { takeTransitionIn } from "../work-items/work-items.ts";
 
 // Packages (spec RP-616; RP-636 an Open Package). Reads go through the package
@@ -125,9 +126,15 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
       ids.map((i) => i.id),
       now,
     );
+    const offers = await bulkOffers(
+      trx,
+      ids.map((i) => i.id),
+    );
     const items = ids.flatMap(({ id }) => {
       const r = seen.get(id);
-      return r ? [{ id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome }] : [];
+      return r
+        ? [{ id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome, bulkTransitions: offers.get(id) ?? [] }]
+        : [];
     });
     const project = await trx.selectFrom("project").select("status").where("id", "=", row.project_id).executeTakeFirst();
     const active = row.owned && project?.status === "active";
