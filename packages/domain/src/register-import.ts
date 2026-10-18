@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { formKey } from "./form.ts";
 import { workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -50,21 +51,70 @@ export const registerSheet = z.object({
   examples: z.array(z.string()),
   /** How many non-empty rows lie below the header row. */
   dataRows: z.int().min(0),
+  /**
+   * A field suggested for each column from its heading, in English or Arabic, with how
+   * alike they are (0–100): a RegisterFieldId; null where nothing is (RP-639, story 8).
+   */
+  suggestions: z.array(z.object({ field: z.string(), score: z.int().min(0).max(100) }).nullable()),
 });
 export type RegisterSheet = z.infer<typeof registerSheet>;
 
 /** A column of the header row, from 0. */
 const column = z.object({ column: z.int().min(0) });
 
+/** The longest Paper ref: the old paper number of a submittal still under review on paper (story 27). */
+export const paperRefMaxLength = 100;
+
+/**
+ * The fields a column can fill (the Map fields step's choices, and the suggestions):
+ * these, and `field:<key>` for a Form field of a mapped Type (registerFormFieldId).
+ */
+export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "paperRef"] as const;
+export type RegisterFieldId = (typeof registerFieldIds)[number] | `field:${string}`;
+/** A Form field's id among the fields a column can fill. */
+export const registerFormFieldId = (key: string): RegisterFieldId => `field:${key}`;
+
+/**
+ * The Form field types a register fills (spec RP-631, "Values"): plain text, numbers,
+ * dates, choices, and a Member or Participant named unambiguously. Every other field
+ * is left for the raiser.
+ */
+export const registerFormFieldTypes = ["text", "textarea", "number", "date", "select", "multi_select", "option_list", "member", "participant"] as const;
+export type RegisterFormFieldType = (typeof registerFormFieldTypes)[number];
+
+/** Values matched by hand once, by the cell's registerMatchKey, applying to every row with it (story 10). */
+const matchesOf = <T extends z.ZodType<string>>(value: T) =>
+  z.record(z.string().max(500), value).refine((matches) => Object.keys(matches).length <= 2000, "At most 2,000 matches");
+
 /**
  * Which column gives each field: the Subject from a column, the Type and the Trade
- * each from a column or one value for every row (a Type code; a Trade's id).
- * Columns not mapped are ignored.
+ * each from a column or one value for every row (a Type code; a Trade's id), and the
+ * optional Scopes, Location, Paper ref and Form fields (a Form field's `label` is
+ * filled in by the preview, as the Form names it). `values` holds the values matched
+ * by hand: a Type code, an id, or an option's value. Columns not mapped are ignored.
  */
 export const registerImportMapping = z.object({
   subject: column,
   type: z.union([column, z.object({ value: workItemTypeCode })]),
   trade: z.union([column, z.object({ value: z.uuid() })]),
+  scopes: column.optional(),
+  location: column.optional(),
+  paperRef: column.optional(),
+  fields: z
+    .array(column.extend({ key: formKey, label: bilingualText.optional() }))
+    .max(100)
+    .refine((fields) => new Set(fields.map((f) => f.key)).size === fields.length, "Each Form field once")
+    .optional(),
+  values: z
+    .object({
+      type: matchesOf(workItemTypeCode),
+      trade: matchesOf(z.uuid()),
+      location: matchesOf(z.uuid()),
+      scopes: matchesOf(z.uuid()),
+      fields: z.record(formKey, matchesOf(z.string().max(64))),
+    })
+    .partial()
+    .optional(),
 });
 export type RegisterImportMapping = z.infer<typeof registerImportMapping>;
 
@@ -90,6 +140,14 @@ export const registerImportRowReasons = [
   "trade_missing",
   "trade_unknown",
   "trade_outside_visibility",
+  "scope_unknown",
+  "scope_not_under_trade",
+  "location_unknown",
+  "location_outside_visibility",
+  "field_invalid",
+  "paper_ref_too_long",
+  "paper_ref_repeated",
+  "paper_ref_taken",
 ] as const;
 export const registerImportRowReason = z.enum(registerImportRowReasons);
 export type RegisterImportRowReason = z.infer<typeof registerImportRowReason>;
@@ -103,6 +161,14 @@ export const registerImportRow = z.object({
   subject: z.string(),
   type: z.object({ text: z.string(), match: z.object({ code: workItemTypeCode, name: bilingualText }).nullable() }),
   trade: z.object({ text: z.string(), match: z.object({ id: z.uuid(), code: z.string(), name: bilingualText }).nullable() }),
+  /** The Location cell as read ("" when not mapped) and the Location it matched. */
+  location: z.object({ text: z.string(), match: z.object({ id: z.uuid(), code: z.string(), name: bilingualText }).nullable() }),
+  /** The Scopes cell as read ("" when not mapped) and the Scopes and Sub-scopes it matched. */
+  scopes: z.object({ text: z.string(), matches: z.array(z.object({ id: z.uuid(), name: bilingualText })) }),
+  /** The Paper ref as read, trimmed ("" when none). */
+  paperRef: z.string(),
+  /** The mapped Form fields of the row's Type, each cell as read, and whether its value doesn't fit the field. */
+  fields: z.array(z.object({ key: formKey, text: z.string(), invalid: z.boolean() })),
   /** Empty for a good row. */
   reasons: z.array(registerImportRowReason),
   /** Whether confirm created a Draft from it. */
@@ -139,6 +205,62 @@ export const registerImport = registerImportSummary.extend({
   rows: z.array(registerImportRow),
 });
 export type RegisterImport = z.infer<typeof registerImport>;
+
+/**
+ * What a register may fill on the Project, for the Map fields and Map values steps: the
+ * Submittals Types the Member may raise, the Project's Trades, Locations (with their
+ * path) and active Scopes, and the simple Form fields of those Types' Forms, editable
+ * at the Draft, with their choices (registerFormFieldTypes). Matching takes any of the
+ * Project's values; the preview then refuses one outside the Member's Visibility.
+ */
+export const registerImportFields = z.object({
+  types: z.array(z.object({ code: workItemTypeCode, name: bilingualText })),
+  trades: z.array(z.object({ id: z.uuid(), code: z.string(), name: bilingualText })),
+  locations: z.array(z.object({ id: z.uuid(), code: z.string(), name: bilingualText, path: bilingualText })),
+  scopes: z.array(z.object({ id: z.uuid(), tradeId: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
+  formFields: z.array(
+    z.object({
+      key: formKey,
+      label: bilingualText,
+      type: z.enum(registerFormFieldTypes),
+      /** The Types whose Form has it. */
+      types: z.array(workItemTypeCode),
+      /** A choice field's options (an Option List's by their path); empty for any other. */
+      options: z.array(z.object({ value: z.string(), label: bilingualText })),
+    }),
+  ),
+});
+export type RegisterImportFields = z.infer<typeof registerImportFields>;
+
+/** The fields whose values Map values matches: these, and `field:<key>` for a choice field. */
+export const registerValueFields = ["type", "trade", "location", "scopes"] as const;
+
+/**
+ * Each mapped column whose values are matched (Type, Trade, Location, Scopes, choice
+ * fields): every different value in it, once by registerMatchKey, with how many rows
+ * hold it, and what it matches: `exact` by code or name, `manual` by the mapping's
+ * `values`, or `suggested` (the most alike value, with its score, which the importer
+ * confirms); null when nothing.
+ */
+export const registerValues = z.object({
+  fields: z.array(
+    z.object({
+      field: z.string(),
+      column: z.int().min(0),
+      values: z.array(
+        z.object({
+          key: z.string(),
+          text: z.string(),
+          rows: z.int().min(1),
+          match: z.string().nullable(),
+          how: z.enum(["exact", "manual", "suggested"]).nullable(),
+          score: z.int().min(0).max(100).nullable(),
+        }),
+      ),
+    }),
+  ),
+});
+export type RegisterValues = z.infer<typeof registerValues>;
 
 export const confirmedRegisterImport = z.object({ rowsCreated: z.int().min(0) });
 export type ConfirmedRegisterImport = z.infer<typeof confirmedRegisterImport>;

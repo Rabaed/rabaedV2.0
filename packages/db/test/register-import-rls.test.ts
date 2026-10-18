@@ -28,6 +28,9 @@ let c1Narrowed = ""; // A C1 engineer whose Trade Visibility is Electrical only.
 let c1Participant = "";
 let projectId = "";
 let electrical = "";
+let mechanical = "";
+let buildingA = "";
+let buildingB = "";
 
 async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
@@ -63,17 +66,33 @@ const failure = (as: string | null, query: ReturnType<typeof sql>) =>
 
 const headers = ["Subject", "Type", "Trade"];
 const mapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 } };
-const row = (rowNo: number, subject: string, type: string, trade: string) => ({ row_no: rowNo, cells: [subject, type, trade], subject, type, trade });
+type Row = { row_no: number; cells: string[]; subject: string; type: string; trade: string } & Record<string, unknown>;
+const row = (rowNo: number, subject: string, type: string, trade: string, more: Record<string, unknown> = {}): Row => ({
+  row_no: rowNo,
+  cells: [subject, type, trade],
+  subject,
+  type,
+  trade,
+  ...more,
+});
 /** Panels (Electrical) and Pumps (Mechanical) are good for C1; the third row is bad three times. */
 const rows = [row(2, "Panels", "MAR", "Electrical"), row(3, "Pumps", "SAR", "ME"), row(4, "", "XYZ", "Plumbing")];
 
+/** What the api matches a row's Type and Trade cells to (RP-639, apps/api register-import/matching.ts), by their text. */
+const matched: { types: string[]; trades: Record<string, string> } = { types: ["MAR", "SAR", "DAR"], trades: {} };
+const asMatched = (r: Row) => ({
+  type_code: matched.types.includes(r.type) ? r.type : null,
+  trade_id: matched.trades[r.trade] ?? null,
+  ...r,
+});
+
 /** `as`'s preview of `rows`, and its outcome. */
-async function preview(as: string, of = rows) {
+async function preview(as: string, of: Row[] = rows) {
   const [r] = await call<{ outcome: string; import_id: string | null }>(
     as,
     sql`select outcome, import_id from app.preview_register_import(
       ${projectId}::uuid, 'register.xlsx', 'Register', 1, ${JSON.stringify(headers)}::jsonb, ${JSON.stringify(mapping)}::jsonb,
-      ${JSON.stringify(of)}::jsonb, null, null, now())`,
+      ${JSON.stringify(of.map(asMatched))}::jsonb, null, null, now())`,
   );
   return r!;
 }
@@ -121,8 +140,10 @@ beforeAll(async () => {
       )
     )[0]!.value_id;
   electrical = await value("trade", "EL", "Electrical");
-  await value("trade", "ME", "Mechanical");
-  await value("location", "BA", "Building A");
+  mechanical = await value("trade", "ME", "Mechanical");
+  buildingA = await value("location", "BA", "Building A");
+  buildingB = await value("location", "BB", "Building B");
+  matched.trades = { Electrical: electrical, ME: mechanical };
   for (const p of Object.values(participant)) {
     for (const kind of ["trade", "location"]) {
       expect(await outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
@@ -210,6 +231,10 @@ describe("RP-589-1: only the importing Participant reads an import", () => {
     }
     expect(await failure(c1.member, sql`select work_item_id from submittal_register_import_row`)).toBe("42501");
     expect(await failure(c1.member, sql`select import_id from work_item`)).toBe("42501");
+    // RP-639: a row's checked answers and their Form Version are the confirm's only.
+    for (const column of ["answers", "form_version_id"]) {
+      expect(await failure(c1.member, sql.raw(`select ${column} from submittal_register_import_row`))).toBe("42501");
+    }
   });
 
   it("writes imports, rows and their Drafts only through the import's functions", async () => {
@@ -275,6 +300,7 @@ describe("A Type the importer may not raise", () => {
       select 'rabaed', 'submittals', 'RGX', '{"en": "Register test", "ar": "Register test"}'::jsonb, d.id, 'review_code',
         (select form_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR')
       from d`);
+    matched.types.push("RGX");
     const previewed = await preview(c1.member, [row(2, "Panels", "RGX", "Electrical"), row(3, "", "RGX", "Nope")]);
     const reasons = await call<{ row_no: number; reasons: string[] }>(
       c1.member,
@@ -330,5 +356,102 @@ describe("The clean-up of previews never confirmed", () => {
     expect(left).toEqual([{ id: kept }]);
     const { rows: orphans } = await migrator.query("select 1 from submittal_register_import_row where import_id = $1", [stale]);
     expect(orphans).toEqual([]);
+  });
+});
+
+// RP-639: the api hands the preview what each row matched; the database checks every id
+// again, as app.create_work_item would, and keeps one Paper ref per Participant.
+describe("Matched values, checked again by the database (RP-639)", () => {
+  let lighting = "";
+  let pumps = "";
+
+  beforeAll(async () => {
+    const scope = async (trade: string, name: string) =>
+      (await call<{ scope_id: string }>(c1.ap, sql`select scope_id from app.add_scope(${projectId}::uuid, ${trade}::uuid, null, ${JSON.stringify({ en: name, ar: name })}::jsonb)`))[0]!
+        .scope_id;
+    lighting = await scope(electrical, "Lighting");
+    pumps = await scope(mechanical, "Pumps");
+  });
+
+  const reasonsOf = (as: string, importId: string) =>
+    call<{ row_no: number; reasons: string[] }>(
+      as,
+      sql`select row_no, reasons from submittal_register_import_row where import_id = ${importId}::uuid order by row_no`,
+    ).then((r) => Object.fromEntries(r.map((x) => [x.row_no, x.reasons])));
+
+  it("refuses a Scope not under the row's Trade, a Location not the Project's, and a Type outside the Submittals, whatever the api matched", async () => {
+    const otherProject = (
+      await call<{ project_id: string }>(c1.ap, sql`select project_id from app.create_project('{"en": "Other", "ar": "Other"}'::jsonb, 'RGO', 'contractor')`)
+    )[0]!.project_id;
+    const elsewhere = (
+      await call<{ value_id: string }>(c1.ap, sql`select value_id from app.add_dimension_value(${otherProject}::uuid, 'location', null, 'XX', '{"en": "X", "ar": "X"}'::jsonb)`)
+    )[0]!.value_id;
+    const previewed = await preview(c1.member, [
+      row(2, "Lit", "MAR", "Electrical", { scopes: "Lighting", scope_ids: [lighting], location: "Building A", location_id: buildingA }),
+      row(3, "Pumps on Electrical", "MAR", "Electrical", { scopes: "Pumps", scope_ids: [pumps] }),
+      row(4, "Elsewhere", "MAR", "Electrical", { location: "X", location_id: elsewhere }),
+      row(5, "A Snag", "SNG", "Electrical", { type_code: "SNG" }),
+      row(6, "Bad field", "MAR", "Electrical", { invalid_fields: ["manufacturer"], scope_reason: "scope_unknown" }),
+    ]);
+    expect(await reasonsOf(c1.member, previewed.import_id!)).toEqual({
+      2: [],
+      3: ["scope_not_under_trade"],
+      4: ["location_unknown"],
+      5: ["type_unknown"],
+      6: ["scope_unknown", "field_invalid"],
+    });
+  });
+
+  it("RP-589-4: refuses a Location outside the importer's Visibility", async () => {
+    await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${c1Narrowed}::uuid, 'location', false, ${[buildingB]}::uuid[], now()) as outcome`);
+    const previewed = await preview(c1Narrowed, [row(2, "Lit", "MAR", "Electrical", { location: "Building A", location_id: buildingA })]);
+    expect(await reasonsOf(c1Narrowed, previewed.import_id!)).toEqual({ 2: ["location_outside_visibility"] });
+  });
+
+  describe("The Paper ref", () => {
+    let draft = "";
+
+    it("is refused when repeated in the register, whatever its case, and set on the Draft at confirm", async () => {
+      const previewed = await preview(c1.member, [
+        row(2, "First", "MAR", "Electrical", { paper_ref: "PR-1" }),
+        row(3, "Second", "MAR", "Electrical", { paper_ref: "pr-1" }),
+        row(4, "Third", "MAR", "Electrical", { paper_ref: "PR-2", scope_ids: [lighting], location_id: buildingA, location: "BA" }),
+      ]);
+      expect(await reasonsOf(c1.member, previewed.import_id!)).toEqual({ 2: ["paper_ref_repeated"], 3: ["paper_ref_repeated"], 4: [] });
+      expect(await confirm(c1.member, previewed.import_id!)).toEqual({ outcome: "created", rows_created: 1 });
+      draft = (await results(c1.member, previewed.import_id!)).find((r) => r.row_no === 4)!.work_item_id!;
+      const [made] = await call<{ paper_ref: string }>(c1.member, sql`select paper_ref from work_item where id = ${draft}::uuid`);
+      expect(made).toEqual({ paper_ref: "PR-2" });
+      const { rows: built } = await migrator.query(
+        "select (select array_agg(scope_id) from work_item_scope where work_item_id = $1) as scopes, (select dimension_value_id from work_item_dimension_value where work_item_id = $1 and dimension_value_id = $2) as location",
+        [draft, buildingA],
+      );
+      expect(built).toEqual([{ scopes: [lighting], location: buildingA }]);
+    });
+
+    it("is refused when another item of the Participant holds it, and taken since the preview refuses the confirm", async () => {
+      expect(await reasonsOf(c1.member, (await preview(c1.member, [row(2, "Again", "MAR", "Electrical", { paper_ref: "pr-2" })])).import_id!)).toEqual({
+        2: ["paper_ref_taken"],
+      });
+      const pending = (await preview(c1.member, [row(2, "Later", "MAR", "Electrical", { paper_ref: "PR-3" })])).import_id!;
+      expect(await outcome(c1.member, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'pr-3', now()) as outcome`)).toBe("saved");
+      expect(await confirm(c1.member, pending)).toEqual({ outcome: "preview_outdated", rows_created: null });
+    });
+
+    it("RP-589-4: is written only through the functions, read by whoever sees the item, set only by who may edit the Draft", async () => {
+      expect(await failure(c1.member, sql`update work_item set paper_ref = 'X' where id = ${draft}::uuid`)).toBe("42501");
+      expect(await outcome(c1Colleague, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_editable");
+      for (const other of [k1.member, c2.member, ow.member]) {
+        expect(await outcome(other, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_found");
+        expect(await call(other, sql`select paper_ref from work_item where id = ${draft}::uuid`)).toEqual([]);
+      }
+      expect(await outcome(c1.member, sql`select app.set_work_item_paper_ref(${draft}::uuid, ${"P".repeat(101)}, now()) as outcome`)).toBe("paper_ref_too_long");
+      // The unique index keeps one per Participant even past the function's own check.
+      const { rows: others } = await migrator.query(
+        "select id from work_item where project_id = $1 and raised_by_participant_id = $2 and id <> $3 and discarded_at is null limit 1",
+        [projectId, c1Participant, draft],
+      );
+      await expect(migrator.query("update work_item set paper_ref = 'PR-3' where id = $1", [others[0].id])).rejects.toMatchObject({ code: "23505" });
+    });
   });
 });

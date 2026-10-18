@@ -3,8 +3,10 @@ import {
   previewRegisterImportRequest,
   readRegisterRequest,
   registerImport,
+  registerImportFields,
   registerImports,
   registerSheet,
+  registerValues,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -13,9 +15,11 @@ import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import {
   confirmRegisterImport,
   getRegisterImport,
+  getRegisterImportFields,
   listRegisterImports,
   previewRegisterImport,
   readRegister,
+  registerImportValues,
 } from "../register-import/register-import.ts";
 import { refusal } from "../refusals.ts";
 
@@ -39,6 +43,28 @@ export const registerImportRoutes =
         const result = await readRegister(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body);
         if (!result.ok) throw refusal(result);
         return result.sheet;
+      },
+    );
+
+    app.get(
+      "/v1/projects/:projectId/register-imports/fields",
+      { schema: { params: projectParams, response: { 200: registerImportFields } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const result = await getRegisterImportFields(ctx.db, memberId, idOrNotFound(request.params.projectId));
+        if ("ok" in result) throw refusal(result);
+        return result;
+      },
+    );
+
+    app.post(
+      "/v1/projects/:projectId/register-imports/values",
+      { bodyLimit: registerBodyLimit, schema: { params: projectParams, body: previewRegisterImportRequest, response: { 200: registerValues } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const result = await registerImportValues(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body);
+        if (!result.ok) throw refusal(result);
+        return result.values;
       },
     );
 

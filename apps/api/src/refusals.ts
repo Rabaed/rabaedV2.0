@@ -163,6 +163,10 @@ const answers = {
   column_not_found: () => new HttpError(422, "column_not_found"),
   nothing_to_import: () => new HttpError(409, "nothing_to_import"),
   preview_outdated: () => new HttpError(409, "preview_outdated"),
+  // A Draft's Paper ref (RP-639): over 100 characters, or one another item of the
+  // Participant on the Project already holds (never which).
+  paper_ref_too_long: () => new HttpError(422, "paper_ref_too_long"),
+  paper_ref_taken: () => new HttpError(409, "paper_ref_taken"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

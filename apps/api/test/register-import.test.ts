@@ -6,13 +6,21 @@
 // C1's Members read the import; C2, K1 and the Owner read nothing of it.
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import type { RegisterImport, RegisterImportMapping, RegisterSheet, WorkItemDetail } from "@rabaed/domain";
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import type { RegisterImport, RegisterImportFields, RegisterImportMapping, RegisterSheet, RegisterValues, WorkItemDetail } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, buildTower, detail, memberOnProject, ok, only, projectMember, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, detail, memberOnProject, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
 
-const api = await createTestApi();
-afterAll(() => api.close());
+const api = await createTestApi({ files: true });
+// Only to give a Project its own DAR Form (RP-639), as a Company's Library would.
+const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+afterAll(async () => {
+  await api.close();
+  await migrator.destroy();
+});
 
 const fixture = (name: string) => ({
   fileName: name,
@@ -86,6 +94,12 @@ describe("Reading a register", () => {
     expect(chosen.top.map((r) => r.rowNo)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(chosen.top[0]!.cells).toEqual(["C1 Contracting: Submittal Register"]);
     expect(chosen.top[1]!.cells).toEqual([]);
+  });
+
+  it("suggests a field for each column from its heading, with how alike they are, and none for the rest (RP-639)", async () => {
+    const chosen: RegisterSheet = (await ok(read(tower.c1Engineer, { file: xlsx, sheet: "Register", headerRow: 3 }), 200)).json();
+    expect(chosen.suggestions.map((s) => s?.field ?? null)).toEqual([null, "subject", "type", "trade", null]);
+    for (const s of chosen.suggestions.filter((x) => x !== null)) expect(s.score).toBeGreaterThanOrEqual(60);
   });
 
   it("reads a .csv as one sheet named after the file", async () => {
@@ -315,5 +329,292 @@ describe("RP-589-1: no other Company reads anything of C1's import", () => {
     await expectHidden(getImport(tower.c1Engineer, theirs.id));
     await expectHidden(getImport(tower.c1Pm, theirs.id));
     expect((await listImports(tower.c1Engineer)).map((i: { id: string }) => i.id)).not.toContain(theirs.id);
+  });
+});
+
+// RP-639: value matching, the optional fields (Scopes, Location, Form fields) and the Paper ref,
+// on a Project of their own whose DAR Form adds a Planning section (a number, a date, a multiple
+// choice and a Member).
+describe("Values, optional fields and Paper ref (RP-639)", () => {
+  const values = fixture("import-values.xlsx");
+  /** import-values.xlsx: Ref, Description, النوع, Discipline, Scope, الموقع, Sheets, Issued, Document type, Remarks. */
+  const full: RegisterImportMapping = {
+    subject: { column: 1 },
+    type: { column: 2 },
+    trade: { column: 3 },
+    scopes: { column: 4 },
+    location: { column: 5 },
+    paperRef: { column: 0 },
+    fields: [
+      { key: "sheets", column: 6 },
+      { key: "issued_on", column: 7 },
+      { key: "document_type", column: 8 },
+    ],
+  };
+  const ofValues = (mapping: RegisterImportMapping) => ({ file: values, sheet: "Register", headerRow: 1, mapping });
+  /** "Elec" is Electrical, and "Document" the DAR, matched by hand once. */
+  let byHand: RegisterImportMapping;
+  let at: Tower;
+  let floor1 = "";
+  let buildingB = "";
+  let lighting = "";
+  let emergency = "";
+  let power = "";
+  let preparer: { id: string; email: string };
+  const projectUrl = (path: string) => `/v1/projects/${at.projectId}/${path}`;
+
+  beforeAll(async () => {
+    at = await buildTower(api, { c1, k1 }, "IMV");
+    const created = async (path: string, body: object) => (await ok(c1.caller.post(projectUrl(path), body), 201)).json().id as string;
+    floor1 = await created("locations", { code: "F1", name: bilingual("Floor 1"), parentId: at.buildingA });
+    buildingB = await created("locations", { code: "BB", name: bilingual("Building B"), parentId: null });
+    lighting = await created("scopes", { tradeId: at.electrical, name: bilingual("Lighting") });
+    emergency = await created("scopes", { tradeId: at.electrical, parentId: lighting, name: bilingual("Emergency lighting") });
+    power = await created("scopes", { tradeId: at.electrical, name: bilingual("Power") });
+    await created("scopes", { tradeId: at.mechanical, name: bilingual("Pumps") });
+    // The Project's own DAR Form: the Rabaed Default's fields and a Planning section.
+    const planning = {
+      key: "planning",
+      title: { en: "Planning", ar: "التخطيط" },
+      fields: [
+        { key: "sheets", type: "number", label: { en: "Sheets", ar: "عدد اللوحات" }, min: 1 },
+        { key: "issued_on", type: "date", label: { en: "Issue date", ar: "تاريخ الإصدار" } },
+        {
+          key: "copies",
+          type: "multi_select",
+          label: { en: "Copies", ar: "النسخ" },
+          options: [
+            { value: "paper", label: { en: "Paper", ar: "ورقية" } },
+            { value: "digital", label: { en: "Digital", ar: "رقمية" } },
+          ],
+        },
+        { key: "prepared_by", type: "member", label: { en: "Prepared by", ar: "أعده" } },
+      ],
+    };
+    await sql`
+      with f as (
+        insert into form_definition (owner_kind, project_id, name, work_item_type_id)
+        values ('project', ${at.projectId}::uuid, '{"en": "DAR", "ar": "DAR"}'::jsonb,
+          (select id from work_item_type where owner_kind = 'rabaed' and code = 'DAR'))
+        returning id
+      )
+      insert into form_version (form_definition_id, version_no, status, schema, published_at)
+      select f.id, 1, 'published', jsonb_set(r.schema, '{sections}', (r.schema -> 'sections') || jsonb_build_array(${JSON.stringify(planning)}::jsonb)), now()
+      from f, form_version r where r.id = app.latest_form_version('DAR')
+    `.execute(migrator);
+    byHand = { ...full, values: { trade: { elec: at.electrical }, type: { document: "DAR" } } };
+    preparer = await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Hana Preparer" });
+  });
+
+  it("suggests every column's field from its heading, in English or Arabic, Form fields of the Types' Forms included", async () => {
+    const sheet: RegisterSheet = (await ok(read(at.c1Engineer, { file: values }, at.projectId), 200)).json();
+    expect(sheet.suggestions.map((s) => s?.field ?? null)).toEqual([
+      "paperRef",
+      "subject",
+      "type",
+      "trade",
+      "scopes",
+      "location",
+      "field:sheets",
+      "field:issued_on",
+      "field:document_type",
+      null,
+    ]);
+  });
+
+  it("lists what a register may fill: the Types, the Project's values, and the simple Form fields with their choices", async () => {
+    const fields: RegisterImportFields = (await ok(at.c1Engineer.get(projectUrl("register-imports/fields")), 200)).json();
+    expect(fields.types.map((t) => t.code)).toEqual(expect.arrayContaining(["MAR", "SAR", "DAR"]));
+    expect(fields.locations.find((l) => l.id === floor1)?.path.en).toBe("Building A / Floor 1");
+    expect(fields.scopes.find((s) => s.id === emergency)).toMatchObject({ tradeId: at.electrical, parentId: lighting });
+    const byKey = Object.fromEntries(fields.formFields.map((f) => [f.key, f]));
+    expect(byKey.sheets).toMatchObject({ type: "number", types: ["DAR"] });
+    expect(byKey.document_type!.options.map((o) => o.value)).toEqual(["report", "calculation", "plan", "procedure", "other"]);
+    expect(byKey.manufacturer).toMatchObject({ type: "text", types: expect.arrayContaining(["MAR"]) });
+    // Never a field the register can't fill (files, tables, links, a Built-in Field), nor a section the Draft can't edit.
+    for (const key of ["document", "items", "related_submittals", "trade", "location", "scopes", "verification_note"]) {
+      expect(byKey[key], key).toBeUndefined();
+    }
+  });
+
+  it("lists each column's values once, ignoring case and spaces, with what each matches", async () => {
+    const before: RegisterValues = (await ok(at.c1Engineer.post(projectUrl("register-imports/values"), ofValues(full)), 200)).json();
+    const of = (result: RegisterValues, field: string) =>
+      Object.fromEntries(result.fields.find((f) => f.field === field)!.values.map((v) => [v.text, [v.rows, v.match, v.how]]));
+    expect(of(before, "type")).toEqual({ dar: [5, "DAR", "exact"], Document: [1, "DAR", "suggested"], mar: [1, "MAR", "exact"] });
+    expect(of(before, "trade")).toEqual({
+      electrical: [2, at.electrical, "exact"],
+      Elec: [2, at.electrical, "suggested"],
+      Mechanical: [3, at.mechanical, "exact"],
+    });
+    const after: RegisterValues = (await ok(at.c1Engineer.post(projectUrl("register-imports/values"), ofValues(byHand)), 200)).json();
+    expect(of(after, "trade").Elec).toEqual([2, at.electrical, "manual"]);
+    expect(of(after, "location")).toMatchObject({ "building a / floor 1": [1, floor1, "exact"], BA: [1, at.buildingA, "exact"], "Tower 9": [1, null, null] });
+    expect(after.fields.map((f) => f.field)).toEqual(["type", "trade", "location", "scopes", "field:document_type"]);
+  });
+
+  describe("previewed and confirmed", () => {
+    let previewed: RegisterImport;
+    let record: RegisterImport;
+
+    beforeAll(async () => {
+      previewed = await (await ok(tryPreview(at.c1Engineer, ofValues(byHand), at.projectId), 201)).json();
+    });
+
+    it("matches in either language, ignoring case and spaces, and one value matched by hand fills every row with it", () => {
+      expect(reasonsByRow(previewed)).toEqual({
+        2: [],
+        3: [],
+        4: [],
+        5: ["scope_not_under_trade", "location_unknown", "field_invalid", "paper_ref_repeated"],
+        6: ["scope_unknown", "paper_ref_repeated"],
+        7: ["paper_ref_too_long"],
+        8: [],
+      });
+      const row = (n: number) => previewed.rows.find((r) => r.rowNo === n)!;
+      expect([row(2).type.match?.code, row(2).trade.match?.id]).toEqual(["DAR", at.electrical]);
+      // "Elec" and "ELEC" both, by the one match made by hand; "Document" too.
+      expect([row(3).trade.match?.id, row(4).trade.match?.id, row(4).type.match?.code]).toEqual([at.electrical, at.electrical, "DAR"]);
+      expect(row(2).location).toEqual({ text: "building a / floor 1", match: expect.objectContaining({ id: floor1 }) });
+      expect(row(2).scopes.matches.map((s) => s.id)).toEqual([lighting, emergency]);
+      expect(row(5).fields).toEqual([
+        { key: "sheets", text: "twelve", invalid: true },
+        { key: "issued_on", text: "05-Nov-26", invalid: true },
+        { key: "document_type", text: "Blueprint", invalid: true },
+      ]);
+      // Labels as the Form names them, for the record.
+      expect(previewed.mapping.fields?.map((f) => f.label?.en)).toEqual(["Sheets", "Issue date", "Document type"]);
+    });
+
+    it("reads cells as stored: a Paper ref typed as a number loses its zeros, a date cell reads as its date", () => {
+      const row3 = previewed.rows.find((r) => r.rowNo === 3)!;
+      expect(row3.paperRef).toBe("12");
+      expect(row3.fields.find((f) => f.key === "issued_on")).toEqual({ key: "issued_on", text: "2026-11-09", invalid: false });
+    });
+
+    describe("on confirm", () => {
+      let drafts: Record<number, WorkItemDetail>;
+
+      beforeAll(async () => {
+        expect((await ok(confirm(at.c1Engineer, previewed.id), 200)).json()).toEqual({ rowsCreated: 4 });
+        record = (await ok(getImport(at.c1Engineer, previewed.id), 200)).json();
+        drafts = Object.fromEntries(
+          await Promise.all(record.rows.filter((r) => r.workItemId).map(async (r) => [r.rowNo, await detail(at.c1Engineer, r.workItemId!)] as const)),
+        );
+      });
+
+      it("fills the Scopes, Location, Paper ref and mapped Form fields, and leaves every other field empty", () => {
+        expect(Object.keys(drafts).map(Number)).toEqual([2, 3, 4, 8]);
+        expect(drafts[2]).toMatchObject({ paperRef: "DAR-P-001", location: { id: floor1 }, documentNumber: null });
+        expect(drafts[2]!.scopes.map((s) => s.id)).toEqual([lighting, emergency]);
+        expect(drafts[2]!.answers).toMatchObject({ sheets: 12, issued_on: "2026-11-05", document_type: "plan" });
+        expect(drafts[2]!.answers).not.toHaveProperty("document_title");
+        expect(drafts[3]).toMatchObject({ paperRef: "12", location: { id: at.buildingA } });
+        expect(drafts[3]!.scopes.map((s) => s.id)).toEqual([power]);
+        expect(drafts[3]!.answers).toMatchObject({ sheets: 3, issued_on: "2026-11-09", document_type: "report" });
+        expect(drafts[4]).toMatchObject({ paperRef: "DAR-P-004", location: null, scopes: [] });
+        // The MAR's Form has no Sheets field: its cell is left out.
+        expect(drafts[8]!.type.code).toBe("MAR");
+        expect(drafts[8]!.answers).not.toHaveProperty("sheets");
+      });
+
+      it("refuses a Paper ref the Participant already holds on the Project, whatever its case", async () => {
+        const again: RegisterImport = await (await ok(tryPreview(at.c1Engineer, ofValues(byHand), at.projectId), 201)).json();
+        expect(reasonsByRow(again)[2]).toEqual(["paper_ref_taken"]);
+        expect(reasonsByRow(again)[3]).toEqual(["paper_ref_taken"]);
+      });
+
+      it("finds a Draft by its Paper ref in the List's search", async () => {
+        const found = (await ok(at.c1Engineer.get(projectUrl("modules/submittals/work-items?q=DAR-P-004")), 200)).json();
+        expect(found.items.map((i: { id: string }) => i.id)).toEqual([record.rows.find((r) => r.rowNo === 4)!.workItemId]);
+      });
+    });
+  });
+
+  it("RP-589-4: makes a row bad whose Location is outside the importer's Visibility", async () => {
+    const narrowed = await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"]);
+    await ok(
+      c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${narrowed.id}/visibility`, { trade: all, location: only(buildingB) }),
+    );
+    const previewed: RegisterImport = await (await ok(tryPreview(narrowed.caller, ofValues({ ...byHand, paperRef: undefined }), at.projectId), 201)).json();
+    expect(reasonsByRow(previewed)[2]).toEqual(["location_outside_visibility"]);
+    expect(reasonsByRow(previewed)[4]).toEqual([]);
+  });
+
+  it("fills a Member field from the Member's email or name when only one matches, a multiple choice from its options", async () => {
+    const register = (rows: string[][]) => ({
+      fileName: "people.csv",
+      content: Buffer.from(["Subject,Type,Trade,Prepared by,Copies", ...rows.map((r) => r.join(","))].join("\n")).toString("base64"),
+    });
+    const file = register([
+      ["By email", "DAR", "Electrical", preparer.email.toUpperCase(), "paper"],
+      ["By name", "DAR", "Electrical", "hana preparer", "Paper; DIGITAL"],
+      ["Nobody", "DAR", "Electrical", "Someone Else", "Fax"],
+    ]);
+    const mapping: RegisterImportMapping = {
+      subject: { column: 0 },
+      type: { column: 1 },
+      trade: { column: 2 },
+      fields: [
+        { key: "prepared_by", column: 3 },
+        { key: "copies", column: 4 },
+      ],
+    };
+    const previewed: RegisterImport = await (await ok(tryPreview(at.c1Engineer, { file, sheet: "people", headerRow: 1, mapping }, at.projectId), 201)).json();
+    expect(reasonsByRow(previewed)).toEqual({ 2: [], 3: [], 4: ["field_invalid"] });
+    expect((await ok(confirm(at.c1Engineer, previewed.id), 200)).json()).toEqual({ rowsCreated: 2 });
+    const record: RegisterImport = (await ok(getImport(at.c1Engineer, previewed.id), 200)).json();
+    const made = await Promise.all(record.rows.filter((r) => r.workItemId).map((r) => detail(at.c1Engineer, r.workItemId!)));
+    expect(made.map((d) => [d.answers.prepared_by, d.answers.copies])).toEqual([
+      [preparer.id, ["paper"]],
+      [preparer.id, ["paper", "digital"]],
+    ]);
+  });
+
+  it("refuses a Form field no Type the Member may raise has", async () => {
+    const res = await tryPreview(at.c1Engineer, ofValues({ ...full, fields: [{ key: "not_a_field", column: 9 }] }), at.projectId);
+    expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 422, body: { error: "field_not_found" } });
+  });
+
+  describe("The Paper ref on the item", () => {
+    let mine = "";
+    let other = "";
+
+    beforeAll(async () => {
+      const make = async (title: string) =>
+        (await ok(at.c1Engineer.post(projectUrl("work-items"), { type: "DAR", title, answers: { trade: at.electrical } }), 201)).json().id as string;
+      mine = await make("Paper ref by hand");
+      other = await make("Another Draft");
+    });
+
+    const setRef = (by: Caller, id: string, paperRef: string | null) => by.request("PUT", `/v1/work-items/${id}/paper-ref`, { paperRef });
+
+    it("is set and cleared by the raiser while it is a Draft, and shown on the item", async () => {
+      expect((await detail(at.c1Engineer, mine)).actions.editPaperRef).toBe(true);
+      await ok(setRef(at.c1Engineer, mine, "  OLD-77 "));
+      expect((await detail(at.c1Engineer, mine)).paperRef).toBe("OLD-77");
+      await ok(setRef(at.c1Engineer, other, "OLD-78"));
+      await ok(setRef(at.c1Engineer, other, " "));
+      expect((await detail(at.c1Engineer, other)).paperRef).toBeNull();
+    });
+
+    it("refuses one another item of the Participant holds, whatever its case, and one over 100 characters", async () => {
+      const taken = await setRef(at.c1Engineer, other, "old-77");
+      expect({ status: taken.statusCode, body: taken.json() }).toEqual({ status: 409, body: { error: "paper_ref_taken" } });
+      const long = await setRef(at.c1Engineer, other, "R".repeat(101));
+      expect({ status: long.statusCode, body: long.json() }).toEqual({ status: 422, body: { error: "paper_ref_too_long" } });
+    });
+
+    it("is not editable by a colleague who may not edit the Draft, nor once numbered, and hidden from another Company", async () => {
+      expect((await detail(at.c1Pm, mine)).actions.editPaperRef).toBe(false);
+      const colleague = await setRef(at.c1Pm, mine, "OLD-79");
+      expect({ status: colleague.statusCode, body: colleague.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+      const numbered = await submitted(at, at.c1Engineer, at.c1Pm, "Numbered");
+      expect((await detail(at.c1Engineer, numbered)).actions.editPaperRef).toBe(false);
+      const refused = await setRef(at.c1Engineer, numbered, "OLD-80");
+      expect(refused.json()).toEqual({ error: "not_editable" });
+      await expectHidden(setRef(at.k1Manager, mine, "OLD-81"));
+      await expectHidden(setRef(at.c1Engineer, randomUUID(), "OLD-82"));
+    });
   });
 });
