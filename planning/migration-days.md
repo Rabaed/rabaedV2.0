@@ -69,5 +69,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
 | 20270610 | RP-624 | 33 | raised_item_counts_by_type |
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
-| 20270613 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524 and 20270609 sort before main's latest migration) |
 | 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
+| 20270628 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524, 20270609 and 20270613 overtaken on main) |
