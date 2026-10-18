@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
 import { SESSION_COOKIE } from "../app.ts";
 import { demoPdf } from "./demo-pdf.ts";
+import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
 import { demoSignaturePng } from "./demo-signature.ts";
 import { jpegWithExif } from "./exif-jpeg.ts";
 
@@ -163,6 +164,33 @@ export async function seedDemo(
     `.execute(databases.migrator);
   }
 
+  // Every demo Company has a logo and a Stamp (RP-617: no Stamp, no Transition), made up for the
+  // demo. With a file store its Authorized Person uploads them through the api, as the Company
+  // profile does; without one they are recorded as the owner with no image stored.
+  let companies = 0;
+  async function brand(caller: Call, companyId: string, authorizedPersonId: string) {
+    const seed = companies++;
+    for (const [kind, png] of [
+      ["logo", demoLogoPng(seed)],
+      ["stamp", demoStampPng(seed)],
+    ] as const) {
+      if (options.files) {
+        await caller("PUT", `/v1/companies/${companyId}/${kind}`, { contentType: "image/png", data: png.toString("base64") });
+        continue;
+      }
+      await sql`
+        with file as (
+          insert into stored_file (storage_key, sha256, size, mime, uploaded_by_member_id)
+          values (${`companies/${companyId}/${kind}/${randomUUID()}.png`}, sha256(${png}), ${png.byteLength}, 'image/png', ${authorizedPersonId}::uuid)
+          returning id
+        )
+        update company set logo_file_id = case when ${kind} = 'logo' then file.id else logo_file_id end,
+          stamp_file_id = case when ${kind} = 'stamp' then file.id else stamp_file_id end
+        from file where company.id = ${companyId}::uuid
+      `.execute(databases.migrator);
+    }
+  }
+
   /** The Engineer onboards a Company; its Authorized Person accepts the invitation. */
   async function onboard(n: number, domain: string, legalName: BilingualText, ap: Person): Promise<Onboarded> {
     // Made-up numbers in a range no real registration uses.
@@ -184,6 +212,7 @@ export async function seedDemo(
     const caller = browser(app);
     await caller("POST", "/v1/invitations/accept", { token: r.invitation.token, password });
     await sign(caller, r.authorizedPersonId);
+    await brand(caller, r.companyId, r.authorizedPersonId);
     people.push({ key: ap.key, email: email(ap.local, domain), name: ap.name, company: legalName.en, label: ap.label });
     return { caller, authorizedPersonId: r.authorizedPersonId, crNumber, domain, legalName };
   }

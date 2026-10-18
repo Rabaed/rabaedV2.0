@@ -2,6 +2,7 @@ export * from "./action-form.ts";
 export * from "./auth.ts";
 export * from "./canonical-json.ts";
 export * from "./company.ts";
+export * from "./company-image.ts";
 export * from "./condition.ts";
 export * from "./document.ts";
 export * from "./field-times.ts";

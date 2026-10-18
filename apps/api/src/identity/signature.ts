@@ -15,10 +15,15 @@ const magic: Record<SignatureImageType, number[]> = {
   "image/jpeg": [0xff, 0xd8, 0xff],
 };
 
+/** Whether `bytes` are an image of `contentType` (PNG or JPEG), at most `maxBytes` long. */
+export function isImageOf(bytes: Uint8Array, contentType: SignatureImageType, maxBytes: number): boolean {
+  if (bytes.byteLength === 0 || bytes.byteLength > maxBytes) return false;
+  return magic[contentType].every((b, i) => bytes[i] === b);
+}
+
 /** Whether `bytes` are an image of `contentType`, no larger than a Signature may be. */
 export function isSignatureImage(bytes: Uint8Array, contentType: SignatureImageType): boolean {
-  if (bytes.byteLength === 0 || bytes.byteLength > SIGNATURE_MAX_BYTES) return false;
-  return magic[contentType].every((b, i) => bytes[i] === b);
+  return isImageOf(bytes, contentType, SIGNATURE_MAX_BYTES);
 }
 
 export type SaveSignatureResult = { ok: true; id: string } | { ok: false; reason: "invalid_signature_image" | "not_found" };

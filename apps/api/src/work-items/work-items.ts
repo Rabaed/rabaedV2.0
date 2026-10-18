@@ -1207,6 +1207,17 @@ async function hasSignature(trx: Trx): Promise<boolean> {
   return rows[0]!.found;
 }
 
+/**
+ * Whether the acting Member's Company has a Stamp in force (RP-617): its own row of company,
+ * the only one RLS shows them. app.take_transition checks the same column.
+ */
+async function hasStamp(trx: Trx): Promise<boolean> {
+  const { rows } = await sql<{ found: boolean }>`
+    select exists (select 1 from company where id = app.current_company_id() and stamp_file_id is not null) as found
+  `.execute(trx);
+  return rows[0]!.found;
+}
+
 /** What the acting Member may press on a visible item now. */
 async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft">> {
   const rows = await actionRows(trx, workItemId);
@@ -1221,6 +1232,8 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
     returnToPool: rows.some((r) => r.action === "return_to_pool"),
     // No Signature, no Transition (RP-85): the pop-up asks for one before the Action Form.
     signatureRequired: transitions.length > 0 && !(await hasSignature(trx)),
+    // No Stamp, no Transition (RP-617): the message says so before the Action Form.
+    stampRequired: transitions.length > 0 && !(await hasStamp(trx)),
     transitions: transitions.map((r, i) => {
       const actionForm = parseActionForm(r.action_form);
       const prefill = actionForm ? prefilled(actionForm, arrival) : {};
@@ -1330,6 +1343,7 @@ const transitionRefusals = [
   "recommended_code_not_offered",
   "not_confirmed",
   "no_signature",
+  "no_stamp",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
@@ -1426,6 +1440,8 @@ export function takeTransition(
     // No Signature, no Transition (RP-85): refused before its answers are checked, as the
     // pop-up asks for one before its Action Form. Only for a Transition they may take.
     if (taking && !(await hasSignature(trx))) return { ok: false, reason: "no_signature" };
+    // No Stamp, no Transition (RP-617): right after the Signature, as the database checks it.
+    if (taking && !(await hasStamp(trx))) return { ok: false, reason: "no_stamp" };
     const routed = taking ? await routedTransition(trx, workItemId, input.transition, input.answers) : null;
     if (taking && !routed) return { ok: false, reason: "no_route" };
     const actionForm = routed ? parseActionForm(routed.action_form) : null;

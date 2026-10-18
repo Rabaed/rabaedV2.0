@@ -30,6 +30,7 @@ import { approvedSupplierRoutes } from "./routes/approved-suppliers.ts";
 import { requiredFieldRoutes } from "./routes/required-fields.ts";
 import { companyDefaultRoutes } from "./routes/company-defaults.ts";
 import { signatureRoutes } from "./routes/signature.ts";
+import { companyImageRoutes } from "./routes/company-images.ts";
 import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
@@ -176,5 +177,6 @@ export async function buildApp({
   await app.register(screenRoutes(context));
   await app.register(companyDefaultRoutes(context));
   await app.register(signatureRoutes(context));
+  await app.register(companyImageRoutes(context));
   return app;
 }

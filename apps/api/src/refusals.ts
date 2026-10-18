@@ -66,6 +66,10 @@ const answers = {
   no_signature: () => new HttpError(409, "no_signature"),
   // A Signature image that isn't the PNG or JPEG it says, or is larger than allowed.
   invalid_signature_image: () => new HttpError(422, "invalid_signature_image"),
+  // No Stamp, no Transition (RP-617, ADR 0023): the Member's own Company's state, naming nothing else.
+  no_stamp: () => new HttpError(409, "no_stamp"),
+  // A logo or Stamp image that isn't the PNG or JPEG it says, or is larger than allowed.
+  invalid_company_image: () => new HttpError(422, "invalid_company_image"),
   // Form answers (RP-262): the body lists each field's error (answersRefusal).
   invalid_answers: () => new HttpError(422, "invalid_answers"),
   form_incomplete: () => new HttpError(422, "form_incomplete"),

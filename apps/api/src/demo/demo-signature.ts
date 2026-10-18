@@ -50,12 +50,17 @@ export function demoSignaturePng(seed: number): Buffer {
     const y = HEIGHT / 2 + 26 * Math.sin(t * Math.PI * (loops + 1) + seed) * (1 - t * 0.5) - 18 * Math.cos(t * Math.PI * 2 * loops);
     dot(x, y);
   }
+  return encodePng(WIDTH, HEIGHT, pixels);
+}
+
+/** An RGBA image (`pixels`, 4 bytes a pixel, row by row) as PNG bytes. */
+export function encodePng(width: number, height: number, pixels: Buffer): Buffer {
   // Each row starts with filter type 0 (none).
-  const raw = Buffer.alloc((WIDTH * 4 + 1) * HEIGHT);
-  for (let y = 0; y < HEIGHT; y++) pixels.copy(raw, y * (WIDTH * 4 + 1) + 1, y * WIDTH * 4, (y + 1) * WIDTH * 4);
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) pixels.copy(raw, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(WIDTH, 0);
-  header.writeUInt32BE(HEIGHT, 4);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
   header.writeUInt8(8, 8); // bit depth
   header.writeUInt8(6, 9); // RGBA
   return Buffer.concat([
