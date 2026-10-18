@@ -3,8 +3,8 @@
 //
 // The Snag's Version 2 (apps/admin/workflows/SNG.json) holds Draft and Verify by the raiser.
 // A Contractor raises a Snag on itself: Open is of its own role, so it holds every Step,
-// works the Snag and closes it, and nothing of it reaches another Company (until SNAG-3
-// informs the Consultant). The Consultant raises one on the Contractor and verifies it on the
+// works the Snag and closes it, and nothing of it reaches another Contractor (from its Raise
+// the Consultant is informed: RP-625, informed-participants.test.ts). The Consultant raises one on the Contractor and verifies it on the
 // same Version. An item started on a Version whose Steps name roles finishes on it after a
 // raiser Version is published.
 import { sql } from "kysely";
@@ -88,10 +88,10 @@ describe("a Contractor's Snag on itself (seam 1)", () => {
     expect(back.actions.transitions.map((t) => t.key)).toContain("resolve");
   });
 
-  it("RP-622-1: its Draft and its whole journey reach no other Company: not K1, not C2, in no list or by id", async () => {
+  it("RP-622-1: its Draft reaches no other Company, and its whole journey never C2, in no list or by id (K1 is informed from the Raise: RP-625)", async () => {
     const id = await draftSnag(at.c1Pm, "C1's own fault");
     const hidden = async (step: string) => {
-      for (const other of [at.k1Manager, c2Engineer]) {
+      for (const other of step === "draft" ? [at.k1Manager, c2Engineer] : [c2Engineer]) {
         await expectHidden(other.get(`/v1/work-items/${id}`), step);
         await expectHidden(other.get(`/v1/work-items/${id}/history`), step);
         await expectHidden(other.get(`/v1/work-items/${id}/workflow`), step);
