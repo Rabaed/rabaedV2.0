@@ -175,6 +175,9 @@ export interface ProjectTable {
   creator_member_id: string;
   /** Project setting (RP-652): the Inspections tab is hidden and the Submittals tab lists Inspections too. */
   show_inspections_in_submittals: Generated<boolean>;
+  /** Project settings (RP-151): the language Documental Records are printed in, and whether Hijri dates show beside the Gregorian ones. */
+  record_language: Generated<"bilingual" | "ar" | "en">;
+  record_hijri_dates: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -510,7 +513,6 @@ export interface WorkflowStepTable {
   name: ColumnType<Bilingual, string, string>;
   stage_key: string;
   actor_rule: Json;
-  is_signing: Generated<boolean>;
   outcome_mode: Generated<"none" | "recommend_code" | "issue_code" | "inspection_result">;
   created_at: Generated<Timestamp>;
 }

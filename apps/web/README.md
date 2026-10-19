@@ -12,8 +12,10 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `sign-in/page.tsx` | `/sign-in` | Sign-in form |
 | `accept-invitation/page.tsx` | `/accept-invitation` | Accept an invitation to a Company or Project |
 | `health/page.tsx` | `/health` | API health check |
-| `profile/page.tsx` | `/profile` | The Member's profile and notification settings |
+| `profile/page.tsx` | `/profile` | The Member's profile: their Signature and notification settings |
+| `profile/signature/page.tsx` | `/profile/signature` | Add Signature: draw, type or upload it; `?returnTo=` the item the pop-up came from (RP-85) |
 | `notifications/page.tsx` | `/notifications` | The Member's notifications, newest first, each linking to its item |
+| `company/page.tsx` | `/company` | The Company profile: its logo and Stamp, which its Authorized Person uploads (RP-617) |
 | `members/page.tsx` | `/members` | The Company's Members (the Authorized Person manages them) |
 | `participants/page.tsx` | `/participants` | Projects the Company takes part in, and invitations to accept |
 | `participants/[participantId]/page.tsx` | `/participants/:participantId` | One Participant and its Project Members |
@@ -32,6 +34,7 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/settings/trades-locations/page.tsx` | `/projects/:projectId/settings/trades-locations` | Trades, Scopes, Sub-scopes and Locations |
 | `projects/[projectId]/settings/approved-suppliers/page.tsx` | `/projects/:projectId/settings/approved-suppliers` | The Approved Supplier List: suppliers per Trade; a Project Admin adds and withdraws (RP-592) |
 | `projects/[projectId]/settings/modules/page.tsx` | `/projects/:projectId/settings/modules` | Where Modules show: "Show Inspections in Submittals"; a Project Admin turns it on or off (RP-652) |
+| `projects/[projectId]/settings/record/page.tsx` | `/projects/:projectId/settings/record` | Documental Record: the language records are printed in and Hijri dates; a Project Admin sets them, and they apply to records made afterwards (RP-151) |
 | `projects/[projectId]/settings/required-links/page.tsx` | `/projects/:projectId/settings/required-links` | Required links: which link questions an item can't leave Draft without, such as the WIR's Approved submittals; a Project Admin turns each on (RP-82) |
 | `projects/[projectId]/settings/checklist-templates/page.tsx` | `/projects/:projectId/settings/checklist-templates` | Checklist Templates: the Project's official checklists per Trade, which a WIR picks; every Member reads them (RP-651) |
 | `projects/[projectId]/settings/checklist-templates/[templateId]/page.tsx` | `/projects/:projectId/settings/checklist-templates/:templateId` (`new` for a new one) | One Checklist Template: its names, Trade and items, and the items as a WIR shows them; a Project Admin edits it into its next Version or retires it (RP-651) |

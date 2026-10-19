@@ -123,9 +123,11 @@ describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
         ...others("SAR", "2-2"),
         ["DAR", 1],
         ...others("DAR", "1-1-owner"),
-        ["WIR", 2],
+        ["WIR", 3],
         ["CMT", 2],
         ["SNG", 1],
+        ["QSN", 1],
+        ["QSC", 1],
       ]);
     } finally {
       await migrator.destroy();

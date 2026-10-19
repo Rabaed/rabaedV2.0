@@ -169,8 +169,8 @@ async function draftWithE(definitionId: string): Promise<string> {
       select ${definitionId}::uuid, 1, 'draft', mar.layout from mar
       returning id
     ), steps as (
-      insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, is_signing, outcome_mode)
-      select version.id, s.key, s.name, s.stage_key, s.actor_rule, s.is_signing, s.outcome_mode
+      insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
+      select version.id, s.key, s.name, s.stage_key, s.actor_rule, s.outcome_mode
       from version, mar join workflow_step s on s.workflow_version_id = mar.id
       returning id, key, workflow_version_id
     ), source as (
@@ -204,7 +204,7 @@ async function draftWithE(definitionId: string): Promise<string> {
 /** The publish checks of `versionId` against Type `code`'s outcome set as its Project's Admin reads it, the Project's Stages and the MAR's Form. */
 async function publishProblems(at: Tower, versionId: string, code: string, outcomes: readonly Pick<Outcome, "code" | "closing" | "actions">[]) {
   const steps = await sql<WorkflowVersionRows["steps"][number]>`
-    select key, name, stage_key, actor_rule, is_signing, outcome_mode from workflow_step where workflow_version_id = ${versionId}::uuid order by key
+    select key, name, stage_key, actor_rule, outcome_mode from workflow_step where workflow_version_id = ${versionId}::uuid order by key
   `.execute(migrator);
   const transitions = await sql<WorkflowVersionRows["transitions"][number] & { rules: unknown; actions: unknown }>`
     select tr.key, f.key as from_step_key, s.key as to_step_key, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions

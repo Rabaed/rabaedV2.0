@@ -33,12 +33,15 @@ import { registerImportRoutes } from "./routes/register-imports.ts";
 import { requiredFieldRoutes } from "./routes/required-fields.ts";
 import { checklistTemplateRoutes } from "./routes/checklist-templates.ts";
 import { companyDefaultRoutes } from "./routes/company-defaults.ts";
+import { signatureRoutes } from "./routes/signature.ts";
+import { companyImageRoutes } from "./routes/company-images.ts";
 import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
 import { stageRoutes } from "./routes/stages.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
+import { snagBulkRoutes } from "./routes/snag-bulk.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
 import { workflowSettingsRoutes } from "./routes/workflow-settings.ts";
@@ -168,6 +171,7 @@ export async function buildApp({
   await app.register(registerImportRoutes(context));
   await app.register(workItemRoutes(context));
   await app.register(packageRoutes(context));
+  await app.register(snagBulkRoutes(context));
   await app.register(workflowRoutes(context));
   await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
@@ -182,5 +186,7 @@ export async function buildApp({
   await app.register(outcomeRoutes(context));
   await app.register(screenRoutes(context));
   await app.register(companyDefaultRoutes(context));
+  await app.register(signatureRoutes(context));
+  await app.register(companyImageRoutes(context));
   return app;
 }
