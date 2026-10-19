@@ -204,6 +204,7 @@ const doc = (fileName: string, contentType: string, key: string, fieldKey: strin
   contentType,
   size: 1000,
   storageKey: key,
+  sha256: null,
   fieldKey,
   itemKey: null,
   takenAt,

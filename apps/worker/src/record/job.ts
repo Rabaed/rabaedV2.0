@@ -3,8 +3,8 @@ import { documentalRecordFacts, saveDocumentalRecord, type OutboxHandler } from 
 import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
+import { appendixOf, renderWithAppendix } from "./appendix.ts";
 import { documentAssets } from "./assets.ts";
-import { renderRecord } from "./pages.ts";
 import { toPdfA3 } from "./pdfa.ts";
 import { sha256 } from "./pki.ts";
 import { recordDataOf, recordDataXml } from "./record-data.ts";
@@ -24,8 +24,12 @@ import type { TimestampAuthority } from "./timestamp.ts";
 // The Project's record language and Hijri setting are read with the facts, when
 // the record is made (RP-151), so a change applies to records made afterwards.
 //
+// The appendix (RP-147, appendix.ts) is appended after the layout's pages and
+// before the PDF/A-3: the shared PDFs' and images' pages, the other files
+// attached as their source files, the rest listed, held in Rabaed.
+//
 // Not yet (later tickets of spec RP-632): the checks before publishing and the
-// "record ready" event (RP-155) and the appendix (RP-147).
+// "record ready" event (RP-155).
 
 export interface RecordJobDeps {
   readonly files: RecordFiles;
@@ -38,6 +42,8 @@ export interface RecordJobDeps {
   /** The customer web's address: the verification page's link starts there. */
   readonly webUrl: string;
   readonly now?: () => Date;
+  /** What the appendix carries in all before it only lists a file (appendix.ts; 100 MB unless a test sets less). */
+  readonly appendixLimitBytes?: number;
 }
 
 /** Crockford's base 32: no I, L, O or U, so a printed code reads back unambiguously. */
@@ -56,17 +62,24 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     if (!facts) return;
     const token = randomBytes(32).toString("base64url");
     const assets = await documentAssets(facts, deps.files);
-    const { data, pdf: rendered } = await renderRecord(
+    const appendix = await appendixOf(facts, deps.files, deps.appendixLimitBytes);
+    const images = new Map([...assets.images, ...appendix.images]);
+    const { data, pdf: rendered } = await renderWithAppendix(
       deps.renderer,
-      recordDataOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) => assets.images.has(key)),
+      {
+        ...recordDataOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) => assets.images.has(key)),
+        appendix: appendix.entries,
+      },
       await deps.fonts(),
-      assets.images,
+      images,
+      appendix.pdfs,
     );
     const xml = new TextEncoder().encode(recordDataXml(data));
     const sealedAt = now();
     const title = [data.type.code, data.documentNumber ?? data.subject].join(" ");
     const archival = await toPdfA3(rendered, { title, at: sealedAt }, [
       { name: "record-data.xml", mimeType: "application/xml", description: "Record Data", bytes: xml },
+      ...appendix.attachments,
     ]);
     const pdf = await sealPdf(archival, { signer: await deps.signer(), timestamps: await deps.timestamps(), at: sealedAt });
 

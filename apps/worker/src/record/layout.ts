@@ -2,6 +2,7 @@ import { formatDate, formatHijriDate, type Locale } from "@rabaed/domain";
 import type { RecordBlock, RecordPhoto } from "./form-content.ts";
 import type { RecordFonts } from "./fonts.ts";
 import { isShortCode, REPLACED, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
+import { APPENDIX_CSS, appendixHtml } from "./appendix-layout.ts";
 import { qrSvg } from "./qr.ts";
 import { texts, type RecordLanguage, type RecordText } from "./record-text.ts";
 
@@ -98,7 +99,14 @@ type Word = keyof typeof WORDS;
  */
 export type RecordCut = { readonly beforeComments: true } | { readonly card: number; readonly withCard: boolean };
 
-export function recordHtml(data: RecordData, fonts: RecordFonts, images: ReadonlyMap<string, string> = new Map(), cut?: RecordCut): string {
+export function recordHtml(
+  data: RecordData,
+  fonts: RecordFonts,
+  images: ReadonlyMap<string, string> = new Map(),
+  cut?: RecordCut,
+  /** Whether the appendix's pages are drawn after its list (RP-147): not in the render that finds where they start. */
+  appendixPages = true,
+): string {
   const language: RecordLanguage = data.language;
   const locales: Locale[] = language === "bilingual" ? ["ar", "en"] : [language];
 
@@ -317,7 +325,9 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
           .join("")}</div></section>`
       : "";
   const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
-  const after = `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}`;
+  // The appendix (element 15, RP-147) comes after the Disclaimer.
+  const appendixPart = ended ? appendixHtml(data, images, appendixPages) : "";
+  const after = `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}`;
 
   const dir = language === "en" ? "ltr" : "rtl";
   return `<!doctype html>
@@ -428,6 +438,7 @@ li > .n { font-weight: 700; min-width: 6mm; }
 .stampimg { max-width: 32mm; max-height: 32mm; display: block; margin: 0 auto 1.5mm; }
 .nostamp { height: 32mm; }
 .disclaimer .pre { font-size: 8pt; color: #333; }
+${APPENDIX_CSS}
 </style>
 </head>
 <body>

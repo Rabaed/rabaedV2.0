@@ -83,12 +83,17 @@ export interface OutcomeFact {
   readonly actions: OutcomeAction[];
 }
 
-/** A Document everyone who reads the closed item reads. */
+/**
+ * A Document the other Participants saw (RP-147): confirmed, never removed, on a Submitted item and
+ * added before the arrival the close follows, so never one only its holder saw.
+ */
 export interface DocumentFact {
   readonly fileName: string;
   readonly contentType: string;
   readonly size: number;
   readonly storageKey: string;
+  /** Its bytes' SHA-256 (hex), taken when its upload was confirmed (RP-618); null only before RP-618. */
+  readonly sha256: string | null;
   /** The Form's `attachments`, `photos` or `checklist` field it belongs to; null for the Attachments System Field. */
   readonly fieldKey: string | null;
   readonly itemKey: string | null;

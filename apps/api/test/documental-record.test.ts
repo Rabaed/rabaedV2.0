@@ -248,7 +248,11 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
 
   it("carries its Record Data inside, which holds nothing the pages don't print", async () => {
     const files = await attachedFiles(record);
-    expect(files.map((f) => [f.name, f.mimeType, f.relationship])).toEqual([["record-data.xml", "application/xml", "Data"]]);
+    // Then the appendix's files carried inside (RP-147): the MAR's datasheet, which doesn't open as a PDF, as its source file.
+    expect(files.map((f) => [f.name, f.mimeType, f.relationship])).toEqual([
+      ["record-data.xml", "application/xml", "Data"],
+      ["datasheet.pdf", "application/pdf", "Source"],
+    ]);
     const xml = new TextDecoder().decode(files[0]!.bytes);
     for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(xml).not.toContain(hidden);
     // Every value it holds is on the pages: element text and attributes, but its structure

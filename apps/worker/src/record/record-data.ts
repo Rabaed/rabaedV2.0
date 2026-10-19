@@ -20,13 +20,15 @@ import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 // and on page 1 the logos, the review duration, a Cancel's who and why, and the
 // pages the Comments and the reply's full text are on. An image (logo, Signature,
 // Stamp) is only flagged: its bytes are printed, its storage key never held.
-// RP-147 adds the appendix.
+// Version 4 (RP-147) adds the appendix: each shared Document of it by name and
+// fingerprint, and whether the record gives its pages (which), carries it inside
+// the PDF, or only lists it, held in Rabaed. Never its storage key or its size.
 
 /** The layout version the Record Data is printed with (layout.ts). */
-export const LAYOUT_VERSION = "3";
+export const LAYOUT_VERSION = "4";
 
 /** Record Data's XML namespace, versioned with its shape. */
-export const RECORD_DATA_NAMESPACE = "https://rabaed.com/ns/record-data/3";
+export const RECORD_DATA_NAMESPACE = "https://rabaed.com/ns/record-data/4";
 
 export type { RecordFacts, TransitionFact };
 
@@ -117,6 +119,28 @@ export interface RecordData {
   readonly disclaimer: RecordText | null;
   /** The pages the pointers on page 1 name, found by rendering (pages.ts): null until then. */
   readonly pages: { readonly comments: number | null; readonly reply: number | null };
+  /** The appendix (element 15, RP-147): set by the job (appendix.ts), empty until then. */
+  readonly appendix: readonly AppendixEntry[];
+}
+
+/**
+ * How the record holds an appendix file: its pages follow in the record, it travels inside the
+ * PDF (opened from the paperclip), or, past the size limit, it is only listed and held in Rabaed.
+ */
+export type AppendixWay = "pages" | "attached" | "held";
+
+/** A shared Document of the appendix, as the record lists it. */
+export interface AppendixEntry {
+  readonly fileName: string;
+  /** Its bytes' SHA-256 (hex, RP-618). */
+  readonly sha256: string | null;
+  readonly way: AppendixWay;
+  /** The record's pages that give it, found by rendering (appendix.ts); null for a file not given as pages, or until then. */
+  readonly pages: { readonly first: number; readonly last: number } | null;
+  /** How many pages it takes (one for an image): the job's, never part of the Record Data. */
+  readonly pageCount: number;
+  /** Where the image drawn on its page is (an image file): found by the job, never part of the Record Data. */
+  readonly imageKey: ImageKey;
 }
 
 /** Where an image the job inlines is stored: found by the job, never part of the Record Data. */
@@ -373,6 +397,7 @@ export function recordDataOf(
     stamps,
     disclaimer: facts.pdf?.disclaimer ? pick(facts.pdf.disclaimer, language) : null,
     pages: { comments: null, reply: null },
+    appendix: [],
   };
 }
 
@@ -456,6 +481,21 @@ function blockXml(block: RecordBlock, indent: string): string[] {
         `${indent}</photos>`,
       ];
   }
+}
+
+/** The appendix's list (element 15): each file by name and fingerprint, its pages, or a flag for how it is held. */
+function appendixXml(appendix: readonly AppendixEntry[]): string[] {
+  if (appendix.length === 0) return [];
+  return [
+    "  <appendix>",
+    ...appendix.flatMap((f, i) => [
+      `    <file n="${i + 1}"${f.sha256 ? ` sha256="${escape(f.sha256)}"` : ""}>`,
+      `      <name>${escape(f.fileName)}</name>`,
+      f.way === "pages" ? (f.pages ? `      <pages first="${f.pages.first}" last="${f.pages.last}"/>` : "      <pages/>") : f.way === "attached" ? "      <attached/>" : "      <held/>",
+      "    </file>",
+    ]),
+    "  </appendix>",
+  ];
 }
 
 /** The Record Data as its XML document. */
@@ -583,6 +623,7 @@ export function recordDataXml(data: RecordData): string {
     ]),
     "  </stamps>",
     ...(data.disclaimer ? ["  <disclaimer>", ...lang("text", data.disclaimer, "    "), "  </disclaimer>"] : []),
+    ...appendixXml(data.appendix),
     `  <verification code="${escape(data.verification.code)}" link="${escape(data.verification.link)}"/>`,
     "</recordData>",
     "",
