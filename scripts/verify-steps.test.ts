@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalLine, loadFailure, selectSteps, tail } from "./verify-steps.ts";
+import { finalLine, loadFailure, runStep, selectSteps, tail, type StepRun } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
 
@@ -121,5 +121,59 @@ describe("loadFailure", () => {
 
   it("reads output printed in colour", () => {
     expect(loadFailure("test:seam2", `\x1b[31m${testTimedOut}\x1b[39m`)).toContain("pnpm test:seam2 apps/api/test/work-item-list-dates.test.ts");
+  });
+});
+
+// A scripted runner: each call to `run` takes the next result and records the arguments it got.
+function scripted(...results: StepRun[]) {
+  const calls: string[][] = [];
+  const run = (args: string[]) => {
+    calls.push(args);
+    return results[calls.length - 1] ?? { status: 99, output: "unexpected extra run" };
+  };
+  return { run, calls };
+}
+
+describe("runStep", () => {
+  it("carries on when a seam step fails only on timeouts and a re-run of just those files passes, and says so in the step's label", () => {
+    const { run, calls } = scripted({ status: 1, output: `${testTimedOut}${summary(1)}` }, { status: 0, output: "" });
+    expect(runStep("test:seam1", run)).toEqual({ passed: true, label: "test:seam1 (re-ran 1 timed-out file)" });
+    expect(calls).toEqual([["test:seam1"], ["test:seam1", datesTest]]);
+  });
+
+  it("re-runs each timed-out file, in the same step's project, and counts them in the label", () => {
+    const otherTest = "apps/api/test/other.test.ts";
+    const otherTimedOut = testTimedOut.replaceAll(datesTest, otherTest);
+    const { run, calls } = scripted({ status: 1, output: `${testTimedOut}${otherTimedOut}` }, { status: 0, output: "" });
+    expect(runStep("test:seam2", run)).toEqual({ passed: true, label: "test:seam2 (re-ran 2 timed-out files)" });
+    expect(calls).toEqual([["test:seam2"], ["test:seam2", datesTest, otherTest]]);
+  });
+
+  it("stops, with the re-run's output, when the re-run fails too", () => {
+    const { run, calls } = scripted({ status: 1, output: testTimedOut }, { status: 1, output: hookTimedOut });
+    expect(runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output: hookTimedOut, reran: true });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("stops at once, without a re-run, when a real failure sits next to a timeout", () => {
+    const output = `${testTimedOut}${assertionFailed}${summary(2)}`;
+    const { run, calls } = scripted({ status: 1, output });
+    expect(runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output, reran: false });
+    expect(calls).toEqual([["test:seam1"]]);
+  });
+
+  it("passes a step that passed, without a re-run, and stops a step that is not a seam suite on its first failure", () => {
+    const first = scripted({ status: 0, output: "" });
+    expect(runStep("test:seam1", first.run)).toEqual({ passed: true, label: "test:seam1" });
+    expect(first.calls).toHaveLength(1);
+    const lint = scripted({ status: 1, output: testTimedOut });
+    expect(runStep("lint", lint.run)).toEqual({ passed: false, status: 1, output: testTimedOut, reran: false });
+    expect(lint.calls).toHaveLength(1);
+  });
+
+  it("stops without a re-run when no test file is named (workers that never started), as the whole suite is not worth running twice", () => {
+    const { run, calls } = scripted({ status: 1, output: workerCrashed });
+    expect(runStep("test:seam1", run)).toMatchObject({ passed: false, reran: false });
+    expect(calls).toHaveLength(1);
   });
 });

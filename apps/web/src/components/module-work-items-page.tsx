@@ -96,18 +96,23 @@ export async function ModuleWorkItemsPage({
       </Link>
     ) : undefined;
   // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
-  // (the API refuses anyone else), with its Imports page, their Company's own.
+  // (story 4; the API refuses anyone else). Its Imports page, their Company's own, to every
+  // Member on the Project (story 32).
   const imports = await getTranslations("registerImport");
   const moreActions =
-    raisable && raisable.types.length > 0
+    module === "submittals"
       ? [
-          {
-            key: "import",
-            label: imports("importRegister"),
-            description: imports("importRegisterHint"),
-            icon: "upload" as const,
-            href: getPathname({ href: `/projects/${project.id}/work-items/import`, locale }),
-          },
+          ...(raisable && raisable.types.length > 0
+            ? [
+                {
+                  key: "import",
+                  label: imports("importRegister"),
+                  description: imports("importRegisterHint"),
+                  icon: "upload" as const,
+                  href: getPathname({ href: `/projects/${project.id}/work-items/import`, locale }),
+                },
+              ]
+            : []),
           { key: "imports", label: imports("imports"), icon: "history" as const, href: getPathname({ href: `/projects/${project.id}/work-items/imports`, locale }) },
         ]
       : undefined;

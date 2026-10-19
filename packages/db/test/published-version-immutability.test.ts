@@ -37,6 +37,9 @@ const EXCUSED: Record<string, Excuse> = {
   work_item_event: { reason: "an Item's append-only history names the Steps and Transition it went through" },
   notification: { reason: "an instance row: a notification about a Step an Item reached" },
   step_assignment: { reason: "an instance row: who holds an Item at a Step" },
+  submittal_register_import_row: {
+    reason: "an instance row (RP-639): a previewed register row names the Form Version its answers were checked against",
+  },
   workflow_change_note: {
     reason: "written once, in the transaction that publishes the Version (primary key = the Version), so INSERT stays open",
     guards: ["update", "delete"],

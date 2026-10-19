@@ -21,6 +21,7 @@ import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-fo
 import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
+import { WorkItemPaperRef } from "@/components/work-item-paper-ref";
 import { WorkItemReplacement } from "@/components/work-item-replacement";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
@@ -229,6 +230,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             {/* The Revision drop-down: only the Revisions of the chain the viewer may see (V1 each). */}
             {chain && <WorkItemRevisionPicker chain={chain} workItemId={item.id} locale={locale} />}
           </dd>
+          {/* The Paper ref (RP-639): its old paper number, never its Document Number; changed only while a Draft. */}
+          {(item.paperRef !== null || item.actions.editPaperRef) && (
+            <>
+              <dt className="text-muted">{t("fields.paperRef")}</dt>
+              <dd>
+                <WorkItemPaperRef workItemId={item.id} value={item.paperRef} canEdit={item.actions.editPaperRef} />
+              </dd>
+            </>
+          )}
           {/* Where a Duplicate came from: the raiser's own Company only, and no time (RP-409). */}
           {item.duplicatedFrom && (
             <>
@@ -349,7 +359,17 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           })}
         </dl>
 
-        {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} documents={documents.documents} locale={locale} />}
+        {history && (
+          <WorkItemHistory
+            events={history.events}
+            imported={history.imported ?? null}
+            projectId={item.projectId}
+            schema={form.schema}
+            optionLists={optionLists}
+            documents={documents.documents}
+            locale={locale}
+          />
+        )}
       </div>
     </WorkItemFormProvider>
   );

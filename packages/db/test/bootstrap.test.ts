@@ -53,6 +53,50 @@ describe("bootstrap", () => {
   });
 });
 
+// Rabaed Admin runs the customer api's import steps as the app role (RP-960): rabaed_admin may
+// SET ROLE rabaed_app, inheriting none of its privileges, and once switched it is held to
+// row-level security like any app connection.
+describe("Rabaed Admin's switch to the app role", () => {
+  const urls = testDatabaseUrls();
+
+  it("is a membership without inheritance: rabaed_admin may set the app role, and has none of its privileges unswitched", async () => {
+    const [grant] = await query(
+      urls.superuser,
+      `select m.inherit_option, m.set_option, m.admin_option from pg_auth_members m
+       where m.roleid = '${APP_ROLE}'::regrole and m.member = '${ADMIN_ROLE}'::regrole`,
+    );
+    expect(grant).toEqual({ inherit_option: false, set_option: true, admin_option: false });
+    // A Member's own preview is the app role's alone.
+    const [may] = await query(
+      urls.admin,
+      `select has_function_privilege('app.preview_register_import(uuid, text, text, integer, jsonb, jsonb, jsonb, text, uuid, timestamptz)', 'execute') as unswitched`,
+    );
+    expect(may).toEqual({ unswitched: false });
+  });
+
+  it("holds rabaed_admin to row-level security once switched: no Member set, no row", async () => {
+    const client = new pg.Client({ connectionString: urls.admin });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const [admin] = (await client.query("select current_user as role, (select count(*)::int from project) > 0 as reads")).rows;
+      await client.query(`set local role ${APP_ROLE}`);
+      const [switched] = (await client.query("select current_user as role, session_user as session, (select count(*)::int from project) as projects")).rows;
+      await client.query("rollback");
+      expect(admin).toEqual({ role: ADMIN_ROLE, reads: true });
+      expect(switched).toEqual({ role: APP_ROLE, session: ADMIN_ROLE, projects: 0 });
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("stays one that never inherits when a deploy bootstraps again", async () => {
+    await bootstrap(urls, { passwords: "on-create" });
+    const grants = await query(urls.superuser, `select inherit_option from pg_auth_members where roleid = '${APP_ROLE}'::regrole and member = '${ADMIN_ROLE}'::regrole`);
+    expect(grants.every((g) => g.inherit_option === false)).toBe(true);
+  });
+});
+
 // On RDS the bootstrap user (the master user) is not a superuser: it has
 // CREATEROLE and CREATEDB, and admin rights on the roles it created. Every
 // deploy after the first bootstraps over the existing roles as that user.

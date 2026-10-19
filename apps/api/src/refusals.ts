@@ -182,8 +182,15 @@ const answers = {
   header_row_not_found: () => new HttpError(422, "header_row_not_found"),
   empty_header_row: () => new HttpError(422, "empty_header_row"),
   column_not_found: () => new HttpError(422, "column_not_found"),
+  // RP-644: a Package the import names that isn't one of the importing Company's own (whatever it is), and a saved mapping's name its Participant already uses.
+  package_not_found: () => new HttpError(422, "package_not_found"),
+  name_taken: () => new HttpError(409, "name_taken"),
   nothing_to_import: () => new HttpError(409, "nothing_to_import"),
   preview_outdated: () => new HttpError(409, "preview_outdated"),
+  // A Draft's Paper ref (RP-639): over 100 characters, or one another item of the
+  // Participant on the Project already holds (never which).
+  paper_ref_too_long: () => new HttpError(422, "paper_ref_too_long"),
+  paper_ref_taken: () => new HttpError(409, "paper_ref_taken"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
