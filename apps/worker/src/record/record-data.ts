@@ -577,6 +577,22 @@ function appendixXml(appendix: readonly AppendixEntry[]): string[] {
   ];
 }
 
+/**
+ * The values of the Record Data the layout decides, never the item: where things land on the
+ * pages. Each is a pattern over recordDataXml's output and what it reads as in the facts. A
+ * Re-produce (RP-155; decided by Main 2, 2026-10-19) may move these and nothing else.
+ */
+export const LAYOUT_DERIVED: readonly { readonly what: string; readonly pattern: RegExp; readonly as: string }[] = [
+  { what: "the page the Review Comments start on", pattern: /(<comments) page="\d+"/g, as: "$1" },
+  { what: "the page of the reply's full text", pattern: /\n *<replyFullText page="\d+"\/>/g, as: "" },
+  { what: "the pages an appendix Document is on", pattern: /<pages first="\d+" last="\d+"\/>/g, as: "<pages/>" },
+];
+
+/** The facts of a Record Data document: its XML with the layout's values (LAYOUT_DERIVED) taken out. */
+export function recordDataFacts(xml: string): string {
+  return LAYOUT_DERIVED.reduce((facts, { pattern, as }) => facts.replace(pattern, as), xml);
+}
+
 /** The Record Data as its XML document. */
 export function recordDataXml(data: RecordData): string {
   const lines = [

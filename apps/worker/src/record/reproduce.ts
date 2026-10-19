@@ -8,6 +8,7 @@ import { makeRecordPdf } from "./make-pdf.ts";
 import { photoFingerprints, recordPhotos } from "./photo-fingerprints.ts";
 import { sha256 } from "./pki.ts";
 import { parseRecord } from "./record-data-read.ts";
+import { LAYOUT_VERSION, RECORD_DATA_NAMESPACE, recordDataFacts } from "./record-data.ts";
 import type { RecordText } from "./record-text.ts";
 
 // Re-produce (RP-155; ADR 0023; workflow-engine.md §7): when the PDF maker had a bug, a Rabaed
@@ -25,7 +26,10 @@ import type { RecordText } from "./record-text.ts";
 // record was made with (source.marks), and the appendix's files from the Documents too
 // (appendix.ts, appendixFrom). One the store no longer holds (or holds changed) fails the
 // Re-produce, rather than being left out of a poorer PDF that would replace the good one. The PDF
-// is made by make-pdf.ts, as at closure, and its Record Data must come out the same as stored.
+// is made by make-pdf.ts, as at closure. Its Record Data must hold the same facts as the stored
+// one: only the layout's values (record-data.ts, LAYOUT_DERIVED: the pages things land on) may
+// move, and the new PDF carries the remade Record Data with them; the stored Record Data file is
+// not changed. A record whose Record Data is of an earlier version gets a failed verdict saying so.
 
 /** A name as a Rabaed Engineer reads it: English where the record has it. */
 const nameOf = (t: RecordText) => t.en ?? t.ar ?? "";
@@ -37,27 +41,48 @@ export function replacedRecordKey(pdfKey: string, sha256: string): string {
   return pdfKey.replace(/[^/]+$/, `replaced/${sha256}.pdf`);
 }
 
+type Candidate = PhotoCandidate & { readonly sha256: string | null };
+
 /**
- * The Documents whose fingerprints are `wanted` (hex SHA-256), with their images. A Document
- * confirmed before its fingerprint was kept (null) is hashed from its bytes. Each fingerprint
- * is checked against the bytes in storage, so a file changed there does not match.
+ * The files whose fingerprints are `wanted` (hex SHA-256), with their images: among the item's
+ * `documents` (Form photos), then among the `marks` (Signatures, logos, Stamps). Each set is
+ * inlined within its own budget, as the record job inlines them (assets.ts), so what printed at
+ * close prints again. A Document confirmed before its fingerprint was kept (null) is hashed from
+ * its bytes. Each fingerprint is checked against the bytes in storage, so a file changed there
+ * does not match.
  */
 export async function findPhotos(
   wanted: ReadonlySet<string>,
-  documents: readonly (PhotoCandidate & { readonly sha256: string | null })[],
+  documents: readonly Candidate[],
   files: RecordFiles,
+  marks: readonly Candidate[] = [],
 ): Promise<{ keys: Map<string, string>; images: Map<string, string> }> {
+  const photos = await findAmong(wanted, documents, files);
+  const marked = await findAmong(new Set([...wanted].filter((sha) => !photos.keys.has(sha))), marks, files);
+  return { keys: new Map([...photos.keys, ...marked.keys]), images: new Map([...photos.images, ...marked.images]) };
+}
+
+async function findAmong(wanted: ReadonlySet<string>, candidates: readonly Candidate[], files: RecordFiles): Promise<{ keys: Map<string, string>; images: Map<string, string> }> {
   const keys = new Map<string, string>();
-  for (const d of documents) if (d.sha256 && wanted.has(d.sha256) && !keys.has(d.sha256)) keys.set(d.sha256, d.storageKey);
+  if (wanted.size === 0) return { keys, images: new Map() };
+  for (const d of candidates) if (d.sha256 && wanted.has(d.sha256) && !keys.has(d.sha256)) keys.set(d.sha256, d.storageKey);
   if ([...wanted].some((sha) => !keys.has(sha))) {
-    const unhashed = documents.filter((d) => d.sha256 === null && IMAGE_TYPES.has(d.contentType));
+    const unhashed = candidates.filter((d) => d.sha256 === null && IMAGE_TYPES.has(d.contentType));
     for (const [storageKey, sha] of (await inlinePhotos(unhashed, files)).fingerprints) if (wanted.has(sha) && !keys.has(sha)) keys.set(sha, storageKey);
   }
-  const byKey = new Map(documents.map((d) => [d.storageKey, d]));
+  const byKey = new Map(candidates.map((d) => [d.storageKey, d]));
   const { images, fingerprints } = await inlinePhotos([...keys.values()].flatMap((k) => byKey.get(k) ?? []), files);
   // What is in storage now must be what the record printed.
   for (const [sha, storageKey] of keys) if (fingerprints.get(storageKey) !== sha) keys.delete(sha);
   return { keys, images };
+}
+
+/** Why a stored Record Data can't be read back by this version, or null when it can. */
+export function unreadableVersion(xml: string): string | null {
+  const root = /<recordData\b[^>]*>/.exec(xml)?.[0] ?? "";
+  if (root.includes(`xmlns="${RECORD_DATA_NAMESPACE}"`)) return null;
+  const version = /layoutVersion="([^"]*)"/.exec(root)?.[1] ?? "unknown";
+  return `the record was made with Record Data version ${version}, and a Re-produce reads only version ${LAYOUT_VERSION}: it cannot be re-produced`;
 }
 
 export function reproduceHandler(deps: RecordJobDeps): OutboxHandler {
@@ -68,6 +93,12 @@ export function reproduceHandler(deps: RecordJobDeps): OutboxHandler {
     const stored = await deps.files.get(source.recordDataKey);
     if (!stored) throw new Error("the Record Data is missing from storage");
     const xml = new TextDecoder().decode(stored);
+    // A record made with an earlier version's Record Data (dev and UAT only) is not read back: it says so.
+    const unreadable = unreadableVersion(xml);
+    if (unreadable) {
+      await reproduceDocumentalRecord(trx, row.id, { verdict: { passed: false, problems: [unreadable] } });
+      return;
+    }
 
     // Every image the page printed (Form photos, logos, Signatures, Stamps), found again by its fingerprint.
     const read = parseRecord(xml).data;
@@ -78,7 +109,7 @@ export function reproduceHandler(deps: RecordJobDeps): OutboxHandler {
       ...read.stamps.flatMap((s) => (s.image && s.imageSha256 ? [{ what: `the Stamp of ${nameOf(s.company)}`, sha256: s.imageSha256 }] : [])),
     ];
     const wanted = new Set([...photoFingerprints(blocks), ...marks.map((m) => m.sha256)]);
-    const found = await findPhotos(wanted, [...source.documents, ...source.marks], deps.files);
+    const found = await findPhotos(wanted, source.documents, deps.files, source.marks);
     const { appendix, problems: appendixProblems } = await appendixFrom(read.appendix, source.documents, deps.files);
     const problems = [
       ...recordPhotos(blocks)
@@ -103,9 +134,11 @@ export function reproduceHandler(deps: RecordJobDeps): OutboxHandler {
     const made = await makeRecordPdf(deps, { data, marks: markKeys, images: found.images, appendix }, sealedAt);
     const { pdf } = made;
     const checked = await checkRecord(pdf, expectationOf(made.data, made.layoutPages), deps.validator ?? environmentValidator());
-    // The pages must land where the stored Record Data says (the pages page 1 and the appendix's list name).
-    const same = Buffer.from(made.xml).equals(Buffer.from(stored));
-    const verdict = same ? checked : { passed: false, problems: [...checked.problems, "the remade pages do not land where the Record Data says"] };
+    // Every fact must come out as stored; only where things land on the pages may move (LAYOUT_DERIVED).
+    const same = recordDataFacts(new TextDecoder().decode(made.xml)) === recordDataFacts(xml);
+    const verdict = same
+      ? checked
+      : { passed: false, problems: [...checked.problems, "the remade Record Data differs from the stored one in more than where things land on the pages"] };
 
     if (verdict.passed) {
       await deps.files.put(movedAsideKey, replacedPdf, "application/pdf");

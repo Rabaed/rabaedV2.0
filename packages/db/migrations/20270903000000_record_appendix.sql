@@ -20,6 +20,12 @@
 --   - none removed, none unconfirmed, as before.
 --   The Form's photos, the Documents list and the appendix all read this one list.
 --   The rule is one function, app.documents_shared_before_close, below.
+-- * app.documental_record_reproduction_source (rebuilt from 20270805000000_record_checks.sql, RP-155):
+--   a Re-produce reads the same Documents as the record job, through the same rule, and also gets
+--   `marks`: the files of the Signatures the item's events recorded, and the logo and Stamp in force
+--   at the close (app.company_image_at) of each Company the record job names (the same list as the
+--   facts' `companies`), each with its fingerprint, so a Re-produce finds again by fingerprint the
+--   logos, Signatures and Stamps the record printed. Worker only, as before.
 -- app.take_transition, app.transition_effects, app.save_documental_record,
 -- app.documental_record_file and the documental_record_written_once trigger are not touched.
 
@@ -292,3 +298,74 @@ create or replace function app.documental_record_facts(p_outbox_id uuid) returns
       return v_facts;
     end
   $$;
+
+-- What a 'documental_record_reproduce' job needs (20270805000000_record_checks.sql): the Documents
+-- the record was made with, by the record's own rule, and the files a logo, Signature or Stamp it
+-- printed may be found among by its fingerprint (see the header).
+create or replace function app.documental_record_reproduction_source(p_outbox_id uuid) returns jsonb
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      perform app.require_worker();
+      return (
+        select jsonb_build_object(
+          'workItemId', r.work_item_id,
+          'projectId', r.project_id,
+          'status', r.status,
+          'pdfKey', f.storage_key,
+          'recordDataKey', d.storage_key,
+          'pdfSha256', encode(r.pdf_sha256, 'hex'),
+          'sealedAt', app.iso_utc(r.sealed_at),
+          -- The Documents the record was made with (app.documents_shared_before_close, as the facts read them).
+          'documents', coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'fileName', s.file_name, 'contentType', s.content_type, 'size', s.size_bytes::bigint, 'storageKey', s.storage_key,
+              'takenAt', app.iso_utc(s.taken_at), 'sha256', encode(s.file_sha256, 'hex')
+            ) order by s.created_at, s.id) -- hidden-sort-key: the order they were added, as the record job read them
+            from app.documents_shared_before_close(r.work_item_id) s
+          ), '[]'::jsonb),
+          -- The Signatures the item's events recorded, and the logo and Stamp in force at the close of
+          -- each Company the record names (the facts' `companies`).
+          'marks', coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'storageKey', m.storage_key, 'contentType', m.mime, 'size', m.size, 'sha256', encode(m.sha256, 'hex')
+            ) order by m.storage_key) -- hidden-sort-key: Rabaed's own file keys, a fixed order for the worker; never shown
+            from (
+              select sf.storage_key, sf.mime, sf.size, sf.sha256
+              from work_item_event e
+              join member_signature ms on ms.id = e.signature_id
+              join stored_file sf on sf.id = ms.file_id
+              where e.work_item_id = r.work_item_id
+              union
+              select sf.storage_key, sf.mime, sf.size, sf.sha256
+              from work_item w
+              join participant p on p.project_id = w.project_id
+              join project_role pr on pr.id = p.project_role_id
+              cross join (values ('logo'), ('stamp')) k (kind)
+              join stored_file sf on sf.storage_key = app.company_image_at(p.company_id, k.kind, w.closed_at) ->> 'storageKey'
+              where w.id = r.work_item_id
+                and (
+                  (pr.base_role = 'owner' and p.status = 'active')
+                  or p.id = w.raised_by_participant_id
+                  or p.id in (select a.participant_id from step_assignment a where a.work_item_id = w.id)
+                  or p.id in (
+                    select e.actor_participant_id from work_item_event e
+                    where e.work_item_id = w.id and e.type in ('transition', 'issue_code') and e.actor_participant_id is not null)
+                )
+            ) m
+          ), '[]'::jsonb))
+        from outbox o
+        join documental_record r on r.work_item_id = (o.payload ->> 'work_item_id')::uuid
+        join stored_file f on f.id = r.pdf_file_id
+        join stored_file d on d.id = r.record_data_file_id
+        where o.id = p_outbox_id and o.kind = 'documental_record_reproduce'
+          and r.status in ('published', 'failed_checks')
+          and not exists (
+            select 1 from documental_record_reproduction x
+            where x.admin_action_id = (o.payload ->> 'admin_action_id')::uuid)
+      );
+    end
+  $$;
+revoke all on function app.documental_record_reproduction_source(uuid) from public;
+grant execute on function app.documental_record_reproduction_source(uuid) to rabaed_app;
