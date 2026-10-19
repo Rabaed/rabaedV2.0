@@ -12,7 +12,6 @@ import {
   isOpenStageCategory,
   listColumnLayout,
   listColumns,
-  moduleNames,
   outcomeLook,
   ownStepCounts,
   packageNumber,
@@ -81,12 +80,6 @@ export type QueryScope = { projectId: string; moduleKey: ModuleKey; alsoModules?
 
 /** The scope's Modules, its own first. */
 const modulesOf = ({ moduleKey, alsoModules = [] }: QueryScope): ModuleKey[] => [moduleKey, ...alsoModules];
-
-/**
- * The Stage key a row or column carries in the scope: the Module's own Stages by their key (as without
- * the setting), another Module's by `<module>:<key>`, so Inspections' "draft" never merges with Submittals' "draft".
- */
-export const scopedStageKey = (scope: QueryScope, moduleKey: string, key: string) => (moduleKey === scope.moduleKey ? key : `${moduleKey}:${key}`);
 
 /**
  * The scope of a Module's own tab: Submittals also reads the Inspections Module's items when the Project shows
@@ -171,7 +164,7 @@ type SnagRow = {
  * app.work_item_holder, so another Company's Member is never read.
  */
 function visibleRows(scope: QueryScope, allRevisions: boolean): RawBuilder<unknown> {
-  const { projectId, moduleKey } = scope;
+  const { projectId } = scope;
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
       w.revision_no, w.outcome,
@@ -192,8 +185,7 @@ function visibleRows(scope: QueryScope, allRevisions: boolean): RawBuilder<unkno
         select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id
         where app.outcome_offers(o.project_id, o.work_item_type_id, o.outcome, 'offer_revision')
       ) as had_code_c,
-      -- Another Module's Stage (Inspections in the Submittals tab) is told apart by its Module (scopedStageKey).
-      case when t.module_key = ${moduleKey} then st.key else t.module_key || ':' || st.key end as stage_key, st.name as stage_name, st.category as stage_category, st.sort as stage_sort,
+      st.key as stage_key, st.name as stage_name, st.category as stage_category, st.sort as stage_sort,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name, tv.sort as trade_sort,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
       e.step_entered_at,
@@ -931,11 +923,11 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
  * else can take a Transition; a card with none has no entry. The Stage is of the
  * item's pinned Workflow Version, one of the Module's own columns.
  */
-async function boardMoves(trx: Trx, scope: QueryScope, cards: readonly WorkItemRow[]): Promise<Record<string, WorkItemMove[]>> {
+async function boardMoves(trx: Trx, cards: readonly WorkItemRow[]): Promise<Record<string, WorkItemMove[]>> {
   const mine = cards.filter((c) => c.with?.kind === "own" && c.with.holder?.isMe).map((c) => c.id);
   if (mine.length === 0) return {};
-  const { rows } = await sql<{ id: string; key: string; label: BilingualText; kind: WorkItemMove["kind"]; module_key: string; stage_key: string; action_form: unknown }>`
-    select w.id, a.transition_key as key, a.label, a.transition_kind as kind, t.module_key, s.stage_key, tr.action_form
+  const { rows } = await sql<{ id: string; key: string; label: BilingualText; kind: WorkItemMove["kind"]; stage_key: string; action_form: unknown }>`
+    select w.id, a.transition_key as key, a.label, a.transition_kind as kind, s.stage_key, tr.action_form
     from unnest(${mine}::uuid[]) as c (id)
     join work_item w on w.id = c.id
     join work_item_type t on t.id = w.work_item_type_id
@@ -947,7 +939,7 @@ async function boardMoves(trx: Trx, scope: QueryScope, cards: readonly WorkItemR
   `.execute(trx);
   const moves: Record<string, WorkItemMove[]> = {};
   for (const r of rows) {
-    (moves[r.id] ??= []).push({ transition: r.key, label: r.label, kind: r.kind, stageKey: scopedStageKey(scope, r.module_key, r.stage_key), actionForm: parseActionForm(r.action_form) });
+    (moves[r.id] ??= []).push({ transition: r.key, label: r.label, kind: r.kind, stageKey: r.stage_key, actionForm: parseActionForm(r.action_form) });
   }
   return moves;
 }
@@ -1127,7 +1119,7 @@ export function boardWorkItems(db: Db, memberId: string, tabScope: QueryScope, q
       const lanes = boardLanes(cards.get(s.key) ?? []);
       return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), steps: ownStepCounts(lanes), lanes };
     });
-    const moves = await boardMoves(trx, scope, [...cards.values()].flatMap((c) => c.map((i) => i.card)));
+    const moves = await boardMoves(trx, [...cards.values()].flatMap((c) => c.map((i) => i.card)));
     return { stages, filters, columns, moves, layout: await readBoardLayout(trx, tabScope), ...(await typeCounts(trx, scope, q, now)) };
   });
 }
@@ -1140,25 +1132,16 @@ export function boardWorkItems(db: Db, memberId: string, tabScope: QueryScope, q
 async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<string, number>): Promise<Pick<WorkItemList, "stages" | "filters">> {
   const { projectId } = scope;
   const modules = modulesOf(scope);
-  const stagesOfModules = await trx
+  // One group per Stage of the scope's own Module (RP-674): the Inspections share the Submittals' Stage keys (ADR 0025),
+  // so a WIR sits in the group of its key and the group takes the Submittals' name.
+  const stages = await trx
     .selectFrom("stage")
-    .select(["module_key", "key", "name", "category"])
-    .where("module_key", "in", modules)
+    .select(["key", "name", "category"])
+    .where("module_key", "=", scope.moduleKey)
     .where("project_id", "=", projectId)
     .orderBy("sort")
     .orderBy("key")
     .execute();
-  // The scope's own Module first, then the others in the order given, each in its own order: Inspections' Stages
-  // are groups of their own (RP-652), named after their Module as they share names with the Submittals'.
-  const stages = modules.flatMap((moduleKey) =>
-    stagesOfModules
-      .filter((s) => s.module_key === moduleKey)
-      .map((s) => ({
-        key: scopedStageKey(scope, moduleKey, s.key),
-        name: moduleKey === scope.moduleKey ? s.name : { en: `${moduleNames[moduleKey].en} · ${s.name.en}`, ar: `${moduleNames[moduleKey].ar} · ${s.name.ar}` },
-        category: s.category,
-      })),
-  );
   const types = await trx
     .selectFrom("work_item_type")
     .select(["code", "name"])

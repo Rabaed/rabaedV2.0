@@ -1,15 +1,16 @@
 // Seam 1 for the Project setting "Show Inspections in the Submittals tab" (RP-652, INSP-7; spec
 // RP-649; visibility.md V3, V14, scenario RP-652-1). Off by default. On, the Submittals List and
 // Kanban also list the Inspections Module's items (the WIRs the viewer sees), with their Type as a
-// chip and the Inspections Stages as groups of their own (`inspections:<key>`); the Submittals'
-// own Stage keys, the Need My Action counts, the item pages and the Inspections List itself stay
-// as they are, and nobody reads a WIR they could not read before.
+// chip. Since ADR 0025 (RP-673) the Inspections use the Submittals' Stage keys, so a WIR sits in the
+// same column and List group as a submittal at the same Stage, matched by key (RP-674); the Need My
+// Action counts, the item pages and the Inspections List itself stay as they are, and nobody reads
+// a WIR they could not read before.
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { buildTower, draft, ok, projectMember, take, all, type Tower } from "./support/tower.ts";
+import { buildTower, draft, ok, projectMember, submitted, take, all, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -22,6 +23,7 @@ let k1Engineer: Caller; // K1's Consultant Engineer: holds the WIR's inspection 
 let c2Engineer: Caller; // C2, a second Contractor covering Mechanical only (V3).
 let projectId = "";
 let marId = "";
+let marPendingId = ""; // A MAR Submitted to the Consultant: at Pending Approval beside the WIR.
 let wirId = "";
 
 const setting = (by: Caller, show: boolean, project = projectId) =>
@@ -58,6 +60,7 @@ beforeAll(async () => {
 
   // A Draft legacy MAR (Submittals) and a WIR C1 has Submitted to the Consultant (Inspections, Pending Approval).
   marId = await draft(tower, c1Engineer, "Cable tray");
+  marPendingId = await submitted(tower, c1Engineer, tower.c1Pm, "Cable tray 2");
   wirId = (
     await ok(
       c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
@@ -86,15 +89,15 @@ describe("Show Inspections in the Submittals tab: off, as today", () => {
     expect(project.showInspectionsInSubmittals).toBe(false);
     expect(project.modules).toContain("inspections");
     const list = await submittals(c1Engineer);
-    expect(ids(list)).toEqual([marId]);
+    expect(ids(list)).toEqual([marId, marPendingId].sort());
     expect(list.filters.types.map((t) => t.code)).not.toContain("WIR");
     expect(list.stages.some((s) => s.key.includes(":"))).toBe(false);
     expect(ids(await inspections(c1Engineer))).toEqual([wirId]);
   });
 
-  it("reads a Stage key of another Module, or a made-up one, as no group: it matches nothing and never errors", async () => {
-    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_approval"] }))).toEqual([]);
-    expect(ids(await submittals(c1Engineer, { stage: ["nonsense:draft"] }))).toEqual([]);
+  it("reads a made-up Stage key as no group, and a `<module>:<key>` one (RP-652's form) as a bad request", async () => {
+    expect(ids(await submittals(c1Engineer, { stage: ["nonsense"] }))).toEqual([]);
+    expect((await c1Engineer.get(`/v1/projects/${projectId}/modules/submittals/work-items?stage=inspections:pending_approval`)).statusCode).toBe(400);
     expect(ids(await inspections(c1Engineer, { stage: ["pending_approval"] }))).toEqual([wirId]);
   });
 
@@ -124,36 +127,36 @@ describe("Show Inspections in the Submittals tab: on", () => {
     }
   });
 
-  it("lists the WIR the viewer sees with its Type as a chip and the Inspections Stages as groups of their own", async () => {
+  it("lists the WIR the viewer sees with its Type as a chip, in the Submittals' Stage groups (RP-674)", async () => {
     const list = await submittals(c1Engineer);
-    expect(ids(list)).toEqual([marId, wirId].sort());
-    expect(list.items.find((i) => i.id === wirId)).toMatchObject({ type: { code: "WIR" }, stage: { key: "inspections:pending_approval" } });
+    expect(ids(list)).toEqual([marId, marPendingId, wirId].sort());
+    expect(list.items.find((i) => i.id === wirId)).toMatchObject({ type: { code: "WIR" }, stage: { key: "pending_approval" } });
+    expect(list.items.find((i) => i.id === marPendingId)).toMatchObject({ type: { code: LEGACY_MAR }, stage: { key: "pending_approval" } });
     expect(list.items.find((i) => i.id === marId)).toMatchObject({ type: { code: LEGACY_MAR }, stage: { key: "draft" } });
     // The Type filter offers both, and filters.
     expect(list.filters.types.map((t) => t.code)).toEqual(expect.arrayContaining([LEGACY_MAR, "WIR"]));
     expect(ids(await submittals(c1Engineer, { type: ["WIR"] }))).toEqual([wirId]);
-    expect(ids(await submittals(c1Engineer, { type: [LEGACY_MAR] }))).toEqual([marId]);
-    // The Submittals' Stages keep their keys; Inspections' come after them, named after their Module, so "Draft" is not two groups of one name.
-    const own = list.stages.filter((s) => !s.key.includes(":")).map((s) => s.key);
-    const theirs = list.stages.filter((s) => s.key.startsWith("inspections:"));
-    expect(own).toContain("draft");
-    expect(theirs.map((s) => s.key)).toEqual(expect.arrayContaining(["inspections:draft", "inspections:pending_approval", "inspections:approved", "inspections:revise_resubmit"]));
-    expect(theirs.find((s) => s.key === "inspections:draft")!.name).toEqual({ en: "Inspections · Draft", ar: "الفحوصات · مسودة" });
-    expect(list.stages.indexOf(theirs[0]!)).toBeGreaterThan(list.stages.indexOf(list.stages.find((s) => s.key === own.at(-1))!));
-    // Counts follow the rows, group by group.
+    expect(ids(await submittals(c1Engineer, { type: [LEGACY_MAR] }))).toEqual([marId, marPendingId].sort());
+    // One group per Stage, the Submittals' own: no "Inspections ·" group, no key of another Module.
+    expect(list.stages.some((s) => s.key.includes(":") || s.name.en.includes("Inspections"))).toBe(false);
+    expect(list.stages.filter((s) => s.key === "pending_approval")).toHaveLength(1);
+    // Counts follow the rows, each WIR once, in its Stage.
     expect(stageCount(list, "draft")).toBe(1);
-    expect(stageCount(list, "inspections:pending_approval")).toBe(1);
-    expect(stageCount(list, "inspections:draft")).toBe(0);
-    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_approval"] }))).toEqual([wirId]);
+    expect(stageCount(list, "pending_approval")).toBe(2);
+    expect(list.stages.reduce((sum, s) => sum + s.count, 0)).toBe(3);
+    // The Stage filter returns both a MAR and a WIR at Pending Approval.
+    expect(ids(await submittals(c1Engineer, { stage: ["pending_approval"] }))).toEqual([marPendingId, wirId].sort());
     expect(ids(await submittals(c1Engineer, { stage: ["draft"] }))).toEqual([marId]);
   });
 
-  it("is the same on the Kanban: the WIR sits in the Inspections' column, the MAR in the Submittals'", async () => {
+  it("is the same on the Kanban: a MAR and the WIR at Pending Approval sit in one Pending Approval column", async () => {
     const board = await kanban(c1Engineer);
     const cardsOf = (stageKey: string) => board.columns.find((c) => c.stageKey === stageKey)!.lanes.flatMap((l) => l.cards.map((c) => c.id));
-    expect(board.stages.map((s) => s.key)).toContain("inspections:pending_approval");
-    expect(cardsOf("inspections:pending_approval")).toEqual([wirId]);
+    expect(board.stages.some((s) => s.key.includes(":") || s.name.en.includes("Inspections"))).toBe(false);
+    expect(board.columns.filter((c) => c.stageKey === "pending_approval")).toHaveLength(1);
+    expect(cardsOf("pending_approval").sort()).toEqual([marPendingId, wirId].sort());
     expect(cardsOf("draft")).toEqual([marId]);
+    expect(board.columns.reduce((sum, c) => sum + c.shown, 0)).toBe(3);
   });
 
   it("changes nothing else: the Inspections List, the item page, its Document Number and the Need My Action count stay the Inspections Module's", async () => {
@@ -195,6 +198,9 @@ describe("Show Inspections in the Submittals tab: on", () => {
     expect(list.stages.reduce((sum, s) => sum + s.count, 0)).toBe(0);
     expect(ids(await submittals(c2Engineer, { type: ["WIR"] }))).toEqual([]);
     expect(ids(await submittals(c2Engineer, { q: "Rebar" }))).toEqual([]);
+    // The shared Pending Approval group holds none of C1's WIRs for C2: not as a row, not in its count.
+    expect(ids(await submittals(c2Engineer, { stage: ["pending_approval"] }))).toEqual([]);
+    expect(stageCount(list, "pending_approval")).toBe(0);
     const board = await kanban(c2Engineer);
     expect(board.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards))).toEqual([]);
     expect(board.columns.reduce((sum, c) => sum + c.shown, 0)).toBe(0);
@@ -206,7 +212,7 @@ describe("Show Inspections in the Submittals tab: on", () => {
   it("turned off again, the Submittals List is as before", async () => {
     expect((await setting(admin, false)).statusCode).toBe(204);
     const list = await submittals(c1Engineer);
-    expect(ids(list)).toEqual([marId]);
+    expect(ids(list)).toEqual([marId, marPendingId].sort());
     expect(list.stages.some((s) => s.key.includes(":"))).toBe(false);
     expect((await summary(c1Engineer)).showInspectionsInSubmittals).toBe(false);
     expect((await setting(admin, true)).statusCode).toBe(204);
