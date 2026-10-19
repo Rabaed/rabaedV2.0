@@ -78,7 +78,7 @@ export function PackagesBoard({ packages, locale, labels, packageHref, linkAs: L
         // Focusable, so the board can be scrolled with the keyboard.
         tabIndex={0}
         data-packages-board=""
-        className={cn("relative -mx-4 overflow-x-auto bg-canvas px-4 pt-1 pb-10 sm:-mx-7 sm:px-7", focusRing)}
+        className={cn("relative -mx-4 overflow-x-auto bg-canvas px-4 pt-1 pb-[40px] sm:-mx-7 sm:px-7", focusRing)}
       >
         <ol className="flex w-max items-start gap-[18px]">
           {packageStatuses.map((status) => {
