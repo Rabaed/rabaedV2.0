@@ -941,8 +941,8 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
 
 /**
  * What the viewer may do with the board's cards now (RP-350): for each card they
- * hold, the Transitions app.work_item_actions lists, which are exactly the
- * buttons of the item's page, with the Stage of the Step each leads to and its
+ * hold, the Transitions app.work_item_actions lists, which are the buttons of
+ * the item's page but those needing the Participant field (RP-658), with the Stage of the Step each leads to and its
  * Action Form. Asked only for the open cards the viewer picked up, since nobody
  * else can take a Transition; a card with none has no entry. The Stage is of the
  * item's pinned Workflow Version, one of the Module's own columns.
@@ -955,10 +955,11 @@ async function boardMoves(trx: Trx, cards: readonly WorkItemRow[]): Promise<Reco
     from unnest(${mine}::uuid[]) as c (id)
     join work_item w on w.id = c.id
     join work_item_type t on t.id = w.work_item_type_id
-    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, n)
+    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, picks_participant, n)
     join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
     join workflow_step s on s.id = tr.to_step_id
-    where a.action = 'transition'
+    -- One that needs the Participant field (RP-658) is taken from the item's page, not by a drag.
+    where a.action = 'transition' and not a.picks_participant
     order by w.id, a.n
   `.execute(trx);
   const moves: Record<string, WorkItemMove[]> = {};
