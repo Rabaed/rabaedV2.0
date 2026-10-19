@@ -1444,15 +1444,30 @@ function validationRefused(rule: Validation, form: FormSchema, actionForm: FormS
  * How many confirmed files each `attachments` or `photos` field of a visible
  * item has, by field key, and each checklist item's photos, by
  * checklistItemFilesKey (RLS shows only confirmed, unremoved Documents), for
- * leaving Draft. An annotated copy is not a file of its own (RP-656).
+ * leaving Draft. An annotated copy is not a file of its own (RP-656). A reply
+ * Screen's files are not the Form's (ADR 0024).
  */
 async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<string, number>> {
   const { rows } = await sql<{ field_key: string; item_key: string | null; files: number }>`
     select field_key, item_key, count(*)::integer as files from document
-    where work_item_id = ${workItemId} and field_key is not null and annotated_from_id is null
+    where work_item_id = ${workItemId} and field_key is not null and annotated_from_id is null and not reply
     group by field_key, item_key
   `.execute(trx);
   return Object.fromEntries(rows.map((r) => [r.item_key === null ? r.field_key : checklistItemFilesKey(r.field_key, r.item_key), r.files]));
+}
+
+/**
+ * How many confirmed files each reply Screen's field holds that no Transition took yet,
+ * by field key (ADR 0024): what the Transition about to be taken would take. Only the
+ * Participant holding the item sees them (RLS), and only it may take its Transitions.
+ */
+async function replyFileCounts(trx: Trx, workItemId: string): Promise<Record<string, number>> {
+  const { rows } = await sql<{ field_key: string; files: number }>`
+    select field_key, count(*)::integer as files from document
+    where work_item_id = ${workItemId} and reply and reply_event_id is null and annotated_from_id is null
+    group by field_key
+  `.execute(trx);
+  return Object.fromEntries(rows.map((r) => [r.field_key, r.files]));
 }
 
 /**
@@ -1521,7 +1536,11 @@ export async function takeTransitionIn(
   let answers: Record<string, unknown> = input.answers;
   if (routed) {
     if (actionForm) {
-      const checked = validateAnswers(actionForm, input.answers, "complete", { optionLists: await optionListsFor(trx, actionForm) });
+      // A Screen's file fields count the files waiting in them, which the Transition takes (ADR 0024).
+      const checked = validateAnswers(actionForm, input.answers, "complete", {
+        optionLists: await optionListsFor(trx, actionForm),
+        files: await replyFileCounts(trx, workItemId),
+      });
       if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
       answers = checked.answers;
     } else if (Object.keys(input.answers).length > 0) {
@@ -1717,6 +1736,19 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
       action_form: unknown;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
+    // The reply files each Transition took (ADR 0024), as RLS shows them: they freeze at its event's
+    // time (the history names no event id). The Owner's review writes one Transition as two events
+    // of the same time, each read by one Participant, and both name the same files.
+    const { rows: taken } = await sql<{ id: string; frozen_at: Date }>`
+      select id, frozen_at from document
+      where work_item_id = ${workItemId} and reply and reply_event_id is not null
+      order by frozen_at, id
+    `.execute(trx);
+    const filesOf = (r: { type: string; created_at: Date }) => {
+      if (r.type !== "transition" && r.type !== "issue_code") return {};
+      const files = taken.filter((d) => d.frozen_at.getTime() === r.created_at.getTime()).map((d) => d.id);
+      return files.length > 0 ? { files } : {};
+    };
     return {
       events: rows.map((r) => ({
         ...(r.answers ? { answersForm: parseActionForm(r.action_form ?? null) } : {}),
@@ -1737,6 +1769,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         changes: r.changes,
         handover: r.handover,
         answers: r.answers,
+        ...filesOf(r),
       })),
     };
   });

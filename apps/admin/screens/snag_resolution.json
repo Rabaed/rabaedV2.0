@@ -17,6 +17,17 @@
               "en": "Say what was done to fix the snag. Shared with everyone who sees it.",
               "ar": "اذكر ما تم لمعالجة العيب. يراها كل من يرى العيب."
             }
+          },
+          {
+            "key": "after_photos",
+            "type": "photos",
+            "required": false,
+            "maxFiles": 10,
+            "label": { "en": "After photos", "ar": "صور بعد المعالجة" },
+            "help": {
+              "en": "The fix as done. Only your Company sees them until you resolve; then everyone who sees the snag does.",
+              "ar": "المعالجة كما تمت. لا تراها إلا شركتك حتى تعالج العيب، ثم يراها كل من يرى العيب."
+            }
           }
         ]
       }

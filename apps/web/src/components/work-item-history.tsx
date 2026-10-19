@@ -3,6 +3,7 @@ import {
   formatFormValue,
   linksChangeField,
   linksChangeValue,
+  type DocumentSummary,
   type FormSchema,
   type Locale,
   type OptionList,
@@ -33,11 +34,14 @@ export async function WorkItemHistory({
   events,
   schema,
   optionLists,
+  documents = [],
   locale,
 }: {
   events: Event[];
   schema: FormSchema;
   optionLists: readonly OptionList[];
+  /** The item's Documents the viewer sees, to name the reply files a Transition took (ADR 0024). */
+  documents?: readonly DocumentSummary[];
   locale: Locale;
 }) {
   const t = await getTranslations("workItems.history");
@@ -99,6 +103,14 @@ export async function WorkItemHistory({
       .filter((f) => !ownLines.has(f.key) && answers[f.key] !== undefined && answers[f.key] !== null && answers[f.key] !== "")
       .map((f) => [f, answers[f.key]] as const);
   };
+  // The reply files a Transition took (ADR 0024), by the Screen field they were added to.
+  const byId = new Map(documents.map((d) => [d.id, d]));
+  const replyFiles = (e: Event) => {
+    const taken = (e.files ?? []).flatMap((id) => byId.get(id) ?? []);
+    const labels = new Map(e.answersForm ? answerFields(e.answersForm).map((f) => [f.key, f.label[locale]]) : []);
+    const keys = [...new Set(taken.map((d) => d.fieldKey ?? ""))];
+    return keys.map((key) => [labels.get(key) ?? t("files"), taken.filter((d) => (d.fieldKey ?? "") === key).map((d) => d.fileName)] as const);
+  };
   const who = (e: Event) =>
     [e.by.memberName?.[locale], e.by.companyName?.[locale]].filter((part): part is string => Boolean(part)).join(" · ");
 
@@ -108,6 +120,7 @@ export async function WorkItemHistory({
       <ol className="divide-y divide-border border-y border-border" data-testid="work-item-history">
         {[...events].reverse().map((e) => {
           const answers = replyAnswers(e);
+          const files = replyFiles(e);
           return (
           <li key={e.seq} className="space-y-1 py-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -144,6 +157,18 @@ export async function WorkItemHistory({
                     <dt className="inline font-medium">{field.label[locale]}:</dt>{" "}
                     <dd className="inline">
                       <bdi>{formatFormValue(field, v, locale, undefined, optionLists)}</bdi>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {files.length > 0 && (
+              <dl className="space-y-0.5 text-sm" data-testid="history-files">
+                {files.map(([label, names]) => (
+                  <div key={label}>
+                    <dt className="inline font-medium">{label}:</dt>{" "}
+                    <dd className="inline">
+                      <bdi>{names.join(", ")}</bdi>
                     </dd>
                   </div>
                 ))}

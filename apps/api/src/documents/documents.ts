@@ -42,10 +42,12 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       taken_at: Date | null;
       taken_latitude: number | null;
       taken_longitude: number | null;
+      reply: boolean;
+      reply_event_id: string | null;
     }>`
       select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
         m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key, d.item_key, d.annotated_from_id,
-        d.taken_at, d.taken_latitude, d.taken_longitude
+        d.taken_at, d.taken_latitude, d.taken_longitude, d.reply, d.reply_event_id
       from document d
       -- The upload time, never earlier than the Creation Date once numbered (RP-399), and the
       -- order they were uploaded in: ids are random and say nothing of it (ADR 0015).
@@ -56,7 +58,9 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       where d.work_item_id = ${workItemId}
       order by t.seq
     `.execute(trx);
-    const { rows: can } = await sql<{ can: boolean }>`select app.can_change_documents(${workItemId}::uuid) as can`.execute(trx);
+    const { rows: can } = await sql<{ can: boolean; replies: boolean }>`
+      select app.can_change_documents(${workItemId}::uuid) as can, app.reply_documents_refusal(${workItemId}::uuid) is null as replies
+    `.execute(trx);
     return {
       documents: rows.map((r) => ({
         id: r.id,
@@ -72,8 +76,10 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         takenAt: r.taken_at?.toISOString() ?? null,
         takenWhere:
           r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
+        ...(r.reply ? { reply: { taken: r.reply_event_id !== null } } : {}),
       })),
       canChange: can[0]!.can,
+      canChangeReplies: can[0]!.replies,
       limits,
     };
   });
@@ -113,7 +119,11 @@ export function startUpload(
   now: Date,
 ): Promise<StartUploadResult> {
   return withMember(db, memberId, async (trx): Promise<StartUploadResult> => {
-    const start = file.annotatedFromId
+    // A reply Screen's file (ADR 0024): its own function, which checks the Screen's field and who holds the item.
+    const start = file.reply
+      ? sql`app.start_reply_document_upload(
+          ${workItemId}::uuid, ${file.fieldKey!}, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
+      : file.annotatedFromId
       ? sql`app.start_annotated_copy_upload(
           ${workItemId}::uuid, ${file.annotatedFromId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
       : sql`app.start_document_upload(
@@ -134,7 +144,7 @@ export function startUpload(
   });
 }
 
-const confirmRefusals = [...changeRefusals, "not_uploaded", "upload_mismatch", "too_many_files"] as const;
+const confirmRefusals = [...changeRefusals, ...fieldRefusals, "not_uploaded", "upload_mismatch"] as const;
 export type ConfirmUploadResult = { ok: true } | { ok: false; reason: (typeof confirmRefusals)[number] };
 
 /**
@@ -185,7 +195,7 @@ export function confirmUpload(
 const removeRefusals = [...changeRefusals, "document_frozen"] as const;
 export type RemoveDocumentResult = { ok: true } | { ok: false; reason: (typeof removeRefusals)[number] };
 
-/** The raiser's Company removes a Document of its Draft; refused once frozen. */
+/** The raiser's Company removes a Document of its Draft, or the holding Participant a reply file no Transition took yet; refused once frozen. */
 export function removeDocument(db: Db, memberId: string, workItemId: string, documentId: string, now: Date): Promise<RemoveDocumentResult> {
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`

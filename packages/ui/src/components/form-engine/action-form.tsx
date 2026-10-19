@@ -3,7 +3,7 @@
 import type { FieldError, FormSchema, FormValue, Locale } from "@rabaed/domain";
 import { Field } from "../form/field.tsx";
 import { Textarea } from "../form/textarea.tsx";
-import { FormRenderer, type FormRendererLabels } from "./form-renderer.tsx";
+import { FormRenderer, type FormFiles, type FormRendererLabels } from "./form-renderer.tsx";
 
 // A Transition's pop-up (RP-300; form-engine.md §4 "Settled 2026-10-05 (part 3)"):
 // its Action Form, a Form schema drawn by the Form engine's renderer, then the
@@ -36,6 +36,11 @@ export type ActionFormProps = {
   onInternalNoteChange: (internalNote: string) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
+  /**
+   * The files of a Screen's `photos` and `attachments` fields (ADR 0024): Documents the
+   * holding Participant added for this reply, which the Transition takes. Absent: none.
+   */
+  files?: FormFiles;
 };
 
 export function ActionForm({
@@ -48,6 +53,7 @@ export function ActionForm({
   onChange,
   onInternalNoteChange,
   idPrefix = "action-form",
+  files,
 }: ActionFormProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -63,6 +69,7 @@ export function ActionForm({
           idPrefix={idPrefix}
           sectionTitles="hidden"
           className="gap-4"
+          {...(files ? { files } : {})}
         />
       )}
       <Field label={text.internalNote} help={text.internalNoteHelp} id={`${idPrefix}-internal-note`}>
