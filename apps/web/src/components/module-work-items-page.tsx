@@ -1,12 +1,13 @@
-import { workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale, type ModuleKey } from "@rabaed/domain";
+import { moduleViewFromSearchParams, workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale, type ModuleKey } from "@rabaed/domain";
 import { Icon, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { PackagesBoardView } from "@/components/packages-board-view";
 import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
 import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
 import { Link, getPathname, redirect } from "@/i18n/navigation";
-import { getMe, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
+import { getMe, getPackages, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
 /**
  * A Module tab of a Project (RP-346): one page of the work item query over the
@@ -28,6 +29,19 @@ export async function ModuleWorkItemsPage({
 }) {
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");
+  // The Submittals' Packages view (RP-660): the Project's Packages the Member sees, as a Kanban of their status.
+  if (moduleViewFromSearchParams(searchParams, module) === "packages") {
+    const [me, project, packages, raisable] = await Promise.all([getMe(), getProject(projectId), getPackages(projectId), getRaisableTypes(projectId, module)]);
+    if (!me) return redirect({ href: "/sign-in", locale });
+    if (!project || !packages) notFound();
+    return (
+      <>
+        <h1 className="sr-only">{tabs(module)}</h1>
+        {/* "+ New Package" for a Member who may raise a Submittals Type: a Package holds their Participant's submittals (the API checks again). */}
+        <PackagesBoardView packages={packages.packages} projectId={project.id} canCreate={(raisable?.types.length ?? 0) > 0} />
+      </>
+    );
+  }
   // The filter fields' names in the other language, small after each (the owner's anatomy, RP-410).
   const other = await getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "workItemViews.list" });
   const hints = {
