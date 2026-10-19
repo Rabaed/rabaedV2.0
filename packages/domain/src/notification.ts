@@ -104,7 +104,7 @@ export interface NotificationEmailPackage {
 export interface NotificationEmailContent {
   /** Null for a Package Submit's, which is about `package`. */
   workItemId: string | null;
-  /** Null while the item has none; a Package Submit's: the Package's number. */
+  /** Null while the item has none, and for a Package Submit's: a Package's number is not a Document Number (GLOSSARY), it is package.number. */
   documentNumber: string | null;
   /** The item's Subject; a Package Submit's: the Package's name in the email's language. */
   subject: string;
@@ -157,7 +157,9 @@ export interface NotificationDigestItem {
   workItemId: string | null;
   /** A Package Submit's Package (RP-643); left out for an item. */
   packageId?: string;
-  /** Null while the item has none; a Package's: its number. */
+  /** A Package Submit's: the Package's number (PKG-001), which is not a Document Number; left out for an item. */
+  packageNumber?: string;
+  /** Null while the item has none, and for a Package's. */
   documentNumber: string | null;
   /** The item's Subject, or the Package's name. */
   subject: string;

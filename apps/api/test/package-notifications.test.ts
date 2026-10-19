@@ -185,7 +185,7 @@ describe("a Package Submit's notification", () => {
     expect(immediate).toHaveLength(1);
     expect(immediate[0]).toMatchObject({
       kind: "package_submitted",
-      content: { workItemId: null, documentNumber: pkg.number, package: { id: pkg.id, number: pkg.number, count: 3, companyName: c1Name } },
+      content: { workItemId: null, documentNumber: null, package: { id: pkg.id, number: pkg.number, count: 3, companyName: c1Name } },
     });
     expect(emails.filter((e) => e.to === k1Electrical.email)).toEqual([]);
 
@@ -196,7 +196,7 @@ describe("a Package Submit's notification", () => {
       .flatMap((d) => d.projects.flatMap((p) => p.items))
       .filter((i) => i.packageId === pkg.id);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ workItemId: null, documentNumber: pkg.number, entries: [{ kind: "package_submitted", package: { count: 2 } }] });
+    expect(entries[0]).toMatchObject({ workItemId: null, documentNumber: null, packageNumber: pkg.number, entries: [{ kind: "package_submitted", package: { count: 2 } }] });
     await saveStepReached(k1Electrical, "immediate");
   });
 

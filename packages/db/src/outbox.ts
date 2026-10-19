@@ -75,12 +75,12 @@ export function notificationPackageOf(row: NotificationPackageColumns): Notifica
 
 /**
  * What a notification email says of its subject: the item's number and Subject, or a
- * Package Submit's Package number and name (in `language`).
+ * Package Submit's Package and its name (in `language`), with no Document Number.
  */
 function aboutOf(row: NotificationRow, language: Locale): Pick<NotificationEmailContent, "workItemId" | "documentNumber" | "subject" | "package"> {
   const pkg = notificationPackageOf(row);
   return pkg
-    ? { workItemId: null, documentNumber: pkg.number, subject: pkg.name[language], package: pkg }
+    ? { workItemId: null, documentNumber: null, subject: pkg.name[language], package: pkg }
     : { workItemId: row.work_item_id, documentNumber: row.document_number, subject: row.subject ?? "" };
 }
 
@@ -149,7 +149,7 @@ export function notificationDigestHandler(send: SendNotificationDigest): OutboxH
       if (!item) {
         item = {
           workItemId: about.workItemId,
-          ...(about.package ? { packageId: about.package.id } : {}),
+          ...(about.package ? { packageId: about.package.id, packageNumber: about.package.number } : {}),
           documentNumber: about.documentNumber,
           subject: about.subject,
           entries: [],
