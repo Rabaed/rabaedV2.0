@@ -7,11 +7,19 @@
 // apps/api/test/register-import.test.ts).
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { AdminRegisterImportParticipants, AdminRegisterImportProjects, RegisterImport, RegisterImportFields, RegisterImportMapping, RegisterSheet } from "@rabaed/domain";
+import type {
+  AdminRegisterImportParticipants,
+  AdminRegisterImportProjects,
+  RegisterImport,
+  RegisterImportFields,
+  RegisterImportMapping,
+  RegisterSheet,
+  RegisterValues,
+} from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden } from "../../api/test/support/harness.ts";
-import { bilingual, buildTower, memberOnProject, ok, only, type Tower } from "../../api/test/support/tower.ts";
+import { all, bilingual, buildTower, memberOnProject, ok, only, type Company, type Tower } from "../../api/test/support/tower.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
 const api = await createTestApi();
@@ -28,6 +36,7 @@ type Person = Awaited<ReturnType<typeof memberOnProject>>;
 const reason = "TMC asked for help loading their Rev 4 register, ticket #4821";
 
 let tower: Tower;
+let c1: Company;
 let k1ParticipantId: string;
 /** The default Member: raises every row nobody else is assigned. */
 let hafiz: Person;
@@ -45,7 +54,7 @@ const actionsOf = async (engineerId: string) =>
   adminDb.selectFrom("admin_action").select(["action", "target_kind", "target_id", "reason", "after"]).where("engineer_id", "=", engineerId).orderBy("at").execute();
 
 beforeAll(async () => {
-  const c1 = await api.projectCreator();
+  c1 = await api.projectCreator();
   const k1 = await api.authorizedPerson();
   tower = await buildTower(api, { c1, k1 }, "ADM");
   k1ParticipantId = (await c1.caller.get(`/v1/projects/${tower.projectId}/participants`))
@@ -227,5 +236,157 @@ describe("An Engineer's import for C1", () => {
       const after = (await sql<{ id: string }>`select id from outbox where project_id = ${tower.projectId}::uuid`.execute(adminDb)).rows;
       expect(after.filter((r) => !outboxBefore.has(r.id))).toEqual([]);
     });
+  });
+});
+
+// Rabaed Admin connects as rabaed_admin, which reads past row-level security: every check of
+// an Engineer's import must scope to the default Member explicitly, never lean on a policy.
+// Each test runs the same import as the default Member through the customer api (rabaed_app,
+// through row-level security) and expects the same answer.
+describe("An Engineer's import checks as the default Member, past row-level security", () => {
+  /** C1's default Member here: Electrical only, and Building A only. */
+  let nadia: Person;
+  /** A C1 engineer who sees Mechanical only. */
+  let mona: Person;
+  /** C2, a second Contractor on the Project. */
+  let c2Engineer: Person;
+  let c2Item: string;
+  const c2Title = "C2 cable trays";
+
+  const forNadia = () => ({ projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: nadia.id, reason });
+  const header = "Subject,Type,Trade,Location,Paper ref,Assign to";
+  const file = () => ({
+    fileName: "C1_Register_Narrowed.csv",
+    content: Buffer.from(
+      [
+        header,
+        "Cables,MAR,Electrical,Building A,,",
+        "Pumps,MAR,Mechanical,Building A,,",
+        "Lights,MAR,Electrical,Building B,,",
+        "Trays,MAR,Electrical,Building A,C2-REF-1,",
+        "Conduits,MAR,Electrical,Building A,c1-ref-1,",
+        `Boxes,MAR,Electrical,Building A,,${c2Engineer.email}`,
+        `Glands,MAR,Electrical,Building A,,${k1Person.email}`,
+        `Sockets,MAR,Electrical,Building A,,${mona.email}`,
+        "Fans,SAR,Electrical,Building A,,",
+      ].join("\r\n"),
+    ).toString("base64"),
+  });
+  const mapping = (): RegisterImportMapping => ({
+    subject: { column: 0 },
+    type: { column: 1 },
+    trade: { column: 2 },
+    location: { column: 3 },
+    paperRef: { column: 4 },
+    assignTo: { column: 5 },
+    // Another Participant's Member, picked by id.
+    assign: { rules: [{ by: "type", value: "SAR", member: c2Engineer.id }] },
+  });
+  const upload = () => ({ file: file(), sheet: "C1_Register_Narrowed", headerRow: 1, mapping: mapping() });
+  const projectUrl = (path: string) => `/v1/projects/${tower.projectId}/${path}`;
+  const setRef = (by: Person["caller"], id: string, paperRef: string) => ok(by.request("PUT", `/v1/work-items/${id}/paper-ref`, { paperRef }));
+  const dar = async (by: Person["caller"], title: string) =>
+    (await ok(by.post(projectUrl("work-items"), { type: "DAR", title, answers: { trade: tower.electrical } }), 201)).json().id as string;
+
+  let previewed: RegisterImport;
+  let asMember: RegisterImport;
+
+  beforeAll(async () => {
+    const buildingB = (await ok(c1.caller.post(projectUrl("locations"), { code: "BB", name: bilingual("Building B"), parentId: null }), 201)).json().id;
+    expect(buildingB).toBeTruthy();
+    nadia = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"], { trade: only(tower.electrical), name: "Nadia Narrowed" });
+    await ok(c1.caller.request("PUT", `/v1/participants/${tower.c1ParticipantId}/members/${nadia.id}/visibility`, { trade: only(tower.electrical), location: only(tower.buildingA) }));
+    mona = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"], { trade: only(tower.mechanical), name: "Mona Mechanical" });
+
+    const onboarded = await api.onboardCompany({ legalName: bilingual("C2 Contracting") });
+    const c2: Company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
+    const c2ParticipantId = await api.addParticipant(c1.caller, tower.projectId, c2.company, "contractor");
+    await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
+    c2Engineer = await memberOnProject(api, c2, c2ParticipantId, ["engineer"]);
+    // C2's own Draft holds C2-REF-1; C1's own holds C1-REF-1.
+    c2Item = await dar(c2Engineer.caller, c2Title);
+    await setRef(c2Engineer.caller, c2Item, "C2-REF-1");
+    await setRef(tower.c1Engineer, await dar(tower.c1Engineer, "C1 conduits"), "C1-REF-1");
+
+    previewed = (await ok(engineer.browser.post("/v1/register-imports", { for: forNadia(), ...upload() }), 201)).json();
+    asMember = (await ok(nadia.caller.post(projectUrl("register-imports"), upload()), 201)).json();
+  });
+
+  it("refuses a row outside the default Member's Trade or Location Visibility with the reason a Member's import gives", () => {
+    expect(reasonsByRow(previewed)).toMatchObject({ 2: [], 3: ["trade_outside_visibility"], 4: ["location_outside_visibility"] });
+    expect(reasonsByRow(previewed)).toEqual(reasonsByRow(asMember));
+  });
+
+  it("refuses a Paper ref C1's own Work Item holds; one another Participant's holds neither refuses the row nor shows anything of it", () => {
+    expect(reasonsByRow(previewed)).toMatchObject({ 5: [], 6: ["paper_ref_taken"] });
+    const seen = JSON.stringify(previewed);
+    expect(seen).not.toContain(c2Item);
+    expect(seen).not.toContain(c2Title);
+  });
+
+  it("refuses \"Assign to\" naming another Participant's Member, by email or picked by id, and a C1 Member who doesn't see the row's Trade", () => {
+    expect(reasonsByRow(previewed)).toMatchObject({
+      7: ["assignee_unknown"],
+      8: ["assignee_unknown"],
+      9: ["assignee_outside_visibility"],
+      10: ["assignee_unknown"],
+    });
+    // Only C1's own Member is matched; the others read as nobody.
+    expect(previewed.rows.flatMap((r) => (r.assignee.match ? [r.assignee.match.id] : []))).toEqual([mona.id]);
+  });
+
+  it("offers the fields and values the default Member is offered through the customer api: no other Participant's Members", async () => {
+    const fields: RegisterImportFields = (await ok(engineer.browser.post("/v1/register-imports/fields", { for: forNadia() }), 200)).json();
+    const theirFields: RegisterImportFields = (await ok(nadia.caller.get(projectUrl("register-imports/fields")), 200)).json();
+    expect(fields).toEqual(theirFields);
+    expect(fields.members.map((m) => m.id)).toEqual(expect.arrayContaining([nadia.id, mona.id, hafiz.id]));
+    expect(fields.members.map((m) => m.id)).not.toEqual(expect.arrayContaining([c2Engineer.id]));
+    expect(fields.members.map((m) => m.id)).not.toEqual(expect.arrayContaining([k1Person.id]));
+
+    const values: RegisterValues = (await ok(engineer.browser.post("/v1/register-imports/values", { for: forNadia(), ...upload() }), 200)).json();
+    const theirValues: RegisterValues = (await ok(nadia.caller.post(projectUrl("register-imports/values"), upload()), 200)).json();
+    expect(values).toEqual(theirValues);
+    const assignTo = values.fields.find((f) => f.field === "assignTo")!;
+    expect(assignTo.values.map((v) => [v.text, v.match])).toEqual([
+      [c2Engineer.email, null],
+      [k1Person.email, null],
+      [mona.email, mona.id],
+    ]);
+  });
+
+  describe("on confirm", () => {
+    let record: RegisterImport;
+
+    beforeAll(async () => {
+      expect((await ok(engineer.browser.post(`/v1/register-imports/${previewed.id}/confirm`, { reason }), 200)).json()).toEqual({ rowsCreated: 2 });
+      record = (await ok(engineer.browser.get(`/v1/register-imports/${previewed.id}?reason=${encodeURIComponent(reason)}`), 200)).json();
+    });
+
+    it("creates nothing for a refused row: only the good rows' Drafts, raised by the default Member", async () => {
+      expect(record.rows.filter((r) => r.created).map((r) => r.subject)).toEqual(["Cables", "Trays"]);
+      const { rows } = await sql<{ id: string }>`select id from work_item where import_id = ${previewed.id}::uuid`.execute(adminDb);
+      expect(rows.map((r) => r.id).sort()).toEqual(record.rows.flatMap((r) => (r.workItemId ? [r.workItemId] : [])).sort());
+      const mine = ((await ok(nadia.caller.get(`${projectUrl("work-items")}?needMyAction=true`), 200)).json().items as { id: string }[]).map((i) => i.id);
+      expect(mine.sort()).toEqual(rows.map((r) => r.id).sort());
+    });
+
+    it("leaves C2 reading nothing of it, its own Paper ref untouched", async () => {
+      expect((await ok(c2Engineer.caller.get(projectUrl("register-imports")), 200)).json().imports).toEqual([]);
+      await expectHidden(c2Engineer.caller.get(`/v1/register-imports/${previewed.id}`));
+      expect((await ok(c2Engineer.caller.get(`/v1/work-items/${c2Item}`), 200)).json().paperRef).toBe("C2-REF-1");
+    });
+  });
+
+  it("reads and confirms as none once its default Member has left the Participant, as a Member's own preview does", async () => {
+    const leaving = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"], { name: "Omar Leaving" });
+    const one = { file: { fileName: "Leaving.csv", content: Buffer.from(`${header}\r\nCables,MAR,Electrical,Building A,,`).toString("base64") }, sheet: "Leaving", headerRow: 1, mapping: mapping() };
+    const forLeaving = { ...forNadia(), defaultMemberId: leaving.id };
+    const theirs: RegisterImport = (await ok(engineer.browser.post("/v1/register-imports", { for: forLeaving, ...one }), 201)).json();
+    const own: RegisterImport = (await ok(leaving.caller.post(projectUrl("register-imports"), one), 201)).json();
+    await ok(c1.caller.request("DELETE", `/v1/participants/${tower.c1ParticipantId}/members/${leaving.id}`));
+
+    await expectHidden(leaving.caller.get(`/v1/register-imports/${own.id}`));
+    expect((await engineer.browser.get(`/v1/register-imports/${theirs.id}?reason=${encodeURIComponent(reason)}`)).statusCode).toBe(404);
+    expect((await engineer.browser.post(`/v1/register-imports/${theirs.id}/confirm`, { reason })).json()).toEqual({ error: "not_found" });
   });
 });

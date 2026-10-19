@@ -31,7 +31,10 @@ import { openSpreadsheet, SpreadsheetError, type SheetTable, type Spreadsheet, t
 // register (the api's routes), and a Rabaed Engineer importing it for a Participant in
 // Rabaed Admin, which runs this very code as the Participant's default Member, who stands
 // where the importer stands. Every check is the same; the import is the Engineer's, which
-// the Company reads as "Rabaed" (visibility.md RP-589-3).
+// the Company reads as "Rabaed" (visibility.md RP-589-3). Rabaed Admin's role reads past
+// row-level security, so no check here leans on a policy: each read says whose it is
+// (the session's Member's Projects, Participant, Visibility), or goes through a function
+// that does.
 
 type Trx = Transaction<Database>;
 
@@ -78,7 +81,13 @@ export type ConfirmRegisterImportResult = { ok: true; rowsCreated: number } | { 
  * they may raise by the rule the preview and the confirm check (app.register_import_raisable_types).
  */
 async function mayImport(trx: Trx, projectId: string): Promise<NotTheirs | null> {
-  const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+  // The project table's policy, said again: Rabaed Admin reads past it as the default Member.
+  const project = await trx
+    .selectFrom("project")
+    .select("id")
+    .where("id", "=", projectId)
+    .where(sql<boolean>`id in (select app.current_project_ids())`)
+    .executeTakeFirst();
   if (!project) return { ok: false, reason: "not_found" };
   const { rows } = await sql<{ raisable: number }>`
     select count(*)::int as raisable from app.register_import_raisable_types(${projectId}::uuid)
@@ -236,10 +245,24 @@ type ImportRow = {
 type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping" | "raiser_id" | "raiser_name">;
 
 /**
- * The imports the reader reads (row-level security; Rabaed Admin reads past it) matching
- * `where`, by file name, with the Member who ran each: none for an Engineer's ("Rabaed").
+ * Which imports the importer reads: the table's policy, said again, because Rabaed Admin
+ * reads past it as the default Member. An import of their own Participant on one of their
+ * Projects, confirmed or their own preview; an Engineer only their own, made for this
+ * default Member.
  */
-function importsWhere(trx: Trx, where: RawBuilder<unknown>): Promise<ImportRow[]> {
+const readBy = (importer: Pick<RegisterImporter, "engineer">) => sql`
+  i.participant_id in (select app.current_participant_ids()) and i.project_id in (select app.current_project_ids())
+  and ${
+    importer.engineer
+      ? sql`i.run_by_engineer_id = ${importer.engineer.id}::uuid and i.default_member_id = app.current_member_id()`
+      : sql`(i.status = 'created' or i.run_by_member_id = app.current_member_id())`
+  }`;
+
+/**
+ * The imports the importer reads (readBy) matching `where`, by file name, with the Member
+ * who ran each: none for an Engineer's ("Rabaed").
+ */
+function importsWhere(trx: Trx, importer: Pick<RegisterImporter, "engineer">, where: RawBuilder<unknown>): Promise<ImportRow[]> {
   return sql<ImportRow>`
     select i.id, i.project_id, i.file_name, i.status, i.run_by_member_id, m.full_name as run_by_name,
       r.id as raiser_id, r.full_name as raiser_name,
@@ -247,7 +270,7 @@ function importsWhere(trx: Trx, where: RawBuilder<unknown>): Promise<ImportRow[]
     from submittal_register_import i
     left join member m on m.id = i.run_by_member_id
     join member r on r.id = coalesce(i.run_by_member_id, i.default_member_id)
-    where ${where}
+    where ${readBy(importer)} and ${where}
     order by lower(i.file_name), i.id
   `
     .execute(trx)
@@ -273,7 +296,7 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
   return withMember(db, memberId, async (trx) => {
     const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!project) return null;
-    return (await importsWhere(trx, sql`i.project_id = ${projectId}::uuid and i.status = 'created'`)).map(toSummary);
+    return (await importsWhere(trx, { engineer: null }, sql`i.project_id = ${projectId}::uuid and i.status = 'created'`)).map(toSummary);
   });
 }
 
@@ -284,7 +307,7 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
 export function getRegisterImport(importer: RegisterImporter, importId: string): Promise<RegisterImport | null> {
   return importer.run(async (trx) => {
     const { engineer } = importer;
-    const [r] = await importsWhere(trx, engineer ? sql`i.id = ${importId}::uuid and i.run_by_engineer_id = ${engineer.id}::uuid` : sql`i.id = ${importId}::uuid`);
+    const [r] = await importsWhere(trx, importer, sql`i.id = ${importId}::uuid`);
     if (!r) return null;
     const results = engineer
       ? sql`app.register_import_results_by_engineer(${engineer.id}::uuid, ${importId}::uuid)`

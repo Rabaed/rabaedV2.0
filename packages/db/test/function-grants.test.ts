@@ -58,6 +58,7 @@ const allow: GrantAllowList = {
   "app.register_import_raisers": ["rabaed_admin"],
   "app.register_import_raisable_types": both,
   "app.current_participant_ids": both,
+  "app.current_project_ids": both,
   "app.new_item_form_version": both,
   "app.new_item_workflow_version": both,
   "app.form_participant_choices": both,

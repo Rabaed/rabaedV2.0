@@ -106,3 +106,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270802 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) |
 | 20270803 | RP-645 | 52 | register_import_by_engineer |
 | 20270731 | RP-629 | 34 | snag_bulk_reassign |
+| 20270804 | RP-645 | 52 | admin_reads_current_project_ids |
