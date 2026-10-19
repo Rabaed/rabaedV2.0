@@ -110,7 +110,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <h1 className="text-h4 font-semibold">{item.title}</h1>
             <div className="flex flex-wrap items-center gap-2">
               {/* A closed item's sealed Documental Record, for everyone who sees it (RP-620, V7). */}
-              {item.outcome && <DownloadRecordButton workItemId={item.id} />}
+              {item.outcome && <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} />}
               {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
               {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
             </div>

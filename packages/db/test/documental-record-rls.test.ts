@@ -92,7 +92,7 @@ describe("the documental_record table", () => {
     await expect(migrator.query("update documental_record set status = 'preparing' where work_item_id = $1", [itemId])).rejects.toMatchObject({ code: "42501" });
   });
 
-  it("lets only its status move forward, for RP-155's checks: preparing to failed_checks or published, failed_checks to published", async () => {
+  it("lets only its status move forward from preparing, for RP-155's checks: to published, or to failed_checks, which only a Re-produce then publishes", async () => {
     const status = (to: string, extra = "") => migrator.query(`update documental_record set status = $1${extra} where work_item_id = $2`, [to, itemId]);
     await migrator.query("begin");
     try {
@@ -106,10 +106,18 @@ describe("the documental_record table", () => {
         await migrator.query("rollback to savepoint refused");
       };
       await refused("failed_checks", ", outcome = 'B'");
+      // A failed record stays failed for the checks' own move: only a Re-produce publishes it (documental-record-checks-rls.test.ts).
       await status("failed_checks");
+      await refused("published");
       await refused("preparing");
+      await migrator.query("rollback");
+      await migrator.query("begin");
+      await migrator.query("alter table documental_record disable trigger documental_record_written_once");
+      await status("preparing");
+      await migrator.query("alter table documental_record enable trigger documental_record_written_once");
       await status("published");
       await refused("failed_checks");
+      await refused("preparing");
     } finally {
       await migrator.query("rollback");
     }

@@ -31,6 +31,8 @@ export interface RecordPhoto {
   readonly takenAt: string | null;
   /** Where the image is stored: found by the job, never part of the Record Data. */
   readonly storageKey: string;
+  /** The SHA-256 (hex) of the image the page prints, when the job inlined it (RP-155: how a Re-produce finds it again); null otherwise. */
+  readonly sha256: string | null;
 }
 
 export type RecordBlock =
@@ -77,7 +79,7 @@ const isBlank = (v: unknown) => v === undefined || v === null || v === "" || (Ar
 function photosOf(documents: readonly DocumentFact[], fieldKey: string, itemKey: string | null): RecordPhoto[] {
   return documents
     .filter((d) => d.fieldKey === fieldKey && d.itemKey === itemKey)
-    .map((d) => ({ fileName: d.fileName, takenAt: d.takenAt, storageKey: d.storageKey }));
+    .map((d) => ({ fileName: d.fileName, takenAt: d.takenAt, storageKey: d.storageKey, sha256: null }));
 }
 
 /** Whether a Document is listed with the shared Documents rather than shown as a photo of the Form. */
