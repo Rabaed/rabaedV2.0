@@ -7,3 +7,5 @@ Imported: 2026-09-27. First via DesignSync `get_file`; then completed from the u
 - Complete: all 211 files in the export are here, except the duplicate font pack
   `uploads/Thmanyah-Font-Family (1)/` (same fonts already live in `assets/fonts/thmanyah/`; the zip still holds it).
 - Binary headers verified (PNG / JPG / WOFF2 / PDF).
+
+**Before committing a Claude Design HTML export**, run `pnpm design:strip-fonts <in.html> <out.html>` and commit the output: exports embed every font (Thmanyah too) in their manifest, and CI refuses embedded font data (`scripts/check-no-fonts.ts`, RP-962).

@@ -1,7 +1,7 @@
 "use client";
 
 import { backwardKinds, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
-import { Badge, Button } from "@rabaed/ui";
+import { Badge, Button, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { StampRequired, useMyCompanyRead } from "@/components/company-stamp";
@@ -10,6 +10,13 @@ import { TransitionDialog, useWorkItemCalls } from "@/components/transition-dial
 import { loaded, transitionGate } from "@/lib/transition-gate";
 
 type Transition = Actions["transitions"][number];
+
+/** The phone's bar: fixed to the bottom of the screen, the page's gutter wide (RP-630). */
+const phoneBarClass =
+  // eslint-disable-next-line rabaed/no-avoid-terms -- CSS env() name
+  "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-20 max-md:border-t max-md:border-border max-md:bg-surface max-md:px-4 max-md:pt-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:shadow-lg";
+/** Its buttons share the row, each at least a thumb's height; a long label wraps. */
+const phoneButton = "max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-1 max-md:basis-0 max-md:px-2 max-md:text-sm max-md:leading-tight max-md:whitespace-normal";
 
 /**
  * Exactly the buttons the viewer may press on a Work Item, as the API lists them.
@@ -24,10 +31,13 @@ export function WorkItemActions({
   workItemId,
   actions,
   locale,
+  phoneBar = false,
 }: {
   workItemId: string;
   actions: Actions;
   locale: Locale;
+  /** Below `md`, a bar fixed to the bottom of the screen, its buttons in one row in reach of a thumb (a Snag List item, RP-630). */
+  phoneBar?: boolean;
 }) {
   const t = useTranslations("workItems.actions");
   const calls = useWorkItemCalls(workItemId);
@@ -54,8 +64,8 @@ export function WorkItemActions({
   const proposing = actions.transitions.some((tr) => tr.proposed);
 
   return (
-    <section id="work-item-actions" className="space-y-3" aria-label={t("title")}>
-      <div className="flex flex-wrap gap-3">
+    <section id="work-item-actions" className={cn("space-y-3", phoneBar && phoneBarClass)} aria-label={t("title")}>
+      <div className={cn("flex flex-wrap gap-3", phoneBar && "max-md:flex-nowrap max-md:gap-2")}>
         {actions.transitions.map((tr) => (
           <Button
             key={tr.key}
@@ -63,18 +73,19 @@ export function WorkItemActions({
             disabled={calls.pending || gate.show === "wait"}
             aria-busy={gate.show === "wait" || undefined}
             onClick={() => open(tr)}
+            className={cn(phoneBar && phoneButton)}
           >
             {tr.label[locale]}
             {tr.proposed && <Badge tone="neutral">{t("proposed")}</Badge>}
           </Button>
         ))}
         {actions.pickUp && (
-          <Button disabled={calls.pending} onClick={() => void calls.send("pick-up")}>
+          <Button disabled={calls.pending} onClick={() => void calls.send("pick-up")} className={cn(phoneBar && phoneButton)}>
             {t("pickUp")}
           </Button>
         )}
         {actions.returnToPool && (
-          <Button variant="ghost" disabled={calls.pending} onClick={() => void calls.send("return-to-pool")}>
+          <Button variant="ghost" disabled={calls.pending} onClick={() => void calls.send("return-to-pool")} className={cn(phoneBar && phoneButton)}>
             {t("returnToPool")}
           </Button>
         )}

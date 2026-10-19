@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  moduleTabPaths,
   workItemSearchParams,
   type Locale,
   type SnagBulkCandidates,
@@ -17,6 +18,7 @@ import { usePathname, useRouter } from "next/navigation";
 // The hrefs here already carry their locale (the browser's own path, getPathname).
 import NextLink from "next/link";
 import { getPathname } from "@/i18n/navigation";
+import { useSnagSwipe } from "@/components/snag-swipe";
 import { usePhotoUrls } from "@/components/use-documents";
 import { listSearchParams, snagListSort } from "@/lib/list-url";
 
@@ -25,6 +27,7 @@ function useSnagLabels(tableLabel: string): SnagListLabels {
   const t = useTranslations("snagList");
   const l = useTranslations("workItemViews.list");
   const b = useTranslations("workItemViews.board");
+  const m = useTranslations("snagList.mobile");
   return {
     toolbar: l("toolbar"),
     search: l("search"),
@@ -84,6 +87,14 @@ function useSnagLabels(tableLabel: string): SnagListLabels {
     lastPage: l("lastPage"),
     page: (page) => l("page", { page }),
     pageOf: (page, pages) => l("pageOf", { page, pages }),
+    phone: {
+      swipeHint: m("swipeHint"),
+      showItems: (n, count) => m("showItems", { n, count }),
+      transitionsOf: (subject) => m("transitionsOf", { subject }),
+      loadingTransitions: m("loadingTransitions"),
+      noTransitions: m("noTransitions"),
+      transitionsUnavailable: m("transitionsUnavailable"),
+    },
   };
 }
 
@@ -191,6 +202,8 @@ export function SnagListView(
   const labels = useSnagLabels(props.tableLabel);
   const router = useRouter();
   const bulk = useSnagBulk(projectId, query, locale, () => router.refresh());
+  // On a phone: each card's Transitions behind a swipe (RP-630).
+  const { swipe, dialog } = useSnagSwipe(locale);
   const pathname = usePathname();
   const hrefIn = (v: WorkItemView, q: WorkItemQuery) => {
     // The tab's path names the Module. The List's own sort (by Stage) stays out of the URL; the Kanban has no pages.
@@ -207,28 +220,34 @@ export function SnagListView(
   // The thumbnails: only the photos the rows carry, those the viewer sees.
   const photoUrls = usePhotoUrls(rows.flatMap((r) => (r.photo ? [{ workItemId: r.id, documentId: r.photo.documentId, contentType: r.photo.contentType }] : [])));
   return (
-    <SnagList
-      data={props.view === "list" ? { view: "list", list: props.list } : { view: "kanban", board: props.board }}
-      query={query}
-      locale={locale}
-      labels={labels}
-      hrefFor={(q) => hrefIn(view, q)}
-      itemHref={(id) => getPathname({ href: `/work-items/${id}`, locale })}
-      onQueryChange={(q) => router.push(hrefIn(view, q))}
-      newTypes={newTypes}
-      newHref={(code) => getPathname({ href: `/projects/${projectId}/work-items/new?module=snag_list&type=${encodeURIComponent(code)}`, locale })}
-      photoUrls={photoUrls}
-      linkAs={NextLink}
-      bulk={view === "list" ? bulk : undefined}
-      viewSwitch={
-        <WorkItemViewSwitch
-          view={view}
-          labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
-          // The List opens at its first page, by Stage; the Kanban takes the filters.
-          hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? snagListSort : query.sort })}
-          linkAs={NextLink}
-        />
-      }
-    />
+    <>
+      <SnagList
+        data={props.view === "list" ? { view: "list", list: props.list } : { view: "kanban", board: props.board }}
+        query={query}
+        locale={locale}
+        labels={labels}
+        hrefFor={(q) => hrefIn(view, q)}
+        itemHref={(id) => getPathname({ href: `/work-items/${id}`, locale })}
+        onQueryChange={(q) => router.push(hrefIn(view, q))}
+        newTypes={newTypes}
+        newHref={(code) => getPathname({ href: `/projects/${projectId}/work-items/new?module=snag_list&type=${encodeURIComponent(code)}`, locale })}
+        // On a phone, "+" opens the camera-first New page (RP-630).
+        phoneNewHref={(code) => getPathname({ href: `/projects/${projectId}/${moduleTabPaths.snag_list}/new?type=${encodeURIComponent(code)}`, locale })}
+        swipe={swipe}
+        photoUrls={photoUrls}
+        linkAs={NextLink}
+        bulk={view === "list" ? bulk : undefined}
+        viewSwitch={
+          <WorkItemViewSwitch
+            view={view}
+            labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
+            // The List opens at its first page, by Stage; the Kanban takes the filters.
+            hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? snagListSort : query.sort })}
+            linkAs={NextLink}
+          />
+        }
+      />
+      {dialog}
+    </>
   );
 }
