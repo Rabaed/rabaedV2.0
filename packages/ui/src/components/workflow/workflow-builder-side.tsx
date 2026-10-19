@@ -454,6 +454,14 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
     onCommit({ ...definition, transitions: definition.transitions.map((t) => (t.key === transition.key ? next : t)) });
   };
   const itemsMissing = problems.some((p) => p.transition === transition.key && p.code === "items_table_missing");
+  // Only a Submit informs (RP-625): its roles to inform go with it when it becomes another kind.
+  const submits = transition.kind === "submit";
+  const informed = transition.inform ?? [];
+  const replace = (next: WorkflowTransition) => onCommit({ ...definition, transitions: definition.transitions.map((t) => (t.key === transition.key ? next : t)) });
+  const withInform = (roles: readonly BaseRole[]): WorkflowTransition => {
+    const { inform: _old, ...rest } = transition;
+    return roles.length > 0 ? { ...rest, inform: [...roles] } : rest;
+  };
   return (
     <div key={transition.key} className="flex flex-col gap-2.5">
       <Heading>{labels.transitionHeading}</Heading>
@@ -472,7 +480,9 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
       <Field label={labels.kind} group>
         <SegmentedControl
           value={transition.kind}
-          onValueChange={(kind) => set({ kind: kind as WorkflowTransition["kind"], ...(kind === "close" ? {} : { outcome: null }) })}
+          onValueChange={(kind) =>
+            replace({ ...(kind === "submit" ? transition : withInform([])), kind: kind as WorkflowTransition["kind"], ...(kind === "close" ? {} : { outcome: null }) })
+          }
           options={transitionKinds.map((k) => ({ value: k, label: labels.map.kind(k) }))}
           // Six kinds, Send Back included: a 3 by 2 grid in the 330px panel.
           className="grid w-full auto-rows-fr grid-cols-3 [&>button]:h-auto [&>button]:min-h-7 [&>button]:px-1 [&>button]:py-0.5 [&>button]:text-[11px] [&>button]:leading-tight"
@@ -485,6 +495,27 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
           options={[{ value: "none", label: labels.noOutcome }, ...closing.map((o) => ({ value: o.code, label: `${o.code} · ${o.name[locale]}` }))]}
         />
       </Field>
+      {/* Inform (RP-625): the roles whose Participants covering the item read it from this Submit, never acting on it. */}
+      <fieldset className="flex flex-col gap-1.5" disabled={!submits}>
+        <legend className={cn("mb-1 text-body font-medium", submits ? "text-text" : "text-muted")}>{labels.inform}</legend>
+        {baseRoles.map((r) => {
+          const id = `inform-${transition.key}-${r}`;
+          return (
+            <div key={r} className="flex items-center gap-2 text-[12.5px]">
+              <Checkbox
+                id={id}
+                checked={informed.includes(r)}
+                disabled={!submits}
+                onCheckedChange={(on) => replace(withInform(on === true ? [...informed, r] : informed.filter((x) => x !== r)))}
+              />
+              <label htmlFor={id} className={submits ? undefined : "text-muted"}>
+                {labels.map.role(r)}
+              </label>
+            </div>
+          );
+        })}
+        <p className="m-0 text-caption text-muted">{submits ? labels.informHelp : labels.informOnlyOnSubmit}</p>
+      </fieldset>
       <TransitionRules
         definition={definition}
         transition={transition}

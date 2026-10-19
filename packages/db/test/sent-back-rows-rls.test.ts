@@ -544,3 +544,58 @@ describe("Documents and Links added during the Draft, through the app role (scen
     expect(await linkedAt(stranger.member)).toEqual([]);
   });
 });
+
+// RP-625-5: only a shared move (a Submit or Send Back) inside one Participant counts as the item reaching
+// the others (app.submit_reaches_others). The Contractor's internal review is a Send and a Return, so
+// it reaches nobody and freezes nothing, before its first external Submit and after a Send Back alike
+// (V1, V19, ADR 0020).
+describe("RP-625-5: the Contractor's internal review reaches no other Company", () => {
+  const stepSeen = async (as: string, id: string) =>
+    (await call<{ stage_key: string; entered_at: Date }>(as, sql`select stage_key, entered_at from app.step_as_seen(${id}::uuid)`))[0];
+  const frozen = async (id: string) =>
+    (await call<{ frozen: boolean }>(c1.member, sql`select frozen_at is not null as frozen from document where work_item_id = ${id}::uuid order by id`)).map(
+      (r) => r.frozen,
+    );
+
+  it("K1 and the Owner read nothing through C1's Send for Review and Return, and its Documents stay unfrozen until the Submit", async () => {
+    const id = await draft("Internal review");
+    await document(id, "datasheet.pdf", "datasheet");
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "return")).toBe("applied");
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    for (const other of [k1.member, ow.member]) {
+      expect(await call(other, sql<{ id: string }>`select id from work_item where id = ${id}::uuid`)).toEqual([]);
+      expect(await stepSeen(other, id)).toBeUndefined();
+      expect(await call(other, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`)).toEqual([]);
+    }
+    expect(await frozen(id)).toEqual([false]);
+
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await frozen(id)).toEqual([true]);
+    for (const other of [k1.member, ow.member]) expect((await stepSeen(other, id))!.stage_key).not.toBe("draft");
+  });
+
+  it("after a Send Back to its Draft, C1's Send for Review moves nothing K1 or the Owner reads, and its new Document stays C1's until it Submits again", async () => {
+    const id = await draft("Sent back, reviewed inside");
+    await submit(id);
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
+    expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
+    const atSendBack = { k1: await stepSeen(k1.member, id), ow: await stepSeen(ow.member, id) };
+    const added = await document(id, "datasheet-2.pdf", "datasheet");
+
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await stepSeen(k1.member, id)).toEqual(atSendBack.k1);
+    expect(await stepSeen(ow.member, id)).toEqual(atSendBack.ow);
+    for (const other of [k1.member, ow.member]) {
+      expect((await call<{ id: string }>(other, sql`select id from document where work_item_id = ${id}::uuid`)).map((r) => r.id)).not.toContain(added);
+    }
+    expect(await frozen(id)).toEqual([false]);
+
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect((await call<{ id: string }>(k1.member, sql`select id from document where work_item_id = ${id}::uuid`)).map((r) => r.id)).toContain(added);
+    expect(await frozen(id)).toEqual([true]);
+  });
+});
