@@ -134,6 +134,7 @@ function useSnagBulk(projectId: string, query: WorkItemQuery, locale: Locale, re
       needs_input: t("reasons.needs_input"),
       already_there: t("reasons.already_there"),
       refused: t("reasons.refused"),
+      item_closed: t("reasons.item_closed"),
     },
     unseen: (n, count) => t("unseen", { n, count }),
     failed: t("failed"),

@@ -138,6 +138,15 @@ export async function reassignCandidates(db: Db, memberId: string, projectId: st
 
 const reassignOutcomes = ["reassigned", "not_found", "item_closed", "project_closed", "forbidden", "not_offered"] as const;
 
+/** Why each refusal of app.reassign_step left the item as it was: a closed item says so, every other refusal is "not offered to you". */
+const reassignSkip: Record<Exclude<(typeof reassignOutcomes)[number], "reassigned">, SnagBulkSkipReason> = {
+  not_found: "not_found",
+  item_closed: "item_closed",
+  project_closed: "item_closed",
+  forbidden: "not_offered",
+  not_offered: "not_offered",
+};
+
 /** Reassign: each chosen item the viewer's Participant holds goes to `toMemberId`, if the item's Step Pool holds them. */
 export async function bulkReassign(db: Db, memberId: string, projectId: string, request: SnagBulkReassignRequest, now: Date): Promise<SnagBulkResult> {
   const result: SnagBulkResult = { done: [], skipped: [] };
@@ -152,7 +161,7 @@ export async function bulkReassign(db: Db, memberId: string, projectId: string, 
       return checkedOutcome(rows[0]!.outcome, reassignOutcomes);
     });
     if (outcome === "reassigned") result.done.push(id);
-    else result.skipped.push(skip(id, item, outcome === "not_found" ? "not_found" : "not_offered"));
+    else result.skipped.push(skip(id, item, reassignSkip[outcome]));
   }
   return result;
 }

@@ -91,7 +91,7 @@ as $$
     ) then
       return 'forbidden';
     end if;
-    if p_to_member_id is not distinct from v_a.assignee_member_id
+    if p_to_member_id is null or p_to_member_id is not distinct from v_a.assignee_member_id
       or p_to_member_id not in (select x.member_id from app.assignment_pool(v_a.id) x) then
       return 'not_offered';
     end if;

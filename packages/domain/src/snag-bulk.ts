@@ -44,9 +44,10 @@ export type SnagBulkReassignRequest = z.infer<typeof snagBulkReassignRequest>;
  *   Member isn't offered to them for it;
  * - `needs_input`: the Transition that leads there asks for something (a note, a Code), so it is taken one by one;
  * - `already_there`: it is at that Stage already;
- * - `refused`: the Transition was offered but its rules refused it now.
+ * - `refused`: the Transition was offered but its rules refused it now;
+ * - `item_closed`: the item, or its Project, is closed: nothing moves.
  */
-export const snagBulkSkipReasons = ["not_found", "not_offered", "needs_input", "already_there", "refused"] as const;
+export const snagBulkSkipReasons = ["not_found", "not_offered", "needs_input", "already_there", "refused", "item_closed"] as const;
 export type SnagBulkSkipReason = (typeof snagBulkSkipReasons)[number];
 
 export const snagBulkResult = z.object({
