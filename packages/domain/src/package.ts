@@ -33,8 +33,12 @@ export const packageCounts = z.object({
 });
 export type PackageCounts = z.infer<typeof packageCounts>;
 
-/** A Trade, as a Package names it (the shape of a Work Item's Trade; work-item.ts imports this file). */
-export const packageTrade = z.object({ id: z.uuid(), code: z.string(), name: bilingualText });
+/**
+ * A Trade, as a Package names it (a Work Item's Trade; work-item.ts imports this file), with
+ * `sort`, its place in the Project's own order of Trades, so every list of them reads in that
+ * order (RP-953, product owner 2026-10-20).
+ */
+export const packageTrade = z.object({ id: z.uuid(), code: z.string(), name: bilingualText, sort: z.number().int() });
 export type PackageTrade = z.infer<typeof packageTrade>;
 
 /**

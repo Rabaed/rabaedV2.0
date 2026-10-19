@@ -84,7 +84,7 @@ async function summaryRows(trx: Trx, where: { projectId: string } | { packageId:
     -- The Trades of the items the page lists (RP-953): the latest of each chain the viewer sees,
     -- each Trade as the viewer may know it (work_item_dimension_value_seen, V19), in the Project's order.
     cross join lateral (
-      select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'code', t.code, 'name', t.name) order by t.sort, t.code, t.id), '[]'::jsonb) as trades
+      select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'code', t.code, 'name', t.name, 'sort', t.sort) order by t.sort, t.code, t.id), '[]'::jsonb) as trades
       from (
         select distinct tv.id, tv.code, tv.name, tv.sort
         from app.package_latest_items(k.id) l

@@ -20,9 +20,9 @@ const labelsOf = (context: { globals: Record<string, unknown> }) => packagesBoar
 const project = "00000000-0000-4000-8000-000000000100";
 const alFuttaim = { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: b("Al Futtaim Contracting", "شركة الفطيم للمقاولات") };
 const nesma = { participantId: "00000000-0000-4000-8000-0000000000a2", companyName: b("Nesma & Partners", "نسما وشركاه") };
-const electrical = { id: "00000000-0000-4000-8000-0000000000e1", code: "EL", name: b("Electrical", "الكهرباء") };
-const mechanical = { id: "00000000-0000-4000-8000-0000000000e2", code: "ME", name: b("Mechanical", "الميكانيكا") };
-const architectural = { id: "00000000-0000-4000-8000-0000000000e3", code: "AR", name: b("Architectural", "المعماري") };
+const electrical = { id: "00000000-0000-4000-8000-0000000000e1", code: "EL", sort: 3, name: b("Electrical", "الكهرباء") };
+const mechanical = { id: "00000000-0000-4000-8000-0000000000e2", code: "ME", sort: 2, name: b("Mechanical", "الميكانيكا") };
+const architectural = { id: "00000000-0000-4000-8000-0000000000e3", code: "AR", sort: 1, name: b("Architectural", "المعماري") };
 const pkg = (n: number, rest: Partial<PackageSummary>): PackageSummary => ({
   id: `00000000-0000-4000-8000-0000000000f${n}`,
   projectId: project,
@@ -246,7 +246,8 @@ export const FilterByTradeAndCompany: Story = {
     await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(escaped(f.filters)) }));
     const trades = await screen.findByRole("group", { name: f.trade });
     const tradeNames = within(trades).getAllByRole("checkbox").map((c) => c.textContent);
-    await expect(tradeNames).toEqual([architectural, electrical, mechanical].map((t) => `${t.name[locale]} (${t.code})`));
+    // In the Project's own order of Trades, not by code.
+    await expect(tradeNames).toEqual([architectural, mechanical, electrical].map((t) => `${t.name[locale]} (${t.code})`));
     await userEvent.click(within(trades).getByRole("checkbox", { name: new RegExp(escaped(electrical.name[locale])) }));
     await waitFor(() => expect(shownCards(context)).toEqual([`#${lighting.id}`, `#${lifts.id}`]));
     await userEvent.click(await screen.findByRole("tab", { name: new RegExp(escaped(f.company)) }));

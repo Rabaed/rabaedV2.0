@@ -3,8 +3,8 @@ import type { PackageSummary } from "./package.ts";
 import { filterPackages, packageFilterChoices, packagesFilterFromSearchParams, packagesFilterSearchParams } from "./package-filter.ts";
 
 const b = (en: string, ar: string) => ({ en, ar });
-const electrical = { id: "0192e0a0-0000-7000-8000-000000000201", code: "EL", name: b("Electrical", "كهرباء") };
-const mechanical = { id: "0192e0a0-0000-7000-8000-000000000202", code: "ME", name: b("Mechanical", "ميكانيكا") };
+const electrical = { id: "0192e0a0-0000-7000-8000-000000000201", code: "EL", sort: 2, name: b("Electrical", "كهرباء") };
+const mechanical = { id: "0192e0a0-0000-7000-8000-000000000202", code: "ME", sort: 1, name: b("Mechanical", "ميكانيكا") };
 const c1 = "0192e0a0-0000-7000-8000-0000000000c1";
 const c2 = "0192e0a0-0000-7000-8000-0000000000c2";
 
@@ -56,9 +56,9 @@ describe("filtering the Packages view by Trade and owning Company (RP-953)", () 
     expect(filterPackages(packages, { q: "pkg-001", trade: [mechanical.id], company: [c1] })).toEqual([plantRoom]);
   });
 
-  it("offers only the Trades and owning Companies of the Packages listed, each once, Trades by code, Companies by name", () => {
+  it("offers only the Trades and owning Companies of the Packages listed, each once, Trades in the Project's order (Mechanical first here), Companies by name", () => {
     expect(packageFilterChoices(packages, "en")).toEqual({
-      trades: [electrical, mechanical],
+      trades: [mechanical, electrical],
       companies: [
         { participantId: c1, companyName: bathrooms.owner.companyName },
         { participantId: c2, companyName: lighting.owner.companyName },

@@ -671,7 +671,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
   it("RP-588-2: K1's PM (Visibility all) reads 8; its engineer narrowed to Electrical reads 6 and the status, never the Mechanical items", async () => {
     // The Trades of the items each reads (RP-953), in the Project's order of Trades.
     const projectTrades = (await getPackage(at.c1Pm, pkg.id)).filters.trades;
-    const tradesOf = (...ids: string[]) => projectTrades.filter((t) => ids.includes(t.id));
+    const tradesOf = (...ids: string[]) => projectTrades.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, sort: expect.any(Number) }));
     const summary = (counts: PackageSummary["counts"], trades = tradesOf(at.electrical, at.mechanical)): PackageSummary => ({
       id: pkg.id,
       projectId: at.projectId,

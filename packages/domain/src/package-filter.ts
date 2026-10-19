@@ -33,7 +33,7 @@ export function filterPackages(packages: readonly PackageSummary[], filter: Pack
   );
 }
 
-/** The filter's choices, from `packages` alone, each once: their Trades by code (across Packages, so not each one's Project order), their owning Companies by name in `locale`. */
+/** The filter's choices, from `packages` alone, each once: their Trades in the Project's own order (`sort`), their owning Companies by name in `locale`. */
 export function packageFilterChoices(packages: readonly PackageSummary[], locale: Locale): { trades: PackageTrade[]; companies: PackageCompanyChoice[] } {
   const trades = new Map<string, PackageTrade>();
   const companies = new Map<string, PackageCompanyChoice>();
@@ -42,7 +42,7 @@ export function packageFilterChoices(packages: readonly PackageSummary[], locale
     companies.set(p.owner.participantId, p.owner);
   }
   return {
-    trades: [...trades.values()].sort((a, b) => a.code.localeCompare(b.code, "en") || a.id.localeCompare(b.id)),
+    trades: [...trades.values()].sort((a, b) => a.sort - b.sort || a.code.localeCompare(b.code, "en") || a.id.localeCompare(b.id)),
     companies: [...companies.values()].sort(
       (a, b) => a.companyName[locale].localeCompare(b.companyName[locale], locale) || a.participantId.localeCompare(b.participantId),
     ),
