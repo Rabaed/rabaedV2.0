@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText, engineerReason } from "./company.ts";
 import { formKey } from "./form.ts";
+import { packageStatus } from "./package.ts";
 import { workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -69,7 +70,7 @@ export const paperRefMaxLength = 100;
  * The fields a column can fill (the Map fields step's choices, and the suggestions):
  * these, and `field:<key>` for a Form field of a mapped Type (registerFormFieldId).
  */
-export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "paperRef", "assignTo"] as const;
+export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "package", "paperRef", "assignTo"] as const;
 export type RegisterFieldId = (typeof registerFieldIds)[number] | `field:${string}`;
 /** A Form field's id among the fields a column can fill. */
 export const registerFormFieldId = (key: string): RegisterFieldId => `field:${key}`;
@@ -101,14 +102,29 @@ export const registerImportAssign = z.object({
 });
 export type RegisterImportAssign = z.infer<typeof registerImportAssign>;
 
+/** The longest Package name (as a Package's own, RP-636). */
+export const registerPackageNameMaxLength = 200;
+
+/**
+ * One Package for every row of the register (RP-644, story 28): a new one, named in the
+ * import, or an Open Package of the importer's own Participant (its id).
+ */
+export const registerImportPackages = z.union([
+  z.object({ new: z.string().trim().min(1).max(registerPackageNameMaxLength) }),
+  z.object({ existing: z.uuid() }),
+]);
+export type RegisterImportPackages = z.infer<typeof registerImportPackages>;
+
 /**
  * Which column gives each field: the Subject from a column, the Type and the Trade
  * each from a column or one value for every row (a Type code; a Trade's id), and the
- * optional Scopes, Location, Paper ref, "Assign to" (each row's assignee by email) and
- * Form fields (a Form field's `label` is filled in by the preview, as the Form names
- * it). `values` holds the values matched by hand: a Type code, an id, or an option's
- * value. `assign` picks the assignee of the rows the "Assign to" column leaves empty
- * (RP-640). Columns not mapped are ignored.
+ * optional Scopes, Location, Package, Paper ref, "Assign to" (each row's assignee by
+ * email) and Form fields (a Form field's `label` is filled in by the preview, as the Form
+ * names it). `values` holds the values matched by hand: a Type code, an id, or an
+ * option's value; for a Package name, an existing Package's id or `new` (RP-644). `assign`
+ * picks the assignee of the rows the "Assign to" column leaves empty (RP-640); `packages`
+ * puts every row in one Package, instead of a Package column (RP-644). Columns not
+ * mapped are ignored.
  */
 export const registerImportMapping = z.object({
   subject: column,
@@ -116,6 +132,8 @@ export const registerImportMapping = z.object({
   trade: z.union([column, z.object({ value: z.uuid() })]),
   scopes: column.optional(),
   location: column.optional(),
+  /** The Package column (RP-644): each different name an Open Package of the Participant, or a new one. */
+  package: column.optional(),
   paperRef: column.optional(),
   assignTo: column.optional(),
   fields: z
@@ -130,10 +148,12 @@ export const registerImportMapping = z.object({
       location: matchesOf(z.uuid()),
       scopes: matchesOf(z.uuid()),
       fields: z.record(formKey, matchesOf(z.string().max(64))),
+      package: matchesOf(z.union([z.uuid(), z.literal("new")])),
     })
     .partial()
     .optional(),
   assign: registerImportAssign.optional(),
+  packages: registerImportPackages.optional(),
 });
 export type RegisterImportMapping = z.infer<typeof registerImportMapping>;
 
@@ -170,9 +190,15 @@ export const registerImportRowReasons = [
   "assignee_unknown",
   "assignee_cannot_create",
   "assignee_outside_visibility",
+  "package_not_open",
+  "package_name_too_long",
 ] as const;
 export const registerImportRowReason = z.enum(registerImportRowReasons);
 export type RegisterImportRowReason = z.infer<typeof registerImportRowReason>;
+
+/** A Package of the importing Company's own (RP-644): its number (PKG-001…, left-to-right), name and status. */
+export const registerImportPackage = z.object({ id: z.uuid(), number: z.string(), name: bilingualText, status: packageStatus });
+export type RegisterImportPackage = z.infer<typeof registerImportPackage>;
 
 /** One row of an import: as read, what it matched, why it is bad, and the Draft it created. */
 export const registerImportRow = z.object({
@@ -197,6 +223,13 @@ export const registerImportRow = z.object({
    * null for the importer, or when the cell names nobody who may take it.
    */
   assignee: z.object({ text: z.string(), match: z.object({ id: z.uuid(), name: bilingualText }).nullable() }),
+  /**
+   * Its Package (RP-644): the Package cell as read ("" when none, or one Package for the
+   * whole register); the existing Package it goes to (after confirm, also the new one it
+   * went to), one of the importing Company's own; and the name of the new Package it goes to
+   * (null when none).
+   */
+  package: z.object({ text: z.string(), match: registerImportPackage.nullable(), new: z.string().nullable() }),
   /** Empty for a good row. */
   reasons: z.array(registerImportRowReason),
   /** Whether confirm created a Draft from it. */
@@ -240,8 +273,27 @@ export const registerImport = registerImportSummary.extend({
   headers: z.array(z.string()),
   mapping: registerImportMapping,
   rows: z.array(registerImportRow),
+  /**
+   * The Packages it creates and adds to (RP-644, story 16): of a preview, its good rows'; of
+   * a confirmed import, its created rows'. A new one has no number until confirm.
+   */
+  packages: z.array(
+    z.object({
+      /** Null for a new Package of a preview. */
+      package: registerImportPackage.nullable(),
+      /** The new Package's name as the import gives it; null for an existing one. */
+      newName: z.string().nullable(),
+      rows: z.int().min(1),
+    }),
+  ),
+  /** Whether its original register can be downloaded (a Member's import keeps it; story 34). */
+  original: z.boolean(),
 });
 export type RegisterImport = z.infer<typeof registerImport>;
+
+/** A mapping saved under a name for the importer's Participant (RP-644, story 11). No time, nor who saved it. */
+export const registerImportSavedMapping = z.object({ id: z.uuid(), name: z.string(), mapping: registerImportMapping });
+export type RegisterImportSavedMapping = z.infer<typeof registerImportSavedMapping>;
 
 /**
  * What a register may fill on the Project, for the Map fields and Map values steps: the
@@ -268,8 +320,25 @@ export const registerImportFields = z.object({
   ),
   /** The active Members of the Member's own Participant on the Project: whom rows may be assigned to (RP-640). */
   members: z.array(z.object({ id: z.uuid(), name: bilingualText, email: z.string() })),
+  /**
+   * The Packages of the Member's own Participant on the Project, by number, each with its
+   * status (RP-644): what a Package column's names match; only the Open ones take Drafts.
+   */
+  packages: z.array(registerImportPackage),
+  /** The mappings saved for the Member's own Participant on the Project, by name (RP-644, story 11). */
+  mappings: z.array(registerImportSavedMapping),
 });
 export type RegisterImportFields = z.infer<typeof registerImportFields>;
+
+/** Save the mapping under a name, or rename a saved one. */
+export const registerImportMappingName = z.string().trim().min(1).max(100);
+export const saveRegisterImportMappingRequest = z.object({ name: registerImportMappingName, mapping: registerImportMapping });
+export type SaveRegisterImportMappingRequest = z.infer<typeof saveRegisterImportMappingRequest>;
+export const renameRegisterImportMappingRequest = z.object({ name: registerImportMappingName });
+
+/** The Participant's saved mappings, by name: the answer to a save, a rename or a delete. */
+export const registerImportMappings = z.object({ mappings: z.array(registerImportSavedMapping) });
+export type RegisterImportMappings = z.infer<typeof registerImportMappings>;
 
 /** The fields whose values Map values matches: these, and `field:<key>` for a choice field. */
 export const registerValueFields = ["type", "trade", "location", "scopes"] as const;

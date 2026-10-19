@@ -1,9 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  packageNumber,
   registerImportMapping,
   registerTopRows,
   suggestRegisterFields,
+  xlsxContentType,
   type BilingualText,
+  type PackageStatus,
+  type RegisterImportMappings,
+  type SaveRegisterImportMappingRequest,
   type PreviewRegisterImportRequest,
   type ReadRegisterRequest,
   type RegisterImport,
@@ -16,8 +22,9 @@ import {
   type RegisterValues,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
+import type { FileStore } from "../documents/file-store.ts";
 import { checkedOutcome } from "../outcomes.ts";
-import { fieldTargets, mappedRows, registerContext, registerValues, type RegisterContext } from "./matching.ts";
+import { fieldTargets, mappedRows, registerContext, registerValues, savedMappingsOf, type RegisterContext } from "./matching.ts";
 import { openSpreadsheet, SpreadsheetError, type SheetTable, type Spreadsheet, type SpreadsheetRefusal } from "./spreadsheet.ts";
 
 // The Submittal Register Import (RP-637, spec RP-631). The api reads the register
@@ -51,12 +58,18 @@ export interface RegisterImporter {
    * reading or confirming their own); null for a Member's own import.
    */
   engineer: { id: string; participantId: string | null } | null;
+  /**
+   * Where a preview's original register is kept, under the Project's prefix (RP-644, story 34):
+   * the api's file store. Rabaed Admin has none, so an Engineer's import keeps no original.
+   */
+  files?: FileStore;
 }
 
 /** A Member importing their own Company's register: each step one transaction as them, through row-level security. */
-export const memberImporter = (db: Db, memberId: string): RegisterImporter => ({
+export const memberImporter = (db: Db, memberId: string, files?: FileStore): RegisterImporter => ({
   run: (fn) => withMember(db, memberId, fn),
   engineer: null,
+  ...(files ? { files } : {}),
 });
 
 /** A register that can't be read, or a choice in it that doesn't fit (the reader's refusals, with its numbers). */
@@ -66,7 +79,7 @@ type NotTheirs = { ok: false; reason: "not_found" | "forbidden" };
 
 export type ReadRegisterResult = { ok: true; sheet: RegisterSheet } | Unreadable | NotTheirs;
 
-const previewRefusals = ["not_found", "project_closed", "forbidden", "type_not_found", "trade_not_found"] as const;
+const previewRefusals = ["not_found", "project_closed", "forbidden", "type_not_found", "trade_not_found", "package_not_found"] as const;
 export type PreviewRegisterImportResult =
   | { ok: true; id: string }
   | Unreadable
@@ -142,7 +155,7 @@ export function getRegisterImportFields(importer: RegisterImporter, projectId: s
 
 /** Every column the mapping names. */
 const mappedColumns = (mapping: RegisterImportMapping) =>
-  [mapping.subject, mapping.type, mapping.trade, mapping.scopes, mapping.location, mapping.paperRef, mapping.assignTo, ...(mapping.fields ?? [])].flatMap((field) =>
+  [mapping.subject, mapping.type, mapping.trade, mapping.scopes, mapping.location, mapping.package, mapping.paperRef, mapping.assignTo, ...(mapping.fields ?? [])].flatMap((field) =>
     field && "column" in field ? [field.column] : [],
   );
 
@@ -220,7 +233,46 @@ export function previewRegisterImport(
         : sql<{ outcome: string; import_id: string | null }>`select outcome, import_id from app.preview_register_import(${args})`
     ).execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["previewed", ...previewRefusals]);
-    return outcome === "previewed" ? { ok: true, id: rows[0]!.import_id! } : { ok: false, reason: outcome };
+    if (outcome !== "previewed") return { ok: false, reason: outcome };
+    const importId = rows[0]!.import_id!;
+    if (importer.files && !engineer) await keepOriginal(trx, importer.files, projectId, importId, request.file);
+    return { ok: true, id: importId };
+  });
+}
+
+/** The media type a register is downloaded as, by its extension. */
+const registerContentType = (fileName: string) => (/\.csv$/i.test(fileName) ? "text/csv; charset=utf-8" : xlsxContentType);
+
+/**
+ * Keeps a Member's previewed register as its original (RP-644, story 34), under the Project's
+ * prefix (ADR 0007), and deletes the files of the previews cleaned up since (the worker can't).
+ */
+async function keepOriginal(trx: Trx, files: FileStore, projectId: string, importId: string, file: RegisterImportFile): Promise<void> {
+  const fileId = randomUUID();
+  const { rows } = await sql<{ key: string }>`select app.register_import_file_key(${projectId}::uuid, ${importId}::uuid, ${fileId}::uuid) as key`.execute(trx);
+  await files.put(rows[0]!.key, Buffer.from(file.content, "base64"), registerContentType(file.fileName));
+  const { rows: stored } = await sql<{ outcome: string }>`select app.store_register_import_file(${importId}::uuid, ${fileId}::uuid) as outcome`.execute(trx);
+  checkedOutcome(stored[0]!.outcome, ["stored"]);
+  const { rows: gone } = await sql<{ key: string }>`select app.take_register_import_file_removals(100) as key`.execute(trx);
+  for (const { key } of gone) await files.remove(key);
+}
+
+/** An import's original register, as its reader downloads it: its name as uploaded, never a time. */
+export type RegisterImportOriginal = { fileName: string; contentType: string; bytes: Uint8Array };
+
+/**
+ * The original register of an import the Member reads (RP-644, story 34); null when they
+ * don't read it, or it keeps none (an Engineer's import, or a file no longer stored).
+ */
+export function registerImportOriginal(importer: RegisterImporter, importId: string): Promise<RegisterImportOriginal | null> {
+  return importer.run(async (trx) => {
+    const files = importer.files;
+    if (!files || importer.engineer) return null;
+    const [r] = await importsWhere(trx, importer, sql`i.id = ${importId}::uuid`);
+    if (!r?.source_file_id) return null;
+    const { rows } = await sql<{ key: string }>`select app.register_import_file_key(${r.project_id}::uuid, ${r.id}::uuid, ${r.source_file_id}::uuid) as key`.execute(trx);
+    const bytes = await files.read(rows[0]!.key);
+    return bytes ? { fileName: r.file_name, contentType: registerContentType(r.file_name), bytes } : null;
   });
 }
 
@@ -241,8 +293,10 @@ type ImportRow = {
   header_row: number;
   headers: string[];
   mapping: unknown;
+  /** Its original register as stored (RP-644); null for an Engineer's import. */
+  source_file_id: string | null;
 };
-type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping" | "raiser_id" | "raiser_name">;
+type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping" | "raiser_id" | "raiser_name" | "source_file_id">;
 
 /**
  * Which imports the importer reads: the table's policy, said again, because Rabaed Admin
@@ -266,7 +320,7 @@ function importsWhere(trx: Trx, importer: Pick<RegisterImporter, "engineer">, wh
   return sql<ImportRow>`
     select i.id, i.project_id, i.file_name, i.status, i.run_by_member_id, m.full_name as run_by_name,
       r.id as raiser_id, r.full_name as raiser_name,
-      i.rows_total, i.rows_rejected, i.rows_created, i.sheet, i.header_row, i.headers, i.mapping
+      i.rows_total, i.rows_rejected, i.rows_created, i.sheet, i.header_row, i.headers, i.mapping, i.source_file_id
     from submittal_register_import i
     left join member m on m.id = i.run_by_member_id
     join member r on r.id = coalesce(i.run_by_member_id, i.default_member_id)
@@ -338,6 +392,12 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
       reasons: RegisterImportRowReason[];
       created: boolean;
       work_item_id: string | null;
+      package_text: string;
+      package_id: string | null;
+      package_seq: number | null;
+      package_name: BilingualText | null;
+      package_status: PackageStatus | null;
+      package_new: string | null;
     }>`
       select r.row_no, r.cells, r.subject, r.type_text, t.code as type_code, t.name as type_name,
         r.trade_text, tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
@@ -347,27 +407,23 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
           from unnest(r.scope_ids) with ordinality x (id, n) join scope s on s.id = x.id
         ), '[]'::jsonb) as scopes,
         r.paper_ref, r.field_cells, r.invalid_fields, r.assignee_text, am.id as assignee_id, am.full_name as assignee_name, r.reasons,
-        res.created, res.work_item_id
+        res.created, res.work_item_id,
+        r.package_text, k.package_id, k.seq as package_seq, k.name as package_name, k.status as package_status, r.package_name as package_new
       from submittal_register_import_row r
       join ${results} res on res.row_no = r.row_no
       left join work_item_type t on t.id = r.work_item_type_id
       left join dimension_value tv on tv.id = r.trade_id
       left join dimension_value lv on lv.id = r.location_id
       left join member am on am.id = r.assignee_member_id
+      -- RP-644: its Package, one of the importing Participant's own (said by the function, not
+      -- RLS: Rabaed Admin reads past it); a Package deleted since reads as none.
+      left join app.register_import_packages(${r.project_id}::uuid) k on k.package_id = r.package_id
       where r.import_id = ${importId}::uuid
       order by r.row_no
     `.execute(trx);
     const mapping = registerImportMapping.parse(r.mapping);
     const fieldKeys = (mapping.fields ?? []).map((f) => f.key);
-    return {
-      ...toSummary(r),
-      projectId: r.project_id,
-      defaultRaiser: { id: r.raiser_id, name: r.raiser_name },
-      sheet: r.sheet,
-      headerRow: r.header_row,
-      headers: r.headers,
-      mapping,
-      rows: rows.map((row) => ({
+    const imported = rows.map((row) => ({
         rowNo: row.row_no,
         cells: row.cells,
         subject: row.subject,
@@ -381,12 +437,42 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
           .filter((key) => key in row.field_cells)
           .map((key) => ({ key, text: row.field_cells[key]!, invalid: row.invalid_fields.includes(key) })),
         assignee: { text: row.assignee_text, match: row.assignee_id ? { id: row.assignee_id, name: row.assignee_name! } : null },
+        package: {
+          text: row.package_text,
+          match: row.package_id ? { id: row.package_id, number: packageNumber(row.package_seq!), name: row.package_name!, status: row.package_status! } : null,
+          new: row.package_new,
+        },
         reasons: row.reasons,
         created: row.created,
         workItemId: row.work_item_id,
-      })),
+    }));
+    return {
+      ...toSummary(r),
+      projectId: r.project_id,
+      defaultRaiser: { id: r.raiser_id, name: r.raiser_name },
+      sheet: r.sheet,
+      headerRow: r.header_row,
+      headers: r.headers,
+      mapping,
+      rows: imported,
+      // What confirm does with Packages: a preview's good rows, a confirmed import's created ones.
+      packages: packagesOfRows(imported.filter((row) => (r.status === "created" ? row.created : row.reasons.length === 0))),
+      original: r.source_file_id !== null && !engineer && importer.files !== undefined,
     };
   });
+}
+
+/** The Packages `rows` go to, each once, with how many: an existing one by its id, a new one by its name. */
+function packagesOfRows(rows: RegisterImport["rows"]): RegisterImport["packages"] {
+  const out = new Map<string, RegisterImport["packages"][number]>();
+  for (const row of rows) {
+    const { match, new: newName } = row.package;
+    const key = match ? `id:${match.id}` : newName ? `new:${newName.toLowerCase()}` : null;
+    if (!key) continue;
+    const known = out.get(key);
+    out.set(key, { package: match, newName, rows: (known?.rows ?? 0) + 1 });
+  }
+  return [...out.values()];
 }
 
 /** Creates the Drafts of the importer's own preview: one per good row, all or nothing. */
@@ -401,5 +487,41 @@ export function confirmRegisterImport(importer: RegisterImporter, importId: stri
     ).execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...confirmRefusals]);
     return outcome === "created" ? { ok: true, rowsCreated: rows[0]!.rows_created! } : { ok: false, reason: outcome };
+  });
+}
+
+// Saved mappings (RP-644, story 11): a Member saves the mapping under a name for their
+// Participant on the Project; its Members apply, rename and delete them. Never with a time.
+
+export type SavedMappingsResult = { ok: true; mappings: RegisterImportMappings } | { ok: false; reason: "not_found" | "name_taken" };
+
+/** The importer's Participant's saved mappings on the Project, by name, as Map fields offers them. */
+const savedMappings = async (trx: Trx, projectId: string): Promise<RegisterImportMappings> => ({ mappings: await savedMappingsOf(trx, projectId) });
+
+/** Saves `request.mapping` under its name for the Member's Participant on the Project. */
+export function saveRegisterImportMapping(db: Db, memberId: string, projectId: string, request: SaveRegisterImportMappingRequest, now: Date): Promise<SavedMappingsResult> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select outcome from app.save_register_import_mapping(${projectId}::uuid, ${request.name}, ${JSON.stringify(request.mapping)}::jsonb, ${now})
+    `.execute(trx);
+    const outcome = checkedOutcome(rows[0]!.outcome, ["saved", "not_found", "name_taken"]);
+    return outcome === "saved" ? { ok: true, mappings: await savedMappings(trx, projectId) } : { ok: false, reason: outcome };
+  });
+}
+
+/** Renames (with `name`) or deletes a saved mapping of the Member's Participant; answers its Participant's saved mappings. */
+export function changeRegisterImportMapping(db: Db, memberId: string, mappingId: string, change: { name: string } | "delete"): Promise<SavedMappingsResult> {
+  return withMember(db, memberId, async (trx) => {
+    // Its Project, where the Member reads it (the table's policy; Members only, never Rabaed Admin).
+    const mine = await trx.selectFrom("register_import_mapping").select("project_id").where("id", "=", mappingId).executeTakeFirst();
+    if (!mine) return { ok: false, reason: "not_found" } as const;
+    const { rows } = await (
+      change === "delete"
+        ? sql<{ outcome: string }>`select app.delete_register_import_mapping(${mappingId}::uuid) as outcome`
+        : sql<{ outcome: string }>`select app.rename_register_import_mapping(${mappingId}::uuid, ${change.name}) as outcome`
+    ).execute(trx);
+    const outcome = checkedOutcome(rows[0]!.outcome, ["deleted", "renamed", "not_found", "name_taken"]);
+    if (outcome === "not_found" || outcome === "name_taken") return { ok: false, reason: outcome } as const;
+    return { ok: true, mappings: await savedMappings(trx, mine.project_id) } as const;
   });
 }

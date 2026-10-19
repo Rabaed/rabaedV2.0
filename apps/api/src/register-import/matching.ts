@@ -19,8 +19,12 @@ import {
   type RegisterFormFieldType,
   type RegisterImportFields,
   type RegisterImportMapping,
+  type RegisterImportPackage,
+  type RegisterImportSavedMapping,
   type RegisterValues,
   type ScopeChoice,
+  packageNumber,
+  registerImportMapping,
   type ValidationContext,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
@@ -61,6 +65,8 @@ export type RegisterContext = {
   optionLists: OptionList[];
   /** Whom rows may be assigned to (RP-640): the active Members of the Member's own Participant on the Project, by email. */
   assignees: RegisterCandidate[];
+  /** The Packages of the Member's own Participant on the Project (RP-644), by number. */
+  packages: RegisterImportPackage[];
 };
 
 const fillableTypes: readonly string[] = registerFormFieldTypes;
@@ -162,6 +168,13 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
     order by m.full_name ->> 'en', m.email
   `.execute(trx);
 
+  // RP-644: the Member's own Participant's Packages and saved mappings, each said for the
+  // acting Member by its function (Rabaed Admin reads past row-level security).
+  const { rows: packages } = await sql<{ package_id: string; seq: number; name: BilingualText; status: RegisterImportPackage["status"] }>`
+    select package_id, seq, name, status from app.register_import_packages(${projectId}::uuid)
+  `.execute(trx);
+  const ownPackages = packages.map((k) => ({ id: k.package_id, number: packageNumber(k.seq), name: k.name, status: k.status }));
+
   return {
     fields: {
       types: raisable.map((t) => ({ code: t.code, name: t.name })),
@@ -176,6 +189,8 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
         options: optionsOf(field, optionLists),
       })),
       members: assignees,
+      packages: ownPackages,
+      mappings: await savedMappingsOf(trx, projectId),
     },
     types: types.map((t) => ({ id: t.code, names: [t.code, ...named(t.name)] })),
     trades: trades.map((t) => ({ id: t.id, names: [t.code, ...named(t.name)] })),
@@ -187,7 +202,23 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
     participants: choices.participants.map((p) => ({ id: p.id, names: named(p.name) })),
     optionLists,
     assignees: assignees.map((a) => ({ id: a.id, names: [a.email] })),
+    packages: ownPackages,
   };
+}
+
+/**
+ * The mappings saved for the Member's own Participant on the Project, by name (RP-644), said
+ * for the acting Member by app.register_import_mappings. One saved before a field changed
+ * shape is left out, never refused.
+ */
+export async function savedMappingsOf(trx: Trx, projectId: string): Promise<RegisterImportSavedMapping[]> {
+  const { rows } = await sql<{ mapping_id: string; name: string; mapping: unknown }>`
+    select mapping_id, name, mapping from app.register_import_mappings(${projectId}::uuid)
+  `.execute(trx);
+  return rows.flatMap((m) => {
+    const parsed = registerImportMapping.safeParse(m.mapping);
+    return parsed.success ? [{ id: m.mapping_id, name: m.name, mapping: parsed.data }] : [];
+  });
 }
 
 /** The headings that name each field a column can fill, in English and Arabic: the Built-in ones first. */
@@ -198,6 +229,7 @@ const builtInTargets: RegisterFieldTarget[] = [
   { field: "trade", names: ["Trade", "Discipline", "التخصص", "الاختصاص"] },
   { field: "scopes", names: ["Scope", "Scopes", "Scope of work", "النطاق", "نطاق العمل"] },
   { field: "location", names: ["Location", "Zone", "Building", "Floor", "الموقع", "المكان"] },
+  { field: "package", names: ["Package", "Packages", "Group", "Submittal package", "الحزمة", "حزمة", "المجموعة"] },
   { field: "paperRef", names: ["Paper ref", "Ref", "Reference", "Ref no", "Reference no", "Paper number", "المرجع", "رقم المرجع"] },
   { field: "assignTo", names: ["Assign to", "Assigned to", "Assignee", "Responsible", "Email", "مسند إلى", "المسؤول", "البريد الإلكتروني"] },
 ];
@@ -238,7 +270,57 @@ export type MappedRow = {
   /** The "Assign to" cell as read ("" when the Member was picked, or none), and the Member it names or was picked (RP-640). */
   assignee: string;
   assignee_member_id: string | null;
+  /**
+   * Its Package (RP-644): the Package cell as read and trimmed, and either the existing
+   * Package it goes to (matched by name, or chosen) or the name of a new one.
+   */
+  package: string;
+  package_id: string | null;
+  package_name: string | null;
 };
+
+/**
+ * The Package a register's name matches (RP-644, story 29): one of the Member's own
+ * Participant's, by its name in either language or its number, ignoring case and spaces;
+ * an Open one first, then the earliest. Null when none.
+ */
+export function matchRegisterPackage(text: string, packages: readonly RegisterImportPackage[]): RegisterImportPackage | null {
+  const key = registerMatchKey(text);
+  if (key === "") return null;
+  const named = packages.filter((k) => [k.name.en, k.name.ar, k.number].some((n) => registerMatchKey(n) === key));
+  return named.find((k) => k.status === "open") ?? named[0] ?? null;
+}
+
+/**
+ * Where each row of the register goes (RP-644): one Package for every row (`packages`), or
+ * each row's Package column: the choice made by hand for its name (an existing Package, or
+ * `new`), else the Package its name matches, else a new one named as the name first reads
+ * in the register. The preview checks every Package again.
+ */
+function packagesOf(table: SheetTable, mapping: RegisterImportMapping, context: RegisterContext): (row: string[]) => Pick<MappedRow, "package" | "package_id" | "package_name"> {
+  const none = { package: "", package_id: null, package_name: null };
+  const whole = mapping.packages;
+  if (whole) {
+    return () => ("new" in whole ? { ...none, package_name: whole.new.trim() } : { ...none, package_id: whole.existing });
+  }
+  const column = mapping.package;
+  if (!column) return () => none;
+  const firstText = new Map<string, string>();
+  for (const row of table.rows) {
+    const text = (row.values[column.column] ?? "").trim();
+    const key = registerMatchKey(text);
+    if (key !== "" && !firstText.has(key)) firstText.set(key, text);
+  }
+  const byHand = mapping.values?.package ?? {};
+  return (values) => {
+    const text = (values[column.column] ?? "").trim();
+    const key = registerMatchKey(text);
+    if (key === "") return none;
+    const chosen = byHand[key];
+    const id = chosen === "new" ? null : (chosen ?? matchRegisterPackage(text, context.packages)?.id ?? null);
+    return id ? { package: text, package_id: id, package_name: null } : { package: text, package_id: null, package_name: firstText.get(key)! };
+  };
+}
 
 /**
  * A Scopes cell's Scopes under the row's Trade, each by name (or by the match made by
@@ -315,6 +397,7 @@ function answerOf(field: AnswerField, text: string, context: RegisterContext, ma
 export function mappedRows(table: SheetTable, mapping: RegisterImportMapping, context: RegisterContext): MappedRow[] {
   const manual = mapping.values ?? {};
   const assign = mapping.assign ?? {};
+  const packageOf = packagesOf(table, mapping, context);
   return table.rows.map((row) => {
     const cell = (column: { column: number } | undefined) => cellOf(row.values, column);
     const typeText = "column" in mapping.type ? cell(mapping.type) : "";
@@ -373,6 +456,7 @@ export function mappedRows(table: SheetTable, mapping: RegisterImportMapping, co
       answers: invalid.size > 0 ? {} : answers,
       assignee: email,
       assignee_member_id: assigneeId,
+      ...packageOf(row.values),
     };
   });
 }
@@ -408,35 +492,58 @@ export function registerValues(table: SheetTable, mapping: RegisterImportMapping
     }
   }
   return {
-    fields: columns.map(({ field, column, manual: byHand, split, suggest }) => {
-      const candidates = valueCandidates(field, context);
-      const seen = new Map<string, { text: string; rows: number }>();
-      for (const row of table.rows) {
-        const text = (row.values[column] ?? "").trim();
-        const pieces = split ? splitRegisterValues(text) : text === "" ? [] : [text];
-        for (const piece of new Set(pieces.map((p) => registerMatchKey(p)))) {
-          const first = pieces.find((p) => registerMatchKey(p) === piece)!;
-          const known = seen.get(piece);
-          seen.set(piece, { text: known?.text ?? first, rows: (known?.rows ?? 0) + 1 });
-        }
-      }
-      return {
-        field,
-        column,
-        values: [...seen.entries()].map(([key, { text, rows }]) => {
-          const manualMatch = byHand[key] !== undefined ? matchRegisterValue(text, candidates, byHand) : null;
-          const exact = manualMatch ?? matchRegisterValue(text, candidates);
-          const suggested = exact === null && suggest !== false ? suggestRegisterValue(text, candidates) : null;
-          return {
-            key,
-            text,
-            rows,
-            match: exact ?? suggested?.id ?? null,
-            how: manualMatch !== null ? ("manual" as const) : exact !== null ? ("exact" as const) : suggested ? ("suggested" as const) : null,
-            score: suggested?.score ?? null,
-          };
-        }),
-      };
-    }),
+    fields: [
+      ...columns.map(({ field, column, manual: byHand, split, suggest }) => {
+        const candidates = valueCandidates(field, context);
+        return {
+          field,
+          column,
+          values: distinctValues(table, column, split).map(({ key, text, rows }) => {
+            const manualMatch = byHand[key] !== undefined ? matchRegisterValue(text, candidates, byHand) : null;
+            const exact = manualMatch ?? matchRegisterValue(text, candidates);
+            const suggested = exact === null && suggest !== false ? suggestRegisterValue(text, candidates) : null;
+            return {
+              key,
+              text,
+              rows,
+              match: exact ?? suggested?.id ?? null,
+              how: manualMatch !== null ? ("manual" as const) : exact !== null ? ("exact" as const) : suggested ? ("suggested" as const) : null,
+              score: suggested?.score ?? null,
+            };
+          }),
+        };
+      }),
+      // The Package column (RP-644): each name, and the Package it goes to: the one chosen by
+      // hand (`new` for a new one), else the Participant's own it matches (never a suggestion),
+      // else none: a new one.
+      ...(mapping.package && !mapping.packages
+        ? [
+            {
+              field: "package",
+              column: mapping.package.column,
+              values: distinctValues(table, mapping.package.column, false).map(({ key, text, rows }) => {
+                const chosen = manual.package?.[key];
+                const matched = chosen === undefined ? (matchRegisterPackage(text, context.packages)?.id ?? null) : null;
+                return { key, text, rows, match: chosen ?? matched, how: chosen !== undefined ? ("manual" as const) : matched ? ("exact" as const) : null, score: null };
+              }),
+            },
+          ]
+        : []),
+    ],
   };
+}
+
+/** Every different value of a column once (each of a Scopes cell's, with `split`) by registerMatchKey, as it first reads, with how many rows hold it. */
+function distinctValues(table: SheetTable, column: number, split: boolean): { key: string; text: string; rows: number }[] {
+  const seen = new Map<string, { text: string; rows: number }>();
+  for (const row of table.rows) {
+    const text = (row.values[column] ?? "").trim();
+    const pieces = split ? splitRegisterValues(text) : text === "" ? [] : [text];
+    for (const piece of new Set(pieces.map((p) => registerMatchKey(p)))) {
+      const first = pieces.find((p) => registerMatchKey(p) === piece)!;
+      const known = seen.get(piece);
+      seen.set(piece, { text: known?.text ?? first, rows: (known?.rows ?? 0) + 1 });
+    }
+  }
+  return [...seen.entries()].map(([key, { text, rows }]) => ({ key, text, rows }));
 }

@@ -894,3 +894,222 @@ describe("Assign to (RP-640)", () => {
     });
   });
 });
+
+// RP-644 (stories 11, 17, 28–31, 34): Packages from an import, the original register's
+// download, and saved mappings, on the Tower. C1's new Packages are C1's alone (RP-589-1).
+describe("Packages, the original register and saved mappings (RP-644)", () => {
+  /** A .csv register: Subject, Type, Trade, Package. */
+  const packageCsv = {
+    fileName: "Packages register.csv",
+    content: Buffer.from(
+      [
+        "Subject,Type,Trade,Package",
+        "Basins,MAR,Electrical,Bathrooms",
+        "Taps,MAR,Electrical,  bath ROOMS ",
+        "Cable trays,MAR,Electrical,electrical level 1",
+        "Pumps,SAR,Mechanical,Started set",
+        "Doors,MAR,Electrical,",
+      ].join("\n"),
+      "utf8",
+    ).toString("base64"),
+  };
+  const byPackage: RegisterImportMapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, package: { column: 3 } };
+  const packageRegister = { file: packageCsv, sheet: "Packages register", headerRow: 1, mapping: byPackage };
+  const createPackage = async (by: Caller, name: string): Promise<{ id: string; number: string }> =>
+    (await ok(by.post(`/v1/projects/${tower.projectId}/packages`, { name: { en: name, ar: name } }), 201)).json();
+  const fields = async (by: Caller): Promise<RegisterImportFields> => (await ok(by.get(`/v1/projects/${tower.projectId}/register-imports/fields`), 200)).json();
+  const packageOf = (imported: RegisterImport, rowNo: number) => imported.rows.find((r) => r.rowNo === rowNo)!.package;
+  let open: { id: string; number: string };
+  let started: { id: string; number: string };
+  let theirs: { id: string; number: string };
+
+  beforeAll(async () => {
+    open = await createPackage(tower.c1Engineer, "Electrical Level 1");
+    started = await createPackage(tower.c1Engineer, "Started set");
+    theirs = await createPackage(c2Engineer, "C2 set");
+    // As a Submit leaves it.
+    await sql`update package set status = 'in_progress' where id = ${started.id}::uuid`.execute(migrator);
+  });
+
+  it("offers the importer's own Company's Packages, each with its number and status, and suggests the Package field", async () => {
+    const offered = (await fields(tower.c1Engineer)).packages;
+    expect(offered).toEqual(
+      expect.arrayContaining([
+        { id: open.id, number: open.number, name: bilingual("Electrical Level 1"), status: "open" },
+        { id: started.id, number: started.number, name: bilingual("Started set"), status: "in_progress" },
+      ]),
+    );
+    expect(offered.map((p) => p.id)).not.toContain(theirs.id);
+    expect((await fields(c2Engineer)).packages.map((p) => p.id)).toEqual([theirs.id]);
+    const sheet: RegisterSheet = (await ok(read(tower.c1Engineer, { file: packageCsv }), 200)).json();
+    expect(sheet.suggestions[3]?.field).toBe("package");
+  });
+
+  it("lists the Package column's names once, ignoring case and spaces, each with the Company's own Package it matches", async () => {
+    const values: RegisterValues = (await ok(tower.c1Engineer.post(`/v1/projects/${tower.projectId}/register-imports/values`, packageRegister), 200)).json();
+    expect(values.fields.find((f) => f.field === "package")!.values).toEqual([
+      { key: "bathrooms", text: "Bathrooms", rows: 2, match: null, how: null, score: null },
+      { key: "electricallevel1", text: "electrical level 1", rows: 1, match: open.id, how: "exact", score: null },
+      { key: "startedset", text: "Started set", rows: 1, match: started.id, how: "exact", score: null },
+    ]);
+  });
+
+  describe("by a Package column", () => {
+    let previewed: RegisterImport;
+    let before: string[];
+
+    beforeAll(async () => {
+      before = (await fields(tower.c1Engineer)).packages.map((p) => p.id);
+      previewed = await preview(tower.c1Engineer, packageRegister);
+    });
+
+    it("previews each row's Package: a new one per name, an Open one it names, and refuses an In Progress one", () => {
+      expect(reasonsByRow(previewed)).toEqual({ 2: [], 3: [], 4: [], 5: ["package_not_open"], 6: [] });
+      expect(packageOf(previewed, 2)).toEqual({ text: "Bathrooms", match: null, new: "Bathrooms" });
+      expect(packageOf(previewed, 3)).toEqual({ text: "bath ROOMS", match: null, new: "Bathrooms" });
+      expect(packageOf(previewed, 4)).toMatchObject({ text: "electrical level 1", match: { id: open.id, number: open.number, status: "open" }, new: null });
+      expect(packageOf(previewed, 5)).toMatchObject({ match: { id: started.id, status: "in_progress" } });
+      expect(packageOf(previewed, 6)).toEqual({ text: "", match: null, new: null });
+      // What confirm will do: one new Package of two rows, and one row added to an Open one.
+      expect(previewed.packages).toEqual([
+        { package: null, newName: "Bathrooms", rows: 2 },
+        { package: expect.objectContaining({ id: open.id }), newName: null, rows: 1 },
+      ]);
+    });
+
+    it("creates no Package before confirm", async () => {
+      expect((await fields(tower.c1Engineer)).packages.map((p) => p.id)).toEqual(before);
+    });
+
+    describe("on confirm", () => {
+      let record: RegisterImport;
+      let created: string;
+
+      beforeAll(async () => {
+        expect((await ok(confirm(tower.c1Engineer, previewed.id), 200)).json()).toEqual({ rowsCreated: 4 });
+        record = (await ok(getImport(tower.c1Engineer, previewed.id), 200)).json();
+        created = record.packages.find((p) => p.newName === "Bathrooms")!.package!.id;
+      });
+
+      it("creates the new Package with the next number, and puts each Draft in its Package", async () => {
+        const numbers = (await fields(tower.c1Engineer)).packages.map((p) => p.number);
+        const made = record.packages.find((p) => p.newName === "Bathrooms")!;
+        expect(made).toEqual({ package: { id: created, number: numbers.at(-1), name: bilingual("Bathrooms"), status: "open" }, newName: "Bathrooms", rows: 2 });
+        const pkg = (await ok(tower.c1Engineer.get(`/v1/packages/${created}`), 200)).json();
+        expect(pkg.items.map((i: { title: string }) => i.title).sort()).toEqual(["Basins", "Taps"]);
+        const opened = (await ok(tower.c1Engineer.get(`/v1/packages/${open.id}`), 200)).json();
+        expect(opened.items.map((i: { title: string }) => i.title)).toContain("Cable trays");
+        const doors = record.rows.find((r) => r.rowNo === 6)!;
+        expect((await detail(tower.c1Engineer, doors.workItemId!)).package ?? null).toBeNull();
+      });
+
+      it("RP-589-1: gives C2, K1 and the Owner nothing of the new Packages: the plain 404, and none listed", async () => {
+        for (const [who, by] of [
+          ["C2", c2Engineer],
+          ["K1 manager", tower.k1Manager],
+          ["K1 engineer", k1Engineer],
+          ["Owner", ownerPm],
+        ] as const) {
+          for (const id of [created, open.id]) await expectHidden(by.get(`/v1/packages/${id}`), `${who} reads ${id}`);
+          const listedPackages = (await ok(by.get(`/v1/projects/${tower.projectId}/packages`), 200)).json().packages.map((p: { id: string }) => p.id);
+          expect(listedPackages, who).not.toContain(created);
+          expect(listedPackages, who).not.toContain(open.id);
+        }
+      });
+    });
+  });
+
+  it("puts every row in one new Package, or one Open Package of the Company; never another Company's", async () => {
+    const mapping: RegisterImportMapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 } };
+    const whole = await preview(tower.c1Engineer, { ...packageRegister, mapping: { ...mapping, packages: { new: "Whole register" } } });
+    expect(whole.packages).toEqual([{ package: null, newName: "Whole register", rows: 5 }]);
+    const into = await preview(tower.c1Engineer, { ...packageRegister, mapping: { ...mapping, packages: { existing: open.id } } });
+    expect(into.packages).toEqual([{ package: expect.objectContaining({ id: open.id }), newName: null, rows: 5 }]);
+    const intoStarted = await preview(tower.c1Engineer, { ...packageRegister, mapping: { ...mapping, packages: { existing: started.id } } });
+    expect(intoStarted.rows.every((r) => r.reasons.includes("package_not_open"))).toBe(true);
+    for (const id of [theirs.id, randomUUID()]) {
+      const res = await tryPreview(tower.c1Engineer, { ...packageRegister, mapping: { ...mapping, packages: { existing: id } } });
+      expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 422, body: { error: "package_not_found" } });
+    }
+    // A name chosen by hand for another Company's Package is refused alike.
+    const chosen = await tryPreview(tower.c1Engineer, { ...packageRegister, mapping: { ...byPackage, values: { package: { bathrooms: theirs.id } } } });
+    expect(chosen.json()).toEqual({ error: "package_not_found" });
+  });
+
+  it("lets a name matching an Open Package start a new one instead, chosen by hand", async () => {
+    const previewed = await preview(tower.c1Engineer, { ...packageRegister, mapping: { ...byPackage, values: { package: { electricallevel1: "new" } } } });
+    expect(packageOf(previewed, 4)).toEqual({ text: "electrical level 1", match: null, new: "electrical level 1" });
+  });
+
+  describe("the original register", () => {
+    let imported: RegisterImport;
+
+    beforeAll(async () => {
+      const previewed = await preview(tower.c1Engineer, register);
+      await ok(confirm(tower.c1Engineer, previewed.id), 200);
+      imported = (await ok(getImport(tower.c1Engineer, previewed.id), 200)).json();
+    });
+
+    it("is downloaded by C1's Members as uploaded, named as uploaded, with no time in any header", async () => {
+      expect(imported.original).toBe(true);
+      for (const by of [tower.c1Engineer, tower.c1Pm]) {
+        const res = await ok(by.get(`/v1/register-imports/${imported.id}/original`), 200);
+        expect(res.rawPayload.equals(Buffer.from(xlsx.content, "base64"))).toBe(true);
+        expect(res.headers["content-type"]).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        expect(res.headers["content-disposition"]).toBe(`attachment; filename="import-register.xlsx"; filename*=UTF-8''import-register.xlsx`);
+        // No import or upload time: only the response's own Date.
+        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined();
+        const { date, ...rest } = res.headers;
+        expect(date).toBeDefined();
+        expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}|GMT|\d{2}:\d{2}/);
+      }
+    });
+
+    it("is the plain 404 to C2, K1 and the Owner, and for an Engineer's import, which keeps none", async () => {
+      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${imported.id}/original`));
+      await expectHidden(tower.c1Engineer.get(`/v1/register-imports/${randomUUID()}/original`));
+      const defaultMember = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"]);
+      const done = await api.engineerImport({
+        for: { projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: defaultMember.id, reason: "Onboarding C1, original" },
+        ...register,
+      });
+      expect((await ok(getImport(defaultMember.caller, done.importId), 200)).json().original).toBe(false);
+      await expectHidden(defaultMember.caller.get(`/v1/register-imports/${done.importId}/original`));
+    });
+
+    it("keeps a preview's file to its importer", async () => {
+      const previewed = await preview(tower.c1Engineer, register);
+      await ok(tower.c1Engineer.get(`/v1/register-imports/${previewed.id}/original`), 200);
+      await expectHidden(tower.c1Pm.get(`/v1/register-imports/${previewed.id}/original`));
+    });
+  });
+
+  describe("saved mappings", () => {
+    const save = (by: Caller, name: string, mapping: RegisterImportMapping = byPackage) =>
+      by.post(`/v1/projects/${tower.projectId}/register-import-mappings`, { name, mapping });
+
+    it("are saved for the Company, offered to its Members with the mapping as saved, and to no other Company", async () => {
+      const saved = (await ok(save(tower.c1Engineer, "Monthly register"), 201)).json();
+      expect(saved.mappings).toEqual([{ id: expect.any(String), name: "Monthly register", mapping: byPackage }]);
+      expect((await fields(tower.c1Pm)).mappings).toEqual(saved.mappings);
+      for (const by of [c2Engineer]) expect((await fields(by)).mappings.map((m) => m.name)).not.toContain("Monthly register");
+      for (const by of [c2Engineer, ownerPm, tower.k1Manager]) {
+        await expectHidden(by.request("PUT", `/v1/register-import-mappings/${saved.mappings[0].id}`, { name: "Taken over" }));
+        await expectHidden(by.request("DELETE", `/v1/register-import-mappings/${saved.mappings[0].id}`));
+      }
+      // No time, nor who saved it.
+      expect(JSON.stringify(saved)).not.toMatch(/createdAt|created_at|createdBy|savedAt/);
+    });
+
+    it("refuse a name the Company already uses, whatever its case; are renamed and deleted by its Members", async () => {
+      const res = await save(tower.c1Pm, "monthly REGISTER");
+      expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "name_taken" } });
+      const id = (await ok(save(tower.c1Pm, "Long-lead items"), 201)).json().mappings.find((m: { name: string }) => m.name === "Long-lead items").id;
+      const renamed = (await ok(tower.c1Engineer.request("PUT", `/v1/register-import-mappings/${id}`, { name: "Long lead" }), 200)).json();
+      expect(renamed.mappings.map((m: { name: string }) => m.name)).toEqual(["Long lead", "Monthly register"]);
+      const deleted = (await ok(tower.c1Engineer.request("DELETE", `/v1/register-import-mappings/${id}`), 200)).json();
+      expect(deleted.mappings.map((m: { name: string }) => m.name)).toEqual(["Monthly register"]);
+      await expectHidden(tower.c1Engineer.request("DELETE", `/v1/register-import-mappings/${id}`));
+    });
+  });
+});

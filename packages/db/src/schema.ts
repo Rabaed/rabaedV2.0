@@ -422,6 +422,17 @@ export interface SubmittalRegisterImportTable {
   rows_total: number;
   rows_rejected: number;
   rows_created: number | null;
+  /** Its original register, stored under the Project's prefix (RP-644); null for an Engineer's import. Never its upload time. */
+  source_file_id: string | null;
+}
+
+/** A mapping saved under a name for a Participant on a Project (RP-644); never who saved it or when. Written through its functions. */
+export interface RegisterImportMappingTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  name: string;
+  mapping: ColumnType<unknown, string, string>;
 }
 
 /** One row of an import as read, with every reason it is bad. Its Draft only through `app.register_import_results`. */
@@ -824,6 +835,7 @@ export interface Database {
   package: PackageTable;
   submittal_register_import: SubmittalRegisterImportTable;
   submittal_register_import_row: SubmittalRegisterImportRowTable;
+  register_import_mapping: RegisterImportMappingTable;
   project_required_field: ProjectRequiredFieldTable;
   checklist_template: ChecklistTemplateTable;
   checklist_template_version: ChecklistTemplateVersionTable;

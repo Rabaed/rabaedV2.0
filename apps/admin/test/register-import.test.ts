@@ -147,7 +147,24 @@ describe("An Engineer's import for C1", () => {
 
   it("shows no time of the import, nor anyone's but the Company's own Members", () => {
     expect(Object.keys(previewed).sort()).toEqual(
-      ["defaultRaiser", "fileName", "headerRow", "headers", "id", "mapping", "projectId", "rows", "rowsCreated", "rowsRejected", "rowsTotal", "runBy", "sheet", "status"].sort(),
+      [
+        "defaultRaiser",
+        "fileName",
+        "headerRow",
+        "headers",
+        "id",
+        "mapping",
+        "original",
+        "packages",
+        "projectId",
+        "rows",
+        "rowsCreated",
+        "rowsRejected",
+        "rowsTotal",
+        "runBy",
+        "sheet",
+        "status",
+      ].sort(),
     );
   });
 
@@ -388,5 +405,106 @@ describe("An Engineer's import checks as the default Member, past row-level secu
     await expectHidden(leaving.caller.get(`/v1/register-imports/${own.id}`));
     expect((await engineer.browser.get(`/v1/register-imports/${theirs.id}?reason=${encodeURIComponent(reason)}`)).statusCode).toBe(404);
     expect((await engineer.browser.post(`/v1/register-imports/${theirs.id}/confirm`, { reason })).json()).toEqual({ error: "not_found" });
+  });
+});
+
+// RP-644 past row-level security: an Engineer's import, run as C1's default Member on Rabaed
+// Admin's connection, never matches, offers or adds to another Participant's Package, and
+// never reads another Company's saved mappings.
+describe("An Engineer's import and Packages (RP-644)", () => {
+  /** C2, a second Contractor on the Project, with a Package named as a name in C1's register. */
+  let c2Person: Person;
+  let theirs: { id: string; number: string };
+  let ours: { id: string; number: string };
+  let started: { id: string; number: string };
+
+  const forHafiz = () => ({ projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, reason });
+  const projectUrl = (path: string) => `/v1/projects/${tower.projectId}/${path}`;
+  const createPackage = async (by: Person["caller"], name: string): Promise<{ id: string; number: string }> =>
+    (await ok(by.post(projectUrl("packages"), { name: bilingual(name) }), 201)).json();
+  const upload = (mapping: RegisterImportMapping) => ({
+    file: {
+      fileName: "TMC_Packages.csv",
+      content: Buffer.from(["Subject,Type,Trade,Package", "Panels,MAR,Electrical,Shared set", "Pumps,MAR,Mechanical,C1 set", "Fans,MAR,Electrical,Started set"].join("\r\n")).toString(
+        "base64",
+      ),
+    },
+    sheet: "TMC_Packages",
+    headerRow: 1,
+    mapping,
+  });
+  const byColumn: RegisterImportMapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, package: { column: 3 } };
+
+  beforeAll(async () => {
+    const onboarded = await api.onboardCompany({ legalName: bilingual("C2 Packages") });
+    const c2: Company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
+    const c2ParticipantId = await api.addParticipant(c1.caller, tower.projectId, c2.company, "contractor");
+    await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
+    c2Person = await memberOnProject(api, c2, c2ParticipantId, ["engineer"]);
+    theirs = await createPackage(c2Person.caller, "Shared set");
+    ours = await createPackage(hafiz.caller, "C1 set");
+    started = await createPackage(hafiz.caller, "Started set");
+    await sql`update package set status = 'in_progress' where id = ${started.id}::uuid`.execute(adminDb);
+    await ok(c2Person.caller.post(projectUrl("register-import-mappings"), { name: "C2 monthly", mapping: byColumn }), 201);
+    await ok(hafiz.caller.post(projectUrl("register-import-mappings"), { name: "C1 monthly", mapping: byColumn }), 201);
+  });
+
+  it("offers the default Member's own Packages and saved mappings, as the customer api offers them; none of another Company's", async () => {
+    const fields: RegisterImportFields = (await ok(engineer.browser.post("/v1/register-imports/fields", { for: forHafiz() }), 200)).json();
+    const theirFields: RegisterImportFields = (await ok(hafiz.caller.get(projectUrl("register-imports/fields")), 200)).json();
+    expect(fields.packages).toEqual(theirFields.packages);
+    expect(fields.mappings).toEqual(theirFields.mappings);
+    const open = fields.packages.filter((p) => p.status === "open").map((p) => p.id);
+    expect(open).toContain(ours.id);
+    expect(open).not.toContain(started.id);
+    expect(fields.packages.map((p) => p.id)).not.toContain(theirs.id);
+    expect(fields.mappings.map((m) => m.name)).toEqual(["C1 monthly"]);
+  });
+
+  it("never matches another Company's Package by name: a new one instead, as for the Member", async () => {
+    const values: RegisterValues = (await ok(engineer.browser.post("/v1/register-imports/values", { for: forHafiz(), ...upload(byColumn) }), 200)).json();
+    expect(values.fields.find((f) => f.field === "package")!.values.map((v) => [v.text, v.match])).toEqual([
+      ["Shared set", null],
+      ["C1 set", ours.id],
+      ["Started set", started.id],
+    ]);
+    const previewed: RegisterImport = (await ok(engineer.browser.post("/v1/register-imports", { for: forHafiz(), ...upload(byColumn) }), 201)).json();
+    const asMember: RegisterImport = (await ok(hafiz.caller.post(projectUrl("register-imports"), upload(byColumn)), 201)).json();
+    expect(reasonsByRow(previewed)).toEqual({ 2: [], 3: [], 4: ["package_not_open"] });
+    expect(reasonsByRow(previewed)).toEqual(reasonsByRow(asMember));
+    expect(previewed.rows.map((r) => r.package.match?.id ?? r.package.new)).toEqual(["Shared set", ours.id, started.id]);
+    expect(JSON.stringify(previewed)).not.toContain(theirs.id);
+    expect(previewed.original).toBe(false);
+  });
+
+  it("refuses another Company's Package, chosen for the file or for a name, with the Member's answer, and logs nothing", async () => {
+    const before = (await actionsOf(engineer.id)).length;
+    for (const mapping of [
+      { ...byColumn, package: undefined, packages: { existing: theirs.id } },
+      { ...byColumn, values: { package: { sharedset: theirs.id } } },
+    ] as RegisterImportMapping[]) {
+      const res = await engineer.browser.post("/v1/register-imports", { for: forHafiz(), ...upload(mapping) });
+      const member = await hafiz.caller.post(projectUrl("register-imports"), upload(mapping));
+      expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 422, body: { error: "package_not_found" } });
+      expect({ status: member.statusCode, body: member.json() }).toEqual({ status: 422, body: { error: "package_not_found" } });
+    }
+    // Refused by the preview itself, logged as such.
+    const logged = (await actionsOf(engineer.id)).slice(before);
+    expect(logged.map((a) => [a.action, (a.after as { outcome?: string }).outcome])).toEqual([
+      ["preview_register_import", "package_not_found"],
+      ["preview_register_import", "package_not_found"],
+    ]);
+  });
+
+  it("creates its new Package for C1 on confirm, and adds nothing to C2's", async () => {
+    const previewed: RegisterImport = (await ok(engineer.browser.post("/v1/register-imports", { for: forHafiz(), ...upload(byColumn) }), 201)).json();
+    expect((await ok(engineer.browser.post(`/v1/register-imports/${previewed.id}/confirm`, { reason }), 200)).json()).toEqual({ rowsCreated: 2 });
+    const record: RegisterImport = (await ok(engineer.browser.get(`/v1/register-imports/${previewed.id}?reason=${encodeURIComponent(reason)}`), 200)).json();
+    const made = record.packages.find((p) => p.newName === "Shared set")!.package!;
+    expect(made).toMatchObject({ name: bilingual("Shared set"), status: "open" });
+    const pkg = (await ok(hafiz.caller.get(`/v1/packages/${made.id}`), 200)).json();
+    expect(pkg.items.map((i: { title: string }) => i.title)).toEqual(["Panels"]);
+    await expectHidden(c2Person.caller.get(`/v1/packages/${made.id}`));
+    expect((await ok(c2Person.caller.get(`/v1/packages/${theirs.id}`), 200)).json().items).toEqual([]);
   });
 });

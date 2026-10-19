@@ -43,6 +43,7 @@ export * from "./workflow-publish.ts";
 export * from "./workflow-definition.ts";
 export * from "./work-item-workflow.ts";
 export * from "./workflow-checks.ts";
+export * from "./xlsx.ts";
 export * from "./transition-rules.ts";
 export * from "./workflow-authoring.ts";
 export * from "./workflow-settings.ts";
