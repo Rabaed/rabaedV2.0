@@ -416,7 +416,7 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
       left join dimension_value lv on lv.id = r.location_id
       left join member am on am.id = r.assignee_member_id
       -- RP-644: its Package, one of the importing Participant's own (said by the function, not
-      -- RLS: Rabaed Admin reads past it); a Package deleted since reads as none.
+      -- RLS: Rabaed Admin reads past it); a Package discarded since reads as none.
       left join app.register_import_packages(${r.project_id}::uuid) k on k.package_id = r.package_id
       where r.import_id = ${importId}::uuid
       order by r.row_no
@@ -520,7 +520,7 @@ export function changeRegisterImportMapping(db: Db, memberId: string, mappingId:
         ? sql<{ outcome: string }>`select app.delete_register_import_mapping(${mappingId}::uuid) as outcome`
         : sql<{ outcome: string }>`select app.rename_register_import_mapping(${mappingId}::uuid, ${change.name}) as outcome`
     ).execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["deleted", "renamed", "not_found", "name_taken"]);
+    const outcome = checkedOutcome(rows[0]!.outcome, ["removed", "renamed", "not_found", "name_taken"]);
     if (outcome === "not_found" || outcome === "name_taken") return { ok: false, reason: outcome } as const;
     return { ok: true, mappings: await savedMappings(trx, mine.project_id) } as const;
   });

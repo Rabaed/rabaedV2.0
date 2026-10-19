@@ -1,3 +1,4 @@
+/* eslint-disable rabaed/no-avoid-terms -- "Relationships" are the Office Open XML format's own part names, not copy */
 /**
  * A small .xlsx writer (RP-644): one worksheet of text cells, its first row bold, left-to-right or
  * right-to-left. The Submittal Register Import's downloads (the rejected rows with a reasons
@@ -104,10 +105,17 @@ function zip(files: readonly { name: string; bytes: Uint8Array }[]): Uint8Array 
   return out;
 }
 
-/** Text as XML character data: escaped, without the control characters XML can't hold. */
+/** Whether XML 1.0 can hold the character: not a control character other than tab, line feed and carriage return, nor U+FFFE or U+FFFF. */
+const xmlChar = (c: string) => {
+  const code = c.charCodeAt(0);
+  return (code >= 0x20 || code === 0x09 || code === 0x0a || code === 0x0d) && code !== 0xfffe && code !== 0xffff;
+};
+
+/** Text as XML character data: escaped, without the characters XML can't hold. */
 function xmlText(text: string): string {
-  return text
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, "")
+  return [...text]
+    .filter(xmlChar)
+    .join("")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

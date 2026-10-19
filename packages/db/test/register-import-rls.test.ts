@@ -979,7 +979,7 @@ describe("Saved mappings (RP-644)", () => {
       expect(await failure(c1.member, sql.raw(`select ${column} from register_import_mapping`))).toBe("42501");
     }
     expect(await failure(c1.member, sql`delete from register_import_mapping`)).toBe("42501");
-    expect(await outcome(c1Colleague, sql`select app.delete_register_import_mapping(${saved.mapping_id}::uuid) as outcome`)).toBe("deleted");
+    expect(await outcome(c1Colleague, sql`select app.delete_register_import_mapping(${saved.mapping_id}::uuid) as outcome`)).toBe("removed");
     expect(await listedBy(c1.member)).not.toContain("Long lead");
   });
 });

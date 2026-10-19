@@ -25,6 +25,9 @@ function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, lo
   if (reason === "location_outside_visibility" && row.location.match) return row.location.match.name[locale];
   // The assignee by their name, or the email as read (one that named nobody who may take it).
   if (reason.startsWith("assignee_")) return row.assignee.match?.name[locale] ?? row.assignee.text;
+  // A Package by its number and name (RP-644); one named too long, as read.
+  if (reason === "package_not_open" && row.package.match) return `${row.package.match.number} · ${row.package.match.name[locale]}`;
+  if (reason.startsWith("package_")) return row.package.text;
   if (reason.startsWith("type_")) return row.type.text;
   if (reason.startsWith("trade_")) return row.trade.text;
   if (reason.startsWith("scope_")) return row.scopes.text;
@@ -32,8 +35,12 @@ function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, lo
   return row.paperRef;
 }
 
-/** Every reason a row is bad, one a line, each with the value it names; a Form value that doesn't fit names its field. */
-export function RowReasons({ row, mapping, t: messages, locale }: { row: RegisterImportRow; mapping: RegisterImportMapping; t: Translate; locale: Locale }) {
+/**
+ * Every reason a row is bad, one a line, each with the value it names; a Form value that
+ * doesn't fit names its field. What the Validate step shows, and the rejected rows' and the
+ * log's "Reasons" column (RP-644).
+ */
+export function reasonLines(row: RegisterImportRow, mapping: RegisterImportMapping, messages: Translate, locale: Locale): { key: string; text: string }[] {
   const t = within(messages, "reasons");
   const labelOf = (key: string) => mapping.fields?.find((f) => f.key === key)?.label?.[locale] ?? key;
   const reasonText = (reason: RegisterImportRowReason) => {
@@ -45,13 +52,19 @@ export function RowReasons({ row, mapping, t: messages, locale }: { row: Registe
       const values = [row.trade.match?.name[locale], row.location.match?.name[locale]].filter(Boolean).join(" · ");
       return t(reason, { value, values });
     }
+    if (reason === "package_not_open") return t(reason, { value, status: messages(`packages.status.${row.package.match?.status ?? "in_progress"}`) });
     return t(reason, { value });
   };
-  const lines = row.reasons.flatMap((reason) =>
+  return row.reasons.flatMap((reason) =>
     reason === "field_invalid"
       ? row.fields.filter((f) => f.invalid).map((f) => ({ key: `${reason}:${f.key}`, text: t(reason, { value: f.text, field: labelOf(f.key) }) }))
       : [{ key: reason, text: reasonText(reason) }],
   );
+}
+
+/** Every reason a row is bad, one a line (reasonLines). */
+export function RowReasons({ row, mapping, t: messages, locale }: { row: RegisterImportRow; mapping: RegisterImportMapping; t: Translate; locale: Locale }) {
+  const lines = reasonLines(row, mapping, messages, locale);
   return (
     <ul className="space-y-0.5">
       {lines.map((line) => (
@@ -62,6 +75,33 @@ export function RowReasons({ row, mapping, t: messages, locale }: { row: Registe
       ))}
     </ul>
   );
+}
+
+/**
+ * A row's Package (RP-644): its number (left-to-right) and name, or a new one's name marked
+ * new; a dash for none.
+ */
+export function PackageCell({ value, locale, newLabel }: { value: RegisterImportRow["package"]; locale: Locale; newLabel: string }) {
+  if (value.match) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
+        <Icon name="packages" size={14} className="shrink-0 text-brand-fg" />
+        <bdi dir="ltr" translate="no" className="shrink-0 font-semibold">
+          {value.match.number}
+        </bdi>
+        <bdi className="truncate">{value.match.name[locale]}</bdi>
+      </span>
+    );
+  }
+  if (value.new) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
+        <Badge tone="brand">{newLabel}</Badge>
+        <bdi className="truncate">{value.new}</bdi>
+      </span>
+    );
+  }
+  return <span className="text-muted">—</span>;
 }
 
 /** The Subject as read, or a dash for an empty one. */
@@ -95,6 +135,9 @@ const fixOf: Record<RegisterImportRowReason, "file" | "mapping" | "values" | "as
   assignee_unknown: "assign",
   assignee_cannot_create: "assign",
   assignee_outside_visibility: "assign",
+  // RP-644: a Package no longer Open is chosen again on Assign & packages; a name too long is the register's.
+  package_not_open: "assign",
+  package_name_too_long: "file",
 };
 
 /** The bad rows: Row, Subject, every reason, and where to fix it. */
@@ -221,6 +264,7 @@ export function ImportRows({
     location: mapping.location !== undefined,
     scopes: mapping.scopes !== undefined,
     raiser: mapping.assignTo !== undefined || mapping.assign !== undefined,
+    package: mapping.package !== undefined || mapping.packages !== undefined,
   };
   const span = 4 + Number(results) + Object.values(columns).filter(Boolean).length;
   const created = (
@@ -241,6 +285,7 @@ export function ImportRows({
           {columns.location && <TableHead>{t("location")}</TableHead>}
           {columns.scopes && <TableHead>{t("scopes")}</TableHead>}
           {columns.raiser && <TableHead>{t("raiser")}</TableHead>}
+          {columns.package && <TableHead>{t("package")}</TableHead>}
           {results && <TableHead>{t("result")}</TableHead>}
         </TableRow>
       </TableHeader>
@@ -304,6 +349,11 @@ export function ImportRows({
                       </small>
                     )}
                   </span>
+                </TableCell>
+              )}
+              {columns.package && (
+                <TableCell className="max-w-64">
+                  <PackageCell value={row.package} locale={locale} newLabel={messages("validate.newPackage")} />
                 </TableCell>
               )}
               {results && (

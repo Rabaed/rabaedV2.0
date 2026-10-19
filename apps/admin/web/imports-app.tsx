@@ -112,6 +112,9 @@ function ImportForCompany({ locale }: { locale: Locale }) {
     values: (body) => call("POST", "/v1/register-imports/values", { ...body, for: chosen.for }),
     preview: (body) => call("POST", "/v1/register-imports", { ...body, for: chosen.for }),
     confirm: (importId) => call("POST", `/v1/register-imports/${importId}/confirm`, { reason: chosen.for.reason }),
+    // RP-644: the import as it reads after confirm (its new Packages' numbers). Saved mappings are
+    // applied here, never saved: the Company's Members save them.
+    get: (importId) => call("GET", `/v1/register-imports/${importId}?reason=${encodeURIComponent(chosen.for.reason)}`),
   };
 
   const heading = (

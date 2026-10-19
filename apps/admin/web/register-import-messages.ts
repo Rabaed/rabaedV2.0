@@ -26,6 +26,10 @@ const overrides: Record<Locale, Record<string, string>> = {
     "errors.forbidden": "The default Member can't raise Submittals on this Project.",
     "errors.fieldNotFound": "A mapped Form field isn't on a Type the default Member may raise any more. Map the fields again.",
     "errors.notFound": "The default Member, their Company or this Project isn't available any more. Change whom the import is for.",
+    // RP-644: the Company's own Packages and saved mappings.
+    "errors.packageNotFound": "A Package chosen isn't one of this Company's on this Project any more. Choose again.",
+    "packages.noneOpen": "This Company has no Open Package on this Project.",
+    "mappings.help": "A saved mapping is the Company's, on this Project: its columns, values matched, assignees and Packages, applied to a register laid out the same way. Its Members save them.",
   },
   ar: {
     "map.formFieldsHelp":
@@ -44,6 +48,9 @@ const overrides: Record<Locale, Record<string, string>> = {
     "errors.forbidden": "لا يمكن للعضو الافتراضي إنشاء تقديمات في هذا المشروع.",
     "errors.fieldNotFound": "أحد حقول النموذج المربوطة لم يعد في نوع يمكن للعضو الافتراضي إنشاؤه. اربط الحقول من جديد.",
     "errors.notFound": "لم يعد هذا المشروع أو هذه الشركة أو العضو الافتراضي متاحاً. غيّر الجهة التي يتم الاستيراد لصالحها.",
+    "errors.packageNotFound": "إحدى الحزم المختارة لم تعد من حزم هذه الشركة في هذا المشروع. اختر مجدداً.",
+    "packages.noneOpen": "ليس لدى هذه الشركة حزمة مفتوحة في هذا المشروع.",
+    "mappings.help": "الربط المحفوظ للشركة في هذا المشروع: أعمدته والقيم المطابقة والمُسند إليهم والحزم، يُطبَّق على سجل بالترتيب نفسه. يحفظه أعضاؤها.",
   },
 };
 

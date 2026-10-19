@@ -2286,7 +2286,7 @@
       "map": "Map fields",
       "values": "Map values",
       "validate": "Validate",
-      "assign": "Assign"
+      "assign": "Assign & packages"
     },
     "back": "Back",
     "next": "Next",
@@ -2386,7 +2386,8 @@
       "scopes": "Scopes",
       "location": "Location",
       "paperRef": "Paper ref",
-      "assignTo": "Assign to"
+      "assignTo": "Assign to",
+      "package": "Package"
     },
     "validate": {
       "checked": "rows checked",
@@ -2397,7 +2398,13 @@
       "tabs": "Rows",
       "errors": "Errors",
       "imported": "What will be imported",
-      "confirm": "{count, plural, one {Import 1 Draft} other {Import {n} Drafts}}"
+      "confirm": "{count, plural, one {Import 1 Draft} other {Import {n} Drafts}}",
+      "packages": "Packages",
+      "newPackage": "New Package",
+      "addTo": "Added to",
+      "noPackage": "No row goes to a Package.",
+      "downloadLog": "Download log",
+      "rejectedRows": "Rejected rows ({n})"
     },
     "result": {
       "created": "{count, plural, one {1 Draft created} other {{n} Drafts created}}",
@@ -2405,7 +2412,10 @@
       "leftOut": "Left out",
       "open": "{count, plural, one {Open the Draft} other {Open the {n} Drafts}}",
       "another": "Import another register",
-      "leftOutHelp": "Fix the rows left out in your register and import them in a new import."
+      "leftOutHelp": "Rejected rows download as your register's columns plus a “Reasons” column: fix them and import them in a new import.",
+      "newPackage": "New Package",
+      "addedTo": "Added to",
+      "downloadRejected": "Download rejected rows ({n})"
     },
     "errors": {
       "unsupportedType": "Only .xlsx and .csv registers can be imported.",
@@ -2424,7 +2434,9 @@
       "forbidden": "You can't raise Submittals on this Project.",
       "notFound": "This Project isn't available.",
       "projectClosed": "This Project is closed.",
-      "unavailable": "It couldn't be done. Try again."
+      "unavailable": "It couldn't be done. Try again.",
+      "packageNotFound": "A Package chosen isn't one of your Company's on this Project any more. Choose again.",
+      "nameTaken": "Your Company already has a saved mapping called that."
     },
     "reasons": {
       "subject_missing": "Subject empty",
@@ -2446,7 +2458,9 @@
       "assignee_unknown": "‘{value}’ isn't an active Member of your Company on this Project",
       "assignee_unknown_picked": "The Member picked is no longer an active Member of your Company on this Project",
       "assignee_cannot_create": "{value} can't create {type}",
-      "assignee_outside_visibility": "{value} doesn't cover {values}"
+      "assignee_outside_visibility": "{value} doesn't cover {values}",
+      "package_not_open": "Package {value} is {status}: only Open Packages take new Drafts",
+      "package_name_too_long": "Package ‘{value}’ is over 200 characters"
     },
     "rows": {
       "row": "Row",
@@ -2467,8 +2481,9 @@
       "openDraft": "Open the Draft",
       "draftCreated": "Draft created",
       "notYours": "Only a Member who may raise it can import it",
-      "assign": "Assign",
-      "raiser": "Raised by"
+      "assign": "Assign & packages",
+      "raiser": "Raised by",
+      "package": "Package"
     },
     "list": {
       "file": "Register",
@@ -2486,6 +2501,55 @@
       "formField": "Form · {label}",
       "rows": "Rows of this import",
       "worksheetValue": "{worksheet}, column headings in row {row}"
+    },
+    "packages": {
+      "title": "Packages",
+      "choice": "Where the Drafts go",
+      "none": "No Package",
+      "file": "One for the whole register",
+      "column": "One per value of a column",
+      "columnLabel": "Column",
+      "noColumn": "No column is mapped to Package: map one on Map fields to put each row in the Package its value gives.",
+      "new": "New",
+      "existing": "Existing",
+      "newOrExisting": "New or existing Package for {value}",
+      "newFile": "The new Package",
+      "existingFor": "The existing Package for {value}",
+      "existingFile": "The existing Package",
+      "chooseOpen": "Choose an Open Package…",
+      "noneOpen": "Your Company has no Open Package on this Project.",
+      "rows": "{count, plural, one {1 row} other {{n} rows}}",
+      "noValue": "{count, plural, one {1 row has no Package value: no Package.} other {{n} rows have no Package value: no Package.}}",
+      "help": "Only Open Packages take new Drafts: a Package In Progress or Done makes its rows bad. New Packages get their number (PKG-…) when you confirm.",
+      "status": {
+        "open": "Open",
+        "in_progress": "In Progress",
+        "done": "Done"
+      }
+    },
+    "downloads": {
+      "reasons": "Reasons",
+      "row": "Row",
+      "subject": "Subject",
+      "rejectedSheet": "Rejected rows",
+      "logSheet": "Log",
+      "rejectedFile": "{register} - rejected rows.xlsx",
+      "logFile": "{register} - log.xlsx",
+      "original": "Download the original register",
+      "failed": "The download couldn't be made. Try again."
+    },
+    "mappings": {
+      "label": "Saved mapping",
+      "none": "None",
+      "save": "Save mapping",
+      "saveAs": "Save this mapping as",
+      "saveButton": "Save",
+      "rename": "Rename",
+      "renameAs": "Rename the mapping to",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "saved": "Saved for your Company.",
+      "help": "A saved mapping is your Company's, on this Project: its columns, values matched, assignees and Packages, applied to a register laid out the same way."
     }
   },
   "packages": {

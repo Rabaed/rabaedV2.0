@@ -281,7 +281,8 @@ export {
 } from "./components/workflow/workflow-builder.tsx";
 export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/workflow/workflow-builder-labels.ts";
 export { workflowBuilderLabels, type Translate } from "./components/workflow/workflow-builder-labels-from.ts";
-export { ErrorRows, ImportRows, RowReasons } from "./components/register-import/register-import-rows.tsx";
+export { ErrorRows, ImportRows, PackageCell, RowReasons } from "./components/register-import/register-import-rows.tsx";
+export { logDownload, rejectedRowsDownload, saveDownload } from "./components/register-import/register-import-downloads.ts";
 export {
   RegisterImportWizard,
   type RegisterImportCallResult,

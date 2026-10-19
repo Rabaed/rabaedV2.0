@@ -684,7 +684,7 @@ create function app.rename_register_import_mapping(p_mapping_id uuid, p_name tex
     end
   $$;
 
--- A Member of its Participant deletes saved mapping p_mapping_id. Outcome 'deleted' or 'not_found'.
+-- A Member of its Participant deletes saved mapping p_mapping_id. Outcome 'removed' or 'not_found'.
 create function app.delete_register_import_mapping(p_mapping_id uuid) returns text
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
@@ -697,7 +697,7 @@ create function app.delete_register_import_mapping(p_mapping_id uuid) returns te
         return 'not_found';
       end if;
       delete from register_import_mapping where id = p_mapping_id;
-      return 'deleted';
+      return 'removed';
     end
   $$;
 

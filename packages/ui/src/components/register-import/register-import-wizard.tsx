@@ -9,6 +9,8 @@ import {
   type RegisterImportFields,
   type RegisterImportFile,
   type RegisterImportMapping,
+  type RegisterImportMappings,
+  type RegisterImportSavedMapping,
   type RegisterSheet,
   type RegisterValues,
 } from "@rabaed/domain";
@@ -17,12 +19,15 @@ import { cn } from "../../lib/cn.ts";
 import { Button, IconButton } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
 import { Checkbox } from "../form/checkbox.tsx";
+import { Input } from "../form/input.tsx";
 import { RadioGroup } from "../form/radio-group.tsx";
 import { Select } from "../form/select.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
-import { ErrorRows, ImportRows, within } from "./register-import-rows.tsx";
+import { logDownload, rejectedRowsDownload, saveDownload } from "./register-import-downloads.ts";
+import { PackagesCard, type PackagesChoice } from "./register-import-packages.tsx";
+import { ErrorRows, ImportRows, PackageCell, within } from "./register-import-rows.tsx";
 
 // The Submittal Register Import wizard (RP-637, RP-639; the owner's design RP-634):
 // Upload → Sheet & header row → Map fields (a field suggested for each column from its
@@ -55,6 +60,15 @@ export interface RegisterImportClient {
   preview(body: { file: RegisterImportFile; sheet: string; headerRow: number; mapping: RegisterImportMapping }): Promise<RegisterImportCallResult>;
   /** Creates the preview's Drafts → `{ rowsCreated }`. */
   confirm(importId: string): Promise<RegisterImportCallResult>;
+  /** One import as it reads now → RegisterImport: the Result step's Packages, with the new ones' numbers (RP-644). */
+  get?(importId: string): Promise<RegisterImportCallResult>;
+  /**
+   * Saved mappings (RP-644): save the mapping under a name for the importer's Company, rename or
+   * delete one → RegisterImportMappings. Left out where none are saved (Rabaed Admin applies them only).
+   */
+  saveMapping?(body: { name: string; mapping: RegisterImportMapping }): Promise<RegisterImportCallResult>;
+  renameMapping?(mappingId: string, name: string): Promise<RegisterImportCallResult>;
+  deleteMapping?(mappingId: string): Promise<RegisterImportCallResult>;
 }
 
 /** A group rule of the Assign step: every row of a Trade (its id) or a Type (its code) to a Member. */
@@ -94,6 +108,8 @@ const refusals: Record<string, string> = {
   forbidden: "forbidden",
   not_found: "notFound",
   project_closed: "projectClosed",
+  package_not_found: "packageNotFound",
+  name_taken: "nameTaken",
 };
 
 /** A spreadsheet column's letter, as Excel names it: A … Z, AA … */
@@ -190,6 +206,14 @@ export function RegisterImportWizard({
   const [defaultAssignee, setDefaultAssignee] = useState<string | null>(null);
   const [rules, setRules] = useState<AssignRule[]>([]);
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>({ by: "trade", value: null, member: null });
+  /** Where the Drafts go (RP-644); a name's choice by hand is `matches.package`. */
+  const [packagesChoice, setPackagesChoice] = useState<PackagesChoice>({ mode: "none" });
+  /** The importer's Company's saved mappings, and the one applied (RP-644). */
+  const [savedMappings, setSavedMappings] = useState<RegisterImportSavedMapping[]>(fields.mappings);
+  const [appliedMapping, setAppliedMapping] = useState<string | null>(null);
+  /** Saving or renaming a mapping: the text typed. */
+  const [mappingEdit, setMappingEdit] = useState<{ mode: "save" | "rename"; text: string } | null>(null);
+  const [mappingSaved, setMappingSaved] = useState(false);
   const [preview, setPreview] = useState<RegisterImport | null>(initialPreview);
   const [created, setCreated] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -236,7 +260,98 @@ export function RegisterImportWizard({
     setTicked(ticks);
     setMatches({});
     setValues(null);
+    setPackagesChoice(Object.values(rest).includes("package") ? { mode: "column" } : { mode: "none" });
+    setAppliedMapping(null);
     return true;
+  }
+
+  /**
+   * Applies a saved mapping (RP-644, story 11) to the register as read: its columns (any past the
+   * header row's left out), its values matched by hand, its assignees and its Packages.
+   */
+  function applySaved(saved: RegisterImportSavedMapping) {
+    if (!sheet) return;
+    const m = saved.mapping;
+    const inSheet = (c: { column: number } | undefined) => (c && c.column < sheet.headers.length ? c.column : null);
+    setSubject(inSheet(m.subject));
+    setType("column" in m.type ? { from: "column", column: inSheet(m.type) } : { from: "value", value: m.type.value });
+    setTrade("column" in m.trade ? { from: "column", column: inSheet(m.trade) } : { from: "value", value: m.trade.value });
+    const rest: Record<number, OtherField> = {};
+    for (const field of ["scopes", "location", "package", "paperRef", "assignTo"] as const) {
+      const column = inSheet(m[field]);
+      if (column !== null) rest[column] = field;
+    }
+    for (const f of m.fields ?? []) {
+      const column = inSheet(f);
+      if (column !== null) rest[column] = `field:${f.key}`;
+    }
+    setOthers(rest);
+    // Every value column's values matched again on Map values, as Map fields ticks them.
+    const ticks: Record<number, boolean> = Object.fromEntries(Object.entries(rest).map(([column, field]) => [column, matchesValues(field, fields)]));
+    if ("column" in m.type && inSheet(m.type) !== null) ticks[m.type.column] = true;
+    if ("column" in m.trade && inSheet(m.trade) !== null) ticks[m.trade.column] = true;
+    setTicked(ticks);
+    const mappedValues = m.values ?? {};
+    setMatches({
+      ...(mappedValues.type ? { type: mappedValues.type } : {}),
+      ...(mappedValues.trade ? { trade: mappedValues.trade } : {}),
+      ...(mappedValues.location ? { location: mappedValues.location } : {}),
+      ...(mappedValues.scopes ? { scopes: mappedValues.scopes } : {}),
+      ...(mappedValues.package ? { package: mappedValues.package } : {}),
+      ...Object.fromEntries(Object.entries(mappedValues.fields ?? {}).map(([key, byHand]) => [`field:${key}`, byHand])),
+    });
+    setDefaultAssignee(m.assign?.default ?? null);
+    setRules(m.assign?.rules ?? []);
+    setPackagesChoice(
+      m.packages
+        ? "new" in m.packages
+          ? { mode: "file", how: "new", name: m.packages.new, existing: null }
+          : { mode: "file", how: "existing", name: "", existing: m.packages.existing }
+        : Object.values(rest).includes("package")
+          ? { mode: "column" }
+          : { mode: "none" },
+    );
+    setValues(null);
+    setAppliedMapping(saved.id);
+  }
+
+  /** Saves the mapping as it is now, or renames the one applied, then offers the Company's saved mappings again. */
+  async function keepMapping() {
+    if (!mappingEdit || mappingEdit.text.trim() === "") return;
+    const chosen = mapping();
+    const call =
+      mappingEdit.mode === "save"
+        ? chosen && client.saveMapping?.({ name: mappingEdit.text.trim(), mapping: chosen })
+        : appliedMapping && client.renameMapping?.(appliedMapping, mappingEdit.text.trim());
+    if (!call) return;
+    setBusy(true);
+    setError(null);
+    const result = await call;
+    setBusy(false);
+    if (!result.ok) {
+      setError(refusal(result.error));
+      return;
+    }
+    const { mappings } = result.body as RegisterImportMappings;
+    setSavedMappings(mappings);
+    if (mappingEdit.mode === "save") setAppliedMapping(mappings.find((m) => m.name.toLowerCase() === mappingEdit.text.trim().toLowerCase())?.id ?? null);
+    setMappingEdit(null);
+    setMappingSaved(true);
+  }
+
+  async function deleteMapping() {
+    if (!appliedMapping || !client.deleteMapping) return;
+    setBusy(true);
+    setError(null);
+    const result = await client.deleteMapping(appliedMapping);
+    setBusy(false);
+    if (!result.ok) {
+      setError(refusal(result.error));
+      return;
+    }
+    setSavedMappings((result.body as RegisterImportMappings).mappings);
+    setAppliedMapping(null);
+    setMappingSaved(false);
   }
 
   async function choose(chosen: File | undefined) {
@@ -251,8 +366,12 @@ export function RegisterImportWizard({
     if (await read(uploaded, {})) setStep("sheet");
   }
 
-  /** The mapping as the API takes it, with the values matched by hand; null until Subject, Type and Trade are given. */
-  const mapping = (withMatches = true): RegisterImportMapping | null => {
+  /**
+   * The mapping as the API takes it, with the values matched by hand; null until Subject, Type
+   * and Trade are given. Its Packages as chosen (RP-644); `allColumns` (Map values and the Assign &
+   * packages step's counts) reads the Package column whatever the choice.
+   */
+  const mapping = (withMatches = true, allColumns = false): RegisterImportMapping | null => {
     if (subject === null) return null;
     const typeOf = type.from === "column" ? (type.column === null ? null : { column: type.column }) : type.value === null ? null : { value: type.value };
     const tradeOf =
@@ -273,13 +392,23 @@ export function RegisterImportWizard({
       ...(byHand("location") ? { location: byHand("location") } : {}),
       ...(byHand("scopes") ? { scopes: byHand("scopes") } : {}),
       ...(Object.keys(fieldMatches).length > 0 ? { fields: fieldMatches } : {}),
+      ...(packagesChoice.mode === "column" && byHand("package") ? { package: byHand("package") } : {}),
     };
+    const byColumn = (allColumns || packagesChoice.mode === "column") && columnOf("package");
+    const forFile =
+      !allColumns && packagesChoice.mode === "file"
+        ? packagesChoice.how === "new"
+          ? packagesChoice.name.trim() && { new: packagesChoice.name.trim() }
+          : packagesChoice.existing && { existing: packagesChoice.existing }
+        : null;
     return {
       subject: { column: subject },
       type: typeOf,
       trade: tradeOf,
       ...(columnOf("scopes") ? { scopes: columnOf("scopes") } : {}),
       ...(columnOf("location") ? { location: columnOf("location") } : {}),
+      ...(byColumn ? { package: byColumn } : {}),
+      ...(forFile ? { packages: forFile } : {}),
       ...(columnOf("paperRef") ? { paperRef: columnOf("paperRef") } : {}),
       ...(columnOf("assignTo") ? { assignTo: columnOf("assignTo") } : {}),
       ...(formFields.length > 0 ? { fields: formFields } : {}),
@@ -292,7 +421,7 @@ export function RegisterImportWizard({
 
   /** Reads every mapped value column's values, as the API matches them; null when it couldn't. */
   async function fetchValues(): Promise<RegisterValues | null> {
-    const chosen = mapping();
+    const chosen = mapping(true, true);
     if (!file || !sheet || !chosen) return null;
     setBusy(true);
     setError(null);
@@ -369,7 +498,21 @@ export function RegisterImportWizard({
       return;
     }
     setCreated((result.body as { rowsCreated: number }).rowsCreated);
+    // The record now: its new Packages with their numbers (RP-644).
+    const record = await client.get?.(preview.id);
+    if (record?.ok) setPreview(record.body as RegisterImport);
     setStep("result");
+  }
+
+  /** Builds a download of the import and hands it to the browser (RP-644). */
+  function download(build: (imported: RegisterImport, messages: Translate, at: Locale) => { fileName: string; bytes: Uint8Array }) {
+    if (!preview) return;
+    try {
+      const made = build(preview, t, locale);
+      saveDownload(made.fileName, made.bytes);
+    } catch {
+      setError(t("downloads.failed"));
+    }
   }
 
   function startAgain() {
@@ -388,6 +531,10 @@ export function RegisterImportWizard({
     setAllValues(null);
     setDefaultAssignee(null);
     setRules([]);
+    setPackagesChoice({ mode: "none" });
+    setAppliedMapping(null);
+    setMappingEdit(null);
+    setMappingSaved(false);
   }
 
   const back = (to: Step) => (
@@ -422,6 +569,9 @@ export function RegisterImportWizard({
     if (field === "type") setType({ from: "column", column });
     if (field === "trade") setTrade({ from: "column", column });
     setTicked((was) => ({ ...was, [column]: field !== "none" && matchesValues(field, fields) }));
+    // A Package column puts each row in the Package it names; without one, no Package by column.
+    if (field === "package") setPackagesChoice({ mode: "column" });
+    else if (fieldOf(column) === "package") setPackagesChoice((was) => (was.mode === "column" ? { mode: "none" } : was));
   }
 
   /** The fields a column can fill, each once, with the required ones starred. */
@@ -432,6 +582,7 @@ export function RegisterImportWizard({
     { value: "trade", label: `${t("fields.trade")} *` },
     { value: "scopes", label: t("fields.scopes") },
     { value: "location", label: t("fields.location") },
+    { value: "package", label: t("fields.package") },
     { value: "paperRef", label: t("fields.paperRef") },
     { value: "assignTo", label: t("fields.assignTo") },
     ...fields.formFields.map((f) => ({ value: `field:${f.key}`, label: fieldName(`field:${f.key}`) })),
@@ -465,13 +616,17 @@ export function RegisterImportWizard({
     );
 
   const currentValues = values?.fields[valueTab];
-  /** The column mapped to Assign to, by its heading and its letter. */
-  const assignToColumn = (() => {
-    const entry = Object.entries(others).find(([, f]) => f === "assignTo");
+  /** The column mapped to `field` (Assign to, Package), by its heading and its letter. */
+  const mappedColumn = (field: string) => {
+    const entry = Object.entries(others).find(([, f]) => f === field);
     if (!entry || !sheet) return null;
     const column = Number(entry[0]);
     return { name: sheet.headers[column] || columnLetter(column), letter: columnLetter(column) };
-  })();
+  };
+  const assignToColumn = mappedColumn("assignTo");
+  /** One Package for the whole register needs its name, or the Open Package chosen (RP-644). */
+  const packagesReady =
+    packagesChoice.mode !== "file" || (packagesChoice.how === "new" ? packagesChoice.name.trim() !== "" : packagesChoice.existing !== null);
   const tickedColumns = Object.entries(ticked).filter(([column, on]) => on && fieldOf(Number(column)) !== "none").length;
 
   return (
@@ -631,6 +786,82 @@ export function RegisterImportWizard({
         <section aria-label={t("step.map")} className="flex flex-col gap-4">
           {fileCard(
             t("map.fileDetail", { worksheet: sheet.sheet, headerRow: n(sheet.headerRow), rows: n(sheet.dataRows), columns: n(sheet.headers.length) }),
+          )}
+          {(savedMappings.length > 0 || client.saveMapping) && (
+            <div role="group" aria-labelledby="saved-mapping-label" className="flex flex-col gap-2 rounded-md border border-border bg-surface px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span id="saved-mapping-label" className="flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary">
+                  <Icon name="template" size={16} />
+                  {t("mappings.label")}
+                </span>
+                <Select
+                  className="min-w-56"
+                  aria-labelledby="saved-mapping-label"
+                  value={appliedMapping ?? "none"}
+                  onValueChange={(id) => {
+                    setMappingSaved(false);
+                    setMappingEdit(null);
+                    const saved = savedMappings.find((m) => m.id === id);
+                    if (saved) applySaved(saved);
+                    else setAppliedMapping(null);
+                  }}
+                  options={[{ value: "none", label: t("mappings.none") }, ...savedMappings.map((m) => ({ value: m.id, label: m.name }))]}
+                />
+                {mappingEdit === null && (
+                  <span className="ms-auto flex flex-wrap items-center gap-2">
+                    {appliedMapping && client.renameMapping && (
+                      <Button variant="ghost" size="sm" onClick={() => setMappingEdit({ mode: "rename", text: savedMappings.find((m) => m.id === appliedMapping)?.name ?? "" })}>
+                        <Icon name="pencil" />
+                        {t("mappings.rename")}
+                      </Button>
+                    )}
+                    {appliedMapping && client.deleteMapping && (
+                      <Button variant="ghost" size="sm" onClick={() => void deleteMapping()} disabled={busy}>
+                        <Icon name="trash" />
+                        {t("mappings.delete")}
+                      </Button>
+                    )}
+                    {client.saveMapping && (
+                      <Button variant="secondary" size="sm" onClick={() => setMappingEdit({ mode: "save", text: "" })} disabled={mapping() === null}>
+                        <Icon name="plus" />
+                        {t("mappings.save")}
+                      </Button>
+                    )}
+                  </span>
+                )}
+              </div>
+              {mappingEdit && (
+                <form
+                  className="flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void keepMapping();
+                  }}
+                >
+                  <Input
+                    className="min-w-56 flex-1"
+                    aria-label={t(mappingEdit.mode === "save" ? "mappings.saveAs" : "mappings.renameAs")}
+                    placeholder={t(mappingEdit.mode === "save" ? "mappings.saveAs" : "mappings.renameAs")}
+                    maxLength={100}
+                    value={mappingEdit.text}
+                    onChange={(e) => setMappingEdit({ ...mappingEdit, text: e.target.value })}
+                  />
+                  <Button type="submit" size="sm" disabled={busy || mappingEdit.text.trim() === ""}>
+                    {t("mappings.saveButton")}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setMappingEdit(null)}>
+                    {t("mappings.cancel")}
+                  </Button>
+                </form>
+              )}
+              {mappingSaved && !mappingEdit && (
+                <p role="status" className="flex items-center gap-1.5 text-[13px] text-success-fg">
+                  <Icon name="circle-check" size={14} />
+                  {t("mappings.saved")}
+                </p>
+              )}
+              <p className="text-[12.5px] text-muted">{t("mappings.help")}</p>
+            </div>
           )}
           <p className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
             {(["subject", "type", "trade"] as const).map((field) => {
@@ -945,10 +1176,32 @@ export function RegisterImportWizard({
           n={n}
           back={back(values && values.fields.length > 0 ? "values" : "map")}
           next={
-            <Button onClick={() => void validate()} disabled={busy || mapping() === null}>
+            <Button onClick={() => void validate()} disabled={busy || mapping() === null || !packagesReady}>
               {t("map.validate")}
               <Icon name="arrow-right" />
             </Button>
+          }
+          aside={
+            <PackagesCard
+              t={t}
+              locale={locale}
+              n={n}
+              packages={fields.packages}
+              choice={packagesChoice}
+              onChoice={setPackagesChoice}
+              column={mappedColumn("package")}
+              values={allValues?.fields.find((f) => f.field === "package")}
+              picks={matches.package ?? {}}
+              onPick={(key, pick) =>
+                setMatches((was) => {
+                  const next = { ...was.package };
+                  if (pick === undefined) delete next[key];
+                  else next[key] = pick;
+                  return { ...was, package: next };
+                })
+              }
+              dataRows={sheet.dataRows}
+            />
           }
         />
       )}
@@ -964,6 +1217,14 @@ export function RegisterImportWizard({
             <p className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-4 py-3 text-[14px]">
               <Icon name="alert-triangle" size={18} className="text-danger-fg" />
               <span className="flex-1">{t("validate.fixHint", { good: n(preview.rowsTotal - preview.rowsRejected), count: preview.rowsTotal - preview.rowsRejected })}</span>
+              <Button variant="secondary" size="sm" onClick={() => download(logDownload)}>
+                <Icon name="download" />
+                {t("validate.downloadLog")}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => download(rejectedRowsDownload)}>
+                <Icon name="file-download" />
+                {t("validate.rejectedRows", { n: n(preview.rowsRejected) })}
+              </Button>
               {file && (
                 <Button variant="ghost" size="sm" onClick={() => void validate()} disabled={busy}>
                   <Icon name="refresh" />
@@ -971,6 +1232,27 @@ export function RegisterImportWizard({
                 </Button>
               )}
             </p>
+          )}
+          {(preview.mapping.package !== undefined || preview.mapping.packages !== undefined) && (
+            <section aria-labelledby="validate-packages" className="flex flex-col gap-2 rounded-md border border-border bg-surface px-4 py-3">
+              <h2 id="validate-packages" className="flex items-center gap-1.5 text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">
+                <Icon name="packages" size={14} />
+                {t("validate.packages")}
+              </h2>
+              {preview.packages.length === 0 ? (
+                <p className="text-[13px] text-muted">{t("validate.noPackage")}</p>
+              ) : (
+                <ul className="flex flex-col gap-1.5">
+                  {preview.packages.map((p) => (
+                    <li key={p.package?.id ?? `new:${p.newName}`} className="flex flex-wrap items-center gap-2 text-[14px]">
+                      <span className="w-24 shrink-0 text-[12.5px] text-muted">{p.package ? t("validate.addTo") : t("validate.newPackage")}</span>
+                      <PackageCell value={{ text: "", match: p.package, new: p.package ? null : p.newName }} locale={locale} newLabel={t("validate.newPackage")} />
+                      <span className="ms-auto text-[12.5px] text-muted">{t("packages.rows", { count: p.rows, n: n(p.rows) })}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           )}
           <Tabs defaultValue={preview.rowsRejected > 0 ? "errors" : "imported"}>
             <TabsList aria-label={t("validate.tabs")}>
@@ -1030,11 +1312,27 @@ export function RegisterImportWizard({
           <p className="text-[14px] text-muted">
             <bdi>{preview.fileName}</bdi>
           </p>
-          <dl className="flex gap-8 rounded-md bg-surface-subtle px-5 py-3 text-[13px]">
+          <dl className="flex flex-wrap justify-center gap-8 rounded-md bg-surface-subtle px-5 py-3 text-[13px]">
             <div>
               <dt className="text-muted">{t("result.draftsLabel")}</dt>
               <dd className="font-bold">{n(created)}</dd>
             </div>
+            {/* RP-644: each Package the import created or added to, by its number. */}
+            {preview.packages.map((p) => (
+              <div key={p.package?.id ?? `new:${p.newName}`} className="text-start">
+                <dt className="text-muted">{p.newName !== null ? t("result.newPackage") : t("result.addedTo")}</dt>
+                <dd className="flex items-center gap-2 font-bold">
+                  {p.package ? (
+                    <bdi dir="ltr" translate="no">
+                      {p.package.number}
+                    </bdi>
+                  ) : (
+                    <bdi>{p.newName}</bdi>
+                  )}
+                  <span className="font-normal text-muted">{n(p.rows)}</span>
+                </dd>
+              </div>
+            ))}
             <div>
               <dt className="text-muted">{t("result.leftOut")}</dt>
               <dd className="font-bold text-danger-fg">{n(preview.rowsRejected)}</dd>
@@ -1042,6 +1340,12 @@ export function RegisterImportWizard({
           </dl>
           <div className="flex flex-wrap items-center justify-center gap-3">
             {resultActions?.(preview, created)}
+            {preview.rowsRejected > 0 && (
+              <Button variant="secondary" onClick={() => download(rejectedRowsDownload)}>
+                <Icon name="download" />
+                {t("result.downloadRejected", { n: n(preview.rowsRejected) })}
+              </Button>
+            )}
             <Button variant="ghost" onClick={startAgain}>
               {t("result.another")}
             </Button>
@@ -1083,6 +1387,7 @@ function AssignStep({
   n,
   back,
   next,
+  aside,
 }: {
   fields: RegisterImportFields;
   locale: Locale;
@@ -1106,6 +1411,8 @@ function AssignStep({
   n: (value: number) => string;
   back: ReactNode;
   next: ReactNode;
+  /** The step's second card, beside Assign to: the Packages (RP-644). */
+  aside?: ReactNode;
 }) {
   const people = new Map(fields.members.map((m) => [m.id, m]));
   const nameOf = (id: string | null) => (id === null || id === me.id ? me.name[locale] : (people.get(id)?.name[locale] ?? "—"));
@@ -1234,6 +1541,7 @@ function AssignStep({
           </div>
           <p className="text-[13px] text-muted">{t("help")}</p>
         </section>
+        {aside}
       </div>
       <div className="flex items-center justify-between">
         {back}
