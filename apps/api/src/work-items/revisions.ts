@@ -36,6 +36,12 @@ export function createRevision(
         select storage_key, source_storage_key from app.revision_document_copies(${id}::uuid)
       `.execute(trx);
       await copy(copies);
+      // Its Checklist Template pick came over with its answers (app.fill_revision): its copy now too, the
+      // Version the revised item holds (RP-651). A Revision held by someone else gets it on their first save.
+      const { rows: synced } = await sql<{ outcome: string }>`
+        select app.sync_work_item_checklists(${id}::uuid, ${now}) as outcome
+      `.execute(trx);
+      checkedOutcome(synced[0]!.outcome, ["synced", "not_editable"]);
     }
     return { ok: true, id };
   }));
