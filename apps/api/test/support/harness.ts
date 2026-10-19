@@ -1,8 +1,17 @@
 import { randomInt, randomUUID } from "node:crypto";
-import { closeOnboardingLead, createEngineer, listOnboardingLeads, onboardCompany, type CloseLeadResult } from "@rabaed/admin/services";
+import {
+  closeOnboardingLead,
+  confirmRegisterImportFor,
+  createEngineer,
+  listOnboardingLeads,
+  onboardCompany,
+  previewRegisterImportFor,
+  type CloseLeadResult,
+} from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type {
+  AdminPreviewRegisterImportRequest,
   BaseRole,
   CreateProjectRequest,
   InviteMemberRequest,
@@ -124,6 +133,14 @@ export interface TestApi {
   onboardingLeads(reason: string): Promise<OnboardingLeads["leads"]>;
   /** A Rabaed Engineer closes an open onboarding lead, with a reason, through Rabaed Admin's service. */
   closeOnboardingLead(leadId: string, reason: string): Promise<CloseLeadResult>;
+  /**
+   * A new Rabaed Engineer (named `fullName`) imports a register for a Participant through
+   * Rabaed Admin's service (RP-645): previews it as its default Member, then confirms it.
+   */
+  engineerImport(
+    request: AdminPreviewRegisterImportRequest,
+    fullName?: string,
+  ): Promise<{ engineer: { id: string; email: string; fullName: string }; importId: string; rowsCreated: number }>;
   /** Accepts an invitation and returns the signed-in caller. */
   acceptInvitation(token: string, password?: string): Promise<Caller>;
   /** Onboards a Company and signs its Authorized Person in. */
@@ -281,6 +298,16 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
 
     async closeOnboardingLead(leadId, reason) {
       return closeOnboardingLead(adminDb, await theEngineer(), leadId, reason, now());
+    },
+
+    async engineerImport(request, fullName = "Test Engineer") {
+      const engineer = { email: uniqueEmail("engineer"), fullName };
+      const engineerId = await createEngineer(migratorDb, { ...engineer, password: DEFAULT_PASSWORD });
+      const previewed = await previewRegisterImportFor(adminDb, engineerId, request, now());
+      if (!previewed.ok) throw new Error(`engineer preview: ${previewed.reason}`);
+      const confirmed = await confirmRegisterImportFor(adminDb, engineerId, previewed.id, request.for.reason, now());
+      if (!confirmed.ok) throw new Error(`engineer confirm: ${confirmed.reason}`);
+      return { engineer: { id: engineerId, ...engineer }, importId: previewed.id, rowsCreated: confirmed.rowsCreated };
     },
 
     async acceptInvitation(token, password = DEFAULT_PASSWORD) {

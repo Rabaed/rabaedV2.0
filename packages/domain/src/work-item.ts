@@ -783,5 +783,15 @@ export const workItemHistory = z.object({
       answersForm: formSchema.nullable().optional(),
     }),
   ),
+  /**
+   * The Submittal Register Import that created the Draft (spec RP-631 story 35; RP-645):
+   * which import, and who ran it, a Member of the viewer's own Company or "Rabaed" for a
+   * Rabaed Engineer's (`byRabaed`, `memberName` null), never the Engineer. No time (its
+   * import's is when the Draft was started, scenario 61). Only for the importing Company's
+   * Members (visibility.md RP-589-3); absent for anyone else and for an item not imported.
+   */
+  imported: z
+    .object({ importId: z.uuid(), fileName: z.string(), byRabaed: z.boolean(), memberName: bilingualText.nullable() })
+    .optional(),
 });
 export type WorkItemHistory = z.infer<typeof workItemHistory>;

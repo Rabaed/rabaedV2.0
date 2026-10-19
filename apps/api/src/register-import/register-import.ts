@@ -26,6 +26,35 @@ import { openSpreadsheet, SpreadsheetError, type SheetTable, type Spreadsheet, t
 // enforces and keeps the import `previewed`; app.confirm_register_import creates the
 // Drafts. Reads go through row-level security: only the importing Participant's
 // Members read an import (visibility.md RP-589-1), a preview only its importer.
+//
+// The one import, for two importers (RP-645): a Member importing their own Company's
+// register (the api's routes), and a Rabaed Engineer importing it for a Participant in
+// Rabaed Admin, which runs this very code as the Participant's default Member, who stands
+// where the importer stands. Every check is the same; the import is the Engineer's, which
+// the Company reads as "Rabaed" (visibility.md RP-589-3).
+
+type Trx = Transaction<Database>;
+
+/**
+ * Who imports, and the transaction an import step runs in, with `app.member_id` set:
+ * the Member importing (memberImporter), or the default Member a Rabaed Engineer imports
+ * for (Rabaed Admin, which logs each step as an admin_action with the Engineer's reason).
+ * Each step runs exactly one transaction.
+ */
+export interface RegisterImporter {
+  run<T>(fn: (trx: Trx) => Promise<T>): Promise<T>;
+  /**
+   * The Rabaed Engineer and the Participant they import for (null once the import names it:
+   * reading or confirming their own); null for a Member's own import.
+   */
+  engineer: { id: string; participantId: string | null } | null;
+}
+
+/** A Member importing their own Company's register: each step one transaction as them, through row-level security. */
+export const memberImporter = (db: Db, memberId: string): RegisterImporter => ({
+  run: (fn) => withMember(db, memberId, fn),
+  engineer: null,
+});
 
 /** A register that can't be read, or a choice in it that doesn't fit (the reader's refusals, with its numbers). */
 type Unreadable = { ok: false; reason: SpreadsheetRefusal; details?: Record<string, number> };
@@ -45,18 +74,16 @@ const confirmRefusals = ["not_found", "project_closed", "nothing_to_import", "pr
 export type ConfirmRegisterImportResult = { ok: true; rowsCreated: number } | { ok: false; reason: (typeof confirmRefusals)[number] };
 
 /**
- * Whether the Member may import on the Project: one of their Projects, with a Submittals Type
+ * Whether the importer may import on the Project: one of their Projects, with a Submittals Type
  * they may raise by the rule the preview and the confirm check (app.register_import_raisable_types).
  */
-function mayImport(db: Db, memberId: string, projectId: string): Promise<NotTheirs | null> {
-  return withMember(db, memberId, async (trx) => {
-    const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-    if (!project) return { ok: false, reason: "not_found" };
-    const { rows } = await sql<{ raisable: number }>`
-      select count(*)::int as raisable from app.register_import_raisable_types(${projectId}::uuid)
-    `.execute(trx);
-    return rows[0]!.raisable === 0 ? { ok: false, reason: "forbidden" } : null;
-  });
+async function mayImport(trx: Trx, projectId: string): Promise<NotTheirs | null> {
+  const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+  if (!project) return { ok: false, reason: "not_found" };
+  const { rows } = await sql<{ raisable: number }>`
+    select count(*)::int as raisable from app.register_import_raisable_types(${projectId}::uuid)
+  `.execute(trx);
+  return rows[0]!.raisable === 0 ? { ok: false, reason: "forbidden" } : null;
 }
 
 /** Runs `read` on the uploaded register, answering the reader's refusal as a result. */
@@ -74,34 +101,34 @@ async function readingRegister<T>(file: RegisterImportFile, read: (spreadsheet: 
  * Reads an uploaded register for the wizard: its sheets, one sheet's top rows, its columns
  * from the header row, and a field suggested for each column from its heading (RP-639).
  */
-export async function readRegister(db: Db, memberId: string, projectId: string, request: ReadRegisterRequest): Promise<ReadRegisterResult> {
-  const refused = await mayImport(db, memberId, projectId);
-  if (refused) return refused;
-  const read = await readingRegister(request.file, (spreadsheet) => ({ spreadsheet, table: spreadsheet.table({ sheet: request.sheet, headerRow: request.headerRow }) }));
-  if (!read.ok) return read;
-  const { spreadsheet, table } = read.value;
-  const targets = await withMember(db, memberId, async (trx) => fieldTargets(await registerContext(trx, projectId)));
-  const first = table.rows[0];
-  return {
-    ok: true,
-    sheet: {
-      sheets: spreadsheet.sheets.map((name, index) => ({ name, rows: spreadsheet.rowCounts[index]! })),
-      sheet: table.sheet,
-      headerRow: table.headerRow,
-      top: spreadsheet.top(table.sheet, registerTopRows).map((row) => ({ rowNo: row.rowNo, cells: row.values })),
-      headers: table.headers,
-      examples: table.headers.map((_, column) => first?.values[column] ?? ""),
-      dataRows: table.rows.length,
-      suggestions: suggestRegisterFields(table.headers, targets),
-    },
-  };
+export function readRegister(importer: RegisterImporter, projectId: string, request: ReadRegisterRequest): Promise<ReadRegisterResult> {
+  return importer.run(async (trx): Promise<ReadRegisterResult> => {
+    const refused = await mayImport(trx, projectId);
+    if (refused) return refused;
+    const read = await readingRegister(request.file, (spreadsheet) => ({ spreadsheet, table: spreadsheet.table({ sheet: request.sheet, headerRow: request.headerRow }) }));
+    if (!read.ok) return read;
+    const { spreadsheet, table } = read.value;
+    const targets = fieldTargets(await registerContext(trx, projectId));
+    const first = table.rows[0];
+    return {
+      ok: true,
+      sheet: {
+        sheets: spreadsheet.sheets.map((name, index) => ({ name, rows: spreadsheet.rowCounts[index]! })),
+        sheet: table.sheet,
+        headerRow: table.headerRow,
+        top: spreadsheet.top(table.sheet, registerTopRows).map((row) => ({ rowNo: row.rowNo, cells: row.values })),
+        headers: table.headers,
+        examples: table.headers.map((_, column) => first?.values[column] ?? ""),
+        dataRows: table.rows.length,
+        suggestions: suggestRegisterFields(table.headers, targets),
+      },
+    };
+  });
 }
 
-/** What a register may fill on one of the Member's Projects (the Map fields and Map values steps). */
-export async function getRegisterImportFields(db: Db, memberId: string, projectId: string): Promise<RegisterImportFields | NotTheirs> {
-  const refused = await mayImport(db, memberId, projectId);
-  if (refused) return refused;
-  return withMember(db, memberId, async (trx) => (await registerContext(trx, projectId)).fields);
+/** What a register may fill on one of the importer's Projects (the Map fields and Map values steps). */
+export function getRegisterImportFields(importer: RegisterImporter, projectId: string): Promise<RegisterImportFields | NotTheirs> {
+  return importer.run(async (trx) => (await mayImport(trx, projectId)) ?? (await registerContext(trx, projectId)).fields);
 }
 
 /** Every column the mapping names. */
@@ -132,17 +159,18 @@ function labelled(mapping: RegisterImportMapping, context: RegisterContext): Reg
  * Map values (RP-639, story 10): each mapped column of a value field, every different
  * value in it once, with how many rows hold it and what it matches.
  */
-export async function registerImportValues(
-  db: Db,
-  memberId: string,
-  projectId: string,
-  request: PreviewRegisterImportRequest,
-): Promise<{ ok: true; values: RegisterValues } | Unreadable | NotTheirs | { ok: false; reason: "column_not_found" | "field_not_found" }> {
-  const refused = await mayImport(db, memberId, projectId);
-  if (refused) return refused;
-  const mapped = await mappedTable(request);
-  if (!mapped.ok) return mapped;
-  return withMember(db, memberId, async (trx) => {
+export type RegisterImportValuesResult =
+  | { ok: true; values: RegisterValues }
+  | Unreadable
+  | NotTheirs
+  | { ok: false; reason: "column_not_found" | "field_not_found" };
+
+export function registerImportValues(importer: RegisterImporter, projectId: string, request: PreviewRegisterImportRequest): Promise<RegisterImportValuesResult> {
+  return importer.run(async (trx) => {
+    const refused = await mayImport(trx, projectId);
+    if (refused) return refused;
+    const mapped = await mappedTable(request);
+    if (!mapped.ok) return mapped;
     const context = await registerContext(trx, projectId);
     const mapping = labelled(request.mapping, context);
     if (!mapping) return { ok: false, reason: "field_not_found" } as const;
@@ -152,31 +180,36 @@ export async function registerImportValues(
 
 /**
  * Previews an uploaded register: reads the sheet from the header row, maps and matches
- * each row, and keeps the checked rows as a `previewed` import of the caller's
- * Participant. Nothing is created in the Project.
+ * each row, and keeps the checked rows as a `previewed` import of the importer's
+ * Participant (an Engineer's for the Participant they import for). Nothing is created in
+ * the Project.
  */
-export async function previewRegisterImport(
-  db: Db,
-  memberId: string,
+export function previewRegisterImport(
+  importer: RegisterImporter,
   projectId: string,
   request: PreviewRegisterImportRequest,
   now: Date,
 ): Promise<PreviewRegisterImportResult> {
-  const refused = await mayImport(db, memberId, projectId);
-  if (refused) return refused;
-  const mapped = await mappedTable(request);
-  if (!mapped.ok) return mapped;
-  const { table } = mapped;
-  return withMember(db, memberId, async (trx): Promise<PreviewRegisterImportResult> => {
+  return importer.run(async (trx): Promise<PreviewRegisterImportResult> => {
+    const refused = await mayImport(trx, projectId);
+    if (refused) return refused;
+    const mapped = await mappedTable(request);
+    if (!mapped.ok) return mapped;
+    const { table } = mapped;
     const context = await registerContext(trx, projectId);
     const mapping = labelled(request.mapping, context);
     if (!mapping) return { ok: false, reason: "field_not_found" };
-    const { rows } = await sql<{ outcome: string; import_id: string | null }>`
-      select outcome, import_id from app.preview_register_import(
-        ${projectId}::uuid, ${request.file.fileName}, ${table.sheet}, ${table.headerRow}, ${JSON.stringify(table.headers)}::jsonb,
+    const args = sql`${projectId}::uuid, ${request.file.fileName}, ${table.sheet}, ${table.headerRow}, ${JSON.stringify(table.headers)}::jsonb,
         ${JSON.stringify(mapping)}::jsonb, ${JSON.stringify(mappedRows(table, mapping, context))}::jsonb,
-        ${"value" in mapping.type ? mapping.type.value : null}, ${"value" in mapping.trade ? mapping.trade.value : null}::uuid, ${now})
-    `.execute(trx);
+        ${"value" in mapping.type ? mapping.type.value : null}, ${"value" in mapping.trade ? mapping.trade.value : null}::uuid, ${now}`;
+    const { engineer } = importer;
+    if (engineer && !engineer.participantId) throw new Error("An Engineer's preview names the Participant it is for");
+    const { rows } = await (
+      engineer
+        ? sql<{ outcome: string; import_id: string | null }>`
+            select outcome, import_id from app.preview_register_import_by_engineer(${engineer.id}::uuid, ${engineer.participantId}::uuid, ${args})`
+        : sql<{ outcome: string; import_id: string | null }>`select outcome, import_id from app.preview_register_import(${args})`
+    ).execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["previewed", ...previewRefusals]);
     return outcome === "previewed" ? { ok: true, id: rows[0]!.import_id! } : { ok: false, reason: outcome };
   });
@@ -187,8 +220,11 @@ type ImportRow = {
   project_id: string;
   file_name: string;
   status: "previewed" | "created";
-  run_by_member_id: string;
-  run_by_name: BilingualText;
+  run_by_member_id: string | null;
+  run_by_name: BilingualText | null;
+  /** Who raises its unassigned rows: the importing Member, or an Engineer's default Member. */
+  raiser_id: string;
+  raiser_name: BilingualText;
   rows_total: number;
   rows_rejected: number;
   rows_created: number | null;
@@ -197,16 +233,20 @@ type ImportRow = {
   headers: string[];
   mapping: unknown;
 };
-type Trx = Transaction<Database>;
-type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping">;
+type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping" | "raiser_id" | "raiser_name">;
 
-/** The imports the Member reads (row-level security) matching `where`, by file name, with who ran each. */
+/**
+ * The imports the reader reads (row-level security; Rabaed Admin reads past it) matching
+ * `where`, by file name, with the Member who ran each: none for an Engineer's ("Rabaed").
+ */
 function importsWhere(trx: Trx, where: RawBuilder<unknown>): Promise<ImportRow[]> {
   return sql<ImportRow>`
     select i.id, i.project_id, i.file_name, i.status, i.run_by_member_id, m.full_name as run_by_name,
+      r.id as raiser_id, r.full_name as raiser_name,
       i.rows_total, i.rows_rejected, i.rows_created, i.sheet, i.header_row, i.headers, i.mapping
     from submittal_register_import i
-    join member m on m.id = i.run_by_member_id
+    left join member m on m.id = i.run_by_member_id
+    join member r on r.id = coalesce(i.run_by_member_id, i.default_member_id)
     where ${where}
     order by lower(i.file_name), i.id
   `
@@ -218,7 +258,7 @@ const toSummary = (r: SummaryRow): RegisterImportSummary => ({
   id: r.id,
   fileName: r.file_name,
   status: r.status,
-  runBy: { id: r.run_by_member_id, name: r.run_by_name },
+  runBy: r.run_by_member_id && r.run_by_name ? { id: r.run_by_member_id, name: r.run_by_name } : null,
   rowsTotal: r.rows_total,
   rowsRejected: r.rows_rejected,
   rowsCreated: r.rows_created,
@@ -237,11 +277,18 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
   });
 }
 
-/** One import the Member reads, with its rows; null when they don't (another Company's, a colleague's preview, or none). */
-export function getRegisterImport(db: Db, memberId: string, importId: string): Promise<RegisterImport | null> {
-  return withMember(db, memberId, async (trx) => {
-    const [r] = await importsWhere(trx, sql`i.id = ${importId}::uuid`);
+/**
+ * One import the importer reads, with its rows; null when they don't (another Company's, a
+ * colleague's preview, or none). An Engineer reads only their own (Rabaed Admin).
+ */
+export function getRegisterImport(importer: RegisterImporter, importId: string): Promise<RegisterImport | null> {
+  return importer.run(async (trx) => {
+    const { engineer } = importer;
+    const [r] = await importsWhere(trx, engineer ? sql`i.id = ${importId}::uuid and i.run_by_engineer_id = ${engineer.id}::uuid` : sql`i.id = ${importId}::uuid`);
     if (!r) return null;
+    const results = engineer
+      ? sql`app.register_import_results_by_engineer(${engineer.id}::uuid, ${importId}::uuid)`
+      : sql`app.register_import_results(${importId}::uuid)`;
     const { rows } = await sql<{
       row_no: number;
       cells: string[];
@@ -279,7 +326,7 @@ export function getRegisterImport(db: Db, memberId: string, importId: string): P
         r.paper_ref, r.field_cells, r.invalid_fields, r.assignee_text, am.id as assignee_id, am.full_name as assignee_name, r.reasons,
         res.created, res.work_item_id
       from submittal_register_import_row r
-      join app.register_import_results(${importId}::uuid) res on res.row_no = r.row_no
+      join ${results} res on res.row_no = r.row_no
       left join work_item_type t on t.id = r.work_item_type_id
       left join dimension_value tv on tv.id = r.trade_id
       left join dimension_value lv on lv.id = r.location_id
@@ -292,6 +339,7 @@ export function getRegisterImport(db: Db, memberId: string, importId: string): P
     return {
       ...toSummary(r),
       projectId: r.project_id,
+      defaultRaiser: { id: r.raiser_id, name: r.raiser_name },
       sheet: r.sheet,
       headerRow: r.header_row,
       headers: r.headers,
@@ -318,12 +366,16 @@ export function getRegisterImport(db: Db, memberId: string, importId: string): P
   });
 }
 
-/** Creates the Drafts of the Member's own preview: one per good row, all or nothing. */
-export function confirmRegisterImport(db: Db, memberId: string, importId: string, now: Date): Promise<ConfirmRegisterImportResult> {
-  return withMember(db, memberId, async (trx): Promise<ConfirmRegisterImportResult> => {
-    const { rows } = await sql<{ outcome: string; rows_created: number | null }>`
-      select outcome, rows_created from app.confirm_register_import(${importId}::uuid, ${now})
-    `.execute(trx);
+/** Creates the Drafts of the importer's own preview: one per good row, all or nothing. */
+export function confirmRegisterImport(importer: RegisterImporter, importId: string, now: Date): Promise<ConfirmRegisterImportResult> {
+  return importer.run(async (trx): Promise<ConfirmRegisterImportResult> => {
+    const { engineer } = importer;
+    const { rows } = await (
+      engineer
+        ? sql<{ outcome: string; rows_created: number | null }>`
+            select outcome, rows_created from app.confirm_register_import_by_engineer(${engineer.id}::uuid, ${importId}::uuid, ${now})`
+        : sql<{ outcome: string; rows_created: number | null }>`select outcome, rows_created from app.confirm_register_import(${importId}::uuid, ${now})`
+    ).execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...confirmRefusals]);
     return outcome === "created" ? { ok: true, rowsCreated: rows[0]!.rows_created! } : { ok: false, reason: outcome };
   });

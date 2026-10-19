@@ -141,7 +141,10 @@ export interface AdminActionTable {
     | "add_default_stage"
     | "rename_default_stage"
     | "reorder_default_stages"
-    | "refuse_workflow_publish";
+    | "refuse_workflow_publish"
+    | "read_register_import"
+    | "preview_register_import"
+    | "confirm_register_import";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -387,7 +390,10 @@ export interface SubmittalRegisterImportTable {
   id: Generated<string>;
   project_id: string;
   participant_id: string;
-  run_by_member_id: string;
+  /** Null for a Rabaed Engineer's import (RP-645), which the Company reads as "Rabaed"; its Engineer and default Member are never granted. */
+  run_by_member_id: string | null;
+  /** An Engineer's import's default Member, who raises its unassigned rows (RP-645). */
+  default_member_id: string | null;
   file_name: string;
   sheet: string;
   header_row: number;

@@ -611,3 +611,133 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
     expect(made).toEqual([]);
   });
 });
+
+describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1's default Member (RP-645)", () => {
+  let adminDb: Db;
+  let engineer = "";
+  let defaultMember = ""; // C1's engineer, seeing all of the Project: raises what nobody else is assigned.
+  let importId = "";
+  let drafts: string[] = [];
+
+  /** `query` on Rabaed Admin's connection, acting as `memberId` (as Rabaed Admin runs the api's import code). */
+  const asAdmin = <T extends object>(memberId: string | null, query: ReturnType<typeof sql<T>>) =>
+    adminDb.transaction().execute(async (trx) => {
+      if (memberId) await sql`select set_config('app.member_id', ${memberId}, true)`.execute(trx);
+      return (await query.execute(trx)).rows;
+    });
+  const adminFailure = (memberId: string | null, query: ReturnType<typeof sql>) =>
+    asAdmin(memberId, query).then(
+      () => null,
+      (error: { code?: string }) => error.code ?? "?",
+    );
+  const previewArgs = (of: Row[]) =>
+    sql`${projectId}::uuid, 'engineer-register.xlsx', 'Register', 1, ${JSON.stringify(headers)}::jsonb, ${JSON.stringify(mapping)}::jsonb,
+      ${JSON.stringify(of.map(asMatched))}::jsonb, null, null, now()`;
+  const engineerPreview = (by: string, participant: string, memberId: string, of: Row[] = rows) =>
+    asAdmin<{ outcome: string; import_id: string | null }>(
+      memberId,
+      sql`select outcome, import_id from app.preview_register_import_by_engineer(${by}::uuid, ${participant}::uuid, ${previewArgs(of)})`,
+    ).then((r) => r[0]!);
+  const engineerConfirm = (by: string, memberId: string, id: string) =>
+    asAdmin<{ outcome: string; rows_created: number | null }>(
+      memberId,
+      sql`select outcome, rows_created from app.confirm_register_import_by_engineer(${by}::uuid, ${id}::uuid, now())`,
+    ).then((r) => r[0]!);
+  const importOf = (as: string, workItemId: string) =>
+    call<{ import_id: string; file_name: string; member_name: unknown; by_rabaed: boolean }>(as, sql`select * from app.register_import_of_work_item(${workItemId}::uuid)`);
+
+  beforeAll(async () => {
+    adminDb = createDb(urls.admin, { max: 1 });
+    engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Yousef Seam') returning id", [email("importing-eng")]);
+    defaultMember = await member(c1.id, "default");
+    await call(c1.ap, sql<{ outcome: string }>`select app.add_project_member(${c1Participant}::uuid, ${defaultMember}::uuid, now())`);
+    for (const kind of ["trade", "location"]) {
+      await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${defaultMember}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`);
+    }
+    await outcome(c1.ap, sql`select app.set_project_member_positions(${c1Participant}::uuid, ${defaultMember}::uuid, ${["engineer"]}::text[]) as outcome`);
+  });
+  afterAll(() => adminDb.destroy());
+
+  it("runs an Engineer's preview, confirm and results only on Rabaed Admin's connection, and a Member's only on the app role", async () => {
+    for (const query of [
+      sql`select * from app.preview_register_import_by_engineer(${engineer}::uuid, ${c1Participant}::uuid, ${previewArgs(rows)})`,
+      sql`select * from app.confirm_register_import_by_engineer(${engineer}::uuid, ${randomUUID()}::uuid, now())`,
+      sql`select * from app.register_import_results_by_engineer(${engineer}::uuid, ${randomUUID()}::uuid)`,
+      sql`select * from app.register_import_raisers(${projectId}::uuid)`,
+    ]) {
+      expect(await failure(defaultMember, query)).toBe("42501");
+    }
+    expect(await adminFailure(defaultMember, sql`select * from app.preview_register_import(${previewArgs(rows)})`)).toBe("42501");
+    expect(await adminFailure(defaultMember, sql`select * from app.confirm_register_import(${randomUUID()}::uuid, now())`)).toBe("42501");
+  });
+
+  it("lists who may import for each Participant: C1's Members, and none of K1's (a Consultant raises no Submittals)", async () => {
+    const raisers = await asAdmin<{ participant_id: string; member_id: string; may_import: boolean }>(
+      null,
+      sql`select * from app.register_import_raisers(${projectId}::uuid)`,
+    );
+    expect(raisers).toContainEqual({ participant_id: c1Participant, member_id: defaultMember, may_import: true });
+    expect(raisers.filter((r) => r.member_id === k1.member)).toEqual([expect.objectContaining({ may_import: false })]);
+  });
+
+  it("refuses an Engineer's preview for a Participant the default Member isn't on", async () => {
+    expect((await engineerPreview(engineer, c1Participant, k1.member)).outcome).toBe("not_found");
+  });
+
+  it("previews as the default Member, recorded as the Engineer's: no Member of C1 reads the preview, nor ever its Engineer", async () => {
+    const previewed = await engineerPreview(engineer, c1Participant, defaultMember);
+    expect(previewed.outcome).toBe("previewed");
+    importId = previewed.import_id!;
+    // The same checks as a Member's import: the third row is bad three times.
+    const results = await asAdmin<{ row_no: number; created: boolean }>(
+      defaultMember,
+      sql`select row_no, created from app.register_import_results_by_engineer(${engineer}::uuid, ${importId}::uuid)`,
+    );
+    expect(results.map((r) => r.row_no)).toEqual([2, 3, 4]);
+    for (const as of [defaultMember, c1Colleague]) {
+      expect(await importsSeen(as)).not.toContain(importId);
+      expect(await rowsSeen(as, importId)).toEqual([]);
+    }
+    expect(await failure(defaultMember, sql`select run_by_engineer_id from submittal_register_import`)).toBe("42501");
+  });
+
+  it("is confirmed only by its Engineer, acting as its default Member", async () => {
+    const other = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Other Seam') returning id", [email("other-eng")]);
+    expect(await engineerConfirm(other, defaultMember, importId)).toEqual({ outcome: "not_found", rows_created: null });
+    expect(await engineerConfirm(engineer, c1Colleague, importId)).toEqual({ outcome: "not_found", rows_created: null });
+    expect(await confirm(defaultMember, importId)).toEqual({ outcome: "not_found", rows_created: null });
+  });
+
+  describe("on confirm", () => {
+    beforeAll(async () => {
+      expect(await engineerConfirm(engineer, defaultMember, importId)).toEqual({ outcome: "created", rows_created: 2 });
+      drafts = (await results(defaultMember, importId)).flatMap((r) => (r.work_item_id ? [r.work_item_id] : []));
+    });
+
+    it("makes the default Member the Drafts' raiser, the Engineer their created event's actor, and names the import", async () => {
+      expect(drafts).toHaveLength(2);
+      const { rows: items } = await migrator.query("select created_by_member_id from work_item where id = any ($1)", [drafts]);
+      for (const i of items) expect(i).toEqual({ created_by_member_id: defaultMember });
+      const { rows: events } = await migrator.query(
+        "select actor_member_id, actor_engineer_id, payload ->> 'import_id' as import_id from work_item_event where work_item_id = any ($1) and type = 'created'",
+        [drafts],
+      );
+      for (const e of events) expect(e).toEqual({ actor_member_id: null, actor_engineer_id: engineer, import_id: importId });
+    });
+
+    it("RP-589-3: C1's Members read the import as Rabaed's, with no Member and no time; K1, C2 and the Owner read nothing", async () => {
+      for (const as of [defaultMember, c1Colleague]) {
+        const [seen] = await call<{ run_by_member_id: string | null; default_member_id: string; status: string }>(
+          as,
+          sql`select run_by_member_id, default_member_id, status from submittal_register_import where id = ${importId}::uuid`,
+        );
+        expect(seen).toEqual({ run_by_member_id: null, default_member_id: defaultMember, status: "created" });
+        expect(await importOf(as, drafts[0]!)).toEqual([{ import_id: importId, file_name: "engineer-register.xlsx", member_name: null, by_rabaed: true }]);
+      }
+      for (const as of [k1.member, k1.ap, c2.member, ow.member]) {
+        expect(await importsSeen(as)).not.toContain(importId);
+        expect(await importOf(as, drafts[0]!)).toEqual([]);
+      }
+    });
+  });
+});

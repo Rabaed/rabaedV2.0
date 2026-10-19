@@ -17,6 +17,7 @@ import {
   getRegisterImport,
   getRegisterImportFields,
   listRegisterImports,
+  memberImporter,
   previewRegisterImport,
   readRegister,
   registerImportValues,
@@ -40,7 +41,7 @@ export const registerImportRoutes =
       { bodyLimit: registerBodyLimit, schema: { params: projectParams, body: readRegisterRequest, response: { 200: registerSheet } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await readRegister(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body);
+        const result = await readRegister(memberImporter(ctx.db, memberId), idOrNotFound(request.params.projectId), request.body);
         if (!result.ok) throw refusal(result);
         return result.sheet;
       },
@@ -51,7 +52,7 @@ export const registerImportRoutes =
       { schema: { params: projectParams, response: { 200: registerImportFields } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await getRegisterImportFields(ctx.db, memberId, idOrNotFound(request.params.projectId));
+        const result = await getRegisterImportFields(memberImporter(ctx.db, memberId), idOrNotFound(request.params.projectId));
         if ("ok" in result) throw refusal(result);
         return result;
       },
@@ -62,7 +63,7 @@ export const registerImportRoutes =
       { bodyLimit: registerBodyLimit, schema: { params: projectParams, body: previewRegisterImportRequest, response: { 200: registerValues } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await registerImportValues(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body);
+        const result = await registerImportValues(memberImporter(ctx.db, memberId), idOrNotFound(request.params.projectId), request.body);
         if (!result.ok) throw refusal(result);
         return result.values;
       },
@@ -73,9 +74,9 @@ export const registerImportRoutes =
       { bodyLimit: registerBodyLimit, schema: { params: projectParams, body: previewRegisterImportRequest, response: { 201: registerImport } } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
-        const result = await previewRegisterImport(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body, ctx.now());
+        const result = await previewRegisterImport(memberImporter(ctx.db, memberId), idOrNotFound(request.params.projectId), request.body, ctx.now());
         if (!result.ok) throw refusal(result);
-        return reply.code(201).send(await visibleOrNotFound(getRegisterImport(ctx.db, memberId, result.id)));
+        return reply.code(201).send(await visibleOrNotFound(getRegisterImport(memberImporter(ctx.db, memberId), result.id)));
       },
     );
 
@@ -90,7 +91,7 @@ export const registerImportRoutes =
 
     app.get("/v1/register-imports/:importId", { schema: { params: importParams, response: { 200: registerImport } } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      return visibleOrNotFound(getRegisterImport(ctx.db, memberId, idOrNotFound(request.params.importId)));
+      return visibleOrNotFound(getRegisterImport(memberImporter(ctx.db, memberId), idOrNotFound(request.params.importId)));
     });
 
     app.post(
@@ -98,7 +99,7 @@ export const registerImportRoutes =
       { schema: { params: importParams, response: { 200: confirmedRegisterImport } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await confirmRegisterImport(ctx.db, memberId, idOrNotFound(request.params.importId), ctx.now());
+        const result = await confirmRegisterImport(memberImporter(ctx.db, memberId), idOrNotFound(request.params.importId), ctx.now());
         if (!result.ok) throw refusal(result);
         return { rowsCreated: result.rowsCreated };
       },

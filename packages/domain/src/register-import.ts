@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import { bilingualText, engineerReason } from "./company.ts";
 import { formKey } from "./form.ts";
 import { workItemTypeCode } from "./work-item.ts";
 
@@ -211,8 +211,12 @@ export const registerImportSummary = z.object({
   id: z.uuid(),
   fileName: z.string(),
   status: z.enum(["previewed", "created"]),
-  /** Who imported it: a Member of the caller's own Company. */
-  runBy: z.object({ id: z.uuid(), name: bilingualText }),
+  /**
+   * Who imported it: a Member of the caller's own Company; null when a Rabaed Engineer
+   * imported it for the Company in Rabaed Admin (RP-645), which the Company reads as
+   * "Rabaed", never the Engineer's name.
+   */
+  runBy: z.object({ id: z.uuid(), name: bilingualText }).nullable(),
   rowsTotal: z.int().min(0),
   rowsRejected: z.int().min(0),
   /** Null until confirmed. */
@@ -226,6 +230,11 @@ export type RegisterImports = z.infer<typeof registerImports>;
 /** One import with its rows: the preview before confirm, the record after. */
 export const registerImport = registerImportSummary.extend({
   projectId: z.uuid(),
+  /**
+   * Who raises every row nobody else is assigned (RP-640, RP-645): the importing Member,
+   * or for a Rabaed Engineer's import the default Member of the Company they chose.
+   */
+  defaultRaiser: z.object({ id: z.uuid(), name: bilingualText }),
   sheet: z.string(),
   headerRow: z.int().min(1),
   headers: z.array(z.string()),
@@ -295,3 +304,53 @@ export type RegisterValues = z.infer<typeof registerValues>;
 
 export const confirmedRegisterImport = z.object({ rowsCreated: z.int().min(0) });
 export type ConfirmedRegisterImport = z.infer<typeof confirmedRegisterImport>;
+
+/*
+ * Rabaed Admin (RP-645, stories 38–41): a Rabaed Engineer runs the same import for a
+ * Participant, with a default Member of it who raises every row nobody else is assigned
+ * (the importer's place), and a reason. Every call carries the reason: each is an
+ * admin_action (V9). The Company reads the import as "Rabaed"'s.
+ */
+
+/** Whom an Engineer imports for, and why. */
+export const adminRegisterImportFor = z.object({
+  projectId: z.uuid(),
+  participantId: z.uuid(),
+  /** The Member of the Participant who raises every row nobody else is assigned. */
+  defaultMemberId: z.uuid(),
+  reason: engineerReason,
+});
+export type AdminRegisterImportFor = z.infer<typeof adminRegisterImportFor>;
+
+export const adminReadRegisterRequest = readRegisterRequest.extend({ for: adminRegisterImportFor });
+export type AdminReadRegisterRequest = z.infer<typeof adminReadRegisterRequest>;
+export const adminRegisterImportFieldsRequest = z.object({ for: adminRegisterImportFor });
+export type AdminRegisterImportFieldsRequest = z.infer<typeof adminRegisterImportFieldsRequest>;
+export const adminPreviewRegisterImportRequest = previewRegisterImportRequest.extend({ for: adminRegisterImportFor });
+export type AdminPreviewRegisterImportRequest = z.infer<typeof adminPreviewRegisterImportRequest>;
+/** Reading or confirming an Engineer's own preview: only the reason (its Participant and default Member are the preview's). */
+export const adminRegisterImportReason = z.object({ reason: engineerReason });
+
+/** The Projects an Engineer may import for, by name. */
+export const adminRegisterImportProjects = z.object({
+  projects: z.array(z.object({ id: z.uuid(), name: bilingualText, code: z.string() })),
+});
+export type AdminRegisterImportProjects = z.infer<typeof adminRegisterImportProjects>;
+
+/**
+ * A Project's active Participants, each with its active Members, and whether each may
+ * import there (a Submittals Type they may raise): a Participant none of whose Members may
+ * (a Consultant, the Client) raises no submittals.
+ */
+export const adminRegisterImportParticipants = z.object({
+  participants: z.array(
+    z.object({
+      id: z.uuid(),
+      companyName: bilingualText,
+      roleName: bilingualText,
+      mayImport: z.boolean(),
+      members: z.array(z.object({ id: z.uuid(), name: bilingualText, email: z.string(), mayImport: z.boolean() })),
+    }),
+  ),
+});
+export type AdminRegisterImportParticipants = z.infer<typeof adminRegisterImportParticipants>;

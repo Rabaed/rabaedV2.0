@@ -631,6 +631,94 @@ describe("Values, optional fields and Paper ref (RP-639)", () => {
 // Type), else by the default, else by the importer. The assignee must be an active Member
 // of the importing Participant on the Project who may raise the row's Type and covers its
 // values; the Draft is their own, and each assignee but the importer hears of it once.
+describe("RP-589-3: a Rabaed Engineer's import for C1 (RP-645)", () => {
+  const engineerName = "Yousef Engineer Qahtani";
+  let engineer: { id: string; email: string; fullName: string };
+  let imported: RegisterImport;
+  let defaultMember: Awaited<ReturnType<typeof memberOnProject>>;
+  /** What a reader got back from the import, the Imports page and a Draft's history, as sent. */
+  const bodies = async (by: Caller) => [
+    (await ok(getImport(by, imported.id), 200)).body,
+    (await ok(by.get(`/v1/projects/${tower.projectId}/register-imports`), 200)).body,
+    (await ok(by.get(`/v1/work-items/${imported.rows.find((r) => r.workItemId)!.workItemId}/history`), 200)).body,
+  ];
+
+  beforeAll(async () => {
+    defaultMember = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"], { name: "Hafiz Default" });
+    const done = await api.engineerImport(
+      {
+        for: { projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: defaultMember.id, reason: "Onboarding C1, ticket 4821" },
+        ...register,
+        file: { ...xlsx, fileName: "engineer-register.xlsx" },
+      },
+      engineerName,
+    );
+    engineer = done.engineer;
+    expect(done.rowsCreated).toBe(3);
+    imported = (await ok(getImport(defaultMember.caller, done.importId), 200)).json();
+  });
+
+  it("is listed to C1's Members with \"Rabaed\" as who imported it (no Member), the file name and the counts, and no time", async () => {
+    for (const by of [defaultMember.caller, tower.c1Pm]) {
+      const imports = await listImports(by);
+      expect(imports.find((i: { id: string }) => i.id === imported.id)).toEqual({
+        id: imported.id,
+        fileName: "engineer-register.xlsx",
+        status: "created",
+        runBy: null,
+        rowsTotal: 6,
+        rowsRejected: 3,
+        rowsCreated: 3,
+      });
+      // Its unassigned rows' raiser is the Company's own default Member.
+      expect((await ok(getImport(by, imported.id), 200)).json()).toMatchObject({
+        runBy: null,
+        status: "created",
+        defaultRaiser: { id: defaultMember.id, name: bilingual("Hafiz Default") },
+      });
+    }
+  });
+
+  it("says in each of its Drafts' history that Rabaed imported it, from which import, with no time; the Draft is the default Member's", async () => {
+    const id = imported.rows.find((r) => r.workItemId)!.workItemId!;
+    for (const by of [defaultMember.caller, tower.c1Pm]) {
+      const history = (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json();
+      expect(history.imported).toEqual({ importId: imported.id, fileName: "engineer-register.xlsx", byRabaed: true, memberName: null });
+    }
+    const mine = (await ok(defaultMember.caller.get(`/v1/projects/${tower.projectId}/work-items?needMyAction=true`), 200)).json().items;
+    expect(mine.map((i: { id: string }) => i.id)).toContain(id);
+  });
+
+  it("says in a Member's imported Draft's history who imported it (story 35)", async () => {
+    const mapping: RegisterImportMapping = { subject: { column: 0 }, type: { value: "SAR" }, trade: { value: tower.mechanical } };
+    const own = await preview(defaultMember.caller, { file: csv, sheet: "import-register", headerRow: 1, mapping });
+    await ok(confirm(defaultMember.caller, own.id), 200);
+    const id = (await ok(getImport(defaultMember.caller, own.id), 200)).json().rows[0].workItemId;
+    const history = (await ok(tower.c1Pm.get(`/v1/work-items/${id}/history`), 200)).json();
+    expect(history.imported).toEqual({ importId: own.id, fileName: "import-register.csv", byRabaed: false, memberName: bilingual("Hafiz Default") });
+  });
+
+  it("never names the Engineer, nor when the import ran, to C1's Members", async () => {
+    for (const by of [defaultMember.caller, tower.c1Pm]) {
+      for (const body of await bodies(by)) {
+        expect(body).not.toContain(engineerName);
+        expect(body).not.toContain(engineer.email);
+        expect(body).not.toContain(engineer.id);
+        expect(body).not.toMatch(/"(createdAt|confirmedAt|created_at|confirmed_at|importedAt)"/);
+      }
+    }
+  });
+
+  it("gives K1 nothing of it: the plain 404 for the import and its Drafts, an empty Imports page", async () => {
+    for (const by of [tower.k1Manager, k1Engineer]) {
+      await expectHidden(getImport(by, imported.id));
+      await expectHidden(confirm(by, imported.id));
+      expect(await listImports(by)).toEqual([]);
+      for (const row of imported.rows.filter((r) => r.workItemId)) await expectHidden(by.get(`/v1/work-items/${row.workItemId}`));
+    }
+  });
+});
+
 describe("Assign to (RP-640)", () => {
   type Person = Awaited<ReturnType<typeof memberOnProject>>;
   let at: Tower;
