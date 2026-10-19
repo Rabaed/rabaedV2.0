@@ -27,6 +27,7 @@ import type {
   NumberingSettings,
   NumberingCounters,
   PackageDetail,
+  PackageList,
   ParticipantMembers,
   ParticipantVisibility,
   ProjectInvitations,
@@ -242,6 +243,11 @@ export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> 
 /** One Package (RP-659); null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getPackage(packageId: string): Promise<PackageDetail | null> {
   return apiGet<PackageDetail>(`/v1/packages/${encodeURIComponent(packageId)}`);
+}
+
+/** A Project's Packages the signed-in Member sees, with their counts (RP-641, the Packages view RP-660); null if the Project isn't one of theirs. */
+export function getPackages(projectId: string): Promise<PackageList | null> {
+  return apiGet<PackageList>(`/v1/projects/${encodeURIComponent(projectId)}/packages`);
 }
 
 /** Download (RP-409): a Work Item as it was shared, the same for every viewer; null before its first Submit or when unseen. */

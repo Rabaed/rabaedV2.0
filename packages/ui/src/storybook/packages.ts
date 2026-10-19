@@ -202,7 +202,7 @@ export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
     create: {
       trigger: "New Package",
       title: "New Package",
-      description: "Its name in English and in Arabic. It gets your Company's next number.",
+      description: "In English and in Arabic. It gets your Company's next number.",
       nameEn: "Name (English)",
       nameAr: "Name (Arabic)",
       required: "Enter both names, in English and in Arabic.",

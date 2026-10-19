@@ -264,7 +264,8 @@
     "viewSwitch": {
       "view": "View",
       "list": "List",
-      "kanban": "Kanban"
+      "kanban": "Kanban",
+      "packages": "Packages"
     },
     "dashboard": {
       "items": "{count} items",
@@ -2234,6 +2235,20 @@
       "nameAr": "Name (Arabic)",
       "required": "Enter both names, in English and in Arabic.",
       "save": "Save"
+    },
+    "board": {
+      "board": "Packages",
+      "toolbar": "Packages toolbar",
+      "noPackages": "No Packages"
+    },
+    "create": {
+      "trigger": "New Package",
+      "title": "New Package",
+      "description": "In English and in Arabic. It gets your Company's next number.",
+      "nameEn": "Name (English)",
+      "nameAr": "Name (Arabic)",
+      "required": "Enter both names, in English and in Arabic.",
+      "save": "Create"
     },
     "delete": {
       "trigger": "Delete",
