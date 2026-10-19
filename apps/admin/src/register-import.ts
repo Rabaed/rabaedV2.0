@@ -6,12 +6,13 @@ import {
   readRegister,
   registerImportValues,
   type ConfirmRegisterImportResult,
+  type ImportingEngineer,
   type PreviewRegisterImportResult,
   type ReadRegisterResult,
   type RegisterImporter,
   type RegisterImportValuesResult,
 } from "@rabaed/api/register-import";
-import type { AdminActionTable, Database, Db } from "@rabaed/db";
+import { APP_ROLE, type AdminActionTable, type Database, type Db } from "@rabaed/db";
 import type {
   AdminPreviewRegisterImportRequest,
   AdminReadRegisterRequest,
@@ -45,6 +46,31 @@ type ForReason = ImportForRefusal["reason"];
 /** Acts as `memberId` for the rest of the admin_action's transaction (the api's import code reads it). */
 const actAs = (trx: Trx, memberId: string) => sql`select set_config('app.member_id', ${memberId}, true)`.execute(trx);
 
+// RP-960: the api's import steps run as the app role, held to row-level security as the
+// Member acted as, so a read the explicit scoping misses fails closed. rabaed_admin is a
+// member of rabaed_app without inheritance (packages/db/src/bootstrap.ts): switched, it has
+// the app role's privileges and none of its own, bypassrls included. These two are the only
+// switches, both transaction-local.
+/** The rest of the transaction as the app role. */
+const asApp = (trx: Trx) => sql`set local role ${sql.id(APP_ROLE)}`.execute(trx);
+/** The rest of the transaction as Rabaed Admin's own role again (the session's). */
+const asAdmin = (trx: Trx) => sql`set local role none`.execute(trx);
+
+/**
+ * The Engineer's side of a step (ImportingEngineer): what is theirs alone (their
+ * `_by_engineer` functions, their own import's header and rows) on Rabaed Admin's role,
+ * back to the app role after.
+ */
+const importingEngineer = (id: string): ImportingEngineer => ({
+  id,
+  own: async (trx, fn) => {
+    await asAdmin(trx);
+    const result = await fn(trx);
+    await asApp(trx);
+    return result;
+  },
+});
+
 /** Refuses an import for a Participant the default Member isn't an active Member of, or one who may not import there (app.register_import_raisers, the shared rule). */
 async function checkFor(trx: Trx, imported: AdminRegisterImportFor): Promise<void> {
   const { rows } = await sql<{ member_id: string; may_import: boolean }>`
@@ -60,7 +86,8 @@ async function checkFor(trx: Trx, imported: AdminRegisterImportFor): Promise<voi
 /**
  * One step of an Engineer's import: one admin_action, `action` with the reason, run as the
  * Member `actingAs` names (none: nobody is acted as, so the api's step finds nothing), and
- * logged with the target and `after` that `log` says of its result.
+ * logged with the target and `after` that `log` says of its result. `actingAs` and the log
+ * run on Rabaed Admin's role; the api's step as the app role, but for what it hands to `engineer.own`.
  */
 function engineerStep<R>(
   adminDb: Db,
@@ -72,7 +99,9 @@ function engineerStep<R>(
     asEngineer(adminDb, context, async (trx) => {
       const member = await actingAs(trx);
       if (member) await actAs(trx, member);
+      await asApp(trx);
       const result = await fn(trx);
+      await asAdmin(trx);
       return { ...log(result), result };
     });
 }
@@ -88,9 +117,9 @@ function engineerImporter<R>(
   action: AdminActionTable["action"],
   targetOf: (result: R) => { kind: string; id: string | null } = () => ({ kind: "project", id: imported.projectId }),
   after: (result: R) => Record<string, unknown> = () => ({}),
-): RegisterImporter<R> & { engineer: { id: string; participantId: string } } {
+): RegisterImporter<R> & { engineer: ImportingEngineer & { participantId: string } } {
   return {
-    engineer: { id: engineerId, participantId: imported.participantId },
+    engineer: { ...importingEngineer(engineerId), participantId: imported.participantId },
     run: engineerStep<R>(
       adminDb,
       { engineerId, action, reason: imported.reason },
@@ -221,7 +250,7 @@ function ownImporter<R>(
   after?: (result: R) => unknown,
 ): RegisterImporter<R> {
   return {
-    engineer: { id: engineerId },
+    engineer: importingEngineer(engineerId),
     run: engineerStep<R>(
       adminDb,
       { engineerId, action, reason },

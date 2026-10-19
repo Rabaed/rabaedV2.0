@@ -1194,3 +1194,73 @@ describe("The Imports page and its Packages (story 32, RP-657)", () => {
     expect(notifiedOfConfirm).toEqual([]);
   });
 });
+
+// RP-960 (the gap RP-657 found): a Rabaed Type whose own Workflow is another Project's (only a
+// migrator can make one, as apps/api/test/outcome-sets.test.ts does) is raised by nobody on
+// this Project: "+ New" doesn't offer it, so neither does the import, and a row naming it is
+// a Type the importer may not raise.
+describe("The Types a register may name are the ones \"+ New\" offers (RP-960)", () => {
+  /** A Rabaed Type whose own Workflow is the other Project's, published. */
+  let lent: string;
+
+  beforeAll(async () => {
+    const other = await api.projectCreator();
+    const otherProjectId = (await api.createProject(other.caller, { code: "ORW" })).id;
+    lent = `ZL${Array.from({ length: 3 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("")}`;
+    // A copy of the MAR's latest Workflow Version as the other Project's own Workflow, and the Type on it.
+    const { rows } = await sql<{ version_id: string }>`
+      with definition as (
+        insert into workflow_definition (owner_kind, project_id, name)
+        values ('project', ${otherProjectId}::uuid, '{"en": "Another Project''s Workflow (test)", "ar": "سير عمل مشروع آخر (اختبار)"}')
+        returning id
+      ), mar as (
+        select v.id, v.layout, t.form_definition_id from workflow_version v
+        join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
+        where t.code = 'MAR' and t.owner_kind = 'rabaed' and v.status = 'published'
+        order by v.version_no desc limit 1
+      ), version as (
+        insert into workflow_version (workflow_definition_id, version_no, status, layout)
+        select definition.id, 1, 'draft', mar.layout from definition, mar
+        returning id, workflow_definition_id
+      ), steps as (
+        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
+        select version.id, s.key, s.name, s.stage_key, s.actor_rule, s.outcome_mode
+        from version, mar join workflow_step s on s.workflow_version_id = mar.id
+        returning id, key, workflow_version_id
+      ), transitions as (
+        insert into workflow_transition (
+          workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions, notifications)
+        select f.workflow_version_id, tr.key, f.id, s.id, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions, tr.notifications
+        from mar
+        join workflow_transition tr on tr.workflow_version_id = mar.id
+        join workflow_step fs on fs.id = tr.from_step_id
+        join workflow_step ts on ts.id = tr.to_step_id
+        join steps f on f.key = fs.key
+        join steps s on s.key = ts.key
+        returning workflow_version_id
+      ), type as (
+        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+        select 'rabaed', 'submittals', ${lent}, '{"en": "Material Submittal on another Project''s Workflow", "ar": "اعتماد المواد بسير عمل مشروع آخر"}',
+          version.workflow_definition_id, 'review_code', mar.form_definition_id
+        from version, mar
+        returning id
+      )
+      select version.id as version_id from version, type
+    `.execute(migrator);
+    await sql`update workflow_version set status = 'published', published_at = now() where id = ${rows[0]!.version_id}::uuid`.execute(migrator);
+  });
+
+  it("offers the importer the Types \"+ New\" offers them, none on another Project's Workflow", async () => {
+    const raisable = (await ok(tower.c1Engineer.get(`/v1/projects/${tower.projectId}/raisable-types`), 200)).json().types.map((t: { code: string }) => t.code);
+    const fields: RegisterImportFields = (await ok(tower.c1Engineer.get(`/v1/projects/${tower.projectId}/register-imports/fields`), 200)).json();
+    expect(raisable).not.toContain(lent);
+    expect(fields.types.map((t) => t.code)).not.toContain(lent);
+    expect(fields.types.map((t) => t.code).sort()).toEqual([...raisable].sort());
+  });
+
+  it("refuses a row naming it as a Type the importer may not raise", async () => {
+    const file = { fileName: "Lent.csv", content: Buffer.from(`Subject,Type,Trade\r\nPanels,${lent},Electrical\r\nPumps,MAR,Electrical`).toString("base64") };
+    const previewed = await preview(tower.c1Engineer, { file, sheet: "Lent", headerRow: 1, mapping: { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 } } });
+    expect(reasonsByRow(previewed)).toEqual({ 2: ["type_not_allowed"], 3: [] });
+  });
+});

@@ -20,6 +20,15 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden } from "../../api/test/support/harness.ts";
 import { all, bilingual, buildTower, memberOnProject, ok, only, type Company, type Tower } from "../../api/test/support/tower.ts";
+import { statementRoles } from "../../../packages/db/test-support/statement-roles.ts";
+import {
+  confirmRegisterImportFor,
+  getRegisterImportFor,
+  previewRegisterImportFor,
+  readRegisterFor,
+  registerImportFieldsFor,
+  registerImportValuesFor,
+} from "../src/register-import.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
 const api = await createTestApi();
@@ -639,5 +648,76 @@ describe("An Engineer's import and Packages (RP-644)", () => {
     expect(pkg.items.map((i: { title: string }) => i.title)).toEqual(["Panels"]);
     await expectHidden(c2Person.caller.get(`/v1/packages/${made.id}`));
     expect((await ok(c2Person.caller.get(`/v1/packages/${theirs.id}`), 200)).json().items).toEqual([]);
+  });
+});
+
+// RP-960: Rabaed Admin runs the customer api's import steps as the app role (`set local role
+// rabaed_app`, the default Member set), so a read the explicit scoping above ever misses is
+// held to row-level security, never past it. Only the Engineer's own part stays on
+// rabaed_admin: their default Member check, the `_by_engineer` functions, their own import's
+// header and rows, and the admin_action. Each statement's role is read just before it runs.
+describe("An Engineer's import runs as the app role, the Engineer's own part alone on rabaed_admin (RP-960)", () => {
+  const recorded = statementRoles(testDatabaseUrls().admin);
+  afterAll(() => recorded.db.destroy());
+
+  /** The Engineer's own statements: their check and setting, their functions, their import, their log; and the switch to the app role itself. */
+  const engineersOwn = /^(begin|commit|rollback)\b|^set local role "?rabaed_app"?$|admin_action|_by_engineer\(|run_by_engineer_id|register_import_raisers|set_config\('app\.member_id'/i;
+  /** Runs one step on the recording connection: the role of each shared statement, and of the Engineer's functions and log. */
+  const rolesOf = async <T>(step: (db: typeof recorded.db) => Promise<T>) => {
+    recorded.statements.length = 0;
+    const result = await step(recorded.db);
+    const shared = recorded.statements.filter((s) => !engineersOwn.test(s.sql.trim()));
+    return {
+      result,
+      shared: shared.length,
+      notAsApp: shared.filter((s) => s.role !== "rabaed_app").map((s) => `${s.role}: ${s.sql.trim().slice(0, 80)}`),
+      engineers: [...new Set(recorded.statements.filter((s) => /_by_engineer\(|insert into "admin_action"/.test(s.sql)).map((s) => s.role))],
+    };
+  };
+
+  const forHafiz = () => ({ projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, reason });
+  const file = () => csvOf([["Panels", "MAR", "Electrical", ""], ["Pumps", "MAR", "Mechanical", ""]]);
+  const mapping = (): RegisterImportMapping => ({ subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, assignTo: { column: 3 } });
+  const preview = () => ({ for: forHafiz(), file: file(), sheet: "TMC_Register_Rev4", headerRow: 1, mapping: mapping() });
+  let importId: string;
+
+  it("reads the register, its fields and its values as the app role", async () => {
+    const read = await rolesOf((db) => readRegisterFor(db, engineer.id, { for: forHafiz(), file: file() }));
+    const fields = await rolesOf((db) => registerImportFieldsFor(db, engineer.id, forHafiz()));
+    const values = await rolesOf((db) => registerImportValuesFor(db, engineer.id, preview()));
+    expect(read.result).toMatchObject({ ok: true });
+    expect(fields.result).toMatchObject({ types: expect.arrayContaining([expect.objectContaining({ code: "MAR" })]) });
+    expect(values.result).toMatchObject({ ok: true });
+    for (const step of [read, fields, values]) {
+      expect(step.shared).toBeGreaterThan(0);
+      expect(step.notAsApp).toEqual([]);
+      expect(step.engineers).toEqual(["rabaed_admin"]);
+    }
+  });
+
+  it("previews as the app role, calling the Engineer's preview on rabaed_admin", async () => {
+    const previewed = await rolesOf((db) => previewRegisterImportFor(db, engineer.id, preview(), new Date()));
+    expect(previewed.result).toMatchObject({ ok: true });
+    importId = (previewed.result as { id: string }).id;
+    expect(previewed.shared).toBeGreaterThan(0);
+    expect(previewed.notAsApp).toEqual([]);
+    expect(previewed.engineers).toEqual(["rabaed_admin"]);
+  });
+
+  it("reads the Engineer's import as the app role, its header and rows on rabaed_admin as theirs", async () => {
+    const got = await rolesOf((db) => getRegisterImportFor(db, engineer.id, importId, reason));
+    expect(got.result).toMatchObject({ id: importId, status: "previewed", rowsTotal: 2 });
+    expect(got.result!.rows.map((r) => r.type.match?.code)).toEqual(["MAR", "MAR"]);
+    expect(got.shared).toBeGreaterThan(0);
+    expect(got.notAsApp).toEqual([]);
+    expect(got.engineers).toEqual(["rabaed_admin"]);
+  });
+
+  it("confirms as the app role, calling the Engineer's confirm on rabaed_admin", async () => {
+    const confirmed = await rolesOf((db) => confirmRegisterImportFor(db, engineer.id, importId, reason, new Date()));
+    expect(confirmed.result).toEqual({ ok: true, rowsCreated: expect.any(Number) });
+    expect(confirmed.shared).toBeGreaterThan(0);
+    expect(confirmed.notAsApp).toEqual([]);
+    expect(confirmed.engineers).toEqual(["rabaed_admin"]);
   });
 });

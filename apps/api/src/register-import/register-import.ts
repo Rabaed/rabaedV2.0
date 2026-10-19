@@ -39,23 +39,36 @@ import { openSpreadsheet, SpreadsheetError, type SheetTable, type Spreadsheet, t
 // register (the api's routes), and a Rabaed Engineer importing it for a Participant in
 // Rabaed Admin, which runs this very code as the Participant's default Member, who stands
 // where the importer stands. Every check is the same; the import is the Engineer's, which
-// the Company reads as "Rabaed" (visibility.md RP-589-3). Rabaed Admin's role reads past
-// row-level security, so no check here leans on a policy: each read says whose it is
-// (the session's Member's Projects, Participant, Visibility), or goes through a function
-// that does.
+// the Company reads as "Rabaed" (visibility.md RP-589-3). Rabaed Admin runs each step as the
+// app role (RP-960), so every read here is held to row-level security as the default Member;
+// only what is the Engineer's alone runs on Rabaed Admin's own role, past it, through
+// `engineer.own`. Each read still says whose it is (the session's Member's Projects,
+// Participant, Visibility), or goes through a function that does, never leaning on a policy.
 
 type Trx = Transaction<Database>;
+
+/**
+ * The Rabaed Engineer importing (Rabaed Admin). The step runs as the app role; `own` runs
+ * what is the Engineer's alone (their `_by_engineer` functions, their own import's header and
+ * rows, which no Member reads) on Rabaed Admin's role, in the same transaction, then returns
+ * to the app role. Nothing else may go through it.
+ */
+export interface ImportingEngineer {
+  id: string;
+  own<T>(trx: Trx, fn: (trx: Trx) => Promise<T>): Promise<T>;
+}
 
 /**
  * Who imports, and the transaction an import step runs in, with `app.member_id` set:
  * the Member importing (memberImporter), or the default Member a Rabaed Engineer imports
  * for (Rabaed Admin, which logs each step as an admin_action with the Engineer's reason).
- * Each step runs exactly one transaction, answering an `R` (what Rabaed Admin logs of it).
+ * Each step runs exactly one transaction, as the app role, answering an `R` (what Rabaed
+ * Admin logs of it).
  */
 export interface RegisterImporter<R = unknown> {
   run<T extends R>(fn: (trx: Trx) => Promise<T>): Promise<T>;
   /** The Rabaed Engineer importing; null for a Member's own import. */
-  engineer: { id: string } | null;
+  engineer: ImportingEngineer | null;
   /**
    * Where a preview's original register is kept, under the Project's prefix (RP-644, story 34):
    * the api's file store. Rabaed Admin has none, so an Engineer's import keeps no original.
@@ -67,7 +80,7 @@ export interface RegisterImporter<R = unknown> {
  * An importer who previews: a Rabaed Engineer names the Participant they import for (reading
  * or confirming their own import, the import names it); a Member imports for their own.
  */
-export type PreviewingImporter = RegisterImporter<PreviewRegisterImportResult> & { engineer: { id: string; participantId: string } | null };
+export type PreviewingImporter = RegisterImporter<PreviewRegisterImportResult> & { engineer: (ImportingEngineer & { participantId: string }) | null };
 
 /** A Member importing their own Company's register: each step one transaction as them, through row-level security. */
 export const memberImporter = (db: Db, memberId: string, files?: FileStore): RegisterImporter & { engineer: null } => ({
@@ -229,12 +242,12 @@ export function previewRegisterImport(
         ${JSON.stringify(mapping)}::jsonb, ${JSON.stringify(mappedRows(table, mapping, context))}::jsonb,
         ${"value" in mapping.type ? mapping.type.value : null}, ${"value" in mapping.trade ? mapping.trade.value : null}::uuid, ${now}`;
     const { engineer } = importer;
-    const { rows } = await (
-      engineer
-        ? sql<{ outcome: string; import_id: string | null }>`
-            select outcome, import_id from app.preview_register_import_by_engineer(${engineer.id}::uuid, ${engineer.participantId}::uuid, ${args})`
-        : sql<{ outcome: string; import_id: string | null }>`select outcome, import_id from app.preview_register_import(${args})`
-    ).execute(trx);
+    const { rows } = await (engineer
+      ? engineer.own(trx, (own) =>
+          sql<{ outcome: string; import_id: string | null }>`
+            select outcome, import_id from app.preview_register_import_by_engineer(${engineer.id}::uuid, ${engineer.participantId}::uuid, ${args})`.execute(own),
+        )
+      : sql<{ outcome: string; import_id: string | null }>`select outcome, import_id from app.preview_register_import(${args})`.execute(trx));
     const outcome = checkedOutcome(rows[0]!.outcome, ["previewed", ...previewRefusals]);
     if (outcome !== "previewed") return { ok: false, reason: outcome };
     const importId = rows[0]!.import_id!;
@@ -374,6 +387,26 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
   });
 }
 
+/** An import's rows as stored, with whether each created a Draft and that Draft where the reader sees it. */
+const storedRowColumns = `row_no integer, cells jsonb, subject text, type_text text, work_item_type_id uuid, trade_text text, trade_id uuid,
+  location_text text, location_id uuid, scopes_text text, scope_ids uuid[], paper_ref text, field_cells jsonb, invalid_fields text[],
+  assignee_text text, assignee_member_id uuid, reasons text[], package_text text, package_id uuid, package_name text,
+  created boolean, work_item_id uuid`;
+
+/** The rows of an import the reader reads, as stored, joined to `results` (its importer's app.register_import_results). */
+async function storedRows(trx: Trx, importId: string, results: RawBuilder<unknown>): Promise<Record<string, unknown>[]> {
+  const { rows } = await sql<Record<string, unknown>>`
+    select r.row_no, r.cells, r.subject, r.type_text, r.work_item_type_id, r.trade_text, r.trade_id,
+      r.location_text, r.location_id, r.scopes_text, r.scope_ids, r.paper_ref, r.field_cells, r.invalid_fields,
+      r.assignee_text, r.assignee_member_id, r.reasons, r.package_text, r.package_id, r.package_name,
+      res.created, res.work_item_id
+    from submittal_register_import_row r
+    join ${results} res on res.row_no = r.row_no
+    where r.import_id = ${importId}::uuid
+  `.execute(trx);
+  return rows;
+}
+
 /**
  * One import the importer reads, with its rows; null when they don't (another Company's, a
  * colleague's preview, or none). An Engineer reads only their own (Rabaed Admin).
@@ -381,11 +414,16 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
 export function getRegisterImport(importer: RegisterImporter, importId: string): Promise<RegisterImport | null> {
   return importer.run(async (trx) => {
     const { engineer } = importer;
-    const [r] = await importsWhere(trx, importer, sql`i.id = ${importId}::uuid`);
+    const which = sql`i.id = ${importId}::uuid`;
+    // An Engineer's import is theirs alone: no Member reads its header or rows (a preview is its
+    // importer's, and the Engineer is none of the Company's), so they are read on Rabaed Admin's
+    // role, scoped to the Engineer and the default Member (readBy, the `_by_engineer` results).
+    // What its rows name is looked up below as the app role, as for a Member's.
+    const [r] = engineer ? await engineer.own(trx, (own) => importsWhere(own, importer, which)) : await importsWhere(trx, importer, which);
     if (!r) return null;
-    const results = engineer
-      ? sql`app.register_import_results_by_engineer(${engineer.id}::uuid, ${importId}::uuid)`
-      : sql`app.register_import_results(${importId}::uuid)`;
+    const stored = engineer
+      ? await engineer.own(trx, (own) => storedRows(own, importId, sql`app.register_import_results_by_engineer(${engineer.id}::uuid, ${importId}::uuid)`))
+      : await storedRows(trx, importId, sql`app.register_import_results(${importId}::uuid)`);
     const { rows } = await sql<{
       row_no: number;
       cells: string[];
@@ -427,10 +465,9 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
           from unnest(r.scope_ids) with ordinality x (id, n) join scope s on s.id = x.id
         ), '[]'::jsonb) as scopes,
         r.paper_ref, r.field_cells, r.invalid_fields, r.assignee_text, am.id as assignee_id, am.full_name as assignee_name, r.reasons,
-        res.created, res.work_item_id,
+        r.created, r.work_item_id,
         r.package_text, k.package_id, k.seq as package_seq, k.name as package_name, k.status as package_status, r.package_name as package_new
-      from submittal_register_import_row r
-      join ${results} res on res.row_no = r.row_no
+      from jsonb_to_recordset(${JSON.stringify(stored)}::jsonb) as r (${sql.raw(storedRowColumns)})
       left join work_item_type t on t.id = r.work_item_type_id
       left join dimension_value tv on tv.id = r.trade_id
       left join dimension_value lv on lv.id = r.location_id
@@ -438,7 +475,6 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
       -- RP-644: its Package, one of the importing Participant's own (said by the function, not
       -- RLS: Rabaed Admin reads past it); a Package discarded since reads as none.
       left join app.register_import_packages(${r.project_id}::uuid) k on k.package_id = r.package_id
-      where r.import_id = ${importId}::uuid
       order by r.row_no
     `.execute(trx);
     const mapping = registerImportMapping.parse(r.mapping);
@@ -499,12 +535,12 @@ function packagesOfRows(rows: RegisterImport["rows"]): RegisterImport["packages"
 export function confirmRegisterImport(importer: RegisterImporter<ConfirmRegisterImportResult>, importId: string, now: Date): Promise<ConfirmRegisterImportResult> {
   return importer.run(async (trx): Promise<ConfirmRegisterImportResult> => {
     const { engineer } = importer;
-    const { rows } = await (
-      engineer
-        ? sql<{ outcome: string; rows_created: number | null }>`
-            select outcome, rows_created from app.confirm_register_import_by_engineer(${engineer.id}::uuid, ${importId}::uuid, ${now})`
-        : sql<{ outcome: string; rows_created: number | null }>`select outcome, rows_created from app.confirm_register_import(${importId}::uuid, ${now})`
-    ).execute(trx);
+    const { rows } = await (engineer
+      ? engineer.own(trx, (own) =>
+          sql<{ outcome: string; rows_created: number | null }>`
+            select outcome, rows_created from app.confirm_register_import_by_engineer(${engineer.id}::uuid, ${importId}::uuid, ${now})`.execute(own),
+        )
+      : sql<{ outcome: string; rows_created: number | null }>`select outcome, rows_created from app.confirm_register_import(${importId}::uuid, ${now})`.execute(trx));
     const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...confirmRefusals]);
     return outcome === "created" ? { ok: true, rowsCreated: rows[0]!.rows_created! } : { ok: false, reason: outcome };
   });
