@@ -1,5 +1,4 @@
 export { Button, IconButton, buttonVariants, type ButtonProps, type IconButtonProps } from "./components/button/button.tsx";
-export { SignButton, type SignButtonProps } from "./components/button/sign-button.tsx";
 export { Avatar, CompanyChip, type AvatarProps, type CompanyChipProps } from "./components/data/avatar.tsx";
 export { Badge, type BadgeProps } from "./components/data/badge.tsx";
 export { KeyValues, type KeyValue, type KeyValuesProps } from "./components/data/key-values.tsx";
@@ -100,6 +99,17 @@ export {
   type SettingsCall,
 } from "./components/notifications/notification-settings.tsx";
 export { WatchButton, type WatchButtonLabels, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
+export { SignatureEditor, type SaveSignatureCall, type SignatureEditorLabels, type SignatureEditorProps } from "./components/signature/signature-editor.tsx";
+export { SignatureRequiredDialog, type SignatureRequiredDialogProps, type SignatureRequiredLabels } from "./components/signature/signature-required-dialog.tsx";
+export { StampRequiredDialog, type StampRequiredDialogProps, type StampRequiredLabels } from "./components/signature/stamp-required-dialog.tsx";
+export { ImageFileButton } from "./components/signature/image-file-button.tsx";
+export {
+  CompanyImages,
+  type CompanyImageCardLabels,
+  type CompanyImagesLabels,
+  type CompanyImagesProps,
+  type SaveCompanyImageCall,
+} from "./components/signature/company-images.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";

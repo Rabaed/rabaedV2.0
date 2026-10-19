@@ -89,4 +89,8 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
 | 20270720 | RP-673 | 41 | Unused: the migration moved to 20270726, after RP-151's 20270720 on main |
 | 20270720 | RP-151 | 22 | record_page_one |
+| 20270727 | RP-85 | 21 | member_signature |
+| 20270728 | RP-85 | 21 | drop_is_signing |
+| 20270729 | RP-617 | 21 | company_stamp |
+| 20270730 | RP-632 | 21 | review_fixes |
 | 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
