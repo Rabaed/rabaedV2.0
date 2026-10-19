@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import type { Locale } from "./locale.ts";
 
 // The public verification page of a Documental Record (RP-157; ADR 0023; visibility.md, the
 // Verification page row; workflow-engine.md §7). Anyone holding a record opens it without
@@ -15,7 +15,8 @@ export type VerifyByLinkRequest = z.infer<typeof verifyByLinkRequest>;
 
 /**
  * The short code printed on every page, with the record's Document Number. Either may be left
- * out or wrong: the answer is then the one a record that doesn't exist gets, never a 400.
+ * out, wrong or too long: the api answers any body this refuses as a record that doesn't exist,
+ * never a 400.
  */
 export const verifyByCodeRequest = z.object({
   code: z.string().max(64).default(""),
@@ -30,7 +31,7 @@ const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
  * A typed Verification Code as the record prints it (`XXXX-XXXX`), or null when it can't be
  * one: case, spaces and the dash don't matter, and I and L read as 1, O as 0 (Crockford).
  */
-export function normalVerificationCode(typed: string): string | null {
+export function parseVerificationCode(typed: string): string | null {
   const chars = typed
     .toUpperCase()
     .replace(/[\s-]/g, "")
@@ -42,30 +43,55 @@ export function normalVerificationCode(typed: string): string | null {
 
 const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 
-/**
- * What the page shows, exactly (visibility.md, the Verification page row): genuine, or replaced
- * by a corrected copy (Re-produce) on a date; the Document Number, Subject, Project, outcome and
- * sealed date; each signer's name, Positions and Company as the record printed them; and the
- * fingerprints a dropped copy is compared with in the browser: the current PDF's, and each
- * replaced one's with the date it was replaced. Never the Documents, the Form answers or the
- * live item.
- */
-export const recordVerification = z.object({
-  status: z.enum(["genuine", "replaced"]),
-  /** When the latest corrected copy replaced the one before; null while genuine. */
-  replacedAt: z.iso.datetime().nullable(),
+/** Text as the record printed it: only in the language(s) it printed (both, or Arabic or English alone). */
+export const printedText = z
+  .object({ ar: z.string().min(1).optional(), en: z.string().min(1).optional() })
+  .refine((t) => t.ar !== undefined || t.en !== undefined, "at least one language");
+export type PrintedText = z.infer<typeof printedText>;
+
+/** The text in `locale` when the record printed it, else in the language it printed. */
+export const printedIn = (text: PrintedText, locale: Locale): string => text[locale] ?? text.ar ?? text.en ?? "";
+
+const printedFace = {
   /** Null only for an item Cancelled before it was ever numbered. */
   documentNumber: z.string().nullable(),
   subject: z.string(),
-  project: bilingualText,
-  outcome: z.object({ code: z.string(), name: bilingualText }),
+  project: printedText,
+  /** `code`: the short code (A, B, C, D) the record prints; null for an outcome it prints by its name only. */
+  outcome: z.object({ code: z.string().nullable(), name: printedText }),
+  /** Everyone on the record's path to its outcome, in its order. */
+  signers: z.array(z.object({ name: printedText, positions: z.array(printedText), company: printedText })),
+};
+
+/**
+ * A record's printed face, as the worker takes it from the Record Data it printed and keeps it for
+ * this page (documental_record_face): with the language(s) the record printed.
+ */
+export const recordFace = z.object({ language: z.enum(["bilingual", "ar", "en"]), ...printedFace });
+export type RecordFace = z.infer<typeof recordFace>;
+
+const shown = {
+  ...printedFace,
   sealedAt: z.iso.datetime(),
-  signers: z.array(z.object({ name: bilingualText, positions: z.array(bilingualText), company: bilingualText })),
   fingerprints: z.object({
     current: sha256Hex,
     replaced: z.array(z.object({ sha256: sha256Hex, replacedAt: z.iso.datetime() })),
   }),
-});
+};
+
+/**
+ * What the page shows, exactly (visibility.md, the Verification page row): genuine, or replaced
+ * by a corrected copy (Re-produce) on a date; the Document Number, Subject, Project, outcome and
+ * sealed date; each signer's name, Positions and Company; all as the record printed them, in the
+ * language(s) it printed; and the fingerprints a dropped copy is compared with in the browser: the
+ * current PDF's, and each replaced one's with the date it was replaced. Never the Documents, the
+ * Form answers or the live item.
+ */
+export const recordVerification = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("genuine"), ...shown }),
+  /** `replacedAt`: when the latest corrected copy replaced the one before. */
+  z.object({ status: z.literal("replaced"), replacedAt: z.iso.datetime(), ...shown }),
+]);
 export type RecordVerification = z.infer<typeof recordVerification>;
 
 /** What a dropped copy is, by its SHA-256: the record as issued now, a copy a corrected one replaced, or neither. */

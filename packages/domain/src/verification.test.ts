@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { copyMatch, normalVerificationCode } from "./verification.ts";
+import { copyMatch, parseVerificationCode } from "./verification.ts";
 
-describe("normalVerificationCode", () => {
+describe("parseVerificationCode", () => {
   it("reads a typed code as the record prints it", () => {
-    expect(normalVerificationCode("7K3M-Q9TB")).toBe("7K3M-Q9TB");
-    expect(normalVerificationCode(" 7k3m q9tb ")).toBe("7K3M-Q9TB");
-    expect(normalVerificationCode("7k3mq9tb")).toBe("7K3M-Q9TB");
+    expect(parseVerificationCode("7K3M-Q9TB")).toBe("7K3M-Q9TB");
+    expect(parseVerificationCode(" 7k3m q9tb ")).toBe("7K3M-Q9TB");
+    expect(parseVerificationCode("7k3mq9tb")).toBe("7K3M-Q9TB");
   });
 
   it("reads I and L as 1 and O as 0, as Crockford's base 32 does", () => {
-    expect(normalVerificationCode("IL0O-0000")).toBe("1100-0000");
+    expect(parseVerificationCode("IL0O-0000")).toBe("1100-0000");
   });
 
   it("is null for anything that can't be a code", () => {
-    for (const typed of ["", "7K3M-Q9T", "7K3M-Q9TBX", "7K3M-Q9TU", "7K3M_Q9TB", "#7K3MQ9TB"]) expect(normalVerificationCode(typed), typed).toBeNull();
+    for (const typed of ["", "7K3M-Q9T", "7K3M-Q9TBX", "7K3M-Q9TU", "7K3M_Q9TB", "#7K3MQ9TB"]) expect(parseVerificationCode(typed), typed).toBeNull();
   });
 });
 

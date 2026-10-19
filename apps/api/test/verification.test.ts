@@ -30,6 +30,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestAdmin } from "../../admin/test/support/harness.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 const SETUP_MS = 240_000;
@@ -53,6 +54,21 @@ const compliant: PdfAValidator = { validate: async () => ({ compliant: true, pro
 const failing: PdfAValidator = { validate: async () => ({ compliant: false, problems: ["PDF/A-3 6.1.2: a test finding"] }) };
 const MADE_UP_TOKEN = "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c";
 const RETURN_REASON = "The datasheet is the wrong one";
+const SEND_BACK_TYPE = "VERSB";
+const sendBackSchema = {
+  sections: [
+    { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
+    {
+      key: "classification",
+      title: bilingual("Classification"),
+      fields: [
+        { key: "trade", type: "trade", label: bilingual("Trade") },
+        { key: "location", type: "location", label: bilingual("Location") },
+        { key: "scopes", type: "scopes", label: bilingual("Scopes") },
+      ],
+    },
+  ],
+};
 
 async function handlers(validator: PdfAValidator): Promise<Record<string, OutboxHandler>> {
   const signer = await localSealSigner();
@@ -76,6 +92,7 @@ let c1Name = "";
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let c1Returner: Caller;
+let k1Engineer: Caller;
 let k1Pm: Caller;
 let k1PmId = "";
 let quick: Record<string, OutboxHandler>;
@@ -126,11 +143,35 @@ async function closedAfterAReturn(subject: string): Promise<string> {
 const reproduce = async (id: string) =>
   expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: "The PDF maker had a bug, RP-157 test" })).statusCode).toBe(202);
 
+/**
+ * An item of the Send Back Type: the C1 engineer sends it, the C1 PM Submits it, K1's engineer Sends it
+ * Back, the C1 PM Submits it again, K1's PM sends it to the manager's Step and approves it (Code A).
+ */
+async function closedAfterASendBack(subject: string): Promise<string> {
+  const res = await ok(c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: SEND_BACK_TYPE, title: subject, answers: { model: "CT-1", trade: at.electrical, location: at.buildingA } }), 201);
+  const id = res.json().id as string;
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit");
+  await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Engineer, id, "send_back");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit");
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Pm, id, "send_to_manager");
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Pm, id, "approve_a");
+  return id;
+}
+
+let sentBack = "";
+let english = "";
 let genuine: { id: string; pdf: Uint8Array; token: string; code: string; documentNumber: string };
 let replaced: { id: string; before: Uint8Array; after: Uint8Array; token: string };
 let failed: { token: string; code: string; documentNumber: string };
 
 beforeAll(async () => {
+  await addSendBackType(migrator, SEND_BACK_TYPE, { en: "Verification Send Back", ar: "إرجاع التحقق" }, sendBackSchema);
   const c1 = await api.projectCreator();
   const onboarded = await api.onboardCompany({ legalName: bilingual("Verification Consultants") });
   k1 = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
@@ -145,6 +186,7 @@ beforeAll(async () => {
   c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
   c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
   c1Returner = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Nadia Returns" })).caller;
+  k1Engineer = (await memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Faisal Otaibi" })).caller;
   const huda = await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" });
   k1Pm = huda.caller;
   k1PmId = huda.id;
@@ -153,8 +195,19 @@ beforeAll(async () => {
   // Anything earlier tests left in the outbox is not ours to judge.
   await drainOutbox(worker, quick);
 
-  const [genuineId, replacedId] = await Promise.all([closedAfterAReturn("Cable trays for Building A"), closedAfterAReturn("Cable glands")]);
+  const [genuineId, replacedId, sentBackId] = await Promise.all([
+    closedAfterAReturn("Cable trays for Building A"),
+    closedAfterAReturn("Cable glands"),
+    closedAfterASendBack("Cable tray supports"),
+  ]);
   await drainOutbox(worker, quick);
+  sentBack = (await printedOn(await download(c1Pm, sentBackId))).token;
+  // A record printed in English only: the Project's record language when the job ran (RP-151).
+  await ok(at.admin!.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "en", hijriDates: false }));
+  const englishId = await closedAfterAReturn("Cable trays in English");
+  await drainOutbox(worker, quick);
+  await ok(at.admin!.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "bilingual", hijriDates: false }));
+  english = (await printedOn(await download(c1Pm, englishId))).token;
   const pdf = await download(c1Pm, genuineId);
   genuine = { id: genuineId, pdf, ...(await printedOn(pdf)), documentNumber: (await detail(c1Pm, genuineId)).documentNumber! };
 
@@ -186,17 +239,17 @@ describe("scenario RP-23-4: a visitor not signed in scans the record's QR", { ti
   it("opens the record by the long link, with no session and no cookie", async () => {
     shown = await verified(byLink(visitor(), genuine.token));
     expect(shown.status).toBe("genuine");
-    expect(shown.replacedAt).toBeNull();
+    expect("replacedAt" in shown).toBe(false);
   });
 
   it("shows exactly the fields of the Verification page row, and nothing more", () => {
     expect(Object.keys(shown).sort()).toEqual(
-      ["documentNumber", "fingerprints", "outcome", "project", "replacedAt", "sealedAt", "signers", "status", "subject"].sort(),
+      ["documentNumber", "fingerprints", "outcome", "project", "sealedAt", "signers", "status", "subject"].sort(),
     );
     expect(Object.keys(shown.outcome).sort()).toEqual(["code", "name"]);
     expect(Object.keys(shown.fingerprints).sort()).toEqual(["current", "replaced"]);
     for (const signer of shown.signers) expect(Object.keys(signer).sort()).toEqual(["company", "name", "positions"]);
-    expect(recordVerification.strict().safeParse(shown).success).toBe(true);
+    expect(recordVerification.safeParse(shown).success).toBe(true);
   });
 
   it("shows the Document Number, Subject, Project, outcome and sealed date of the record", async () => {
@@ -271,16 +324,24 @@ describe("a record that isn't published", { timeout: SETUP_MS }, () => {
 describe("a record replaced by a corrected copy (Re-produce, RP-155)", { timeout: SETUP_MS }, () => {
   let shown: RecordVerification;
 
+  let replacedAt = "";
+
   it("says it was replaced by a corrected copy, and when", async () => {
     shown = await verified(byLink(visitor(), replaced.token));
-    expect(shown.status).toBe("replaced");
-    expect(shown.replacedAt).not.toBeNull();
-    expect(new Date(shown.sealedAt).getTime()).toBeLessThanOrEqual(new Date(shown.replacedAt!).getTime() + 1000);
+    if (shown.status !== "replaced") throw new Error(`expected a replaced record, got ${shown.status}`);
+    replacedAt = shown.replacedAt;
+    expect(new Date(shown.sealedAt).getTime()).toBeLessThanOrEqual(new Date(replacedAt).getTime() + 1000);
   });
 
   it("still recognises the old copy's fingerprint, as replaced on that date, and gives the corrected copy's as current", () => {
     expect(shown.fingerprints.current).toBe(sha(replaced.after));
-    expect(shown.fingerprints.replaced).toEqual([{ sha256: sha(replaced.before), replacedAt: shown.replacedAt }]);
+    expect(shown.fingerprints.replaced).toEqual([{ sha256: sha(replaced.before), replacedAt }]);
+  });
+
+  it("shows the same printed face after the Re-produce, which prints the same Record Data", async () => {
+    const { fingerprints: _f, sealedAt: _s, ...face } = shown;
+    expect(face).toMatchObject({ subject: "Cable glands", outcome: { code: "A" } });
+    expect(face.signers.map((s) => s.name.en)).toEqual(["Omar Haddad", "Sara Qahtani", "Huda Harbi"]);
   });
 
   it("is opened by the old copy's QR, which the corrected copy prints too", async () => {
@@ -312,5 +373,74 @@ describe("typing codes is limited per visitor", { timeout: SETUP_MS }, () => {
     expect((await byCode(v, { code: genuine.code, documentNumber: genuine.documentNumber })).statusCode).toBe(429);
     api.advanceClock(VERIFICATION_ATTEMPTS.windowMinutes * 60_000 + 1000);
     await verified(byCode(v, { code: genuine.code, documentNumber: genuine.documentNumber }));
+  });
+
+  it("counts a visitor by the address the load balancer appended, whatever the browser wrote before it", async () => {
+    const real = `198.51.100.${++visitors}`;
+    for (let i = 0; i < VERIFICATION_ATTEMPTS.perVisitor; i++) {
+      await expectHidden(byCode(api.visitor(`1.2.3.${i}, ${real}`), { code: "ZZZZ-ZZZZ", documentNumber: "VER" }), `try ${i + 1}`);
+    }
+    const refused = await byCode(api.visitor(`5.6.7.8, ${real}`), { code: genuine.code, documentNumber: genuine.documentNumber });
+    expect([refused.statusCode, refused.json()]).toEqual([429, { error: "too_many_attempts" }]);
+  });
+});
+
+describe("every refusal is one answer", { timeout: SETUP_MS }, () => {
+  const long = "X".repeat(5000);
+  for (const path of ["/v1/verification/link", "/v1/verification/code"]) {
+    it(`gives the plain 404 for a body that is too long, malformed or not JSON at ${path}, never a 400, 413 or 415`, async () => {
+      const v = visitor();
+      await expectHidden(v.post(path, { token: long, code: long, documentNumber: long }), "too long");
+      await expectHidden(v.post(path, { token: 42, code: 42, documentNumber: ["x"] }), "the wrong types");
+      await expectHidden(v.postRaw(path, "[1, 2, 3]", "application/json"), "an array");
+      await expectHidden(v.postRaw(path, '{"token": "not json', "application/json"), "JSON that doesn't parse");
+      await expectHidden(v.postRaw(path, "<token/>", "application/xml"), "not JSON at all");
+      await expectHidden(v.postRaw(path, "x".repeat(2 * 1024 * 1024), "application/json"), "a body past the size limit");
+    });
+  }
+});
+
+describe("the answer is the record as it was printed, never the live item", { timeout: SETUP_MS }, () => {
+  it("lists the signers in the order of the path to the outcome, without the Send Back or who took it", async () => {
+    const shown = await verified(byLink(visitor(), sentBack));
+    // Sent, Submitted, Sent Back by K1's engineer, Submitted again, sent to the manager's Step, approved:
+    // the Send Back and the Submit before it are off the path (V7).
+    expect(shown.signers.map((s) => [s.name.en, s.positions.map((p) => p.en)])).toEqual([
+      ["Omar Haddad", ["Engineer"]],
+      ["Sara Qahtani", ["Project Manager"]],
+      ["Huda Harbi", ["Manager"]],
+      ["Huda Harbi", ["Manager"]],
+    ]);
+    expect(JSON.stringify(shown)).not.toContain("Faisal Otaibi");
+  });
+
+  it("answers a record printed in English only in English only", async () => {
+    const shown = await verified(byLink(visitor(), english));
+    const texts = [shown.project, shown.outcome.name, ...shown.signers.flatMap((s) => [s.name, s.company, ...s.positions])];
+    expect(texts.length).toBeGreaterThan(5);
+    for (const text of texts) expect(Object.keys(text)).toEqual(["en"]);
+    expect(shown.signers.map((s) => s.name.en)).toEqual(["Omar Haddad", "Sara Qahtani", "Huda Harbi"]);
+  });
+
+  it("is unchanged when the Project and the outcome are renamed after the record was sealed", async () => {
+    const before = await verified(byLink(visitor(), genuine.token));
+    // No seam renames a Project, and the outcome's other settings are not this test's: both as the migrator.
+    // The renamed rows are put back after, for the files that run next.
+    const outcomes = sql`
+      from outcome where code = 'A' and (project_id = ${at.projectId}::uuid or owner_kind = 'rabaed')
+        and work_item_type_id = (select work_item_type_id from work_item where id = ${genuine.id}::uuid)
+    `;
+    const kept = await sql<{ id: string; name: unknown }>`select id, name ${outcomes}`.execute(migrator);
+    expect(kept.rows.length).toBeGreaterThan(0);
+    const project = await sql`update project set name = '{"en": "Renamed Tower", "ar": "برج آخر"}'::jsonb where id = ${at.projectId}::uuid`.execute(migrator);
+    expect(Number(project.numAffectedRows)).toBe(1);
+    try {
+      for (const row of kept.rows) await sql`update outcome set name = '{"en": "Renamed A", "ar": "أ آخر"}'::jsonb where id = ${row.id}::uuid`.execute(migrator);
+      const after = await verified(byLink(visitor(), genuine.token));
+      expect(after).toEqual(before);
+      expect(JSON.stringify(after)).not.toContain("Renamed");
+    } finally {
+      for (const row of kept.rows) await sql`update outcome set name = ${JSON.stringify(row.name)}::jsonb where id = ${row.id}::uuid`.execute(migrator);
+    }
   });
 });

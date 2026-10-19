@@ -85,6 +85,8 @@ export interface Caller {
   patch(url: string, body?: unknown): Promise<LightMyRequestResponse>;
   delete(url: string): Promise<LightMyRequestResponse>;
   request(method: Method, url: string, body?: unknown): Promise<LightMyRequestResponse>;
+  /** POSTs `payload` as it is, with `contentType`: a body that is not JSON, or not what it says it is. */
+  postRaw(url: string, payload: string, contentType: string): Promise<LightMyRequestResponse>;
   /** The current session token, to replay it after sign-out. */
   readonly sessionToken: string | undefined;
   /** Replaces the session token (e.g. to replay an old one). */
@@ -205,6 +207,8 @@ function callerFor(app: FastifyInstance, headers: Record<string, string> = {}): 
   };
   return {
     request,
+    postRaw: (url, payload, contentType) =>
+      app.inject({ method: "POST", url, payload, headers: { ...headers, "content-type": contentType }, cookies: token ? { [SESSION_COOKIE]: token } : {} }),
     get: (url) => request("GET", url),
     post: (url, body) => request("POST", url, body ?? {}),
     patch: (url, body) => request("PATCH", url, body ?? {}),

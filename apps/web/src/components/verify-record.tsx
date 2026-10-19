@@ -3,7 +3,7 @@
 import { VERIFICATION_ATTEMPTS, type Locale, type RecordVerification } from "@rabaed/domain";
 import { RecordVerificationView, VerificationCodeForm, type RecordVerificationLabels, type VerificationCodeFormLabels } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { checkVerificationCode, type CodeCheck } from "@/app/[locale]/verify/actions";
 
 // The public verification page's parts (RP-157), in the visitor's language: interim, from the kit's
@@ -11,15 +11,12 @@ import { checkVerificationCode, type CodeCheck } from "@/app/[locale]/verify/act
 
 function useLabels(): { record: RecordVerificationLabels; form: VerificationCodeFormLabels } {
   const t = useTranslations("verification");
-  // Raw: `{date}` is filled in by the component, in the page's language.
-  const raw = (key: string) => t.raw(key) as string;
   return {
     record: {
       genuine: t("genuine"),
-      replaced: raw("replaced"),
+      replaced: (date) => t("replaced", { date }),
       replacedHint: t("replacedHint"),
       documentNumber: t("documentNumber"),
-      subject: t("subject"),
       project: t("project"),
       outcome: t("outcome"),
       sealed: t("sealed"),
@@ -29,7 +26,7 @@ function useLabels(): { record: RecordVerificationLabels; form: VerificationCode
       chooseFile: t("chooseFile"),
       checking: t("checking"),
       original: t("original"),
-      copyReplaced: raw("copyReplaced"),
+      copyReplaced: (date) => t("copyReplaced", { date }),
       different: t("different"),
       noFile: t("noFile"),
     },
@@ -54,13 +51,19 @@ export function VerifyByCode({ linkNotFound = false }: { linkNotFound?: boolean 
   const t = useTranslations("verification");
   const labels = useLabels();
   const locale = useLocale() as Locale;
-  const [state, action] = useActionState<CodeCheck, FormData>(checkVerificationCode, { kind: "idle", code: "", documentNumber: "" });
+  const [state, dispatch] = useActionState<CodeCheck, FormData>(checkVerificationCode, { kind: "idle" });
+  // What was typed last, shown again with the answer (a form action resets the form).
+  const [typed, setTyped] = useState({ code: "", documentNumber: "", attempt: 0 });
+  const action = (form: FormData) => {
+    setTyped((last) => ({ code: String(form.get("code") ?? ""), documentNumber: String(form.get("documentNumber") ?? ""), attempt: last.attempt + 1 }));
+    dispatch(form);
+  };
 
   if (state.kind === "found") {
     return (
       <div className="flex flex-col gap-4">
         <RecordVerificationView verification={state.verification} locale={locale} labels={labels.record} />
-        <VerificationCodeForm action={action} labels={{ ...labels.form, title: t("checkAnother") }} />
+        <VerificationCodeForm key={typed.attempt} action={action} labels={{ ...labels.form, title: t("checkAnother") }} />
       </div>
     );
   }
@@ -76,12 +79,12 @@ export function VerifyByCode({ linkNotFound = false }: { linkNotFound?: boolean 
             : undefined;
   return (
     <VerificationCodeForm
-      // A new key after each answer, so the form shows what was typed.
-      key={`${state.kind}:${state.code}:${state.documentNumber}`}
+      // A new key with each answer, so the form shows what was typed.
+      key={`${state.kind}:${typed.attempt}`}
       action={action}
       labels={labels.form}
-      defaultCode={state.code}
-      defaultDocumentNumber={state.documentNumber}
+      defaultCode={typed.code}
+      defaultDocumentNumber={typed.documentNumber}
       refusal={refusal}
     />
   );

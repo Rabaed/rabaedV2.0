@@ -1,6 +1,6 @@
 "use client";
 
-import { copyMatch, formatDayMonthYear, type CopyMatch, type Locale, type RecordVerification } from "@rabaed/domain";
+import { copyMatch, formatDayMonthYear, printedIn, type CopyMatch, type Locale, type PrintedText, type RecordVerification } from "@rabaed/domain";
 import { useId, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Badge } from "../data/badge.tsx";
@@ -19,11 +19,10 @@ import { Icon } from "../icon/icon.tsx";
 
 export type RecordVerificationLabels = {
   genuine: string;
-  /** "This record was replaced by a corrected copy on {date}": `{date}` is filled in. */
-  replaced: string;
+  /** "This record was replaced by a corrected copy on {date}", given the date as the page writes it. */
+  replaced: (date: string) => ReactNode;
   replacedHint: string;
   documentNumber: string;
-  subject: string;
   project: string;
   outcome: string;
   sealed: string;
@@ -33,8 +32,8 @@ export type RecordVerificationLabels = {
   chooseFile: string;
   checking: string;
   original: string;
-  /** "This copy was replaced by a corrected copy on {date}: …": `{date}` is filled in. */
-  copyReplaced: string;
+  /** "This copy was replaced by a corrected copy on {date}: …", given the date as the page writes it. */
+  copyReplaced: (date: string) => ReactNode;
   different: string;
   noFile: string;
 };
@@ -46,8 +45,6 @@ async function fingerprintOf(file: Blob): Promise<string> {
 }
 
 const day = (iso: string, locale: Locale) => formatDayMonthYear(new Date(iso), locale);
-/** A label with its `{date}` filled in (labels are plain strings: the page passes them from the server). */
-const onDay = (label: string, iso: string, locale: Locale) => label.replace("{date}", day(iso, locale));
 
 type Check = { state: "idle" } | { state: "checking" } | { state: "done"; fileName: string; match: CopyMatch } | { state: "failed" };
 
@@ -126,7 +123,7 @@ export function CopyCheck({
               check.match.kind === "original"
                 ? labels.original
                 : check.match.kind === "replaced"
-                  ? onDay(labels.copyReplaced, check.match.replacedAt, locale)
+                  ? labels.copyReplaced(day(check.match.replacedAt, locale))
                   : labels.different
             }
           />
@@ -136,7 +133,7 @@ export function CopyCheck({
   );
 }
 
-function CopyResult({ tone, icon, text, fileName }: { tone: "success" | "danger"; icon: "circle-check" | "circle-x"; text: string; fileName?: string }) {
+function CopyResult({ tone, icon, text, fileName }: { tone: "success" | "danger"; icon: "circle-check" | "circle-x"; text: ReactNode; fileName?: string }) {
   return (
     <div
       data-testid="copy-result"
@@ -168,7 +165,9 @@ export function RecordVerificationView({
 }) {
   const v = verification;
   const genuine = v.status === "genuine";
-  const status: ReactNode = genuine ? labels.genuine : onDay(labels.replaced, v.replacedAt!, locale);
+  const status: ReactNode = v.status === "genuine" ? labels.genuine : labels.replaced(day(v.replacedAt, locale));
+  // As the record printed it: in the page's language when the record printed it, else in the one it did.
+  const printed = (text: PrintedText) => <bdi dir="auto">{printedIn(text, locale)}</bdi>;
   return (
     <div className="flex flex-col gap-4" data-testid="record-verification">
       <div
@@ -181,12 +180,21 @@ export function RecordVerificationView({
           {!genuine && <p className="mt-1 text-body">{labels.replacedHint}</p>}
         </div>
       </div>
-      <TitledCard title={v.subject} level={2}>
+      <TitledCard title={<bdi dir="auto">{v.subject}</bdi>} level={2}>
         <KeyValues
           items={[
             { key: "number", label: labels.documentNumber, value: v.documentNumber ? <DocNo value={v.documentNumber} /> : "—" },
-            { key: "project", label: labels.project, value: v.project[locale] },
-            { key: "outcome", label: labels.outcome, value: <Badge tone="neutral">{v.outcome.name[locale]}</Badge> },
+            { key: "project", label: labels.project, value: printed(v.project) },
+            {
+              key: "outcome",
+              label: labels.outcome,
+              value: (
+                <Badge tone="neutral">
+                  {v.outcome.code && <bdi dir="ltr">{v.outcome.code}</bdi>}
+                  {printed(v.outcome.name)}
+                </Badge>
+              ),
+            },
             { key: "sealed", label: labels.sealed, value: day(v.sealedAt, locale) },
           ]}
         />
@@ -195,8 +203,10 @@ export function RecordVerificationView({
         <ul className="divide-y divide-border-subtle">
           {v.signers.map((s, i) => (
             <li key={i} className="flex flex-col gap-0.5 py-2.5">
-              <span className="font-semibold">{s.name[locale]}</span>
-              <span className="text-[13px] text-muted">{[...s.positions.map((p) => p[locale]), s.company[locale]].join(" · ")}</span>
+              <span className="font-semibold">{printed(s.name)}</span>
+              <span className="text-[13px] text-muted">
+                <bdi dir="auto">{[...s.positions.map((p) => printedIn(p, locale)), printedIn(s.company, locale)].join(" · ")}</bdi>
+              </span>
             </li>
           ))}
         </ul>

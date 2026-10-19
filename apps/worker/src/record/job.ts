@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { documentalRecordFacts, saveDocumentalRecord, type OutboxHandler } from "@rabaed/db";
+import { documentalRecordFacts, saveDocumentalRecord, saveDocumentalRecordFace, type OutboxHandler } from "@rabaed/db";
+import { recordFace } from "./face.ts";
 import { finishRecord } from "./checks.ts";
 import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
@@ -83,6 +84,7 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
       verificationTokenHash: await sha256(new TextEncoder().encode(token)),
       verificationCode: data.verification.code,
     });
+    if (saved) await saveDocumentalRecordFace(trx, row.id, recordFace(data)); // the verification page's (RP-157)
     if (saved) await finishRecord(trx, row.id, { pdf, data, layoutPages }, deps.validator);
   };
 }

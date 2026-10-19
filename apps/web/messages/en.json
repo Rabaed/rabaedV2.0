@@ -2567,7 +2567,6 @@
     "replaced": "This record was replaced by a corrected copy on {date}",
     "replacedHint": "Verify your copy below: an older copy is no longer the current record.",
     "documentNumber": "Document Number",
-    "subject": "Subject",
     "project": "Project",
     "outcome": "Outcome",
     "sealed": "Sealed",

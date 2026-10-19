@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
-import { codeFormLabels, storyPdf, storyVerification, verificationLabels } from "../../storybook/verification.ts";
+import { codeFormLabels, storyArabicOnlyVerification, storyPdf, storyVerification, verificationLabels } from "../../storybook/verification.ts";
 import { RecordVerificationView, VerificationCodeForm } from "./record-verification.tsx";
 
 // The public verification page of a Documental Record (RP-157; visibility.md, the Verification page
@@ -43,6 +43,17 @@ export const Genuine: Story = {
     await expect(page).toHaveTextContent(locale === "en" ? "Delta Consultants" : "دلتا للاستشارات");
     // The Document Number reads left to right in both languages.
     await expect(within(page).getByText("TWR-MAR-01-0007 Rev 1")).toHaveAttribute("dir", "ltr");
+  },
+};
+
+/** A record printed in Arabic only: its names show in Arabic on the English page too, as the record printed them. */
+export const PrintedInArabicOnly: Story = {
+  args: { verification: storyArabicOnlyVerification() },
+  play: async () => {
+    const page = await screen.findByTestId("record-verification");
+    await expect(page).toHaveTextContent("هدى الحربي");
+    await expect(page).toHaveTextContent("برج الرياض");
+    await expect(page).not.toHaveTextContent("Huda Harbi");
   },
 };
 

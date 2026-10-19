@@ -7,10 +7,9 @@ import type { RecordVerificationLabels, VerificationCodeFormLabels } from "../co
 export const verificationLabels: Record<Locale, RecordVerificationLabels> = {
   en: {
     genuine: "This record is genuine",
-    replaced: "This record was replaced by a corrected copy on {date}",
+    replaced: (date) => `This record was replaced by a corrected copy on ${date}`,
     replacedHint: "Verify your copy below: an older copy is no longer the current record.",
     documentNumber: "Document Number",
-    subject: "Subject",
     project: "Project",
     outcome: "Outcome",
     sealed: "Sealed",
@@ -20,16 +19,15 @@ export const verificationLabels: Record<Locale, RecordVerificationLabels> = {
     chooseFile: "Choose PDF",
     checking: "Verifying…",
     original: "This copy is the original record.",
-    copyReplaced: "This copy was replaced by a corrected copy on {date}: it is not the current record.",
+    copyReplaced: (date) => `This copy was replaced by a corrected copy on ${date}: it is not the current record.`,
     different: "This PDF is not this record. It may have been changed.",
     noFile: "This PDF could not be read. Choose another.",
   },
   ar: {
     genuine: "هذا السجل أصلي",
-    replaced: "استُبدل هذا السجل بنسخة مصححة في {date}",
+    replaced: (date) => `استُبدل هذا السجل بنسخة مصححة في ${date}`,
     replacedHint: "تحقق من نسختك أدناه: النسخة الأقدم لم تعد السجل الحالي.",
     documentNumber: "رقم المستند",
-    subject: "الموضوع",
     project: "المشروع",
     outcome: "النتيجة",
     sealed: "تاريخ التوثيق",
@@ -39,7 +37,7 @@ export const verificationLabels: Record<Locale, RecordVerificationLabels> = {
     chooseFile: "اختر ملف PDF",
     checking: "جارٍ الفحص…",
     original: "هذه النسخة هي السجل الأصلي.",
-    copyReplaced: "استُبدلت هذه النسخة بنسخة مصححة في {date}: وهي ليست السجل الحالي.",
+    copyReplaced: (date) => `استُبدلت هذه النسخة بنسخة مصححة في ${date}: وهي ليست السجل الحالي.`,
     different: "هذا الملف ليس هذا السجل. ربما عُدّل.",
     noFile: "تعذرت قراءة الملف. اختر ملف PDF.",
   },
@@ -78,9 +76,7 @@ const storyPdfSha256 = {
 /** A made-up record, genuine; `replaced` gives it a corrected copy that replaced `storyPdf.replaced`. */
 export function storyVerification(replaced = false): RecordVerification {
   const replacedAt = "2027-08-30T09:15:00.000Z";
-  return {
-    status: replaced ? "replaced" : "genuine",
-    replacedAt: replaced ? replacedAt : null,
+  const face = {
     documentNumber: "TWR-MAR-01-0007 Rev 1",
     subject: "Cable trays for Building A",
     project: { en: "Riyadh Tower", ar: "برج الرياض" },
@@ -95,5 +91,18 @@ export function storyVerification(replaced = false): RecordVerification {
       current: storyPdfSha256.original,
       replaced: replaced ? [{ sha256: storyPdfSha256.replaced, replacedAt }] : [],
     },
+  };
+  return replaced ? { status: "replaced", replacedAt, ...face } : { status: "genuine", ...face };
+}
+
+/** A record printed in Arabic only: every text is Arabic, whatever the page's language. */
+export function storyArabicOnlyVerification(): RecordVerification {
+  const v = storyVerification();
+  const ar = (t: { ar?: string }) => ({ ar: t.ar ?? "" });
+  return {
+    ...v,
+    project: ar(v.project),
+    outcome: { code: v.outcome.code, name: ar(v.outcome.name) },
+    signers: v.signers.map((s) => ({ name: ar(s.name), positions: s.positions.map(ar), company: ar(s.company) })),
   };
 }
