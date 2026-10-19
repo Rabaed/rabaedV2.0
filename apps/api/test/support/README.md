@@ -13,4 +13,5 @@ are listed at the top of `packages/db/test-support/index.ts`.
 | `rules.ts` | `addRulesType`, `addActionsType`: a Rabaed Type on the rules or actions Workflow. |
 | `send-back.ts` | `addSendBackType`: a Rabaed Type on the test Send Back Workflow (`addTestWorkflow` options pass through). |
 | `internal-steps-type.ts` | `addInternalConsultantStepsType`, `INTERNAL_STEPS_TYPE`, `MANAGER_STEP`: a Type with two Consultant Steps. |
+| `checklist-template.ts` | `checklistTemplate`: a Project's Checklist Template for a WIR to pick (RP-651); `passChecklists`: the Consultant Engineer answers the WIR's checklist all Pass before Send to Manager (RP-86). |
 | `seed-demo.ts` | The global setup that seeds the demo into the test database, once. |
