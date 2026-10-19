@@ -287,16 +287,16 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
     expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
     expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
 
-    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative, c2.members.engineer, other.ap]) {
+    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative, c2.members.engineer, other.ap]) {
       expect(await photosAs(outsider, id), outsider).toEqual([]);
       for (const document of [photo, copy]) expect(await byId(outsider, document), outsider).toEqual([]);
     }
-    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative]) {
+    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative]) {
       expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`), outsider).toEqual([]);
     }
 
     expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
-    for (const reader of [c1.members.engineer, c1Pm, ow.members.representative, k1.members.engineer, k1.members.manager]) {
+    for (const reader of [c1.members.engineer, c1.members.project_manager, ow.members.representative, k1.members.engineer, k1.members.manager]) {
       expect(await photosAs(reader, id), reader).toEqual([photo, copy].sort());
       expect(await byId(reader, copy), reader).toEqual([copy]);
     }
@@ -319,7 +319,7 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
     const photo = await addPhoto(k1.members.engineer, id);
     // K1's Manager may too: any Member of the Participant holding the Step (ADR 0024).
     await annotate(k1.members.manager, id, photo);
-    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative, c2.members.engineer, other.ap]) {
+    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative, c2.members.engineer, other.ap]) {
       expect((await startCopy(outsider, id, photo)).outcome, outsider).toBe("not_found");
     }
     expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
@@ -333,7 +333,7 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
     const photo = await addPhoto(k1.members.engineer, id);
     const copy = await annotate(k1.members.engineer, id, photo);
     expect(await take(k1.members.engineer, id, "send_back")).toBe("applied");
-    for (const reader of [k1.members.engineer, c1.members.engineer, c1Pm]) expect(await photosAs(reader, id), reader).toEqual([]);
+    for (const reader of [k1.members.engineer, c1.members.engineer, c1.members.project_manager]) expect(await photosAs(reader, id), reader).toEqual([]);
     const removed = await migrator.query("select removed_at is not null as removed from document where id = $1", [copy]);
     expect(removed.rows[0].removed).toBe(true);
   });
