@@ -496,7 +496,6 @@ export interface WorkflowStepTable {
   name: ColumnType<Bilingual, string, string>;
   stage_key: string;
   actor_rule: Json;
-  is_signing: Generated<boolean>;
   outcome_mode: Generated<"none" | "recommend_code" | "issue_code" | "inspection_result">;
   created_at: Generated<Timestamp>;
 }

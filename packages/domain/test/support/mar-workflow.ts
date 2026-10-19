@@ -46,7 +46,6 @@ const marSteps: WorkflowVersionRows["steps"] = [
     name: { en: "Draft", ar: "مسودة" },
     stage_key: "draft",
     actor_rule: { base_role: "contractor", permission: "create" },
-    is_signing: false,
     outcome_mode: "none",
   },
   {
@@ -54,7 +53,6 @@ const marSteps: WorkflowVersionRows["steps"] = [
     name: { en: "Contractor review", ar: "مراجعة المقاول" },
     stage_key: "internal_review",
     actor_rule: { base_role: "contractor", permission: "review" },
-    is_signing: false,
     outcome_mode: "none",
   },
   {
@@ -62,16 +60,14 @@ const marSteps: WorkflowVersionRows["steps"] = [
     name: { en: "Consultant review", ar: "مراجعة الاستشاري" },
     stage_key: "pending_approval",
     actor_rule: { base_role: "consultant", permission: "approve" },
-    is_signing: false,
     outcome_mode: "issue_code",
   },
-  { key: "approved", name: { en: "Approved", ar: "معتمد" }, stage_key: "approved", actor_rule: {}, is_signing: false, outcome_mode: "none" },
+  { key: "approved", name: { en: "Approved", ar: "معتمد" }, stage_key: "approved", actor_rule: {}, outcome_mode: "none" },
   {
     key: "revise_resubmit",
     name: { en: "Revise & Resubmit", ar: "مراجعة وإعادة تقديم" },
     stage_key: "revise_resubmit",
     actor_rule: {},
-    is_signing: false,
     outcome_mode: "none",
   },
 ];

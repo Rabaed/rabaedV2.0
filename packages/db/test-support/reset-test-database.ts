@@ -1,6 +1,7 @@
 import pg from "pg";
 import { databaseNameOf, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 import { resetDatabase } from "../src/reset-database.ts";
+import { installTestDefaults } from "./test-defaults.ts";
 
 /** Throws unless the database is a test database: its name ends in `_test`. */
 export function assertTestDatabase(urls: DatabaseUrls): void {
@@ -10,12 +11,14 @@ export function assertTestDatabase(urls: DatabaseUrls): void {
 
 /**
  * Drops `<db>_test` and builds it again (roles, migrations), so a seam run never
- * sees what an earlier run left behind. Other connections to it are closed;
+ * sees what an earlier run left behind, then installs the test defaults (every
+ * Member has a Signature; test-defaults.ts). Other connections to it are closed;
  * no other database is touched.
  */
 export async function resetTestDatabase(urls: DatabaseUrls): Promise<void> {
   assertTestDatabase(urls);
   await resetDatabase(urls);
+  await installTestDefaults(urls);
 }
 
 /** A lock on one test database, held until released. */

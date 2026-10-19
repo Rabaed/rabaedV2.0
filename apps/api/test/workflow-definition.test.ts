@@ -100,7 +100,7 @@ beforeAll(async () => {
     `.execute(migrator)
   ).rows;
   const steps = await sql<WorkflowVersionRows["steps"][number] & { version: string }>`
-    select s.workflow_version_id as version, s.key, s.name, s.stage_key, s.actor_rule, s.is_signing, s.outcome_mode
+    select s.workflow_version_id as version, s.key, s.name, s.stage_key, s.actor_rule, s.outcome_mode
     from workflow_step s join workflow_version v on v.id = s.workflow_version_id
     where v.status = 'published'
     order by s.created_at, s.key

@@ -1,4 +1,4 @@
-# Migration days
+﻿# Migration days
 
 Each row reserves one day of migration timestamps (`yyyymmdd`, the first eight digits of a migration's name) for one issue or spec: `| yyyymmdd | RP-nnn (or spec RP-nnn) | lane | purpose |`. The planning session writes the rows with the spec, beside its ticket table's Migration days column (`planning/parallel-sessions.md` step 4.5), and lands them on `main` before the spec starts. A single ticket's migration gets its row from `pnpm migration:new <name> --issue RP-nnn` (RP-583), in the ticket's branch. Only table rows count.
 
@@ -91,5 +91,10 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270721 | RP-623 | 3B | Unused: the migration moved to 20270731, after main's 20270726 |
 | 20270720 | RP-673 | 41 | Unused: the migration moved to 20270726, after RP-151's 20270720 on main |
 | 20270720 | RP-151 | 22 | record_page_one |
+| 20270727 | RP-85 | 21 | member_signature |
+| 20270728 | RP-85 | 21 | drop_is_signing |
+| 20270729 | RP-617 | 21 | company_stamp |
+| 20270730 | RP-632 | 21 | review_fixes |
 | 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
 | 20270731 | RP-623 | 32 | reply_screen_files |
+| 20270731 | RP-629 | 34 | snag_bulk_reassign |

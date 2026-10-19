@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { closeOnboardingLead, createEngineer, listOnboardingLeads, onboardCompany, type CloseLeadResult } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { runAsOwner, testDatabaseUrls, withoutSignature, withoutStamp } from "@rabaed/db/test-support";
 import type {
   BaseRole,
   CreateProjectRequest,
@@ -124,8 +124,19 @@ export interface TestApi {
   onboardingLeads(reason: string): Promise<OnboardingLeads["leads"]>;
   /** A Rabaed Engineer closes an open onboarding lead, with a reason, through Rabaed Admin's service. */
   closeOnboardingLead(leadId: string, reason: string): Promise<CloseLeadResult>;
-  /** Accepts an invitation and returns the signed-in caller. */
+  /**
+   * Accepts an invitation and returns the signed-in caller. Like every Member of the test
+   * database, they have a Signature by default (RP-85, @rabaed/db/test-support test-defaults.ts);
+   * `withoutSignature` ends it, for a test of the gate.
+   */
   acceptInvitation(token: string, password?: string): Promise<Caller>;
+  /** Ends the Member's Signature in force, as the owner: they have none until they add one (RP-85). */
+  withoutSignature(memberId: string): Promise<void>;
+  /**
+   * Takes the Company's Stamp away, as the owner: none of its Members can act until its
+   * Authorized Person adds one. Every Company of the test database has one by default (RP-617).
+   */
+  withoutStamp(companyId: string): Promise<void>;
   /** Onboards a Company and signs its Authorized Person in. */
   authorizedPerson(): Promise<{ company: OnboardedCompany; caller: Caller }>;
   /** The Authorized Person (`by`) invites a Member; overrides replace parts of the request. */
@@ -290,6 +301,14 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       const email = invitedEmails.get(token);
       if (email) signedIn.set(caller, { email, password });
       return caller;
+    },
+
+    async withoutSignature(memberId) {
+      await withoutSignature(runAsOwner(migratorDb), memberId);
+    },
+
+    async withoutStamp(companyId) {
+      await withoutStamp(runAsOwner(migratorDb), companyId);
     },
 
     async authorizedPerson() {

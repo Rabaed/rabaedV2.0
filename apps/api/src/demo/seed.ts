@@ -3,8 +3,11 @@ import { createEngineer, onboardCompany, publishRabaedDefaults } from "@rabaed/a
 import type { Db } from "@rabaed/db";
 import type { BaseRole, BilingualText, Locale, StartedDocumentUpload, VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
+import { sql } from "kysely";
 import { SESSION_COOKIE } from "../app.ts";
 import { demoPdf } from "./demo-pdf.ts";
+import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
+import { demoSignaturePng } from "./demo-signature.ts";
 import { jpegWithExif } from "./exif-jpeg.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
@@ -139,6 +142,56 @@ export async function seedDemo(
   });
   if (!defaults.ok) throw new Error(`Demo seed: the Rabaed Default ${defaults.kind} ${defaults.name} was refused: ${JSON.stringify(defaults.result)}`);
 
+  // Every demo Member has a Signature (RP-85: no Signature, no Transition), drawn for the demo.
+  // With a file store the Member saves it through the api, as Profile → Add Signature does.
+  // Without one (the cloud demo's migration task, which may not write the Project files
+  // bucket) it is recorded as the owner with no image stored: the profile shows none.
+  /** A demo image recorded as the owner, with no image stored: its stored_file row, uploaded by `uploaderId`. */
+  async function storedFileAsOwner(key: string, png: Buffer, uploaderId: string): Promise<string> {
+    const { rows } = await sql<{ id: string }>`
+      insert into stored_file (storage_key, sha256, size, mime, uploaded_by_member_id)
+      values (${key}, sha256(${png}), ${png.byteLength}, 'image/png', ${uploaderId}::uuid)
+      returning id
+    `.execute(databases.migrator);
+    return rows[0]!.id;
+  }
+
+  let signatures = 0;
+  async function sign(caller: Call, memberId: string) {
+    const png = demoSignaturePng(signatures++);
+    if (options.files) {
+      await caller("PUT", "/v1/me/signature", { method: "drawn", contentType: "image/png", data: png.toString("base64") });
+      return;
+    }
+    const fileId = await storedFileAsOwner(`members/${memberId}/signatures/${randomUUID()}.png`, png, memberId);
+    await sql`
+      insert into member_signature (member_id, file_id, method, active_from) values (${memberId}::uuid, ${fileId}::uuid, 'drawn', now())
+    `.execute(databases.migrator);
+  }
+
+  // Every demo Company has a logo and a Stamp (RP-617: no Stamp, no Transition), made up for the
+  // demo. With a file store its Authorized Person uploads them through the api, as the Company
+  // profile does; without one they are recorded as the owner with no image stored.
+  let companies = 0;
+  async function brand(caller: Call, companyId: string, authorizedPersonId: string) {
+    const seed = companies++;
+    for (const [kind, png] of [
+      ["logo", demoLogoPng(seed)],
+      ["stamp", demoStampPng(seed)],
+    ] as const) {
+      if (options.files) {
+        await caller("PUT", `/v1/companies/${companyId}/${kind}`, { contentType: "image/png", data: png.toString("base64") });
+        continue;
+      }
+      const fileId = await storedFileAsOwner(`companies/${companyId}/${kind}/${randomUUID()}.png`, png, authorizedPersonId);
+      await sql`
+        update company set logo_file_id = case when ${kind} = 'logo' then ${fileId}::uuid else logo_file_id end,
+          stamp_file_id = case when ${kind} = 'stamp' then ${fileId}::uuid else stamp_file_id end
+        where id = ${companyId}::uuid
+      `.execute(databases.migrator);
+    }
+  }
+
   /** The Engineer onboards a Company; its Authorized Person accepts the invitation. */
   async function onboard(n: number, domain: string, legalName: BilingualText, ap: Person): Promise<Onboarded> {
     // Made-up numbers in a range no real registration uses.
@@ -159,6 +212,8 @@ export async function seedDemo(
     if (!r.ok) throw new Error(`Demo seed: onboarding ${legalName.en} conflicts on ${r.conflict}`);
     const caller = browser(app);
     await caller("POST", "/v1/invitations/accept", { token: r.invitation.token, password });
+    await sign(caller, r.authorizedPersonId);
+    await brand(caller, r.companyId, r.authorizedPersonId);
     people.push({ key: ap.key, email: email(ap.local, domain), name: ap.name, company: legalName.en, label: ap.label });
     return { caller, authorizedPersonId: r.authorizedPersonId, crNumber, domain, legalName };
   }
@@ -290,7 +345,9 @@ export async function seedDemo(
       fullName: person.name,
       locale: person.locale ?? "en",
     });
-    await browser(app)("POST", "/v1/invitations/accept", { token: invited.invitation.token, password });
+    const memberCaller = browser(app);
+    await memberCaller("POST", "/v1/invitations/accept", { token: invited.invitation.token, password });
+    await sign(memberCaller, invited.memberId);
     await company.caller("POST", `/v1/participants/${participantId}/members`, { memberId: invited.memberId });
     await company.caller("PUT", `/v1/participants/${participantId}/members/${invited.memberId}/visibility`, {
       trade: all,
