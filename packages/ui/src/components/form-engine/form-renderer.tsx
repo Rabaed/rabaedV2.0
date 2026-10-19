@@ -41,7 +41,7 @@ import {
   type ChecklistTemplateChoice,
   type TableColumn,
 } from "@rabaed/domain";
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
@@ -54,7 +54,7 @@ import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices, type BuiltInFieldLabels } from "./built-in-fields.tsx";
 import { AttachmentsField, attachmentsLimits, takesUpload, type AttachmentsFieldLabels } from "./attachments-field.tsx";
 import { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./checklist-field.tsx";
-import { ChecklistTemplateField, templateOptions, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
+import { ChecklistTemplateField, PickedTemplateItems, templateOptions, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
 import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabels } from "./link-question-field.tsx";
 import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
@@ -638,7 +638,7 @@ export function FormRenderer({
                 onChange?.({
                   trade,
                   scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes),
-                  ...suppliersOfOtherTrades(trade),
+                  ...choicesOfOtherTrades(trade),
                 })
               }
             />
@@ -695,7 +695,7 @@ export function FormRenderer({
    * Clears the suppliers and Checklist Templates chosen for another Trade than `trade`: changing
    * the Trade clears them (form-engine.md §2.12, §3.2).
    */
-  function suppliersOfOtherTrades(trade: string): Record<string, undefined> {
+  function choicesOfOtherTrades(trade: string): Record<string, undefined> {
     const cleared: Record<string, undefined> = {};
     for (const field of byKey.values()) {
       const choices = field.type === "approved_supplier" ? suppliers : field.type === "checklist_template" ? checklistTemplates : [];
@@ -979,7 +979,7 @@ export function FormRenderer({
                         (value) => onChange?.({ [field.key]: value }),
                         cellErrorsOf(field.key),
                       );
-                return (
+                const shownField = (
                   <Field
                     key={field.key}
                     id={fieldId(field.key)}
@@ -992,6 +992,15 @@ export function FormRenderer({
                   >
                     {element}
                   </Field>
+                );
+                // The picked Checklist Template's items read below the pick and its help (RP-651).
+                return field.type === "checklist_template" ? (
+                  <Fragment key={field.key}>
+                    {shownField}
+                    <PickedTemplateItems value={answers[field.key]} choices={checklistTemplates} locale={locale} labels={labels.checklistTemplate} />
+                  </Fragment>
+                ) : (
+                  shownField
                 );
               })
             ) : (
