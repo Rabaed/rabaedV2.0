@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
-import { environmentTemplates, references, render, resourcesOfType, type Resource } from "./support.ts";
+import { environmentTemplates, references, render, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const storage = env.template("storage");
@@ -67,13 +67,14 @@ describe("buckets", () => {
 
 describe("Project files", () => {
   const apiTaskRole = "arn:aws:iam::${AWS::AccountId}:role/rabaed-dev-api-task";
+  const workerTaskRole = "arn:aws:iam::${AWS::AccountId}:role/rabaed-dev-worker-task";
 
-  it("the bucket refuses object reads and writes by anyone but the api task role", () => {
+  it("the bucket refuses object reads and writes by anyone but the api and worker task roles", () => {
     const deny = bucketPolicy("ProjectFiles").find((s) => s.Effect === "Deny" && s.Condition?.StringNotEquals);
     expect(render(deny)).toMatchObject({
       Principal: { AWS: "*" },
       Action: expect.arrayContaining(["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*"]),
-      Condition: { StringNotEquals: { "aws:PrincipalArn": apiTaskRole } },
+      Condition: { StringNotEquals: { "aws:PrincipalArn": [apiTaskRole, workerTaskRole] } },
     });
   });
 
@@ -99,7 +100,7 @@ describe("Project files", () => {
     expect(buckets.BuildAssets?.Properties?.CorsConfiguration).toBeUndefined();
   });
 
-  it("only the api task role is granted object access, and only under projects/", () => {
+  it("only the api and worker task roles are granted object access: the api under projects/, the worker reading there and writing only records (RP-620)", () => {
     const projectBucket = bucketLogicalId("ProjectFiles");
     const grants: { role: string; actions: string[]; resources: unknown[] }[] = [];
     for (const part of Object.keys(stackNames(environments.dev)) as (keyof ReturnType<typeof stackNames>)[]) {
@@ -118,14 +119,25 @@ describe("Project files", () => {
         }
       }
     }
-    expect([...new Set(grants.map((g) => g.role))]).toEqual(["rabaed-dev-api-task"]);
+    expect([...new Set(grants.map((g) => g.role))].sort()).toEqual(["rabaed-dev-api-task", "rabaed-dev-worker-task"]);
     // ADR 0007: object keys start with the Project; the api's object grants cover that prefix only.
     const isList = (g: { actions: string[] }) => g.actions.includes("s3:ListBucket");
-    for (const resource of grants.filter((g) => !isList(g)).flatMap((g) => g.resources)) {
+    const api = grants.filter((g) => g.role === "rabaed-dev-api-task");
+    for (const resource of api.filter((g) => !isList(g)).flatMap((g) => g.resources)) {
       expect(String(render(resource))).toMatch(/\/projects\/\*$/);
     }
+    // The worker reads Documents, and writes nothing but each item's Documental Record; it never deletes or lists.
+    // (CDK merges one action's statements, so a statement may also name the build assets bucket.)
+    const onBucket = (r: unknown) => references(r).some((ref) => env.tryResolve(ref, "app")?.logicalId === projectBucket);
+    const worker = grants
+      .filter((g) => g.role === "rabaed-dev-worker-task")
+      .flatMap((g) => g.resources.filter(onBucket).map((r) => [g.actions.join(","), String(render(r))]));
+    expect(worker).toEqual([
+      ["s3:GetObject", expect.stringMatching(/\/projects\/\*$/)],
+      ["s3:PutObject", expect.stringMatching(/\/projects\/\*\/work-items\/\*\/documental-record\/\*$/)],
+    ]);
     // And listing, on the bucket itself, so a file not uploaded yet answers 404 rather than 403 (RP-269).
-    const lists = grants.filter(isList);
+    const lists = api.filter(isList);
     expect(lists.map((g) => g.actions)).toEqual([["s3:ListBucket"]]);
     expect(env.resolve(lists[0]!.resources[0], "app").logicalId).toBe(projectBucket);
   });
@@ -153,8 +165,25 @@ describe("build assets", () => {
     return grants;
   }
 
+  it("only the deploy role and the worker may read the build assets bucket", () => {
+    expect([...new Set(grantsOn(buildAssets).flatMap((g) => g.roles))].sort()).toEqual(["rabaed-dev-github-deploy", "rabaed-dev-worker-task"]);
+  });
+
+  it("the worker reads the fonts and the sealing certificate, and lists only the fonts (RP-620)", () => {
+    const grants = grantsOn(buildAssets).filter((g) => g.roles.includes("rabaed-dev-worker-task"));
+    const byAction = Object.fromEntries(grants.map(({ statement }) => [String(statement.Action), statement]));
+    expect(Object.keys(byAction).sort()).toEqual(["s3:GetObject", "s3:ListBucket"]);
+    // (CDK merges the worker's reads into one statement, the Project files' included.)
+    const onBuildAssets = (r: unknown) => references(r).some((ref) => env.tryResolve(ref, "app")?.logicalId === buildAssets);
+    expect([byAction["s3:GetObject"]!.Resource].flat().filter(onBuildAssets).map((r) => String(render(r)))).toEqual([
+      expect.stringMatching(/\/fonts\/\*$/),
+      expect.stringMatching(/\/sealing\/\*$/),
+    ]);
+    expect(byAction["s3:ListBucket"]!.Condition).toEqual({ StringLike: { "s3:prefix": "fonts/*" } });
+  });
+
   it("the deploy role, which builds the images, can read only the fonts/ prefix of the build assets bucket", () => {
-    const grants = grantsOn(buildAssets);
+    const grants = grantsOn(buildAssets).filter((g) => g.roles.includes("rabaed-dev-github-deploy"));
     expect(grants.flatMap((g) => g.roles)).toEqual(["rabaed-dev-github-deploy", "rabaed-dev-github-deploy"]);
     const byAction = Object.fromEntries(grants.map(({ statement }) => [String(statement.Action), statement]));
     expect(Object.keys(byAction).sort()).toEqual(["s3:GetObject", "s3:ListBucket"]);
@@ -195,11 +224,37 @@ describe("keys", () => {
     expect(keys.StorageKey).toMatchObject({ EnableKeyRotation: true });
   });
 
-  it("reserves an asymmetric signing key for sealing PDFs, which nothing may use yet", () => {
+  it("has an asymmetric signing key for sealing the Documental Records, with which only the worker may sign (RP-620)", () => {
     expect(keys.PdfSealingKey).toMatchObject({ KeySpec: "RSA_3072", KeyUsage: "SIGN_VERIFY" });
     const sealing = keysByName.PdfSealingKey!.logicalId;
-    for (const policy of resourcesOfType(env.synthesised, "AWS::IAM::Policy")) {
-      expect(JSON.stringify(policy.Properties?.PolicyDocument)).not.toContain(sealing);
+    const uses: { roles: string[]; actions: string[] }[] = [];
+    for (const part of Object.keys(stackNames(environments.dev)) as (keyof ReturnType<typeof stackNames>)[]) {
+      for (const policy of Object.values(env.template(part).findResources("AWS::IAM::Policy")) as Resource[]) {
+        for (const statement of (policy.Properties?.PolicyDocument as { Statement: Statement[] }).Statement) {
+          if (!references(statement.Resource).some((ref) => env.tryResolve(ref, part)?.logicalId === sealing)) continue;
+          const roles = (policy.Properties?.Roles as unknown[]).map((role) => String(env.resolve(role, part).resource.Properties?.RoleName));
+          uses.push({ roles, actions: actions(statement) });
+        }
+      }
     }
+    expect(uses).toEqual([{ roles: ["rabaed-dev-worker-task"], actions: ["kms:Sign"] }]);
+  });
+
+  it("its key policy refuses kms:Sign to every principal but the worker's task role, whatever IAM grants", () => {
+    const policy = keysByName.PdfSealingKey!.resource.Properties?.KeyPolicy as { Statement: Statement[] };
+    const deny = policy.Statement.filter((s) => s.Effect === "Deny");
+    expect(render(deny)).toEqual([
+      expect.objectContaining({
+        Principal: { AWS: "*" },
+        Action: "kms:Sign",
+        Resource: "*",
+        Condition: { StringNotEquals: { "aws:PrincipalArn": "arn:aws:iam::${AWS::AccountId}:role/rabaed-dev-worker-task" } },
+      }),
+    ]);
+  });
+
+  it("carries the tag the permissions boundary allows kms:Sign by", () => {
+    expect(keys.PdfSealingKey!.Tags).toContainEqual({ Key: "rabaed-purpose", Value: "pdf-sealing" });
+    expect(keys.StorageKey!.Tags ?? []).not.toContainEqual({ Key: "rabaed-purpose", Value: "pdf-sealing" });
   });
 });
