@@ -4,7 +4,7 @@
 // covering its Trade and Location; C1 moves it inside its own Company and resolves it, and
 // K1 verifies it. C2, another Contractor of the same Trade covering another Location, never
 // reads it; each Company reads the other's work only through the shared Transitions.
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -22,11 +22,14 @@ type Company = { id: string; cr: string; ap: string; member: string };
 let c1: Company; // Contractor: works the Snag.
 let k1: Company; // Consultant: raises and verifies it.
 let c2: Company; // Another Contractor of the same Trade, covering Building B only (V3).
+let k2: Company; // Another Consultant, covering Buildings B and C only (RP-625).
 let c1Pm = "";
-let participant: Record<"c1" | "k1" | "c2", string>;
+let participant: Record<"c1" | "k1" | "c2" | "k2", string>;
 let projectId = "";
 let electrical = "";
 let buildingA = "";
+let buildingB = ""; // Covered by C2, K2, C1 and K1.
+let buildingC = ""; // Covered by C1 (all), K1 (all) and K2; not by C2.
 
 async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
@@ -94,6 +97,7 @@ beforeAll(async () => {
   c1 = await company(engineer, "C1");
   k1 = await company(engineer, "K1");
   c2 = await company(engineer, "C2");
+  k2 = await company(engineer, "K2");
   c1Pm = await member(c1.id, "pm");
 
   const [created] = await call<{ project_id: string }>(
@@ -105,6 +109,7 @@ beforeAll(async () => {
     c1: (await migrator.query("select id from participant where project_id = $1", [projectId])).rows[0].id as string,
     k1: await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap),
     c2: await joinProject(app, projectId, { adminId: c1.ap, crNumber: c2.cr, role: "contractor" }, c2.ap),
+    k2: await joinProject(app, projectId, { adminId: c1.ap, crNumber: k2.cr, role: "consultant" }, k2.ap),
   };
   const value = async (kind: string, code: string) =>
     (
@@ -115,12 +120,14 @@ beforeAll(async () => {
     )[0]!.value_id;
   electrical = await value("trade", "EL");
   buildingA = await value("location", "BA");
-  const buildingB = await value("location", "BB");
+  buildingB = await value("location", "BB");
+  buildingC = await value("location", "BC");
+  const locations: Partial<Record<string, string[]>> = { [participant.c2]: [buildingB], [participant.k2]: [buildingB, buildingC] };
   for (const p of Object.values(participant)) {
     for (const kind of ["trade", "location"]) {
-      const onlyB = p === participant.c2 && kind === "location";
+      const only = kind === "location" ? locations[p] : undefined;
       expect(
-        await outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, ${!onlyB}, ${onlyB ? [buildingB] : []}::uuid[], now()) as outcome`),
+        await outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, ${!only}, ${only ?? []}::uuid[], now()) as outcome`),
       ).toBe("set");
     }
   }
@@ -129,6 +136,7 @@ beforeAll(async () => {
     [c1, participant.c1, c1Pm, ["project_manager"]],
     [k1, participant.k1, k1.member, ["engineer"]],
     [c2, participant.c2, c2.member, ["engineer"]],
+    [k2, participant.k2, k2.member, ["engineer"]],
   ];
   for (const [co, p, m, positions] of people) {
     await call(co.ap, sql<{ outcome: string }>`select app.add_project_member(${p}::uuid, ${m}::uuid, now())`);
@@ -215,10 +223,10 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
     expect(await take(c1Pm, id, transition, answers)).toBe("applied");
     await pickUp(c1Pm, id);
   }
-  /** What K1 and C2 read of item `id`: none of its row, events, Steps, Documents, Links or raiser. */
-  async function readByOthers(id: string) {
+  /** What `others` (K1 and C2) read of item `id`: none of its row, events, Steps, Documents, Links or raiser. */
+  async function readByOthers(id: string, others = [k1.member, c2.member]) {
     const reads = [];
-    for (const who of [k1.member, c2.member]) {
+    for (const who of others) {
       reads.push(
         await seen(who, id),
         await events(who, id),
@@ -231,22 +239,23 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
     }
     return reads;
   }
-  const nothing = [[], [], [], [], [], undefined, null, [], [], [], [], [], undefined, null];
+  const nothing = [[], [], [], [], [], undefined, null];
 
-  it("RP-622-1: its Draft, Open, moves, Verify and Close are C1's alone: K1 and C2 read none of it at any Step", async () => {
+  it("RP-622-1: its Draft, Open, moves, Verify and Close are C1's alone: C2 reads none of it at any Step, K1 none of its Draft", async () => {
     const id = await drafted("Missing fire stopping");
-    expect(await readByOthers(id)).toEqual(nothing);
+    expect(await readByOthers(id)).toEqual([...nothing, ...nothing]);
+    // From the Raise the Consultant is informed (RP-625, below); C2 never reads it.
     await move(id, "raise");
     expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("open");
-    expect(await readByOthers(id)).toEqual(nothing);
+    expect(await readByOthers(id, [c2.member])).toEqual(nothing);
     await move(id, "start_work");
     await move(id, "put_on_hold_in_progress");
-    expect(await readByOthers(id)).toEqual(nothing);
+    expect(await readByOthers(id, [c2.member])).toEqual(nothing);
     await move(id, "resolve_on_hold", { resolution_note: "Sealed" });
     expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("resolved");
-    expect(await readByOthers(id)).toEqual(nothing);
+    expect(await readByOthers(id, [c2.member])).toEqual(nothing);
     expect(await take(c1Pm, id, "close")).toBe("applied");
-    expect(await readByOthers(id)).toEqual(nothing);
+    expect(await readByOthers(id, [c2.member])).toEqual(nothing);
     // C1 reads it whole, every event its own.
     expect(await seen(c1.member, id)).toEqual([id]);
     expect((await events(c1.member, id)).every((e) => e.actor_participant_id === participant.c1)).toBe(true);
@@ -257,7 +266,7 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
     const k1s = await raised("Raiser role of K1's Snag");
     const role = async (who: string, id: string) => (await call<{ role: string | null }>(who, sql`select app.work_item_raiser_role(${id}::uuid) as role`))[0]!.role;
     expect(await role(c1.member, own)).toBe("contractor");
-    expect(await role(k1.member, own)).toBeNull();
+    expect(await role(k1.member, own)).toBeNull(); // A Draft: K1 is informed only by its Raise (RP-625).
     expect(await role(k1.member, k1s)).toBe("consultant");
     expect(await role(c1.member, k1s)).toBe("consultant");
     expect(await role(c2.member, k1s)).toBeNull();
@@ -275,3 +284,143 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
     expect(await seen(c2.member, id)).toEqual([]);
   });
 });
+
+// RP-625 (SNAG-3): the Snag's Version 3 Raise informs the Consultant. Every active Consultant
+// Participant covering the Snag gets `informed` access at the Raise and reads it as any
+// Participant without the Step: its shared moves only, its Stage and Step Age from the Raise.
+describe("a Contractor's raised Snag informs the covering Consultants (RP-625)", () => {
+  /** C1's PM's Draft Snag on `location`. */
+  async function drafted(title: string, location = buildingA): Promise<string> {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1Pm,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', ${title}, app.latest_form_version('SNG'), ${JSON.stringify({ description: title })}::jsonb,
+        ${electrical}::uuid, ${location}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    return created!.work_item_id;
+  }
+  async function move(id: string, transition: string, answers: object = {}) {
+    expect(await take(c1Pm, id, transition, answers)).toBe("applied");
+    await pickUp(c1Pm, id);
+  }
+  const transitionKeys = async (who: string, id: string) => (await events(who, id)).map((e) => e.transition_key);
+
+  it("RP-625-1: K1 reads nothing of C1's Draft; from the Raise, its shared moves only, Open until C1 resolves it, aged from the Raise", async () => {
+    const id = await drafted("Exposed rebar");
+    expect(await seen(k1.member, id)).toEqual([]);
+    expect(await stepAsSeen(k1.member, id)).toBeUndefined();
+
+    await move(id, "raise");
+    const atRaise = (await stepAsSeen(c1.member, id))!;
+    expect(await seen(k1.member, id)).toEqual([id]);
+    // Step Age from the Raise, never from when C1 started the Draft (V14, Creation Date).
+    expect(await stepAsSeen(k1.member, id)).toEqual(atRaise);
+    expect(atRaise.stage_key).toBe("open");
+    expect(await transitionKeys(k1.member, id)).toEqual(["raise"]);
+    // Its answers, as they left C1.
+    const [answers] = await call<{ a: { description?: string } }>(k1.member, sql`select app.work_item_answers(${id}::uuid) as a`);
+    expect(answers!.a.description).toBe("Exposed rebar");
+
+    // C1's moves inside it stay its own (V5): K1 still reads Open, aged from the Raise.
+    await move(id, "start_work");
+    await move(id, "put_on_hold_in_progress");
+    expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("on_hold");
+    expect(await stepAsSeen(k1.member, id)).toEqual(atRaise);
+    expect(await transitionKeys(k1.member, id)).toEqual(["raise"]);
+    // K1 holds no Step and can't move it: refused as a Transition it isn't offered.
+    expect(await call(k1.member, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`)).toEqual([]);
+    expect(await take(k1.member, id, "resolve_on_hold", { resolution_note: "Not K1's" })).toBe("not_holder");
+
+    // C1's Resolve is shared: K1 reads it, and the Snag Resolved from then.
+    await move(id, "resolve_on_hold", { resolution_note: "Cut back and coated" });
+    const resolved = (await stepAsSeen(k1.member, id))!;
+    expect(resolved.stage_key).toBe("resolved");
+    expect(resolved.entered_at.getTime()).toBeGreaterThan(atRaise.entered_at.getTime());
+    expect(await transitionKeys(k1.member, id)).toEqual(["raise", "resolve_on_hold"]);
+    expect(await take(c1Pm, id, "close")).toBe("applied");
+    expect(await transitionKeys(k1.member, id)).toEqual(["raise", "resolve_on_hold", "close"]);
+    // C2 never reads it (V3).
+    expect(await seen(c2.member, id)).toEqual([]);
+    expect(await events(c2.member, id)).toEqual([]);
+  });
+
+  it("RP-625-1: K1 reads its Documents as they left C1 at the Raise: the Draft's photo, frozen, and nothing added after", async () => {
+    const id = await drafted("Cracked tile");
+    const [started] = await call<{ outcome: string; document_id: string }>(
+      c1Pm,
+      sql`select outcome, document_id from app.start_document_upload(${id}::uuid, 'before.jpg', 10, 'image/jpeg', now(), 'photos')`,
+    );
+    expect(started!.outcome).toBe("started");
+    const fingerprint = createHash("sha256").update("before.jpg", "utf8").digest();
+    expect(
+      await outcome(c1Pm, sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'image/jpeg', ${fingerprint}, now()) as outcome`),
+    ).toBe("confirmed");
+    const documents = (who: string) => call<{ id: string; frozen: boolean }>(who, sql`select id, frozen_at is not null as frozen from document where work_item_id = ${id}::uuid`);
+    expect(await documents(k1.member)).toEqual([]);
+
+    await move(id, "raise");
+    expect(await documents(k1.member)).toEqual([{ id: started!.document_id, frozen: true }]);
+    // Nobody adds to them once they have reached another Company (ADR 0020).
+    const [after] = await call<{ outcome: string }>(c1Pm, sql`select outcome from app.start_document_upload(${id}::uuid, 'after.jpg', 10, 'image/jpeg', now(), 'photos')`);
+    expect(after!.outcome).not.toBe("started");
+    expect(await documents(k1.member)).toEqual([{ id: started!.document_id, frozen: true }]);
+  });
+
+  it("RP-625-1: Need My Action never counts it for K1", async () => {
+    const id = await drafted("Need My Action");
+    await move(id, "raise");
+    const [nma] = await call<{ state: string | null }>(k1.member, sql`select app.need_my_action(${id}::uuid) as state`);
+    expect(nma!.state).toBeNull();
+  });
+
+  it("RP-625-2: only Consultants covering it are informed: K2 (Buildings B and C) not of a Snag on Building A, both K1 and K2 of one on Building C", async () => {
+    const onA = await drafted("Loose cable on A");
+    await move(onA, "raise");
+    expect(await seen(k1.member, onA)).toEqual([onA]);
+    expect(await seen(k2.member, onA)).toEqual([]);
+    expect(await events(k2.member, onA)).toEqual([]);
+
+    const onC = await drafted("Loose cable on C", buildingC);
+    await move(onC, "raise");
+    expect(await seen(k1.member, onC)).toEqual([onC]);
+    expect(await seen(k2.member, onC)).toEqual([onC]);
+    expect(await transitionKeys(k2.member, onC)).toEqual(["raise"]);
+  });
+
+  it("RP-625-3: narrowing an informed Member's Visibility off the Snag hides it at once (layer 4)", async () => {
+    const id = await drafted("Missing label", buildingC);
+    await move(id, "raise");
+    expect(await seen(k2.member, id)).toEqual([id]);
+    // K2's engineer narrowed to Building B: the Snag on Building C is gone, as for oversight.
+    expect(await outcome(k2.ap, sql`select app.set_member_visibility(${participant.k2}::uuid, ${k2.member}::uuid, 'location', false, ${[buildingB]}::uuid[], now()) as outcome`)).toBe("set");
+    expect(await seen(k2.member, id)).toEqual([]);
+    expect(await events(k2.member, id)).toEqual([]);
+    expect(await stepAsSeen(k2.member, id)).toBeUndefined();
+    expect(await seen(k1.member, id)).toEqual([id]);
+    // Widened again, it reads it again: its access was never taken away.
+    expect(await outcome(k2.ap, sql`select app.set_member_visibility(${participant.k2}::uuid, ${k2.member}::uuid, 'location', true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+    expect(await seen(k2.member, id)).toEqual([id]);
+  });
+
+  it("RP-625-4: a Consultant's own raise informs no other Consultant (V3): K2, covering Building C, never reads K1's Snag there", async () => {
+    const id = await raisedOn("K1's Snag on C", buildingC);
+    expect(await seen(k1.member, id)).toEqual([id]);
+    expect(await seen(c1.member, id)).toEqual([id]);
+    expect(await seen(k2.member, id)).toEqual([]);
+    expect(await seen(c2.member, id)).toEqual([]);
+  });
+});
+
+/** K1's engineer's Snag on `location`, raised on the one Contractor covering it. */
+async function raisedOn(title: string, location: string): Promise<string> {
+  const [created] = await call<{ outcome: string; work_item_id: string }>(
+    k1.member,
+    sql`select outcome, work_item_id from app.create_work_item(
+      ${projectId}::uuid, 'SNG', ${title}, app.latest_form_version('SNG'), ${JSON.stringify({ description: title })}::jsonb,
+      ${electrical}::uuid, ${location}::uuid, now())`,
+  );
+  expect(created!.outcome).toBe("created");
+  expect(await take(k1.member, created!.work_item_id, "raise")).toBe("applied");
+  return created!.work_item_id;
+}

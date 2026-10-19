@@ -128,6 +128,10 @@ export type WorkflowBuilderLabels = {
   noOutcome: string;
   /** Why the outcome is off on any kind but Close. */
   outcomeOnlyOnClose: string;
+  /** The roles a Submit informs (RP-625): the legend, what it does, and why it is off on any other kind. */
+  inform: string;
+  informHelp: string;
+  informOnlyOnSubmit: string;
   /** The Action Form section: its heading and the Screen picker. */
   actionFormHeading: string;
   screen: string;
