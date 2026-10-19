@@ -12,8 +12,11 @@ import { isAncestor } from "./worktrees.ts";
 //
 // Run it from any checkout, as one plain command: `pnpm queue 149 --wait` (RP-454).
 // The checks and the queue entry use the PR's own head (refs/pull/<n>/head), not
-// HEAD. --wait polls every 60 s until the PR merges (exit 0) or leaves the queue
-// or closes (exit 1, with the reason).
+// HEAD. --wait first waits for the main ruleset's required checks on that head to
+// finish (RP-967: right after `gh pr create` GitHub refuses the enqueue with
+// "1 expected"), failing only when one fails or never reports; then it polls every
+// 60 s until the PR merges (exit 0) or leaves the queue or closes (exit 1, with the
+// reason). GitHub's "already in the queue" (an earlier call queued it) counts as queued.
 // The PR needs the `reviewed` label (a finished /code-review, RP-584), or the `docs-only` label when
 // every file it changes is a doc: the rule of the main ruleset's reviewed-required check (RP-606).
 // --no-review only names the docs-only label when it is missing; it no longer skips the rule.
@@ -57,6 +60,10 @@ export interface QueueSeam {
   status(id: string): PullStatus;
   /** The reason of the PR's latest RemovedFromMergeQueueEvent created at or after `since` (an enum, e.g. MERGE_CONFLICT); undefined when there is none. */
   removalReason(id: string, since: Date): string | undefined;
+  /** The status checks the main ruleset requires (`gh api repos/{owner}/{repo}/rules/branches/main`). */
+  requiredChecks(): string[];
+  /** The latest check run of each name on `commit` (`gh api repos/{owner}/{repo}/commits/<commit>/check-runs`). */
+  checkRuns(commit: string): CheckRun[];
 }
 
 export interface QueueResult {
@@ -103,7 +110,29 @@ export function onlyDependencyFieldsChanged(before: string | undefined, after: s
   }
 }
 
+/** What the refusals hand the enqueue: the PR's node id, the head to pin, and the warnings so far. */
+type Prepared = { ok: true; id: string; head: string; warnings: string[] };
+
 export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boolean } = {}): QueueResult {
+  const prepared = prepare(pr, seam, options);
+  return prepared.ok ? enqueueAt(pr, seam, prepared) : prepared;
+}
+
+/** RP-967: GitHub's answer when the PR is in the queue already (an earlier call queued it). */
+const ALREADY_QUEUED = /already in the (merge )?queue/i;
+
+function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: Prepared): QueueResult {
+  try {
+    const entry = seam.enqueue(id, head);
+    return { ok: true, lines: [...warnings, `Queued PR #${pr} at ${head}: position ${entry.position}, state ${entry.state}.`] };
+  } catch (error) {
+    if (!(error instanceof Error && ALREADY_QUEUED.test(error.message))) throw error;
+    return { ok: true, lines: [...warnings, `PR #${pr} is already in the merge queue (an earlier call queued it); treating it as queued.`] };
+  }
+}
+
+/** The refusals, in order; on success, what to enqueue. */
+function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean }): Prepared | QueueResult {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
@@ -200,11 +229,83 @@ export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boole
     return fail(immutable.output.trimEnd(), "Fix: merge main, rename the migration so it sorts after main's latest (an existing migration is never edited), push, wait for CI, then run `pnpm queue` again.");
   }
 
-  const entry = seam.enqueue(pull.id, head);
-  return { ok: true, lines: [...warnings, `Queued PR #${pr} at ${head}: position ${entry.position}, state ${entry.state}.`] };
+  return { ok: true, id: pull.id, head, warnings };
 }
 
 const POLL_MS = 60_000;
+
+/** How long a required check may stay unreported on the head (a workflow that never starts) before the wait gives up. */
+const UNREPORTED_MS = 15 * 60_000;
+
+/** Conclusions the ruleset counts as passing; a skipped required check passes (see merge-queue.test.ts). */
+const PASSING = ["success", "skipped", "neutral"];
+
+export interface CheckRun {
+  name: string;
+  status: string;
+  conclusion: string;
+}
+
+/** Sorts the ruleset's required checks by the head's check runs: failed (with the conclusion), pending (running, or not reported yet: "1 expected"). */
+export function requiredCheckState(required: string[], runs: CheckRun[]): { failed: string[]; pending: string[]; unreported: string[] } {
+  const failed: string[] = [];
+  const pending: string[] = [];
+  const unreported: string[] = [];
+  for (const name of required) {
+    const run = runs.find((candidate) => candidate.name === name);
+    if (run === undefined) {
+      pending.push(name);
+      unreported.push(name);
+    } else if (run.status !== "completed") pending.push(name);
+    else if (!PASSING.includes(run.conclusion)) failed.push(`${name} (${run.conclusion})`);
+  }
+  return { failed, pending, unreported };
+}
+
+export interface WaitOptions {
+  noReview?: boolean;
+  sleep?: (ms: number) => Promise<void>;
+  /** Milliseconds; only differences are used. */
+  now?: () => number;
+  /** Progress lines while waiting. */
+  log?: (line: string) => void;
+}
+
+const realSleep = (ms: number) => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, ms));
+
+/**
+ * `pnpm queue <n> --wait` (RP-967): the same refusals as `queuePr`, then waits for the main ruleset's
+ * required checks on the PR's head to finish before enqueueing, so a call made right after
+ * `gh pr create` is not refused with "N of N required status checks have not succeeded: 1 expected".
+ * Fails only when a required check fails (naming it) or never reports on the head.
+ */
+export async function queuePrWhenChecksPass(pr: number, seam: QueueSeam, options: WaitOptions = {}): Promise<QueueResult> {
+  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
+  const prepared = prepare(pr, seam, options);
+  if (!prepared.ok) return prepared;
+  const { head } = prepared;
+  const required = seam.requiredChecks();
+  const started = now();
+  let last = "";
+  for (;;) {
+    const { failed, pending, unreported } = requiredCheckState(required, seam.checkRuns(head));
+    if (failed.length > 0) {
+      return fail(`PR #${pr}: required check(s) failed on ${head}: ${failed.join(", ")}.`, `Fix: open the failing run from the PR's Checks tab, fix it and push (or re-run a flaky job), then run \`pnpm queue ${pr} --wait\` again.`);
+    }
+    if (pending.length === 0) break;
+    if (unreported.length > 0 && now() - started >= UNREPORTED_MS) {
+      return fail(
+        `PR #${pr}: required check(s) never reported on ${head} in ${UNREPORTED_MS / 60_000} min: ${unreported.join(", ")}.`,
+        "Fix: check that the workflow runs on this PR (its Checks tab, a path filter, a merge conflict that stops pull_request runs), then run `pnpm queue " + pr + " --wait` again.",
+      );
+    }
+    const line = `Waiting for required checks on ${head}: ${pending.join(", ")}.`;
+    if (line !== last) log(line);
+    last = line;
+    await sleep(POLL_MS);
+  }
+  return enqueueAt(pr, seam, prepared);
+}
 
 const REMOVAL_TEXT: Record<RemovalKind, string> = {
   failed: "a check failed in the queue's CI run (the PR's own checks can still be green): read the queue run's failing job, merge main, fix it, push",
@@ -286,6 +387,18 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
       // An older removal (an earlier queue attempt) is not why this wait ended.
       return latest?.createdAt !== undefined && Date.parse(latest.createdAt) >= since.getTime() ? latest.reason : undefined;
     },
+    // --jq prints one item per line, so --paginate's pages simply concatenate.
+    requiredChecks: () =>
+      must("gh", ["api", "--paginate", "repos/{owner}/{repo}/rules/branches/main", "--jq", '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context'])
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    // The endpoint's default filter is "latest": one run per name, the newest (a re-run replaces a failure).
+    checkRuns: (commit) =>
+      must("gh", ["api", "--paginate", `repos/{owner}/{repo}/commits/${commit}/check-runs?per_page=100`, "--jq", '.check_runs[] | {name, status, conclusion: (.conclusion // "")}'])
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => JSON.parse(line) as CheckRun),
     enqueue: (id, head) => {
       const answer = graphql(mutation, { id, head }).data as unknown as { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };
       return answer.enqueuePullRequest.mergeQueueEntry;
@@ -309,7 +422,8 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   try {
     const seam = realSeam();
     const started = new Date();
-    let result = print(queuePr(pr, seam, { noReview: args.includes("--no-review") }));
+    const noReview = args.includes("--no-review");
+    let result = print(wait ? await queuePrWhenChecksPass(pr, seam, { noReview, log: (line) => console.log(line) }) : queuePr(pr, seam, { noReview }));
     if (result.ok && wait) {
       console.log(`Waiting for PR #${pr} to merge (polling every ${POLL_MS / 1000} s)...`);
       result = print(await waitForMerge(pr, seam, started));
