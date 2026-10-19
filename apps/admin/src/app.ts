@@ -12,6 +12,7 @@ import { workflowDefaultRoutes } from "./routes/workflow-defaults.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
 import { optionListRoutes } from "./routes/option-lists.ts";
 import { pageRoutes } from "./routes/pages.ts";
+import { registerImportRoutes } from "./routes/register-imports.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { resolveSession, type Seen } from "./sign-in.ts";
 
@@ -161,5 +162,6 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   await app.register(numberingRoutes(context));
   await app.register(workflowRoutes(context));
   await app.register(workflowDefaultRoutes(context));
+  await app.register(registerImportRoutes(context));
   return app;
 }

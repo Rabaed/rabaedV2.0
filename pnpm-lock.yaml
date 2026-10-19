@@ -50,6 +50,9 @@ importers:
       '@fastify/cookie':
         specifier: ^11.1.2
         version: 11.1.2
+      '@rabaed/api':
+        specifier: workspace:*
+        version: link:../api
       '@rabaed/auth':
         specifier: workspace:*
         version: link:../../packages/auth
