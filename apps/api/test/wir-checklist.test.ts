@@ -14,11 +14,11 @@
 import { createHash } from "node:crypto";
 import { createDb, withMember } from "@rabaed/db";
 import { expectedContentSha256, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
-import type { ChecklistTemplates, DocumentList, StartedDocumentUpload, WorkItemHistory } from "@rabaed/domain";
+import type { ChecklistTemplates, DocumentList, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -58,23 +58,15 @@ const history = async (by: Caller, id: string): Promise<WorkItemHistory["events"
 const codeOf = (events: WorkItemHistory["events"]) => events.find((e) => e.type === "issue_code");
 
 /** Uploads a photo of check item `item` of WIR `id` as `by` (start, PUT to the signed URL, confirm); returns the Document's id. */
-async function addPhoto(by: Caller, id: string, item: string): Promise<string> {
-  const started = await by.post(`/v1/work-items/${id}/documents`, {
-    fieldKey: FIELD,
-    itemKey: item,
-    reply: true,
-    fileName: `${item}.jpg`,
-    contentType: "image/jpeg",
-    sizeBytes: photo.byteLength,
-  });
-  expect(started.statusCode, started.body).toBe(201);
-  const { id: documentId, upload } = started.json() as StartedDocumentUpload;
-  const stored = await fetch(upload.url, { method: upload.method, headers: upload.headers, body: photo });
-  expect(stored.status).toBe(200);
-  const confirmed = await by.post(`/v1/work-items/${id}/documents/${documentId}/confirm`);
-  expect(confirmed.statusCode, confirmed.body).toBe(204);
-  return documentId;
-}
+const addPhoto = (by: Caller, id: string, item: string): Promise<string> =>
+  uploadDocument(by, id, { fieldKey: FIELD, itemKey: item, reply: true, fileName: `${item}.jpg`, contentType: "image/jpeg", body: photo });
+
+/** The image RP-656's annotate view uploads: a canvas's PNG (any bytes do for the store). */
+const drawn = Buffer.from("\x89PNG annotated: an arrow at the gap");
+
+/** Saves `by`'s annotated copy of photo `original` of WIR `id` as the browser does (RP-656); returns its id. */
+const annotate = (by: Caller, id: string, original: string): Promise<string> =>
+  uploadDocument(by, id, { annotatedFromId: original, fileName: "formwork-annotated.png", contentType: "image/png", body: drawn });
 
 /** A WIR raised by Hafiz, Submitted by Ali to K1: Ahmed, K1's only Engineer, holds the Consultant Engineer Step at once. */
 async function submitted(title: string) {
@@ -284,5 +276,77 @@ describe("RP-86-1: who reads the Consultant Engineer's checklist", () => {
     await expectHidden(yousef.caller.get(`/v1/work-items/${id}/history`));
     await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
     expect(await answersAs(yousef.id)).toEqual([]);
+  });
+});
+
+// Scenario RP-981-1 (visibility.md): the Engineer annotates a checklist item's photo with RP-656's
+// tool before Send to Manager. The annotated copy is a reply Document beside its original, the
+// Consultant's until the code as the original is (V19, ADR 0024; RP-981, INSP-12).
+describe("RP-981-1: the Consultant Engineer annotates a checklist item's photo", () => {
+  let id = "";
+  let original = "";
+  let copy = "";
+  const download = (by: Caller, document: string) => by.get(`/v1/work-items/${id}/documents/${document}/download`);
+  const bytesOf = async (by: Caller, document: string) =>
+    Buffer.from(await (await fetch((await ok(download(by, document), 200)).json().url as string)).arrayBuffer());
+
+  beforeAll(async () => {
+    id = await submitted("Annotated");
+    expect((await answer(ahmed.caller, id, FAILED)).statusCode).toBe(204);
+    original = await addPhoto(ahmed.caller, id, "formwork");
+    copy = await annotate(ahmed.caller, id, original);
+    await take(ahmed.caller, id, "send_to_manager", { recommendedCode: "C" });
+  });
+
+  it("the Manager reads both, the copy beside its original in the item's photo, the original's bytes untouched", async () => {
+    const { documents } = await documentsOf(mohammed.caller, id);
+    expect(documents.filter((d) => d.fieldKey === FIELD).map((d) => [d.id, d.itemKey, d.annotatedFromId, d.reply])).toEqual([
+      [original, "formwork", null, { taken: false }],
+      [copy, "formwork", original, { taken: false }],
+    ]);
+    expect(await bytesOf(mohammed.caller, original)).toEqual(photo);
+    expect(await bytesOf(mohammed.caller, copy)).toEqual(drawn);
+  });
+
+  it("before the code, C1, the Owner and C2 read neither, by the api or the file link, nor annotate the photo", async () => {
+    for (const outsider of [hafiz, ali, faisal]) {
+      expect((await documentsOf(outsider.caller, id)).documents, outsider.id).toEqual([]);
+    }
+    for (const outsider of [hafiz, ali, faisal, yousef]) {
+      for (const document of [original, copy]) await expectHidden(download(outsider.caller, document));
+      const refused = await outsider.caller.post(`/v1/work-items/${id}/documents`, {
+        fileName: "leak.png",
+        contentType: "image/png",
+        sizeBytes: drawn.byteLength,
+        annotatedFromId: original,
+      });
+      expect(refused.statusCode, outsider.id).toBe(404);
+    }
+    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
+  });
+
+  it("the code freezes and shares both, and its content hash covers both; C1 then reads both, C2 never", async () => {
+    await take(mohammed.caller, id, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
+    for (const reader of [hafiz, ali, faisal]) {
+      const { documents } = await documentsOf(reader.caller, id);
+      expect(documents.map((d) => [d.id, d.annotatedFromId, d.frozen, d.reply]), reader.id).toEqual([
+        [original, null, true, { taken: true }],
+        [copy, original, true, { taken: true }],
+      ]);
+      expect(await bytesOf(reader.caller, copy), reader.id).toEqual(drawn);
+    }
+    for (const document of [original, copy]) await expectHidden(download(yousef.caller, document));
+    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
+
+    const { rows: item } = await sql<{ title: string; data: object }>`select title, data from work_item where id = ${id}::uuid`.execute(migrator);
+    const { rows: documents } = await sql<HashedDocument & { file_sha256: string }>`
+      select id, field_key, item_key, file_name, content_type, size_bytes::int as size_bytes, storage_key, encode(file_sha256, 'hex') as file_sha256
+      from document where work_item_id = ${id}::uuid
+    `.execute(migrator);
+    const fingerprint = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+    expect(Object.fromEntries(documents.map((d) => [d.id, d.file_sha256]))).toEqual({ [original]: fingerprint(photo), [copy]: fingerprint(drawn) });
+    expect(await codeHash(id)).toBe(
+      expectedContentSha256({ title: item[0]!.title, data: item[0]!.data, outcome: "C", documents, checklists: [{ field_key: FIELD, answers: FAILED }] }),
+    );
   });
 });

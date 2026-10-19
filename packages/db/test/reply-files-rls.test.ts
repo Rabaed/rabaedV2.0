@@ -152,3 +152,43 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
     }
   });
 });
+
+// RP-981 (INSP-12): an After photo annotated with RP-656's tool. Its copy is a reply Document of the
+// same field, C1's until the Resolve as its original is (V19, ADR 0024; scenario RP-981-1).
+describe("RP-981: an annotated copy of an After photo goes with its original", () => {
+  const startCopy = (as: string, id: string, original: string) =>
+    call<{ outcome: string; document_id: string | null }>(
+      as,
+      sql`select outcome, document_id from app.start_annotated_copy_upload(${id}::uuid, ${original}::uuid, 'after-annotated.jpg', 2048, 'image/jpeg', now())`,
+    ).then((rows) => rows[0]!);
+
+  it("C1 annotates it at In Progress; K1 and the Owner read neither until the Resolve shares both, frozen; after a Return only the new photo is annotated", async () => {
+    const id = await inProgress("Tray annotated");
+    const photo = await addAfterPhoto(c1Pm, id);
+    const started = await startCopy(c1.member, id, photo);
+    expect(started.outcome).toBe("started");
+    expect(
+      await outcome(
+        c1.member,
+        sql`select app.confirm_document_upload(${id}::uuid, ${started.document_id}::uuid, 2048, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
+      ),
+    ).toBe("confirmed");
+    const copy = started.document_id!;
+    const [row] = (await migrator.query("select reply, field_key, annotated_from_id from document where id = $1", [copy])).rows;
+    expect(row).toEqual({ reply: true, field_key: "after_photos", annotated_from_id: photo });
+    for (const outsider of [k1.member, ow.member, c2.member]) {
+      expect(await afterPhotos(outsider, id)).toEqual([]);
+      expect(await byId(outsider, copy)).toEqual([]);
+      expect((await startCopy(outsider, id, photo)).outcome).toBe("not_found");
+    }
+
+    expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Bonded" })).toBe("applied");
+    for (const reader of [k1.member, ow.member, c1.member]) expect(await afterPhotos(reader, id)).toEqual([photo, copy].sort());
+    expect(await afterPhotos(c2.member, id)).toEqual([]);
+
+    expect(await take(k1.member, id, "return_to_open", { reason: "Label it" })).toBe("applied");
+    expect((await startCopy(c1Pm, id, photo)).outcome).toBe("document_frozen");
+    const next = await addAfterPhoto(c1Pm, id);
+    expect((await startCopy(c1Pm, id, next)).outcome).toBe("started");
+  });
+});

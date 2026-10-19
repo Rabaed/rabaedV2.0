@@ -211,6 +211,48 @@ export const Viewer: Story = {
   },
 };
 
+/**
+ * A reply Screen's photos (RP-981): a check item's photos the Consultant Engineer takes on site. The page passes
+ * the holder's right to add to the field (`canChangeReplies`) as `canChange`. A photo waiting for the code is
+ * annotated like any other, its copy a reply Document beside it; one an earlier Transition took is frozen,
+ * so it is only opened, Annotated / Original switching on both.
+ */
+export const ReplyPhotos: Story = {
+  parameters: { ...phone, ...overlay },
+  args: {
+    documents: [
+      { ...ceiling, reply: { taken: false } },
+      { ...ceilingAnnotated, reply: { taken: false } },
+      { ...duct, frozen: true, reply: { taken: true } },
+      photo("0199a3b0-0000-7000-8000-000000000305", "duct-annotated.jpg", { annotatedFromId: duct.id, frozen: true, reply: { taken: true } }),
+    ],
+    imageUrls: { ...imageUrls, "0199a3b0-0000-7000-8000-000000000305": annotatedImage },
+  },
+  play: async (context) => {
+    const { args, canvas } = context;
+    const text = words(context);
+    await expect(canvas.getAllByText(text.annotatedMark)).toHaveLength(2);
+    await expect(canvas.getByRole("button", { name: storyText(context, copy.removeCeiling) })).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: text.remove("duct.jpg") })).toBeNull();
+
+    await userEvent.click(canvas.getByRole("button", { name: text.open("duct.jpg") }));
+    const taken = within(await screen.findByRole("dialog"));
+    await userEvent.click(taken.getByRole("radio", { name: text.viewer.original }));
+    await expect(taken.getByRole("img")).toHaveAttribute("src", sitePhoto);
+    await expect(taken.queryByRole("button", { name: text.viewer.annotate })).toBeNull();
+    await userEvent.click(taken.getByRole("button", { name: text.viewer.close }));
+
+    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.openCeiling) }));
+    const waiting = within(await screen.findByRole("dialog"));
+    await expect(waiting.getByRole("img")).toHaveAttribute("src", annotatedImage);
+    await userEvent.click(waiting.getByRole("radio", { name: text.viewer.original }));
+    await expect(waiting.getByRole("img")).toHaveAttribute("src", ceilingImage);
+    await userEvent.click(waiting.getByRole("button", { name: text.viewer.annotate }));
+    await expect(await screen.findByRole("dialog", { name: text.annotator.title("ceiling.jpg") })).toBeVisible();
+    await expect(args.onSaveAnnotated).not.toHaveBeenCalled();
+  },
+};
+
 /** Annotate from the viewer: draw an arrow, Save, and the page gets the drawn image for the original. */
 export const AnnotateAndSave: Story = {
   parameters: { ...phone, ...overlay },
