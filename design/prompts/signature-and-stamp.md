@@ -4,7 +4,7 @@ Design the **Signature and Stamp** screens for Rabaed, a B2B construction manage
 Companies on a Project move each Work Item (a submittal or an inspection) through its Workflow by taking **Transitions**: Submit, Approve, Code B and so on. When the item closes, Rabaed makes its **Documental Record**, a sealed PDF that looks like the paper transmittals the Companies use today.
 
 - **Signature:** every Member has one, drawn, typed or uploaded in their profile. Every Transition they confirm applies it, together with who acted and when. **There is no separate signing step:** the confirm button keeps the Transition's own label (Submit, Approve, Code B…), with no "Sign" button and no checkbox. A Member without a Signature cannot take Transitions. A new Signature never changes records already made.
-- **Stamp:** every Company has one, uploaded to its Company profile by its owner or Authorized Person, beside its **logo**. The record prints the Stamp of every Company whose Members acted. While a Company has no Stamp, **none of its Members can take Transitions**, just as a paper submittal without its stamp isn't processed. The logo is optional: without one, records show the Company's name.
+- **Stamp:** every Company has one, uploaded to its Company profile by its Authorized Person, beside its **logo**. The record prints the Stamp of every Company whose Members acted. While a Company has no Stamp, **none of its Members can take Transitions**, just as a paper submittal without its stamp isn't processed. The logo is optional: without one, records show the Company's name.
 
 **Visibility rule (critical):** a message or pop-up names only the viewer's own Company and its people, never another Company. Nobody is notified when a Member is blocked.
 
@@ -28,13 +28,13 @@ Companies on a Project move each Work Item (a submittal or an inspection) throug
 
 ### 3. The no-Stamp message
 - Shown when a Member opens a Transition and **their own Company** has no Stamp.
-- Example: "‹Company› has no Stamp yet, so its Members can't act. Ask ‹Company›'s owner or Authorized Person to add it in the Company profile." For the owner or Authorized Person themself: "Add ‹Company›'s Stamp to act", with a button **Add Stamp**.
+- Example: "‹Company› has no Stamp yet, so its Members can't act. Ask ‹Company›'s Authorized Person to add it in the Company profile." For the Authorized Person themself: "Add ‹Company›'s Stamp to act", with a button **Add Stamp**.
 - Names only the viewer's own Company.
 
 ### 4. Company profile: logo and Stamp
 - Two upload cards beside each other: **Logo** (optional) and **Stamp** (required to act). Each shows the current image, Replace, and a note that records already made keep the one in force then.
 - While there is no Stamp, a clear notice at the top of the Company profile: "Your Members can't take any action until the Stamp is added."
-- Only the owner or Authorized Person can upload; other Members see the images without the buttons.
+- Only the Authorized Person can upload; other Members see the images without the buttons.
 
 ## Screens to produce
 - Add Signature: Draw (desktop and phone), Type, Upload; the profile after saving.
