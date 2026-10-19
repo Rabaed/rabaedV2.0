@@ -15,14 +15,33 @@
 --   that gate would make it a Form Document, shared before the code.
 -- * A copy never counts toward the field's maxFiles or a check item's 10 photos
 --   (app.reply_field_refusal lets it through once its field is found, as
---   app.field_document_refusal does).
+--   app.field_document_refusal does), and is never confirmed once a Transition took its
+--   original. The count both kinds of field shared is now app.reply_files_waiting.
 -- * A trigger refuses any annotated copy that isn't where its original is: another `reply`,
 --   field or check item. So a reply photo's copy is never a Form Document, however it is written.
 -- app.confirm_document_upload, the Documents copy, app.take_transition and app.transition_effects
 -- are unchanged.
 
--- As in the reply_checklist migration, except that an annotated copy being confirmed is checked for
--- its field only: its original already counts, and was checked for its type.
+-- The photos and files waiting in reply field `p_field_key` (its check item `p_item_key`'s, for a
+-- checklist) that no Transition took yet, besides `p_except`: originals only, an annotated copy
+-- counting toward no limit. The block app.reply_field_refusal had copied for both kinds of field
+-- since the reply_checklist migration (RP-86), extracted for its next redefinition (spec RP-649).
+create function app.reply_files_waiting(p_work_item_id uuid, p_field_key text, p_item_key text, p_except uuid)
+  returns bigint
+  language sql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    select count(*) from document d
+    where d.work_item_id = p_work_item_id and d.reply and d.reply_event_id is null
+      and d.field_key = p_field_key and d.item_key is not distinct from p_item_key
+      and d.confirmed_at is not null and d.removed_at is null
+      and d.annotated_from_id is null and d.id is distinct from p_except
+  $$;
+
+-- As in the reply_checklist migration (its counts through app.reply_files_waiting), except for an
+-- annotated copy being confirmed: it is checked for its field only, its original already counting
+-- and checked for its type; and 'not_editable' once a Transition took its original (a copy goes
+-- where its original is, and a taken original takes no new copy).
 create or replace function app.reply_field_refusal(p_work_item_id uuid, p_field_key text, p_item_key text, p_content_type text, p_document_id uuid)
   returns text
   language plpgsql stable security definer
@@ -31,34 +50,30 @@ create or replace function app.reply_field_refusal(p_work_item_id uuid, p_field_
     declare
       v_field jsonb := app.reply_file_field(p_work_item_id, p_field_key);
       v_item jsonb;
-      v_copy boolean := exists (select 1 from document c where c.id = p_document_id and c.annotated_from_id is not null);
+      -- For an annotated copy, whether a Transition took its original; null for any other file.
+      v_original_taken boolean := (
+        select o.reply_event_id is not null or o.frozen_at is not null
+        from document c join document o on o.id = c.annotated_from_id
+        where c.id = p_document_id);
     begin
       if v_field ->> 'type' = 'copied_checklist' then
         v_item := app.reply_checklist_item(p_work_item_id, v_field, p_item_key);
         return case
           when v_item is null or coalesce(v_item ->> 'photo', 'off') = 'off' then 'field_not_found'
-          when v_copy then null
+          when v_original_taken then 'not_editable'
+          when v_original_taken is not null then null
           when p_content_type <> all (array['image/jpeg', 'image/png', 'image/webp', 'image/heic']) then 'content_type_not_allowed'
-          when 10 <= (
-            select count(*) from document d
-            where d.work_item_id = p_work_item_id and d.reply and d.reply_event_id is null
-              and d.field_key = p_field_key and d.item_key = p_item_key and d.confirmed_at is not null and d.removed_at is null
-              and d.annotated_from_id is null and d.id is distinct from p_document_id
-          ) then 'too_many_files'
+          when 10 <= app.reply_files_waiting(p_work_item_id, p_field_key, p_item_key, p_document_id) then 'too_many_files'
         end;
       end if;
       return case
         when v_field is null or p_item_key is not null then 'field_not_found'
-        when v_copy then null
+        when v_original_taken then 'not_editable'
+        when v_original_taken is not null then null
         when v_field ->> 'type' = 'photos'
           and p_content_type <> all (array['image/jpeg', 'image/png', 'image/webp', 'image/heic']) then 'content_type_not_allowed'
         when v_field ? 'contentTypes' and not (v_field -> 'contentTypes') ? p_content_type then 'content_type_not_allowed'
-        when (v_field ->> 'maxFiles')::integer <= (
-          select count(*) from document d
-          where d.work_item_id = p_work_item_id and d.reply and d.reply_event_id is null
-            and d.field_key = p_field_key and d.confirmed_at is not null and d.removed_at is null
-            and d.annotated_from_id is null and d.id is distinct from p_document_id
-        ) then 'too_many_files'
+        when (v_field ->> 'maxFiles')::integer <= app.reply_files_waiting(p_work_item_id, p_field_key, null, p_document_id) then 'too_many_files'
       end;
     end
   $$;
@@ -164,4 +179,4 @@ create trigger document_annotated_copy_where_original_is before insert or update
   for each row when (new.annotated_from_id is not null)
   execute function app.annotated_copy_where_original_is();
 
-revoke all on function app.annotated_copy_where_original_is() from public;
+revoke all on function app.annotated_copy_where_original_is(), app.reply_files_waiting(uuid, text, text, uuid) from public;

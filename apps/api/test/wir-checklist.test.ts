@@ -14,11 +14,11 @@
 import { createHash } from "node:crypto";
 import { createDb, withMember } from "@rabaed/db";
 import { expectedContentSha256, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
-import type { ChecklistTemplates, DocumentList, StartedDocumentUpload, WorkItemHistory } from "@rabaed/domain";
+import type { ChecklistTemplates, DocumentList, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -58,43 +58,15 @@ const history = async (by: Caller, id: string): Promise<WorkItemHistory["events"
 const codeOf = (events: WorkItemHistory["events"]) => events.find((e) => e.type === "issue_code");
 
 /** Uploads a photo of check item `item` of WIR `id` as `by` (start, PUT to the signed URL, confirm); returns the Document's id. */
-async function addPhoto(by: Caller, id: string, item: string): Promise<string> {
-  const started = await by.post(`/v1/work-items/${id}/documents`, {
-    fieldKey: FIELD,
-    itemKey: item,
-    reply: true,
-    fileName: `${item}.jpg`,
-    contentType: "image/jpeg",
-    sizeBytes: photo.byteLength,
-  });
-  expect(started.statusCode, started.body).toBe(201);
-  const { id: documentId, upload } = started.json() as StartedDocumentUpload;
-  const stored = await fetch(upload.url, { method: upload.method, headers: upload.headers, body: photo });
-  expect(stored.status).toBe(200);
-  const confirmed = await by.post(`/v1/work-items/${id}/documents/${documentId}/confirm`);
-  expect(confirmed.statusCode, confirmed.body).toBe(204);
-  return documentId;
-}
+const addPhoto = (by: Caller, id: string, item: string): Promise<string> =>
+  uploadDocument(by, id, { fieldKey: FIELD, itemKey: item, reply: true, fileName: `${item}.jpg`, contentType: "image/jpeg", body: photo });
 
 /** The image RP-656's annotate view uploads: a canvas's PNG (any bytes do for the store). */
 const drawn = Buffer.from("\x89PNG annotated: an arrow at the gap");
 
 /** Saves `by`'s annotated copy of photo `original` of WIR `id` as the browser does (RP-656); returns its id. */
-async function annotate(by: Caller, id: string, original: string): Promise<string> {
-  const started = await by.post(`/v1/work-items/${id}/documents`, {
-    fileName: "formwork-annotated.png",
-    contentType: "image/png",
-    sizeBytes: drawn.byteLength,
-    annotatedFromId: original,
-  });
-  expect(started.statusCode, started.body).toBe(201);
-  const { id: documentId, upload } = started.json() as StartedDocumentUpload;
-  const stored = await fetch(upload.url, { method: upload.method, headers: upload.headers, body: drawn });
-  expect(stored.status).toBe(200);
-  const confirmed = await by.post(`/v1/work-items/${id}/documents/${documentId}/confirm`);
-  expect(confirmed.statusCode, confirmed.body).toBe(204);
-  return documentId;
-}
+const annotate = (by: Caller, id: string, original: string): Promise<string> =>
+  uploadDocument(by, id, { annotatedFromId: original, fileName: "formwork-annotated.png", contentType: "image/png", body: drawn });
 
 /** A WIR raised by Hafiz, Submitted by Ali to K1: Ahmed, K1's only Engineer, holds the Consultant Engineer Step at once. */
 async function submitted(title: string) {

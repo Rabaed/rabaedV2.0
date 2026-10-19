@@ -418,8 +418,8 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
       expect(await photosAs(outsider, id), outsider).toEqual([]);
       expect(await byId(outsider, copy), outsider).toEqual([]);
     }
-    // Frozen: shared, it is never annotated again.
-    expect((await startCopy(k1Manager, id, photo)).outcome).not.toBe("started");
+    // Shared: K1 holds the WIR no more, so it is never annotated again.
+    expect((await startCopy(k1Manager, id, photo)).outcome).toBe("not_editable");
   });
 
   it("only who may add to the field now annotates: not the Manager at the code, and nobody outside K1, who doesn't even read the photo", async () => {
@@ -447,6 +447,21 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
     expect(removed.rows[0].removed).toBe(true);
   });
 
+  it("a copy started before a Transition took its original is never confirmed", async () => {
+    const id = await atConsultantReview("Slab pour, original taken first");
+    const photo = await addPhoto(k1.member, id);
+    const started = await startCopy(k1.member, id, photo);
+    expect(started.outcome).toBe("started");
+    // As a Transition that leaves the item with K1 and its field open would leave it (none of the Rabaed Defaults does).
+    await migrator.query("update document set frozen_at = now() where id = $1", [photo]);
+    expect(
+      await outcome(
+        k1.member,
+        sql`select app.confirm_document_upload(${id}::uuid, ${started.document_id}::uuid, 2048, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
+      ),
+    ).toBe("not_editable");
+  });
+
   it("a copy doesn't count toward the check item's 10 photos", async () => {
     const id = await atConsultantReview("Slab pour, ten photos");
     const photos = [];
@@ -461,6 +476,7 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
     const copy = await annotate(k1.member, id, photo);
     for (const [column, value] of [
       ["reply", false],
+      ["field_key", "remarks"],
       ["item_key", "cover"],
     ] as const) {
       await expect(migrator.query(`update document set ${column} = $1 where id = $2`, [value, copy]), column).rejects.toMatchObject({ code: "23514" });
