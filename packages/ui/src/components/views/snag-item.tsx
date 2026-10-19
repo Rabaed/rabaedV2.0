@@ -35,7 +35,7 @@ export type SnagPhoto = { id: string; url: string | null; name: string };
 export function SnagItemCard({ title, icon, aside, children, className }: { title: string; icon?: IconName; aside?: ReactNode; children: ReactNode; className?: string }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn("flex flex-col gap-2.5 rounded-[14px] border border-border bg-surface px-4 py-3.5", className)}>
+    <section aria-labelledby={id} className={cn("flex flex-col gap-2.5 rounded-[14px] border border-border bg-surface px-4 py-[14px]", className)}>
       <h2 id={id} className="flex items-center gap-1.5 text-[11.5px] font-bold text-muted uppercase">
         {icon && <Icon name={icon} size={14} />}
         {title}
