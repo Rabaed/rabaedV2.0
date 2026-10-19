@@ -347,7 +347,7 @@ function SnagFilterSheet({
   const n = (value: number) => formatNumber(value, locale);
   const total = list.stages.reduce((sum, s) => sum + s.count, 0);
   const toggle = (values: readonly string[], value: string) => (values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
-  const chip = "inline-flex min-h-11 items-center gap-2 rounded-[12px] border border-control-border bg-surface px-3 text-[14px] font-semibold text-text-secondary aria-pressed:border-primary aria-pressed:bg-brand-tint aria-pressed:text-brand-fg";
+  const chip = "inline-flex min-h-11 items-center gap-2 rounded-[12px] border border-border bg-surface-subtle px-3 text-[14px] font-semibold text-text-secondary aria-pressed:border-primary aria-pressed:bg-brand-tint aria-pressed:text-brand-fg";
   return (
     <DialogPrimitive.Root>
       <DialogPrimitive.Trigger asChild>
@@ -367,6 +367,8 @@ function SnagFilterSheet({
         // eslint-disable-next-line rabaed/no-avoid-terms -- CSS env() name
         className="inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-[20px] px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
       >
+        {/* The kit's handle: the sheet comes up from the bottom (Escape, the scrim or the close button shut it). */}
+        <span aria-hidden="true" className="absolute inset-x-0 top-2 mx-auto h-1 w-9 rounded-full bg-border-strong" />
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 text-sm font-semibold text-text">{labels.stage}</legend>
           <div className="flex flex-wrap gap-2">
@@ -386,7 +388,7 @@ function SnagFilterSheet({
             <div className="flex flex-wrap gap-2">
               {list.filters.trades.map((v) => (
                 <button key={v.id} type="button" aria-pressed={query.trade.includes(v.id)} onClick={() => onChange({ trade: toggle(query.trade, v.id) })} className={cn(chip, focusRing)}>
-                  <span aria-hidden="true" className={cn("size-2.5 rounded-[3px]", tradeChipClass(v.code))} />
+                  <TradeDot code={v.code} />
                   {v.name[locale]}
                 </button>
               ))}
@@ -411,6 +413,15 @@ function SnagFilterSheet({
         </div>
       </ModalContent>
     </DialogPrimitive.Root>
+  );
+}
+
+/** A Trade's colour, as a small square (its chip's text colour). */
+export function TradeDot({ code }: { code: string }) {
+  return (
+    <span aria-hidden="true" className={cn("inline-flex size-2.5 rounded-[3px] bg-transparent", tradeChipClass(code))}>
+      <span className="size-full rounded-[3px] bg-current" />
+    </span>
   );
 }
 

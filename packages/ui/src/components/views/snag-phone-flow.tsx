@@ -9,7 +9,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Input } from "../form/input.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
-import { tradeChipClass } from "./kanban-card.tsx";
+import { TradeDot } from "./snag-phone.tsx";
 
 // The camera-first New Snag on a phone (RP-630; design/reference/claude-design/ui_kits/app/snag-list-mobile.html,
 // `snag/mobile.js`): one step a screen, each with a big button in reach of a thumb. The camera, then the
@@ -276,11 +276,11 @@ export function SnagSubjectStep({
               aria-checked={value.trade === t.id}
               onClick={() => onChange({ ...value, trade: t.id })}
               className={cn(
-                "inline-flex min-h-11 items-center gap-2 rounded-[12px] border border-control-border bg-surface px-3 text-[14px] font-semibold text-text-secondary aria-checked:border-primary aria-checked:bg-brand-tint aria-checked:text-brand-fg",
+                "inline-flex min-h-11 items-center gap-2 rounded-[12px] border border-border bg-surface-subtle px-3 text-[14px] font-semibold text-text-secondary aria-checked:border-primary aria-checked:bg-brand-tint aria-checked:text-brand-fg",
                 focusRing,
               )}
             >
-              <span aria-hidden="true" className={cn("size-2.5 rounded-[3px]", tradeChipClass(t.code))} />
+              <TradeDot code={t.code} />
               {t.name[locale]}
             </button>
           ))}
@@ -339,7 +339,7 @@ export function SnagLocationStep({
               key={c.id}
               type="button"
               onClick={() => onPick(c.id)}
-              className={cn("inline-flex min-h-12 items-center gap-2 rounded-[12px] border border-control-border bg-surface px-4 text-[15px] font-semibold text-text", focusRing)}
+              className={cn("inline-flex min-h-12 items-center gap-2 rounded-[12px] border border-border bg-surface-subtle px-4 text-[15px] font-semibold text-text", focusRing)}
             >
               <Icon name="map-pin" size={16} className="text-muted" />
               {c.name[locale]}
