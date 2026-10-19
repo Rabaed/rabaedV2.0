@@ -112,6 +112,24 @@ async function addPhoto(as: string, id: string, item = "formwork"): Promise<stri
   return started.document_id;
 }
 
+const startCopy = (as: string, id: string, original: string) =>
+  call<{ outcome: string; document_id: string | null }>(
+    as,
+    sql`select outcome, document_id from app.start_annotated_copy_upload(${id}::uuid, ${original}::uuid, 'gap-annotated.jpg', 2048, 'image/jpeg', now())`,
+  ).then((rows) => rows[0]!);
+
+/** `as` saves an annotated copy of photo `original` of Inspection `id` (RP-656's tool): started and confirmed. */
+async function annotate(as: string, id: string, original: string): Promise<string> {
+  const started = await startCopy(as, id, original);
+  expect(started.outcome).toBe("started");
+  const confirmed = await outcome(
+    as,
+    sql`select app.confirm_document_upload(${id}::uuid, ${started.document_id}::uuid, 2048, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
+  );
+  expect(confirmed).toBe("confirmed");
+  return started.document_id!;
+}
+
 /** The answers `as` reads of Inspection `id`'s checklist before its code. */
 const answersAs = (as: string, id: string) =>
   call<{ field_key: string; answers: unknown }>(as, sql`select field_key, answers from reply_checklist where work_item_id = ${id}::uuid`);
@@ -350,5 +368,112 @@ describe("leaving K1 any other way discards them", () => {
     expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await answersAs(k1.member, id)).toEqual([]);
     expect(await photosAs(k1.member, id)).toEqual([]);
+  });
+});
+
+// RP-981 (INSP-12): the Engineer annotates a checklist item's photo with RP-656's tool. The
+// annotated copy is a reply Document of the same field and check item, never a Form Document, so
+// it is K1's until the code exactly as its original is (V19, ADR 0024).
+describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until the code", () => {
+  it("the Engineer annotates the photo before Send to Manager: a reply Document in the photo's field and item, which the Manager reads beside it", async () => {
+    const id = await atConsultantReview("Slab pour, annotated");
+    expect(await save(k1.member, id)).toBe("saved");
+    const photo = await addPhoto(k1.member, id);
+    const copy = await annotate(k1.member, id, photo);
+
+    const rows = await migrator.query("select id, reply, field_key, item_key, annotated_from_id from document where id = $1", [copy]);
+    expect(rows.rows).toEqual([{ id: copy, reply: true, field_key: FIELD, item_key: "formwork", annotated_from_id: photo }]);
+    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
+    expect(await photosAs(k1Manager, id)).toEqual([photo, copy].sort());
+  });
+
+  it("before the code, C1, the Owner and C2 read neither the original nor the copy; the code freezes and shares both, never to C2", async () => {
+    const id = await atConsultantReview("Slab pour, annotated and coded");
+    expect(await save(k1.member, id)).toBe("saved");
+    const photo = await addPhoto(k1.member, id);
+    const copy = await annotate(k1.member, id, photo);
+    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
+
+    for (const outsider of [c1.member, c1Pm, ow.member, c2.member, other.ap]) {
+      expect(await photosAs(outsider, id), outsider).toEqual([]);
+      for (const document of [photo, copy]) expect(await byId(outsider, document), outsider).toEqual([]);
+    }
+    for (const outsider of [c1.member, c1Pm, ow.member]) {
+      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`), outsider).toEqual([]);
+    }
+
+    expect(await take(k1Manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    for (const reader of [c1.member, c1Pm, ow.member, k1.member, k1Manager]) {
+      expect(await photosAs(reader, id), reader).toEqual([photo, copy].sort());
+      expect(await byId(reader, copy), reader).toEqual([copy]);
+    }
+    const taken = await migrator.query(
+      "select id, frozen_at is not null as frozen, reply_event_id is not null as taken from document where work_item_id = $1 order by id",
+      [id],
+    );
+    expect(taken.rows).toEqual([photo, copy].sort().map((d) => ({ id: d, frozen: true, taken: true })));
+    for (const outsider of [c2.member, other.ap]) {
+      expect(await photosAs(outsider, id), outsider).toEqual([]);
+      expect(await byId(outsider, copy), outsider).toEqual([]);
+    }
+    // Frozen: shared, it is never annotated again.
+    expect((await startCopy(k1Manager, id, photo)).outcome).not.toBe("started");
+  });
+
+  it("only who may add to the field now annotates: not the Manager at the code, and nobody outside K1, who doesn't even read the photo", async () => {
+    const id = await atConsultantReview("Slab pour, who annotates");
+    expect(await save(k1.member, id)).toBe("saved");
+    const photo = await addPhoto(k1.member, id);
+    // K1's Manager may too: any Member of the Participant holding the Step (ADR 0024).
+    await annotate(k1Manager, id, photo);
+    for (const outsider of [c1.member, c1Pm, ow.member, c2.member, other.ap]) {
+      expect((await startCopy(outsider, id, photo)).outcome, outsider).toBe("not_found");
+    }
+    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
+    expect((await startCopy(k1Manager, id, photo)).outcome).toBe("field_not_found");
+  });
+
+  it("a Send Back before the code removes the copy with its original, for K1 too", async () => {
+    const id = await atConsultantReview("Slab pour, annotated and sent back");
+    expect(await save(k1.member, id)).toBe("saved");
+    const photo = await addPhoto(k1.member, id);
+    const copy = await annotate(k1.member, id, photo);
+    expect(await take(k1.member, id, "send_back")).toBe("applied");
+    for (const reader of [k1.member, c1.member, c1Pm]) expect(await photosAs(reader, id), reader).toEqual([]);
+    const removed = await migrator.query("select removed_at is not null as removed from document where id = $1", [copy]);
+    expect(removed.rows[0].removed).toBe(true);
+  });
+
+  it("a copy doesn't count toward the check item's 10 photos", async () => {
+    const id = await atConsultantReview("Slab pour, ten photos");
+    const photos = [];
+    for (let n = 0; n < 10; n++) photos.push(await addPhoto(k1.member, id));
+    expect((await startPhoto(k1.member, id, "formwork")).outcome).toBe("too_many_files");
+    await annotate(k1.member, id, photos[0]!);
+  });
+
+  it("is never written as a Form Document, nor anywhere but its original's field and check item", async () => {
+    const id = await atConsultantReview("Slab pour, never a Form Document");
+    const photo = await addPhoto(k1.member, id);
+    const copy = await annotate(k1.member, id, photo);
+    for (const [column, value] of [
+      ["reply", false],
+      ["item_key", "cover"],
+    ] as const) {
+      await expect(migrator.query(`update document set ${column} = $1 where id = $2`, [value, copy]), column).rejects.toMatchObject({ code: "23514" });
+    }
+    await expect(
+      migrator.query(
+        `insert into document (project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
+           uploaded_by_member_id, uploaded_by_participant_id, field_key, item_key, annotated_from_id)
+         select project_id, work_item_id, 'leak.jpg', 1, 'image/jpeg', storage_key || '-leak', uploaded_by_member_id,
+           uploaded_by_participant_id, field_key, item_key, id
+         from document where id = $1`,
+        [photo],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
   });
 });
