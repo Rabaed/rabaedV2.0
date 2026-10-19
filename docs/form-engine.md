@@ -32,6 +32,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
 - **3. Checklists**: read when you work on `checklist` fields and their check items.
   - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
   - **3.2 Project Checklist Templates and the Checklist Template choice (as built, RP-651, spec RP-649)**: read when you work on Checklist Templates, the `checklist_template` field or an item's copied checklist.
+  - **3.3 A checklist in a reply Screen (as built, RP-86, spec RP-649)**: read when you work on the `copied_checklist` field, the WIR's code Screens or the proposed code.
 - **4. Who fills what: section editability**: read when you change which Participant fills a Form Section, and at which Step.
   - **Settled 2026-10-05 (part 3)**: read when you need the rule of one Participant per Form Section.
   - **Settled 2026-10-10: the Form belongs to the raiser (ADR 0019)**: read when you work on who may edit the raiser's Form.
@@ -271,7 +272,7 @@ A `checklist` field holds a list of **check items**:
 | `on_negative` | `none`, or `create_snag`. `create_snag` raises one Snag per failed item when the Form is submitted, `raised_from`-linked to the source item. |
 
 - **Checklist templates** (e.g. "Concrete pour", "HSE weekly") live in the library at Rabaed, Company or Project level. Inserting one into a Form **copies** its items, following the same library pattern as everything else. The Project level, and an Inspection's pick copied onto the item, are built (§3.2, RP-651).
-- **Checklist summary:** the PDF and list view show counts (e.g. 18 Pass / 2 Fail / 1 N/A). An Inspection Result can be proposed from it ("Failed" if any Fail), but the inspector confirms it in the Action Form.
+- **Checklist summary:** the PDF and list view show counts (e.g. 18 Pass / 2 Fail / 1 N/A). An Inspection's checklist proposes its Review Code (C if any item failed, else A; §3.3), which the Consultant Manager confirms or changes.
 
 ### 3.1 As built (RP-285)
 
@@ -296,6 +297,20 @@ Settled with the owner (2026-10-16, spec RP-649): on an Inspection the Contracto
 - **WIR Form Version 3** (`apps/admin/forms/WIR.json`, published by `pnpm defaults:publish`): Version 2 plus a **Checklist** section, after Classification so the Trade is chosen first, with **Checklist Template** (`checklist_template`, required; "قالب قائمة التحقق") in the raiser's section, with the copied items shown read-only below it; the Form has no section another Participant fills (ADR 0019). The Consultant Engineer answers the copied items on site in a reply Screen (INSP-4, RP-86). New WIRs pin it; WIRs on Versions 1 and 2 keep theirs and need no template. It is Version 3 wherever Version 2 was published; a database seeded fresh numbers the same document 1.
 - **Revisions:** `app.fill_revision` carries the pick in the Revision's answers, and the api copies it when it creates the Revision: the Version the revised item holds, edited or retired since (the Revision's re-inspection keeps the same checklist, spec RP-649). A copy still missing is filled in before the item moves on, and after its first Submit too, since that is no change of the pick.
 - Seam 1: `apps/api/test/checklist-templates.test.ts`; seam 2: `packages/db/test/checklist-template-rls.test.ts` (scenarios RP-651-1, RP-651-2); seam 3: `packages/domain/src/form-checklist-template.test.ts`.
+
+### 3.3 A checklist in a reply Screen (as built, RP-86, spec RP-649)
+
+ADR 0024, amended 2026-10-19, and ADR 0025: the Inspection's checklist is answered in the Consultant Manager's code Screens, on the reply-file mechanism (workflow-engine.md §5.7), never in the raiser's Form (ADR 0019).
+
+- **Schema:** `{"key": "inspection_checklist", "type": "copied_checklist", "copyOf": "checklist_template", "required": true}` (`packages/domain` `CopiedChecklistField`). It holds no items: it answers the checklist the item copied by its `checklist_template` field `copyOf` (§3.2), and is absent on an item that copied none (a WIR on Form Version 1 or 2). Screens only and shared: a Form refuses it (`screen_only`), a Transition's own Action Form refuses it (`not_in_action_form`), and a Screen refuses it marked internal (`internal_file_field`: its photos are files). A condition can't read it (`unknown_reference`).
+- **Answers** are §3.1's, by item key, checked against the copy's items (`replyChecklistOf`, `checkReplyChecklist`): any answers so far on a save, every item answered and a negative answer's `comment_required` and `photo_required` to move on. They are never given in the pop-up's answers (`validateAnswers`: `wrong_type`; `app.action_form_fits` takes no key for it): the holding Participant saves them beforehand, `PUT /v1/work-items/:id/reply-checklists/:fieldKey {answers}` (204; `invalid_answers` 422 naming the items, `not_editable` 409, `forbidden`, `field_not_found` 422), into `reply_checklist` (data-model.md). **Photos** are reply Documents of the field and the check item (`POST …/documents {fieldKey, itemKey, reply: true}`): images only, ten to an item, only for an item whose `photo` isn't `off`.
+- **Where:** at the Steps of the holding Participant's role on the way to the code (through `send`s inside it), not at the code's own from-Step, which reads it (`app.reply_file_field`): on the WIR, the Consultant Engineer's Step fills it; any Member of the Consultant may add to it there; the Manager reads it in the code pop-up. Send to Manager and Return to Engineer keep it.
+- **Moving on** from a Step that fills it checks it like a required section (`form_incomplete` naming the field and each item); the code whose Screen holds it checks it too (`invalid_action_form`).
+- **The code takes it:** its shared event carries the answers under the field's key (the history labels them from the Screen, the summary from §3.1), the photos freeze, and its content hash covers both (`checklists`, ADR 0017). Leaving the Consultant any other way (a Send Back) discards them; a cancel can't happen after a Submit.
+- **The proposed code** (ADR 0025): the pop-up of each code shows the checklist read-only with its summary, the Engineer's Recommended Code marked internal (`actions.recommendedCode`), and marks the code the checklist proposes, C when any item is Fail or No, else A (`proposedCode`; `transitions[].proposed`). The Manager confirms it or takes another.
+- **WIR Workflow Version 4** (`apps/admin/workflows/WIR.json`): Version 3 (`WIR-3.json`, kept for the items on it) with its codes showing the Rabaed Default Screens `inspection_code_a` to `inspection_code_d`, each `code_a` to `code_d` with the checklist first. The submittals' code Screens are unchanged.
+- **Not yet:** the Documental Record lists the photos with the item's Documents, but doesn't yet print the checklist as at the code; the on-site screen comes with RP-655.
+- Seam 1: `apps/api/test/wir-checklist.test.ts`; seam 2: `packages/db/test/reply-checklist-rls.test.ts` (scenario RP-86-1); unit: `packages/domain/src/reply-checklist.test.ts`.
 
 ---
 
