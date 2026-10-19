@@ -970,7 +970,10 @@
         "tooLong": "Use at most {max} characters.",
         "summary": "Summary",
         "evidence": "Photos for {item}",
-        "itemNumber": "{n} of {of}"
+        "itemNumber": "{n} of {of}",
+        "raiseSnag": "Raise a Snag",
+        "snagRaised": "A Snag is raised with the code",
+        "noSnagRaised": "No Snag is raised"
       },
       "tableField": {
         "addRow": "Add row",
@@ -1004,7 +1007,7 @@
         "photoRequired": "Photo required on {answer}",
         "commentOptional": "Comment optional",
         "photoOptional": "Photos optional",
-        "raisesSnag": "{answer} raises a Snag"
+        "snagRaised": "{answer} raises a Snag"
       },
       "linkQuestion": {
         "remove": "Remove {number}"

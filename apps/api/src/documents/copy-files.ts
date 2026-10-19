@@ -11,7 +11,10 @@ import type { FileStore } from "./file-store.ts";
 /** A file to copy: from the source Document's key to the new one's. */
 export type FileCopy = { storage_key: string; source_storage_key: string };
 
-export async function withFileCopies<T>(files: FileStore, run: (copy: (copies: readonly FileCopy[]) => Promise<void>) => Promise<T>): Promise<T> {
+/** Copies files inside withFileCopies, which deletes them again if the transaction doesn't commit. */
+export type CopyFiles = (copies: readonly FileCopy[]) => Promise<void>;
+
+export async function withFileCopies<T>(files: FileStore, run: (copy: CopyFiles) => Promise<T>): Promise<T> {
   const stored: string[] = [];
   const copy = async (copies: readonly FileCopy[]) => {
     for (const c of copies) {

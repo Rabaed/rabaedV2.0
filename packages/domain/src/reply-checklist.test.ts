@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { actionFormProblems } from "./action-form.ts";
 import type { ChecklistCopy } from "./checklist-template.ts";
-import { formSchema, validateAnswers, type FormSchema } from "./form.ts";
+import { formSchema, snagTick, validateAnswers, type FormSchema } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
 import { checklistOfRead, checklistsPropose, checkReplyChecklist, proposedCode, replyChecklistOf } from "./reply-checklist.ts";
 import { screenProblems } from "./screen.ts";
@@ -32,6 +32,9 @@ const copy: ChecklistCopy = {
   ],
 };
 const checklist = replyChecklistOf(formSchema.parse(screen(field)).sections[0]!.fields[0]! as never, copy);
+/** The checklist with every item's `on_negative` set to `onNegative`. */
+const checklistOf = (onNegative: "none" | "create_snag") =>
+  replyChecklistOf(formSchema.parse(screen(field)).sections[0]!.fields[0]! as never, { ...copy, items: copy.items.map((i) => ({ ...i, on_negative: onNegative })) });
 
 describe("the Screen publish checks", () => {
   it("take a copied checklist in a Screen's Action Form, shared", () => {
@@ -104,6 +107,40 @@ describe("checkReplyChecklist", () => {
     });
     const complete = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" }, clean: { answer: "na" } };
     expect(checkReplyChecklist(checklist, complete, "complete", { "inspection_checklist.formwork": 1 })).toEqual({ ok: true, answers: complete });
+  });
+});
+
+describe("the \"Raise a Snag\" tick (RP-577)", () => {
+  it("is kept only when unticked: ticked is the default, so a tick given is dropped", () => {
+    const answers = { formwork: { answer: "fail", comment: "Gap", snag: false }, cover: { answer: "fail", snag: true } };
+    expect(checkReplyChecklist(checklistOf("create_snag"), answers, "draft", {})).toEqual({
+      ok: true,
+      answers: { formwork: { answer: "fail", comment: "Gap", snag: false }, cover: { answer: "fail" } },
+    });
+  });
+
+  it("is refused on an item that raises no Snag, and when it is not true or false", () => {
+    expect(checkReplyChecklist(checklist, { cover: { answer: "fail", snag: false } }, "draft", {})).toEqual({
+      ok: false,
+      errors: [{ key: "inspection_checklist", code: "wrong_type", item: "cover" }],
+    });
+    expect(checkReplyChecklist(checklist, { formwork: { answer: "fail", snag: "no" } }, "draft", {})).toEqual({
+      ok: false,
+      errors: [{ key: "inspection_checklist", code: "wrong_type", item: "formwork" }],
+    });
+  });
+
+  it("is offered on an item answered Fail or No that raises a Snag, ticked unless taken off", () => {
+    const items = checklistOf("create_snag").items;
+    const [formwork, cover, clean] = items;
+    expect(snagTick(formwork!, { answer: "fail" })).toBe("ticked");
+    expect(snagTick(cover!, { answer: "fail", snag: false })).toBe("unticked");
+    expect(snagTick(clean!, { answer: "no" })).toBe("ticked");
+    // No tick: answered Pass or N/A, not answered, or an item that raises none.
+    expect(snagTick(formwork!, { answer: "pass" })).toBeNull();
+    expect(snagTick(cover!, { answer: "na", snag: false })).toBeNull();
+    expect(snagTick(formwork!, undefined)).toBeNull();
+    expect(snagTick(checklist.items[1]!, { answer: "fail" })).toBeNull();
   });
 });
 

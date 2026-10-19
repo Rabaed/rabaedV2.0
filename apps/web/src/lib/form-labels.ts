@@ -82,6 +82,9 @@ export function useFormRendererLabels(): FormRendererLabels {
       summary: t("checklistField.summary"),
       evidence: (item) => t("checklistField.evidence", { item }),
       itemNumber: (n, of) => t("checklistField.itemNumber", { n, of }),
+      raiseSnag: t("checklistField.raiseSnag"),
+      snagRaised: t("checklistField.snagRaised"),
+      noSnagRaised: t("checklistField.noSnagRaised"),
       photosField: photosLabels(t),
     },
     table: {
