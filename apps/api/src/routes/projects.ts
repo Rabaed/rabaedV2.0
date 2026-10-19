@@ -1,9 +1,16 @@
-import { createdProject, createProjectRequest, myProjects, projectSummary, showInspectionsInSubmittalsRequest } from "@rabaed/domain";
+import {
+  createdProject,
+  createProjectRequest,
+  myProjects,
+  projectSummary,
+  recordSettingsRequest,
+  showInspectionsInSubmittalsRequest,
+} from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { forbidden, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
-import { createProject, getProject, listMyProjects, setShowInspectionsInSubmittals } from "../projects/projects.ts";
+import { createProject, getProject, listMyProjects, setRecordSettings, setShowInspectionsInSubmittals } from "../projects/projects.ts";
 import { throwIfRefused } from "../refusals.ts";
 
 // Projects. Only Project Creators create one; only a Project's Members see it,
@@ -33,6 +40,18 @@ export const projectRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getProject(ctx.db, memberId, idOrNotFound(request.params.projectId)));
+      },
+    );
+
+    // A Project Admin sets the language Documental Records are printed in and whether they show Hijri dates
+    // (RP-151). They apply to records made afterwards. Anyone else gets a 404 exactly like a made-up id.
+    app.put(
+      "/v1/projects/:projectId/settings/record",
+      { schema: { params: z.object({ projectId: z.string() }), body: recordSettingsRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        throwIfRefused(await setRecordSettings(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body));
+        return reply.code(204).send();
       },
     );
 

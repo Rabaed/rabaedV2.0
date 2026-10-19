@@ -418,7 +418,7 @@ A Member's handwritten signature, drawn, typed or uploaded in their profile, and
 _Avoid_: Stamp, initials, e-signature
 
 **Stamp**:
-A Company's official stamp, uploaded to its Company profile by its owner or Authorized Person beside its logo. The Documental Record prints the Stamp of every Company whose Members acted on the item. While a Company has no Stamp, none of its Members can take Transitions, as a paper submittal without its stamp isn't processed (ADR 0023).
+A Company's official stamp, uploaded to its Company profile by its Authorized Person beside its logo. The Documental Record prints the Stamp of every Company whose Members acted on the item. While a Company has no Stamp, none of its Members can take Transitions, as a paper submittal without its stamp isn't processed (ADR 0023).
 _Avoid_: Seal (the record's digital seal), company signature
 
 **Documental Record**:

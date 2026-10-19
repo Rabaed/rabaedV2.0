@@ -107,6 +107,8 @@ function Frame({ locale, memberName, companyName, isAuthorizedPerson, unread, de
     {
       label: t("myCompany"),
       items: [
+        // Its logo and Stamp (RP-617): every Member of the Company sees them; its Authorized Person uploads them.
+        { key: "company", label: t("companyProfile"), icon: "building", href: "/company" },
         // eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy
         { key: "members", label: t("members"), icon: "users", href: "/members" },
         ...(isAuthorizedPerson ? [{ key: "company-projects", label: t("participations"), icon: "building" as const, href: "/participants" }] : []),

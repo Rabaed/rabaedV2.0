@@ -30,6 +30,7 @@ export const rabaedDefaultScreens = [
   "inspection_failed",
   "comment_resolution",
   "snag_resolution",
+  "question_answer",
 ] as const;
 
 /**
@@ -100,18 +101,20 @@ export const submittalWorkflows = [
  * 1→1 → Owner review (RP-596). The three submittals also have each of the eight (`variants`),
  * published as Rabaed Defaults of their own that a Project Admin may bind or duplicate; `workflow`
  * is one of them. `history` lists the documents of the Type's earlier Workflow Versions, Version 1
- * first, that still have items on them (RP-170: the WIR's Version 1, `WIR-1.json`, whose items
- * finish on it): each is published as its Version only while the Type's Workflow has no Version
- * that number or later, so a database seeded before the Version 2 document keeps its own Version 1
- * and a fresh one gets the same two Versions.
+ * first, that still have items on them (RP-170: the WIR's Version 1, `WIR-1.json`; RP-673: its
+ * Version 2, `WIR-2.json`, whose items finish with an Inspection Result): each is published as its
+ * Version only while the Type's Workflow has no Version that number or later, so a database seeded
+ * before a later document keeps its own earlier Versions and a fresh one gets the same Versions.
  */
 export const rabaedDefaultTypes = [
   { type: "MAR", form: "MAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows, history: null },
   { type: "SAR", form: "SAR.json", workflow: "submittal-2-2.json", variants: submittalWorkflows, history: null },
   { type: "DAR", form: "DAR.json", workflow: "submittal-1-1-owner.json", variants: submittalWorkflows, history: null },
-  { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null, history: ["WIR-1.json"] },
+  { type: "WIR", form: "WIR.json", workflow: "WIR.json", variants: null, history: ["WIR-1.json", "WIR-2.json"] },
   { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null, history: null },
   { type: "SNG", form: "SNG.json", workflow: "SNG.json", variants: null, history: null },
+  { type: "QSN", form: "QST.json", workflow: "QSN.json", variants: null, history: null },
+  { type: "QSC", form: "QST.json", workflow: "QSC.json", variants: null, history: null },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>

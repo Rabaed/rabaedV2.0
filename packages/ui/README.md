@@ -8,7 +8,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 
 | Folder under `src/components/` | What it holds (main exports) |
 |---|---|
-| `button/` | `Button`, `IconButton`, `buttonVariants`, `SignButton` |
+| `button/` | `Button`, `IconButton`, `buttonVariants` |
 | `data/` | `Avatar`, `CompanyChip` (`avatar.tsx`), `Badge`, `StatTile`, `TitledCard`, `KeyValues`, table parts; `initials.ts`, `tone.ts` |
 | `doc-no/` | `DocNo`: a Document Number, always left-to-right |
 | `feedback/` | Empty, loading and error states (`states.tsx`) |
@@ -27,6 +27,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
 | `settings/` | `SettingsLayout` (the Project Settings frame) |
 | `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
+| `signature/` | The Signature (RP-85): `SignatureEditor` (Profile → Add Signature: draw, type or upload), `SignatureRequiredDialog` (no Signature, no Transition); `CompanyImages` and `StampRequiredDialog` (the logo and Stamp, RP-617); `ImageFileButton` (their image file control, a button in the page's language) |
 | `status/` | `StagePill`, `StageDot`, `AgeDots`, `CodeBadge`, `SaveStatus`, `SentBackNotice`, `WithChip`, `WorkItemCard`, `stageColour` |
 | `views/` | Whole views: `WorkItemList`, `WorkItemTable`, `WorkItemBoard` (Kanban), `ProjectDashboard`, `ProjectCards`, `ProjectsBrowser`, `ActivityFeedPanel`, Home cards, `ColumnSettings` |
 | `watch/` | `WatchButton` |
@@ -52,7 +53,7 @@ Elsewhere (the paths in the first column are checked to exist):
 ```
 
 ```tsx
-import { Button, SignButton } from "@rabaed/ui";
+import { Button } from "@rabaed/ui";
 ```
 
 Next.js apps also list `@rabaed/ui` in `transpilePackages`.

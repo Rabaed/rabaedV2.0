@@ -1,0 +1,36 @@
+{
+  "sections": [
+    {
+      "key": "details",
+      "title": { "en": "Question", "ar": "السؤال" },
+      "fields": [
+        {
+          "key": "question",
+          "type": "textarea",
+          "required": true,
+          "label": { "en": "Question", "ar": "السؤال" },
+          "help": {
+            "en": "Ask one clear question, so the answer can settle it.",
+            "ar": "اطرح سؤالاً واحداً واضحاً ليحسمه الجواب."
+          }
+        },
+        {
+          "key": "attachments",
+          "type": "attachments",
+          "required": false,
+          "label": { "en": "Attachments", "ar": "المرفقات" },
+          "help": { "en": "Files that help answer it, such as a drawing or a photo.", "ar": "ملفات تساعد على الإجابة، مثل مخطط أو صورة." }
+        }
+      ]
+    },
+    {
+      "key": "classification",
+      "title": { "en": "Classification", "ar": "التصنيف" },
+      "fields": [
+        { "key": "trade", "type": "trade", "required": true, "label": { "en": "Trade", "ar": "التخصص" } },
+        { "key": "location", "type": "location", "required": true, "label": { "en": "Location", "ar": "الموقع" } },
+        { "key": "scopes", "type": "scopes", "required": false, "label": { "en": "Scopes", "ar": "النطاقات" } }
+      ]
+    }
+  ]
+}
