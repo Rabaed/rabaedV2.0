@@ -5,7 +5,7 @@
 // The font mime types are built at run time, so this file itself never holds
 // embedded font data for the check to find. The "font" bytes are plain text.
 
-export type ManifestEntry = { mime: string; compressed?: boolean; data: string };
+import type { ManifestEntry } from "./design-strip-fonts.ts";
 
 /** A font mime type, e.g. font("woff2") is the woff2 one. */
 export const font = (format: string) => ["font", format].join("/");

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Refuses a commit that stages a font file or embedded font data (RP-962).
+# Opt-in: git config core.hooksPath .githooks   (README, "Thmanyah fonts")
+exec node scripts/check-no-fonts.ts --staged
