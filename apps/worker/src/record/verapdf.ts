@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -56,15 +56,33 @@ async function reportOf(command: string, args: string[]): Promise<PdfAValidation
   return parseVeraPdfReport(out.stdout);
 }
 
+/**
+ * A folder for the PDFs a veraPDF container reads. The image runs as its own non-root user, which on
+ * Linux is not the one that made the folder: mkdtemp's 0700 would leave it unable to read the PDF
+ * (it reports a missing file, and no verdict). The folder and files are readable by all, and are
+ * removed after each use; they hold only a record the Members of the item may download anyway.
+ */
+async function sharedFolder(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "rabaed-verapdf-"));
+  await chmod(dir, 0o755);
+  return dir;
+}
+
+/** Writes `pdf` as `name` in `dir`, readable by the container's user. */
+async function putPdf(dir: string, name: string, pdf: Uint8Array): Promise<void> {
+  await writeFile(join(dir, name), pdf, { mode: 0o644 });
+  await chmod(join(dir, name), 0o644);
+}
+
 const veraArgs = (file: string) => ["--flavour", "3b", "--format", "xml", file];
 
 /** A validator that writes the PDF into a folder of its own and runs `command` on it; `args(dir)` are the arguments before veraPDF's own. */
 function throughFolder(command: string, args: (dir: string) => { before: string[]; file: string }): PdfAValidator {
   return {
     async validate(pdf) {
-      const dir = await mkdtemp(join(tmpdir(), "rabaed-verapdf-"));
+      const dir = await sharedFolder();
       try {
-        await writeFile(join(dir, "record.pdf"), pdf);
+        await putPdf(dir, "record.pdf", pdf);
         const { before, file } = args(dir);
         return await reportOf(command, [...before, ...veraArgs(file)]);
       } finally {
@@ -97,7 +115,7 @@ export function veraPdfDockerSession(image: string): PdfAValidatorSession {
   let started: Promise<{ id: string; dir: string }> | undefined;
   let count = 0;
   const start = async () => {
-    const dir = await mkdtemp(join(tmpdir(), "rabaed-verapdf-"));
+    const dir = await sharedFolder();
     const { stdout } = await run("docker", ["run", "-d", "--rm", "-v", `${dir}:/data:ro`, "--entrypoint", "sleep", image, "infinity"], { timeout: TIMEOUT_MS });
     return { id: stdout.trim(), dir };
   };
@@ -108,7 +126,7 @@ export function veraPdfDockerSession(image: string): PdfAValidatorSession {
         throw error;
       }));
       const name = `record-${count++}.pdf`;
-      await writeFile(join(dir, name), pdf);
+      await putPdf(dir, name, pdf);
       try {
         return await reportOf("docker", ["exec", id, "/opt/verapdf/verapdf", ...veraArgs(`/data/${name}`)]);
       } finally {
