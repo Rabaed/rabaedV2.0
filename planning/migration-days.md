@@ -85,5 +85,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270716 | RP-626 | 33 | The Question Types (QSN, QSC) and the Consultant's `submit` (moved from 20270706, then 20270705) |
 | 20270714 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, then 20270706: main's later days) |
 | 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
-| 20270721 | RP-629 | 34 | snag_bulk_reassign |
 | 20270720 | RP-151 | 22 | record_page_one |
+| 20270726 | RP-629 | 34 | snag_bulk_reassign |
