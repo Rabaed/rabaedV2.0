@@ -18,8 +18,10 @@ import {
   localSealSigner,
   localTimestampAuthority,
   pdfImages,
+  PINNED_VERAPDF_IMAGE,
   projectFilesFromEnv,
   s3RecordFiles,
+  veraPdfDockerSession,
   verifySeal,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
@@ -35,7 +37,10 @@ const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
 const renderer = chromiumRenderer();
+/** veraPDF, in one container for the file: the record checks (RP-155) validate every record made here. */
+const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
 afterAll(async () => {
+  await veraPdf.close();
   await renderer.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
@@ -213,6 +218,7 @@ async function recordHandler(): Promise<OutboxHandler> {
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
+    validator: veraPdf,
   });
 }
 
@@ -391,7 +397,8 @@ describe("the Signature cards", () => {
   it("show each Member's Signature as the Transition recorded it, never one they saved afterwards", () => {
     for (const ink of [INK.omar, INK.sara, INK.faisal, INK.huda]) expect(made.a.inks, inkOf(ink)).toContain(inkOf(ink));
     expect(made.a.inks).not.toContain(inkOf(INK.saraLater));
-    expect(cards(made.a).every((c) => c.includes("<signature/>"))).toBe(true);
+    // Flagged with its image's fingerprint (RP-155: how a Re-produce finds it again), never where it is stored.
+    expect(cards(made.a).every((c) => /<signature sha256="[0-9a-f]{64}"\/>/.test(c))).toBe(true);
   });
 
   it("print what was written in the shared Action Form: the full Remarks and Code B's Comments as a numbered list", () => {
@@ -524,8 +531,8 @@ describe("the endings", () => {
 describe("the Stamps", () => {
   it("scenario RP-23-1: C1, K1 and the Owner Representative read the same record, with both acting Companies' Stamps labelled by role", async () => {
     const stamps = /<stamps>([\s\S]*?)<\/stamps>/.exec(made.b.xml)![1]!;
-    expect(stamps).toMatch(new RegExp(`${c1Name}[\\s\\S]*<role lang="en">Contractor</role>[\\s\\S]*<image/>`));
-    expect(stamps).toMatch(new RegExp(`${K1_NAME}[\\s\\S]*<role lang="en">Consultant</role>[\\s\\S]*<image/>`));
+    expect(stamps).toMatch(new RegExp(`${c1Name}[\\s\\S]*<role lang="en">Contractor</role>[\\s\\S]*<image sha256="[0-9a-f]{64}"/>`));
+    expect(stamps).toMatch(new RegExp(`${K1_NAME}[\\s\\S]*<role lang="en">Consultant</role>[\\s\\S]*<image sha256="[0-9a-f]{64}"/>`));
     expect(stamps).not.toContain(OWNER_NAME);
     for (const ink of [INK.stampC1, INK.stampK1]) expect(made.b.inks).toContain(inkOf(ink));
     expect(made.b.inks).not.toContain(inkOf(INK.stampOwner));
@@ -539,8 +546,8 @@ describe("the Stamps", () => {
   it("put each Company's logo beside its name, and only its name when it has none", () => {
     expect(made.b.inks).toContain(inkOf(INK.logoK1));
     const strip = /<companies>([\s\S]*?)<\/companies>/.exec(made.b.xml)![1]!;
-    expect(strip).toMatch(new RegExp(`${K1_NAME}[^]*?<logo/>`));
-    expect(strip.split("<company>").filter((c) => c.includes("<logo/>"))).toHaveLength(1);
+    expect(strip).toMatch(new RegExp(`${K1_NAME}[^]*?<logo sha256="[0-9a-f]{64}"/>`));
+    expect(strip.split("<company>").filter((c) => c.includes("<logo "))).toHaveLength(1);
   });
 
   it("are those in force at the close: a Stamp or logo replaced afterwards never reaches a record made from that close", () => {
@@ -572,7 +579,8 @@ describe("the Disclaimer and the review duration", () => {
 
 describe("the record as a whole", () => {
   it("holds nothing the pages don't print, and is still sealed", async () => {
-    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri"]);
+    // sha256 fingerprints an image the page prints as a picture (RP-155: how a Re-produce finds the file).
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri", "sha256"]);
     for (const record of Object.values(made)) {
       const body = record.xml.replace(/^<\?xml[^>]*\?>/, "");
       const values = [
