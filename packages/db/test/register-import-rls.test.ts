@@ -23,7 +23,7 @@ let c1: Company; // Contractor: imports the register.
 let k1: Company; // Consultant.
 let c2: Company; // Another Contractor.
 let ow: Company; // The Owner.
-let c1Colleague = ""; // Another Member of C1 on the Project.
+let c1Colleague = ""; // Another Member of C1 on the Project: its PM.
 let c1Narrowed = ""; // A C1 engineer whose Trade Visibility is Electrical only.
 let c1Participant = "";
 let projectId = "";
@@ -440,6 +440,7 @@ describe("Matched values, checked again by the database (RP-639)", () => {
 
     it("RP-589-4: is written only through the functions, read by whoever sees the item, set only by who may edit the Draft", async () => {
       expect(await failure(c1.member, sql`update work_item set paper_ref = 'X' where id = ${draft}::uuid`)).toBe("42501");
+      // C1's PM (c1Colleague), who did not raise the Draft, may not edit it.
       expect(await outcome(c1Colleague, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_editable");
       for (const other of [k1.member, c2.member, ow.member]) {
         expect(await outcome(other, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_found");
