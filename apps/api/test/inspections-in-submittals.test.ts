@@ -56,7 +56,7 @@ beforeAll(async () => {
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id as string;
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
 
-  // A Draft legacy MAR (Submittals) and a WIR C1 has Submitted to the Consultant (Inspections, Pending Inspection).
+  // A Draft legacy MAR (Submittals) and a WIR C1 has Submitted to the Consultant (Inspections, Pending Approval).
   marId = await draft(tower, c1Engineer, "Cable tray");
   wirId = (
     await ok(
@@ -93,9 +93,9 @@ describe("Show Inspections in the Submittals tab: off, as today", () => {
   });
 
   it("reads a Stage key of another Module, or a made-up one, as no group: it matches nothing and never errors", async () => {
-    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_inspection"] }))).toEqual([]);
+    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_approval"] }))).toEqual([]);
     expect(ids(await submittals(c1Engineer, { stage: ["nonsense:draft"] }))).toEqual([]);
-    expect(ids(await inspections(c1Engineer, { stage: ["pending_inspection"] }))).toEqual([wirId]);
+    expect(ids(await inspections(c1Engineer, { stage: ["pending_approval"] }))).toEqual([wirId]);
   });
 
   it("is set by a Project Admin only; anyone else is told 404, like a made-up Project", async () => {
@@ -127,7 +127,7 @@ describe("Show Inspections in the Submittals tab: on", () => {
   it("lists the WIR the viewer sees with its Type as a chip and the Inspections Stages as groups of their own", async () => {
     const list = await submittals(c1Engineer);
     expect(ids(list)).toEqual([marId, wirId].sort());
-    expect(list.items.find((i) => i.id === wirId)).toMatchObject({ type: { code: "WIR" }, stage: { key: "inspections:pending_inspection" } });
+    expect(list.items.find((i) => i.id === wirId)).toMatchObject({ type: { code: "WIR" }, stage: { key: "inspections:pending_approval" } });
     expect(list.items.find((i) => i.id === marId)).toMatchObject({ type: { code: LEGACY_MAR }, stage: { key: "draft" } });
     // The Type filter offers both, and filters.
     expect(list.filters.types.map((t) => t.code)).toEqual(expect.arrayContaining([LEGACY_MAR, "WIR"]));
@@ -137,31 +137,31 @@ describe("Show Inspections in the Submittals tab: on", () => {
     const own = list.stages.filter((s) => !s.key.includes(":")).map((s) => s.key);
     const theirs = list.stages.filter((s) => s.key.startsWith("inspections:"));
     expect(own).toContain("draft");
-    expect(theirs.map((s) => s.key)).toEqual(expect.arrayContaining(["inspections:draft", "inspections:pending_inspection", "inspections:passed", "inspections:failed"]));
+    expect(theirs.map((s) => s.key)).toEqual(expect.arrayContaining(["inspections:draft", "inspections:pending_approval", "inspections:approved", "inspections:revise_resubmit"]));
     expect(theirs.find((s) => s.key === "inspections:draft")!.name).toEqual({ en: "Inspections · Draft", ar: "الفحوصات · مسودة" });
     expect(list.stages.indexOf(theirs[0]!)).toBeGreaterThan(list.stages.indexOf(list.stages.find((s) => s.key === own.at(-1))!));
     // Counts follow the rows, group by group.
     expect(stageCount(list, "draft")).toBe(1);
-    expect(stageCount(list, "inspections:pending_inspection")).toBe(1);
+    expect(stageCount(list, "inspections:pending_approval")).toBe(1);
     expect(stageCount(list, "inspections:draft")).toBe(0);
-    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_inspection"] }))).toEqual([wirId]);
+    expect(ids(await submittals(c1Engineer, { stage: ["inspections:pending_approval"] }))).toEqual([wirId]);
     expect(ids(await submittals(c1Engineer, { stage: ["draft"] }))).toEqual([marId]);
   });
 
   it("is the same on the Kanban: the WIR sits in the Inspections' column, the MAR in the Submittals'", async () => {
     const board = await kanban(c1Engineer);
     const cardsOf = (stageKey: string) => board.columns.find((c) => c.stageKey === stageKey)!.lanes.flatMap((l) => l.cards.map((c) => c.id));
-    expect(board.stages.map((s) => s.key)).toContain("inspections:pending_inspection");
-    expect(cardsOf("inspections:pending_inspection")).toEqual([wirId]);
+    expect(board.stages.map((s) => s.key)).toContain("inspections:pending_approval");
+    expect(cardsOf("inspections:pending_approval")).toEqual([wirId]);
     expect(cardsOf("draft")).toEqual([marId]);
   });
 
   it("changes nothing else: the Inspections List, the item page, its Document Number and the Need My Action count stay the Inspections Module's", async () => {
     const listed = await inspections(c1Engineer);
     expect(ids(listed)).toEqual([wirId]);
-    expect(listed.items[0]!.stage.key).toBe("pending_inspection");
+    expect(listed.items[0]!.stage.key).toBe("pending_approval");
     const detail = (await ok(c1Engineer.get(`/v1/work-items/${wirId}`), 200)).json();
-    expect(detail).toMatchObject({ id: wirId, type: { code: "WIR" }, stage: { key: "pending_inspection" } });
+    expect(detail).toMatchObject({ id: wirId, type: { code: "WIR" }, stage: { key: "pending_approval" } });
     expect(detail.documentNumber).toMatch(/WIR/);
     expect((await submittals(c1Engineer)).items.find((i) => i.id === wirId)!.documentNumber).toBe(detail.documentNumber);
   });
