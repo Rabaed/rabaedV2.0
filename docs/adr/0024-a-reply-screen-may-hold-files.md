@@ -8,6 +8,7 @@ ADR 0019 made the Form the raiser's: every other Participant answers in its repl
 - **One set per Transition.** Each Transition taken keeps its own files: after a Return to Open, the next Resolve starts with an empty field, and the earlier round's photos stay with the earlier Resolve in the history. The field's file limit counts only the current round.
 - **Record.** The Documental Record (ADR 0023) lists them like the item's other Documents, by name, the uploader's Participant and the Transition they froze at, and covers them by its hash.
 - **Scope.** RP-623 lifts the refusal only for `photos` and `attachments` fields. Photos on checklist items in a Screen come with Inspections (RP-27), on the same mechanism. The Screens editor offers file fields in a follow-up; until then they are published as data.
+- **A checklist in a Screen** (amended 2026-10-19, RP-27, with the product owner). The Inspection's checklist sits in the Consultant Manager's code Screens. Its answers, comments and photos are added at the Consultant Engineer's Step too, because the Engineer's Step leads to those Transitions within the Consultant: for a checklist, the holding Participant's earlier Steps on the way to the Transition count as from-Steps. Send to Manager and Return to Engineer are moves within the Consultant, so they keep the answers. The code freezes and shares them; a cancel discards them.
 
 ## Considered Options
 
