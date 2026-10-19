@@ -7,6 +7,12 @@ import type { SetupApi } from "../screens.ts";
 
 const bi = (en: string, ar: string) => ({ en, ar });
 
+/** `value`, or a refusal naming the demo row that is missing (`what`, e.g. "Project TWR"). */
+export function found<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`The demo has no ${what}: run the example on a fresh \`pnpm demo\`.`);
+  return value;
+}
+
 /** The Package's id and number, and its items' ids in the order of `titles`. */
 export type ReadyPackage = { id: string; number: string; items: string[] };
 
@@ -14,16 +20,28 @@ export async function readyPackage(api: SetupApi, name: { en: string; ar: string
   const hafiz = await api.as("hafiz");
   const ali = await api.as("ali");
   const { body: list } = (await hafiz.request("GET", "/projects")) as { body: { projects: { id: string; code: string }[] } };
-  const projectId = list.projects.find((p) => p.code === "TWR")!.id;
+  const projectId = found(
+    list.projects.find((p) => p.code === "TWR"),
+    "Project TWR",
+  ).id;
   const { body: dims } = (await hafiz.request("GET", `/projects/${projectId}/dimensions`)) as {
     body: { trade: { id: string; code: string }[]; location: { id: string; code: string }[] };
   };
-  const electrical = dims.trade.find((t) => t.code === "EL")!.id;
-  const location = dims.location.find((l) => l.code === "T1F01")!.id;
+  const electrical = found(
+    dims.trade.find((t) => t.code === "EL"),
+    "Trade EL on Project TWR",
+  ).id;
+  const location = found(
+    dims.location.find((l) => l.code === "T1F01"),
+    "Location T1F01 on Project TWR",
+  ).id;
   const { body: approved } = (await hafiz.request("GET", `/projects/${projectId}/approved-suppliers?tradeId=${electrical}`)) as {
     body: { suppliers: { id: string; name: { en: string } }[] };
   };
-  const supplier = approved.suppliers.find((s) => s.name.en === "Najd Electrical Supplies")!.id;
+  const supplier = found(
+    approved.suppliers.find((s) => s.name.en === "Najd Electrical Supplies"),
+    "approved Electrical supplier Najd Electrical Supplies",
+  ).id;
 
   const items: string[] = [];
   for (const title of titles) {

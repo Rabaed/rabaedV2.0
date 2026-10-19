@@ -1,7 +1,15 @@
+import { EventEmitter } from "node:events";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { screens as bulkScreens } from "./screens-examples/packages-bulk.ts";
+import { found } from "./screens-examples/packages-seed.ts";
+import { screens as submitScreens } from "./screens-examples/packages-submit.ts";
 import {
   fillRoute,
+  finishAnimations,
+  trackRequests,
+  unsettledWarning,
   locatorOf,
   markdownTable,
   parseArgs,
@@ -183,9 +191,7 @@ describe("runActions", () => {
       if (call === failOn) throw new Error("locator.click: Timeout 10000ms exceeded.\nCall log:\n  - waiting for getByRole('button')");
     };
     const driver: ActionDriver = {
-      click: (role, name) => record(`click ${role} ${name}`),
-      checkRow: (text) => record(`check ${text}`),
-      waitFor: (role, name) => record(`waitFor ${role}${name === undefined ? "" : ` ${name}`}`),
+      run: (verb, target) => record(`${verb} ${"row" in target ? target.row : `${target.role}${target.name === undefined ? "" : ` ${target.name}`}`}`),
     };
     return { driver, calls };
   }
@@ -228,6 +234,67 @@ describe("runActions", () => {
 
   it("names a wait without a name by its role alone", () => {
     expect(locatorOf({ waitFor: "dialog" }, "en")).toBe('getByRole("dialog")');
+  });
+});
+
+// Review fix 14 and 17: the wait for a click's requests, its warning, and its listeners.
+describe("trackRequests", () => {
+  function clocked() {
+    let clock = 0;
+    const page = new EventEmitter();
+    const tracker = trackRequests(page as unknown as Parameters<typeof trackRequests>[0], {
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+    });
+    return { page, tracker, at: () => clock };
+  }
+
+  it("settles once no request has been in flight for half a second", async () => {
+    const { page, tracker, at } = clocked();
+    page.emit("request");
+    page.emit("requestfinished");
+    expect(await tracker.settle()).toBe(true);
+    expect(at()).toBeGreaterThanOrEqual(500);
+    expect(at()).toBeLessThan(1_000);
+  });
+
+  it("gives up unsettled after 10 s with a request still in flight", async () => {
+    const { page, tracker, at } = clocked();
+    page.emit("request");
+    expect(await tracker.settle()).toBe(false);
+    expect(at()).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it("removes its listeners when stopped, as when an action throws, and when it settles", async () => {
+    const stopped = clocked();
+    expect(stopped.page.listenerCount("request")).toBe(1);
+    stopped.tracker.stop();
+    expect(["request", "requestfinished", "requestfailed"].map((event) => stopped.page.listenerCount(event))).toEqual([0, 0, 0]);
+    const settled = clocked();
+    await settled.tracker.settle();
+    expect(settled.page.listenerCount("requestfinished")).toBe(0);
+  });
+
+  it("warns naming the screen, its language and width when it gave up", () => {
+    expect(unsettledWarning({ name: "bulk", route: "/packages/p", actions: [] }, { locale: "ar", width: 1920 })).toBe(
+      'Warning: screen "bulk" (ar, 1920): requests were still in flight 10 s after its last action; shot anyway.',
+    );
+  });
+});
+
+// Review fix 13: an infinite animation (a spinner) never finishes, and a slow one must not hold the shot.
+describe("finishAnimations", () => {
+  const animation = (endTime: number, finished: Promise<unknown>) => ({ finished, effect: { getComputedTiming: () => ({ endTime }) } });
+  const never = new Promise(() => {});
+
+  it("waits for the finite animations and skips infinite ones", async () => {
+    expect(await finishAnimations(1_000, [animation(200, Promise.resolve()), animation(Infinity, never)] as unknown as Animation[])).toBe("done");
+  });
+
+  it("stops waiting after its timeout", async () => {
+    expect(await finishAnimations(20, [animation(5_000, never)] as unknown as Animation[])).toBe("timed out");
   });
 });
 
@@ -275,7 +342,13 @@ describe("plannedShots", () => {
       "submit-dialog-1920-ar.png",
     ]);
     expect(shots[4]).toMatchObject({ route: "/packages/p1", screen: dialog });
-    expect(() => plannedShots(["/submit-dialog", dialog])).toThrow(/\/submit-dialog and submit-dialog/);
+    expect(() => plannedShots(["/submit-dialog", dialog])).toThrow('Route /submit-dialog and screen "submit-dialog" would be saved as the same file');
+  });
+
+  // Review fix 15: Windows file names ignore case, so /A and /a would overwrite each other.
+  it("refuses two names that differ only in case", () => {
+    expect(() => plannedShots(["/Packages", "/packages"])).toThrow("Routes /Packages and /packages would be saved as the same file");
+    expect(() => plannedShots([{ name: "Bulk", route: "/a", actions: [] }, { name: "bulk", route: "/b", actions: [] }])).toThrow('Screens "Bulk" and "bulk"');
   });
 });
 
@@ -319,5 +392,43 @@ describe("publishing", () => {
   it("names a named screen's row by its name and route", () => {
     const shots = plannedShots([{ name: "bulk", route: "/packages/p1", actions: [] }]);
     expect(markdownTable(shots, (file) => file).split("\n")[2]).toBe("| bulk: `/packages/p1` | ![](bulk-1366-en.png) | ![](bulk-1920-en.png) | ![](bulk-1366-ar.png) | ![](bulk-1920-ar.png) |");
+  });
+});
+
+describe("the Packages examples (scripts/screens-examples)", () => {
+  const root = resolve(import.meta.dirname, "..");
+  /** Every { en, ar } pair in a JSON value, at any depth. */
+  const pairs = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.flatMap(pairs);
+    if (typeof value !== "object" || value === null) return [];
+    const record = value as Record<string, unknown>;
+    const own = typeof record.en === "string" && typeof record.ar === "string" ? [`${record.en} | ${record.ar}`] : [];
+    return [...own, ...Object.values(record).flatMap(pairs)];
+  };
+  const json = (path: string) => JSON.parse(readFileSync(resolve(root, path), "utf8")) as unknown;
+  /** The same key's text in both message files, as one "en | ar" pair each. */
+  const messagePairs = (en: unknown, ar: unknown): string[] => {
+    if (typeof en === "string" && typeof ar === "string") return [`${en} | ${ar}`];
+    if (typeof en !== "object" || en === null || typeof ar !== "object" || ar === null) return [];
+    return Object.keys(en).flatMap((key) => messagePairs((en as Record<string, unknown>)[key], (ar as Record<string, unknown>)[key]));
+  };
+
+  // Review fix 19: an Arabic name that isn't the app's own fails only in a browser, on the Arabic shot.
+  it("names each control with the app's own English and Arabic words: its messages, or a Workflow's labels", () => {
+    const known = new Set([
+      ...messagePairs(json("apps/web/messages/en.json"), json("apps/web/messages/ar.json")),
+      ...readdirSync(resolve(root, "apps/admin/workflows")).flatMap((file) => pairs(json(`apps/admin/workflows/${file}`))),
+    ]);
+    const names = parseScreens([...submitScreens, ...bulkScreens], "examples").flatMap((screen) =>
+      screen.actions.flatMap((action) => ("name" in action && action.name !== undefined && typeof action.name !== "string" ? [`${action.name.en} | ${action.name.ar}`] : [])),
+    );
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) expect(known.has(name), name).toBe(true);
+  });
+
+  // Review fix 18: a demo without the row says which row, not "cannot read properties of undefined".
+  it("names the demo row it could not find", () => {
+    expect(found({ id: "p1" }, "Project TWR")).toEqual({ id: "p1" });
+    expect(() => found(undefined, "Project TWR")).toThrow("The demo has no Project TWR: run the example on a fresh `pnpm demo`.");
   });
 });
