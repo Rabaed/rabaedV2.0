@@ -1014,6 +1014,12 @@
       "recommendCodeHelp": "Optional. Your advice to the next reviewer in your Company, with the Internal Note below. Only your Company sees it.",
       "recommendCodeNone": "No Recommended Code",
       "recommendedCodeNotOffered": "That Code can't be recommended here. Choose one from the list.",
+      "recommendedCodeIs": "Recommended Code: {code}",
+      "internal": "Internal",
+      "proposed": "Proposed",
+      "proposedCode": "The checklist proposes {code}: {reason}",
+      "proposedC": "an item failed.",
+      "proposedA": "no item failed.",
       "projectClosed": "This Project is closed.",
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
@@ -1024,6 +1030,12 @@
       "gateUnavailable": "Your Signature and your Company's Stamp couldn't be checked, so the Transition didn't open. Try again.",
       "internalNote": "Internal Note",
       "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
+    },
+    "replyChecklist": {
+      "intro": "Answer each item on site; it saves as you go. Only your Company sees it until the code shares it.",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "notSaved": "The checklist wasn't saved. Try again."
     },
     "attachments": {
       "title": "Attachments",

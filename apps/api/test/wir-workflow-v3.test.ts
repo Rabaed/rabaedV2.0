@@ -74,6 +74,8 @@ async function inReview(title: string) {
 async function submitted(title: string) {
   const id = await inReview(title);
   await take(ali.caller, id, "submit", { answers: { cover_note: "Ready on site from 09:00" } });
+  // Version 4 (RP-86) adds the checklist to the codes; a WIR started on Version 3 finishes on it.
+  await pinToWorkflowVersion(migrator, "WIR", 3, id);
   return id;
 }
 
@@ -133,9 +135,10 @@ beforeAll(async () => {
 });
 
 describe("the WIR Workflow Version 3 is the document `pnpm defaults:publish` publishes", () => {
-  it("Version 3 is apps/admin/workflows/WIR.json, Version 2 WIR-2.json and Version 1 WIR-1.json, all three published", async () => {
+  it("Version 3 is apps/admin/workflows/WIR-3.json (Version 4, WIR.json, holds the checklist: RP-86), Version 2 WIR-2.json and Version 1 WIR-1.json, all published", async () => {
     for (const [versionNo, file] of [
-      [3, "WIR.json"],
+      [4, "WIR.json"],
+      [3, "WIR-3.json"],
       [2, "WIR-2.json"],
       [1, "WIR-1.json"],
     ] as const) {
@@ -167,12 +170,13 @@ describe("the WIR Workflow Version 3 is the document `pnpm defaults:publish` pub
       [1, "inspection_result"],
       [2, "inspection_result"],
       [3, "issue_code"],
+      [4, "issue_code"],
     ]);
   });
 });
 
 describe("a WIR on Version 3 (seam 1 acceptance)", () => {
-  it("starts on Version 3 and is Submitted to the Consultant Engineer, in Pending Approval", async () => {
+  it("on Version 3, is Submitted to the Consultant Engineer, in Pending Approval", async () => {
     const id = await submitted("Submitted");
     expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_engineer" }, workflow: { versionNo: 3 } });
     expect((await detail(ahmed.caller, id)).heldBy?.memberName?.en).toBe("Ahmed bin Said");

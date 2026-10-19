@@ -74,13 +74,14 @@ export const startDocumentUploadRequest = z.object({
   /**
    * The file is for the field `fieldKey` of a reply Screen a Transition out of the item's
    * Step shows (ADR 0024, RP-623), not the Form's: added by the Participant holding the item.
+   * With `itemKey`, a photo of that check item of the Screen's checklist (RP-86).
    */
   reply: z.boolean().optional(),
 })
   .refine((file) => file.itemKey === undefined || file.fieldKey !== undefined, "An item needs its checklist field")
   .refine(
-    (file) => file.reply !== true || (file.fieldKey !== undefined && file.itemKey === undefined && file.annotatedFromId === undefined),
-    "A reply file names its Screen field, and only that",
+    (file) => file.reply !== true || (file.fieldKey !== undefined && file.annotatedFromId === undefined),
+    "A reply file names its Screen field, and for a checklist's photo its item",
   )
   .refine(
     (file) => file.annotatedFromId === undefined || (file.fieldKey === undefined && file.itemKey === undefined),

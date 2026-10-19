@@ -1,7 +1,7 @@
 "use client";
 
 import { backwardKinds, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
-import { Button, cn } from "@rabaed/ui";
+import { Badge, Button, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { StampRequired, useMyCompanyRead } from "@/components/company-stamp";
@@ -60,6 +60,8 @@ export function WorkItemActions({
 
   const none = !actions.pickUp && !actions.returnToPool && actions.transitions.length === 0;
   if (none) return null;
+  // The code a checklist proposes (RP-86, ADR 0025) is the one marked; the other codes stay offered.
+  const proposing = actions.transitions.some((tr) => tr.proposed);
 
   return (
     <section id="work-item-actions" className={cn("space-y-3", phoneBar && phoneBarClass)} aria-label={t("title")}>
@@ -67,13 +69,14 @@ export function WorkItemActions({
         {actions.transitions.map((tr) => (
           <Button
             key={tr.key}
-            variant={backwardKinds.includes(tr.kind) ? "secondary" : "primary"}
+            variant={backwardKinds.includes(tr.kind) || (proposing && tr.checklists && !tr.proposed) ? "secondary" : "primary"}
             disabled={calls.pending || gate.show === "wait"}
             aria-busy={gate.show === "wait" || undefined}
             onClick={() => open(tr)}
             className={cn(phoneBar && phoneButton)}
           >
             {tr.label[locale]}
+            {tr.proposed && <Badge tone="neutral">{t("proposed")}</Badge>}
           </Button>
         ))}
         {actions.pickUp && (
@@ -94,7 +97,15 @@ export function WorkItemActions({
       )}
       {/* What was written for one Transition never carries over to another: a new pop-up for each. */}
       {asking && (
-        <TransitionDialog key={asking.key} transition={asking} calls={calls} locale={locale} idPrefix="transition" onClose={() => setAsking(null)} />
+        <TransitionDialog
+          key={asking.key}
+          transition={asking}
+          calls={calls}
+          locale={locale}
+          recommendedCode={actions.recommendedCode}
+          idPrefix="transition"
+          onClose={() => setAsking(null)}
+        />
       )}
       <SignatureRequired open={needsSignature} onOpenChange={setNeedsSignature} returnTo={`/work-items/${workItemId}`} />
       <StampRequired open={needsStamp} onOpenChange={setNeedsStamp} company={gate.show === "stamp" ? gate.company : null} />
