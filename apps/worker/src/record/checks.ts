@@ -16,29 +16,25 @@ import { veraPdfFromEnv, type PdfAValidator } from "./verapdf.ts";
 
 /** What a record's PDF must hold, from its Record Data. */
 export interface RecordExpectation {
-  /** The Signature images the pages must show: one for each distinct Signature on the path (none until the Record Data names them, RP-85, RP-650). */
+  /** The Signature images the pages must show: one for each distinct Signature its cards print (RP-650). */
   readonly signatures: number;
-  /** The pages the layout rendered from the Record Data. */
+  /** The pages the layout rendered from the Record Data, up to the end of the appendix's list. */
   readonly layoutPages: number;
-  /** The pages appended from the Documents the Record Data lists (none until RP-147). */
+  /** The pages the appendix gives after them, from the files the Record Data lists (RP-147). */
   readonly appendixPages: number;
 }
 
-/** A Transition of the path as the Record Data will name its Signature (RP-85, RP-650). */
-export interface SignedTransition {
-  readonly signatureId?: string | null;
-}
-
-/** The Documents the Record Data lists, with the pages each adds to the PDF (RP-147). */
-export interface AppendedDocuments {
-  readonly documents?: readonly { readonly appendedPages?: number }[];
-}
-
-/** The invariants of a record made from `data`, once the layout has rendered `layoutPages` pages. */
+/**
+ * The invariants of a record made from `data`, once the layout has rendered `layoutPages` pages.
+ * A Signature is told apart by its image's fingerprint (one Member signing twice prints one image),
+ * or, without one, by who signed: never more than the distinct images the pages hold.
+ */
 export function expectationOf(data: RecordData, layoutPages: number): RecordExpectation {
-  const signatures = new Set((data.transitions as readonly SignedTransition[]).flatMap((t) => (t.signatureId ? [t.signatureId] : [])));
-  const appended = (data as AppendedDocuments).documents ?? [];
-  return { signatures: signatures.size, layoutPages, appendixPages: appended.reduce((sum, d) => sum + (d.appendedPages ?? 0), 0) };
+  const signatures = new Set(
+    data.cards.flatMap((c) => (c.signature ? [c.signatureSha256 ?? JSON.stringify([c.name, c.company])] : [])),
+  );
+  const appendixPages = data.appendix.reduce((sum, f) => sum + (f.way === "pages" ? f.pageCount : 0), 0);
+  return { signatures: signatures.size, layoutPages, appendixPages };
 }
 
 /** Every image of the PDF's pages, once each (a soft mask is part of its image), forms included. */
@@ -112,7 +108,7 @@ export function environmentValidator(): PdfAValidator {
 export interface MadeRecord {
   readonly pdf: Uint8Array;
   readonly data: RecordData;
-  /** The pages the layout rendered, before anything was appended. */
+  /** The pages before the appendix's own (renderWithAppendix). */
   readonly layoutPages: number;
 }
 
