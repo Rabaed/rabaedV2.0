@@ -7,7 +7,7 @@ import { bilingualText } from "./company.ts";
 // hold gets a new holder from its pool.
 
 /** Why the Step was handed over: the change that took its holder out of the pool. */
-export const handoverReasons = ["deactivated", "removed", "positions", "visibility"] as const;
+export const handoverReasons = ["deactivated", "removed", "positions", "visibility", "reassigned"] as const;
 export type HandoverReason = (typeof handoverReasons)[number];
 
 /** The Authorized Person's pick for one Step: who holds it from now on. */

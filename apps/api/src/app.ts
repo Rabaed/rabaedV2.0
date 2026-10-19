@@ -40,6 +40,7 @@ import { outcomeRoutes } from "./routes/outcomes.ts";
 import { stageRoutes } from "./routes/stages.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
+import { snagBulkRoutes } from "./routes/snag-bulk.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
 import { workflowSettingsRoutes } from "./routes/workflow-settings.ts";
@@ -168,6 +169,7 @@ export async function buildApp({
   await app.register(checklistTemplateRoutes(context));
   await app.register(registerImportRoutes(context));
   await app.register(workItemRoutes(context));
+  await app.register(snagBulkRoutes(context));
   await app.register(workflowRoutes(context));
   await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
