@@ -40,6 +40,7 @@ let k1: Company; // Consultant: inspects.
 let c2: Company; // A second Contractor on the Project.
 let other: Company; // Another Project's Project Admin.
 let k1Engineer = ""; // A K1 Project Member who is no Project Admin.
+let c1Engineer = ""; // A C1 Project Member who is no Project Admin.
 let projectId = "";
 let otherProjectId = "";
 let civil = "";
@@ -120,7 +121,7 @@ const versionsAs = (as: string) =>
 const versionId = (no: number) =>
   migrator.query("select id from checklist_template_version where checklist_template_id = $1 and version_no = $2", [template, no]).then((r) => r.rows[0].id as string);
 const copiesAs = (as: string) => call<{ work_item_id: string; field_key: string }>(as, sql`select work_item_id, field_key from work_item_checklist`);
-const sync = (as: string) => outcome(as, sql`select app.sync_work_item_checklists(${wir}::uuid, now()) as outcome`);
+const sync = (as: string, item = wir) => outcome(as, sql`select app.sync_work_item_checklists(${item}::uuid, now()) as outcome`);
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -133,6 +134,7 @@ beforeAll(async () => {
   c2 = await company(engineer, "C2");
   other = await company(engineer, "OT");
   k1Engineer = await member(k1.id, "k1-engineer");
+  c1Engineer = await member(c1.id, "c1-engineer");
   projectId = await project(c1.ap, "CTS");
   otherProjectId = await project(other.ap, "CTO");
 
@@ -150,11 +152,13 @@ beforeAll(async () => {
   buildingA = await value("location", "BA");
   await call(k1.ap, sql<object>`select app.add_project_member(${k1Participant}::uuid, ${k1.ap}::uuid, now())`);
   await call(k1.ap, sql<object>`select app.add_project_member(${k1Participant}::uuid, ${k1Engineer}::uuid, now())`);
+  await call(c1.ap, sql<object>`select app.add_project_member(${c1Participant}::uuid, ${c1Engineer}::uuid, now())`);
   await call(c2.ap, sql<object>`select app.add_project_member(${c2Participant}::uuid, ${c2.ap}::uuid, now())`);
   for (const [co, p, who] of [
     [c1, c1Participant, c1.ap],
     [k1, k1Participant, k1.ap],
     [k1, k1Participant, k1Engineer],
+    [c1, c1Participant, c1Engineer],
     [c2, c2Participant, c2.ap],
   ] as const) {
     for (const kind of ["trade", "location"]) {
@@ -187,7 +191,7 @@ afterAll(async () => {
 
 describe("RP-651-1: a Project's Checklist Templates", () => {
   it("are read, with their Versions, by every Project Member of every Participant, and only their Project's", async () => {
-    for (const as of [c1.ap, k1.ap, k1Engineer, c2.ap]) {
+    for (const as of [c1.ap, c1Engineer, k1.ap, k1Engineer, c2.ap]) {
       expect((await templatesAs(as)).map((t) => [t.id, t.project_id]), as).toEqual([[template, projectId]]);
       expect(await versionsAs(as), as).toEqual([{ checklist_template_id: template, version_no: 1 }]);
     }
@@ -209,7 +213,7 @@ describe("RP-651-1: a Project's Checklist Templates", () => {
   });
 
   it("are written by the Project's Project Admins only: anyone else is told 'not_found', and nothing changes", async () => {
-    for (const as of [k1.ap, k1Engineer, c2.ap, other.ap]) {
+    for (const as of [c1Engineer, k1.ap, k1Engineer, c2.ap, other.ap]) {
       expect((await create(as, projectId, civil)).outcome, as).toBe("not_found");
       expect(await edit(as, template, "Changed"), as).toBe("not_found");
       expect(await retire(as, template), as).toBe("not_found");
@@ -226,6 +230,8 @@ describe("RP-651-2: the copy on a WIR", () => {
     expect(await copiesAs(c1.ap)).toEqual([]);
     expect(await sync(c1.ap)).toBe("synced");
     expect(await copiesAs(c1.ap)).toEqual([{ work_item_id: wir, field_key: "checklist_template" }]);
+    // A Draft: nobody outside C1 reads it, nor its copy.
+    for (const as of [k1.ap, k1Engineer, c2.ap, other.ap]) expect(await copiesAs(as), as).toEqual([]);
   });
 
   it("stays as copied when the template gets a new Version", async () => {
@@ -238,6 +244,24 @@ describe("RP-651-2: the copy on a WIR", () => {
     expect(copy).toEqual({ checklist_template_version_id: await versionId(1), name: { en: "Concrete pour", ar: "Concrete pour" } });
   });
 
+  it("takes, for a new copy, only the latest Version of an active template: a superseded or retired one is refused", async () => {
+    const [draft] = await call<{ outcome: string; work_item_id: string }>(
+      c1.ap,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Column pour', app.latest_form_version(${TYPE}), '{}'::jsonb, ${civil}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const pick = async (version: string) => {
+      await migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify({ checklist_template: version }), draft!.work_item_id]);
+      return sync(c1.ap, draft!.work_item_id);
+    };
+    expect(await pick(await versionId(1))).toBe("template_not_found");
+    expect(await pick(await versionId(2))).toBe("synced");
+    const retiring = (await create(c1.ap, projectId, civil, "Kerbs")).template_id!;
+    expect(await retire(c1.ap, retiring)).toBe("retired");
+    const retired = (await migrator.query("select id from checklist_template_version where checklist_template_id = $1", [retiring])).rows[0].id as string;
+    expect(await pick(retired)).toBe("template_not_found");
+  });
+
   it("is read by whoever sees the WIR once Submitted, never by another Contractor or another Project; and is fixed", async () => {
     await migrator.query(
       `update work_item w set document_number = 'CTS-WIR-0001', submitted_at = now(), participant_entered_step_id = (
@@ -247,7 +271,7 @@ describe("RP-651-2: the copy on a WIR", () => {
     );
     const k1Participant = (await migrator.query("select id from participant where project_id = $1 and company_id = $2", [projectId, k1.id])).rows[0].id as string;
     await migrator.query("insert into work_item_access (work_item_id, project_id, participant_id, since, reason) values ($1, $2, $3, now(), 'handling')", [wir, projectId, k1Participant]);
-    for (const as of [c1.ap, k1.ap, k1Engineer]) expect(await copiesAs(as), as).toEqual([{ work_item_id: wir, field_key: "checklist_template" }]);
+    for (const as of [c1.ap, k1.ap, k1Engineer]) expect((await copiesAs(as)).filter((c) => c.work_item_id === wir), as).toEqual([{ work_item_id: wir, field_key: "checklist_template" }]);
     for (const as of [c2.ap, other.ap]) expect(await copiesAs(as), as).toEqual([]);
     // Fixed: a changed pick, after the first Submit, is refused whoever could save.
     await migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify({ checklist_template: await versionId(2) }), wir]);
