@@ -96,10 +96,13 @@ describe("the Snag item page's read (seam 1)", () => {
       subject: "Lighting fixtures",
       workItemId: source,
       outcome: { code: "B", name: expect.objectContaining({ en: expect.any(String) }), look: "b" },
+      // Raised from a Code B row, not a failed check item (RP-577).
+      checkItem: null,
     });
-    // Every viewer reads the card its own Snag List row reads: K1 reads no Link of C1's Comment (Link rules).
+    // Every viewer reads the card its own Snag List row reads, with no check item: K1 reads no Link of C1's Comment (Link rules).
     for (const by of [at.c1Pm, at.k1Manager]) {
-      expect((await detail(by, commentId)).raisedFrom).toEqual((await commentRow(by)).raisedFrom);
+      const row = (await commentRow(by)).raisedFrom;
+      expect((await detail(by, commentId)).raisedFrom).toEqual(row && { ...row, checkItem: null });
     }
   });
 

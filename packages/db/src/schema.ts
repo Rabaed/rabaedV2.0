@@ -143,7 +143,10 @@ export interface AdminActionTable {
     | "reorder_default_stages"
     | "refuse_workflow_publish"
     | "reproduce_documental_record"
-    | "read_documental_record_alerts";
+    | "read_documental_record_alerts"
+    | "read_register_import"
+    | "preview_register_import"
+    | "confirm_register_import";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -406,7 +409,10 @@ export interface SubmittalRegisterImportTable {
   id: Generated<string>;
   project_id: string;
   participant_id: string;
-  run_by_member_id: string;
+  /** Null for a Rabaed Engineer's import (RP-645), which the Company reads as "Rabaed"; its Engineer and default Member are never granted. */
+  run_by_member_id: string | null;
+  /** An Engineer's import's default Member, who raises its unassigned rows (RP-645). */
+  default_member_id: string | null;
   file_name: string;
   sheet: string;
   header_row: number;
@@ -416,6 +422,17 @@ export interface SubmittalRegisterImportTable {
   rows_total: number;
   rows_rejected: number;
   rows_created: number | null;
+  /** Its original register, stored under the Project's prefix (RP-644); null for an Engineer's import. Never its upload time. */
+  source_file_id: string | null;
+}
+
+/** A mapping saved under a name for a Participant on a Project (RP-644); never who saved it or when. Written through its functions. */
+export interface RegisterImportMappingTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  name: string;
+  mapping: ColumnType<unknown, string, string>;
 }
 
 /** One row of an import as read, with every reason it is bad. Its Draft only through `app.register_import_results`. */
@@ -818,6 +835,7 @@ export interface Database {
   package: PackageTable;
   submittal_register_import: SubmittalRegisterImportTable;
   submittal_register_import_row: SubmittalRegisterImportRowTable;
+  register_import_mapping: RegisterImportMappingTable;
   project_required_field: ProjectRequiredFieldTable;
   checklist_template: ChecklistTemplateTable;
   checklist_template_version: ChecklistTemplateVersionTable;

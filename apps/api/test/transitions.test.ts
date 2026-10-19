@@ -7,6 +7,7 @@ import { createDb } from "@rabaed/db";
 import { takeTransitionRequest, type WorkItemDetail, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
 import { takeTransition } from "../src/work-items/work-items.ts";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
@@ -349,12 +350,13 @@ describe("a Transition sent again while the first one commits", () => {
         return result;
       },
     });
-    const second = takeTransition(held, memberId, id, input, new Date());
+    const files = createFileStore(fileStoreSettingsFromEnv());
+    const second = takeTransition(held, files, memberId, id, input, new Date());
     await atButtons;
 
     // The first runs to its commit meanwhile, or waits for the key the second holds.
     let firstDone = false;
-    const first = takeTransition(appDb, memberId, id, input, new Date()).finally(() => (firstDone = true));
+    const first = takeTransition(appDb, files, memberId, id, input, new Date()).finally(() => (firstDone = true));
     try {
       for (let i = 0; i < 200 && !firstDone && !(await waitingForKey()); i++) await new Promise((r) => setTimeout(r, 25));
       expect(firstDone || (await waitingForKey())).toBe(true);

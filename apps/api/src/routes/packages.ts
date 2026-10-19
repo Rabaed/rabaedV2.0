@@ -96,7 +96,7 @@ export const packageRoutes =
       { schema: { params: packageParams, body: submitPackageRequest, response: { 200: submittedPackage } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await submitPackage(ctx.db, memberId, idOrNotFound(request.params.packageId), request.body, ctx.now());
+        const result = await submitPackage(ctx.db, ctx.files, memberId, idOrNotFound(request.params.packageId), request.body, ctx.now());
         if (result.ok) return { submitted: result.submitted };
         if (result.reason === "package_not_ready") {
           throw new HttpError(409, "package_not_ready", { notReady: result.notReady, othersNotReady: result.othersNotReady });

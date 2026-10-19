@@ -5,10 +5,11 @@ import { finishRecord } from "./checks.ts";
 import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
+import { appendixOf } from "./appendix.ts";
 import { documentAssets } from "./assets.ts";
 import { makeRecordPdf } from "./make-pdf.ts";
 import { sha256 } from "./pki.ts";
-import { recordDataOf, recordDataXml } from "./record-data.ts";
+import { recordOf } from "./record-data.ts";
 import type { PdfRenderer } from "./render.ts";
 import type { SealSigner } from "./signer.ts";
 import type { TimestampAuthority } from "./timestamp.ts";
@@ -25,11 +26,13 @@ import type { PdfAValidator } from "./verapdf.ts";
 // The Project's record language and Hijri setting are read with the facts, when
 // the record is made (RP-151), so a change applies to records made afterwards.
 //
+// The appendix (RP-147, appendix.ts) is drawn after the layout's own pages and
+// before the PDF/A-3: the shared PDFs' and images' pages, the other files
+// attached as their source files, the rest listed, held in Rabaed. make-pdf.ts
+// makes the PDF, as Re-produce does.
+//
 // The record is saved 'preparing', checked (checks.ts) and then published, or kept as
 // failed_checks with Rabaed Admin alerted (RP-155); publishing queues "record ready".
-//
-// Not yet (later tickets of spec RP-632): the appendix (RP-147), Signatures, Stamps,
-// Review Comments and the endings (RP-650).
 
 export interface RecordJobDeps {
   readonly files: RecordFiles;
@@ -42,6 +45,8 @@ export interface RecordJobDeps {
   /** The customer web's address: the verification page's link starts there. */
   readonly webUrl: string;
   readonly now?: () => Date;
+  /** What the appendix carries in all before it only lists a file (appendix.ts; 100 MB unless a test sets less). */
+  readonly appendixLimitBytes?: number;
   /** The PDF/A-3 validator the checks use (veraPDF); the environment's (VERAPDF) when left out. */
   readonly validator?: PdfAValidator;
 }
@@ -62,15 +67,16 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     if (!facts) return;
     const token = randomBytes(32).toString("base64url");
     const assets = await documentAssets(facts, deps.files);
-    const data = recordDataOf(
+    const record = recordOf(
       facts,
       { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` },
       assets.pageCounts,
+      (key) => assets.images.has(key),
       assets.fingerprints,
     );
-    const xml = new TextEncoder().encode(recordDataXml(data));
+    const appendix = await appendixOf(facts, deps.files, deps.appendixLimitBytes);
     const sealedAt = now();
-    const { pdf, layoutPages } = await makeRecordPdf(deps, data, xml, assets.images, sealedAt);
+    const { pdf, data, xml, layoutPages } = await makeRecordPdf(deps, { data: record.data, marks: record.images, images: assets.images, appendix }, sealedAt);
 
     const keys = recordKeys(facts.projectId, facts.workItemId);
     await deps.files.put(keys.recordData, xml, "application/xml");

@@ -29,6 +29,7 @@ import {
   type RaisedFromSource,
   type Locale,
   type WorkItemCursorSort,
+  type WorkItemDetail,
   type WorkItemExport,
   type BoardCardLayout,
   type BoardCardLayoutChange,
@@ -168,7 +169,7 @@ function visibleRows(scope: QueryScope, allRevisions: boolean): RawBuilder<unkno
   const { projectId } = scope;
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
-      w.revision_no, w.outcome,
+      w.revision_no, w.outcome, w.paper_ref,
       -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
       w.submitted_at is not null as submitted,
       coalesce(w.raised_by_participant_id in (select app.current_participant_ids()), false) as raised_by_own,
@@ -322,7 +323,9 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
               union all
               select v.id, v.parent_id, v.name from dimension_value v join up on v.id = up.parent_id
             ) select 1 from up where ${named(sql.ref("up.name"))}))`;
-    conditions.push(sql`(r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text)) or ${onCard})`);
+    // And the Paper ref (RP-639), which everyone who sees the item reads, however short the search.
+    const paperRef = sql<boolean>`coalesce(r.paper_ref ilike ${phrase}, false)`;
+    conditions.push(sql`(r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text)) or ${onCard} or ${paperRef})`);
   }
   // One Package's submittals (RP-647), through app.package_items: the items of a Package the viewer
   // sees that they see too, none of one they don't (work_item.package_id is not theirs to read). So a
@@ -630,11 +633,15 @@ function raisedFromOf(r: SourceRow): RaisedFromSource | null {
 
 /**
  * The item `workItemId` was raised from, as its Snag List row names it (RP-628, the item page's
- * Raised from card); null when it was raised by hand. Read as the Member, like the row.
+ * Raised from card), with the failed check item a code raised it from (RP-577,
+ * app.raised_from_check_item); null when it was raised by hand. Read as the Member, like the row.
  */
-export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<RaisedFromSource | null> {
-  const { rows } = await sql<SourceRow>`select ${sourceColumns} from (select ${workItemId}::uuid as id) r ${sourceJoins}`.execute(trx);
-  return rows[0] ? raisedFromOf(rows[0]) : null;
+export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<WorkItemDetail["raisedFrom"]> {
+  const { rows } = await sql<SourceRow & { check_item: { key: string; text: BilingualText } | null }>`
+    select ${sourceColumns}, app.raised_from_check_item(r.id) as check_item from (select ${workItemId}::uuid as id) r ${sourceJoins}
+  `.execute(trx);
+  const source = rows[0] ? raisedFromOf(rows[0]) : null;
+  return source && { ...source, checkItem: rows[0]!.check_item };
 }
 
 /**

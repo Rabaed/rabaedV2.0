@@ -56,8 +56,11 @@ export function proposedCode(answers: ChecklistAnswers): "A" | "C" {
   return Object.values(answers).some((entry) => entry.answer !== undefined && isNegativeAnswer(entry.answer)) ? "C" : "A";
 }
 
-/** A check item's answer and comment, as saved: the answers of a checklist by item key. */
-export const checklistAnswers = z.record(z.string(), z.object({ answer: z.string().optional(), comment: z.string().optional() }));
+/** A check item's answer and comment, and its "Raise a Snag" tick when unticked (RP-577), as saved: the answers of a checklist by item key. */
+export const checklistAnswers = z.record(
+  z.string(),
+  z.object({ answer: z.string().optional(), comment: z.string().optional(), snag: z.literal(false).optional() }),
+);
 
 /**
  * A reply Screen's checklist as the Participant holding the item reads it (RP-86): the field, the

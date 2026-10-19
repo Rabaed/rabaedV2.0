@@ -9,6 +9,7 @@ import {
   boardCardLayoutChange,
   createdWorkItem,
   createReplacementRequest,
+  setPaperRefRequest,
   createRevisionRequest,
   createWorkItemRequest,
   dashboard,
@@ -55,6 +56,7 @@ import { createReplacement, createRevision, discardRevision, getRevisionChain } 
 import {
   pickUpStep,
   discardDraft,
+  setPaperRef,
   duplicateWorkItem,
   getSharedWorkItem,
   createWorkItem,
@@ -363,7 +365,7 @@ export const workItemRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
-        const result = await takeTransition(ctx.db, memberId, id, request.body, ctx.now());
+        const result = await takeTransition(ctx.db, ctx.files, memberId, id, request.body, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },
@@ -376,7 +378,7 @@ export const workItemRoutes =
       { schema: { body: bulkTransitionRequest, response: { 200: bulkTransitionTaken } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await takeBulkTransition(ctx.db, memberId, request.body, ctx.now());
+        const result = await takeBulkTransition(ctx.db, ctx.files, memberId, request.body, ctx.now());
         if (result.ok) return { taken: result.taken };
         if (result.reason === "bulk_refused") throw new HttpError(409, "bulk_refused", { stoppedBy: result.stoppedBy });
         throw refusal(result);
@@ -435,6 +437,18 @@ export const workItemRoutes =
       if (!result.ok) throw refusal(result);
       return reply.code(204).send();
     });
+
+    // The Paper ref (RP-639): the raiser sets or clears it while it is their Draft. Hidden: the plain 404.
+    app.put(
+      "/v1/work-items/:workItemId/paper-ref",
+      { schema: { params: workItemParams, body: setPaperRefRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const result = await setPaperRef(ctx.db, memberId, idOrNotFound(request.params.workItemId), request.body.paperRef, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(204).send();
+      },
+    );
 
     // Download (RP-409, scenario RP-409-2): the item as it was shared, the same for every viewer.
     // Before its first Submit, nothing is shared: the plain 404.

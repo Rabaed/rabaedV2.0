@@ -15,6 +15,7 @@ import { sql, type Transaction } from "kysely";
 import type { Database } from "@rabaed/db";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { outcomeAndDimensionChoices, workItemRowsById } from "../work-items/query.ts";
+import type { FileStore } from "../documents/file-store.ts";
 import { bulkOffers } from "../work-items/bulk-transitions.ts";
 import { allOrNothing, itemsById, lockWorkItems, Rollback, takeEach } from "../work-items/several-transitions.ts";
 
@@ -291,12 +292,13 @@ const notReadyReason = (reason: string): PackageNotReadyReason =>
  */
 export async function submitPackage(
   db: Db,
+  files: FileStore,
   memberId: string,
   packageId: string,
   input: Required<SubmitPackageRequest>,
   now: Date,
 ): Promise<SubmitPackageResult> {
-  return allOrNothing(db, memberId, async (trx): Promise<SubmitPackageResult> => {
+  return allOrNothing(db, files, memberId, async (trx, copy): Promise<SubmitPackageResult> => {
     await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
     // The items still to Submit first, by id, then the Package (app.begin_package_submit locks it):
     // the lock order. An item added meanwhile, after this read, is locked when it is taken.
@@ -329,7 +331,7 @@ export async function submitPackage(
       workItemId: i.id,
       input: { transition: i.submit_key!, answers: {}, internalNote: "", assignTo: null, recommendedCode: null },
     }));
-    const refusals = await takeEach(trx, memberId, takes, { command: SUBMIT_COMMAND, key: input.idempotencyKey, now, stopAtFirst: false });
+    const refusals = await takeEach(trx, memberId, takes, { command: SUBMIT_COMMAND, key: input.idempotencyKey, now, stopAtFirst: false, copy });
     if (refusals.length > 0) {
       const byId = new Map(items.map((i) => [i.id, i]));
       const listed = refusals.map((r) => ({ ...item(byId.get(r.workItemId)!), reason: notReadyReason(r.refused.reason) }));

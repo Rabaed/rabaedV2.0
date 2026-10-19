@@ -19,6 +19,9 @@ const t = (n: number, kind: string, from: string, to: string): TransitionFact =>
   remarks: null,
   participantId: "p",
   roleName: { en: "Contractor", ar: "مقاول" },
+  answers: null,
+  actionForm: null,
+  signature: null,
 });
 const labels = (path: TransitionFact[]) => path.map((p) => p.label.en);
 
@@ -65,7 +68,7 @@ describe("recordPath", () => {
 describe("the reply on page 1", () => {
   const verification = { code: "7K2M-9QXD", link: "https://rabaed.test/verify/x" };
   const base = goldenFacts("A", "en");
-  const remarksOf = (facts: typeof base) => recordDataOf(facts, verification).reply;
+  const remarksOf = (facts: typeof base) => recordDataOf(facts, verification).reply?.text ?? null;
 
   it("is the Remarks of the Code that is the outcome", () => {
     expect(remarksOf(base)).toContain("Approved as submitted.");
