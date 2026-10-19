@@ -848,7 +848,9 @@
       "package": "الحزمة",
       "issuedCode": "الرمز الصادر",
       "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب", "OBS": "ملاحظات الموقع", "QSN": "الأسئلة إلى الاستشاري", "QSC": "الأسئلة إلى المقاول" },
-      "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة"
+      "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة",
+      "previousRaisedItems": "{type} من المراجعة {revision}",
+      "previousRaisedItemCounts": "{closed} مغلقة / {open} مفتوحة"
     },
     "paperRef": {
       "label": "المرجع الورقي",

@@ -757,6 +757,26 @@ export const workItemDetail = workItemSummary.extend({
     }),
   ),
   /**
+   * A Revision's previous item in its chain (RP-653, "Snags from Rev 0: 1 closed / 1 open"): its
+   * Revision number and Document Number, and the items raised from it per Type, counted as
+   * `raisedItems` counts them (only those the viewer sees, never a discarded one). Null for an item
+   * that is no Revision, when the viewer sees no previous item, or when nothing was raised from it.
+   * The counts never block a code.
+   */
+  previousRaisedItems: z
+    .object({
+      revisionNo: z.number().int().nonnegative(),
+      documentNumber: z.string().nullable(),
+      items: z.array(
+        z.object({
+          type: z.object({ code: z.string(), name: bilingualText }),
+          open: z.number().int().nonnegative(),
+          closed: z.number().int().nonnegative(),
+        }),
+      ),
+    })
+    .nullable(),
+  /**
    * Its Package (RP-659, the chip on its page), by number and name: only where the
    * viewer sees the Package, as on its row (app.work_item_package). Left out otherwise.
    */

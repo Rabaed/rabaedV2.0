@@ -798,6 +798,18 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows: raisedItems } = await sql<{ type_code: string; type_name: BilingualText; open_count: number; closed_count: number }>`
       select type_code, type_name, open_count, closed_count from app.work_item_raised_item_counts(${workItemId}::uuid)
     `.execute(trx);
+    // A Revision's previous item's, the same per Type (RP-653): what Rev 0 left, as the viewer sees it.
+    const { rows: previous } = await sql<{
+      previous_revision_no: number;
+      previous_document_number: string | null;
+      type_code: string;
+      type_name: BilingualText;
+      open_count: number;
+      closed_count: number;
+    }>`
+      select previous_revision_no, previous_document_number, type_code, type_name, open_count, closed_count
+      from app.work_item_previous_raised_item_counts(${workItemId}::uuid)
+    `.execute(trx);
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
     `.execute(trx);
@@ -847,6 +859,13 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         : null,
       paperRef: d.paper_ref,
       raisedItems: raisedItems.map((f) => ({ type: { code: f.type_code, name: f.type_name }, open: f.open_count, closed: f.closed_count })),
+      previousRaisedItems: previous[0]
+        ? {
+            revisionNo: previous[0].previous_revision_no,
+            documentNumber: previous[0].previous_document_number,
+            items: previous.map((f) => ({ type: { code: f.type_code, name: f.type_name }, open: f.open_count, closed: f.closed_count })),
+          }
+        : null,
       ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name } } : {}),
       actions: {
         ...(await actions(trx, workItemId)),
