@@ -269,6 +269,6 @@ describe("app.documents_shared_before_close: the Documents a closed item's recor
   });
 
   it("is not the app role's to call", async () => {
-    await expect(call(c1.member, sql`select * from app.documents_shared_before_close(${randomUUID()}::uuid)`)).rejects.toThrow(/permission denied/);
+    await expect(call(c1.member, sql<{ id: string }>`select id from app.documents_shared_before_close(${randomUUID()}::uuid)`)).rejects.toThrow(/permission denied/);
   });
 });
