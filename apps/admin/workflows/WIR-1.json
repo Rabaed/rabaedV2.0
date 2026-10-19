@@ -25,21 +25,21 @@
     {
       "key": "consultant_inspection",
       "name": { "en": "Consultant inspection", "ar": "معاينة الاستشاري" },
-      "stage": "pending_inspection",
+      "stage": "pending_approval",
       "actor": { "role": "consultant", "permission": "approve" },
       "outcomeMode": "issue_outcome"
     },
     {
       "key": "passed",
       "name": { "en": "Passed", "ar": "ناجح" },
-      "stage": "passed",
+      "stage": "approved",
       "actor": null,
       "outcomeMode": "none"
     },
     {
       "key": "failed",
       "name": { "en": "Failed", "ar": "راسب" },
-      "stage": "failed",
+      "stage": "revise_resubmit",
       "actor": null,
       "outcomeMode": "none"
     },

@@ -181,11 +181,12 @@ describe("Cancel", () => {
 });
 
 describe("the Recommended Code", () => {
-  it("is offered on the forward move of a Step that Recommends a Code: the Type's closing outcomes", async () => {
+  it("is offered on the forward move of a Step that Recommends a Code: the Type's closing outcomes its Workflow Version sets (RP-673)", async () => {
     const id = await atConsultantReview("Lights");
     const transitions = await actionsOf(k1Engineer, id);
     const toManager = transitions.find((t) => t.key === "send_to_manager")!;
-    expect(toManager.recommendCode?.map((o) => o.code)).toEqual(["A", "B", "C", "D"]);
+    // The test Workflow closes with A or C only: B and D are in the set, but nothing there issues them.
+    expect(toManager.recommendCode?.map((o) => o.code)).toEqual(["A", "C"]);
     expect(toManager.recommendCode?.[0]).toMatchObject({ code: "A", name: { en: expect.any(String), ar: expect.any(String) } });
     // A Send Back crosses to C1: nothing to recommend there.
     expect(transitions.find((t) => t.key === "send_back")!.recommendCode).toBeUndefined();

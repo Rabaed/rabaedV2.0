@@ -18,6 +18,18 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270408 | RP-597 | B | Demo |
 | 20270409 | spec RP-598 | B | Review fixes; RP-593's and RP-594's migrations, moved here to sort after RP-591's on `main` |
 | 20270429 | RP-90 | 3A | Snag Type, Snag List Stages and permissions, Snag Workflow Version 1 |
+| 20270430 | RP-622 | 3A | The raiser as a Step holder; Snag Workflow Version 2 |
+| 20270501 | RP-623 | 3B | Photos and attachments in another Participant's section; After photos |
+| 20270502 | RP-624 | 3C | Raised-from counts by Type |
+| 20270503 | RP-94 | 3D | Snag List desktop views |
+| 20270504 | RP-625 | 3A | Unused: the migration moved to 20270706, after main's later days |
+| 20270505 | RP-626 | 3B | Question Types (QSN, QSC) |
+| 20270506 | RP-627 | 3A | Site Observation Type and the "General" Trade |
+| 20270507 | RP-628 | 3C | Snag item detail |
+| 20270508 | RP-629 | 3D | Snag List bulk actions and exports |
+| 20270509 | RP-630 | 3D | Snag List on a phone |
+| 20270510 | RP-658 | 3A | Pick one of several covering Participants at a Submit |
+| 20270511 | spec RP-619 | 3A | Review fixes |
 | 20270620 | RP-636 | 1A | Build an Open Package (moved from 20270410: main's migrations had passed that block) |
 | 20270621 | RP-638 | 1A | Submit Package |
 | 20270622 | RP-641 | 1A | Packages board and each viewer's counts |
@@ -60,8 +72,22 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270611 | RP-622 | 3A | The raiser as a Step holder (moved after RP-624's 20270610 on main) |
 | 20270613 | RP-618 | 2D | Fingerprint each Document's bytes; the content hash covers it (moved from 20270512, then 20270610) |
 | 20270628 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function (20270524, 20270609 and 20270613 overtaken on main) |
+| 20270701 | RP-85 | 21 | stored_file |
+| 20270705 | RP-620 | 22 | documental_record |
 | 20270705 | RP-668 | 33 | comment_not_raised_directly |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
+| 20270707 | RP-620 | 22 | documental_record |
+| 20270705 | RP-668 | 33 | comment_not_raised_directly |
+| 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
+| 20270714 | RP-673 | 41 | Unused: the migration moved to 20270726 (main took 20270714, 20270716 and 20270720 first) |
+| 20270706 | RP-625 | 3A | Unused: the migration moved to 20270714, after main's 20270708 and 20270709 |
 | 20270708 | RP-85 | 21 | stored_file |
 | 20270709 | RP-620 | 22 | documental_record |
 | 20270726 | RP-155 | 23 | record_checks |
+| 20270716 | RP-626 | 33 | The Question Types (QSN, QSC) and the Consultant's `submit` (moved from 20270706, then 20270705) |
+| 20270714 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, then 20270706: main's later days) |
+| 20270716 | RP-673 | 41 | Unused: the migration moved to 20270726 (main took 20270716 and 20270720 first) |
+| 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
+| 20270720 | RP-673 | 41 | Unused: the migration moved to 20270726, after RP-151's 20270720 on main |
+| 20270720 | RP-151 | 22 | record_page_one |
+| 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |

@@ -260,7 +260,7 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(xml).not.toContain(hidden);
     // Every value it holds is on the pages: element text and attributes, but its structure
     // (languages, numbering, the layout version), and the times, which the pages print in Riyadh time.
-    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at"]);
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri"]);
     const body = xml.replace(/^<\?xml[^>]*\?>/, "");
     const values = [
       ...[...body.matchAll(/>([^<>]+)</g)].map((m) => m[1]!),
@@ -268,7 +268,7 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     ]
       .map((v) => v.trim().replace(/&amp;/g, "&"))
       // Arabic is shaped on the page, so its extracted text reads differently.
-      .filter((v) => v !== "" && !/[؀-ۿ]/.test(v));
+      .filter((v) => v !== "" && !/[\u0600-\u06FF\u200E\u200F]/.test(v));
     expect(values.length).toBeGreaterThan(10);
     for (const value of values) expect(text, value).toContain(squeeze(value));
   });
@@ -333,7 +333,7 @@ describe("the record job", () => {
     expect(new Set(copies.map((c) => createHash("sha256").update(c.bytes).digest("hex"))).size).toBe(1);
     const text = await printed(copies[0]!.bytes);
     expect(text).toContain("Cancelledcabletrays");
-    expect(text).toContain("cancelled");
+    expect(text).toContain("Cancelled");
     expect((await verifySeal(copies[0]!.bytes)).valid).toBe(true);
     // Never Submitted: K1 never saw it, and C2 never did.
     await expectHidden(downloadLink(k1Pm, id), "K1");

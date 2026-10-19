@@ -25,7 +25,7 @@ Say **Import register** / **import**; never "bulk upload" or "migration".
 6. **Result:** created counts with links (to the Drafts list filtered to this import, and to each Package), and **"Download rejected rows"** (the 7 rows plus a reason column).
 
 ### 2. Imports page
-- The project's imports by the viewer's company: who, when, file name, rows created / rejected, Packages created or used.
+- The project's imports by the viewer's company: who, file name, rows created / rejected, Packages created or used. No date or time anywhere for an import or its rows (not on this page, the import's page or the result): an import's time is when its Drafts were first started, hidden by the Creation Date rule in `docs/visibility.md`.
 - One import's page: every row with its result (created → link to the Draft; rejected → reasons), the mapping it used ("Save as mapping", named, to reuse it next time), and downloads of the original file and the rejected rows.
 
 ### 3. Rabaed Admin variant

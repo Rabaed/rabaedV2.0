@@ -229,20 +229,39 @@ describe("a WIR's Checklist Template (seam 1 acceptance)", () => {
     expect(seen.checklistCopies.map((c) => c.items.length)).toEqual([4]);
   });
 
-  it("a Failed WIR's Revision carries its pick, and copies that Version, edited since, when its raiser saves", async () => {
+  it("a WIR's Revision after Code C, the re-inspection (RP-673), carries its pick and its copy, that Version edited since, and is Submitted with it without a save", async () => {
     const picked = await latestVersion(template);
     const id = (await ok(createWir(civil, { checklist_template: picked }), 201)).json().id as string;
     await take(tower.c1Engineer, id, "send_for_review");
     await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.c1Pm, id, "submit", { answers: { cover_note: "Ready from 09:00" } });
-    await take(k1Engineer, id, "send_to_manager", { recommendedCode: "failed" });
+    await take(k1Engineer, id, "send_to_manager", { recommendedCode: "C" });
     await tower.k1Manager.post(`/v1/work-items/${id}/pick-up`);
-    await take(tower.k1Manager, id, "fail", { remarks: "Cover short at gridline 4" });
+    await take(tower.k1Manager, id, "revise_c", { answers: { sample_checked: true, matches_specification: false, verification_note: "Cover short" }, remarks: "Cover short at gridline 4" });
     await ok(admin.request("PUT", `/v1/checklist-templates/${template}`, pour(civil, pourItems.slice(0, 2))));
     const revision = (await ok(tower.c1Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
-    expect((await detail(tower.c1Engineer, revision)).answers.checklist_template).toBe(picked);
-    await ok(tower.c1Engineer.request("PUT", `/v1/work-items/${revision}/answers`, { answers: { ...(await detail(tower.c1Engineer, revision)).answers } }), 204);
-    expect((await detail(tower.c1Engineer, revision)).checklistCopies.map((c) => [c.versionId, c.items.length])).toEqual([[picked, 4]]);
+    const fresh = await detail(tower.c1Engineer, revision);
+    expect(fresh.answers.checklist_template).toBe(picked);
+    // Copied when the Revision is created: the revised WIR's Version, never the template's newer one.
+    expect(fresh.checklistCopies.map((c) => [c.versionId, c.items.length])).toEqual([[picked, 4]]);
+    // Sent on and Submitted with no save: the Consultant reads the same checklist.
+    await take(tower.c1Engineer, revision, "send_for_review");
+    await ok(tower.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
+    await take(tower.c1Pm, revision, "submit", { answers: { cover_note: "Re-inspection, cover fixed" } });
+    expect((await detail(k1Engineer, revision)).checklistCopies.map((c) => [c.versionId, c.items.length])).toEqual([[picked, 4]]);
+  });
+
+  it("refuses a pick naming another Project's template Version, as an unknown option, and copies nothing", async () => {
+    const other = await buildTower(api, { c1, k1 }, "CKO");
+    const otherCivil = (await ok(other.admin!.post(`/v1/projects/${other.projectId}/trades`, { code: "CV", name: bilingual("Civil") }), 201)).json().id as string;
+    const foreign = (await ok(other.admin!.post(`/v1/projects/${other.projectId}/checklist-templates`, pour(otherCivil)), 201)).json().id as string;
+    const foreignVersion = ((await templates(other.admin!, other.projectId)).templates.find((t) => t.id === foreign))!.versionId;
+    const refused = await createWir(civil, { checklist_template: foreignVersion });
+    expect(refused.statusCode, refused.body).toBe(422);
+    expect(refused.json()).toMatchObject({ error: "invalid_answers", fields: [{ key: "checklist_template", code: "unknown_option" }] });
+    const id = (await ok(createWir(civil, {}), 201)).json().id as string;
+    expect((await saveWir(id, civil, { checklist_template: foreignVersion })).statusCode).toBe(422);
+    expect((await detail(tower.c1Engineer, id)).checklistCopies).toEqual([]);
   });
 
   it("a retired template isn't offered; WIRs that copied it keep their items", async () => {

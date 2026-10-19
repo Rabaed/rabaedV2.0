@@ -5,9 +5,13 @@
 // Consultant Manager, who may Return to Engineer or issue Passed, Passed with Comments or Failed.
 // A WIR already on Version 1 (one Consultant inspection Step) finishes on Version 1.
 //
+// Since RP-673 (ADR 0025) a new WIR starts on Version 3, which issues Review Codes
+// (wir-workflow-v3.test.ts): each WIR here is pinned to Version 2 when it is raised, as one
+// started on it before, and its Stages are the Submittals' keys the migration moved them to.
+//
 // The seam suites' global setup runs the demo seed, which publishes the Rabaed Defaults.
 import { publishRabaedDefaults, rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
-import { createDb, readLatestPublishedDefinition, withMember } from "@rabaed/db";
+import { createDb, readPublishedVersionDefinition, withMember } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { parseWorkflowDefinition, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
@@ -15,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { pinToWorkflowVersion } from "./support/pin-version.ts";
 import { all, bilingual, detail, memberOnProject, ok, tryTake, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -45,7 +50,7 @@ const transitionKeys = async (by: Caller, id: string) => (await detail(by, id)).
 
 const RECOMMENDATION_NOTE = "Engineer: rebar spacing out of tolerance at gridline 4";
 
-/** A WIR raised by Hafiz and sent for review. */
+/** A WIR raised by Hafiz on Version 2 and sent for review. */
 async function inReview(title: string) {
   const id = (
     await ok(
@@ -64,6 +69,7 @@ async function inReview(title: string) {
       201,
     )
   ).json().id as string;
+  await pinToWorkflowVersion(migrator, "WIR", 2, id);
   await take(hafiz, id, "send_for_review");
   return id;
 }
@@ -120,15 +126,17 @@ beforeAll(async () => {
 });
 
 describe("the WIR Workflow Version 2 is the document `pnpm defaults:publish` publishes", () => {
-  it("apps/admin/workflows/WIR.json is the latest Version, 2; Version 1 stays published for the items pinned to it", async () => {
+  it("apps/admin/workflows/WIR-2.json is Version 2, published beside Version 1 for the items pinned to them (Version 3 is WIR.json, RP-673)", async () => {
     const definitionId = (
       await migrator.selectFrom("work_item_type").select("workflow_definition_id").where("owner_kind", "=", "rabaed").where("code", "=", "WIR").executeTakeFirstOrThrow()
     ).workflow_definition_id!;
-    const latest = (await readLatestPublishedDefinition(migrator, definitionId))!;
-    expect(latest.versionNo).toBe(2);
-    const file = parseWorkflowDefinition(rabaedWorkflowFile("WIR.json"));
-    expect(file.ok && sameDefinition(latest.definition, file.definition)).toBe(true);
-    expect(latest.definition.steps.map((s) => s.key)).toEqual([
+    const version2 = await sql<{ id: string }>`
+      select id from workflow_version where workflow_definition_id = ${definitionId}::uuid and version_no = 2
+    `.execute(migrator);
+    const stored = (await readPublishedVersionDefinition(migrator, version2.rows[0]!.id))!;
+    const file = parseWorkflowDefinition(rabaedWorkflowFile("WIR-2.json"));
+    expect(file.ok && sameDefinition(stored, file.definition)).toBe(true);
+    expect(stored.steps.map((s) => s.key)).toEqual([
       "draft",
       "internal_review",
       "contractor_engineer",
@@ -144,12 +152,13 @@ describe("the WIR Workflow Version 2 is the document `pnpm defaults:publish` pub
     expect(versions.rows.map((v) => [v.version_no, v.status])).toEqual([
       [1, "published"],
       [2, "published"],
+      [3, "published"],
     ]);
   });
 });
 
 describe("a WIR on Version 2 (seam 1 acceptance)", () => {
-  it("goes Draft → Contractor PM → Return → Contractor Engineer → PM → Submit, a new WIR starting on Version 2", async () => {
+  it("goes Draft → Contractor PM → Return → Contractor Engineer → PM → Submit, on Version 2", async () => {
     const id = await inReview("Returned");
     expect(await detail(ali, id)).toMatchObject({ stage: { key: "internal_review" }, workflow: { versionNo: 2 } });
     await take(ali, id, "return", { reason: "Add the drawing reference" });
@@ -158,7 +167,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     expect(returned.actions.transitions.map((t) => t.key).sort()).toEqual(["cancel_engineer", "send_for_review_again"]);
     await take(hafiz, id, "send_for_review_again");
     await take(ali, id, "submit", { answers: { cover_note: "Drawing E-201 attached" } });
-    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_engineer" } });
+    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_engineer" } });
   });
 
   it("the Consultant Engineer Step's pool is the Consultant's Engineers only, so its Engineer holds it at once and the Manager doesn't", async () => {
@@ -176,7 +185,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
       expect(refused.json()).toMatchObject({ error: "recommended_code_not_offered" });
     }
     await sentToManager(id, "failed");
-    expect(await detail(mohammed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_manager" } });
+    expect(await detail(mohammed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_manager" } });
     expect((await detail(mohammed.caller, id)).heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
     expect(await transitionKeys(mohammed.caller, id)).toEqual(["fail", "pass", "pass_with_comments", "return_to_engineer"]);
     // The Engineer no longer holds it, and the Contractor holds nothing of it.
@@ -189,7 +198,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     const noReason = await tryTake(mohammed.caller, id, "return_to_engineer");
     expect(noReason.statusCode, noReason.body).toBe(422);
     await take(mohammed.caller, id, "return_to_engineer", { reason: "Photograph the cover at gridline 4" });
-    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_engineer" } });
+    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_engineer" } });
     expect((await detail(ahmed.caller, id)).heldBy?.memberName?.en).toBe("Ahmed bin Said");
     expect(await transitionKeys(mohammed.caller, id)).toEqual([]);
     await sentToManager(id, "passed");
@@ -207,7 +216,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
   it("Passed closes the WIR Passed, with no Revision offered", async () => {
     const id = await returnedAndSentAgain("Rebar Level 2");
     await take(mohammed.caller, id, "pass", { remarks: "Accepted" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed", actions: { createRevision: false } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "passed", actions: { createRevision: false } });
   });
 
   it("Passed with Comments makes each row of its table a Comment for the Contractor", async () => {
@@ -217,7 +226,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     await take(mohammed.caller, id, "pass_with_comments", {
       answers: { remarks: "Fix the cover", items_to_create: [{ comment: "Raise the cover to 40 mm" }, { comment: "Tie the lap at gridline 4" }] },
     });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed_with_comments", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "passed_with_comments", raisedItems: [{ type: { code: "CMT" }, open: 2, closed: 0 }] });
   });
 
   it("Failed closes the WIR Failed and offers the Contractor a Revision, the re-inspection", async () => {
@@ -225,7 +234,7 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
     const none = await tryTake(mohammed.caller, id, "fail");
     expect(none.statusCode, none.body).toBe(422);
     await take(mohammed.caller, id, "fail", { remarks: "Spacing out of tolerance" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "failed" }, outcome: "failed", actions: { createRevision: true } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "failed", actions: { createRevision: true } });
     expect((await detail(mohammed.caller, id)).actions.createRevision).toBe(false);
   });
 
@@ -246,35 +255,12 @@ describe("a WIR on Version 2 (seam 1 acceptance)", () => {
 });
 
 describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinned)", () => {
-  /** Pins item `id`, at a Step Version 1 shares with Version 2, to the WIR Workflow's Version 1, Steps by key. */
-  async function pinToVersion1(id: string) {
-    await sql`
-      with old as (
-        select v.id as version_id, s.key, s.id as step_id from work_item_type t
-        join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.version_no = 1
-        join workflow_step s on s.workflow_version_id = v.id
-        where t.owner_kind = 'rabaed' and t.code = 'WIR'
-      ),
-      moved_assignments as (
-        update step_assignment a set step_id = o.step_id
-        from workflow_step cur, old o
-        where a.work_item_id = ${id}::uuid and cur.id = a.step_id and o.key = cur.key
-        returning a.id
-      )
-      update work_item w set
-        workflow_version_id = (select distinct version_id from old),
-        current_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.current_step_id),
-        participant_entered_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.participant_entered_step_id)
-      where w.id = ${id}::uuid
-    `.execute(migrator);
-  }
-
   it("is Submitted to the one Consultant inspection Step and closed by its Result there; publishing again moves nothing", async () => {
     const id = await inReview("In flight on Version 1");
-    await pinToVersion1(id);
+    await pinToWorkflowVersion(migrator, "WIR", 1, id);
     expect(await detail(ali, id)).toMatchObject({ stage: { key: "internal_review" }, workflow: { versionNo: 1 } });
     await take(ali, id, "submit", { answers: { cover_note: "Ready on site" } });
-    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_inspection" }, step: { key: "consultant_inspection" }, workflow: { versionNo: 1 } });
+    expect(await detail(ahmed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_inspection" }, workflow: { versionNo: 1 } });
 
     const engineer = await migrator.selectFrom("rabaed_engineer").select("id").where("email", "=", DEMO_ENGINEER_EMAIL).executeTakeFirstOrThrow();
     const again = await publishRabaedDefaults(migrator, { engineerId: engineer.id, reason: "RP-170 test: nothing to publish" });
@@ -285,7 +271,7 @@ describe("a WIR on Version 1 finishes on Version 1 (the Workflow Version it pinn
     await ok(ahmed.caller.post(`/v1/work-items/${id}/pick-up`));
     expect(await transitionKeys(ahmed.caller, id)).toEqual(["fail", "pass", "pass_with_comments"]);
     await take(ahmed.caller, id, "pass", { remarks: "Accepted" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "passed" }, outcome: "passed", workflow: { versionNo: 1 } });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "passed", workflow: { versionNo: 1 } });
   });
 });
 

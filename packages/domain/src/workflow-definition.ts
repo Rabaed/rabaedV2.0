@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
-import type { OutcomeKind } from "./outcome.ts";
+import { defaultOutcomeSets, type OutcomeKind } from "./outcome.ts";
 import { condition } from "./condition.ts";
 import type { Locale } from "./locale.ts";
 import { baseRoles, type BaseRole } from "./project.ts";
@@ -182,6 +182,16 @@ const transition = z.strictObject({
   rules: transitionRules.optional(),
   actions: z.array(transitionAction).optional(),
   notifications: z.array(recipient).optional(),
+  /**
+   * On a Submit: the roles whose covering Participants are informed when it is taken (RP-625,
+   * workflow-engine.md §5.1): they read the item, never act on it (`informed` access).
+   * Stored in the row's `actions` as an `inform` entry.
+   */
+  inform: z
+    .array(z.enum(baseRoles))
+    .min(1)
+    .refine((roles) => new Set(roles).size === roles.length, "each Project Role is named once")
+    .optional(),
 });
 export type WorkflowTransition = z.infer<typeof transition>;
 
@@ -225,7 +235,8 @@ export type WorkflowStepRow = {
 
 /**
  * A `workflow_transition` row of a Version, its Steps by key. `rules` (WF-7),
- * `actions` (WF-8) and `notifications` (WF-9) are columns, null when it has none.
+ * `actions` (WF-8) and `notifications` (WF-9) are columns, null when it has none;
+ * `actions` also holds the roles to inform, as an `inform` entry (RP-625).
  * Each is present only when the definition has it.
  */
 export type WorkflowTransitionRow = {
@@ -275,7 +286,7 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
         outcome: t.outcome,
         permission: t.permission,
         ...(t.screen_key == null ? { actionForm: t.action_form ?? null } : { actionForm: null, screen: t.screen_key }),
-        ...transitionParts(t),
+        ...transitionDefinitionParts(t),
       })),
     layout: rows.layout,
   });
@@ -283,12 +294,20 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
 
 /**
  * A definition as a Version's rows, for a Work Item Type of `outcomeKind`: an
- * issuing Step issues its Inspection Result for a Type with Inspection Results,
- * else its Review Code. Transitions are sorted as listed, from 1. The outcome
- * kind only names the row's `outcome_mode` word: which outcomes a Transition may
- * set is the Type's own outcome set (RP-429), checked at publish (check 3).
+ * issuing Step issues its Inspection Result for a Type with Inspection Results, or
+ * when every outcome it issues is an Inspection Result (a WIR Workflow Version 1 or
+ * 2, whose Type issues Review Codes since ADR 0025, RP-673), else its Review Code.
+ * Transitions are sorted as listed, from 1. The outcome kind only names the row's
+ * `outcome_mode` word: which outcomes a Transition may set is the Type's own outcome
+ * set (RP-429), checked at publish (check 3).
  */
 export function definitionToRows(definition: WorkflowDefinition, outcomeKind: OutcomeKind): WorkflowVersionRows {
+  const inspectionResults = new Set(defaultOutcomeSets.inspection_result.map((o) => o.code));
+  const issuesInspectionResults = (step: string) => {
+    const issued = definition.transitions.filter((t) => t.from === step && t.outcome !== null);
+    return issued.length > 0 && issued.every((t) => inspectionResults.has(t.outcome!));
+  };
+  const issuingMode = (step: string) => (outcomeKind === "inspection_result" || issuesInspectionResults(step) ? "inspection_result" : "issue_code");
   return {
     layout: definition.layout,
     steps: definition.steps.map((s) => ({
@@ -297,7 +316,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       stage_key: s.stage,
       actor_rule: s.actor === null ? {} : ruleFromActor(s.actor),
       is_signing: false,
-      outcome_mode: s.outcomeMode === "issue_outcome" ? (outcomeKind === "inspection_result" ? "inspection_result" : "issue_code") : s.outcomeMode,
+      outcome_mode: s.outcomeMode === "issue_outcome" ? issuingMode(s.key) : s.outcomeMode,
       ...(s.editsForm === undefined ? {} : { edits_form: s.editsForm }),
       ...(s.draftsVisibleTo === undefined ? {} : { drafts_visible_to: s.draftsVisibleTo }),
       ...(s.afterSendBack === undefined ? {} : { after_send_back: s.afterSendBack }),
@@ -313,7 +332,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       sort: index + 1,
       action_form: t.actionForm,
       ...(t.screen === undefined ? {} : { screen_key: t.screen }),
-      ...transitionParts(t),
+      ...transitionRowParts(t),
     })),
   };
 }
@@ -335,6 +354,27 @@ function transitionParts<T extends TransitionParts>({ rules, actions, notificati
     ...(actions === undefined ? {} : { actions }),
     ...(notifications === undefined ? {} : { notifications }),
   } as Pick<T, keyof TransitionParts>;
+}
+
+/** The `actions` entry a Transition's roles to inform are stored as (RP-625): no column of their own. */
+type InformEntry = { type: "inform"; roles: unknown };
+const isInformEntry = (a: unknown): a is InformEntry => typeof a === "object" && a !== null && (a as { type?: unknown }).type === "inform";
+
+/** A definition's Transition parts as a row's: its roles to inform go last in `actions`. */
+function transitionRowParts(t: WorkflowTransition): TransitionParts {
+  const actions = [...(t.actions ?? []), ...(t.inform === undefined ? [] : [{ type: "inform", roles: t.inform }])];
+  return transitionParts({ ...t, actions: actions.length === 0 ? undefined : actions });
+}
+
+/** A row's Transition parts as a definition's: an `inform` entry of `actions` is the Transition's `inform`. */
+function transitionDefinitionParts(row: WorkflowTransitionRow): TransitionParts & { inform?: unknown } {
+  if (!Array.isArray(row.actions)) return transitionParts(row);
+  const inform = row.actions.find(isInformEntry);
+  const actions = row.actions.filter((a) => !isInformEntry(a));
+  return {
+    ...transitionParts({ ...row, actions: actions.length === 0 && inform !== undefined ? undefined : actions }),
+    ...(inform === undefined ? {} : { inform: inform.roles }),
+  };
 }
 
 /** Outcome codes and Stage keys: those a Workflow Version uses, or those a Project's sets lack (RP-566). */
