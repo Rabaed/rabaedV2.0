@@ -22,6 +22,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import NextLink from "next/link";
 import { useCallback, useRef } from "react";
+import { usePackageBulkCalls } from "@/components/package-bulk";
 import { getPathname, useRouter } from "@/i18n/navigation";
 
 type Result = { ok: true } | { ok: false; reason: string };
@@ -101,6 +102,7 @@ function usePackageLabels(): PackagePageLabels {
 export function PackageView({ pkg, rows, filters, locale }: Pick<PackagePageProps, "pkg" | "rows" | "filters" | "locale">) {
   const router = useRouter();
   const labels = usePackageLabels();
+  const bulk = usePackageBulkCalls();
   // Submit Package's key, kept until it is taken, so a double click or a retry Submits once.
   const submitKey = useRef<string | null>(null);
   const back = `/projects/${pkg.projectId}/work-items`;
@@ -172,6 +174,7 @@ export function PackageView({ pkg, rows, filters, locale }: Pick<PackagePageProp
         return result;
       }}
       onSubmit={onSubmit}
+      bulk={bulk}
     />
   );
 }
