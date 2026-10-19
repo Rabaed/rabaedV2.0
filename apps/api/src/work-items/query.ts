@@ -1104,23 +1104,16 @@ export function boardWorkItems(db: Db, memberId: string, tabScope: QueryScope, q
 async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<string, number>): Promise<Pick<WorkItemList, "stages" | "filters">> {
   const { projectId } = scope;
   const modules = modulesOf(scope);
-  const stagesOfModules = await trx
+  // One group per Stage of the scope's own Module (RP-674): the Inspections share the Submittals' Stage keys (ADR 0025),
+  // so a WIR sits in the group of its key and the group takes the Submittals' name.
+  const stages = await trx
     .selectFrom("stage")
-    .select(["module_key", "key", "name", "category"])
-    .where("module_key", "in", modules)
+    .select(["key", "name", "category"])
+    .where("module_key", "=", scope.moduleKey)
     .where("project_id", "=", projectId)
     .orderBy("sort")
     .orderBy("key")
     .execute();
-  // One group per Stage key, matched across Modules (RP-674): the Inspections share the Submittals' Stage keys
-  // (ADR 0025), so a WIR sits in the Submittals' group of its key and the group takes the Submittals' name. The scope's
-  // own Module first, then a key only another Module has (an item still on a Version from before) after it, so no item is left out.
-  const stages: Pick<WorkItemList["stages"][number], "key" | "name" | "category">[] = [];
-  for (const moduleKey of modules) {
-    for (const s of stagesOfModules.filter((x) => x.module_key === moduleKey)) {
-      if (!stages.some((x) => x.key === s.key)) stages.push({ key: s.key, name: s.name, category: s.category });
-    }
-  }
   const types = await trx
     .selectFrom("work_item_type")
     .select(["code", "name"])
