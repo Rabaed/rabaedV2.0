@@ -31,6 +31,7 @@ const project = (n: number, rest: Partial<ProjectSummary>): ProjectSummary => ({
   showInspectionsInSubmittals: false,
   recordLanguage: "bilingual",
   recordHijriDates: false,
+  workingCopyWatermark: b("Not Final", "غير نهائي"),
   ...rest,
 });
 

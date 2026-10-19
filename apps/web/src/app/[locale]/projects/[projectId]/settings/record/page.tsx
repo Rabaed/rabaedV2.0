@@ -8,7 +8,7 @@ import { getMe, getProject } from "@/lib/session";
 
 /**
  * Project → Settings → Documental Record (RP-151): the language its records are printed in and
- * whether they show Hijri dates. Every Project Member reads it; a Project Admin changes it, and a
+ * whether they show Hijri dates, and the Working Copy's watermark (RP-621). Every Project Member reads it; a Project Admin changes it, and a
  * change applies to records made afterwards.
  */
 export default async function ProjectRecordSettingsPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
@@ -27,6 +27,7 @@ export default async function ProjectRecordSettingsPage({ params }: { params: Pr
         projectId={project.id}
         recordLanguage={project.recordLanguage}
         recordHijriDates={project.recordHijriDates}
+        workingCopyWatermark={project.workingCopyWatermark}
         canEdit={project.isProjectAdmin && project.status === "active"}
       />
     </>

@@ -24,6 +24,7 @@ export * from "./notification.ts";
 export * from "./option-list.ts";
 export * from "./participant.ts";
 export * from "./project.ts";
+export * from "./working-copy.ts";
 export * from "./required-field.ts";
 export * from "./schedule.ts";
 export * from "./scope.ts";

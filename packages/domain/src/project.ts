@@ -77,6 +77,8 @@ export const projectSummary = z.object({
   recordLanguage: z.enum(recordLanguages),
   /** Whether Documental Records print the Hijri date beside the Gregorian one (RP-151; off by default). */
   recordHijriDates: z.boolean(),
+  /** The text across every page of the Project's Working Copies (RP-621), Arabic and English, never empty ("Not Final / غير نهائي" by default). */
+  workingCopyWatermark: bilingualText,
 });
 export type ProjectSummary = z.infer<typeof projectSummary>;
 
@@ -108,6 +110,15 @@ export type ShowInspectionsInSubmittalsRequest = z.infer<typeof showInspectionsI
 /** A Project Admin sets the record language and Hijri dates (RP-151); they apply to records made afterwards. */
 export const recordSettingsRequest = z.object({ language: z.enum(recordLanguages), hijriDates: z.boolean() });
 export type RecordSettingsRequest = z.infer<typeof recordSettingsRequest>;
+
+/** The longest a Working Copy watermark may be, in each language: it must fit across an A4 page. */
+export const WATERMARK_MAX_LENGTH = 60;
+
+/** A Project Admin sets the Working Copy watermark text (RP-621), both languages, never empty; it applies to Working Copies made afterwards. */
+export const workingCopyWatermarkRequest = z.object({
+  watermark: z.object({ en: z.string().trim().min(1).max(WATERMARK_MAX_LENGTH), ar: z.string().trim().min(1).max(WATERMARK_MAX_LENGTH) }),
+});
+export type WorkingCopyWatermarkRequest = z.infer<typeof workingCopyWatermarkRequest>;
 
 /** What app.set_show_inspections_in_submittals refuses with: a Member who is no Project Admin of it is told `not_found`. */
 export const projectSettingRefusals = ["not_found", "project_closed"] as const;
