@@ -1,4 +1,4 @@
-import { EventEmitter } from "node:events";
+﻿import { EventEmitter } from "node:events";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import { screens as submitScreens } from "./screens-examples/packages-submit.ts"
 import {
   fillRoute,
   finishAnimations,
+  loadPage,
   trackRequests,
   unsettledWarning,
   locatorOf,
@@ -281,6 +282,41 @@ describe("trackRequests", () => {
     expect(unsettledWarning({ name: "bulk", route: "/packages/p", actions: [] }, { locale: "ar", width: 1920 })).toBe(
       'Warning: screen "bulk" (ar, 1920): requests were still in flight 10 s after its last action; shot anyway.',
     );
+  });
+});
+
+// The web app answers 404 when its API read takes over 3 s (apps/web/src/lib/session.ts), as under load.
+describe("loadPage", () => {
+  function answering(statuses: (number | undefined)[]) {
+    const warned: string[] = [];
+    const slept: number[] = [];
+    let n = 0;
+    const load = () => loadPage(async () => statuses[Math.min(n++, statuses.length - 1)], "ar/packages/p1", { sleep: async (ms) => void slept.push(ms), warn: (line) => warned.push(line) });
+    return { load, warned, slept, tries: () => n };
+  }
+
+  it("goes on at once when the page answers", async () => {
+    const a = answering([200]);
+    await a.load();
+    expect([a.tries(), a.warned, a.slept]).toEqual([1, [], []]);
+  });
+
+  it("tries a page that answered 404 or 5xx again, saying so, and goes on when it answers", async () => {
+    const a = answering([404, 502, 200]);
+    await a.load();
+    expect(a.tries()).toBe(3);
+    expect(a.slept).toEqual([2_000, 2_000]);
+    expect(a.warned).toEqual([
+      "Warning: ar/packages/p1 answered 404 (try 1 of 3); trying again: the web server answers 404 when its API read takes over 3 s.",
+      "Warning: ar/packages/p1 answered 502 (try 2 of 3); trying again: the web server answers 404 when its API read takes over 3 s.",
+    ]);
+  });
+
+  it("fails naming the page and its last answer after three tries", async () => {
+    const a = answering([404]);
+    await expect(a.load()).rejects.toThrow("ar/packages/p1 answered 404, 3 times.");
+    const none = answering([undefined]);
+    await expect(none.load()).rejects.toThrow("ar/packages/p1 answered nothing, 3 times.");
   });
 });
 

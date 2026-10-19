@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+﻿import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -299,6 +299,30 @@ function playwrightDriver(page: import("playwright").Page): ActionDriver {
   };
 }
 
+/** How many times a page that answered 404 or 5xx is loaded, LOAD_RETRY_MS apart, before the run stops. */
+const LOAD_TRIES = 3;
+const LOAD_RETRY_MS = 2_000;
+
+/**
+ * Loads a page through `goto` (its HTTP status, or undefined for no answer) until it answers
+ * below 400. The web app answers 404 when its API read takes over 3 s (apps/web/src/lib/session.ts),
+ * as under load, so a 404 or 5xx is tried again, with a warning, and the run stops after LOAD_TRIES.
+ */
+export async function loadPage(
+  goto: () => Promise<number | undefined>,
+  page: string,
+  { sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms)), warn = console.warn }: { sleep?: (ms: number) => Promise<void>; warn?: (line: string) => void } = {},
+): Promise<void> {
+  for (let tries = 1; ; tries++) {
+    const status = await goto();
+    if (status !== undefined && status < 400) return;
+    const answer = status ?? "nothing";
+    if (tries >= LOAD_TRIES) throw new Error(`${page} answered ${answer}, ${LOAD_TRIES} times.`);
+    warn(`Warning: ${page} answered ${answer} (try ${tries} of ${LOAD_TRIES}); trying again: the web server answers 404 when its API read takes over 3 s.`);
+    await sleep(LOAD_RETRY_MS);
+  }
+}
+
 /** The page events trackRequests listens to. */
 type RequestEvents = { on(event: string, listener: () => void): unknown; off(event: string, listener: () => void): unknown };
 const REQUEST_EVENTS = { request: 1, requestfinished: -1, requestfailed: -1 } as const;
@@ -547,8 +571,7 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
       });
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {
-        const response = await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" });
-        if (!response || response.status() >= 400) throw new Error(`${shot.locale}${shot.route} answered ${response?.status() ?? "nothing"}.`);
+        await loadPage(async () => (await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" }))?.status(), `${shot.locale}${shot.route}`);
         // A lost session redirects to the sign-in page with a 200: that is not the page asked for.
         if (new URL(page.url()).pathname.includes("/sign-in")) throw new Error(`${shot.locale}${shot.route} sent ${args.email} to the sign-in page: the session did not hold.`);
         // Next's dev-mode indicator ("N" in a corner) is not part of the page.
