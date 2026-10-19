@@ -6,6 +6,7 @@ import {
   type SnagBulkCandidates,
   type SnagBulkResult,
   type SnagBulkSkipReason,
+  type SnagReportState,
   type WorkItemList as WorkItemListData,
 } from "@rabaed/domain";
 import { useEffect, useId, useState, type ReactNode } from "react";
@@ -83,6 +84,24 @@ export type SnagBulkActions = {
   onChanged: () => void;
 };
 
+/**
+ * The PDF report (RP-677): "Export PDF" asks the worker for a plain PDF of the chosen rows (`ids`) or of every
+ * row the filters match (null), then the List asks after it until it is ready and links to it. Null when the
+ * request couldn't be made.
+ */
+export type SnagReportActions = {
+  labels: {
+    exportPdf: string;
+    /** Shown while the worker makes it. */
+    preparing: string;
+    /** The link to the made PDF, e.g. "Download the Snag report (3 items)": `n` is `count` written for the locale. */
+    download: (n: string, count: number) => string;
+    failed: string;
+  };
+  request: (ids: string[] | null) => Promise<SnagReportState | null>;
+  check: (id: string) => Promise<SnagReportState | null>;
+};
+
 type Stage = WorkItemListData["stages"][number];
 
 /** What a dialog is doing: choosing, working, or showing what happened. */
@@ -96,6 +115,9 @@ export function SnagBulkBar({
   actions,
   exporting,
   onExport,
+  report,
+  reporting,
+  onExportPdf,
   onClear,
 }: {
   ids: string[];
@@ -104,6 +126,9 @@ export function SnagBulkBar({
   actions: SnagBulkActions;
   exporting: boolean;
   onExport: () => void;
+  report: SnagReportActions;
+  reporting: boolean;
+  onExportPdf: () => void;
   onClear: () => void;
 }) {
   const { labels } = actions;
@@ -129,6 +154,10 @@ export function SnagBulkBar({
       <Button variant="secondary" size="sm" disabled={exporting} onClick={onExport}>
         <Icon name="file-download" />
         {labels.exportSelected}
+      </Button>
+      <Button variant="secondary" size="sm" disabled={reporting} onClick={onExportPdf}>
+        <Icon name="file-text" />
+        {report.labels.exportPdf}
       </Button>
       <Button variant="ghost" size="sm" onClick={onClear}>
         {labels.clearSelection}

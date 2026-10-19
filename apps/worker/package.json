@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./record": "./src/record/index.ts"
+    "./record": "./src/record/index.ts",
+    "./snag-report": "./src/snag-report/index.ts"
   },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",

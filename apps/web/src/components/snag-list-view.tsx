@@ -6,6 +6,7 @@ import {
   type Locale,
   type SnagBulkCandidates,
   type SnagBulkResult,
+  type SnagReportState,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemExport,
   type WorkItemList as WorkItemListData,
@@ -172,6 +173,28 @@ function useSnagBulk(projectId: string, query: WorkItemQuery, locale: Locale, re
       notPickedUp: l("notPickedUp"),
       noNumber: l("noNumber"),
       fileName: t("export.fileName"),
+    },
+    // The Snag report (RP-677): the worker makes the PDF from what the viewer reads now; the page asks after it.
+    report: {
+      labels: {
+        exportPdf: t("exportPdf"),
+        preparing: t("pdfPreparing"),
+        download: (n, count) => t("pdfDownload", { n, count }),
+        failed: t("pdfFailed"),
+      },
+      request: async (ids) => {
+        const params = workItemSearchParams({ ...query, module: undefined, cursor: undefined, lang: locale });
+        const res = await fetch(`/api/v1/projects/${projectId}/snag-list/reports?${params}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...(ids ? { ids } : {}), language: locale }),
+        });
+        return res.ok ? ((await res.json()) as SnagReportState) : null;
+      },
+      check: async (id) => {
+        const res = await fetch(`/api/v1/projects/${projectId}/snag-list/reports/${id}`);
+        return res.ok ? ((await res.json()) as SnagReportState) : null;
+      },
     },
     // Every row the viewer reads with the List's filters, through the List's own read (RP-409), at most 5,000.
     loadExportRows: async () => {

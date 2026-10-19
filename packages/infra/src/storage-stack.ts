@@ -25,6 +25,9 @@ export const PDF_SEALING_TAG = { key: "rabaed-purpose", value: "pdf-sealing" } a
 /** Where each item's Documental Record lives under its Project's prefix (apps/worker recordKeys). */
 export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
 
+/** Where each Snag report lives under its Project's prefix (apps/worker snagReportKey): plain PDFs, written by the worker (RP-677). */
+export const SNAG_REPORT_OBJECTS = "projects/*/snag-reports/*";
+
 /**
  * The images a record prints besides the Documents: Members' Signatures (RP-85) and Companies'
  * logos and Stamps (RP-617), where the api stores them (apps/api/src/identity). The api writes them (RP-951).

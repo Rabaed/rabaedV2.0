@@ -11,7 +11,7 @@ import { grantToDeployRole } from "./deploy-grants.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
-import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_IMAGE_OBJECTS, RECORD_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
+import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_IMAGE_OBJECTS, RECORD_OBJECTS, SEALING_PREFIX, SNAG_REPORT_OBJECTS, type StorageStack } from "./storage-stack.ts";
 
 /**
  * The free public RFC 3161 timestamp authority the Documental Records' seals use (ADR 0023).
@@ -133,7 +133,13 @@ export class AppStack extends Stack {
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)] }),
     );
-    workerTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:PutObject"], resources: [storage.projectFiles.arnForObjects(RECORD_OBJECTS)] }));
+    workerTaskRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:PutObject"],
+        // The records, and the Snag reports (RP-677): plain PDFs under their Project's snag-reports/ prefix.
+        resources: [RECORD_OBJECTS, SNAG_REPORT_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
+      }),
+    );
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["s3:GetObject"],

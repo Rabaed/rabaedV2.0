@@ -14,6 +14,7 @@ export * from "./image-file.ts";
 export * from "./formula.ts";
 export * from "./handover.ts";
 export * from "./snag-bulk.ts";
+export * from "./snag-report.ts";
 export * from "./health.ts";
 export * from "./appearance.ts";
 export * from "./locale.ts";
