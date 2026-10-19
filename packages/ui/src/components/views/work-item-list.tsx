@@ -182,7 +182,16 @@ export type WorkItemListLabels = {
 };
 
 /** The filter fields' names in the other language, shown small after each (the anatomy's bilingual field list). */
-export type WorkItemFilterHints = Partial<Record<"stage" | "trade" | "documentType" | "owner" | "role" | "createdDate" | "stepAge" | "outcome" | "submissionDate" | "revisions", string>>;
+export type WorkItemFilterHints = Partial<Record<"stage" | "trade" | "documentType" | "owner" | "role" | "createdDate" | "stepAge" | "outcome" | "submissionDate" | "revisions" | "package", string>>;
+
+/**
+ * The Package filter (RP-662): the field's name, and the Packages the viewer sees as the API lists
+ * them, each by its PKG number and owning Company (numbers count per Company, so two can both be PKG-001).
+ */
+export type WorkItemPackageFilter = {
+  label: string;
+  choices: { id: string; number: string; owner: { companyName: BilingualText } }[];
+};
 
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
@@ -230,6 +239,8 @@ export type WorkItemListProps = {
   board?: ReactNode;
   /** The filter fields' names in the other language. */
   hints?: WorkItemFilterHints;
+  /** The Submittals' Package filter (RP-662), one Package at a time. Without it, the panel has no Package field. */
+  packages?: WorkItemPackageFilter;
   /** The table's columns at first, in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
   columns?: ListColumnLayout;
   /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
@@ -287,6 +298,7 @@ function WorkItemListBody({
   linkAs: Link = "a",
   board,
   hints,
+  packages,
   columns: initialColumns,
   onSaveColumns,
   loadExportRows,
@@ -424,6 +436,41 @@ function WorkItemListBody({
         ),
       })),
     ),
+    // One Package of those the viewer sees (RP-662): its number left to right, beside its owning Company by name only (V14).
+    ...(packages
+      ? [
+          {
+            key: "package",
+            label: packages.label,
+            hint: hints?.package,
+            group: "workflow",
+            count: query.packageId === undefined ? 0 : 1,
+            content: (
+              <FilterValues
+                label={packages.label}
+                hint={hints?.package}
+                multiple={false}
+                values={query.packageId === undefined ? [] : [query.packageId]}
+                choices={packages.choices.map((p) => ({
+                  value: p.id,
+                  text: `${p.number} ${p.owner.companyName[locale]}`,
+                  label: (
+                    <>
+                      <bdi dir="ltr" translate="no" className="font-ui font-semibold text-text">
+                        {p.number}
+                      </bdi>{" "}
+                      <span className="text-muted">{p.owner.companyName[locale]}</span>
+                    </>
+                  ),
+                  mark: <Icon name="packages" size={15} className="text-muted" />,
+                }))}
+                labels={valueLabels}
+                onChange={([v]) => change({ packageId: v })}
+              />
+            ),
+          } satisfies FilterMenuField,
+        ]
+      : []),
     many(
       "type",
       t("documentType"),
@@ -608,6 +655,7 @@ function WorkItemListBody({
               trade: [],
               location: [],
               outcome: [],
+              packageId: undefined,
               stepAgeMin: undefined,
               createdWithin: undefined,
               submittedFrom: undefined,

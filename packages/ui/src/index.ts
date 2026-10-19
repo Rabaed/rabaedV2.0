@@ -196,7 +196,7 @@ export {
   type MembersCardProps,
 } from "./components/members/members-card.tsx";
 export { NumberedPager, type NumberedPagerLabels, type NumberedPagerProps } from "./components/list/numbered-pager.tsx";
-export { Outcome, WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { Outcome, WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemPackageFilter, type WorkItemListProps } from "./components/views/work-item-list.tsx";
 export { WorkItemTable, type WorkItemTableLabels, type WorkItemTableProps } from "./components/views/work-item-table.tsx";
 export { SnagList, type SnagListLabels, type SnagListProps, type SnagNewType } from "./components/views/snag-list.tsx";
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
