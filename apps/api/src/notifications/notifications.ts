@@ -6,9 +6,7 @@ import { sql } from "kysely";
 // Member reads only their own bell's (RLS on notification: in-app, not
 // withdrawn), and only of items they still see: RLS on notification, on
 // work_item and on work_item_event, so the number, title and what happened are
-// what they may see now. Another Company appears by its name only (V14). A
-// Register Import's "Drafts were imported for you" (RP-640) says how many, and no
-// time: that is when the Drafts were started (scenario 61).
+// what they may see now. Another Company appears by its name only (V14).
 
 const LIMIT = 50;
 
@@ -26,8 +24,6 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       transition_label: BilingualText | null;
       outcome: NonNullable<Notification["event"]>["outcome"];
       company_name: BilingualText | null;
-      project_id: string;
-      drafts: number | null;
       created_at: Date;
       read_at: Date | null;
     }>`
@@ -39,7 +35,6 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
         coalesce(e.payload ->> 'outcome', case when n.event_type = 'cancelled' then 'cancelled' end) as outcome,
         (select c.legal_name from app.work_item_companies(n.work_item_id) c where c.participant_id = e.actor_participant_id)
           as company_name,
-        n.project_id, case when n.kind = 'drafts_imported' then app.drafts_imported_count(n.work_item_id) end as drafts,
         n.created_at, n.read_at
       from latest n
       join work_item w on w.id = n.work_item_id
@@ -63,8 +58,7 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
         event: r.event_type
           ? { type: r.event_type, transition: r.transition_label, outcome: r.outcome ?? null, companyName: r.company_name }
           : null,
-        drafts: r.kind === "drafts_imported" && r.drafts ? { count: r.drafts, projectId: r.project_id } : null,
-        createdAt: r.kind === "drafts_imported" ? null : r.created_at.toISOString(),
+        createdAt: r.created_at.toISOString(),
         readAt: r.read_at?.toISOString() ?? null,
       })),
     };

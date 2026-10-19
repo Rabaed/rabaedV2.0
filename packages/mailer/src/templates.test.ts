@@ -62,7 +62,6 @@ const examples: EmailTemplateValues = {
     ...item,
     event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
   },
-  "notification-drafts-imported": { ...item, drafts: { count: 3 } },
   "daily-digest": {
     projects: [
       {
@@ -257,16 +256,6 @@ describe("notification emails", () => {
 
   it("Sent Back says what happened", () => {
     expect(renderEmail("notification-sent-back", "en", examples["notification-sent-back"]).subject.split(" · ")[2]).toBe("Sent Back to you");
-  });
-
-  it("Drafts imported says how many, in either language (RP-640)", () => {
-    const said = (locale: "en" | "ar", count: number) =>
-      renderEmail("notification-drafts-imported", locale, { ...examples["notification-drafts-imported"], drafts: { count } }).subject.split(" · ")[2];
-    expect(said("en", 3)).toBe("3 Drafts were imported for you");
-    expect(said("en", 1)).toBe("1 Draft was imported for you");
-    expect(said("ar", 2)).toBe("استُوردت لك مسودتان");
-    expect(said("ar", 3)).toBe("استُوردت لك 3 مسودات");
-    expect(said("ar", 12)).toBe("استُوردت لك 12 مسودة");
   });
 });
 

@@ -6,10 +6,9 @@
 // C1's Members read the import; C2, K1 and the Owner read nothing of it.
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { createDb, notificationDigestHandler } from "@rabaed/db";
+import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type {
-  NotificationDigest,
   RegisterImport,
   RegisterImportFields,
   RegisterImportMapping,
@@ -763,10 +762,15 @@ describe("Assign to (RP-640)", () => {
 
   describe("on confirm", () => {
     let record: RegisterImport;
+    /** The outbox rows of the Project the confirm wrote, before the worker took them. */
+    let outboxOfConfirm: { kind: string }[];
     const draftOf = (subject: string) => record.rows.find((r) => r.subject === subject)!.workItemId!;
 
     beforeAll(async () => {
+      const outbox = async () => (await sql<{ id: string; kind: string }>`select id, kind from outbox where project_id = ${at.projectId}::uuid`.execute(migrator)).rows;
+      const before = new Set((await outbox()).map((o) => o.id));
       expect((await ok(confirm(at.c1Pm, previewed.id), 200)).json()).toEqual({ rowsCreated: 3 });
+      outboxOfConfirm = (await outbox()).filter((o) => !before.has(o.id)).map(({ kind }) => ({ kind }));
       record = (await ok(getImport(at.c1Pm, previewed.id), 200)).json();
       await drainOutbox(worker);
     });
@@ -790,24 +794,15 @@ describe("Assign to (RP-640)", () => {
       expect(importers.map((i: { id: string }) => i.id)).not.toContain(draftOf("Panels"));
     });
 
-    it("tells each assignee but the importer once how many Drafts were imported for them, and nobody else", async () => {
-      const ofKind = async (by: Caller) => (await notifications(by)).filter((n) => n.kind === "drafts_imported");
-      expect(await ofKind(narrowed.caller)).toEqual([expect.objectContaining({ kind: "drafts_imported", drafts: { count: 2, projectId: at.projectId }, readAt: null })]);
-      expect(await ofKind(colleague.caller)).toEqual([expect.objectContaining({ drafts: { count: 1, projectId: at.projectId } })]);
-      for (const by of [at.c1Pm, noCreate.caller, k1Person.caller, at.k1Manager]) expect(await ofKind(by)).toEqual([]);
-    });
-
-    it("shows no time on the notification: when Drafts were imported is when they were started (scenario 61)", async () => {
-      const [n] = (await notifications(narrowed.caller)).filter((x) => x.kind === "drafts_imported");
-      expect(n!.createdAt).toBeNull();
-    });
-
-    it("routes it like any other notification: a digest by default", async () => {
-      const digests: NotificationDigest[] = [];
-      await worker.transaction().execute((trx) => sql`select app.enqueue_notification_digests()`.execute(trx));
-      await drainOutbox(worker, { digest: notificationDigestHandler(async (d) => void digests.push(d)) });
-      const entries = digests.filter((d) => d.to === narrowed.email).flatMap((d) => d.projects.flatMap((p) => p.items.flatMap((i) => i.entries)));
-      expect(entries).toEqual([expect.objectContaining({ kind: "drafts_imported", drafts: { count: 2 } })]);
+    it("tells nobody: no notification, email or digest entry, for an assignee or anyone else (owner, 2026-10-19)", async () => {
+      // Its time would be the import's, when the Drafts were started (scenario 61).
+      expect(outboxOfConfirm).toEqual([]);
+      const drafts = ["Panels", "Fans", "Doors"].map(draftOf);
+      const notified = await sql<{ member_id: string }>`select member_id from notification where work_item_id = any(${drafts}::uuid[])`.execute(migrator);
+      expect(notified.rows).toEqual([]);
+      for (const by of [narrowed.caller, colleague.caller, noCreate.caller, at.c1Pm, k1Person.caller, at.k1Manager]) {
+        expect((await notifications(by)).filter((n) => drafts.includes(n.workItemId as string))).toEqual([]);
+      }
     });
   });
 });

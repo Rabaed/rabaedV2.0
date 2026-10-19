@@ -1467,9 +1467,7 @@
     "unavailable": "Something went wrong. Try again.",
     "revisionCreated": "New Revision",
     "cancelled": "Cancelled",
-    "sentBack": "Sent Back to you by {company}",
-    "draftsImported": "{count, plural, one {1 Draft was imported for you} other {{n} Drafts were imported for you}}",
-    "draftsImportedHelp": "From a submittal register. They are your own Drafts, in Need My Action."
+    "sentBack": "Sent Back to you by {company}"
   },
   "handover": {
     "title": "Hand over {name}'s Steps",

@@ -532,8 +532,12 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
   describe("on confirm", () => {
     let importId = "";
     let drafts: { row_no: number; work_item_id: string | null }[] = [];
+    /** The outbox rows the confirm wrote. */
+    let outboxOfConfirm: { kind: string }[] = [];
 
     beforeAll(async () => {
+      const outbox = async () => (await migrator.query<{ id: string; kind: string }>("select id, kind from outbox")).rows;
+      const before = new Set((await outbox()).map((o) => o.id));
       importId = (
         await preview(importer, [
           row(2, "Panels for the engineer", "MAR", "Electrical", assigned(c1Narrowed)),
@@ -543,6 +547,7 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
         ])
       ).import_id!;
       expect(await confirm(importer, importId)).toEqual({ outcome: "created", rows_created: 3 });
+      outboxOfConfirm = (await outbox()).filter((o) => !before.has(o.id)).map(({ kind }) => ({ kind }));
       drafts = await results(importer, importId);
     });
 
@@ -581,17 +586,13 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
       expect(rows).toEqual([{ actor_member_id: importer, actor_participant_id: c1Participant, import_id: importId }]);
     });
 
-    it("tells the assignee, and nobody else, how many Drafts were imported for them", async () => {
+    it("tells nobody: no outbox row and no notification, for the assignee or anyone else (owner, 2026-10-19)", async () => {
+      // Its time would be the import's, when the Drafts were started (scenario 61).
+      expect(outboxOfConfirm).toEqual([]);
       await drainOutbox(app);
-      const panels = drafts.find((d) => d.row_no === 2)!.work_item_id!;
-      const kinds = (as: string) =>
-        call<{ kind: string; work_item_id: string }>(as, sql`select kind, work_item_id from notification where kind = 'drafts_imported'`);
-      expect(await kinds(c1Narrowed)).toEqual([{ kind: "drafts_imported", work_item_id: panels }]);
-      for (const other of [importer, c1.member, k1.member, c2.member, ow.member]) expect(await kinds(other)).toEqual([]);
-      const count = (as: string) => call<{ n: number | null }>(as, sql`select app.drafts_imported_count(${panels}::uuid) as n`).then((r) => r[0]!.n);
-      expect(await count(c1Narrowed)).toBe(1);
-      for (const other of [importer, k1.member, c2.member]) expect(await count(other)).toBeNull();
-      expect(await failure(c1Narrowed, sql`select app.deliver_drafts_imported(${randomUUID()}::uuid)`)).toBe("42501");
+      const ids = drafts.map((d) => d.work_item_id).filter((id) => id !== null);
+      const { rows } = await migrator.query("select member_id from notification where work_item_id = any ($1)", [ids]);
+      expect(rows).toEqual([]);
     });
 
     it("lets the assignee read and edit their Draft as their own", async () => {

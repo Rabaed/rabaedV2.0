@@ -32,14 +32,6 @@ export const deliverNotification: OutboxHandler = async (trx, row) => {
   await sql`select app.deliver_notification(${row.id}::uuid)`.execute(trx);
 };
 
-/**
- * Delivers a Register Import's "Drafts were imported for you" (RP-640) to its Member, if
- * they still see one of those Drafts and their settings route it (app.deliver_drafts_imported).
- */
-export const deliverDraftsImported: OutboxHandler = async (trx, row) => {
-  await sql`select app.deliver_drafts_imported(${row.id}::uuid)`.execute(trx);
-};
-
 type NotificationEvent = NonNullable<NotificationEmailContent["event"]>;
 
 /**
@@ -69,13 +61,6 @@ function eventOf(row: NotificationRow): NotificationEvent | null {
     : null;
 }
 
-/** For a `drafts_imported` notification, how many Drafts were imported for its recipient (app.drafts_imported_count); else nothing. */
-async function draftsOf(trx: Transaction<Database>, row: NotificationRow): Promise<Pick<NotificationEmailContent, "drafts">> {
-  if (row.kind !== "drafts_imported") return {};
-  const { rows } = await sql<{ count: number | null }>`select app.drafts_imported_count(${row.work_item_id}::uuid) as count`.execute(trx);
-  return { drafts: { count: rows[0]?.count ?? 0 } };
-}
-
 /** Sends one notification email: the worker's mailer. Throws when it could not. */
 export type SendNotificationEmail = (email: NotificationEmail) => Promise<void>;
 
@@ -101,7 +86,6 @@ export function notificationEmailHandler(send: SendNotificationEmail): OutboxHan
         subject: email.subject,
         step: email.step_name,
         event: eventOf(email),
-        ...(await draftsOf(trx, email)),
       },
     });
   };
@@ -136,14 +120,14 @@ export function notificationDigestHandler(send: SendNotificationDigest): OutboxH
         items.set(r.work_item_id, item);
         project.items.push(item);
       }
-      item.entries.push({ kind: r.kind, step: r.step_name, event: eventOf(r), ...(await draftsOf(trx, r)) });
+      item.entries.push({ kind: r.kind, step: r.step_name, event: eventOf(r) });
     }
     await send({ to: first.to_address, language: first.language, projects: [...projects.values()] });
   };
 }
 
 /** No email handler by default: the worker passes one with its mailer. */
-const defaultHandlers: Record<string, OutboxHandler> = { notification: deliverNotification, drafts_imported: deliverDraftsImported };
+const defaultHandlers: Record<string, OutboxHandler> = { notification: deliverNotification };
 
 export interface ProcessOutboxOptions {
   /** Replaces the handler of a kind (tests use this to make deliveries fail). */

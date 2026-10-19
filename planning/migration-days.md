@@ -83,4 +83,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
 | 20270720 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707) |
 | 20270721 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713) |
-| 20270722 | RP-640 | 5B | Register Import: the drafts_imported notification (new notification and outbox kind; moved from 20270714) |
+| 20270722 | RP-640 | 5B | Unused: RP-640's notification dropped (owner, 2026-10-19) |

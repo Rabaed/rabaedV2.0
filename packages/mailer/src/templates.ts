@@ -39,8 +39,6 @@ export interface EmailTemplateValues {
   "notification-watched-event": NotificationEmailValues;
   /** An item was Sent Back to the Member's Participant (RP-356). */
   "notification-sent-back": NotificationEmailValues;
-  /** A Register Import made Drafts of the Member's (RP-640); linking to the first of them. */
-  "notification-drafts-imported": NotificationEmailValues;
   /** The daily digest of the notifications routed to it (RP-358). */
   "daily-digest": DailyDigestValues;
   /** The weekly Step Age report (RP-359). */
@@ -172,7 +170,6 @@ const notificationCopy = {
   en: {
     reached: (step: string) => `Reached you at ${step}`,
     sentBack: "Sent Back to you",
-    draftsImported: (n: number) => (n === 1 ? "1 Draft was imported for you" : `${formatNumber(n, "en")} Drafts were imported for you`),
     revision: "New Revision",
     code: (code: string) => `Code ${code}`,
     closed: "Closed",
@@ -187,15 +184,6 @@ const notificationCopy = {
   ar: {
     reached: (step: string) => `وصلك في ${step}`,
     sentBack: "أُرجع إليكم",
-    // Arabic counts 3 to 10 with the plural, and 1, 2 (and 11 up) apart.
-    draftsImported: (n: number) =>
-      n === 1
-        ? "استُوردت لك مسودة واحدة"
-        : n === 2
-          ? "استُوردت لك مسودتان"
-          : n <= 10
-            ? `استُوردت لك ${formatNumber(n, "ar")} مسودات`
-            : `استُوردت لك ${formatNumber(n, "ar")} مسودة`,
     revision: "مراجعة جديدة",
     code: (code: string) => `الرمز ${code}`,
     closed: "مغلق",
@@ -248,7 +236,7 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   };
 }
 
-type Happening = Pick<NotificationEmailContent, "step" | "event" | "drafts">;
+type Happening = Pick<NotificationEmailContent, "step" | "event">;
 
 /**
  * Each kind of notification: the template it is emailed with; what happened, in
@@ -270,11 +258,6 @@ const notificationKinds = {
     template: "notification-sent-back",
     happened: (locale: Locale) => notificationCopy[locale].sentBack,
     details: (locale: Locale, { event }: Happening) => actedBy(locale, event),
-  },
-  drafts_imported: {
-    template: "notification-drafts-imported",
-    happened: (locale: Locale, { drafts }: Happening) => notificationCopy[locale].draftsImported(drafts?.count ?? 1),
-    details: (): Paragraph[] => [],
   },
 } as const satisfies Record<
   NotificationEmailKind,

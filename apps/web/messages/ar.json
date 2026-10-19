@@ -1467,9 +1467,7 @@
     "unavailable": "حدث خطأ. حاول مرة أخرى.",
     "revisionCreated": "مراجعة جديدة",
     "cancelled": "ملغى",
-    "sentBack": "أرجعته إليكم {company}",
-    "draftsImported": "{count, plural, one {استُوردت لك مسودة واحدة} two {استُوردت لك مسودتان} few {استُوردت لك {n} مسودات} other {استُوردت لك {n} مسودة}}",
-    "draftsImportedHelp": "من سجل التقديمات. هي مسوداتك، في «بحاجة لإجرائي»."
+    "sentBack": "أرجعته إليكم {company}"
   },
   "handover": {
     "title": "تسليم خطوات {name}",
