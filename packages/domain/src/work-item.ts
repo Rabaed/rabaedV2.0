@@ -776,6 +776,11 @@ export const workItemHistory = z.object({
        */
       answers: z.record(z.string(), z.unknown()).nullable(),
       /**
+       * On a Transition or Code event, the reply Screen's files it took (ADR 0024), by
+       * Document id, as the viewer sees them; absent when it took none.
+       */
+      files: z.array(z.uuid()).optional(),
+      /**
        * With `answers`: the Action Form they were given in, as the item's Workflow Version
        * pinned it (RP-437), to label them. Read like the Workflow, by everyone on the
        * Project (V20); absent without answers.

@@ -1,5 +1,5 @@
 // Seam 1: a closed item gets its sealed Documental Record (RP-620, spec RP-632;
-// ADR 0023; workflow-engine.md §7; visibility.md V7, the Documental Record row,
+// ADR 0023; workflow-engine.md Â§7; visibility.md V7, the Documental Record row,
 // scenario RP-23-1, without Stamps until RP-650). Closing writes the record job
 // to the outbox; the worker (run here in-process, with the local sealing key and
 // timestamp stand-in, as the notification tests run theirs) writes the Record
@@ -150,9 +150,15 @@ const recordJobs = (id: string) =>
     .then((r) => r.rows);
 
 beforeAll(async () => {
-  await addSendBackType(migrator, CANCELLABLE, { en: "Cancellable record", ar: "سجل قابل للإلغاء" }, cancellableSchema, { withCancel: true });
-  const c1 = await api.projectCreator();
-  k1 = await onboard(K1_NAME);
+  // The steps that don't wait on each other run together (the password hashing of each Member is slow when the machine is busy).
+  const [c1, onboardedK1, or, c2] = await Promise.all([
+    api.projectCreator(),
+    onboard(K1_NAME),
+    onboard(OR_NAME),
+    onboard("Record Second Contractor"),
+    addSendBackType(migrator, CANCELLABLE, { en: "Cancellable record", ar: "سجل قابل للإلغاء" }, cancellableSchema, { withCancel: true }),
+  ]);
+  k1 = onboardedK1;
   at = await buildTower(api, { c1, k1 }, "REC");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as {
     id: string;
@@ -161,18 +167,80 @@ beforeAll(async () => {
   }[];
   k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
   c1Name = participants.find((p) => p.isOwnCompany)!.company.legalName.en;
-  c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
-  c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
-  k1Pm = (await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" })).caller;
-  k1Engineer = (await memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Faisal Otaibi" })).caller;
-  const or = await onboard(OR_NAME);
-  orEngineer = (await memberOnProject(api, or, await participant(or, "owner_representative"), ["engineer"])).caller;
-  const c2 = await onboard("Record Second Contractor");
-  c2Engineer = (await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"])).caller;
+  const [c1EngineerMember, c1PmMember, k1PmMember, k1EngineerMember, orMember, c2Member, signerMember] = await Promise.all([
+    memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" }),
+    memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" }),
+    memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" }),
+    memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Faisal Otaibi" }),
+    participant(or, "owner_representative").then((id) => memberOnProject(api, or, id, ["engineer"])),
+    participant(c2, "contractor").then((id) => memberOnProject(api, c2, id, ["engineer"])),
+    memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Laila Saud" }),
+  ]);
+  c1Engineer = c1EngineerMember.caller;
+  c1Pm = c1PmMember.caller;
+  k1Pm = k1PmMember.caller;
+  k1Engineer = k1EngineerMember.caller;
+  orEngineer = orMember.caller;
+  c2Engineer = c2Member.caller;
   handler = await recordHandler();
   // Anything earlier tests left in the outbox is not ours to judge.
   await drainOutbox(worker, { documental_record: handler });
-});
+
+  // Every item the read-only tests share is closed here at once, then the worker runs once
+  // (one Chromium start, one sealer), so a loaded machine pays for the setup one time.
+  const signer = signerMember;
+  const [approved, codeC, cancelled, signed] = await Promise.all([
+    closedAt("approve_a"),
+    closedAt("revise_c", "Cable ladders"),
+    cancelledAtDraft(),
+    closedBy(signer.caller, "Cable tray covers"),
+  ]);
+  // What the first test says about the moment before the worker has run.
+  const beforeWorker = {
+    outcome: (await detail(c1Pm, approved)).outcome,
+    jobs: await recordJobs(approved),
+    link: await downloadLink(c1Pm, approved),
+  };
+  // Before the record is made, K1 makes her an Engineer instead.
+  await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${signer.id}/positions`, { positions: ["engineer"] }));
+  await drainOutbox(worker, { documental_record: handler });
+  shared = { approved, codeC, cancelled, signed, beforeWorker };
+}, 180_000);
+
+interface Shared {
+  approved: string;
+  codeC: string;
+  cancelled: string;
+  signed: string;
+  beforeWorker: { outcome: unknown; jobs: unknown; link: Awaited<ReturnType<typeof downloadLink>> };
+}
+let shared: Shared;
+
+/** A Cancellable Draft of the C1 engineer's, Cancelled. */
+async function cancelledAtDraft(): Promise<string> {
+  const res = await ok(
+    c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+      type: CANCELLABLE,
+      title: "Cancelled cable trays",
+      answers: { model: "CT-100", trade: at.electrical, location: at.buildingA },
+    }),
+    201,
+  );
+  const id = res.json().id as string;
+  await take(c1Engineer, id, "cancel");
+  return id;
+}
+
+/** A MAR the C1 engineer sends, the C1 PM Submits, and `reviewer` (K1) approves with Code A. */
+async function closedBy(reviewer: Caller, subject: string): Promise<string> {
+  const id = await draft(at, c1Engineer, subject);
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit");
+  await ok(reviewer.post(`/v1/work-items/${id}/pick-up`));
+  await take(reviewer, id, "approve_a");
+  return id;
+}
 
 /** A MAR the C1 engineer prepares, the C1 PM Returns once, then Submits with an Internal Note; K1's PM issues `code`. */
 async function closedAt(code: "approve_a" | "revise_c", subject = SUBJECT): Promise<string> {
@@ -199,18 +267,18 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
   let record: Uint8Array;
   let text = "";
 
-  beforeAll(async () => {
-    id = await closedAt("approve_a");
+  beforeAll(() => {
+    id = shared.approved;
   });
 
   it("closes without waiting for the record: until the job has run there is none to download", async () => {
-    expect((await detail(c1Pm, id)).outcome).toBe("A");
-    expect(await recordJobs(id)).toEqual([{ attempts: 0, processed_at: null, last_error: null }]);
-    await expectHidden(downloadLink(c1Pm, id));
+    // As it stood after closing and before the worker ran (see the outer beforeAll).
+    expect(shared.beforeWorker.outcome).toBe("A");
+    expect(shared.beforeWorker.jobs).toEqual([{ attempts: 0, processed_at: null, last_error: null }]);
+    await expectHidden(shared.beforeWorker.link);
   });
 
   it("is the same sealed PDF for C1, K1 and the Owner Representative, through a short-lived link", async () => {
-    await drainOutbox(worker, { documental_record: handler });
     expect((await recordJobs(id))[0]!.processed_at).not.toBeNull();
     const copies = await Promise.all([c1Pm, c1Engineer, k1Pm, k1Engineer, orEngineer].map((by) => download(by, id)));
     const fingerprints = new Set(copies.map((c) => createHash("sha256").update(c.bytes).digest("hex")));
@@ -305,26 +373,14 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
 
 describe("the record job", () => {
   it("is written at any outcome: a Code C item gets its record too", async () => {
-    const id = await closedAt("revise_c", "Cable ladders");
-    await drainOutbox(worker, { documental_record: handler });
-    const { bytes } = await download(c1Pm, id);
+    const { bytes } = await download(c1Pm, shared.codeC);
     expect(await printed(bytes)).toContain("Cableladders");
     expect((await verifySeal(bytes)).valid).toBe(true);
   });
 
   it("is made for a Cancelled item too, for those who see it: inside the raiser's Company, never K1", async () => {
-    const res = await ok(
-      c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
-        type: CANCELLABLE,
-        title: "Cancelled cable trays",
-        answers: { model: "CT-100", trade: at.electrical, location: at.buildingA },
-      }),
-      201,
-    );
-    const id = res.json().id as string;
-    await take(c1Engineer, id, "cancel");
+    const id = shared.cancelled;
     expect((await detail(c1Engineer, id)).outcome).toBe("cancelled");
-    await drainOutbox(worker, { documental_record: handler });
     const copies = await Promise.all([c1Engineer, c1Pm].map((by) => download(by, id)));
     expect(new Set(copies.map((c) => createHash("sha256").update(c.bytes).digest("hex"))).size).toBe(1);
     const text = await printed(copies[0]!.bytes);
@@ -337,17 +393,8 @@ describe("the record job", () => {
   });
 
   it("names each signer with the Position they held when they acted, not a later one", async () => {
-    const signer = await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Laila Saud" });
-    const id = await draft(at, c1Engineer, "Cable tray covers");
-    await take(c1Engineer, id, "send_for_review");
-    await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
-    await take(c1Pm, id, "submit");
-    await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
-    await take(signer.caller, id, "approve_a");
-    // Before the record is made, K1 makes her an Engineer instead.
-    await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${signer.id}/positions`, { positions: ["engineer"] }));
-    await drainOutbox(worker, { documental_record: handler });
-    const xml = new TextDecoder().decode((await attachedFiles((await download(c1Pm, id)).bytes))[0]!.bytes);
+    // Closed, then K1 made her an Engineer, then the record made: all in the outer beforeAll.
+    const xml = new TextDecoder().decode((await attachedFiles((await download(c1Pm, shared.signed)).bytes))[0]!.bytes);
     const hers = xml.split("<transition ").find((block) => block.includes("Laila Saud"))!;
     expect(hers).toContain('<name lang="en">Manager</name>');
     expect(hers).not.toContain('<name lang="en">Engineer</name>');
@@ -371,5 +418,5 @@ describe("the record job", () => {
     await sql`update outbox set available_at = now() where kind = 'documental_record' and payload ->> 'closed_work_item_id' = ${id}`.execute(migrator);
     await drainOutbox(worker, { documental_record: handler });
     expect((await verifySeal((await download(c1Pm, id)).bytes)).valid).toBe(true);
-  });
+  }, 120_000);
 });

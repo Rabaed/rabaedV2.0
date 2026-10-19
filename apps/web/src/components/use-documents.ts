@@ -32,7 +32,12 @@ const systemField = "";
 const pendingKeyOf = (fieldKey?: string, itemKey?: string) =>
   fieldKey === undefined ? systemField : itemKey === undefined ? fieldKey : checklistItemFilesKey(fieldKey, itemKey);
 
-export function useDocuments(workItemId: string, limits: DocumentList["limits"]) {
+/**
+ * `reply`: the fields are a reply Screen's (ADR 0024), whose files the holding Participant adds
+ * for the Transition that takes them. `onChanged`: called after a file is added or removed, as
+ * well as the page refreshing (a pop-up keeps its own list).
+ */
+export function useDocuments(workItemId: string, limits: DocumentList["limits"], { reply = false, onChanged }: { reply?: boolean; onChanged?: () => void } = {}) {
   const t = useTranslations("workItems.attachments");
   const format = useFormatter();
   const router = useRouter();
@@ -76,7 +81,10 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
       }
     } finally {
       done(pendingKey);
-      if (uploaded) router.refresh();
+      if (uploaded) {
+        router.refresh();
+        onChanged?.();
+      }
     }
   }
 
@@ -96,7 +104,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
       const res = await fetch(base, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType, fieldKey, itemKey }),
+        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType, fieldKey, itemKey, ...(reply ? { reply: true } : {}) }),
       });
       if (!res.ok) {
         await refused(res);
@@ -149,6 +157,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
       if (!res.ok) return await refused(res);
       setMessage(t("removed"));
       router.refresh();
+      onChanged?.();
     } catch {
       setMessage(t("unavailable"));
     } finally {
