@@ -44,10 +44,14 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 /**
  * A file to upload to a Work Item: to a named file field with `fieldKey` (a
  * checklist item's photo with `itemKey` too), else to the Attachments System Field.
+ * With `reply`, the field is a reply Screen's (ADR 0024); with `annotatedFromId`,
+ * the file is that photo's annotated copy, naming no field (RP-656).
  */
 export interface TestFile {
   fieldKey?: string;
   itemKey?: string;
+  reply?: boolean;
+  annotatedFromId?: string;
   fileName: string;
   contentType: string;
   body: string | Uint8Array;

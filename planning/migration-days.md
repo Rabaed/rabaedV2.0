@@ -1,4 +1,4 @@
-﻿# Migration days
+# Migration days
 
 Each row reserves one day of migration timestamps (`yyyymmdd`, the first eight digits of a migration's name) for one issue or spec: `| yyyymmdd | RP-nnn (or spec RP-nnn) | lane | purpose |`. The planning session writes the rows with the spec, beside its ticket table's Migration days column (`planning/parallel-sessions.md` step 4.5), and lands them on `main` before the spec starts. A single ticket's migration gets its row from `pnpm migration:new <name> --issue RP-nnn` (RP-583), in the ticket's branch. Only table rows count.
 
@@ -89,4 +89,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270827 | RP-86 | 44 | reply_checklist |
 | 20270829 | RP-958 | 22 | outbox_attempt_on_take |
 | 20270910 | RP-157 | 23 | documental_record_verification |
+| 20270915 | RP-981 | 42 | annotate_reply_photos |
 | 20270914 | RP-627 | 33 | site_observation_type_and_general_trade |
