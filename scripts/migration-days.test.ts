@@ -25,17 +25,14 @@ const allDays = `${days}| 20270408 | RP-597 | B | Demo |\n`;
 
 function fakeSeam(overrides: Partial<MigrationDaysSeam> = {}): MigrationDaysSeam {
   return {
-    fetchMain: () => true,
     fetch: () => true,
-    days: {
-      remoteBranches: () => [{ name: "main", migrations: ["20270326000000_a.sql"], sharesHistory: () => true }],
-      localMigrations: () => ["20270326000000_a.sql"],
-      reservations: () => [days, days],
-      today: () => "20261015",
-    },
+    remoteBranches: () => [{ name: "main", migrations: ["20270326000000_a.sql"], sharesHistory: () => true, reservations: () => days }],
+    localMigrations: () => ["20270326000000_a.sql"],
+    reservations: () => [days, days],
+    today: () => "20261015",
+    lane: () => "12",
     credentials: () => true,
     specDescription: async () => spec,
-    reservations: () => [days, days],
     ...overrides,
   };
 }
@@ -82,9 +79,9 @@ describe("migration-days", () => {
   });
 
   it("warns when the fetch fails, and checks the last-fetched main", async () => {
-    const result = await unreservedSpecIssues(["--spec", "RP-598"], fakeSeam({ fetchMain: () => false, reservations: () => [allDays, allDays] }));
+    const result = await unreservedSpecIssues(["--spec", "RP-598"], fakeSeam({ fetch: () => false, reservations: () => [allDays, allDays] }));
     expect(result.ok).toBe(true);
-    expect(result.lines.join("\n")).toContain("git fetch origin main failed");
+    expect(result.lines.join("\n")).toContain("Warning: git fetch origin failed");
   });
 
   it("checks a --tickets list offline, without Jira", async () => {
@@ -131,33 +128,41 @@ describe("migration-days", () => {
 });
 
 describe("migration:days --next", () => {
-  it("prints the next n free days, the latest day and its source, and rows to paste; it writes nothing", async () => {
+  it("prints the next n free days, the latest day and its source, and rows to paste with this worktree's lane; it writes nothing", async () => {
     const result = await migrationDays(["--next", "3"], fakeSeam());
     expect(result).toEqual({
       ok: true,
       lines: [
         "Latest day found: 20270409, from reservation spec RP-598 in origin/main's planning/migration-days.md.",
         "Next 3 free days: 20270410, 20270411, 20270412.",
-        "Rows for planning/migration-days.md (fill in the issue, lane and purpose):",
-        "| 20270410 | RP-nnn | lane | purpose |",
-        "| 20270411 | RP-nnn | lane | purpose |",
-        "| 20270412 | RP-nnn | lane | purpose |",
+        "Rows for planning/migration-days.md (fill in the issue and purpose):",
+        "| 20270410 | RP-nnn | 12 | purpose |",
+        "| 20270411 | RP-nnn | 12 | purpose |",
+        "| 20270412 | RP-nnn | 12 | purpose |",
       ],
     });
   });
 
+  it("leaves `lane` in the rows without a lane", async () => {
+    const result = await migrationDays(["--next", "1"], fakeSeam({ lane: () => "" }));
+    expect(result.lines.at(-2)).toBe("Rows for planning/migration-days.md (fill in the issue, lane and purpose):");
+    expect(result.lines.at(-1)).toBe("| 20270410 | RP-nnn | lane | purpose |");
+  });
+
   it("names a branch as the source, crossing a month end", async () => {
-    const days = {
-      ...fakeSeam().days,
-      remoteBranches: () => [{ name: "RP-616-packages", migrations: ["20270430000000_packages.sql"], sharesHistory: () => true }],
-    };
-    const result = await migrationDays(["--next", "2"], fakeSeam({ days }));
+    const remoteBranches = () => [{ name: "RP-616-packages", migrations: ["20270430000000_packages.sql"], sharesHistory: () => true, reservations: () => days }];
+    const result = await migrationDays(["--next", "2"], fakeSeam({ remoteBranches }));
     expect(result.lines.slice(0, 2)).toEqual(["Latest day found: 20270430, from branch origin/RP-616-packages.", "Next 2 free days: 20270501, 20270502."]);
   });
 
+  it("prints the scan's warnings first", async () => {
+    const result = await migrationDays(["--next", "1"], fakeSeam({ localMigrations: () => ["20271399000000_bad.sql"] }));
+    expect(result.lines[0]).toBe("Warning: ignored this worktree's migration 20271399000000_bad.sql: 20271399 is not a calendar date.");
+    expect(result.lines[2]).toBe("Next 1 free day: 20270410.");
+  });
+
   it("starts today when nothing has a day yet", async () => {
-    const days = { remoteBranches: () => [], localMigrations: () => [], reservations: (): [string, string] => ["", ""], today: () => "20261015" };
-    const result = await migrationDays(["--next", "1"], fakeSeam({ days }));
+    const result = await migrationDays(["--next", "1"], fakeSeam({ remoteBranches: () => [], localMigrations: () => [], reservations: () => ["", ""] }));
     expect(result.lines.slice(0, 2)).toEqual(["No migration or reservation has a day yet.", "Next 1 free day: 20261015."]);
   });
 
@@ -165,6 +170,12 @@ describe("migration:days --next", () => {
     const result = await migrationDays(["--next", "3"], fakeSeam({ fetch: () => false }));
     expect(result.ok).toBe(false);
     expect(result.lines.join("\n")).toContain("git fetch origin failed");
+  });
+
+  it("takes up to 60 days, and refuses more", async () => {
+    expect((await migrationDays(["--next", "60"], fakeSeam())).lines.filter((line) => line.startsWith("| 2027"))).toHaveLength(60);
+    const result = await migrationDays(["--next", "61"], fakeSeam());
+    expect(result).toEqual({ ok: false, lines: ["--next takes at most 60 days (asked for 61). Reserve the first block, then run it again for more."] });
   });
 
   it("refuses a count that isn't a positive whole number, or --next with --spec", async () => {
@@ -180,3 +191,4 @@ describe("migration:days --next", () => {
     expect(result.lines.join("\n")).toContain("reserved for RP-597 of RP-598.");
   });
 });
+

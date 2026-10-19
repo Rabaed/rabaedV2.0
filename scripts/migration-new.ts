@@ -1,9 +1,8 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { reservationsFile } from "./check-migrations-days.ts";
 import { laneOf } from "./lanes.ts";
-import { freeDay, type FreeDaySeam, realFreeDaySeam } from "./migration-free-days.ts";
+import { fetchOrigin, freeDay, type FreeDaySeam, readRepoFile, realFreeDaySeam, repoGit } from "./migration-free-days.ts";
 import { migrationsDir } from "./migrations.ts";
 
 // `pnpm migration:new <name> --issue RP-nnn` (RP-583, from the RP-580 / RP-582
@@ -51,21 +50,21 @@ export function newMigration(args: string[], seam: NewMigrationSeam): NewMigrati
 
   if (!seam.fetch()) return fail("git fetch origin failed; the free day needs today's main and branches. Get online and run `pnpm migration:new` again.");
 
-  const day = freeDay(seam).first;
+  const { first: day, warnings } = freeDay(seam);
   const [, onBranch] = seam.reservations();
   const file = `${migrationsDir}/${day}000000_${name}.sql`;
   seam.write(file, `-- ${issue}: ${name.replaceAll("_", " ")}.\n`);
   seam.write(reservationsFile, withRow(onBranch, `| ${day} | ${issue} | ${seam.lane()} | ${name} |`));
-  return { ok: true, lines: [`Created ${file}`, `Reserved ${day} for ${issue} in ${reservationsFile}; commit both together.`] };
+  return { ok: true, lines: [...warnings, `Created ${file}`, `Reserved ${day} for ${issue} in ${reservationsFile}; commit both together.`] };
 }
 
 /** The real git and file calls, in the repository at `repo`. */
 export function realSeam(repo: string = process.cwd()): NewMigrationSeam {
-  const read = (path: string) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
+  const git = repoGit(repo);
   return {
-    ...realFreeDaySeam(repo),
-    fetch: () => spawnSync("git", ["fetch", "origin", "--prune"], { cwd: repo }).status === 0,
-    lane: () => laneOf(read(".env")),
+    ...realFreeDaySeam(repo, git),
+    fetch: () => fetchOrigin(git),
+    lane: () => laneOf(readRepoFile(repo, ".env")),
     write: (path, text) => writeFileSync(join(repo, path), text),
   };
 }
