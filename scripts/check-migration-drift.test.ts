@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { takeTransition } from "./check-migration-drift.fixtures.ts";
-import { branchOrderDrift, definedObjects, duplicateTimestamps, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
+import { kindCheck, takeTransition } from "./check-migration-drift.fixtures.ts";
+import { branchOrderDrift, definedObjects, driftMessage, duplicateTimestamps, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
 
 describe("duplicateTimestamps", () => {
   const files = [
@@ -49,6 +49,26 @@ describe("definedObjects", () => {
       create policy member_reads_own_project_members on public.project_member using (true);
     `;
     expect(definedObjects(sql)).toEqual(["view app.visible_work_item", "policy member_reads_own_project_members on project_member"]);
+  });
+
+  it("finds table constraints dropped or added, by name and table, in single and multi-clause alter table (RP-963)", () => {
+    const sql = `
+      alter table notification drop constraint notification_kind_check;
+      ALTER TABLE notification ADD CONSTRAINT Notification_Kind_Check
+        check (kind in ('step_reached', 'record_ready'));
+      alter table if exists only app."numbering_pattern"
+        drop constraint if exists numbering_pattern_shape,
+        add constraint numbering_pattern_shape check (follows_project or app.is_numbering_pattern(segments, seq_scope)),
+        add column x int;
+    `;
+    expect(definedObjects(sql)).toEqual([
+      "constraint notification_kind_check on notification",
+      "constraint numbering_pattern_shape on numbering_pattern",
+    ]);
+  });
+
+  it("ignores constraints declared inside create table: a new table is no rebuild", () => {
+    expect(definedObjects("create table package (id uuid, constraint package_kind_check check (kind in ('a')));")).toEqual([]);
   });
 
   it("ignores commented-out SQL and functions outside app", () => {
@@ -108,6 +128,55 @@ describe("redefinitionDrift", () => {
     expect(redefinitionDrift([mainBefore, ...mainLater], [oldTimestamp])).toEqual([
       { object: "function app.take_transition", branch: [oldTimestamp.name], main: [mainBefore.name, ...mainLater.map((m) => m.name)] },
     ]);
+  });
+});
+
+// RP-963: RP-643 (Packages, on the branch) and RP-155 (Documental Record, on
+// main) each rebuilt notification_kind_check from only the kinds they knew; the
+// later-sorting one dropped the other's kind. 20270820 rebuilt it with both.
+describe("redefinitionDrift of a table constraint", () => {
+  const kinds = ["step_reached", "watched_event"];
+  const handover = { name: "20270112000000_handover.sql", sql: kindCheck(kinds) };
+  const recordChecks = { name: "20270805000000_record_checks.sql", sql: kindCheck([...kinds, "record_ready"]) };
+  const packageSubmit = { name: "20270816000000_package_submit_notification.sql", sql: kindCheck([...kinds, "package_submitted"]), seen: [handover.name] };
+  const object = "constraint notification_kind_check on notification";
+
+  it("fails a check constraint the branch and main both rebuilt, naming both migrations", () => {
+    expect(redefinitionDrift([handover, recordChecks], [packageSubmit])).toEqual([{ object, branch: [packageSubmit.name], main: [recordChecks.name] }]);
+  });
+
+  it("passes a check constraint only the branch rebuilt", () => {
+    expect(redefinitionDrift([handover], [packageSubmit])).toEqual([]);
+  });
+
+  it("passes once a later migration, written after merging main, rebuilds it with both sides' kinds", () => {
+    const reconcile = {
+      name: "20270820000000_notification_kinds_package_and_record.sql",
+      sql: kindCheck([...kinds, "record_ready", "package_submitted"]),
+      seen: [handover.name, recordChecks.name, packageSubmit.name],
+    };
+    expect(redefinitionDrift([handover, recordChecks], [packageSubmit, reconcile])).toEqual([]);
+  });
+
+  it("says which constraint, both migrations and the rule 11.1 fix: a new later migration with both sides", () => {
+    const [problem, fix] = driftMessage({ object, branch: [packageSubmit.name], main: [recordChecks.name] });
+    expect(problem).toBe(
+      "constraint notification_kind_check on notification is redefined on this branch (20270816000000_package_submit_notification.sql) and on main (20270805000000_record_checks.sql).",
+    );
+    expect(fix).toBe(
+      "  Merge main, then rebuild it in a new migration that sorts after all of these, with both sides' change: for a check constraint, every value either side allows (planning/parallel-sessions.md rule 11.1).",
+    );
+  });
+
+  it("keeps the function fix text for a function, and names rule 11.1", () => {
+    expect(driftMessage({ object: "function app.take_transition", branch: ["b.sql"], main: ["m.sql"] })[1]).toBe(
+      "  Merge main, then redefine it in a new migration that sorts after all of these: start from the newest body and re-apply this branch's change (planning/parallel-sessions.md rule 11.1).",
+    );
+  });
+
+  it("tells constraints of the same name on different tables apart", () => {
+    const otherTable = { name: "20270805000000_other.sql", sql: "alter table outbox drop constraint notification_kind_check;" };
+    expect(redefinitionDrift([handover, otherTable], [packageSubmit])).toEqual([]);
   });
 });
 
