@@ -340,7 +340,7 @@ describe("the List's web path", () => {
 
 describe("a Stage filter in the Submittals tab that lists Inspections too (RP-652)", () => {
   it("takes a Stage of another Module by `<module>:<key>`, beside the Module's own keys", () => {
-    expect(workItemQuery.parse({ stage: ["draft", "inspections:pending_inspection"] }).stage).toEqual(["draft", "inspections:pending_inspection"]);
+    expect(workItemQuery.parse({ stage: ["draft", "inspections:pending_approval"] }).stage).toEqual(["draft", "inspections:pending_approval"]);
   });
 
   it("refuses a key that is neither", () => {
