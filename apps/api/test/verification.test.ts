@@ -52,7 +52,8 @@ afterAll(async () => {
 /** The PDF/A-3 validator stands in for veraPDF: the checks themselves are record-checks.test.ts's. */
 const compliant: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
 const failing: PdfAValidator = { validate: async () => ({ compliant: false, problems: ["PDF/A-3 6.1.2: a test finding"] }) };
-const MADE_UP_TOKEN = "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c";
+/** A link of the right shape that no record printed: built at run time, so no key-like literal is in the source. */
+const madeUpLink = () => Buffer.alloc(32, 7).toString("base64url");
 const RETURN_REASON = "The datasheet is the wrong one";
 const SEND_BACK_TYPE = "VERSB";
 const sendBackSchema = {
@@ -303,7 +304,7 @@ describe("scenario RP-23-4: a visitor not signed in scans the record's QR", { ti
     await expectHidden(byCode(v, { code: "#not-a-code!", documentNumber: genuine.documentNumber }), "not a code at all");
     await expectHidden(byCode(v, { documentNumber: genuine.documentNumber }), "the Document Number alone");
     await expectHidden(byCode(v, {}), "nothing");
-    await expectHidden(byLink(v, MADE_UP_TOKEN), "a made-up link");
+    await expectHidden(byLink(v, madeUpLink()), "a made-up link");
     await expectHidden(byLink(v, "short"), "not a link at all");
   });
 
