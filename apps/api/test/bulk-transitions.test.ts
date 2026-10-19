@@ -12,6 +12,7 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { PackageDetail, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { demoSignaturePng } from "../src/demo/demo-signature.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addActionsType, addRulesType } from "./support/rules.ts";
 import { all, bilingual, buildTower, detail, inInternalReview, memberOnProject, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
@@ -337,34 +338,50 @@ describe("story 44: each item is signed as a single Transition", () => {
     expect(new Set([control.content_sha256, ...signed.map((s) => s.content_sha256)]).size).toBe(4);
   });
 
-  // RP-85 (Main 2, branch RP-632-signature-stamp, not on main yet): app.take_transition
-  // refuses a Member without a saved Signature (`no_signature`, ADR 0017: "A Member
-  // needs a saved Signature before taking any Transition"). Un-skip once RP-85 lands
-  // and fill in the Signature setup below. It checks that a K1 manager without a
-  // Signature taking a bulk Code over three items is refused all or nothing: 409
-  // `bulk_refused`, `stoppedBy` naming the first item and the Signature refusal, and
-  // none of the three moves. Today stopFrom (bulk-transitions.ts) answers any engine
-  // refusal it doesn't pass through as `refused`, and commandResult only knows the
-  // refusals in transitionRefusals: RP-85 must add `no_signature` to both (and to
-  // bulkStopReasons) for `stoppedBy.reason` to name it.
-  it.skip("RP-85: a K1 manager without a Signature is refused a bulk Code over three items, and none of them moves", async () => {
-    const unsigned = await memberOnProject(api, k1, k1ParticipantId, ["manager"]);
-    // RP-85: make sure `unsigned` has no saved Signature here (remove it, or create the Member without one).
+  /** Three items Submitted by C1, each picked up by `by`: waiting on them to Code it. */
+  async function pickedUpBy(by: Caller, titles: string[]): Promise<string[]> {
     const items: string[] = [];
-    for (const title of ["Unsigned one", "Unsigned two", "Unsigned three"]) {
+    for (const title of titles) {
       const id = await submitted(at, at.c1Engineer, at.c1Pm, title);
-      await ok(unsigned.caller.post(`/v1/work-items/${id}/pick-up`));
+      await ok(by.post(`/v1/work-items/${id}/pick-up`));
       items.push(id);
     }
-    const refused = await refusal(bulk(unsigned.caller, items, { transition: "approve_a" }));
+    return items;
+  }
+
+  /** A bulk Code by `by` over `items` is refused at the first, naming `reason`, and none of them moves. */
+  async function refusedAtFirst(by: Caller, items: string[], title: string, reason: string) {
+    const refused = await refusal(bulk(by, items, { transition: "approve_a" }));
     expect(refused.status, JSON.stringify(refused.body)).toBe(409);
     expect(refused.body).toEqual({
       error: "bulk_refused",
-      stoppedBy: { id: items[0], documentNumber: (await detail(unsigned.caller, items[0]!)).documentNumber, title: "Unsigned one", reason: "no_signature" },
+      stoppedBy: { id: items[0], documentNumber: (await detail(by, items[0]!)).documentNumber, title, reason },
     });
     for (const id of items) {
-      expect(await whereFor(unsigned.caller, id)).toMatchObject({ offered: expect.arrayContaining(["approve_a"]) });
+      expect(await whereFor(by, id)).toMatchObject({ offered: expect.arrayContaining(["approve_a"]) });
       expect((await history(at.c1Pm, id)).events.filter((e) => e.outcome === "A")).toEqual([]);
+    }
+  }
+
+  // RP-85 (ADR 0017: "A Member needs a saved Signature before taking any Transition"):
+  // each item's own Transition refuses a Member without one, so the bulk Code is refused
+  // all or nothing, naming the first item and the Signature refusal.
+  it("a K1 manager without a Signature is refused a bulk Code over three items, and none of them moves", async () => {
+    const unsigned = await memberOnProject(api, k1, k1ParticipantId, ["manager"]);
+    const items = await pickedUpBy(unsigned.caller, ["Unsigned one", "Unsigned two", "Unsigned three"]);
+    await api.withoutSignature(unsigned.id);
+    await refusedAtFirst(unsigned.caller, items, "Unsigned one", "no_signature");
+  });
+
+  // RP-617: while the Company has no Stamp none of its Members takes a Transition, in bulk neither.
+  it("a K1 manager whose Company has no Stamp is refused a bulk Code over three items, and none of them moves", async () => {
+    const items = await pickedUpBy(at.k1Manager, ["Unstamped one", "Unstamped two", "Unstamped three"]);
+    await api.withoutStamp(k1.company.companyId);
+    try {
+      await refusedAtFirst(at.k1Manager, items, "Unstamped one", "no_stamp");
+    } finally {
+      const stamp = demoSignaturePng(21).toString("base64");
+      await ok(k1.caller.request("PUT", `/v1/companies/${k1.company.companyId}/stamp`, { contentType: "image/png", data: stamp }), 200);
     }
   });
 });
