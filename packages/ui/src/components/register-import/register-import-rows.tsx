@@ -382,7 +382,7 @@ export function ImportRows({
                       <span className="font-medium">{(row.assignee.match?.name ?? importer)[locale]}</span>
                       {row.assignee.text && (
                         // An email reads left to right, cut at its end, in Arabic too.
-                        <small dir="ltr" className="truncate text-[12px] text-muted rtl:text-right" title={row.assignee.text}>
+                        <small dir="ltr" className="truncate text-[12px] text-muted rtl:text-end" title={row.assignee.text}>
                           {row.assignee.text}
                         </small>
                       )}
