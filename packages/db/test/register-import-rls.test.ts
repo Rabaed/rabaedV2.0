@@ -869,7 +869,7 @@ describe("RP-589-1: Packages from C1's import (RP-644)", () => {
         const seen = await packagesSeen(other);
         expect(seen).not.toContain(created);
         expect(seen).not.toContain(open);
-        expect(await call(other, sql`select app.sees_package(${created}::uuid) as sees`)).toEqual([{ sees: false }]);
+        expect(await call(other, sql<{ sees: boolean }>`select app.sees_package(${created}::uuid) as sees`)).toEqual([{ sees: false }]);
       }
     });
   });
@@ -921,8 +921,8 @@ describe("The original register of an import (RP-644)", () => {
     expect(await outcome(c2.member, sql`select app.store_register_import_file(${previewed}::uuid, ${file}::uuid) as outcome`)).toBe("not_found");
     expect(await outcome(c1.member, sql`select app.store_register_import_file(${previewed}::uuid, ${file}::uuid) as outcome`)).toBe("stored");
     expect(await outcome(c1.member, sql`select app.store_register_import_file(${previewed}::uuid, ${randomUUID()}::uuid) as outcome`)).toBe("not_found");
-    expect(await call(c1.member, sql`select source_file_id from submittal_register_import where id = ${previewed}::uuid`)).toEqual([{ source_file_id: file }]);
-    expect(await call(c1.member, sql`select app.register_import_file_key(${projectId}::uuid, ${previewed}::uuid, ${file}::uuid) as key`)).toEqual([
+    expect(await call(c1.member, sql<{ source_file_id: string }>`select source_file_id from submittal_register_import where id = ${previewed}::uuid`)).toEqual([{ source_file_id: file }]);
+    expect(await call(c1.member, sql<{ key: string }>`select app.register_import_file_key(${projectId}::uuid, ${previewed}::uuid, ${file}::uuid) as key`)).toEqual([
       { key: `projects/${projectId}/register-imports/${previewed}/${file}` },
     ]);
   });
@@ -1011,7 +1011,7 @@ describe("RP-589-3: an Engineer's import never reaches another Participant's Pac
     const name = (n: string) => JSON.stringify({ en: n, ar: n });
     theirs = (await call<{ package_id: string }>(c2.member, sql`select package_id from app.create_package(${projectId}::uuid, ${name("Shared name")}::jsonb, now())`))[0]!.package_id;
     ours = (await call<{ package_id: string }>(c1.member, sql`select package_id from app.create_package(${projectId}::uuid, ${name("Ours")}::jsonb, now())`))[0]!.package_id;
-    await call(c2.member, sql`select * from app.save_register_import_mapping(${projectId}::uuid, 'C2 only', ${JSON.stringify(mapping)}::jsonb, now())`);
+    await call(c2.member, sql<{ outcome: string }>`select * from app.save_register_import_mapping(${projectId}::uuid, 'C2 only', ${JSON.stringify(mapping)}::jsonb, now())`);
   });
   afterAll(() => adminDb.destroy());
 
