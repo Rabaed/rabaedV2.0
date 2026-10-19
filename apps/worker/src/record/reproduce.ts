@@ -1,4 +1,4 @@
-import { documentalRecordReproductionSource, reproduceDocumentalRecord, saveDocumentalRecordFace, type OutboxHandler, type ReproductionSource } from "@rabaed/db";
+import { documentalRecordReproductionSource, reproduceDocumentalRecord, saveDocumentalRecordFace, type OutboxHandler } from "@rabaed/db";
 import { appendixFrom } from "./appendix.ts";
 import { IMAGE_TYPES, inlinePhotos, type PhotoCandidate } from "./assets.ts";
 import { recordFace } from "./face.ts";
