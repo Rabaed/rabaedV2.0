@@ -222,8 +222,6 @@ export type WorkflowStepRow = {
   stage_key: string;
   /** `{ base_role, permission, positions? }`, or `{ raiser: true, permission, positions? }` (RP-622); `{}` on a terminal Step. */
   actor_rule: Record<string, unknown>;
-  /** Dropped by ADR 0017 (every Transition is confirmed and recorded): always written false. */
-  is_signing: boolean;
   outcome_mode: "none" | "recommend_code" | "issue_code" | "inspection_result" | "confirm_code";
   /** Null (left out): the default (RP-514). */
   edits_form?: boolean | null;
@@ -315,7 +313,6 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       name: s.name,
       stage_key: s.stage,
       actor_rule: s.actor === null ? {} : ruleFromActor(s.actor),
-      is_signing: false,
       outcome_mode: s.outcomeMode === "issue_outcome" ? issuingMode(s.key) : s.outcomeMode,
       ...(s.editsForm === undefined ? {} : { edits_form: s.editsForm }),
       ...(s.draftsVisibleTo === undefined ? {} : { drafts_visible_to: s.draftsVisibleTo }),

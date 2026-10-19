@@ -11,6 +11,7 @@
     "profile": "Profile",
     "home": "Home",
     "myCompany": "My Company",
+    "companyProfile": "Company Profile",
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
     "menu": "Menu",
@@ -94,7 +95,52 @@
     "noMatchTitle": "Nothing you can see matches these filters",
     "noSearchMatchTitle": "Nothing you can see matches this search",
     "clearFilters": "Clear filters",
-    "searchPlaceholder": "Search number or Subject"
+    "searchPlaceholder": "Search number or Subject",
+    "bulk": {
+      "selected": "{count, plural, one {1 selected} other {{n} selected}}",
+      "clearSelection": "Clear selection",
+      "selectAll": "Select all on this page",
+      "selectRow": "Select {subject}",
+      "reassign": "Reassign",
+      "moveStage": "Move Stage",
+      "exportSelected": "Export selected",
+      "exportAll": "Export to Excel",
+      "exported": "{count, plural, one {Exported 1 item (Excel)} other {Exported {n} items (Excel)}}",
+      "exportedCapped": "Exported the first {n} items (Excel); narrow the filters to export the rest",
+      "exportFailed": "The export could not be made. Try again.",
+      "close": "Close",
+      "cancel": "Cancel",
+      "working": "Working…",
+      "reassignTitle": "Reassign within your Company",
+      "reassignDescription": "{count, plural, one {Hand the item to a colleague. Only items your Company holds are reassigned.} other {Hand the {n} chosen items to a colleague. Only items your Company holds are reassigned.}}",
+      "reassignTo": "Hand over to",
+      "colleague": "{name} ({n} of {of})",
+      "nothingToReassign": "Your Company holds none of these items, or you can't reassign them.",
+      "reassignConfirm": "Reassign",
+      "moveTitle": "Move Stage",
+      "moveDescription": "{count, plural, one {Move the item to a Stage. It moves only if a move there is offered to you.} other {Move the {n} chosen items to a Stage. Each item moves only if a move there is offered to you.}}",
+      "moveTo": "Move to",
+      "moveHint": "Each move is signed and recorded as if you took it on the item's page. A move that asks for more is skipped.",
+      "moveConfirm": "Move",
+      "doneCount": "{count, plural, one {1 item done} other {{n} items done}}",
+      "skippedCount": "{count, plural, one {1 item skipped} other {{n} items skipped}}",
+      "reasons": {
+        "not_found": "You can no longer see it",
+        "not_offered": "Not offered to you for this item",
+        "needs_input": "Asks for more from you: do it on the item's page",
+        "already_there": "Already at this Stage",
+        "refused": "Its rules don't allow it now",
+        "item_closed": "It is closed"
+      },
+      "unseen": "{count, plural, one {1 item you can no longer see} other {{n} items you can no longer see}}",
+      "failed": "That didn't work. Nothing was changed that isn't listed above; try again.",
+      "notifications": "Notifications",
+      "export": {
+        "stage": "Stage",
+        "stepAgeWeeks": "Step Age (weeks)",
+        "fileName": "Snag List"
+      }
+    }
   },
   "workItemViews": {
     "moreActions": "More actions",
@@ -909,7 +955,10 @@
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
       "tryAgain": "The answers changed meanwhile. Try again.",
+      "noSignature": "Add your Signature in your profile before you take a Transition.",
+      "noStamp": "Your Company has no Stamp yet. Its Authorized Person must add it in the Company profile.",
       "unavailable": "Something went wrong. Try again.",
+      "gateUnavailable": "Your Signature and your Company's Stamp couldn't be checked, so the Transition didn't open. Try again.",
       "internalNote": "Internal Note",
       "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
     },
@@ -971,6 +1020,8 @@
       "pickedUp": "Picked up",
       "returnedToPool": "Returned to pool",
       "assignedOnlyMember": "Assigned to {name}, the only one who can take this Step",
+      "reassigned": "Reassigned from {from} to {to}",
+      "reassignedFromPool": "Assigned to {to}",
       "handedOver": "Handed over from {from} to {to}: {from} {because, select, deactivated {deactivated} removed {removed from the Project} positions {Positions changed} other {Visibility changed}}",
       "other": "Updated",
       "numbered": "Document Number",
@@ -1515,6 +1566,109 @@
     "title": "Profile",
     "notificationSettings": "Notification settings",
     "unavailable": "Something went wrong. Try again."
+  },
+  "signature": {
+    "title": "Signature",
+    "help": "Every Transition you take records your Signature. A new one is used from then on; what you signed before keeps the one it was signed with.",
+    "none": "You have no Signature yet. Add one before you take any Transition.",
+    "imageAlt": "Your Signature",
+    "since": "In force since {date}",
+    "madeBy": {
+      "drawn": "Drawn",
+      "typed": "Typed",
+      "uploaded": "Uploaded"
+    },
+    "add": "Add Signature",
+    "replace": "Replace Signature",
+    "addTitle": "Add Signature",
+    "addSubtitle": "Draw it, type your full name in a handwriting style, or upload an image of it.",
+    "back": "Back",
+    "methods": "How to add your Signature",
+    "drawn": "Draw",
+    "typed": "Type",
+    "uploaded": "Upload",
+    "pad": "Signature pad: draw with your mouse or finger",
+    "pen": "Pen",
+    "pens": {
+      "fine": "Fine",
+      "medium": "Medium",
+      "bold": "Bold"
+    },
+    "ink": "Ink",
+    "inks": {
+      "black": "Black",
+      "blue": "Blue"
+    },
+    "clear": "Clear",
+    "name": "Your full name",
+    "hand": "Handwriting",
+    "hands": {
+      "flowing": "Flowing",
+      "upright": "Upright"
+    },
+    "preview": "Preview",
+    "file": "Image of your Signature",
+    "chooseFile": "Choose image",
+    "fileHelp": "A PNG or JPEG image, up to 512 KB.",
+    "save": "Save Signature",
+    "empty": "Draw, type or upload your Signature first.",
+    "refusals": {
+      "invalid_signature_image": "That image isn't a PNG or JPEG. Choose another.",
+      "file_type": "Choose a PNG or JPEG image.",
+      "file_too_large": "That image is larger than 512 KB. Choose a smaller one.",
+      "unavailable": "That didn't work. Try again."
+    },
+    "required": {
+      "title": "Add your Signature first",
+      "body": "Every Transition you take records your Signature. Add it in your profile, and you'll come back here to carry on.",
+      "notNow": "Not now",
+      "close": "Close"
+    }
+  },
+  "company": {
+    "title": "Company Profile",
+    "subtitle": "My Company · its logo and Stamp, which its records print",
+    "crNumber": "CR number",
+    "vatNumber": "VAT number",
+    "unavailable": "The Company profile isn't available right now. Try again.",
+    "logo": {
+      "title": "Logo",
+      "badge": "Optional",
+      "none": "No logo. It's optional: records print the Company without one.",
+      "upload": "Upload logo",
+      "replace": "Replace logo",
+      "fileHelp": "A PNG or JPEG image, up to 1 MB.",
+      "imageAlt": "The Company's logo"
+    },
+    "stamp": {
+      "title": "Stamp",
+      "badge": "Required to act",
+      "none": "No Stamp yet.",
+      "upload": "Upload Stamp",
+      "replace": "Replace Stamp",
+      "fileHelp": "A PNG or JPEG image, up to 1 MB. A transparent background prints best.",
+      "imageAlt": "The Company's Stamp"
+    },
+    "noStamp": "Your Members can't take any Transition until the Stamp is added.",
+    "kept": "Records already made keep the logo and Stamp that were in force then.",
+    "saving": "Saving…",
+    "refusals": {
+      "file_type": "Choose a PNG or JPEG image.",
+      "file_too_large": "That image is larger than 1 MB. Choose a smaller one.",
+      "invalid_company_image": "That image isn't a PNG or JPEG. Choose another.",
+      "forbidden": "Only the Company's Authorized Person can change this.",
+      "unavailable": "That didn't work. Try again."
+    },
+    "required": {
+      "memberTitle": "{company} has no Stamp yet",
+      "memberBody": "Its Members can't take any Transition until it is added. Ask {company}'s Authorized Person to add it in the Company profile.",
+      "ok": "OK",
+      "authorizedPersonTitle": "Add {company}'s Stamp to act",
+      "authorizedPersonBody": "None of {company}'s Members can take a Transition until its Stamp is in the Company profile.",
+      "notNow": "Not now",
+      "addStamp": "Add Stamp",
+      "close": "Close"
+    }
   },
   "settings": {
     "heading": "Project settings",
