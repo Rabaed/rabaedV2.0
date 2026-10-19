@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { GetObjectCommand, ListObjectsV2Command, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { z } from "zod";
 
@@ -11,6 +12,8 @@ export interface RecordFiles {
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** The file's bytes, or null when nothing is stored under `key`. */
   get(key: string): Promise<Uint8Array | null>;
+  /** The SHA-256 (hex) of the file under `key`, read as a stream so a large file is never held whole; null when nothing is stored there. */
+  sha256(key: string): Promise<string | null>;
 }
 
 export interface S3Settings {
@@ -66,6 +69,17 @@ export function s3RecordFiles(settings: S3Settings, client = s3Client(settings))
       try {
         const object = await client.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
         return (await object.Body?.transformToByteArray()) ?? null;
+      } catch (error) {
+        if (notFound(error)) return null;
+        throw error;
+      }
+    },
+    async sha256(key) {
+      try {
+        const object = await client.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
+        const hash = createHash("sha256");
+        for await (const chunk of (object.Body ?? []) as AsyncIterable<Uint8Array>) hash.update(chunk);
+        return hash.digest("hex");
       } catch (error) {
         if (notFound(error)) return null;
         throw error;

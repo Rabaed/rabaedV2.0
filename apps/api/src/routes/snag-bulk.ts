@@ -31,7 +31,7 @@ export const snagBulkRoutes =
       { schema: { params: projectParams, body: snagBulkMoveRequest, response: { 200: snagBulkResult } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        return bulkMove(ctx.db, memberId, await project(memberId, request.params.projectId), request.body, ctx.now());
+        return bulkMove(ctx.db, ctx.files, memberId, await project(memberId, request.params.projectId), request.body, ctx.now());
       },
     );
 

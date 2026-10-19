@@ -1,5 +1,5 @@
 import { saveWorkingCopy, workingCopyJob, type MoveFact, type OutboxHandler, type WorkingCopyContent } from "@rabaed/db";
-import { documentAssets } from "./assets.ts";
+import { formAssets } from "./assets.ts";
 import type { RecordFiles } from "./files.ts";
 import { workingCopyKey } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
@@ -119,7 +119,7 @@ export function workingCopyHandler(deps: WorkingCopyJobDeps): OutboxHandler {
     const job = await workingCopyJob(trx, row.id);
     if (!job) return;
     const { content } = job;
-    const assets = await documentAssets(content, deps.files);
+    const assets = await formAssets(content, deps.files);
     const pdf = await deps.renderer.render(recordHtml(workingCopyDataOf(content, assets.pageCounts), await deps.fonts(), assets.images));
     const key = workingCopyKey(content.projectId, content.workItemId, job.workingCopyId);
     await deps.files.put(key, pdf, "application/pdf");

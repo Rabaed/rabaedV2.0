@@ -39,7 +39,8 @@ export interface WorkingCopyContent {
   /** The Stage every Company but the holder reads (a Draft's own). */
   readonly stage: BilingualText | null;
   readonly outcomes: readonly OutcomeFact[];
-  readonly companies: readonly CompanyFact[];
+  /** The Companies by name and Project Role only: a Working Copy prints no logo or Stamp. */
+  readonly companies: readonly Omit<CompanyFact, "logo" | "stamp">[];
   readonly trades: readonly { readonly name: BilingualText; readonly selected: boolean }[];
   readonly location: readonly BilingualText[] | null;
   readonly scopes: readonly BilingualText[];

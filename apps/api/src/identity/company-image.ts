@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { withMember, type Db } from "@rabaed/db";
-import { COMPANY_IMAGE_MAX_BYTES, imageFileExtension, type CompanyImage, type CompanyImageKind, type MyCompany, type ImageFileType, type SaveCompanyImageRequest } from "@rabaed/domain";
+import { COMPANY_IMAGE_MAX_BYTES, companyImagePrefix, imageFileExtension, type CompanyImage, type CompanyImageKind, type MyCompany, type ImageFileType, type SaveCompanyImageRequest } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { FileStore } from "../documents/file-store.ts";
 import { isImageOf, storeImage } from "./stored-image.ts";
@@ -36,7 +36,7 @@ export async function saveCompanyImage(
   if (!own.manages) return { ok: false, reason: "forbidden" };
   const bytes = Buffer.from(request.data, "base64");
   if (!isImageOf(bytes, request.contentType, COMPANY_IMAGE_MAX_BYTES)) return { ok: false, reason: "invalid_company_image" };
-  const key = `companies/${companyId}/${kind}/${randomUUID()}.${imageFileExtension(request.contentType)}`;
+  const key = `${companyImagePrefix(companyId, kind)}${randomUUID()}.${imageFileExtension(request.contentType)}`;
   const outcome = await storeImage(
     files,
     { key, bytes, contentType: request.contentType },

@@ -5,8 +5,8 @@ import type { RecordLanguage } from "@rabaed/domain";
 import type { Browser } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fallbackFonts } from "./fonts.ts";
-import { fixtureImages, goldenData, type GoldenCode } from "./golden-fixtures.ts";
-import { recordHtml } from "./layout.ts";
+import { fixtureImages, goldenRecord, type GoldenCode } from "./golden-fixtures.ts";
+import { recordHtml, type RecordCut } from "./layout.ts";
 import { launch, screenshotHtml } from "./render.ts";
 
 // Golden screenshots of the Documental Record's layout (RP-151; form-engine.md §6): a
@@ -29,14 +29,29 @@ const CHANNEL_TOLERANCE = 28;
 /** The share of pixels that may differ before the screenshot fails. */
 const MAX_DIFFERING_SHARE = 0.004;
 
+// Each is the whole record drawn as one tall page, so the pages after page 1 (RP-650: the Review
+// Comments, the Signature cards, the Next step, the Stamps and the Disclaimer) are in it too; the
+// running header and the footer are the paper's margins, which a screenshot has not.
 const cases: { name: string; code: GoldenCode; language: RecordLanguage }[] = [
   { name: "mar-code-a-bilingual", code: "A", language: "bilingual" },
   { name: "mar-code-a-ar", code: "A", language: "ar" },
+  { name: "mar-code-b-bilingual", code: "B", language: "bilingual" },
+  { name: "mar-code-b-en", code: "B", language: "en" },
   { name: "dar-code-c-bilingual", code: "C", language: "bilingual" },
   { name: "dar-code-c-en", code: "C", language: "en" },
   { name: "das-code-d-bilingual", code: "D", language: "bilingual" },
   { name: "das-code-d-ar", code: "D", language: "ar" },
+  { name: "mar-cancelled-bilingual", code: "cancelled", language: "bilingual" },
+  { name: "mar-cancelled-by-rabaed-en", code: "rabaed-cancelled", language: "en" },
+  { name: "dar-owner-review-bilingual", code: "owner", language: "bilingual" },
+  { name: "dar-owner-review-ar", code: "owner", language: "ar" },
 ];
+
+/** A golden record's HTML, with its images. */
+function htmlOf(code: GoldenCode, language: RecordLanguage): string {
+  const { data, images } = goldenRecord(code, language);
+  return recordHtml(data, fallbackFonts(), fixtureImages, images);
+}
 
 let browser: Browser;
 beforeAll(async () => {
@@ -87,7 +102,7 @@ async function differingShare(a: Uint8Array, b: Uint8Array): Promise<{ share: nu
 describe("the record's layout, as golden screenshots", () => {
   for (const { name, code, language } of cases) {
     it(`${name}`, async () => {
-      const png = await screenshotHtml(browser, recordHtml(goldenData(code, language), fallbackFonts(), fixtureImages));
+      const png = await screenshotHtml(browser, htmlOf(code, language));
       expect(png.length).toBeGreaterThan(10_000);
       const baseline = baselineDir(name);
       if (update) {
@@ -104,7 +119,7 @@ describe("the record's layout, as golden screenshots", () => {
 });
 
 describe("the layout's content, from the same fixtures", () => {
-  const html = (code: GoldenCode, language: RecordLanguage) => recordHtml(goldenData(code, language), fallbackFonts(), fixtureImages);
+  const html = (code: GoldenCode, language: RecordLanguage) => htmlOf(code, language);
 
   it("prints a Code D Revision's source and the rejected mark", () => {
     const text = html("D", "en");
@@ -117,6 +132,56 @@ describe("the layout's content, from the same fixtures", () => {
     expect(html("A", "en")).not.toMatch(/[؀-ۿ]/);
     expect(html("A", "ar")).not.toContain("Final decision");
     expect(html("A", "bilingual")).toContain("Final decision");
+  });
+
+  it("runs a header on every page but the first: the Type, the Subject, the Document Number and the outcome", () => {
+    const text = html("A", "en");
+    expect(text).toMatch(/@top-center \{\s*content: "\u2066MAR\u2069 {2}· {2}\u2068Cable tray 300 mm, galvanised, for Building A level 3\u2069 {2}· {2}\u2066RGT-MAR-EL-0012\u2069 {2}· {2}\u2066A\u2069";/);
+    expect(text).toMatch(/@page :first \{\s*@top-center \{ content: none;/);
+  });
+
+  it("draws each card's Signature, each acting Company's Stamp and the logos it has; a Company without one by name", () => {
+    const text = html("B", "en");
+    for (const key of ["sig-omar", "sig-sara", "sig-faisal", "sig-huda", "stamp-c1", "stamp-k1", "logo-owner", "logo-k1"]) {
+      expect(text, key).toContain(fixtureImages.get(key)!);
+    }
+    // The Owner never acted: its Stamp is not printed.
+    expect(text).not.toContain(fixtureImages.get("stamp-owner")!);
+    expect(text).toContain("Al Rashid Contracting");
+  });
+
+  it("ends with the Next step after Code C and D, and the Disclaimer", () => {
+    expect(html("C", "en")).toMatch(/Next step[\s\S]*Revision <bdi dir="ltr" class="ltr">1<\/bdi>, by Al Rashid Contracting/);
+    expect(html("D", "en")).toContain("A new submittal replaces this one");
+    expect(html("A", "en")).not.toContain("Next step");
+    expect(html("A", "en")).toContain("Its approval does not relieve the Contractor");
+  });
+
+  it("draws a probe only up to where it is cut, for the pages page 1 points to", () => {
+    const { data, images } = goldenRecord("B", "en");
+    const cut = (c?: RecordCut) => recordHtml(data, fallbackFonts(), fixtureImages, images, c);
+    const cards = (text: string) => text.split('<article class="card').length - 1;
+    const answers = (text: string) => text.split('<div class="answer">').length - 1;
+    expect(cut({ beforeComments: true })).not.toContain("Review Comments</span></h2>");
+    expect(cards(cut({ beforeComments: true }))).toBe(0);
+    // To the issuing card's answers: every card, the last without them.
+    expect(cut({ replyCard: true })).toContain("Review Comments</span></h2>");
+    expect(cards(cut({ replyCard: true }))).toBe(4);
+    expect(answers(cut({ replyCard: true }))).toBe(answers(cut()) - data.cards.at(-1)!.lines.length);
+    for (const c of [{ beforeComments: true } as const, { replyCard: true } as const]) expect(cut(c)).not.toContain("Disclaimer");
+    expect(cards(cut())).toBe(4);
+    // The issuing card holding the reply's full text may run across pages; no other card does.
+    expect(cut().match(/<article class="card flows">/g) ?? []).toHaveLength(data.reply?.cut ? 1 : 0);
+  });
+
+  it("says Rabaed cancelled it when a Company left the Project", () => {
+    expect(html("rabaed-cancelled", "en")).toContain("Cancelled by Rabaed: Al Rashid Contracting left the Project");
+  });
+
+  it("never calls the review duration a deadline", () => {
+    const text = html("A", "en");
+    expect(text).toContain("Review duration (days)");
+    expect(text.toLowerCase()).not.toMatch(/overdue|deadline|due date|\bsla\b/);
   });
 
   it("loads nothing outside itself", () => {

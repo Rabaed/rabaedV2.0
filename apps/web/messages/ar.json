@@ -970,7 +970,10 @@
         "tooLong": "استخدم {max} حرفًا على الأكثر.",
         "summary": "الملخص",
         "evidence": "صور \u2068{item}\u2069",
-        "itemNumber": "{n} من {of}"
+        "itemNumber": "{n} من {of}",
+        "raiseSnag": "إنشاء عيب",
+        "snagRaised": "يُنشأ عيب مع الرمز",
+        "noSnagRaised": "لا يُنشأ عيب"
       },
       "tableField": {
         "addRow": "إضافة صف",
@@ -1004,7 +1007,7 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "raisesSnag": "عند {answer} تُنشأ ملاحظة"
+        "snagRaised": "عند {answer} تُنشأ ملاحظة"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"

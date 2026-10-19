@@ -20,9 +20,9 @@ export const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "im
 export interface DocumentAssets {
   /** The page count of each listed Document by storage key; null where it has no pages to count. */
   readonly pageCounts: ReadonlyMap<string, number | null>;
-  /** The data URL of each Form photo by storage key. */
+  /** The data URL of each Form photo, Signature, logo and Stamp by storage key. */
   readonly images: ReadonlyMap<string, string>;
-  /** The SHA-256 (hex) of each inlined photo's bytes by storage key: the Record Data carries it (RP-155). */
+  /** The SHA-256 (hex) of each inlined image's bytes (photos, Signatures, logos, Stamps) by storage key: the Record Data carries it (RP-155). */
   readonly fingerprints: ReadonlyMap<string, string>;
 }
 
@@ -30,6 +30,7 @@ export interface DocumentAssets {
 export interface PhotoCandidate {
   readonly storageKey: string;
   readonly contentType: string;
+  /** Its stored size; 0 when not known before it is read. */
   readonly size: number;
 }
 
@@ -48,7 +49,8 @@ export async function inlinePhotos(
   for (const d of candidates) {
     if (!IMAGE_TYPES.has(d.contentType) || d.size > MAX_PHOTO_BYTES || inlined + d.size > MAX_PHOTOS_TOTAL_BYTES) continue;
     const bytes = await files.get(d.storageKey);
-    if (!bytes) continue;
+    // The size is checked again on the bytes read: a Signature, logo or Stamp comes without one (0).
+    if (!bytes || bytes.length > MAX_PHOTO_BYTES || inlined + bytes.length > MAX_PHOTOS_TOTAL_BYTES) continue;
     images.set(d.storageKey, `data:${d.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
     fingerprints.set(d.storageKey, createHash("sha256").update(bytes).digest("hex"));
     inlined += bytes.length;
@@ -56,7 +58,11 @@ export async function inlinePhotos(
   return { images, fingerprints };
 }
 
-export async function documentAssets(facts: Pick<RecordFacts, "form" | "documents">, files: RecordFiles): Promise<DocumentAssets> {
+/**
+ * The Form's and Documents' assets: the listed Documents' page counts and the Form's photos inlined. A
+ * Working Copy prints these only (RP-621: no Signature, logo or Stamp); the record adds its marks below.
+ */
+export async function formAssets(facts: Pick<RecordFacts, "form" | "documents">, files: RecordFiles): Promise<DocumentAssets> {
   const attachmentFields = attachmentFieldKeysOf(facts);
   const pageCounts = new Map<string, number | null>();
   for (const d of facts.documents) {
@@ -69,6 +75,23 @@ export async function documentAssets(facts: Pick<RecordFacts, "form" | "document
     facts.documents.filter((d) => !isListedDocument(d, attachmentFields)),
     files,
   );
+  return { pageCounts, images, fingerprints };
+}
+
+export async function documentAssets(facts: RecordFacts, files: RecordFiles): Promise<DocumentAssets> {
+  const { pageCounts, images: formImages, fingerprints: formFingerprints } = await formAssets(facts, files);
+  const images = new Map(formImages);
+  const fingerprints = new Map(formFingerprints);
+  // The Signatures the path's events recorded, and the acting Companies' logos and Stamps in force
+  // at close (RP-650): stored under members/ and companies/, which the worker may read (ADR 0023).
+  // Inlined as the photos are, with their fingerprints, within limits of their own.
+  const seen = new Set<string>();
+  const marks = [...facts.transitions.map((t) => t.signature), ...facts.companies.flatMap((c) => [c.logo, c.stamp])].flatMap((m) =>
+    m === null || images.has(m.storageKey) || seen.has(m.storageKey) ? [] : (seen.add(m.storageKey), [{ storageKey: m.storageKey, contentType: m.contentType, size: 0 }]),
+  );
+  const read = await inlinePhotos(marks, files);
+  for (const [key, url] of read.images) images.set(key, url);
+  for (const [key, sha] of read.fingerprints) fingerprints.set(key, sha);
   return { pageCounts, images, fingerprints };
 }
 

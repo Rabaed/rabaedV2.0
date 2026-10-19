@@ -1,9 +1,10 @@
 import { formatDate, formatHijriDate, type Locale } from "@rabaed/domain";
 import type { RecordBlock, RecordPhoto } from "./form-content.ts";
 import type { RecordFonts } from "./fonts.ts";
-import { isShortCode, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
+import { isShortCode, NO_IMAGES, REPLACED, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData, type RecordImages } from "./record-data.ts";
+import { APPENDIX_CSS, appendixHtml } from "./appendix-layout.ts";
 import { qrSvg } from "./qr.ts";
-import type { RecordLanguage, RecordText } from "./record-text.ts";
+import { headingHtml, html, ltr, texts, WORDS, type RecordLanguage, type RecordText, type Word } from "./record-text.ts";
 import type { WorkingCopyData } from "./working-copy.ts";
 
 // The one Rabaed layout (form-engine.md §6; ADR 0023), printed from the Record
@@ -20,13 +21,10 @@ import type { WorkingCopyData } from "./working-copy.ts";
 //
 // A Working Copy (RP-621, working-copy.ts) prints the same page from the item as
 // shared: the Stage instead of the outcome, the shared moves by Company only, no
-// person, no reply, no QR or Verification Code, and the Project's watermark across
-// every page and in the footer.
-
-const html = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-/** Left to right whatever surrounds it: Document Numbers, codes, hashes, links. */
-const ltr = (s: string) => `<bdi dir="ltr" class="ltr">${html(s)}</bdi>`;
+// person, no reply, no QR or Verification Code, none of what follows the Form on
+// the record (Comments, Signature cards, Stamps, Disclaimer, appendix), its free
+// Links after its Documents, and the Project's watermark across every page and in
+// the footer.
 
 /** Text in the record's languages: Arabic, then English on its own line when it differs, so a wrapped line never mixes the two. */
 function txt(t: RecordText): string {
@@ -45,47 +43,26 @@ function inline(t: RecordText): string {
   return t.ar !== undefined && t.en !== undefined && t.ar !== t.en ? `${txt({ ar: t.ar })} · ${txt({ en: t.en })}` : txt(t);
 }
 
-const WORDS = {
-  project: { ar: "المشروع", en: "Project" },
-  subject: { ar: "الموضوع", en: "Subject" },
-  number: { ar: "رقم المستند", en: "Document Number" },
-  parties: { ar: "الأطراف", en: "Parties" },
-  classification: { ar: "التصنيف", en: "Classification" },
-  trade: { ar: "التخصص", en: "Trade" },
-  location: { ar: "الموقع", en: "Location" },
-  scopes: { ar: "نطاق العمل", en: "Scopes" },
-  decision: { ar: "القرار النهائي", en: "Final decision" },
-  issuedBy: { ar: "أصدره", en: "Issued by" },
-  confirmedBy: { ar: "أكّده", en: "Confirmed by" },
-  submitted: { ar: "تاريخ التقديم", en: "Submission Date" },
-  replied: { ar: "تاريخ الرد", en: "Reply date" },
-  comments: { ar: "عدد الملاحظات", en: "Review Comments" },
-  code: { ar: "رمز التحقق", en: "Verification Code" },
-  link: { ar: "رابط التحقق", en: "Verification link" },
-  reply: { ar: "الرد", en: "Reply" },
-  flow: { ar: "مسار الاعتماد", en: "Approval flow" },
-  step: { ar: "الإجراء", en: "Step" },
-  member: { ar: "العضو", en: "Member" },
-  company: { ar: "الشركة", en: "Company" },
-  date: { ar: "التاريخ", en: "Date" },
-  hash: { ar: "بصمة المحتوى", en: "Content hash" },
-  documents: { ar: "المستندات", en: "Documents" },
-  documentName: { ar: "المستند", en: "Document" },
-  links: { ar: "الروابط", en: "Links" },
-  pages: { ar: "الصفحات", en: "Pages" },
-  takenAt: { ar: "تاريخ التصوير", en: "Taken" },
-  totals: { ar: "الإجمالي", en: "Total" },
-  revisionOf: { ar: "مراجعة للمستند", en: "Revision of" },
-  closedAtCode: { ar: "أُغلق بالرمز", en: "closed at Code" },
-  closedOn: { ar: "بتاريخ", en: "on" },
-  footer: { ar: "صادر إلكترونيًا عبر رابد", en: "Issued electronically through Rabaed" },
-  stage: { ar: "المرحلة", en: "Stage" },
-  page: { ar: "صفحة", en: "page" },
-  of: { ar: "من", en: "of" },
-} satisfies Record<string, { ar: string; en: string }>;
-type Word = keyof typeof WORDS;
+/**
+ * Where a probe render stops (pages.ts): before the Review Comments, or at the start of the answers
+ * of the last card (the issuing one, which holds the reply's full text). Nothing after it is drawn,
+ * so its page count says on which page that part is. `appendixList` (RP-147, appendix.ts) draws
+ * the whole record and the appendix's list, but not the appendix's pages: where they start.
+ */
+export type RecordCut = { readonly beforeComments: true } | { readonly replyCard: true } | { readonly appendixList: true };
 
-export function recordHtml(data: RecordData | WorkingCopyData, fonts: RecordFonts, images: ReadonlyMap<string, string> = new Map()): string {
+/**
+ * The record's HTML. `images` are the data URLs of the images it prints by storage key, and
+ * `marks` says which of them each logo, Signature, Stamp and appendix image is (RecordImages: never in the Record Data).
+ * A Working Copy (WorkingCopyData) prints the same page without the sealed record's own parts.
+ */
+export function recordHtml(
+  data: RecordData | WorkingCopyData,
+  fonts: RecordFonts,
+  images: ReadonlyMap<string, string> = new Map(),
+  marks: RecordImages = NO_IMAGES,
+  cut?: RecordCut,
+): string {
   const language: RecordLanguage = data.language;
   /** The sealed record's own parts; null on a Working Copy. */
   const record = "verification" in data ? data : null;
@@ -93,14 +70,7 @@ export function recordHtml(data: RecordData | WorkingCopyData, fonts: RecordFont
   const locales: Locale[] = language === "bilingual" ? ["ar", "en"] : [language];
 
   /** An Arabic heading with its English label beside it (bilingual), or one language. */
-  const heading = (word: Word) => {
-    const w = WORDS[word];
-    return language === "ar"
-      ? `<span lang="ar">${w.ar}</span>`
-      : language === "en"
-        ? `<span lang="en" dir="ltr">${w.en}</span>`
-        : `<span lang="ar">${w.ar}</span> <span lang="en" dir="ltr" class="en">${w.en}</span>`;
-  };
+  const heading = (word: Word) => headingHtml(word, language);
 
   /** The language of dates in fields: the record's, or English when it prints both. */
   const primary: Locale = language === "ar" ? "ar" : "en";
@@ -148,7 +118,11 @@ export function recordHtml(data: RecordData | WorkingCopyData, fonts: RecordFont
 
   const person = (p: PersonLine) =>
     `<div class="person"><div class="strong">${txt(p.name)}</div>${p.positions.map((pos) => `<div class="muted">${txt(pos)}</div>`).join("")}<div class="muted">${txt(p.company)}</div></div>`;
-  const companyBox = (c: CompanyLine) => `<div class="company"><div class="strong">${txt(c.name)}</div><div class="muted">${txt(c.role)}</div></div>`;
+  const companyBox = (c: CompanyLine, i: number) => {
+    const key = c.logo ? marks.logos[i] : null;
+    const logo = key ? images.get(key) : undefined;
+    return `<div class="company">${logo ? `<img class="logo" src="${logo}" alt="">` : ""}<div class="strong">${txt(c.name)}</div><div class="muted">${txt(c.role)}</div></div>`;
+  };
 
   const mark = (m: FlowMark) => {
     const paths: Record<FlowMark, string> = {
@@ -226,39 +200,6 @@ export function recordHtml(data: RecordData | WorkingCopyData, fonts: RecordFont
         </tr>`,
     )
     .join("");
-  const chips = `<div class="chips">${data.chips.map((c) => `<span class="chip${c.issued ? " issued" : ""}">${chipText(c)}</span>`).join("")}</div>`;
-  /** The sealed record's Final decision box: the outcome, who issued it, the dates, and the QR with the Verification Code. */
-  const decisionBox = (r: RecordData) => `<section class="box">
-  <h2>${heading("decision")}</h2>
-  <div class="decision">
-    <div>
-      <div class="outcome">${isShortCode(r.outcome.code) ? ltr(r.outcome.code) : txt(r.outcome.name)}</div>
-      ${isShortCode(r.outcome.code) ? `<div>${txt(r.outcome.name)}</div>` : ""}
-      ${chips}
-      <dl>
-        ${r.issuedBy ? `<dt>${heading("issuedBy")}</dt><dd>${person(r.issuedBy)}</dd>` : ""}
-        ${r.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(r.confirmedBy)}</dd>` : ""}
-        ${r.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(r.submittedAt)}</dd>` : ""}
-        <dt>${heading("replied")}</dt><dd>${day(r.closedAt)}</dd>
-        <dt>${heading("comments")}</dt><dd>${ltr(String(r.reviewComments))}</dd>
-      </dl>
-    </div>
-    <div class="qr">
-      ${qrSvg(r.verification.link, 110)}
-      <div class="muted">${heading("code")}</div>
-      <div class="code">${ltr(r.verification.code)}</div>
-      <div class="link">${ltr(r.verification.link)}</div>
-    </div>
-  </div>
-</section>`;
-  /** A Working Copy's box in its place: the Stage the item is at, the outcomes it may close with, none issued. */
-  const stageBox = (c: WorkingCopyData) => `<section class="box">
-  <h2>${heading("stage")}</h2>
-  ${c.stage ? `<div class="stage">${txt(c.stage)}</div>` : ""}
-  ${chips}
-  ${c.submittedAt ? `<dl><dt>${heading("submitted")}</dt><dd>${day(c.submittedAt)}</dd></dl>` : ""}
-</section>`;
-
   const flow = (record?.transitions ?? [])
     .map(
       (t, i) => `
@@ -284,6 +225,145 @@ export function recordHtml(data: RecordData | WorkingCopyData, fonts: RecordFont
         .join("")}</div>`
     : "";
 
+  // The running header on every page after the first: the Type badge, the Subject, the Document
+  // Number and Revision, the outcome badge. Each part bidi-isolated, as in the footer.
+  const FSI = "\u2068";
+  const outcomeBadge = record
+    ? isShortCode(record.outcome.code)
+      ? `${LRI}${record.outcome.code}${PDI}`
+      : texts(record.outcome.name).map((n) => `${FSI}${n}${PDI}`).join(" / ")
+    : copy?.stage
+      ? texts(copy.stage).map((n) => `${FSI}${n}${PDI}`).join(" / ")
+      : "";
+  const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${LRI}${numberLine}${PDI}  ·  ${outcomeBadge}`);
+
+  const image = (key: string | null | undefined, cls: string) => {
+    const src = key ? images.get(key) : undefined;
+    return src ? `<img class="${cls}" src="${src}" alt="">` : "";
+  };
+  /** A sentence in each of the record's languages, each on its own line. */
+  const sentence = (fn: (l: Locale) => string) => locales.map((l) => `<div class="line" lang="${l}" dir="${dirOf(l)}">${fn(l)}</div>`).join("");
+
+  /** The sealed record's own parts after the Form: Review Comments, Signature cards, Next step, Stamps, Disclaimer, appendix. */
+  function recordParts(data: RecordData) {
+  const cancellation = data.cancellation
+    ? data.cancellation.companyLeft
+      ? `<dt></dt><dd>${sentence((l) => `${WORDS.byRabaed[l]} ${html(data.cancellation!.companyLeft![l] ?? "")} ${WORDS.leftProject[l]}`)}</dd>`
+      : `${data.cancellation.by ? `<dt>${heading("cancelledBy")}</dt><dd>${person(data.cancellation.by)}</dd>` : ""}${
+          data.cancellation.reason ? `<dt>${heading("reason")}</dt><dd class="pre"><bdi>${html(data.cancellation.reason)}</bdi></dd>` : ""
+        }`
+    : "";
+
+  const commentsPart =
+    data.comments.length === 0 || (cut !== undefined && "beforeComments" in cut)
+      ? ""
+      : `<section class="after-start comments"><h2 class="part">${heading("reviewComments")}</h2>${data.comments
+          .map(
+            (g) => `<div class="author">
+  <div class="avatar">${txt(g.initials)}</div>
+  <div>${person(g.author)}<div class="muted">${when(g.at)}</div></div>
+</div>
+<ol class="review-items">${g.items
+              .map(
+                (c) =>
+                  `<li value="${c.n}"><span class="n">${c.n}.</span><div><div class="pre"><bdi>${html(c.comment)}</bdi></div>${
+                    c.reference ? `<div class="muted">${heading("reference")}: <bdi>${html(c.reference)}</bdi></div>` : ""
+                  }${c.documentNumber ? `<div class="muted">${ltr(c.documentNumber)}</div>` : ""}</div></li>`,
+              )
+              .join("")}</ol>`,
+          )
+          .join("")}</section>`;
+
+  // The issuing card, when page 1 points to the reply's full text in it, may run across pages, so its
+  // answers start right after its head, where a probe that stops there finds them (pages.ts).
+  const replyCard = data.reply?.cut ? data.cards.length - 1 : -1;
+  const cardHtml = (c: RecordData["cards"][number], i: number, withLines = true) => `<article class="card${i === replyCard ? " flows" : ""}">
+  <div class="card-head"><span class="num">${i + 1}</span> <span class="strong">${inline(c.verb)}</span>${i === 0 ? "" : ` <span class="muted">· ${inline(c.label)}</span>`}</div>
+  <div class="card-body">
+    <div>${person(c)}<div class="muted">${when(c.at)}</div></div>
+    <div class="sigbox">${image(c.signature ? marks.signatures[i] : null, "sig")}<div class="muted">${heading("signature")}</div></div>
+  </div>
+  ${(withLines ? c.lines : [])
+    .map((line) =>
+      line.kind === "text"
+        ? `<div class="answer"><div class="alabel">${txt(line.label)}</div><div class="pre">${txt(line.value)}</div></div>`
+        : `<div class="answer"><div class="alabel">${txt(line.label)}</div><ol class="numbered">${line.items.map((item, n) => `<li><span class="n">${n + 1}.</span><div>${txt(item)}</div></li>`).join("")}</ol></div>`,
+    )
+    .join("")}
+</article>`;
+  // A probe to the reply's card draws every card, the last without its answers.
+  const cardsHtml = data.cards.map((c, i) => cardHtml(c, i, !(cut && "replyCard" in cut && i === data.cards.length - 1))).join("");
+  const signaturesPart =
+    cut !== undefined && "beforeComments" in cut
+      ? ""
+      : `<section class="${data.comments.length === 0 ? "after-start " : ""}signatures"><h2 class="part">${heading("signatures")}</h2>${cardsHtml}</section>`;
+  const appendixList = cut !== undefined && "appendixList" in cut;
+  const ended = cut === undefined || appendixList;
+  const nextStepPart =
+    ended && data.nextStep
+      ? `<section class="box next"><h2>${heading("nextStep")}</h2>${
+          data.nextStep.kind === "revision"
+            ? sentence((l) => `${WORDS.revision[l]} ${ltr(String((data.nextStep as { revisionNo: number }).revisionNo))}${l === "ar" ? "،" : ","} ${WORDS.by[l]} ${html((data.nextStep as { company: RecordText }).company[l] ?? "")}`)
+            : sentence((l) => html(REPLACED[l]))
+        }</section>`
+      : "";
+  const stampsPart =
+    ended && data.stamps.length > 0
+      ? `<section class="box"><h2>${heading("stamps")}</h2><div class="stamps">${data.stamps
+          .map((s, i) => `<figure class="stamp">${image(s.image ? marks.stamps[i]! : null, "stampimg") || '<div class="nostamp"></div>'}<figcaption><div class="strong">${txt(s.role)}</div><div class="muted">${txt(s.company)}</div></figcaption></figure>`)
+          .join("")}</div></section>`
+      : "";
+  const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
+  // The appendix (element 15, RP-147) comes after the Disclaimer.
+  const appendixPart = ended ? appendixHtml(data, images, marks.appendix ?? [], !appendixList) : "";
+  return { cancellation, after: `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}` };
+  }
+  const parts = record ? recordParts(record) : null;
+  // A Working Copy's free Links follow its Documents.
+  const after = parts
+    ? parts.after
+    : copy && copy.links.length > 0
+      ? `<section class="form"><h2>${heading("links")}</h2><table><tbody>${copy.links
+          .map((l) => `<tr><td class="linkno">${ltr(l.documentNumber)}</td><td><bdi>${html(l.subject)}</bdi></td></tr>`)
+          .join("")}</tbody></table></section>`
+      : "";
+
+  /** The sealed record's Final decision box: the outcome, who issued it, the dates, Review Comments, and the QR with the Verification Code. */
+  const decisionBox = (r: RecordData) => `<section class="box">
+  <h2>${heading("decision")}</h2>
+  <div class="decision">
+    <div>
+      <div class="outcome">${isShortCode(r.outcome.code) ? ltr(r.outcome.code) : txt(r.outcome.name)}</div>
+      ${isShortCode(r.outcome.code) ? `<div>${txt(r.outcome.name)}</div>` : ""}
+      <div class="chips">${r.chips.map((c) => `<span class="chip${c.issued ? " issued" : ""}">${chipText(c)}</span>`).join("")}</div>
+      <dl>
+        ${r.issuedBy ? `<dt>${heading("issuedBy")}</dt><dd>${person(r.issuedBy)}</dd>` : ""}
+        ${r.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(r.confirmedBy)}</dd>` : ""}
+        ${r.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(r.submittedAt)}</dd>` : ""}
+        <dt>${heading("replied")}</dt><dd>${day(r.closedAt)}</dd>
+        ${r.reviewDays !== null ? `<dt>${heading("reviewDuration")}</dt><dd>${ltr(String(r.reviewDays))}</dd>` : ""}
+        <dt>${heading("comments")}</dt><dd>${ltr(String(r.reviewComments))}${
+          r.pages.comments !== null && r.comments.length > 0 ? ` <span class="muted">· ${heading("page")} ${ltr(String(r.pages.comments))}</span>` : ""
+        }</dd>
+        ${parts!.cancellation}
+      </dl>
+    </div>
+    <div class="qr">
+      ${qrSvg(r.verification.link, 110)}
+      <div class="muted">${heading("code")}</div>
+      <div class="code">${ltr(r.verification.code)}</div>
+      <div class="link">${ltr(r.verification.link)}</div>
+    </div>
+  </div>
+</section>`;
+  /** A Working Copy's box in its place: the Stage the item is at, the outcomes it may close with, none issued. */
+  const stageBox = (c: WorkingCopyData) => `<section class="box">
+  <h2>${heading("stage")}</h2>
+  ${c.stage ? `<div class="stage">${txt(c.stage)}</div>` : ""}
+  <div class="chips">${c.chips.map((chip) => `<span class="chip">${chipText(chip)}</span>`).join("")}</div>
+  ${c.submittedAt ? `<dl><dt>${heading("submitted")}</dt><dd>${day(c.submittedAt)}</dd></dl>` : ""}
+</section>`;
+
   const dir = language === "en" ? "ltr" : "rtl";
   return `<!doctype html>
 <html lang="${language === "en" ? "en" : "ar"}" dir="${dir}">
@@ -301,6 +381,18 @@ ${fonts.css}
     font-size: 7.5pt;
     color: #444;
   }
+  @top-center {
+    content: ${headerContent};
+    font-family: ${fonts.family};
+    font-size: 8pt;
+    color: #222;
+    border-bottom: 0.75pt solid #999;
+    vertical-align: bottom;
+    padding-bottom: 1.5mm;
+  }
+}
+@page :first {
+  @top-center { content: none; border: none; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #fff; color: #111; }
@@ -356,11 +448,39 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 .photo img { width: 100%; max-height: 45mm; object-fit: cover; border: 0.5pt solid #999; display: block; }
 .photo .noimage { height: 20mm; border: 0.5pt dashed #999; }
 .mark { vertical-align: middle; }
-td.linkno { width: 45mm; }
+.pre { white-space: pre-line; }
+.logo { display: block; max-height: 12mm; max-width: 40mm; margin-bottom: 1.5mm; }
+.pointer { margin-top: 1.5mm; }
+.after-start { break-before: page; }
+h2.part { font-size: 12pt; margin: 0 0 3mm; border-bottom: 1.5pt solid #111; padding-bottom: 1mm; }
+.signatures, .comments { margin-bottom: 4mm; }
+.author { display: flex; gap: 3mm; align-items: center; margin: 3mm 0 2mm; break-after: avoid; }
+.avatar { width: 10mm; height: 10mm; border-radius: 50%; background: #111; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 9pt; flex: none; }
+ol.review-items, ol.numbered { list-style: none; margin: 0 0 3mm; padding: 0; }
+ol.review-items > li, ol.numbered > li { display: flex; gap: 2mm; padding: 1.2mm 0; border-bottom: 0.5pt solid #ddd; break-inside: avoid; }
+ol.numbered > li { border-bottom: none; padding: 0.4mm 0; }
+li > .n { font-weight: 700; min-width: 6mm; }
+.card { border: 0.75pt solid #777; border-radius: 1.5mm; padding: 2.5mm 4mm; margin-bottom: 3mm; break-inside: avoid; }
+.card.flows { break-inside: auto; }
+.card-head, .card-body, .alabel { break-inside: avoid; break-after: avoid; }
+.card > .card-head { border-bottom: 0.5pt solid #ccc; padding-bottom: 1.2mm; margin-bottom: 2mm; }
+.card .num { display: inline-block; min-width: 5mm; height: 5mm; border-radius: 1mm; background: #111; color: #fff; text-align: center; font-weight: 700; font-size: 8pt; }
+.card-body { display: grid; grid-template-columns: 1fr 48mm; gap: 4mm; align-items: start; }
+.sigbox { text-align: center; border-bottom: 0.75pt solid #111; min-height: 18mm; display: flex; flex-direction: column; justify-content: flex-end; }
+.sig { max-height: 16mm; max-width: 46mm; margin: 0 auto; display: block; }
+.answer { margin-top: 2mm; }
+.alabel { color: #444; font-weight: 700; font-size: 8pt; }
+.stamps { display: flex; flex-wrap: wrap; gap: 5mm; }
+.stamp { margin: 0; width: 38mm; text-align: center; break-inside: avoid; }
+.stampimg { max-width: 32mm; max-height: 32mm; display: block; margin: 0 auto 1.5mm; }
+.nostamp { height: 32mm; }
+.disclaimer .pre { font-size: 8pt; color: #333; }
 .stage { font-size: 16pt; font-weight: 700; line-height: 1.2; margin-bottom: 1mm; }
+td.linkno { width: 45mm; }
 /* A Working Copy's watermark: fixed, so Chromium prints it on every page, over the content. */
 .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); z-index: 10; text-align: center; white-space: nowrap; font-size: 54pt; font-weight: 700; line-height: 1.15; color: rgba(160, 30, 30, 0.16); }
 .watermark .en { color: inherit; }
+${APPENDIX_CSS}
 </style>
 </head>
 <body>
@@ -395,7 +515,9 @@ ${copy ? `<div class="watermark">${txt(copy.watermark)}</div>` : ""}
 ${record ? decisionBox(record) : stageBox(copy!)}
 ${
   record?.reply
-    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(record.reply)}</bdi></div></section>`
+    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(record.reply.text)}</bdi></div>${
+        record.pages.reply !== null ? `<div class="pointer muted">${heading("fullText")} ${ltr(String(record.pages.reply))}</div>` : ""
+      }</section>`
     : ""
 }
 <section class="box">
@@ -418,13 +540,7 @@ ${
         .join("")}</tbody></table></section>`
     : ""
 }
-${
-  copy && copy.links.length > 0
-    ? `<section class="form"><h2>${heading("links")}</h2><table><tbody>${copy.links
-        .map((l) => `<tr><td class="linkno">${ltr(l.documentNumber)}</td><td><bdi>${html(l.subject)}</bdi></td></tr>`)
-        .join("")}</tbody></table></section>`
-    : ""
-}
+${after}
 </body>
 </html>`;
 }
