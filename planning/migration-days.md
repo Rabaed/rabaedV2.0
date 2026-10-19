@@ -93,9 +93,10 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
 | 20270801 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) |
 | 20270802 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) |
-| 20270803 | RP-645 | 52 | register_import_by_engineer |
 | 20270731 | RP-629 | 34 | snag_bulk_reassign |
-| 20270804 | RP-645 | 52 | admin_reads_current_project_ids |
+| 20270804 | RP-645 | 5B | Unused: the migration moved to 20270806, after 20270805 |
 | 20270731 | RP-623 | 3B | Unused: the migration moved to 20270803, after main's 20270731 (RP-629) |
 | 20270731 | RP-629 | 34 | snag_bulk_reassign |
 | 20270803 | RP-623 | 32 | reply_screen_files |
+| 20270805 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803) |
+| 20270806 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (moved from 20270804) |
