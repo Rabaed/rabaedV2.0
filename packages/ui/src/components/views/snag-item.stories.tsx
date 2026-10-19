@@ -50,10 +50,10 @@ const hidden: RaisedFromSource = { documentNumber: "TWR-DCL-AR-IR-045", subject:
 const pixel = (fill: string) =>
   `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="${fill}"/></svg>`)}`;
 const before: SnagPhoto[] = [
-  { id: "p1", url: pixel("#9aa5b1"), name: "before-1.jpg" },
+  { id: "p1", url: pixel("slategray"), name: "before-1.jpg" },
   { id: "p2", url: null, name: "before-2.heic" },
 ];
-const after: SnagPhoto[] = [{ id: "p3", url: pixel("#3f9142"), name: "after-1.jpg" }];
+const after: SnagPhoto[] = [{ id: "p3", url: pixel("darkseagreen"), name: "after-1.jpg" }];
 
 const meta = {
   title: "Views/SnagItem",
@@ -106,11 +106,11 @@ export const RaisedByHand: Story = {
   },
 };
 
-/** The Contractor's response: the resolution note, and the "after" photos beside the "before" ones. */
+/** The Contractor's response: what was done, and the "after" photos beside the "before" ones. */
 export const Response: Story = {
   render: (_args, context) => (
     <SnagResponse
-      note={storyLocale(context) === "ar" ? "تم توصيل حامل الكابلات وتأريضه." : "Tray bonded and earthed; continuity tested."}
+      resolution={storyLocale(context) === "ar" ? "تم توصيل حامل الكابلات وتأريضه." : "Tray bonded and earthed; continuity tested."}
       before={before}
       after={after}
       subject="Cable tray not bonded"
@@ -131,10 +131,10 @@ export const Response: Story = {
   },
 };
 
-/** A response with no "after" photo: the note, and "No photo" beside the "before" ones. */
+/** A response with no "after" photo: what was done, and "No photo" beside the "before" ones. */
 export const ResponseWithoutPhotos: Story = {
   render: (_args, context) => (
-    <SnagResponse note="Cleaned." before={[]} after={[]} subject="Rubbish on floor 3" labels={labels[storyLocale(context)]} />
+    <SnagResponse resolution="Cleaned." before={[]} after={[]} subject="Rubbish on floor 3" labels={labels[storyLocale(context)]} />
   ),
   play: async (context) => {
     const l = labels[storyLocale(context)];

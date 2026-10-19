@@ -133,18 +133,18 @@ export function SnagPhotoGrid({ photos, labels, subject, tag }: { photos: readon
 }
 
 /**
- * The Contractor's response at its Resolve: the resolution note, then the "after" photos beside
+ * The Contractor's response at its Resolve: what was done, then the "after" photos beside
  * the "before" ones, so the raiser judges the fix side by side.
  */
 export function SnagResponse({
-  note,
+  resolution,
   before,
   after,
   subject,
   labels,
   aside,
 }: {
-  note: string;
+  resolution: string;
   before: readonly SnagPhoto[];
   after: readonly SnagPhoto[];
   subject: string;
@@ -155,7 +155,7 @@ export function SnagResponse({
   return (
     <SnagItemCard title={labels.response} icon="circle-check" aside={aside}>
       <p className="rounded-[10px] bg-segment-type-tint px-3 py-2.5 text-[13px] leading-normal whitespace-pre-line text-text">
-        <bdi>{note}</bdi>
+        <bdi>{resolution}</bdi>
       </p>
       <div className="grid grid-cols-2 gap-2.5">
         <PhotoGroup label={labels.before}>
