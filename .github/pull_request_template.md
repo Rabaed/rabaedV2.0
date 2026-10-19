@@ -34,6 +34,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Need My Action
 - [ ] Watch
 - [ ] Working Copy
+- [ ] Snag report
 - [ ] Documental Record
 - [ ] Signature
 - [ ] Company logo and Stamp
