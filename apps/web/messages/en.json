@@ -96,6 +96,55 @@
     "noSearchMatchTitle": "Nothing you can see matches this search",
     "clearFilters": "Clear filters",
     "searchPlaceholder": "Search number or Subject",
+    "mobile": {
+      "swipeHint": "Swipe a card for what you can do on it",
+      "showItems": "{count, plural, one {Show 1 item} other {Show {n} items}}",
+      "transitionsOf": "What you can do on {subject}",
+      "loadingTransitions": "Loading…",
+      "noTransitions": "Nothing for you to do here now",
+      "transitionsUnavailable": "Couldn't read what you can do on it",
+      "flow": {
+        "newSnag": "New Snag",
+        "stepOf": "Step {n} of {of}",
+        "back": "Back",
+        "cancel": "Cancel",
+        "draftSaved": "Draft saved",
+        "saving": "Saving…",
+        "next": "Next",
+        "camera": {
+          "takePhoto": "Take a photo",
+          "library": "Library",
+          "skip": "Skip",
+          "pointAt": "Point the camera at the snag",
+          "remove": "Remove {name}"
+        },
+        "subject": {
+          "heading": "What's wrong?",
+          "subject": "Subject",
+          "placeholder": "e.g. Cable tray not bonded",
+          "description": "Description",
+          "trade": "Trade"
+        },
+        "location": {
+          "heading": "Where is it?",
+          "allZones": "All Zones",
+          "hint": "Pick the Zone, then the Building and the Floor. It is saved to the Draft as you pick."
+        },
+        "raise": {
+          "heading": "Ready to raise",
+          "raise": "Raise",
+          "notOffered": "Raise isn't offered to you on this Draft now. It is saved: open it to see it.",
+          "openDraft": "Open the Draft"
+        },
+        "errors": {
+          "subject": "Write the Subject.",
+          "description": "Describe the snag.",
+          "trade": "Pick the Trade.",
+          "notSaved": "The Location wasn't saved. Pick it again.",
+          "photosMissing": "Some photos weren't added to the Draft. Add them on the Draft's page."
+        }
+      }
+    },
     "bulk": {
       "selected": "{count, plural, one {1 selected} other {{n} selected}}",
       "clearSelection": "Clear selection",

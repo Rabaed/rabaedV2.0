@@ -96,6 +96,55 @@
     "noSearchMatchTitle": "لا شيء مما تراه يطابق هذا البحث",
     "clearFilters": "مسح التصفية",
     "searchPlaceholder": "ابحث بالرقم أو الموضوع",
+    "mobile": {
+      "swipeHint": "اسحب البطاقة لترى ما يمكنك فعله عليها",
+      "showItems": "{count, plural, one {عرض عنصر واحد} other {عرض {n} عنصر}}",
+      "transitionsOf": "ما يمكنك فعله على {subject}",
+      "loadingTransitions": "جارٍ التحميل…",
+      "noTransitions": "لا إجراء لك عليها الآن",
+      "transitionsUnavailable": "تعذّرت قراءة ما يمكنك فعله عليها",
+      "flow": {
+        "newSnag": "عيب جديد",
+        "stepOf": "الخطوة {n} من {of}",
+        "back": "رجوع",
+        "cancel": "إلغاء",
+        "draftSaved": "تم حفظ المسودة",
+        "saving": "جارٍ الحفظ…",
+        "next": "التالي",
+        "camera": {
+          "takePhoto": "التقاط صورة",
+          "library": "المعرض",
+          "skip": "تخطي",
+          "pointAt": "وجّه الكاميرا نحو العيب",
+          "remove": "إزالة {name}"
+        },
+        "subject": {
+          "heading": "ما الخلل؟",
+          "subject": "الموضوع",
+          "placeholder": "مثال: حامل الكابلات غير موصول بالأرضي",
+          "description": "الوصف",
+          "trade": "التخصص"
+        },
+        "location": {
+          "heading": "أين هو؟",
+          "allZones": "كل المناطق",
+          "hint": "اختر المنطقة ثم المبنى ثم الطابق. يُحفظ في المسودة عند اختياره."
+        },
+        "raise": {
+          "heading": "جاهز للإصدار",
+          "raise": "إصدار",
+          "notOffered": "الإصدار غير متاح لك على هذه المسودة الآن. وهي محفوظة: افتحها لتراها.",
+          "openDraft": "فتح المسودة"
+        },
+        "errors": {
+          "subject": "اكتب الموضوع.",
+          "description": "صف العيب.",
+          "trade": "اختر التخصص.",
+          "notSaved": "لم يُحفظ الموقع. اختره مرة أخرى.",
+          "photosMissing": "لم تُضف بعض الصور إلى المسودة. أضفها من صفحة المسودة."
+        }
+      }
+    },
     "bulk": {
       "selected": "{count, plural, one {عنصر واحد محدد} two {عنصران محددان} few {{n} عناصر محددة} many {{n} عنصرًا محددًا} other {{n} عنصر محدد}}",
       "clearSelection": "مسح التحديد",

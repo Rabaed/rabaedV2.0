@@ -23,7 +23,7 @@ import { Checkbox } from "../form/checkbox.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { EmptyState } from "../feedback/states.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
-import { Icon, type IconName } from "../icon/icon.tsx";
+import { Icon } from "../icon/icon.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
 import { TableCard } from "../list/table-card.tsx";
@@ -35,6 +35,8 @@ import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions } from "./snag-bulk.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
+import { lookOf, placeText, type Places } from "./snag-look.ts";
+import { SnagPhoneList, type SnagPhoneLabels, type SnagSwipe } from "./snag-phone.tsx";
 import { saveFile } from "./work-item-export.ts";
 import { ownerOf, placesOf } from "./work-item-board.tsx";
 import { locationLevels, WorkItemPager } from "./work-item-list.tsx";
@@ -111,6 +113,8 @@ export type SnagListLabels = {
   lastPage: string;
   page: (page: string) => string;
   pageOf: (page: string, last: string) => string;
+  /** The phone's own words (RP-630). */
+  phone: SnagPhoneLabels;
 };
 
 /**
@@ -151,17 +155,11 @@ export type SnagListProps = {
   bulk?: SnagBulk;
   /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
+  /** On a phone, the List's cards' swipe actions (RP-630). Without it the cards have none. */
+  swipe?: SnagSwipe;
+  /** On a phone, "+"'s page for a Type (the camera-first New Snag, RP-630); defaults to `newHref`. */
+  phoneNewHref?: (typeCode: string) => string;
 };
-
-/** How a Type's chip looks: a shape and a colour, never colour alone. A Type the app doesn't know (a Project Type) is a neutral chip. */
-const typeLooks: Record<string, { icon: IconName; classes: string; mark: string }> = {
-  SNG: { icon: "alert-triangle", classes: "bg-danger-tint text-danger-fg", mark: "text-danger" },
-  OBS: { icon: "eye", classes: "bg-warning-tint text-warning-fg", mark: "text-warning-fg" },
-  QST: { icon: "help-circle", classes: "bg-segment-type-tint text-segment-type-fg", mark: "text-segment-type-solid" },
-  CMT: { icon: "message-circle", classes: "bg-info-tint text-info-fg", mark: "text-info-fg" },
-};
-const otherType = { icon: "tag" as IconName, classes: "bg-neutral-tint text-neutral-fg", mark: "text-muted" };
-const lookOf = (code: string) => typeLooks[code] ?? otherType;
 
 /** An item's Type, as a chip: its shape, its name. */
 export function SnagTypeChip({ code, name, className }: { code: string; name: string; className?: string }) {
@@ -177,7 +175,23 @@ export function SnagTypeChip({ code, name, className }: { code: string; name: st
 const dash = <span className="text-faint">—</span>;
 
 /** The views of the Snag List: the toolbar and type chips over the List or the Kanban. */
-export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQueryChange, newTypes, newHref, photoUrls = {}, viewSwitch, bulk, linkAs: Link = "a" }: SnagListProps) {
+export function SnagList({
+  data,
+  query,
+  locale,
+  labels,
+  hrefFor,
+  itemHref,
+  onQueryChange,
+  newTypes,
+  newHref,
+  photoUrls = {},
+  viewSwitch,
+  bulk,
+  linkAs: Link = "a",
+  swipe,
+  phoneNewHref = newHref,
+}: SnagListProps) {
   const list: SnagListData = data.view === "list" ? data.list : data.board;
   const n = (value: number) => formatNumber(value, locale);
   // Rows chosen on this page: a new page, filter or sort starts with none.
@@ -326,8 +340,10 @@ export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQue
     body = <SnagBoard board={data.board} locale={locale} labels={labels} places={places} itemHref={itemHref} photoUrls={photoUrls} linkAs={Link} />;
   }
 
-  return (
-    <div className="flex min-w-0 flex-col gap-3">
+  // Below `md` the List is the phone's cards (RP-630); the Kanban, and a Module with no item at all, look the same everywhere.
+  const phone = data.view === "list" && !(total === 0 && !filtered);
+  const desktop = (
+    <div className={cn("flex min-w-0 flex-col gap-3", phone && "max-md:hidden")}>
       <ListToolbar label={labels.toolbar} end={viewSwitch} className="gap-1.5">
         {newTypes.length > 0 && newAction}
         <ToolbarSearch
@@ -368,6 +384,30 @@ export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQue
       <TypeChips list={list} query={query} locale={locale} labels={labels} hrefFor={hrefFor} linkAs={Link} />
       {body}
     </div>
+  );
+  if (!phone || data.view !== "list") return desktop;
+  return (
+    <>
+      {desktop}
+      <div className="md:hidden">
+        <SnagPhoneList
+          list={data.list}
+          query={query}
+          locale={locale}
+          labels={labels}
+          hrefFor={hrefFor}
+          itemHref={itemHref}
+          onChange={change}
+          onQueryChange={onQueryChange}
+          newTypes={newTypes}
+          newHref={phoneNewHref}
+          photoUrls={photoUrls}
+          linkAs={Link}
+          swipe={swipe}
+          typeChips={<TypeChips list={list} query={query} locale={locale} labels={labels} hrefFor={hrefFor} linkAs={Link} phone />}
+        />
+      </div>
+    </>
   );
 }
 
@@ -426,6 +466,7 @@ function TypeChips({
   labels,
   hrefFor,
   linkAs: Link,
+  phone = false,
 }: {
   list: SnagListData;
   query: WorkItemQuery;
@@ -433,15 +474,17 @@ function TypeChips({
   labels: SnagListLabels;
   hrefFor: (query: WorkItemQuery) => string;
   linkAs: ElementType;
+  /** One row that scrolls sideways, then Need My Action (the kit's "Mine"): the phone's (RP-630). */
+  phone?: boolean;
 }) {
   const counts = list.typeCounts;
   const countOf = (code: string) => counts?.find((c) => c.code === code)?.count ?? 0;
   const all = counts?.reduce((sum, c) => sum + c.count, 0);
   const { cursor: _cursor, page: _page, ...rest } = query;
-  const chip = (key: string, chosen: boolean, type: string[], content: ReactNode, count: number | undefined) => (
-    <li key={key}>
+  const chip = (key: string, chosen: boolean, type: string[], content: ReactNode, count: number | undefined, next = { ...rest, type }) => (
+    <li key={key} className="shrink-0">
       <Link
-        href={hrefFor({ ...rest, type })}
+        href={hrefFor(next)}
         aria-current={chosen ? "true" : undefined}
         className={cn(
           "inline-flex h-8 items-center gap-1.5 rounded-full border border-control-border bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
@@ -456,7 +499,7 @@ function TypeChips({
   );
   return (
     <nav aria-label={labels.types}>
-      <ul className="flex flex-wrap items-center gap-2">
+      <ul className={cn("flex items-center gap-2", phone ? "flex-nowrap pb-1" : "flex-wrap")}>
         {chip("all", query.type.length === 0, [], labels.allTypes, all)}
         {list.filters.types.map((t) => {
           const look = lookOf(t.code);
@@ -471,22 +514,22 @@ function TypeChips({
             counts ? countOf(t.code) : undefined,
           );
         })}
+        {phone &&
+          chip(
+            "need-my-action",
+            query.needMyAction,
+            query.type,
+            <>
+              {/* eslint-disable-next-line rabaed/no-avoid-terms -- an icon's name */}
+              <Icon name="user-check" size={15} />
+              {labels.needMyAction}
+            </>,
+            undefined,
+            { ...rest, needMyAction: !query.needMyAction },
+          )}
       </ul>
     </nav>
   );
-}
-
-type Places = ReturnType<typeof placesOf>;
-
-/** An item's Location as the last two places of the path down to it, as the design reads it, e.g. "Tower 1 · Floor 02". */
-function placeText(row: WorkItemRow, places: Places, locale: Locale): string | null {
-  if (row.location === null) return null;
-  const path = places.get(row.location.id) ?? [{ depth: 1, name: row.location.name }];
-  return [...path]
-    .sort((a, b) => a.depth - b.depth)
-    .slice(-2)
-    .map((p) => p.name[locale])
-    .join(" · ");
 }
 
 /** What it was raised from: the source's number (a link when the viewer sees it, E1) and its outcome, or "by hand". */
