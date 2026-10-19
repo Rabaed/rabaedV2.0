@@ -33,6 +33,10 @@ WORKDIR /app/apps/api
 EXPOSE 4000
 CMD ["./node_modules/.bin/tsx", "src/server.ts"]
 
+# veraPDF 1.30.3, the PDF/A-3 validator of the Documental Records' checks (RP-155, ADR 0023): its
+# jars come from the official image (pinned by digest), and run on the worker's own Java below.
+FROM verapdf/cli@sha256:d565095c67a083e693aebf7d1a15784007370571053fc1aa5b502665b9a78f9c AS verapdf
+
 FROM node-service AS worker
 WORKDIR /app/apps/worker
 # Headless Chromium for the Documental Records (RP-620, ADR 0023): Playwright's own build of the
@@ -42,6 +46,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN ./node_modules/.bin/playwright-core install --with-deps --only-shell chromium \
     && chmod -R a+rX /ms-playwright \
     && rm -rf /var/lib/apt/lists/*
+# A Java runtime and veraPDF's program, for the checks before a record is published (RP-155).
+RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=verapdf /opt/verapdf /opt/verapdf
+ENV VERAPDF=cli VERAPDF_PATH=/opt/verapdf/verapdf
 USER node
 CMD ["./node_modules/.bin/tsx", "src/main.ts"]
 

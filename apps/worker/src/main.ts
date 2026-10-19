@@ -3,7 +3,7 @@ import { createDbFromEnv, pingDatabase, processOutbox, runScheduledJobs } from "
 import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import { z } from "zod";
 import { outboxHandlers, scheduledJobs } from "./jobs.ts";
-import { documentalRecordHandler, recordJobFromEnv } from "./record/index.ts";
+import { documentalRecordHandler, recordJobFromEnv, reproduceHandler } from "./record/index.ts";
 import { createLogger } from "./log.ts";
 
 // The outbox processor: each poll runs the scheduled jobs that are due (the
@@ -27,7 +27,12 @@ process.once("SIGTERM", () => stop.abort());
 let mailer: Mailer | undefined;
 // The Documental Record job (RP-620): Chromium starts at the first record, and stops with the worker.
 const record = recordJobFromEnv(env.WEB_URL);
-const handlers = { ...outboxHandlers(() => (mailer ??= mailerFromEnv()), env.WEB_URL), documental_record: documentalRecordHandler(record) };
+const handlers = {
+  ...outboxHandlers(() => (mailer ??= mailerFromEnv()), env.WEB_URL),
+  documental_record: documentalRecordHandler(record),
+  // A Rabaed Engineer's Re-produce of a record (RP-155).
+  documental_record_reproduce: reproduceHandler(record),
+};
 
 let lastOk: boolean | undefined;
 log.info("worker started");
