@@ -29,6 +29,7 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/work-items/imports/page.tsx` | `/projects/:projectId/work-items/imports` | Imports: the Company's Submittal Register Imports on the Project (RP-637) |
 | `projects/[projectId]/work-items/imports/[importId]/page.tsx` | `/projects/:projectId/work-items/imports/:importId` | One import: its mapping and each row's Draft or reasons (RP-637) |
 | `projects/[projectId]/[moduleTab]/page.tsx` | `/projects/:projectId/:moduleTab` | Any other Module's tab (Inspections, Snag List...), same List or Kanban |
+| `projects/[projectId]/[moduleTab]/new/page.tsx` | `/projects/:projectId/snag-list/new?type=&draft=&step=` | The camera-first New Snag on a phone (RP-630): camera, Subject (the Draft), Location, Raise; other tabs not found |
 | `projects/[projectId]/settings/page.tsx` | `/projects/:projectId/settings` | Redirects to Document Numbering |
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |
 | `projects/[projectId]/settings/trades-locations/page.tsx` | `/projects/:projectId/settings/trades-locations` | Trades, Scopes, Sub-scopes and Locations |

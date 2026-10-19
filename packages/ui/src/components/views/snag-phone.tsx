@@ -85,7 +85,8 @@ export function SnagPhoneList({ list, query, locale, labels, hrefFor, itemHref, 
   const [openId, setOpenId] = useState<string | null>(null);
   const applied = query.stage.length + query.trade.length + (query.needMyAction ? 1 : 0);
   return (
-    <section aria-label={labels.table} className="flex min-w-0 flex-col gap-2.5 pb-24">
+    // The bottom padding keeps the last card and the pages clear of the fixed "+".
+    <section aria-label={labels.table} className="flex min-w-0 flex-col gap-2.5 pb-[6rem]">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 overflow-x-auto">{typeChips}</div>
         <SnagFilterSheet list={list} query={query} locale={locale} labels={labels} applied={applied} onChange={onChange} />

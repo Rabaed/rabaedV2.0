@@ -83,8 +83,9 @@ export function SnagFlowFrame({
   children: ReactNode;
 }) {
   const id = useId();
+  // The bottom padding keeps the step clear of its fixed bar.
   return (
-    <section aria-labelledby={`${id}-heading`} className="mx-auto flex min-h-[calc(100dvh-12rem)] max-w-md flex-col gap-4 pb-28">
+    <section aria-labelledby={`${id}-heading`} className="mx-auto flex min-h-[calc(100dvh-12rem)] max-w-md flex-col gap-4 pb-[7rem]">
       <header className="flex items-center gap-3">
         {back}
         <div className="min-w-0 flex-1">
