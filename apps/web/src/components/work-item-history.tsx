@@ -64,6 +64,11 @@ export async function WorkItemHistory({
     if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
     if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");
     // A Handover (RP-108): from whom to whom and why, internal to the holding Participant.
+    if (e.type === "assigned" && e.handover?.because === "reassigned") {
+      // Reassigned within the Company (RP-629): from the holder, or from the pool when nobody had picked it up.
+      const to = e.handover.to?.[locale] ?? "";
+      return e.handover.from ? t("reassigned", { from: e.handover.from[locale], to }) : t("reassignedFromPool", { to });
+    }
     if (e.type === "assigned" && e.handover) {
       return t("handedOver", { from: e.handover.from?.[locale] ?? "", to: e.handover.to?.[locale] ?? "", because: e.handover.because });
     }

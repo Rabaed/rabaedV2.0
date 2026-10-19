@@ -14,6 +14,7 @@ describe("sidebarItemOf", () => {
 
   it("marks My Company's pages", () => {
     expect(sidebarItemOf("/members")).toBe("members");
+    expect(sidebarItemOf("/company")).toBe("company");
     expect(sidebarItemOf("/participants")).toBe("company-projects");
     expect(sidebarItemOf("/participants/p1/members/m1/visibility")).toBe("company-projects");
     expect(sidebarItemOf("/library")).toBe("library");

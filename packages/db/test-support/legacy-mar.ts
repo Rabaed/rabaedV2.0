@@ -52,8 +52,8 @@ export async function addLegacyMarType(migrator: Db, code: string): Promise<void
         -- Built as a draft, then published: a published Version takes no new parts (RP-424).
         insert into workflow_version (workflow_definition_id, version_no, status, layout)
         values (v_definition, 1, 'draft', '{}') returning id into v_version;
-        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, is_signing, outcome_mode)
-        select v_version, key, name, stage_key, actor_rule, is_signing, outcome_mode from workflow_step where workflow_version_id = v_source;
+        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
+        select v_version, key, name, stage_key, actor_rule, outcome_mode from workflow_step where workflow_version_id = v_source;
         insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form)
         select v_version, t.key, f2.id, s2.id, t.label, t.kind, t.outcome, t.permission, t.sort, t.action_form
         from workflow_transition t

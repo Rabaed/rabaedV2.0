@@ -4,13 +4,14 @@
 export const sidebarCookie = "rabaed-sidebar";
 
 /** The sidebar items, by key. */
-export type SidebarItemKey = "home" | "projects" | "members" | "company-projects" | "library";
+export type SidebarItemKey = "home" | "projects" | "company" | "members" | "company-projects" | "library";
 
 /** Which sidebar item a path (without its locale) belongs to: a Work Item and every Project page are under Projects. */
 export function sidebarItemOf(pathname: string): SidebarItemKey | undefined {
   const first = pathname.split("/")[1] ?? "";
   if (first === "") return "home";
   if (first === "projects" || first === "work-items") return "projects";
+  if (first === "company") return "company";
   if (first === "members") return "members";
   if (first === "participants") return "company-projects";
   if (first === "library") return "library";
