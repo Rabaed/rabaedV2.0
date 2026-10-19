@@ -1,6 +1,22 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fillRoute, markdownTable, parseArgs, plannedShots, rawUrl, repoSlug, screensBranch, setupApi, shotName, type EvaluatingPage, type Shot } from "./screens.ts";
+import {
+  fillRoute,
+  locatorOf,
+  markdownTable,
+  parseArgs,
+  parseScreens,
+  plannedShots,
+  rawUrl,
+  repoSlug,
+  runActions,
+  screensBranch,
+  setupApi,
+  shotName,
+  type ActionDriver,
+  type EvaluatingPage,
+  type Shot,
+} from "./screens.ts";
 
 const at = { root: "/repo", branch: "RP-531-pnpm-screens" };
 
@@ -23,6 +39,10 @@ describe("parseArgs", () => {
 
   it("uses the branch name as the folder when it has no issue key", () => {
     expect(parseArgs(["/home", "--as", "ali"], { root: "/repo", branch: "prototype/uat" }).folder).toBe("prototype-uat");
+  });
+
+  it("takes no route with --setup, whose screens may name them", () => {
+    expect(parseArgs(["--as", "ali", "--setup", "s.ts"], at).routes).toEqual([]);
   });
 
   it("refuses no route, no person, a route with a locale or without a slash, an unknown option, a bare value option", () => {
@@ -75,6 +95,140 @@ describe("setupApi", () => {
   it("returns a body that is not JSON as text", async () => {
     expect(await setupApi(fakePage(200, "plain").page).request("GET", "/x")).toEqual({ status: 200, body: "plain" });
   });
+
+  it("acts as another demo person through the sign-in it is given", async () => {
+    const other = setupApi(fakePage(200, "{}").page);
+    const asked: string[] = [];
+    const api = setupApi(fakePage(200, "{}").page, async (person) => {
+      asked.push(person);
+      return other;
+    });
+    expect(await api.as("hafiz")).toBe(other);
+    expect(asked).toEqual(["hafiz"]);
+    await expect(setupApi(fakePage(200, "{}").page).as("hafiz")).rejects.toThrow(/as\("hafiz"\)/);
+  });
+
+  it("uploads a file as the browser does: start, put to the signed URL, confirm", async () => {
+    const calls: unknown[] = [];
+    const answers = [
+      { status: 201, text: '{"id":"doc-1","upload":{"url":"http://files/x","method":"PUT","headers":{"content-type":"application/pdf"}}}' },
+      { status: 200, text: "" },
+      { status: 200, text: "{}" },
+    ];
+    const page = {
+      evaluate: async (_fn: unknown, arg: unknown) => {
+        calls.push(arg);
+        return answers[calls.length - 1];
+      },
+    } as unknown as EvaluatingPage;
+    await setupApi(page).upload("item-1", "datasheet", { fileName: "d.pdf", contentType: "application/pdf", body: Buffer.from("%PDF") });
+    expect(calls[0]).toMatchObject({ method: "POST", path: "/work-items/item-1/documents", body: { fieldKey: "datasheet", fileName: "d.pdf", contentType: "application/pdf", sizeBytes: 4 } });
+    expect(calls[1]).toEqual({ url: "http://files/x", method: "PUT", headers: { "content-type": "application/pdf" }, base64: Buffer.from("%PDF").toString("base64") });
+    expect(calls[2]).toMatchObject({ method: "POST", path: "/work-items/item-1/documents/doc-1/confirm" });
+  });
+
+  it("stops when the file store refuses the file", async () => {
+    let n = 0;
+    const page = {
+      evaluate: async () => (n++ === 0 ? { status: 201, text: '{"id":"d","upload":{"url":"http://files/x","method":"PUT","headers":{}}}' } : { status: 403, text: "denied" }),
+    } as unknown as EvaluatingPage;
+    await expect(setupApi(page).upload("i", "datasheet", { fileName: "d.pdf", contentType: "application/pdf", body: Buffer.from("x") })).rejects.toThrow(
+      /file store answered 403 to d\.pdf: denied/,
+    );
+  });
+});
+
+describe("parseScreens", () => {
+  const submit = { en: "Submit Package", ar: "تقديم الحزمة" };
+
+  it("reads named screens, each with its actions in the order given", () => {
+    const screens = parseScreens(
+      [
+        { name: "submit-dialog", route: "/packages/{open}", actions: [{ click: "button", name: submit }, { waitFor: "dialog" }] },
+        { name: "bulk", route: "/packages/{held}", actions: [{ check: "Corridor luminaires" }, { check: "PKG-001-MAR-002" }, { click: "button", name: "Approve · A" }] },
+        { name: "plain", route: "/home" },
+      ],
+      "setup.ts",
+    );
+    expect(screens).toEqual([
+      { name: "submit-dialog", route: "/packages/{open}", actions: [{ click: "button", name: submit }, { waitFor: "dialog" }] },
+      { name: "bulk", route: "/packages/{held}", actions: [{ check: "Corridor luminaires" }, { check: "PKG-001-MAR-002" }, { click: "button", name: "Approve · A" }] },
+      { name: "plain", route: "/home", actions: [] },
+    ]);
+  });
+
+  it("refuses what is not a list of screens, naming the file, the screen and the action", () => {
+    expect(() => parseScreens({}, "s.ts")).toThrow(/s\.ts: screens must be a list/);
+    expect(() => parseScreens([{ route: "/home" }], "s.ts")).toThrow(/s\.ts: screen 1 needs a name/);
+    expect(() => parseScreens([{ name: "../x", route: "/home" }], "s.ts")).toThrow(/screen 1 \("\.\.\/x"\).*plain name/);
+    expect(() => parseScreens([{ name: "a", route: "home" }], "s.ts")).toThrow(/screen "a": its route must start with \//);
+    expect(() => parseScreens([{ name: "a", route: "/en/home" }], "s.ts")).toThrow(/screen "a".*without the locale/);
+    expect(() => parseScreens([{ name: "a", route: "/a" }, { name: "a", route: "/b" }], "s.ts")).toThrow(/two screens named "a"/);
+    expect(() => parseScreens([{ name: "a", route: "/a", actions: [{ tap: "x" }] }], "s.ts")).toThrow(/screen "a", action 1: .*click, check or waitFor/);
+    expect(() => parseScreens([{ name: "a", route: "/a", actions: [{ click: "button" }] }], "s.ts")).toThrow(/screen "a", action 1: click needs a name/);
+    expect(() => parseScreens([{ name: "a", route: "/a", actions: [{ click: "button", name: { en: "Submit" } }] }], "s.ts")).toThrow(
+      /screen "a", action 1: .*both en and ar/,
+    );
+    expect(() => parseScreens([{ name: "a", route: "/a", actions: [{ waitFor: "Dialog" }] }], "s.ts")).toThrow(/screen "a", action 1: "Dialog" is not an ARIA role/);
+    expect(() => parseScreens([{ name: "a", route: "/a", actions: [{ check: "" }] }], "s.ts")).toThrow(/screen "a", action 1: check needs the text of its row/);
+  });
+});
+
+describe("runActions", () => {
+  /** A driver that records each call, and fails the one whose description is `failOn`. */
+  function fakeDriver(failOn?: string) {
+    const calls: string[] = [];
+    const record = async (call: string) => {
+      calls.push(call);
+      if (call === failOn) throw new Error("locator.click: Timeout 10000ms exceeded.\nCall log:\n  - waiting for getByRole('button')");
+    };
+    const driver: ActionDriver = {
+      click: (role, name) => record(`click ${role} ${name}`),
+      checkRow: (text) => record(`check ${text}`),
+      waitFor: (role, name) => record(`waitFor ${role}${name === undefined ? "" : ` ${name}`}`),
+    };
+    return { driver, calls };
+  }
+
+  const screen = parseScreens(
+    [
+      {
+        name: "submit-dialog",
+        route: "/packages/x",
+        actions: [{ check: "PKG-001" }, { click: "button", name: { en: "Submit Package", ar: "تقديم الحزمة" } }, { waitFor: "dialog", name: { en: "Submit PKG-003", ar: "تقديم PKG-003" } }],
+      },
+    ],
+    "s.ts",
+  )[0]!;
+
+  it("runs the actions in order, with the names of the page's language", async () => {
+    const en = fakeDriver();
+    await runActions(en.driver, screen, { locale: "en", width: 1366 });
+    expect(en.calls).toEqual(["check PKG-001", "click button Submit Package", "waitFor dialog Submit PKG-003"]);
+    const ar = fakeDriver();
+    await runActions(ar.driver, screen, { locale: "ar", width: 1920 });
+    expect(ar.calls).toEqual(["check PKG-001", "click button تقديم الحزمة", "waitFor dialog تقديم PKG-003"]);
+  });
+
+  it("stops at a failed action, naming the screen, the action and its locator, and runs none after it", async () => {
+    const { driver, calls } = fakeDriver("click button تقديم الحزمة");
+    const failure = runActions(driver, screen, { locale: "ar", width: 1366 });
+    await expect(failure).rejects.toThrow(
+      'Screen "submit-dialog" (ar, 1366): action 2 of 3, click button "تقديم الحزمة", failed at getByRole("button", { name: "تقديم الحزمة", exact: true }): locator.click: Timeout 10000ms exceeded.',
+    );
+    expect(calls).toHaveLength(2);
+  });
+
+  it("names a row's checkbox by the row's text", async () => {
+    const { driver } = fakeDriver("check PKG-001");
+    await expect(runActions(driver, screen, { locale: "en", width: 1366 })).rejects.toThrow(
+      'Screen "submit-dialog" (en, 1366): action 1 of 3, check the row "PKG-001", failed at getByRole("row").filter({ hasText: "PKG-001" }).getByRole("checkbox"):',
+    );
+  });
+
+  it("names a wait without a name by its role alone", () => {
+    expect(locatorOf({ waitFor: "dialog" }, "en")).toBe('getByRole("dialog")');
+  });
 });
 
 describe("fillRoute", () => {
@@ -105,6 +259,23 @@ describe("plannedShots", () => {
   it("refuses two routes that would be saved as the same file, and shoots a repeated route once", () => {
     expect(() => plannedShots(["/a-b", "/a/b"])).toThrow(/\/a-b and \/a\/b/);
     expect(plannedShots(["/a", "/a"])).toHaveLength(4);
+  });
+
+  it("saves a named screen under its name, so one route can be shot in several states", () => {
+    const dialog = { name: "submit-dialog", route: "/packages/p1", actions: [{ waitFor: "dialog" }] };
+    const shots = plannedShots(["/packages/p1", dialog]);
+    expect(shots.map((s) => s.file)).toEqual([
+      "packages-p1-1366-en.png",
+      "packages-p1-1920-en.png",
+      "packages-p1-1366-ar.png",
+      "packages-p1-1920-ar.png",
+      "submit-dialog-1366-en.png",
+      "submit-dialog-1920-en.png",
+      "submit-dialog-1366-ar.png",
+      "submit-dialog-1920-ar.png",
+    ]);
+    expect(shots[4]).toMatchObject({ route: "/packages/p1", screen: dialog });
+    expect(() => plannedShots(["/submit-dialog", dialog])).toThrow(/\/submit-dialog and submit-dialog/);
   });
 });
 
@@ -143,5 +314,10 @@ describe("publishing", () => {
       "| `/work-items/abc` | ![](https://x/work-items-abc-1366-en.png) | ![](https://x/work-items-abc-1920-en.png) | ![](https://x/work-items-abc-1366-ar.png) | ![](https://x/work-items-abc-1920-ar.png) |",
       "| `/home` | ![](https://x/home-1366-en.png) | ![](https://x/home-1920-en.png) | ![](https://x/home-1366-ar.png) | ![](https://x/home-1920-ar.png) |",
     ]);
+  });
+
+  it("names a named screen's row by its name and route", () => {
+    const shots = plannedShots([{ name: "bulk", route: "/packages/p1", actions: [] }]);
+    expect(markdownTable(shots, (file) => file).split("\n")[2]).toBe("| bulk: `/packages/p1` | ![](bulk-1366-en.png) | ![](bulk-1920-en.png) | ![](bulk-1366-ar.png) | ![](bulk-1920-ar.png) |");
   });
 });
