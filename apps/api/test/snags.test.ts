@@ -234,6 +234,32 @@ describe("a Snag where two Contractors cover its Trade and Location (a Visibilit
     }
   });
 
+  it("RP-658: a covering Contractor with nobody to hold Open is never told apart (V16): beside C1 alone no field, beside C1 and C3 not listed", async () => {
+    // C4 covers the Snag too, but none of its Members is on the Project: nobody there can hold Open.
+    const c4 = await api.authorizedPerson();
+    const c4Participant = await api.addParticipant(c1.caller, at.projectId, c4.company, "contractor");
+    const c4Covers = (location: typeof all) => ok(c1.caller.request("PUT", `/v1/participants/${c4Participant}/visibility`, { trade: all, location }));
+    await c4Covers(all);
+    try {
+      const alone = await draftSnag("C1 and an empty C4");
+      expect((await detail(at.k1Manager, alone)).actions.transitions.find((t) => t.key === "raise")!.participants).toBeUndefined();
+      const refused = await tryTake(at.k1Manager, alone, "raise", { participant: c4Participant });
+      expect({ status: refused.statusCode, body: refused.json() }).toEqual({ status: 422, body: { error: "participant_not_offered" } });
+      await take(at.k1Manager, alone, "raise");
+      expect((await detail(at.c1Pm, alone)).stage.key).toBe("open");
+
+      await c3Covers(all);
+      const id = await draftSnag("C1, C3 and an empty C4");
+      const raise = (await detail(at.k1Manager, id)).actions.transitions.find((t) => t.key === "raise")!;
+      expect(raise.participants!.map((p) => p.participantId).sort()).toEqual([at.c1ParticipantId, c3Participant].sort());
+      const unstaffed = await tryTake(at.k1Manager, id, "raise", { participant: c4Participant });
+      expect({ status: unstaffed.statusCode, body: unstaffed.json() }).toEqual({ status: 422, body: { error: "participant_not_offered" } });
+    } finally {
+      await c3Covers(only(buildingB));
+      await c4Covers(only(buildingB));
+    }
+  });
+
   it("RP-658: a pick where the Raise offers none (one Contractor covers it) is refused unless it names that Contractor", async () => {
     const id = await draftSnag("One Contractor, a pick anyway");
     const refused = await tryTake(at.k1Manager, id, "raise", { participant: c2Participant });

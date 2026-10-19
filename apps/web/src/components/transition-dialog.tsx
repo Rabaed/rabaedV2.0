@@ -333,7 +333,9 @@ export function TransitionDialog({
                 setParticipant(value);
                 setParticipantMissing(false);
               }}
-              options={transition.participants.map((p) => ({ value: p.participantId, label: p.companyName[locale] }))}
+              options={transition.participants
+                .map((p) => ({ value: p.participantId, label: p.companyName[locale] }))
+                .sort((a, b) => a.label.localeCompare(b.label, locale))}
             />
           </Field>
         )}

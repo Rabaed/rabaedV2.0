@@ -8,10 +8,14 @@
 --
 -- * app.next_step_candidates(item, transition): the covering candidates, the Owner's review
 --   included (ADR 0022), moved out of app.next_step_holder unchanged.
--- * app.next_step_holder gains the pick (p_pick). Several candidates at a Submit: without a
---   pick, 'participant_pick' (offered, not yet takeable; 'next_step_unavailable' when none of
---   them has anyone to hold the Step); with a pick of one of them that has, 'ok' for it; any
---   other pick, 'participant_not_offered', whoever it names.
+-- * app.next_step_choices(item, transition): those of them with someone to hold the Step (its
+--   Step Pool for the Transition, §3.2), whom a pick may name.
+-- * app.next_step_holder gains the pick (p_pick). Several candidates at a Submit are judged by
+--   their choices only, so a covering Participant with nobody to hold the Step is never told
+--   apart from one not covering the item (V16): none, 'next_step_unavailable' (a Visibility
+--   Gap's answer); one, it holds the Step at once, as a single candidate does; several, without
+--   a pick 'participant_pick' (offered, not yet takeable), with a pick of one of them 'ok' for
+--   it, and any other pick 'participant_not_offered', whoever it names.
 -- * app.transition_next_holder passes the pick and answers 'participant_not_picked' for a
 --   Submit that needs one; a pick where none is offered counts only when it names the one
 --   Participant the item goes to, else 'participant_not_offered'.
@@ -63,6 +67,26 @@ create function app.next_step_candidates(p_work_item_id uuid, p_transition_id uu
   $$;
 
 revoke all on function app.next_step_candidates(uuid, uuid) from public;
+
+-- The candidates the acting Participant may pick among (RP-658): those with someone to hold the
+-- next Step, its Step Pool for the Transition (§3.2).
+create function app.next_step_choices(p_work_item_id uuid, p_transition_id uuid, p_candidates uuid[]) returns uuid[]
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    declare
+      v_actor uuid := (select me.participant_id from app.acting_project_member(p_work_item_id) me);
+    begin
+      return coalesce((
+        select array_agg(c.id order by c.n)
+        from unnest(p_candidates) with ordinality c (id, n)
+        where exists (select 1 from app.transition_step_pool(p_work_item_id, p_transition_id, c.id, v_actor))
+      ), '{}');
+    end
+  $$;
+
+revoke all on function app.next_step_choices(uuid, uuid, uuid[]) from public;
 
 -- From 20270611000000_raiser_step_holder.sql: the pick at a Submit to several (RP-658).
 drop function app.next_step_holder(uuid, uuid);
@@ -133,23 +157,21 @@ create function app.next_step_holder(p_work_item_id uuid, p_transition_id uuid, 
       else
         v_candidates := app.next_step_candidates(p_work_item_id, p_transition_id);
       end if;
-      -- More than one covering Participant, at a Submit (RP-658): the actor picks one in the
-      -- Action Form, among those with someone to hold the Step (app.participants_offered).
-      -- Without a pick it is offered but not taken ('participant_pick'); a pick of any other
-      -- Participant is refused alike, whoever it names.
+      -- More than one covering Participant, at a Submit (RP-658): judged by those with someone
+      -- to hold the Step only (app.next_step_choices), so one with nobody there is never told
+      -- apart from one not covering the item (V16). One such: it holds the Step at once. Several:
+      -- the actor picks one in the Action Form (app.participants_offered); without a pick it is
+      -- offered but not taken ('participant_pick'), and any other pick is refused alike,
+      -- whoever it names.
       if v_previous is null and v_target.kind = 'submit' and cardinality(v_candidates) > 1 then
-        if p_pick is null then
-          if exists (
-            select 1 from unnest(v_candidates) c (id)
-            where exists (select 1 from app.transition_step_pool(p_work_item_id, p_transition_id, c.id, v_actor)))
-          then
-            return query select 'participant_pick'::text, null::uuid;
-          else
-            return query select 'next_step_unavailable'::text, null::uuid;
-          end if;
-        elsif p_pick = any(v_candidates)
-          and exists (select 1 from app.transition_step_pool(p_work_item_id, p_transition_id, p_pick, v_actor))
-        then
+        v_candidates := app.next_step_choices(p_work_item_id, p_transition_id, v_candidates);
+        if cardinality(v_candidates) = 0 then
+          return query select 'next_step_unavailable'::text, null::uuid;
+        elsif cardinality(v_candidates) = 1 then
+          return query select 'ok'::text, v_candidates[1];
+        elsif p_pick is null then
+          return query select 'participant_pick'::text, null::uuid;
+        elsif p_pick = any(v_candidates) then
           return query select 'ok'::text, p_pick;
         else
           return query select 'participant_not_offered'::text, null::uuid;
@@ -237,9 +259,9 @@ create function app.transition_next_holder(
 revoke all on function app.transition_next_holder(uuid, uuid, uuid, uuid, uuid) from public;
 
 -- The Participants the actor may pick for Transition p_transition_id of item p_work_item_id
--- (RP-658): the covering ones with someone to hold the next Step, each with its Company's
--- name only (no Member, nothing of its work; V14). Only to the item's holder, for a Transition
--- from its current Step that needs the pick; nothing to anyone else, nor otherwise.
+-- (RP-658): app.next_step_choices, each with its Company's name only (no Member, nothing of
+-- its work; V14). Only to the item's holder, for a Transition from its current Step that needs
+-- the pick; nothing to anyone else, nor otherwise.
 create function app.participants_offered(p_work_item_id uuid, p_transition_id uuid)
   returns table(participant_id uuid, company_name jsonb)
   language plpgsql stable security definer
@@ -247,23 +269,23 @@ create function app.participants_offered(p_work_item_id uuid, p_transition_id uu
   as $$
     #variable_conflict use_column
     declare
-      v_actor uuid;
+      v_holder uuid;
     begin
-      select h.participant_id into v_actor
+      select h.participant_id into v_holder
       from app.held_work_item(p_work_item_id) h
       join workflow_transition tr on tr.id = p_transition_id
         and tr.workflow_version_id = h.workflow_version_id and tr.from_step_id = h.current_step_id;
-      if v_actor is null
+      if v_holder is null
         or (select n.outcome from app.next_step_holder(p_work_item_id, p_transition_id) n) is distinct from 'participant_pick'
       then
         return;
       end if;
       return query
         select p.id, co.legal_name
-        from unnest(app.next_step_candidates(p_work_item_id, p_transition_id)) c (id)
+        from unnest(app.next_step_choices(
+          p_work_item_id, p_transition_id, app.next_step_candidates(p_work_item_id, p_transition_id))) c (id)
         join participant p on p.id = c.id
         join company co on co.id = p.company_id
-        where exists (select 1 from app.transition_step_pool(p_work_item_id, p_transition_id, p.id, v_actor))
         order by co.legal_name ->> 'en', p.id;
     end
   $$;
