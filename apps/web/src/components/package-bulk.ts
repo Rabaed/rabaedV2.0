@@ -6,9 +6,6 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
 
-/** Reasons a bulk Transition may name beyond the ones the API's types list now: RP-85's missing Signature, RP-617's missing Stamp (passed through by the spec's review fixes). */
-const laterReasons = ["no_signature", "no_stamp"] as const;
-
 /** Bulk Transitions' words, from the app's messages (packages.bulk). */
 function useBulkLabels(): PackageBulkLabels {
   const t = useTranslations("packages.bulk");
@@ -33,7 +30,7 @@ function useBulkLabels(): PackageBulkLabels {
     formInvalid: t("formInvalid"),
     stoppedTitle: t("stoppedTitle"),
     stoppedBy: t("stoppedBy"),
-    reasons: keys("reasons", [...bulkStopReasons, ...laterReasons, "unknown"] as const),
+    reasons: keys("reasons", [...bulkStopReasons, "unknown"] as const),
     refusals: keys("refusals", ["unavailable", "not_found", "idempotency_key_reused", "not_confirmed"] as const),
   };
 }
@@ -71,7 +68,7 @@ export function usePackageBulkCalls(): PackageBulkProps {
         router.refresh();
         return { ok: true };
       }
-      // `stoppedBy.reason` is read as a string: a reason added later (RP-85's `no_signature`) still reaches the pop-up.
+      // `stoppedBy.reason` is read as a string: one a newer API adds still reaches the pop-up, worded as `unknown`.
       const body = (await res.json().catch(() => ({}))) as { error?: string; stoppedBy?: Omit<BulkStop, "reason"> & { reason: string } };
       if (res.status === 404 || res.status === 409) router.refresh();
       if (body.error === "bulk_refused" && body.stoppedBy) return { ok: false, reason: "bulk_refused", stoppedBy: body.stoppedBy satisfies BulkStopped };
