@@ -2204,6 +2204,14 @@
     }
   },
   "packages": {
+    "comments": {
+      "title": "Comments",
+      "forInformation": "For information",
+      "notPartOf": "Comments are not part of the Package and count in none of its counts.",
+      "empty": "No Comments you can see were raised from these submittals.",
+      "raisedFrom": "Raised from",
+      "noNumber": "No number yet"
+    },
     "breadcrumb": "Breadcrumb",
     "back": "Submittals",
     "kind": "Package",

@@ -26,6 +26,7 @@ import type {
   NotificationSettingsView,
   NumberingSettings,
   NumberingCounters,
+  PackageComments,
   PackageDetail,
   PackageList,
   ParticipantMembers,
@@ -243,6 +244,11 @@ export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> 
 /** One Package (RP-659); null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getPackage(packageId: string): Promise<PackageDetail | null> {
   return apiGet<PackageDetail>(`/v1/packages/${encodeURIComponent(packageId)}`);
+}
+
+/** The Comments raised from a Package's submittals, only those the signed-in Member sees, for information (RP-647); null if they can't see the Package. */
+export function getPackageComments(packageId: string): Promise<PackageComments | null> {
+  return apiGet<PackageComments>(`/v1/packages/${encodeURIComponent(packageId)}/comments`);
 }
 
 /** A Project's Packages the signed-in Member sees, with their counts (RP-641, the Packages view RP-660); null if the Project isn't one of theirs. */
