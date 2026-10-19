@@ -2,6 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
+  directionOf,
   formatNumber,
   isOpenStageCategory,
   type Locale,
@@ -160,7 +161,7 @@ export function SnagPhoneCard({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const dir = locale === "ar" ? "rtl" : "ltr";
+  const dir = directionOf(locale);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const start = useRef<{ x: number; y: number; moved: boolean } | null>(null);

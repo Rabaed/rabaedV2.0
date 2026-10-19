@@ -1,6 +1,6 @@
 "use client";
 
-import type { DimensionValues, DocumentSummary, Locale, WorkItemActions, WorkItemDetail } from "@rabaed/domain";
+import { moduleTabPaths, type DimensionValues, type DocumentSummary, type Locale, type WorkItemActions, type WorkItemDetail } from "@rabaed/domain";
 import {
   SnagCameraStep,
   SnagFlowBack,
@@ -16,11 +16,11 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
-import { TransitionDialog, useWorkItemCalls } from "@/components/transition-dialog";
-import { TransitionOpening } from "@/components/transition-opening";
+import { TransitionPopup } from "@/components/transition-opening";
 import { uploadToWorkItem, useImageUrls } from "@/components/use-documents";
 import { Link, useRouter } from "@/i18n/navigation";
-import { locationChoices, locationPath, phoneSteps, withLocation, type PhoneStep } from "@/lib/snag-phone-flow";
+import { useCreateRefusal } from "@/lib/create-refusal";
+import { isLastLevel, locationChoices, locationPath, phoneSteps, withLocation, type PhoneStep } from "@/lib/snag-phone-flow";
 
 type Draft = {
   id: string;
@@ -85,8 +85,9 @@ export function SnagPhoneNew({
   const t = useTranslations("snagList.mobile.flow");
   const w = useTranslations("workItems");
   const router = useRouter();
-  const listHref = `/projects/${projectId}/snag-list`;
-  const stepHref = (id: string, step: PhoneStep) => `/projects/${projectId}/snag-list/new?type=${encodeURIComponent(typeCode)}&draft=${id}&step=${step}`;
+  const listHref = `/projects/${projectId}/${moduleTabPaths.snag_list}`;
+  const refusal = useCreateRefusal();
+  const stepHref = (id: string, step: PhoneStep) => `${listHref}/new?type=${encodeURIComponent(typeCode)}&draft=${id}&step=${step}`;
   const [step, setStep] = useState<PhoneStep>(initial);
   const number = phoneSteps.indexOf(step) + 1;
 
@@ -127,14 +128,7 @@ export function SnagPhoneNew({
       });
       if (res.status !== 201) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        const known: Record<string, string> = {
-          outside_visibility: w("outsideVisibility"),
-          value_not_found: w("form.valueNotFound"),
-          project_closed: w("projectClosed"),
-          form_version_not_latest: w("form.newVersion"),
-          invalid_answers: w("form.invalid"),
-        };
-        setMessage(known[body.error ?? ""] ?? w("unavailable"));
+        setMessage(refusal(body.error));
         return;
       }
       const { id } = (await res.json()) as { id: string };
@@ -151,18 +145,24 @@ export function SnagPhoneNew({
   // The Location step: saved to the Draft as soon as it is picked.
   const [picked, setPicked] = useState<string | undefined>(typeof draft?.answers.location === "string" ? draft.answers.location : undefined);
   const [saved, setSaved] = useState<"saved" | "saving">("saved");
-  async function pick(id: string | null) {
+  // Picks follow one another, each saved after the one before, so the Draft ends with the last.
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
+  const lastPick = useRef(0);
+  function pick(id: string | null) {
     setPicked(id ?? undefined);
     if (!draft || id === null) return;
+    const mine = ++lastPick.current;
     setSaved("saving");
     setMessage(null);
-    const res = await fetch(`/api/v1/work-items/${draft.id}/answers`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ answers: withLocation(draft.answers, id) }),
-    }).catch(() => null);
-    setSaved("saved");
-    if (!res?.ok) setMessage(t("errors.notSaved"));
+    saving.current = saving.current.then(async () => {
+      const res = await fetch(`/api/v1/work-items/${draft.id}/answers`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answers: withLocation(draft.answers, id) }),
+      }).catch(() => null);
+      if (!res?.ok) setMessage(t("errors.notSaved"));
+      if (mine === lastPick.current) setSaved("saved");
+    });
   }
 
   const [raising, setRaising] = useState(false);
@@ -233,7 +233,8 @@ export function SnagPhoneNew({
         // The Draft is kept: back to the List, where it is among the viewer's Drafts.
         back={back(listHref)}
         footer={
-          <SnagFlowButton onClick={() => router.push(stepHref(draft.id, "raise"))} disabled={!picked || saved === "saving"}>
+          // Down to the last level (a Floor): a place with nothing inside it.
+          <SnagFlowButton onClick={() => router.push(stepHref(draft.id, "raise"))} disabled={!isLastLevel(locations, picked) || saved === "saving"}>
             {labels.next}
           </SnagFlowButton>
         }
@@ -243,7 +244,7 @@ export function SnagPhoneNew({
             {t("errors.photosMissing")}
           </p>
         )}
-        <SnagLocationStep path={path} choices={locationChoices(locations, picked ?? null)} picked={picked} onPick={(id) => void pick(id)} locale={locale} labels={labels} />
+        <SnagLocationStep path={path} choices={locationChoices(locations, picked ?? null)} picked={picked} onPick={pick} locale={locale} labels={labels} />
         {alert}
       </SnagFlowFrame>
     );
@@ -269,16 +270,9 @@ export function SnagPhoneNew({
     >
       <SnagRaiseStep photo={draftPhotos[0]} subject={draft.subject} place={place} trade={draft.trade.name[locale]} offered={draft.raise !== null} labels={labels} />
       {/* Raised, the page reads the item again and opens its own page. */}
-      {raising && draft.raise && <RaiseDialog workItemId={draft.id} subject={draft.subject} transition={draft.raise} locale={locale} onClose={() => setRaising(false)} />}
+      {raising && draft.raise && (
+        <TransitionPopup workItemId={draft.id} subject={draft.subject} transition={draft.raise} locale={locale} idPrefix="phone-raise" onClose={() => setRaising(false)} />
+      )}
     </SnagFlowFrame>
-  );
-}
-
-function RaiseDialog({ workItemId, subject, transition, locale, onClose }: { workItemId: string; subject: string; transition: WorkItemActions["transitions"][number]; locale: Locale; onClose: () => void }) {
-  const calls = useWorkItemCalls(workItemId);
-  return (
-    <TransitionOpening returnTo={`/work-items/${workItemId}`} onClose={onClose}>
-      <TransitionDialog transition={transition} calls={calls} locale={locale} description={subject} idPrefix="phone-raise" onClose={onClose} />
-    </TransitionOpening>
   );
 }

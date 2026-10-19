@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  moduleTabPaths,
   workItemSearchParams,
   type Locale,
   type SnagBulkCandidates,
@@ -231,7 +232,7 @@ export function SnagListView(
         newTypes={newTypes}
         newHref={(code) => getPathname({ href: `/projects/${projectId}/work-items/new?module=snag_list&type=${encodeURIComponent(code)}`, locale })}
         // On a phone, "+" opens the camera-first New page (RP-630).
-        phoneNewHref={(code) => getPathname({ href: `/projects/${projectId}/snag-list/new?type=${encodeURIComponent(code)}`, locale })}
+        phoneNewHref={(code) => getPathname({ href: `/projects/${projectId}/${moduleTabPaths.snag_list}/new?type=${encodeURIComponent(code)}`, locale })}
         swipe={swipe}
         photoUrls={photoUrls}
         linkAs={NextLink}

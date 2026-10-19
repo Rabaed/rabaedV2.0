@@ -1,6 +1,6 @@
 import type { DimensionValues } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { locationChoices, locationPath, phoneFlowStep, phoneSteps, withLocation } from "./snag-phone-flow.ts";
+import { isLastLevel, locationChoices, locationPath, parsePhoneStep, phoneFlowStep, phoneSteps, withLocation } from "./snag-phone-flow.ts";
 
 // Story data only.
 const b = (en: string) => Object.fromEntries([
@@ -14,6 +14,24 @@ const draft = (answers: Record<string, unknown>, category: "draft" | "in_progres
 describe("phoneSteps", () => {
   it("is the camera, then the Subject, the Location and the Raise: no Pin until Pins exist, no Contractor until the engine offers a pick (RP-658)", () => {
     expect(phoneSteps).toEqual(["photo", "subject", "location", "raise"]);
+  });
+});
+
+describe("parsePhoneStep", () => {
+  it("reads a step from the URL, and nothing else", () => {
+    expect(parsePhoneStep("location")).toBe("location");
+    expect(parsePhoneStep("raise")).toBe("raise");
+    expect(parsePhoneStep("contractor")).toBeUndefined();
+    expect(parsePhoneStep(undefined)).toBeUndefined();
+  });
+});
+
+describe("isLastLevel", () => {
+  it("is a place with nothing inside it (a Floor): the Location step's Next waits for one", () => {
+    expect(isLastLevel(locations, "t1f1")).toBe(true);
+    expect(isLastLevel(locations, "t1")).toBe(false);
+    expect(isLastLevel(locations, "zone")).toBe(false);
+    expect(isLastLevel(locations, undefined)).toBe(false);
   });
 });
 

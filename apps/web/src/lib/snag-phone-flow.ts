@@ -12,12 +12,17 @@ export type PhoneStep = (typeof phoneSteps)[number];
 
 type Draft = Pick<WorkItemDetail, "answers"> & { stage: Pick<WorkItemDetail["stage"], "category"> };
 
+/** The step the URL names, or none when it names no step. */
+export function parsePhoneStep(raw: string | undefined): PhoneStep | undefined {
+  return phoneSteps.find((s) => s === raw);
+}
+
 /**
  * The step the flow opens at. Without a Draft, the camera: the photos taken before the Subject step
  * live only in the page. With one, the step asked for, from the Location on (its Subject can't
  * change), but never Raise before a Location is picked. "done" once it has left Draft.
  */
-export function phoneFlowStep({ draft, step }: { draft: Draft | null; step?: string }): PhoneStep | "done" {
+export function phoneFlowStep({ draft, step }: { draft: Draft | null; step?: PhoneStep }): PhoneStep | "done" {
   if (draft === null) return "photo";
   if (draft.stage.category !== "draft") return "done";
   const located = typeof draft.answers.location === "string";
@@ -38,6 +43,11 @@ export function locationPath(locations: readonly Location[], id: string | undefi
   const path: Location[] = [];
   for (let at = id ? byId.get(id) : undefined; at; at = at.parentId ? byId.get(at.parentId) : undefined) path.unshift(at);
   return path;
+}
+
+/** Whether `id` is a place with nothing inside it (a Floor): the Location step goes on from one. */
+export function isLastLevel(locations: readonly Location[], id: string | undefined): boolean {
+  return id !== undefined && locations.some((l) => l.id === id) && !locations.some((l) => l.parentId === id);
 }
 
 /** The Draft's answers to save at the Location step: as read, with the Location picked. */

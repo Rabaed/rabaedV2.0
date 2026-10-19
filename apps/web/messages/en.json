@@ -2202,7 +2202,7 @@
       "negative": "Negative",
       "closing": "Closes the item",
       "notClosing": "Does not close",
-      "noTransitions": "Nothing after closing",
+      "noActions": "Nothing after closing",
       "actions": {
         "offer_revision": "Offers a Revision",
         "offer_replacement": "Offers a replacement",

@@ -82,12 +82,13 @@ export function SnagFlowFrame({
   footer: ReactNode;
   children: ReactNode;
 }) {
+  const id = useId();
   return (
-    <section aria-labelledby="snag-flow-heading" className="mx-auto flex min-h-[calc(100dvh-12rem)] max-w-md flex-col gap-4 pb-28">
+    <section aria-labelledby={`${id}-heading`} className="mx-auto flex min-h-[calc(100dvh-12rem)] max-w-md flex-col gap-4 pb-28">
       <header className="flex items-center gap-3">
         {back}
         <div className="min-w-0 flex-1">
-          <h1 id="snag-flow-heading" className="text-[17px] font-bold text-text">
+          <h1 id={`${id}-heading`} className="text-[17px] font-bold text-text">
             {heading}
           </h1>
           <p className="sr-only">{labels.stepOf(String(step), String(steps))}</p>

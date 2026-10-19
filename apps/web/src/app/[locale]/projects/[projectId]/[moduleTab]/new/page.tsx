@@ -3,7 +3,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { SnagPhoneNew } from "@/components/snag-phone-new";
 import { redirect } from "@/i18n/navigation";
-import { phoneFlowStep } from "@/lib/snag-phone-flow";
+import { parsePhoneStep, phoneFlowStep } from "@/lib/snag-phone-flow";
 import { getMe, getMyVisibility, getNewWorkItemForm, getRaisableTypes, getWorkItem, getWorkItemDocuments } from "@/lib/session";
 
 /**
@@ -37,7 +37,7 @@ export default async function SnagPhoneNewPage({
 
   const [draft, documents] = draftId ? await Promise.all([getWorkItem(draftId), getWorkItemDocuments(draftId)]) : [null, null];
   if (draftId && (!draft || !documents || draft.type.code !== type.code)) notFound();
-  const at = phoneFlowStep({ draft, step });
+  const at = phoneFlowStep({ draft, step: parsePhoneStep(step) });
   if (at === "done") return redirect({ href: `/work-items/${draftId}`, locale });
 
   return (

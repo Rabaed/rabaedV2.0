@@ -2202,7 +2202,7 @@
       "negative": "سلبية",
       "closing": "تغلق العنصر",
       "notClosing": "لا تغلق",
-      "noTransitions": "لا إجراء لاحق",
+      "noActions": "لا إجراء لاحق",
       "actions": {
         "offer_revision": "تتيح مراجعة",
         "offer_replacement": "تتيح بديلًا",

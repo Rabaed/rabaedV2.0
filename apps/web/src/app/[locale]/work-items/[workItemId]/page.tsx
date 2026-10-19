@@ -51,11 +51,6 @@ import {
   getWorkItemWorkflow,
 } from "@/lib/session";
 
-/** Below `md`, a bar fixed to the bottom of the screen, the page's gutter wide (RP-630). */
-const phoneActionBar =
-  // eslint-disable-next-line rabaed/no-avoid-terms -- CSS env() name
-  "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-20 max-md:border-t max-md:border-border max-md:bg-surface max-md:px-4 max-md:pt-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:shadow-lg max-md:[&>div:first-child>button]:min-h-11 max-md:[&>div:first-child>button]:flex-1";
-
 /**
  * One Work Item, in the frame every item has (form-engine.md §1): the System
  * Fields Subject and Document Number above its Form, Attachments and Links below it. One
@@ -175,7 +170,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           actions={item.actions}
           locale={locale}
           // A Snag List item's actions on a phone: a bar at the bottom of the screen, in reach of a thumb (RP-630).
-          className={snag ? phoneActionBar : undefined}
+          phoneBar={snag}
         />
         <WorkItemRevision
           workItemId={item.id}
