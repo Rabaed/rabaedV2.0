@@ -113,10 +113,11 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
   return withMember(db, memberId, async (trx) => {
     const [row] = await summaryRows(trx, { packageId });
     if (!row) return null;
+    // The latest Revision of each chain the viewer sees (spec story 30, app.package_latest_items).
     const { rows: ids } = await sql<{ id: string }>`
       select w.id
-      from app.package_items(${packageId}::uuid) i
-      join work_item w on w.id = i
+      from app.package_latest_items(${packageId}::uuid) l
+      join work_item w on w.id = l.work_item_id
       order by w.document_number nulls last, w.title, w.id
     `.execute(trx);
     const seen = await workItemRowsById(

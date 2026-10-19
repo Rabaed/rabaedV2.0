@@ -119,7 +119,7 @@ beforeAll(async () => {
   await drainOutbox(worker);
 });
 
-describe("scenario RP-588-2 (RP-643: notification): one notification per Member for a Package Submit, counting what they see", () => {
+describe("scenario RP-588-2 (RP-643: notification): one notification per Member for a Package Submit, counting the items whose Step reached them that they still see", () => {
   it("K1's engineer who sees everything hears of 8, the one narrowed to Electrical of 6; neither gets a Step reached per submittal", async () => {
     const pkg = await packageOf("Bathrooms – Tower 1", 6, 2);
     await submitPackage(pkg.id);
@@ -168,7 +168,7 @@ describe("a Package Submit's notification", () => {
     expect(await ofPackage(k1All, pkg.id)).toMatchObject([{ package: { count: 3 } }]);
   });
 
-  it("is emailed and digested as a Step reached is, with the count the recipient sees", async () => {
+  it("is emailed and digested as a Step reached is, with the count of the items that reached the recipient and they still see", async () => {
     const emails: NotificationEmail[] = [];
     const digests: NotificationDigest[] = [];
     const handlers = {

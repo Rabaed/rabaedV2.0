@@ -724,10 +724,55 @@ describe("RP-642: a Code C keeps the Package In Progress until its Revision clos
     expect(await statusOf(pkg.id)).toBe("in_progress");
 
     const revision = await revisionOf(revised);
-    expect((await getPackage(at.c1Pm, pkg.id)).items.map((i) => i.id).sort()).toEqual([passed, revised, revision].sort());
+    // Story 30: the latest Revision of each chain only, the Code C left out once its Revision is raised.
+    expect((await getPackage(at.c1Pm, pkg.id)).items.map((i) => i.id).sort()).toEqual([passed, revision].sort());
     await submitAlone(revision);
     expect(await statusOf(pkg.id)).toBe("in_progress");
     await codeAs(revision, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("done");
+  });
+});
+
+// Story 30, as the product owner settled it on 2026-10-19: the counts are of the latest
+// Revision of each chain only, as Done reads them, on the board and the Package page.
+describe("story 30: a Package counts the latest Revision of each chain", () => {
+  it('a Code C and its open Revision count "open 1, total 1", for C1 and for K1; K1 counts the Code C until it sees the Revision', async () => {
+    const pkg = await submittedPackage("Switchgear – Tower 1", 1);
+    const [revised] = pkg.items as [string];
+    await codeAs(revised, "revise_c");
+    const counts = async (by: Caller) => ({
+      page: (await getPackage(by, pkg.id)).counts,
+      board: (await listPackages(by)).find((p) => p.id === pkg.id)!.counts,
+    });
+    const codedC = { total: 1, open: 0, codes: { C: 1 } };
+    expect(await counts(at.c1Pm)).toEqual({ page: codedC, board: codedC });
+
+    const revision = await revisionOf(revised);
+    const reopened = { total: 1, open: 1, codes: {} };
+    expect(await counts(at.c1Pm)).toEqual({ page: reopened, board: reopened });
+    expect((await getPackage(at.c1Pm, pkg.id)).items.map((i) => i.id)).toEqual([revision]);
+    // C1's Draft R1 is C1's own: K1 neither counts it nor learns it exists.
+    expect(await counts(at.k1Manager)).toEqual({ page: codedC, board: codedC });
+    expect((await getPackage(at.k1Manager, pkg.id)).items.map((i) => i.id)).toEqual([revised]);
+    await submitAlone(revision);
+    expect(await counts(at.k1Manager)).toEqual({ page: reopened, board: reopened });
+  });
+});
+
+// As the product owner settled it on 2026-10-19: the owner may still add items to a Done
+// Package, and it goes back to In Progress until they close.
+describe("adding an item to a Done Package", () => {
+  it("is allowed, and puts the Package back In Progress until the new item closes", async () => {
+    const pkg = await submittedPackage("Lifts – Tower 1", 1);
+    await codeAs(pkg.items[0]!, "approve_a");
+    expect(await statusOf(pkg.id)).toBe("done");
+    expect((await getPackage(at.c1Pm, pkg.id)).actions.addItems).toBe(true);
+
+    const late = await readyForPm("Lifts – Tower 1 late");
+    await ok(addItem(at.c1Pm, pkg.id, late));
+    expect(await statusOf(pkg.id)).toBe("in_progress");
+    await ok(submitPackage(at.c1Pm, pkg.id), 200);
+    await codeAs(late, "approve_a");
     expect(await statusOf(pkg.id)).toBe("done");
   });
 });
