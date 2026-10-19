@@ -97,8 +97,7 @@ export const searchMaxLength = 200;
 export const stepAgeMinimums = [1, 2, 3, 4] as const;
 
 const uuid = z.uuid();
-/** A Stage key; `<module>:<key>` for a Stage listed in another Module's tab (Inspections in the Submittals tab, RP-652). */
-const stageKey = z.string().regex(/^[a-z][a-z0-9_]{0,62}(:[a-z][a-z0-9_]{0,62})?$/);
+const stageKey = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/);
 
 /**
  * Who an item is with (the "With" column, V14):

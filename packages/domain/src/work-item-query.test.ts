@@ -338,14 +338,14 @@ describe("the List's web path", () => {
   });
 });
 
-describe("a Stage filter in the Submittals tab that lists Inspections too (RP-652)", () => {
-  it("takes a Stage of another Module by `<module>:<key>`, beside the Module's own keys", () => {
-    expect(workItemQuery.parse({ stage: ["draft", "inspections:pending_approval"] }).stage).toEqual(["draft", "inspections:pending_approval"]);
+describe("a Stage filter in the Submittals tab that lists Inspections too (RP-674)", () => {
+  it("takes a plain Stage key: the Inspections share the Submittals' Stage keys", () => {
+    expect(workItemQuery.parse({ stage: ["draft", "pending_approval"] }).stage).toEqual(["draft", "pending_approval"]);
   });
 
-  it("refuses a key that is neither", () => {
+  it("refuses a `<module>:<key>` key, which RP-652 once took", () => {
+    expect(workItemQuery.safeParse({ stage: ["inspections:pending_approval"] }).success).toBe(false);
     expect(workItemQuery.safeParse({ stage: ["inspections:"] }).success).toBe(false);
-    expect(workItemQuery.safeParse({ stage: ["a:b:c"] }).success).toBe(false);
     expect(workItemQuery.safeParse({ stage: [":draft"] }).success).toBe(false);
   });
 });
