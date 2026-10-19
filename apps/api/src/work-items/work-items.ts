@@ -1741,7 +1741,6 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
       action_form: unknown;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
-<<<<<<< HEAD
     // The import that created it (RP-645, story 35), for its importing Company's Members only, with no time.
     const { rows: imports } = await sql<{ import_id: string; file_name: string; member_name: BilingualText | null; by_rabaed: boolean }>`
       select import_id, file_name, member_name, by_rabaed from app.register_import_of_work_item(${workItemId}::uuid)
