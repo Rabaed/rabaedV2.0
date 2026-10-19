@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { PackageDetail, WorkItemHistory } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addActionsType, addRulesType } from "./support/rules.ts";
@@ -288,5 +289,82 @@ describe("the Package's answer says which Transitions each item offers in bulk",
 
     await ok(bulk(at.k1Manager, [a, b], { transition: "approve_a" }), 200);
     expect((await read(at.k1Manager)).get(a)).toEqual([]);
+  });
+});
+
+/**
+ * Item `id`'s Code A event as the migrator reads the append-only trail: who took it,
+ * from which Participant, the hash of the item's content it recorded (ADR 0003,
+ * ADR 0017), and that hash worked out again from the item as it is now
+ * (app.work_item_content_sha256, the function app.transition_effects records it with).
+ */
+async function codeSignature(id: string) {
+  const { rows } = await sql<{ actor_member_id: string; actor_participant_id: string; content_sha256: string | null; content_now: string }>`
+    select e.actor_member_id, e.actor_participant_id, encode(e.content_sha256, 'hex') as content_sha256,
+      encode(app.work_item_content_sha256(w.id, w.title, w.data, w.outcome), 'hex') as content_now
+    from work_item_event e
+    join workflow_transition tr on tr.id = e.transition_id
+    join work_item w on w.id = e.work_item_id
+    where e.work_item_id = ${id}::uuid and e.type in ('transition', 'issue_code') and tr.key = 'approve_a'
+  `.execute(migrator);
+  expect(rows, id).toHaveLength(1);
+  return rows[0]!;
+}
+
+// Spec story 44, as the product owner settled it on 2026-10-19: each submittal in a
+// bulk Transition is signed exactly as in a single Transition, so a bulk action never
+// bypasses a signature. There is no signing check of the bulk command's own: each
+// item goes through takeTransitionIn and app.take_transition.
+describe("story 44: each item is signed as a single Transition", () => {
+  it("each item's own Code event records its own content hash and signer, as a single Code does: one signature per item, never a shared one", async () => {
+    const single = await atK1("Signed alone");
+    await take(at.k1Manager, single, "approve_a");
+    const control = await codeSignature(single);
+    // A single Code records the hash of the item's content as the Code leaves it.
+    expect(control.content_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(control.content_sha256).toBe(control.content_now);
+    expect(control.actor_participant_id).toBe(k1ParticipantId);
+
+    // Three items whose content differs (each its own Subject).
+    const items = [await atK1("Signed one"), await atK1("Signed two"), await atK1("Signed three")];
+    await ok(bulk(at.k1Manager, items, { transition: "approve_a" }), 200);
+    const signed = await Promise.all(items.map(codeSignature));
+    for (const s of signed) {
+      expect(s.content_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(s.content_sha256).toBe(s.content_now);
+      expect(s).toMatchObject({ actor_member_id: control.actor_member_id, actor_participant_id: k1ParticipantId });
+    }
+    expect(new Set([control.content_sha256, ...signed.map((s) => s.content_sha256)]).size).toBe(4);
+  });
+
+  // RP-85 (Main 2, branch RP-632-signature-stamp, not on main yet): app.take_transition
+  // refuses a Member without a saved Signature (`no_signature`, ADR 0017: "A Member
+  // needs a saved Signature before taking any Transition"). Un-skip once RP-85 lands
+  // and fill in the Signature setup below. It checks that a K1 manager without a
+  // Signature taking a bulk Code over three items is refused all or nothing: 409
+  // `bulk_refused`, `stoppedBy` naming the first item and the Signature refusal, and
+  // none of the three moves. Today stopFrom (bulk-transitions.ts) answers any engine
+  // refusal it doesn't pass through as `refused`, and commandResult only knows the
+  // refusals in transitionRefusals: RP-85 must add `no_signature` to both (and to
+  // bulkStopReasons) for `stoppedBy.reason` to name it.
+  it.skip("RP-85: a K1 manager without a Signature is refused a bulk Code over three items, and none of them moves", async () => {
+    const unsigned = await memberOnProject(api, k1, k1ParticipantId, ["manager"]);
+    // RP-85: make sure `unsigned` has no saved Signature here (remove it, or create the Member without one).
+    const items: string[] = [];
+    for (const title of ["Unsigned one", "Unsigned two", "Unsigned three"]) {
+      const id = await submitted(at, at.c1Engineer, at.c1Pm, title);
+      await ok(unsigned.caller.post(`/v1/work-items/${id}/pick-up`));
+      items.push(id);
+    }
+    const refused = await refusal(bulk(unsigned.caller, items, { transition: "approve_a" }));
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+    expect(refused.body).toEqual({
+      error: "bulk_refused",
+      stoppedBy: { id: items[0], documentNumber: (await detail(unsigned.caller, items[0]!)).documentNumber, title: "Unsigned one", reason: "no_signature" },
+    });
+    for (const id of items) {
+      expect(await whereFor(unsigned.caller, id)).toMatchObject({ offered: expect.arrayContaining(["approve_a"]) });
+      expect((await history(at.c1Pm, id)).events.filter((e) => e.outcome === "A")).toEqual([]);
+    }
   });
 });
