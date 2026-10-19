@@ -165,28 +165,28 @@ describe("RP-981: an annotated copy of an After photo goes with its original", (
   it("C1 annotates it at In Progress; K1 and the Owner read neither until the Resolve shares both, frozen; after a Return only the new photo is annotated", async () => {
     const id = await inProgress("Tray annotated");
     const photo = await addAfterPhoto(c1Pm, id);
-    const started = await startCopy(c1.member, id, photo);
+    const started = await startCopy(c1.members.engineer, id, photo);
     expect(started.outcome).toBe("started");
     expect(
       await outcome(
-        c1.member,
+        c1.members.engineer,
         sql`select app.confirm_document_upload(${id}::uuid, ${started.document_id}::uuid, 2048, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
       ),
     ).toBe("confirmed");
     const copy = started.document_id!;
     const [row] = (await migrator.query("select reply, field_key, annotated_from_id from document where id = $1", [copy])).rows;
     expect(row).toEqual({ reply: true, field_key: "after_photos", annotated_from_id: photo });
-    for (const outsider of [k1.member, ow.member, c2.member]) {
+    for (const outsider of [k1.members.engineer, ow.members.representative, c2.members.engineer]) {
       expect(await afterPhotos(outsider, id)).toEqual([]);
       expect(await byId(outsider, copy)).toEqual([]);
       expect((await startCopy(outsider, id, photo)).outcome).toBe("not_found");
     }
 
     expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Bonded" })).toBe("applied");
-    for (const reader of [k1.member, ow.member, c1.member]) expect(await afterPhotos(reader, id)).toEqual([photo, copy].sort());
-    expect(await afterPhotos(c2.member, id)).toEqual([]);
+    for (const reader of [k1.members.engineer, ow.members.representative, c1.members.engineer]) expect(await afterPhotos(reader, id)).toEqual([photo, copy].sort());
+    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
 
-    expect(await take(k1.member, id, "return_to_open", { reason: "Label it" })).toBe("applied");
+    expect(await take(k1.members.engineer, id, "return_to_open", { reason: "Label it" })).toBe("applied");
     expect((await startCopy(c1Pm, id, photo)).outcome).toBe("document_frozen");
     const next = await addAfterPhoto(c1Pm, id);
     expect((await startCopy(c1Pm, id, next)).outcome).toBe("started");
