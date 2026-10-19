@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, type BilingualText, type Locale, type RegisterImport, type RegisterImportFields, type RegisterImportMapping, type RegisterImportRow } from "@rabaed/domain";
-import { Button, Icon, ImportRows, RegisterImportWizard as Wizard, rejectedRowsDownload, saveDownload, type RegisterImportClient } from "@rabaed/ui";
+import { Button, Icon, ImportRows, RegisterImportWizard as Wizard, buttonVariants, rejectedRowsDownload, saveDownload, type RegisterImportClient } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
@@ -73,10 +73,7 @@ export function RegisterImportWizard({
       onPreviewed={(id) => window.history.replaceState(null, "", `?preview=${id}`)}
       draftLink={draftLink}
       resultActions={(preview, created) => (
-        <Link
-          href={`/projects/${projectId}/work-items/imports/${preview.id}`}
-          className="inline-flex h-9 items-center gap-2 rounded-sm bg-primary px-3.5 text-[14px] font-semibold text-on-primary hover:bg-primary-hover"
-        >
+        <Link href={`/projects/${projectId}/work-items/imports/${preview.id}`} className={buttonVariants()}>
           <Icon name="list" />
           {t("result.open", { count: created, n: formatNumber(created, locale) })}
         </Link>

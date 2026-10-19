@@ -5,10 +5,24 @@ import {
   type AdminRegisterImportFor,
   type AdminRegisterImportParticipants,
   type AdminRegisterImportProjects,
+  type BilingualText,
   type Locale,
   type RegisterImportFields,
 } from "@rabaed/domain";
-import { Avatar, Button, DirectionProvider, Icon, RegisterImportWizard, Select, cn, type RegisterImportCallResult, type RegisterImportClient } from "@rabaed/ui";
+import {
+  Avatar,
+  Button,
+  DirectionProvider,
+  Field,
+  Icon,
+  RegisterImportWizard,
+  Select,
+  Textarea,
+  buttonVariants,
+  cn,
+  type RegisterImportCallResult,
+  type RegisterImportClient,
+} from "@rabaed/ui";
 import { useMemo, useState } from "react";
 import { AdminHeader, SignedOutOrLoading, useAdminSession } from "./admin-header.tsx";
 import { ApiError, api } from "./api.ts";
@@ -47,7 +61,7 @@ async function call(method: "GET" | "POST", path: string, body?: unknown): Promi
 
 type Participant = AdminRegisterImportParticipants["participants"][number];
 /** Whom the import is for, once the Company & reason step is done, with what a register may fill there. */
-type Chosen = { for: AdminRegisterImportFor; projectName: string; participant: Participant; memberName: { en: string; ar: string }; fields: RegisterImportFields };
+type Chosen = { for: AdminRegisterImportFor; projectName: string; participant: Participant; memberName: BilingualText; fields: RegisterImportFields };
 
 function ImportForCompany({ locale }: { locale: Locale }) {
   const w = importPageWords(locale);
@@ -197,25 +211,25 @@ function ImportForCompany({ locale }: { locale: Locale }) {
       )}
 
       <section aria-label={w.step} className="flex max-w-[860px] flex-col gap-5 rounded-lg border border-border bg-surface p-5">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[14px] font-semibold">
-            {w.reason} <span aria-hidden>*</span>
-          </span>
-          <textarea
-            required
+        <Field
+          label={w.reason}
+          required
+          help={
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="lock" size={14} />
+              {w.reasonKept}
+            </span>
+          }
+        >
+          <Textarea
             rows={3}
             maxLength={1000}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             onBlur={() => void (why && (projects === null || listsStale) ? loadProjects() : undefined)}
             placeholder={w.reasonPlaceholder}
-            className="rounded-sm border border-border-strong bg-surface px-3 py-2 text-[14px]"
           />
-          <span className="flex items-center gap-1.5 text-[13px] text-muted">
-            <Icon name="lock" size={14} />
-            {w.reasonKept}
-          </span>
-        </label>
+        </Field>
 
         {projects === null ? (
           <div className="flex flex-wrap items-center gap-3">
@@ -303,7 +317,7 @@ function ImportForCompany({ locale }: { locale: Locale }) {
       </section>
 
       <div className="flex items-center justify-between">
-        <a href="/" className="inline-flex h-9 items-center rounded-sm bg-neutral-tint px-3.5 text-[14px] font-semibold text-text hover:bg-hover">
+        <a href="/" className={buttonVariants({ variant: "secondary" })}>
           {t("back")}
         </a>
         <Button onClick={() => void next()} disabled={busy || !why || !member || listsStale}>
