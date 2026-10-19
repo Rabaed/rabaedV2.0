@@ -28,6 +28,5 @@ const byCategory: Record<Stage["category"], StageKey> = {
 
 /** The colour category `StagePill` shows a Stage in. */
 export function stageColour(stage: Stage): StageKey {
-  // A Stage of another Module listed in this tab is `<module>:<key>` (RP-652): coloured as its own key.
-  return byKey.get(stage.key.slice(stage.key.indexOf(":") + 1)) ?? byCategory[stage.category];
+  return byKey.get(stage.key) ?? byCategory[stage.category];
 }
