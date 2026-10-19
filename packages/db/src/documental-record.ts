@@ -64,7 +64,10 @@ export interface SealedRecord {
   readonly verificationCode: string;
 }
 
-/** Saves the sealed record of job `outboxId`; false when the item has one already. */
+/**
+ * Saves the made record of job `outboxId` as 'preparing' (RP-155: it is published only once
+ * `finishDocumentalRecord` has the checks' verdict); false when the item has one already.
+ */
 export async function saveDocumentalRecord(trx: Transaction<Database>, outboxId: string, record: SealedRecord): Promise<boolean> {
   const { rows } = await sql<{ saved: boolean }>`
     select app.save_documental_record(

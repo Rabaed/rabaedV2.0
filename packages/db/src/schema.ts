@@ -141,7 +141,9 @@ export interface AdminActionTable {
     | "add_default_stage"
     | "rename_default_stage"
     | "reorder_default_stages"
-    | "refuse_workflow_publish";
+    | "refuse_workflow_publish"
+    | "reproduce_documental_record"
+    | "read_documental_record_alerts";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;

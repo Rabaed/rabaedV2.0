@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { documentalRecordFacts, saveDocumentalRecord, type OutboxHandler } from "@rabaed/db";
+import { finishRecord, pageCountOf } from "./checks.ts";
 import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
@@ -11,6 +12,7 @@ import type { PdfRenderer } from "./render.ts";
 import { sealPdf } from "./seal.ts";
 import type { SealSigner } from "./signer.ts";
 import type { TimestampAuthority } from "./timestamp.ts";
+import type { PdfAValidator } from "./verapdf.ts";
 
 // The record job (workflow-engine.md §7; ADR 0023): the outbox handler for kind
 // 'documental_record', written when an item closes. It writes the Record Data,
@@ -20,8 +22,10 @@ import type { TimestampAuthority } from "./timestamp.ts";
 // retries the row, then dead-letters it; the closure is never touched. Until
 // the save, nothing is issued: a retry makes the record afresh.
 //
-// Not yet (later tickets of spec RP-632): the checks before publishing and the
-// "record ready" event (RP-155), the appendix (RP-147), page 1, the Form,
+// The record is saved 'preparing', checked (checks.ts) and then published, or kept as
+// failed_checks with Rabaed Admin alerted (RP-155); publishing queues "record ready".
+//
+// Not yet (later tickets of spec RP-632): the appendix (RP-147), page 1, the Form,
 // Signatures and Stamps (RP-151, RP-650), and the Project's record language.
 
 export interface RecordJobDeps {
@@ -35,6 +39,8 @@ export interface RecordJobDeps {
   /** The customer web's address: the verification page's link starts there. */
   readonly webUrl: string;
   readonly now?: () => Date;
+  /** The PDF/A-3 validator the checks use (veraPDF); the environment's (VERAPDF) when left out. */
+  readonly validator?: PdfAValidator;
 }
 
 /** Crockford's base 32: no I, L, O or U, so a printed code reads back unambiguously. */
@@ -68,7 +74,7 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     const keys = recordKeys(facts.projectId, facts.workItemId);
     await deps.files.put(keys.recordData, xml, "application/xml");
     await deps.files.put(keys.pdf, pdf, "application/pdf");
-    await saveDocumentalRecord(trx, row.id, {
+    const saved = await saveDocumentalRecord(trx, row.id, {
       pdf: { storageKey: keys.pdf, sha256: await sha256(pdf), size: pdf.length },
       recordData: { storageKey: keys.recordData, sha256: await sha256(xml), size: xml.length },
       layoutVersion: data.layoutVersion,
@@ -77,5 +83,6 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
       verificationTokenHash: await sha256(new TextEncoder().encode(token)),
       verificationCode: data.verification.code,
     });
+    if (saved) await finishRecord(trx, row.id, { pdf, data, layoutPages: await pageCountOf(rendered) }, deps.validator);
   };
 }

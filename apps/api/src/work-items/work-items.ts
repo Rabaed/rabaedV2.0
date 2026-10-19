@@ -775,6 +775,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
     `.execute(trx);
+    const { rows: record } = await sql<{ state: "preparing" | "published" | null }>`select app.documental_record_state(${workItemId}::uuid) as state`.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
@@ -802,6 +803,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         : null,
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
+      documentalRecord: record[0]!.state,
       // When the Draft was started is audit only, shown to nobody (visibility.md "Creation Date", scenario 61).
       creationDate: d.creation_date?.toISOString() ?? null,
       submissionDate: d.submitted_at?.toISOString() ?? null,

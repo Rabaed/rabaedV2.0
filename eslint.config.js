@@ -125,7 +125,7 @@ export default tseslint.config(
       // The Documental Record's PDF and PKI internals, in ISO 32000's, PDF/A's and the RFCs' own vocabulary
       // (header, annotation, output intent, AFRelationship, organization, serial number, file). "Seal" there is
       // ADR 0023's digital seal of the record, the meaning GLOSSARY.md keeps it for, never a Company's Stamp.
-      "apps/worker/src/record/{pdfa,pki,seal,signer,timestamp}.ts",
+      "apps/worker/src/record/{checks,pdfa,pki,seal,signer,timestamp}.ts",
     ],
     plugins: { rabaed },
     rules: { "rabaed/no-avoid-terms": "error" },

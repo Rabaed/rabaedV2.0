@@ -22,6 +22,7 @@ import {
   projectFilesFromEnv,
   s3RecordFiles,
   sealTamperOffsets,
+  veraPdfDocker,
   verifySeal,
   withByteChanged,
   type PdfRenderer,
@@ -90,6 +91,8 @@ async function recordHandler(rendering: PdfRenderer = renderer): Promise<OutboxH
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
+    // The checks before publishing (RP-155) validate with veraPDF itself.
+    validator: veraPdfDocker(),
   });
 }
 
@@ -294,8 +297,9 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     expect(xml).not.toContain(rows[0]!.at);
   });
 
-  it("validates as PDF/A-3", async () => {
+  it("validates as PDF/A-3: our own rules, and veraPDF's (the checks before publishing ran it)", async () => {
     expect(await pdfA3Problems(record)).toEqual([]);
+    expect(await veraPdfDocker().validate(record)).toEqual({ compliant: true, problems: [] });
   });
 });
 
