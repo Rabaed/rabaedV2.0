@@ -223,6 +223,15 @@ export {
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
 export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
 export { PackagePage, packageItemsToSubmit, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
+export {
+  sharedBulkTransitions,
+  type BulkStopped,
+  type BulkTakeRequest,
+  type BulkTakeResult,
+  type BulkTransitionForm,
+  type PackageBulkLabels,
+  type PackageBulkProps,
+} from "./components/packages/package-bulk.tsx";
 export { type AddPackageItemsLabels, type PackageItemSearch } from "./components/packages/add-package-items-dialog.tsx";
 export { type DeletePackageLabels, type NewPackageLabels, type RenamePackageLabels } from "./components/packages/package-dialogs.tsx";
 export { PackagesBoard, type PackagesBoardLabels, type PackagesBoardProps } from "./components/packages/packages-board.tsx";
