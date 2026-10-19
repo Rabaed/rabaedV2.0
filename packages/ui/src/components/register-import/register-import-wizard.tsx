@@ -1020,7 +1020,7 @@ export function RegisterImportWizard({
       )}
 
       {step === "result" && preview && created !== null && (
-        <section aria-labelledby="result-heading" className="flex flex-col items-center gap-4 rounded-lg border border-border bg-surface px-6 py-10 text-center">
+        <section aria-labelledby="result-heading" className="flex flex-col items-center gap-4 rounded-lg border border-border bg-surface px-6 py-8 text-center">
           <span className="inline-flex size-16 items-center justify-center rounded-full bg-success-tint text-success-fg">
             <Icon name="circle-check" size={32} />
           </span>
