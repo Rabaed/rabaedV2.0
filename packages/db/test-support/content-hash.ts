@@ -29,9 +29,19 @@ export type HashedDocument = {
 /**
  * The content hash a Transition's event should carry (RP-436, workflow-engine.md
  * §7): SHA-256, hex, of the item's Subject, answers, outcome and Documents (by id)
- * as the Transition leaves it, worked out from the spec, not by the database.
+ * as the Transition leaves it, worked out from the spec, not by the database. An item a
+ * Transition took a reply Screen's checklist from (RP-86) adds `checklists`: each one's
+ * field key and answers, by field key.
  */
-export function expectedContentSha256(content: { title: string; data: object; outcome: string | null; documents: HashedDocument[] }): string {
+export function expectedContentSha256(content: {
+  title: string;
+  data: object;
+  outcome: string | null;
+  documents: HashedDocument[];
+  checklists?: { field_key: string; answers: object }[];
+}): string {
   const documents = [...content.documents].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return createHash("sha256").update(jsonbText({ ...content, documents }), "utf8").digest("hex");
+  const { checklists, ...rest } = content;
+  const taken = checklists && checklists.length > 0 ? { checklists: [...checklists].sort((a, b) => (a.field_key < b.field_key ? -1 : 1)) } : {};
+  return createHash("sha256").update(jsonbText({ ...rest, documents, ...taken }), "utf8").digest("hex");
 }
