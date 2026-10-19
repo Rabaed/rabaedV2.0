@@ -10,7 +10,7 @@ import {
   workItemListHref,
   type Locale,
 } from "@rabaed/domain";
-import { AgeDots, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, cn, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -27,7 +27,7 @@ import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
 import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
-import { SnagItemCards } from "@/components/snag-item-cards";
+import { SnagHeroPhoto, SnagItemCards } from "@/components/snag-item-cards";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
@@ -120,7 +120,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       fieldTimes={item.fieldTimes}
       autosave={item.autosave}
     >
-      <div className="max-w-3xl space-y-6">
+      {/* On a phone a Snag List item ends above its bar of actions (RP-630). */}
+      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24")}>
+        {/* On a phone a Snag List item opens with its first photo, as the kit does (RP-630). */}
+        {snag && <SnagHeroPhoto workItemId={item.id} subject={item.title} photos={beforePhotos(form.schema, documents.documents)} />}
         <div className="space-y-2">
           <Link href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
             {snag ? moduleNames.snag_list[locale] : t("title")}
@@ -166,7 +169,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
         </div>
 
-        <WorkItemActions workItemId={item.id} actions={item.actions} locale={locale} />
+        <WorkItemActions
+          workItemId={item.id}
+          actions={item.actions}
+          locale={locale}
+          // A Snag List item's actions on a phone: a bar at the bottom of the screen, in reach of a thumb (RP-630).
+          phoneBar={snag}
+        />
         <WorkItemRevision
           workItemId={item.id}
           projectId={item.projectId}

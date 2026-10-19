@@ -25,6 +25,35 @@ const refusals: Record<string, string> = {
   field_not_found: "unavailable",
 };
 
+/**
+ * Uploads one file to a Work Item: the API signs a URL for exactly this file, the browser puts it in
+ * the file store, and the API is told it's there. `refused` is the API's refusal code (or
+ * `unavailable` when the file store or the network failed).
+ */
+export async function uploadToWorkItem(
+  workItemId: string,
+  file: File,
+  { fieldKey, itemKey, reply = false }: { fieldKey?: string; itemKey?: string; reply?: boolean } = {},
+): Promise<{ ok: true } | { ok: false; refused: string; status?: number }> {
+  const base = `/api/v1/work-items/${workItemId}/documents`;
+  const refusal = async (res: Response) => ({ ok: false as const, status: res.status, refused: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "unavailable" });
+  try {
+    const res = await fetch(base, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType: contentTypeOfFile(file), fieldKey, itemKey, ...(reply ? { reply: true } : {}) }),
+    });
+    if (!res.ok) return await refusal(res);
+    const started = (await res.json()) as StartedDocumentUpload;
+    const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body: file });
+    if (!put.ok) return { ok: false, refused: "unavailable" };
+    const confirmed = await fetch(`${base}/${started.id}/confirm`, { method: "POST" });
+    return confirmed.ok ? { ok: true } : await refusal(confirmed);
+  } catch {
+    return { ok: false, refused: "unavailable" };
+  }
+}
+
 /** The Attachments System Field's Documents have no field key: this key stands for them in `pending`. */
 const systemField = "";
 
@@ -60,8 +89,11 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"],
 
   async function refused(res: Response) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
-    setMessage(t(refusals[body.error ?? ""] ?? "unavailable", { size: size(limits.maxBytes) }));
-    if (res.status === 404 || res.status === 409) router.refresh();
+    refusedWith(body.error, res.status);
+  }
+  function refusedWith(error: string | undefined, status?: number) {
+    setMessage(t(refusals[error ?? ""] ?? "unavailable", { size: size(limits.maxBytes) }));
+    if (status === 404 || status === 409) router.refresh();
   }
 
   /**
@@ -100,33 +132,13 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"],
       setMessage(t("wrongType"));
       return false;
     }
-    try {
-      const res = await fetch(base, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType, fieldKey, itemKey, ...(reply ? { reply: true } : {}) }),
-      });
-      if (!res.ok) {
-        await refused(res);
-        return false;
-      }
-      const started = (await res.json()) as StartedDocumentUpload;
-      const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body: file });
-      if (!put.ok) {
-        setMessage(t("unavailable"));
-        return false;
-      }
-      const confirmed = await fetch(`${base}/${started.id}/confirm`, { method: "POST" });
-      if (!confirmed.ok) {
-        await refused(confirmed);
-        return false;
-      }
-      setMessage(t("uploaded"));
-      return true;
-    } catch {
-      setMessage(t("unavailable"));
+    const result = await uploadToWorkItem(workItemId, file, { fieldKey, itemKey, reply });
+    if (!result.ok) {
+      refusedWith(result.refused, result.status);
       return false;
     }
+    setMessage(t("uploaded"));
+    return true;
   }
 
   async function open(documentId: string) {

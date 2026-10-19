@@ -11,6 +11,8 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `page.tsx` | `/` | Home across the Member's Projects; the welcome when signed out |
 | `sign-in/page.tsx` | `/sign-in` | Sign-in form |
 | `accept-invitation/page.tsx` | `/accept-invitation` | Accept an invitation to a Company or Project |
+| `verify/page.tsx` | `/verify` | Public: verify a Documental Record by its Verification Code and Document Number (RP-157) |
+| `verify/[token]/page.tsx` | `/verify/:token` | Public: the page a Documental Record's QR opens (RP-157) |
 | `health/page.tsx` | `/health` | API health check |
 | `profile/page.tsx` | `/profile` | The Member's profile: their Signature and notification settings |
 | `profile/signature/page.tsx` | `/profile/signature` | Add Signature: draw, type or upload it; `?returnTo=` the item the pop-up came from (RP-85) |
@@ -29,6 +31,7 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/work-items/imports/page.tsx` | `/projects/:projectId/work-items/imports` | Imports: the Company's Submittal Register Imports on the Project (RP-637) |
 | `projects/[projectId]/work-items/imports/[importId]/page.tsx` | `/projects/:projectId/work-items/imports/:importId` | One import: its mapping and each row's Draft or reasons (RP-637) |
 | `projects/[projectId]/[moduleTab]/page.tsx` | `/projects/:projectId/:moduleTab` | Any other Module's tab (Inspections, Snag List...), same List or Kanban |
+| `projects/[projectId]/[moduleTab]/new/page.tsx` | `/projects/:projectId/snag-list/new?type=&draft=&step=` | The camera-first New Snag on a phone (RP-630): camera, Subject (the Draft), Location, Raise; other tabs not found |
 | `projects/[projectId]/settings/page.tsx` | `/projects/:projectId/settings` | Redirects to Document Numbering |
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |
 | `projects/[projectId]/settings/trades-locations/page.tsx` | `/projects/:projectId/settings/trades-locations` | Trades, Scopes, Sub-scopes and Locations |

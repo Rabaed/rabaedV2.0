@@ -4,6 +4,7 @@ export * from "./client.ts";
 export * from "./config.ts";
 export * from "./documental-record.ts";
 export * from "./documental-record-checks.ts";
+export * from "./documental-record-face.ts";
 export * from "./local-database.ts";
 export * from "./migrate.ts";
 export * from "./numbering.ts";
