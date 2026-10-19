@@ -70,8 +70,16 @@ describe("check-migrations", () => {
     expect(result.stderr).toContain("20261213000000_unplanned.sql");
   });
 
-  // RP-977: the immutable check's second half (a new migration that sorts before
-  // main's newest) runs here too, so it shows before the push, not only in CI.
+  // RP-977: the immutable check runs here too, so it shows before the push, not only in CI:
+  // an existing migration edited, and a new one that sorts before main's newest.
+  it("fails an existing migration that the branch edits, with the immutable check's message", () => {
+    commit(clone, { [`${dir}/20261201000000_start.sql`]: "select 99;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Migrations that already exist on the base branch must not change.");
+    expect(result.stderr).toContain(`${dir}/20261201000000_start.sql (edited)`);
+  });
+
   it("fails a new migration that sorts before the latest one on main, with the immutable check's message", () => {
     commit(clone, { [`${dir}/20261205000000_early.sql`]: "select 3;\n" }, "branch");
     const result = check();
