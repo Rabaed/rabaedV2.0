@@ -208,7 +208,8 @@ export {
 export { NumberedPager, type NumberedPagerLabels, type NumberedPagerProps } from "./components/list/numbered-pager.tsx";
 export { Outcome, WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
 export { WorkItemTable, type WorkItemTableLabels, type WorkItemTableProps } from "./components/views/work-item-table.tsx";
-export { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps, type SnagNewType } from "./components/views/snag-list.tsx";
+export { SnagList, SnagTypeChip, type SnagBulk, type SnagListLabels, type SnagListProps, type SnagNewType } from "./components/views/snag-list.tsx";
+export { RaisedFromCard, SnagItemCard, SnagPhotoGrid, SnagResponse, type SnagItemLabels, type SnagPhoto } from "./components/views/snag-item.tsx";
 export { type SnagBulkActions, type SnagBulkLabels } from "./components/views/snag-bulk.tsx";
 export { type SnagExportLabels } from "./components/views/snag-export.ts";
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
