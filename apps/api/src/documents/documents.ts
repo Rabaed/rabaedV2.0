@@ -119,10 +119,11 @@ export function startUpload(
   now: Date,
 ): Promise<StartUploadResult> {
   return withMember(db, memberId, async (trx): Promise<StartUploadResult> => {
-    // A reply Screen's file (ADR 0024): its own function, which checks the Screen's field and who holds the item.
+    // A reply Screen's file (ADR 0024), or a photo of one of its checklist's items (RP-86): its own
+    // function, which checks the Screen's field, the check item, and who holds the item.
     const start = file.reply
       ? sql`app.start_reply_document_upload(
-          ${workItemId}::uuid, ${file.fieldKey!}, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
+          ${workItemId}::uuid, ${file.fieldKey!}, ${file.itemKey ?? null}, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
       : file.annotatedFromId
       ? sql`app.start_annotated_copy_upload(
           ${workItemId}::uuid, ${file.annotatedFromId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})`
