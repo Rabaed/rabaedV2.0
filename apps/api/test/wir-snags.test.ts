@@ -227,6 +227,13 @@ describe("every code raises them (seam 1)", () => {
     expect((await raisedFrom(hafiz.caller, wir, "SNG")).map((s) => s.title)).toEqual(["Formwork tight"]);
   });
 
+  it("Code D with one ticked Fail raises the Snag too", async () => {
+    const wir = await atManager("Code D", ONE_FAIL);
+    await sendToManager(wir, "D");
+    await take(mohammed.caller, wir, "reject_d", { answers: { ...VERIFIED, remarks: "Rejected" } });
+    expect((await raisedFrom(hafiz.caller, wir, "SNG")).map((s) => s.title)).toEqual(["Formwork tight"]);
+  });
+
   it("the same code again (its key replayed) raises no second Snag, and the Snag's photo still opens", async () => {
     const wir = await atManager("Replayed", ONE_FAIL);
     await sendToManager(wir, "C");

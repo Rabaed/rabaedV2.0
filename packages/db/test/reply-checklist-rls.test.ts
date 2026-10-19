@@ -398,6 +398,23 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     }
   });
 
+  it("the tick, taken off before the code, is K1's alone like the answers (V19), and the code shares it", async () => {
+    const unticked = { ...ANSWERS, formwork: { ...ANSWERS.formwork, snag: false } };
+    const held = await atConsultantReview("Slab pour, unticked");
+    expect(await save(k1.member, held, unticked)).toBe("saved");
+    expect(await answersAs(k1Manager, held)).toEqual([{ field_key: FIELD, answers: unticked }]);
+    for (const outsider of [c1.member, c1Pm, ow.member, c2.member, other.ap]) {
+      expect(await answersAs(outsider, held), outsider).toEqual([]);
+    }
+    await addPhoto(k1.member, held);
+    expect(await take(k1.member, held, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1Manager, held)).toBe("picked_up");
+    expect(await take(k1Manager, held, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    expect(await codeAnswersAs(c1.member, held)).toEqual([unticked]);
+    const raised = await migrator.query("select 1 from work_item_link where to_id = $1 and kind = 'raised_from'", [held]);
+    expect(raised.rows).toEqual([]);
+  });
+
   it("the files to copy are only the code's own transaction's: once it committed, none, for K1 that raised them too", async () => {
     // The photo was copied (a Document of the Snag) ...
     expect(await snagPhotos(k1Manager)).toBe(1);
