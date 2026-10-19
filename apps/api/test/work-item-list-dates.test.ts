@@ -10,7 +10,7 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { decodeWorkItemCursor, workItemSearchParams, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { copyWorkItem } from "./support/copy-work-items.ts";
+import { copyWorkItems } from "./support/copy-work-items.ts";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, approvedSupplier, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
@@ -212,40 +212,47 @@ describe("cursor paging by Submission Date", () => {
     await projectMember(api, c1, own, ["project_manager"]);
     // Five Subjects, shared, in an order unlike the order they were made in.
     const titleOf = (i: number) => `Item ${"DBEAC"[(i * 7) % 5]}`;
-    // The first goes through the api; the other 52 are copies of it, made in one go (53 requests took over 60 s in CI, RP-978).
+    // Pages hold 50, and the break falls where a cursor can go wrong: inside a group of items sharing one Submission Date
+    // (the id breaks the tie), with the items not yet Submitted after it. Under the other sorts the break falls inside
+    // the Subject ties. (Each page reads every item, so more items would make the test slow.)
+    const total = 60;
+    const submittedCount = 55;
+    const groupSize = 11;
+    // The first goes through the api; the others are copies of it, made in one go (53 requests took over 60 s in CI, RP-978).
+    // Their `created_at` runs in neither the order of the Subjects nor of the Submission Dates, to show nothing sorts by it.
     const first = await ok(engineer.post(`/v1/projects/${project}/work-items`, { type: "MAR", title: titleOf(0), answers: { trade: tradeId, location: locationId } }), 201);
-    const copies = Array.from({ length: 52 }, (_, i) => ({ id: randomUUID(), title: titleOf(i + 1) }));
-    await copyWorkItem(migrator, first.json().id, copies);
+    const madeAt = (i: number) => new Date(Date.UTC(2026, 0, 1) + ((i * 37) % total) * 1000).toISOString();
+    const copies = Array.from({ length: total - 1 }, (_, i) => ({ id: randomUUID(), title: titleOf(i + 1), createdAt: madeAt(i + 1) }));
+    await copyWorkItems(migrator, first.json().id, copies);
     const created: string[] = [first.json().id, ...copies.map((c) => c.id)];
     const subjects = new Map<string, string>([[first.json().id, titleOf(0)], ...copies.map((c) => [c.id, c.title] as const)]);
     // Un-numbered Drafts and items not yet Submitted: by Subject, then id, never by when they were made (ADR 0015).
     // Code-unit order is `collate "C"`'s byte order for these ASCII Subjects and the ids' lowercase hex.
     const byCodeUnits = (a: string, b: string) => Number(a > b) - Number(a < b);
     const bySubject = (a: string, b: string) => byCodeUnits(subjects.get(a)!, subjects.get(b)!) || byCodeUnits(a, b);
-    // 49 carry a Submission Date, in groups that share one (the id breaks the tie); 4 have none.
-    const submitted = created.slice(0, 49);
-    const submittedAt = submitted.map((_, i) => new Date(Date.UTC(2026, 5, 1) + Math.floor(i / 7) * DAY).toISOString());
+    // The first 55 carry a Submission Date, in five groups of 11 that share one (the 50th row is in the last); the rest have none.
+    const submitted = created.slice(0, submittedCount);
+    const dayOf = (id: string) => Math.floor(created.indexOf(id) / groupSize);
+    const submittedAt = submitted.map((id) => new Date(Date.UTC(2026, 5, 1) + dayOf(id) * DAY).toISOString());
     await sql`
       update work_item set submitted_at = s.at
       from unnest(${submitted}::uuid[], ${submittedAt}::timestamptz[]) as s (id, at)
       where work_item.id = s.id
     `.execute(migrator);
     const seen: string[] = [];
+    const pageSizes: number[] = [];
     let cursor: string | undefined;
-    let pages = 0;
     do {
       const page = await list(engineer, { sort: "submissionDate", ...(cursor ? { cursor } : {}) }, project);
       seen.push(...ids(page));
+      pageSizes.push(page.items.length);
       cursor = page.nextCursor ?? undefined;
-      pages += 1;
-      expect(page.items.length).toBe(cursor ? 50 : 3);
     } while (cursor);
-    expect(pages).toBe(2);
-    expect(new Set(seen).size).toBe(53);
-    // The Submitted ones first, the latest first; then the rest.
-    const times = seen.slice(0, 49).map((id) => created.indexOf(id)).map((n) => Math.floor(n / 7));
-    expect(times).toEqual([...times].sort((a, b) => b - a));
-    expect(seen.slice(49)).toEqual(created.slice(49).sort(bySubject));
+    expect(pageSizes).toEqual([50, 10]);
+    expect(new Set(seen).size).toBe(total);
+    // The Submitted ones first, the latest first and, among those of one day, by id; then the rest.
+    expect(seen.slice(0, submittedCount)).toEqual([...submitted].sort((a, b) => dayOf(b) - dayOf(a) || byCodeUnits(a, b)));
+    expect(seen.slice(submittedCount)).toEqual(created.slice(submittedCount).sort(bySubject));
     // Under the Step Age sort, a Draft with no number sorts last, by Subject, then id, and its cursor holds no time (scenarios 61 and 73).
     const stepAgeSeen: string[] = [];
     let stepAgeCursor: string | undefined;
@@ -255,7 +262,7 @@ describe("cursor paging by Submission Date", () => {
       stepAgeCursor = page.nextCursor ?? undefined;
       if (stepAgeCursor) expect(decodeWorkItemCursor(stepAgeCursor, "stepAge")![1]).toBe("");
     } while (stepAgeCursor);
-    expect(new Set(stepAgeSeen).size).toBe(53);
+    expect(new Set(stepAgeSeen).size).toBe(total);
     expect(stepAgeSeen).toEqual([...created].sort(bySubject));
     // So does the Document Number sort, where they have no number, and the Kanban.
     const numberSeen: string[] = [];
@@ -271,7 +278,8 @@ describe("cursor paging by Submission Date", () => {
     expect(cards).toEqual([...created].sort(bySubject));
     // A date range pages the same way.
     const ranged = await list(engineer, { sort: "submissionDate", submittedFrom: "2026-06-01" }, project);
-    expect(ranged.items.length).toBe(49);
-    expect(ranged.nextCursor).toBeNull();
+    expect(ranged.stages.reduce((sum, s) => sum + s.count, 0)).toBe(submittedCount);
+    expect(ranged.items.every((i) => i.submissionDate !== null)).toBe(true);
+    expect(ranged.nextCursor).not.toBeNull();
   });
 });
