@@ -16,7 +16,7 @@ export interface ChromiumOptions {
   readonly executablePath?: string;
 }
 
-async function launch({ executablePath }: ChromiumOptions): Promise<Browser> {
+export async function launch({ executablePath }: ChromiumOptions): Promise<Browser> {
   if (executablePath) return chromium.launch({ executablePath });
   try {
     return await chromium.launch();
@@ -28,6 +28,25 @@ async function launch({ executablePath }: ChromiumOptions): Promise<Browser> {
     } catch {
       throw error;
     }
+  }
+}
+
+/**
+ * The layout as one tall PNG at A4 width, in print media: what the golden screenshots compare
+ * (golden.test.ts) and the UI ticket shows. The page's margins are drawn as padding, since a
+ * screenshot has no paper.
+ */
+export async function screenshotHtml(browser: Browser, html: string): Promise<Uint8Array> {
+  const context = await browser.newContext({ javaScriptEnabled: false, offline: true, viewport: { width: 794, height: 1123 }, deviceScaleFactor: 1 });
+  try {
+    const page = await context.newPage();
+    await page.route("**/*", (route) => route.abort());
+    await page.emulateMedia({ media: "print" });
+    await page.setContent(html.replace("</head>", "<style>html { padding: 16mm 13mm; }</style></head>"), { waitUntil: "load" });
+    await page.evaluate("document.fonts.ready.then(() => true)").catch(() => undefined);
+    return new Uint8Array(await page.screenshot({ fullPage: true, type: "png" }));
+  } finally {
+    await context.close();
   }
 }
 

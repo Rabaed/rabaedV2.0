@@ -16,6 +16,8 @@ const project = (code: string, name: ProjectSummary["name"], status: ProjectSumm
   needMyAction: 0,
   modules: ["submittals"],
   showInspectionsInSubmittals: false,
+  recordLanguage: "bilingual",
+  recordHijriDates: false,
 });
 
 const projects = [
