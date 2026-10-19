@@ -110,8 +110,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270901 | RP-645 | 5B | Unused: the migration moved to 20270907 (main gained 20270829, RP-958) |
 | 20270902 | RP-644 | 5B | Unused: the migration moved to 20270908 (main gained 20270829, RP-958) |
 | 20270829 | RP-958 | 22 | outbox_attempt_on_take |
-| 20270912 | RP-650 | 22 | record_signatures |
-| 20270913 | RP-147 | 22 | record_appendix |
 | 20270904 | RP-639 | 5B | Unused: the migration moved to 20270916 (main gained 20270914) |
 | 20270905 | RP-640 | 5B | Unused: the migration moved to 20270917 (main gained 20270914) |
 | 20270906 | RP-645 | 5B | Unused: the migration moved to 20270918 (main gained 20270914) |
@@ -127,3 +125,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270919 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day, moved from 20270907 before queueing) |
 | 20270920 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day, moved from 20270908 before queueing) |
 | 20270921 | RP-960 | 5B | Register Import: a Type counts as raisable only on a Rabaed or the Project's own Workflow (Rabaed Admin's import runs as the app role: bootstrap) (final day, moved from 20270911 before queueing) |
+| 20270923 | RP-650 | 22 | record_signatures |
+| 20270924 | RP-147 | 22 | record_appendix |
