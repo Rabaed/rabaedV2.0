@@ -3,7 +3,7 @@ import type { Database } from "./schema.ts";
 
 // The Documental Record's checks, its "record ready" notice and Re-produce, as the
 // worker's record job and Rabaed Admin use them (RP-155; migration
-// 20270716000000_record_checks.sql; workflow-engine.md §7). The checks themselves
+// 20270726000000_record_checks.sql; workflow-engine.md §7). The checks themselves
 // are the worker's (apps/worker/src/record/checks.ts).
 
 /** What the checks of one made PDF found: none when it passed. */

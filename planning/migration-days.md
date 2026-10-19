@@ -64,4 +64,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
 | 20270708 | RP-85 | 21 | stored_file |
 | 20270709 | RP-620 | 22 | documental_record |
-| 20270716 | RP-155 | 23 | record_checks |
+| 20270726 | RP-155 | 23 | record_checks |

@@ -401,24 +401,28 @@ create function app.documental_record_alerts()
   returns table (
     work_item_id uuid, project_id uuid, project_name jsonb, document_number text, status text,
     problems jsonb, raised_at timestamptz)
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select w.id, w.project_id, pr.name, w.document_number, r.status, c.problems, c.ran_at
-    from documental_record r
-    join lateral (
-      select x.problems, x.ran_at, x.passed from documental_record_check x
-      where x.documental_record_id = r.id order by x.ran_at desc, x.id desc limit 1
-    ) c on not c.passed
-    join work_item w on w.id = r.work_item_id
-    join project pr on pr.id = w.project_id
-    union all
-    select w.id, w.project_id, pr.name, w.document_number, 'job_failed', jsonb_build_array(coalesce(o.last_error, 'failed')), o.dead_at
-    from outbox o
-    join work_item w on w.id = coalesce((o.payload ->> 'closed_work_item_id')::uuid, (o.payload ->> 'work_item_id')::uuid)
-    join project pr on pr.id = w.project_id
-    where o.kind in ('documental_record', 'documental_record_reproduce') and o.dead_at is not null
-    order by 7, 1
+    #variable_conflict use_column
+    begin
+      return query
+        select w.id, w.project_id, pr.name, w.document_number, r.status, c.problems, c.ran_at
+        from documental_record r
+        join lateral (
+          select x.problems, x.ran_at, x.passed from documental_record_check x
+          where x.documental_record_id = r.id order by x.ran_at desc, x.id desc limit 1
+        ) c on not c.passed
+        join work_item w on w.id = r.work_item_id
+        join project pr on pr.id = w.project_id
+        union all
+        select w.id, w.project_id, pr.name, w.document_number, 'job_failed', jsonb_build_array(coalesce(o.last_error, 'failed')), o.dead_at
+        from outbox o
+        join work_item w on w.id = coalesce((o.payload ->> 'closed_work_item_id')::uuid, (o.payload ->> 'work_item_id')::uuid)
+        join project pr on pr.id = w.project_id
+        where o.kind in ('documental_record', 'documental_record_reproduce') and o.dead_at is not null
+        order by 7, 1;
+    end
   $$;
 revoke all on function app.documental_record_alerts() from public;
 grant execute on function app.documental_record_alerts() to rabaed_admin;
