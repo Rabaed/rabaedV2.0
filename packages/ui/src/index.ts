@@ -214,6 +214,19 @@ export { type SnagBulkActions, type SnagBulkLabels } from "./components/views/sn
 export { type SnagExportLabels } from "./components/views/snag-export.ts";
 export { type SnagPhoneLabels, type SnagSwipe } from "./components/views/snag-phone.tsx";
 export { swipeActionsOf, type SwipeAction } from "./components/views/snag-swipe.ts";
+export {
+  SnagCameraStep,
+  SnagFlowBack,
+  SnagFlowButton,
+  SnagFlowFrame,
+  SnagFlowLink,
+  SnagLocationStep,
+  SnagRaiseStep,
+  SnagSubjectStep,
+  type FlowPhoto,
+  type SnagFlowLabels,
+  type SubjectAnswers,
+} from "./components/views/snag-phone-flow.tsx";
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
 export { type WholeTableLabels } from "./components/views/work-item-export.ts";
 export {

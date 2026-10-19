@@ -75,12 +75,12 @@ const labels: Record<Locale, SnagListLabels> = {
     page: (page) => `Page ${page}`,
     pageOf: (page, last) => `Page ${page} of ${last}`,
     phone: {
-      swipeHint: "Swipe a card for its actions",
+      swipeHint: "Swipe a card for what you can do on it",
       showItems: (n, count) => (count === 1 ? "Show 1 item" : `Show ${n} items`),
-      actionsOf: (subject) => `Actions for ${subject}`,
-      loadingActions: "Loading…",
-      noActions: "Nothing for you to do here now",
-      actionsUnavailable: "Couldn't load its actions",
+      transitionsOf: (subject) => `What you can do on ${subject}`,
+      loadingTransitions: "Loading…",
+      noTransitions: "Nothing for you to do here now",
+      transitionsUnavailable: "Couldn't read what you can do on it",
     },
   },
   ar: {
@@ -143,12 +143,12 @@ const labels: Record<Locale, SnagListLabels> = {
     page: (page) => `صفحة ${page}`,
     pageOf: (page, last) => `صفحة ${page} من ${last}`,
     phone: {
-      swipeHint: "اسحب البطاقة لإجراءاتها",
+      swipeHint: "اسحب البطاقة لترى ما يمكنك فعله عليها",
       showItems: (n, count) => (count === 1 ? "عرض عنصر واحد" : `عرض ${n} عنصر`),
-      actionsOf: (subject) => `إجراءات ${subject}`,
-      loadingActions: "جارٍ التحميل…",
-      noActions: "لا إجراء لك عليها الآن",
-      actionsUnavailable: "تعذّر تحميل إجراءاتها",
+      transitionsOf: (subject) => `ما يمكنك فعله على ${subject}`,
+      loadingTransitions: "جارٍ التحميل…",
+      noTransitions: "لا إجراء لك عليها الآن",
+      transitionsUnavailable: "تعذّرت قراءة ما يمكنك فعله عليها",
     },
   },
 };
@@ -613,8 +613,8 @@ export const PhoneNothingToTake: Story = {
   play: async (context) => {
     const text = labels[storyLocale(context)];
     const card = phoneCard(context, "Socket outlet loose");
-    await userEvent.click(within(card).getByRole("button", { name: text.phone.actionsOf("Socket outlet loose") }));
-    await expect(await within(card).findByText(text.phone.noActions)).toBeVisible();
+    await userEvent.click(within(card).getByRole("button", { name: text.phone.transitionsOf("Socket outlet loose") }));
+    await expect(await within(card).findByText(text.phone.noTransitions)).toBeVisible();
     await expect(within(card).getAllByRole("button").filter((el) => !el.hasAttribute("data-card-actions"))).toHaveLength(0);
   },
 };

@@ -42,14 +42,14 @@ export type SnagPhoneLabels = {
   swipeHint: string;
   /** The filter sheet's button that closes it, e.g. "Show 12 items". */
   showItems: (n: string, count: number) => string;
-  /** The hidden button that opens a card's actions without a swipe, e.g. "Actions for Cable tray not bonded". */
-  actionsOf: (subject: string) => string;
+  /** The hidden button that opens a card's Transitions without a swipe, e.g. "What you can do on Cable tray not bonded". */
+  transitionsOf: (subject: string) => string;
   /** Behind a card while its actions are read. */
-  loadingActions: string;
+  loadingTransitions: string;
   /** Behind a card that offers the viewer nothing to take. */
-  noActions: string;
+  noTransitions: string;
   /** Behind a card whose actions could not be read. */
-  actionsUnavailable: string;
+  transitionsUnavailable: string;
 };
 
 /** What a card's swipe does: reads the Transitions the item offers the viewer (null when it can't), and opens one's Action Form. */
@@ -103,7 +103,8 @@ export function SnagPhoneList({ list, query, locale, labels, hrefFor, itemHref, 
         <ul className="flex flex-col gap-2.5">
           {list.items.map((row) => (
             <SnagPhoneCard
-              key={row.id}
+              // A card whose item moved is a new card: what it offers is read again.
+              key={`${row.id}:${row.stage.key}:${row.stepEnteredAt}`}
               row={row}
               locale={locale}
               labels={labels}
@@ -263,7 +264,7 @@ export function SnagPhoneCard({
                 }}
                 className={cn("sr-only rounded-xs focus:not-sr-only focus:relative focus:z-10 focus:ms-auto focus:px-1", focusRing)}
               >
-                {labels.phone.actionsOf(row.title)}
+                {labels.phone.transitionsOf(row.title)}
               </button>
             )}
           </div>
@@ -295,7 +296,7 @@ export function SnagPhoneCard({
 function SwipeButtons({ loaded, locale, labels, onTake }: { loaded: Loaded | null; locale: Locale; labels: SnagListLabels; onTake: (key: string) => void }) {
   const phone = labels.phone;
   if (!Array.isArray(loaded) || loaded.length === 0) {
-    const text = loaded === "failed" ? phone.actionsUnavailable : Array.isArray(loaded) ? phone.noActions : phone.loadingActions;
+    const text = loaded === "failed" ? phone.transitionsUnavailable : Array.isArray(loaded) ? phone.noTransitions : phone.loadingTransitions;
     return (
       <p role="status" className="flex flex-1 items-center justify-center bg-surface-subtle px-3 text-center text-caption font-semibold text-muted">
         {text}
