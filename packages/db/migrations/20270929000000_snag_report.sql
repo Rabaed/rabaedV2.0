@@ -14,12 +14,7 @@
 --   or 'failed' (its job was dead-lettered), for the Member who asked; no row for anyone else and
 --   for a made-up id.
 -- * app.snag_report_job / app.save_snag_report: the worker's.
--- outbox_kind_check lists every kind on main plus RP-621's 'working_copy' (claimed on RP-603), so
--- whichever of the two sorts last keeps the other's kind.
-
-alter table outbox drop constraint outbox_kind_check;
-alter table outbox add constraint outbox_kind_check
-  check (kind in ('notification', 'email', 'digest', 'step_age_report', 'documental_record', 'record_ready', 'documental_record_reproduce', 'working_copy', 'snag_report'));
+-- The outbox kind 'snag_report' is allowed by 20270930000000_snag_report_outbox_kind.sql, rebuilt after main's own.
 
 create table snag_report (
   id uuid primary key default gen_random_uuid(),
