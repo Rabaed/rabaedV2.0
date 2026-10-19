@@ -133,7 +133,16 @@ describe("the worker's functions", () => {
 
 describe("app.set_project_working_copy_watermark", () => {
   it("is not_found for a Member who is no Project Admin, and changes nothing", async () => {
-    const { rows } = await withMember(app, other, (trx) =>
+    // A Member of the Project who is none of its Project Admins (whether they see the item has nothing to do with it).
+    const { rows: members } = await migrator.query<{ id: string }>(
+      `select pm.member_id as id from project_member pm
+       where pm.project_id = $1 and pm.status = 'active'
+         and not exists (select 1 from project_admin pa where pa.project_id = pm.project_id and pa.member_id = pm.member_id)
+       order by pm.member_id limit 1`,
+      [projectId],
+    );
+    const nonAdmin = members[0]!.id;
+    const { rows } = await withMember(app, nonAdmin, (trx) =>
       sql<{ outcome: string }>`select app.set_project_working_copy_watermark(${projectId}::uuid, ${JSON.stringify({ en: "Mine", ar: "لي" })}::jsonb) as outcome`.execute(trx),
     );
     expect(rows[0]!.outcome).toBe("not_found");
