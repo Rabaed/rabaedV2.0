@@ -2276,6 +2276,44 @@
       "add": "{count, plural, one {Add # submittal} other {Add # submittals}}",
       "numberOnSubmit": "Number on submit"
     },
+    "bulk": {
+      "bar": "Take a Transition on the selected submittals",
+      "hint": "Select the submittals waiting on you to take one Transition on them all.",
+      "selected": "{n} selected",
+      "transitions": "Transitions they share",
+      "noneShared": "These don't share a Transition. Select ones at the same Step.",
+      "clear": "Clear",
+      "selectAll": "Select all waiting on you",
+      "selectRow": "Select {subject}",
+      "description": "Taken on {count, plural, one {1 submittal} other {# submittals}} with the same answers, each signed as on its own. All or nothing: if one can't take it, none moves.",
+      "appliesTo": "Taken on",
+      "noNumber": "No number yet",
+      "loading": "Loading…",
+      "assignTo": "Assign to",
+      "assignToHelp": "Who in your Company takes the next step on all of them. Leave it to the Step Pool and anyone who may take it can pick them up.",
+      "assignToPool": "Step Pool: anyone who may take it",
+      "formInvalid": "Fill in the marked fields first.",
+      "stoppedTitle": "Nothing was done",
+      "stoppedBy": "This submittal stopped it, so none of them moved:",
+      "reasons": {
+        "not_waiting": "It no longer waits on you.",
+        "transition_not_offered": "It doesn't offer you this Transition now. Pick it up first, or it is at another Step.",
+        "different_action_form": "Its Transition asks for a different Action Form. Take it on its own.",
+        "form_incomplete": "Its Form has a required field to fill.",
+        "invalid_action_form": "The answers don't suit it. Check the marked fields.",
+        "validation_failed": "A rule of its Workflow isn't met.",
+        "assignee_not_offered": "The Member you chose can't take its next step. Choose someone from the list.",
+        "refused": "Its Transition was refused. Open it to see why.",
+        "no_signature": "You have no saved Signature yet. Add one in your profile: each submittal is signed as on its own.",
+        "unknown": "It can't take this Transition now. Open it to see why."
+      },
+      "refusals": {
+        "unavailable": "Something went wrong. Try again.",
+        "not_found": "One of them is no longer yours to act on. The page shows what is true now.",
+        "idempotency_key_reused": "The selection changed meanwhile. Close this and try again.",
+        "not_confirmed": "The answers changed meanwhile. Try again."
+      }
+    },
     "submit": {
       "trigger": "Submit Package",
       "title": "Submit {number}",
