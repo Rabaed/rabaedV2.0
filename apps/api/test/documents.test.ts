@@ -117,6 +117,8 @@ describe("a Draft's Documents, for the raiser", () => {
     expect(await list(engineer, itemId)).toEqual({
       documents: [],
       canChange: true,
+      // Its holder's Participant may add a reply Screen's files, where a Transition out of its Step has a file field (ADR 0024).
+      canChangeReplies: true,
       limits: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/jpeg", "image/png", "text/plain"] },
     });
   });
