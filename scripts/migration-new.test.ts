@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { laneOf } from "./lanes.ts";
-import { newMigration, nextDay, type NewMigrationSeam } from "./migration-new.ts";
+import { newMigration, type NewMigrationSeam } from "./migration-new.ts";
 
 const table = `# Migration days
 
@@ -8,12 +8,14 @@ const table = `# Migration days
 | --- | --- | --- | --- |
 `;
 
+const branch = (name: string, ...migrations: string[]) => ({ name, migrations, sharesHistory: () => true, reservations: () => "" });
+
 // A fake seam: main's and the branches' migrations, the reservations file; it records what is written.
 function fakeSeam(overrides: Partial<NewMigrationSeam> = {}) {
   const written = new Map<string, string>();
   const seam: NewMigrationSeam = {
     fetch: () => true,
-    remoteMigrations: () => ["20270326000000_sent_back_built_ins.sql", "20270327000000_after_send_back_review_fixes.sql"],
+    remoteBranches: () => [branch("main", "20270326000000_sent_back_built_ins.sql", "20270327000000_after_send_back_review_fixes.sql")],
     localMigrations: () => ["20270327000000_after_send_back_review_fixes.sql"],
     reservations: () => [table, table],
     lane: () => "5",
@@ -25,14 +27,6 @@ function fakeSeam(overrides: Partial<NewMigrationSeam> = {}) {
   };
   return { seam, written };
 }
-
-describe("nextDay", () => {
-  it("is the calendar day after, across month and year ends", () => {
-    expect(nextDay("20270327")).toBe("20270328");
-    expect(nextDay("20270228")).toBe("20270301");
-    expect(nextDay("20281231")).toBe("20290101");
-  });
-});
 
 describe("laneOf", () => {
   it("reads the lane from the .env's compose project, else blank", () => {
@@ -56,9 +50,16 @@ describe("migration:new", () => {
   });
 
   it("goes past a later migration on another remote branch (a queue branch too)", () => {
-    const { seam, written } = fakeSeam({ remoteMigrations: () => ["20270327000000_a.sql", "20270402000000_queued.sql"] });
+    const { seam, written } = fakeSeam({ remoteBranches: () => [branch("main", "20270327000000_a.sql"), branch("gh-readonly-queue/main/pr-1", "20270327000000_a.sql", "20270402000000_queued.sql")] });
     newMigration(["b", "--issue", "RP-583"], seam);
     expect(written.has("packages/db/migrations/20270403000000_b.sql")).toBe(true);
+  });
+
+  it("skips a branch with no history in common with main (screens-*)", () => {
+    const orphan = { name: "screens-RP-411", migrations: ["20290101000000_orphan.sql"], sharesHistory: () => false, reservations: () => "" };
+    const { seam, written } = fakeSeam({ remoteBranches: () => [branch("main", "20270327000000_a.sql"), orphan] });
+    newMigration(["b", "--issue", "RP-583"], seam);
+    expect(written.has("packages/db/migrations/20270328000000_b.sql")).toBe(true);
   });
 
   it("goes past a later reserved day, on main's file or the branch's", () => {
@@ -67,6 +68,20 @@ describe("migration:new", () => {
     newMigration(["b", "--issue", "RP-583"], seam);
     expect(written.has("packages/db/migrations/20270411000000_b.sql")).toBe(true);
     expect(written.get("planning/migration-days.md")).toBe(`${later}| 20270411 | RP-583 | 5 | b |\n`);
+  });
+
+  it("goes past a day reserved only on another branch", () => {
+    const onBranch = { ...branch("main-4-x", "20270327000000_a.sql"), reservations: () => `${table}| 20270420 | RP-600 | 4 | x |\n` };
+    const { seam, written } = fakeSeam({ remoteBranches: () => [branch("main", "20270327000000_a.sql"), onBranch] });
+    newMigration(["b", "--issue", "RP-583"], seam);
+    expect(written.has("packages/db/migrations/20270421000000_b.sql")).toBe(true);
+  });
+
+  it("prints the warning for a day that isn't a calendar date, and takes the next real one", () => {
+    const { seam, written } = fakeSeam({ localMigrations: () => ["20270230000000_bad.sql"] });
+    const result = newMigration(["b", "--issue", "RP-583"], seam);
+    expect(written.has("packages/db/migrations/20270328000000_b.sql")).toBe(true);
+    expect(result.lines[0]).toBe("Warning: ignored this worktree's migration 20270230000000_bad.sql: 20270230 is not a calendar date.");
   });
 
   it("goes past a migration this worktree already created", () => {
@@ -88,7 +103,7 @@ describe("migration:new", () => {
   });
 
   it("takes today in a repository with no migrations or reservations", () => {
-    const { seam, written } = fakeSeam({ remoteMigrations: () => [], localMigrations: () => [], reservations: () => ["", ""] });
+    const { seam, written } = fakeSeam({ remoteBranches: () => [], localMigrations: () => [], reservations: () => ["", ""] });
     newMigration(["first", "--issue", "RP-583"], seam);
     expect(written.has("packages/db/migrations/20261015000000_first.sql")).toBe(true);
     expect(written.get("planning/migration-days.md")).toBe("| 20261015 | RP-583 | 5 | first |\n");

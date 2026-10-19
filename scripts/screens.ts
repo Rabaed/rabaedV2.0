@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 
-// pnpm screens [<route>...] --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--publish] (RP-531)
+// pnpm screens [<route>...] --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
 //
 // Full-page screenshots of the running app for a PR (CODING_STANDARDS.md › UI): every
 // route at 1366 and 1920 wide, in English and Arabic, signed in as a demo person.
@@ -57,6 +57,8 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 // requests it started (10 s, then a warning) and its finite animations (2 s). Examples:
 // scripts/screens-examples/.
 //
+// --phone: a phone instead (RP-630): 375 × 812, touch, as a phone's browser says it is.
+//
 // --publish: commits the PNGs under <folder>/ to `screens-<branch>` on origin (an orphan
 // branch the first time, "not for merging"; later runs add to it), without touching this
 // checkout, and prints a markdown table of their raw URLs for the PR body.
@@ -68,18 +70,25 @@ export const LOCALES = ["en", "ar"] as const;
 const LOCALE_NAMES: Record<(typeof LOCALES)[number], string> = { en: "English", ar: "Arabic" };
 /** Viewport height: shots are full-page, so it only decides what is "above the fold" while the page loads. */
 const HEIGHT = 900;
+/** `--phone`'s one size (RP-630): the design's phone frame. */
+export const PHONE = { width: 375, height: 812 } as const;
 
-export type ScreensArgs = { routes: string[]; email: string; short: string; setup?: string; folder: string; out: string; publish: boolean };
+export type ScreensArgs = { routes: string[]; email: string; short: string; setup?: string; folder: string; out: string; publish: boolean; phone: boolean };
 
 /** Reads the command line. `at` gives the repository root and current branch for the defaults. Throws a plain message on bad input. */
 export function parseArgs(argv: string[], at: { root: string; branch: string }): ScreensArgs {
   const routes: string[] = [];
   const values: Record<"as" | "setup" | "folder" | "out", string | undefined> = { as: undefined, setup: undefined, folder: undefined, out: undefined };
   let publish = false;
+  let phone = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === "--publish") {
       publish = true;
+      continue;
+    }
+    if (arg === "--phone") {
+      phone = true;
       continue;
     }
     const option = /^--(as|setup|folder|out)(?:=(.*))?$/.exec(arg);
@@ -101,7 +110,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
   const { email, short } = resolvePerson(values.as);
   const folder = values.folder ?? (/^RP-\d+/.exec(at.branch)?.[0] ?? at.branch.replace(/[^A-Za-z0-9._-]/g, "-"));
   if (!/^[A-Za-z0-9._-]+$/.test(folder) || folder.startsWith(".")) throw new Error(`--folder must be a plain name (letters, digits, . _ -): got "${folder}".`);
-  return { routes, email, short, setup: values.setup, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish };
+  return { routes, email, short, setup: values.setup, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish, phone };
 }
 
 /** `route` with each `{name}` replaced by the setup's value for it. */
@@ -355,12 +364,14 @@ export async function finishAnimations(timeoutMs: number, animations: Animation[
 
 export type Shot = { route: string; screen?: Screen; width: number; locale: Locale; file: string };
 
+const widthsOf = (phone: boolean): readonly number[] => (phone ? [PHONE.width] : WIDTHS);
+
 /**
  * Every shot to take, locale by locale, then width: a route from the command line as it loads, a
- * Screen after its actions, saved under its name. Refuses two that would be saved as the same file,
- * case aside (Windows file names ignore it).
+ * Screen after its actions, saved under its name; at the phone's one width with `phone`. Refuses two
+ * that would be saved as the same file, case aside (Windows file names ignore it).
  */
-export function plannedShots(items: readonly (string | Screen)[]): Shot[] {
+export function plannedShots(items: readonly (string | Screen)[], { phone = false }: { phone?: boolean } = {}): Shot[] {
   const seen = new Map<string, string | Screen>();
   const unique: (string | Screen)[] = [];
   const said = (item: string | Screen) => (typeof item === "string" ? item : `"${item.name}"`);
@@ -382,7 +393,7 @@ export function plannedShots(items: readonly (string | Screen)[]): Shot[] {
   }
   return unique.flatMap((item) =>
     LOCALES.flatMap((locale) =>
-      WIDTHS.map((width) =>
+      widthsOf(phone).map((width) =>
         typeof item === "string"
           ? { route: item, width, locale, file: shotName(item, width, locale) }
           : { route: item.route, screen: item, width, locale, file: shotName(item.name, width, locale) },
@@ -407,7 +418,8 @@ export const rawUrl = (repo: string, ref: string, path: string) => `https://raw.
 
 /** The PR body's table: one row per route, one column per locale and width. */
 export function markdownTable(shots: Shot[], urlOf: (file: string) => string): string {
-  const columns = LOCALES.flatMap((locale) => WIDTHS.map((width) => ({ locale, width })));
+  const widths = [...new Set(shots.map((shot) => shot.width))];
+  const columns = LOCALES.flatMap((locale) => widths.map((width) => ({ locale, width })));
   const label = (shot: Shot) => (shot.screen ? `${shot.screen.name}: \`${shot.route}\`` : `\`${shot.route}\``);
   const rows = [...new Set(shots.map(label))];
   const cell = (row: string, locale: string, width: number) => {
@@ -526,10 +538,13 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
     const shots = plannedShots([
       ...args.routes.map((route) => fillRoute(route, placeholders)),
       ...screens.map((screen) => ({ ...screen, route: fillRoute(screen.route, placeholders) })),
-    ]);
+    ], { phone: args.phone });
     mkdirSync(args.out, { recursive: true });
-    for (const width of WIDTHS) {
-      const context = await browser.newContext({ storageState, viewport: { width, height: HEIGHT } });
+    for (const width of widthsOf(args.phone)) {
+      const context = await browser.newContext({
+        storageState,
+        ...(args.phone ? { viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width, height: HEIGHT } }),
+      });
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {
         const response = await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" });

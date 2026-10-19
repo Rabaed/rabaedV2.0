@@ -345,6 +345,14 @@ describe("plannedShots", () => {
     expect(() => plannedShots(["/submit-dialog", dialog])).toThrow('Route /submit-dialog and screen "submit-dialog" would be saved as the same file');
   });
 
+  it("with --phone, is every route at 375 only, in English and Arabic (RP-630)", () => {
+    expect(parseArgs(["/home", "--as", "ali"], at).phone).toBe(false);
+    expect(parseArgs(["/home", "--as", "ali", "--phone"], at).phone).toBe(true);
+    expect(plannedShots(["/home"], { phone: true }).map((s) => s.file)).toEqual(["home-375-en.png", "home-375-ar.png"]);
+    expect(markdownTable(plannedShots(["/home"], { phone: true }), (file) => file).split("\n")[0]).toBe("| Page | English 375 | Arabic 375 |");
+    expect(plannedShots([{ name: "bulk", route: "/p", actions: [] }], { phone: true }).map((s) => s.file)).toEqual(["bulk-375-en.png", "bulk-375-ar.png"]);
+  });
+
   // Review fix 15: Windows file names ignore case, so /A and /a would overwrite each other.
   it("refuses two names that differ only in case", () => {
     expect(() => plannedShots(["/Packages", "/packages"])).toThrow("Routes /Packages and /packages would be saved as the same file");
