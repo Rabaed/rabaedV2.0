@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { specIssues, unreservedSpecIssues, type MigrationDaysSeam } from "./migration-days.ts";
+import { migrationDays, specIssues, unreservedSpecIssues, type MigrationDaysSeam } from "./migration-days.ts";
 
 // Jira's description (ADF): a paragraph, a table without a Ticket column, then the spec's issue table.
 type Node = { type: string; text?: string; attrs?: { url: string }; content?: Node[] };
@@ -26,6 +26,13 @@ const allDays = `${days}| 20270408 | RP-597 | B | Demo |\n`;
 function fakeSeam(overrides: Partial<MigrationDaysSeam> = {}): MigrationDaysSeam {
   return {
     fetchMain: () => true,
+    fetch: () => true,
+    days: {
+      remoteBranches: () => [{ name: "main", migrations: ["20270326000000_a.sql"], sharesHistory: () => true }],
+      localMigrations: () => ["20270326000000_a.sql"],
+      reservations: () => [days, days],
+      today: () => "20261015",
+    },
     credentials: () => true,
     specDescription: async () => spec,
     reservations: () => [days, days],
@@ -118,7 +125,58 @@ describe("migration-days", () => {
     for (const args of [[], ["--spec"], ["--spec", "598"], ["--tickets", "RP-1,x"], ["--tickets"]]) {
       const result = await unreservedSpecIssues(args, fakeSeam());
       expect(result.ok).toBe(false);
-      expect(result.lines.join("\n")).toContain("Usage: pnpm migration-days");
+      expect(result.lines.join("\n")).toContain("Usage: pnpm migration:days");
     }
+  });
+});
+
+describe("migration:days --next", () => {
+  it("prints the next n free days, the latest day and its source, and rows to paste; it writes nothing", async () => {
+    const result = await migrationDays(["--next", "3"], fakeSeam());
+    expect(result).toEqual({
+      ok: true,
+      lines: [
+        "Latest day found: 20270409, from reservation spec RP-598 in origin/main's planning/migration-days.md.",
+        "Next 3 free days: 20270410, 20270411, 20270412.",
+        "Rows for planning/migration-days.md (fill in the issue, lane and purpose):",
+        "| 20270410 | RP-nnn | lane | purpose |",
+        "| 20270411 | RP-nnn | lane | purpose |",
+        "| 20270412 | RP-nnn | lane | purpose |",
+      ],
+    });
+  });
+
+  it("names a branch as the source, crossing a month end", async () => {
+    const days = {
+      ...fakeSeam().days,
+      remoteBranches: () => [{ name: "RP-616-packages", migrations: ["20270430000000_packages.sql"], sharesHistory: () => true }],
+    };
+    const result = await migrationDays(["--next", "2"], fakeSeam({ days }));
+    expect(result.lines.slice(0, 2)).toEqual(["Latest day found: 20270430, from branch origin/RP-616-packages.", "Next 2 free days: 20270501, 20270502."]);
+  });
+
+  it("starts today when nothing has a day yet", async () => {
+    const days = { remoteBranches: () => [], localMigrations: () => [], reservations: (): [string, string] => ["", ""], today: () => "20261015" };
+    const result = await migrationDays(["--next", "1"], fakeSeam({ days }));
+    expect(result.lines.slice(0, 2)).toEqual(["No migration or reservation has a day yet.", "Next 1 free day: 20261015."]);
+  });
+
+  it("stops when git fetch fails: the free days need today's branches", async () => {
+    const result = await migrationDays(["--next", "3"], fakeSeam({ fetch: () => false }));
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("git fetch origin failed");
+  });
+
+  it("refuses a count that isn't a positive whole number, or --next with --spec", async () => {
+    for (const args of [["--next"], ["--next", "0"], ["--next", "-2"], ["--next", "two"], ["--next", "1.5"], ["--next", "2", "--spec", "RP-598"]]) {
+      const result = await migrationDays(args, fakeSeam());
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("pnpm migration:days --next <n>");
+    }
+  });
+
+  it("still checks a spec without --next", async () => {
+    const result = await migrationDays(["--spec", "RP-598"], fakeSeam());
+    expect(result.lines.join("\n")).toContain("reserved for RP-597 of RP-598.");
   });
 });

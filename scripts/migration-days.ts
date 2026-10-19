@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { combineReservations, parseReservations, reservationsFile, reservedIssues } from "./check-migrations-days.ts";
+import { freeDay, type FreeDaySeam, nextDay, realFreeDaySeam } from "./migration-free-days.ts";
 
 // `pnpm migration-days --spec RP-nnn` (RP-587, from the spec RP-462 retro): lists
 // the spec's issues that have no day in planning/migration-days.md, before
@@ -13,6 +14,13 @@ import { combineReservations, parseReservations, reservationsFile, reservedIssue
 // (JIRA_EMAIL and JIRA_API_TOKEN, as scripts/jira-close.ts), or from
 // `--tickets RP-a,RP-b` offline. The reservations are origin/main's, plus
 // HEAD's for the days main doesn't reserve, as `check:migrations` reads them.
+//
+// `pnpm migration:days --next <n>` (RP-966, from the RP-616 retro): after `git
+// fetch origin`, prints the next n free days, the latest day taken and what took
+// it, and the rows to paste into planning/migration-days.md. It writes nothing.
+// The scan is migration:new's freeDay (scripts/migration-free-days.ts).
+// `pnpm migration-days` is the older name of the same command.
+//
 // The git and Jira calls sit behind MigrationDaysSeam so the tests touch neither.
 
 const JIRA = "https://rabaedsa.atlassian.net";
@@ -20,6 +28,10 @@ const JIRA = "https://rabaedsa.atlassian.net";
 export interface MigrationDaysSeam {
   /** `git fetch origin main`; false when it fails. */
   fetchMain(): boolean;
+  /** `git fetch origin --prune`, for every branch; false when it fails. */
+  fetch(): boolean;
+  /** The branches, migrations and reservations the free days are counted from. */
+  days: FreeDaySeam;
   /** True when JIRA_EMAIL and JIRA_API_TOKEN are set. */
   credentials(): boolean;
   /** The spec issue's description, as Jira's document format (ADF). */
@@ -37,8 +49,11 @@ export interface MigrationDaysResult {
 const issuesFlag = "--tickets";
 // eslint-disable-next-line rabaed/no-avoid-terms -- the spec tables' column header: Jira tickets, not Rabaed items
 const issuesColumn = "Ticket";
-// eslint-disable-next-line rabaed/no-avoid-terms -- the command's own name: database migrations, not a data import
-const usage = `Usage: pnpm migration-days --spec RP-nnn [${issuesFlag} RP-a,RP-b]   (${issuesFlag}: the spec's issues, offline, without Jira)`;
+const usage = [
+  `Usage: pnpm migration:days --spec RP-nnn [${issuesFlag} RP-a,RP-b]   (${issuesFlag}: the spec's issues, offline, without Jira)`,
+  // eslint-disable-next-line rabaed/no-avoid-terms -- database migrations, not a data import
+  "       pnpm migration:days --next <n>   (the next n free migration days; writes nothing)",
+].join("\n");
 const fail = (...lines: string[]): MigrationDaysResult => ({ ok: false, lines });
 const isKey = (value: string) => /^RP-\d+$/.test(value);
 
@@ -125,11 +140,40 @@ export async function unreservedSpecIssues(args: string[], seam: MigrationDaysSe
   );
 }
 
+/** The next n free days after everything freeDay counts, and the rows that reserve them. */
+export function nextFreeDays(args: string[], seam: MigrationDaysSeam): MigrationDaysResult {
+  const values = flagValues(args, "--next") ?? [];
+  const count = values.length === 1 && /^[1-9]\d*$/.test(values[0] ?? "") ? Number(values[0]) : 0;
+  if (count === 0 || args.length !== 2) return fail(usage);
+  if (!seam.fetch()) return fail("git fetch origin failed; the free days need today's main and branches. Get online and run `pnpm migration:days --next` again.");
+
+  const { first, latest } = freeDay(seam.days);
+  const free = [first];
+  while (free.length < count) free.push(nextDay(free.at(-1) as string));
+  return {
+    ok: true,
+    lines: [
+      // eslint-disable-next-line rabaed/no-avoid-terms -- database migrations, not a data import
+      latest === undefined ? "No migration or reservation has a day yet." : `Latest day found: ${latest.day}, from ${latest.sources.join("; ")}.`,
+      `Next ${count} free day${count === 1 ? "" : "s"}: ${free.join(", ")}.`,
+      `Rows for ${reservationsFile} (fill in the issue, lane and purpose):`,
+      ...free.map((day) => `| ${day} | RP-nnn | lane | purpose |`),
+    ],
+  };
+}
+
+/** `--next <n>` prints free days; anything else checks a spec's issues. */
+export async function migrationDays(args: string[], seam: MigrationDaysSeam): Promise<MigrationDaysResult> {
+  return args.includes("--next") ? nextFreeDays(args, seam) : unreservedSpecIssues(args, seam);
+}
+
 /** The real git and Jira calls, in the repository at `repo`. */
 export function realSeam(repo: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): MigrationDaysSeam {
   const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
   return {
     fetchMain: () => git("fetch", "origin", "main").status === 0,
+    fetch: () => git("fetch", "origin", "--prune").status === 0,
+    days: realFreeDaySeam(repo),
     credentials: () => Boolean(env.JIRA_EMAIL && env.JIRA_API_TOKEN),
     async specDescription(key) {
       const headers = { Authorization: `Basic ${Buffer.from(`${env.JIRA_EMAIL}:${env.JIRA_API_TOKEN}`).toString("base64")}`, Accept: "application/json" };
@@ -144,7 +188,7 @@ export function realSeam(repo: string = process.cwd(), env: NodeJS.ProcessEnv = 
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   try {
-    const result = await unreservedSpecIssues(process.argv.slice(2), realSeam());
+    const result = await migrationDays(process.argv.slice(2), realSeam());
     for (const line of result.lines) (result.ok ? console.log : console.error)(line);
     process.exit(result.ok ? 0 : 1);
   } catch (error) {
