@@ -22,8 +22,10 @@ import {
   localTimestampAuthority,
   pdfA3Problems,
   pdfImages,
+  PINNED_VERAPDF_IMAGE,
   projectFilesFromEnv,
   s3RecordFiles,
+  veraPdfDockerSession,
   verifySeal,
   type AttachedFile,
 } from "@rabaed/worker/record";
@@ -40,7 +42,10 @@ const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
 const renderer = chromiumRenderer();
+/** veraPDF, in one container for the file: the record checks (RP-155) validate every record made here. */
+const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
 afterAll(async () => {
+  await veraPdf.close();
   await renderer.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
@@ -196,6 +201,7 @@ async function recordHandler(): Promise<OutboxHandler> {
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
+    validator: veraPdf,
     appendixLimitBytes: LIMIT_BYTES,
   });
 }
@@ -440,11 +446,23 @@ describe("scenario RP-147-1: the appendix holds the shared Documents, after the 
     `.execute(migrator);
     const listed = appendixOf(made.full!.xml);
     expect(listed.map((f) => `${f.name} ${f.sha256}`).sort()).toEqual(rows.map((r) => `${r.file_name} ${r.sha256}`).sort());
-    // No other fingerprint anywhere in it: only the Transitions' content hashes beside these.
+    // No other fingerprint anywhere in it: only the Transitions' content hashes beside these, and those of
+    // the Signatures, logos and Stamps the pages print as pictures (RP-155: how a Re-produce finds them).
     const { rows: hashes } = await sql<{ hash: string }>`
       select encode(content_sha256, 'hex') as hash from work_item_event where work_item_id = ${fullId}::uuid and content_sha256 is not null
+      union all
+      select encode(f.sha256, 'hex') from work_item_event e join member_signature ms on ms.id = e.signature_id join stored_file f on f.id = ms.file_id
+      where e.work_item_id = ${fullId}::uuid
+      union all
+      select encode(f.sha256, 'hex') from stored_file f where f.storage_key like 'companies/%'
+      union all
+      -- The Form's photos, printed in its grid (never appendix pages).
+      select encode(d.file_sha256, 'hex') from document d
+      where d.work_item_id = ${fullId}::uuid and d.file_sha256 is not null and d.content_type like 'image/%'
     `.execute(migrator);
-    const known = new Set([...listed.map((f) => f.sha256), ...hashes.map((h) => h.hash)]);
+    const images = new Set(hashes.map((h) => h.hash));
+    for (const m of made.full!.xml.matchAll(/<(?:logo|signature|image) sha256="([0-9a-f]{64})"\/>/g)) expect(images.has(m[1]!), m[1]).toBe(true);
+    const known = new Set([...listed.map((f) => f.sha256), ...images]);
     for (const hex of made.full!.xml.match(/[0-9a-f]{64}/g) ?? []) expect(known.has(hex), hex).toBe(true);
     // Its file elements hold only the name and how the record holds it: never a storage key or a size.
     const block = /<appendix>[\s\S]*?<\/appendix>/.exec(made.full!.xml)![0];
