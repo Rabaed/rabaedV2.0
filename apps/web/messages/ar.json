@@ -800,6 +800,16 @@
       "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب", "QSN": "الأسئلة إلى الاستشاري", "QSC": "الأسئلة إلى المقاول" },
       "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة"
     },
+    "snag": {
+      "raisedFrom": "المصدر",
+      "raisedManually": "أُنشئ يدويًا.",
+      "open": "فتح",
+      "comment": "من مراجعة الاستشاري",
+      "response": "الرد",
+      "before": "قبل",
+      "after": "بعد",
+      "noPhoto": "لا صورة"
+    },
     "invalid": "أدخل موضوعًا واختر تخصصًا.",
     "notContractor": "فقط المقاول يمكنه إنشاء هذا الاعتماد.",
     "outsideVisibility": "اختر تخصصًا وموقعًا ضمن رؤيتك.",

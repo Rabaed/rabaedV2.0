@@ -5,6 +5,7 @@ import { documentSummary } from "./document.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 import { handoverReasons } from "./handover.ts";
 import { listColumnLayout } from "./list-columns.ts";
+import { moduleKeySchema } from "./module.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 import { workItemPackage } from "./package.ts";
 
@@ -129,6 +130,19 @@ export const workItemWith = z.discriminatedUnion("kind", [
 ]);
 export type WorkItemWith = z.infer<typeof workItemWith>;
 
+/**
+ * The item a Snag List item's `raised_from` Link names (RP-94, RP-628), by Document Number and
+ * Subject (E1). Its id and its outcome (the Review Code or Inspection Result, with how a badge
+ * shows it) only when the viewer sees that item: a Link never carries its live data.
+ */
+export const raisedFromSource = z.object({
+  documentNumber: z.string(),
+  subject: z.string(),
+  workItemId: z.uuid().nullable(),
+  outcome: z.object({ code: workItemOutcome, name: bilingualText, look: z.enum(["a", "b", "c", "d"]) }).nullable(),
+});
+export type RaisedFromSource = z.infer<typeof raisedFromSource>;
+
 /** A List row: one Revision the viewer sees, by default the latest of its chain. */
 export const workItemRow = workItemSummary.extend({
   /** 0 for the first submission, then 1, 2… */
@@ -165,21 +179,8 @@ export const workItemRow = workItemSummary.extend({
     ])
     .nullable()
     .optional(),
-  /**
-   * The Snag List's "Raised from" (RP-94): the item its `raised_from` Link names, by Document
-   * Number and Subject (E1). Its id and its outcome (the Review Code or Inspection Result, with how
-   * a badge shows it) only when the viewer sees that item: a Link never carries its live data.
-   * Null when it was raised by hand; left out by reads of other Modules.
-   */
-  raisedFrom: z
-    .object({
-      documentNumber: z.string(),
-      subject: z.string(),
-      workItemId: z.uuid().nullable(),
-      outcome: z.object({ code: workItemOutcome, name: bilingualText, look: z.enum(["a", "b", "c", "d"]) }).nullable(),
-    })
-    .nullable()
-    .optional(),
+  /** The Snag List's "Raised from" (RP-94). Null when it was raised by hand; left out by reads of other Modules. */
+  raisedFrom: raisedFromSource.nullable().optional(),
   /**
    * The Snag List's thumbnail (RP-94): the first image in one of its Form's file fields (not a
    * checklist item's evidence, nor an annotated copy) that the viewer sees (RLS on Documents), in
@@ -611,6 +612,13 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 
 /** One Work Item, for someone who can see it. */
 export const workItemDetail = workItemSummary.extend({
+  /** The Module its Type belongs to, which lays out its page (the Snag List's, RP-628). */
+  module: moduleKeySchema,
+  /**
+   * The item it was raised from, as its Snag List row names it (RP-628). Null when it was raised
+   * by hand, and for an item of another Module.
+   */
+  raisedFrom: raisedFromSource.nullable(),
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
   /**
