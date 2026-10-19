@@ -26,6 +26,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     removalReason: () => undefined,
     requiredChecks: () => [],
     checkRuns: () => [],
+    commitStatuses: () => [],
     enqueue: (id, head) => {
       enqueued.push([id, head]);
       return { position: 3, state: "QUEUED" };
@@ -318,6 +319,22 @@ describe("queuePr", () => {
     expect(result.lines.join("\n")).toContain("PR #149 is already in the merge queue");
   });
 
+  it("knows GitHub's other wordings for a PR already queued", () => {
+    for (const message of [
+      "GraphQL: Pull request is already in a merge queue",
+      "GraphQL: This pull request is already queued to merge",
+      "Pull request Rabaed/rabaedV2.0#149 is already queued to merge",
+      "already in the queue",
+    ]) {
+      const { seam } = fakeSeam({
+        enqueue: () => {
+          throw new Error(message);
+        },
+      });
+      expect(queuePr(149, seam).ok, message).toBe(true);
+    }
+  });
+
   it("still fails on any other enqueue error", () => {
     const { seam } = fakeSeam({
       enqueue: () => {
@@ -423,6 +440,114 @@ describe("queuePrWhenChecksPass", () => {
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).toContain("already in the merge queue");
+  });
+
+  // Review fix 1: a run stuck queued or in progress must not loop forever.
+  it("gives up after 60 min when a required check stays pending, naming it and its status", async () => {
+    const c = checking([[done("ci"), { name: "reviewed-required", status: "queued", conclusion: "" }]]);
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result).toMatchObject({ ok: false, reason: "checks_timeout" });
+    expect(result.lines.join("\n")).toContain("reviewed-required (queued)");
+    expect(result.lines.join("\n")).toContain("60 min");
+    expect(c.sleeps.length).toBe(60);
+    expect(c.enqueued).toEqual([]);
+  });
+
+  // Review fix 2: a required context can be a commit status, not a check run.
+  it("counts a required context reported as a commit status", async () => {
+    let poll = 0;
+    const c = checking([[done("ci"), done("reviewed-required")]], {
+      requiredChecks: () => ["ci", "reviewed-required", "legacy/status"],
+      commitStatuses: () => (poll++ === 0 ? [{ context: "legacy/status", state: "pending" }] : [{ context: "legacy/status", state: "success" }]),
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(true);
+    expect(c.sleeps).toEqual([60_000]);
+  });
+
+  it("fails on a required commit status that failed or errored, naming it", async () => {
+    const c = checking([[done("ci"), done("reviewed-required")]], {
+      requiredChecks: () => ["ci", "legacy/status"],
+      commitStatuses: () => [{ context: "legacy/status", state: "error" }],
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("legacy/status (error)");
+  });
+
+  // Review fix 3: one flaky gh call mid-wait is not the end of the wait.
+  it("retries a gh call that fails mid-wait, and goes on when it answers", async () => {
+    let calls = 0;
+    const c = checking([[done("ci"), done("reviewed-required")]]);
+    const answer = c.seam.checkRuns;
+    c.seam.checkRuns = (commit) => {
+      if (calls++ < 2) throw new Error("gh: HTTP 502 Bad Gateway");
+      return answer(commit);
+    };
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(true);
+    expect(c.sleeps).toEqual([10_000, 10_000]);
+  });
+
+  it("fails naming the call after three failed tries", async () => {
+    const c = checking([[]], {
+      checkRuns: () => {
+        throw new Error("gh: HTTP 502 Bad Gateway");
+      },
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result).toMatchObject({ ok: false, reason: "gh_failed" });
+    const text = result.lines.join("\n");
+    expect(text).toContain("the head's check runs");
+    expect(text).toContain("3 times");
+    expect(text).toContain("HTTP 502");
+    expect(c.enqueued).toEqual([]);
+  });
+
+  // Review fix 4: right after `gh pr create` the reviewed-label run is still going; --wait waits for it.
+  it("waits for a reviewed-label run still going on the head, then queues", async () => {
+    let poll = 0;
+    const c = checking([[done("ci"), done("reviewed-required")]], {
+      labelRuns: () => (poll++ < 2 ? [{ status: "in_progress", conclusion: "" }] : [{ status: "completed", conclusion: "success" }]),
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(true);
+    expect(c.enqueued).toEqual([["PR_node", "abc123"]]);
+    expect(c.sleeps.length).toBe(1);
+  });
+
+  it("still refuses when the reviewed-label run it waited for fails", async () => {
+    let poll = 0;
+    const c = checking([[done("ci"), done("reviewed-required")]], {
+      labelRuns: () => (poll++ < 2 ? [{ status: "queued", conclusion: "" }] : [{ status: "completed", conclusion: "failure" }]),
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("reviewed-label run on abc123 failed (failure)");
+    expect(c.enqueued).toEqual([]);
+  });
+
+  // Review fix 5: a push while waiting moves the head; the wait ends with a named result, not a throw.
+  it("ends with head_moved when the PR's head moves during the wait", async () => {
+    let poll = 0;
+    const c = checking([[going("ci")]], {
+      pullRequest: () => ({ id: "PR_node", headRefOid: poll++ < 2 ? "abc123" : "def456", headRefName: "feature" }),
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result).toMatchObject({ ok: false, reason: "head_moved" });
+    expect(result.lines.join("\n")).toContain("abc123");
+    expect(result.lines.join("\n")).toContain("def456");
+    expect(c.enqueued).toEqual([]);
+  });
+
+  it("ends with head_moved when GitHub refuses the pinned head at enqueue", async () => {
+    const c = checking([[done("ci"), done("reviewed-required")]], {
+      enqueue: () => {
+        throw new Error("GraphQL: Expected head OID abc123 does not match the pull request's head (enqueuePullRequest)");
+      },
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result).toMatchObject({ ok: false, reason: "head_moved" });
   });
 
   it("logs which required checks it is waiting for, once per change", async () => {
@@ -633,6 +758,12 @@ describe("realSeam", () => {
     expect(rules?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/rules/branches/main"]);
     expect(rules?.join(" ")).toContain("required_status_checks");
     expect(runs?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/commits/abc123/check-runs?per_page=100"]);
+  });
+
+  it("reads the head's commit statuses through gh api, one JSON line per context", () => {
+    const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"context":"legacy/status","state":"pending"}\n' }));
+    expect(seam.commitStatuses("abc123")).toEqual([{ context: "legacy/status", state: "pending" }]);
+    expect(calls[0]?.args.slice(0, 3)).toEqual(["api", "--paginate", "repos/{owner}/{repo}/commits/abc123/status?per_page=100"]);
   });
 
   it("throws with the command's output when a required call fails", () => {
