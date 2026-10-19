@@ -17,6 +17,7 @@ import {
   attachedFiles,
   chromiumRenderer,
   documentalRecordHandler,
+  reproduceHandler,
   fallbackFonts,
   localSealSigner,
   localTimestampAuthority,
@@ -28,16 +29,21 @@ import {
   veraPdfDockerSession,
   verifySeal,
   type AttachedFile,
+  type PdfRenderer,
+  type RecordJobDeps,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { encodePng } from "../src/demo/demo-signature.ts";
+import { createTestAdmin } from "../../admin/test/support/harness.ts";
 import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
+const admin = await createTestAdmin();
+const recordFiles = s3RecordFiles(projectFilesFromEnv());
 const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
@@ -47,6 +53,7 @@ const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
 afterAll(async () => {
   await veraPdf.close();
   await renderer.close();
+  await admin.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
 });
@@ -191,19 +198,24 @@ const made: { full?: Made; fullAsK1?: Uint8Array; held?: Made; heldAsK1?: Made }
 let fullId = "";
 let heldId = "";
 
-async function recordHandler(): Promise<OutboxHandler> {
+/** What the record job and Re-produce make records with here; `rendering` stands in for a changed layout. */
+async function recordDeps(rendering: PdfRenderer = renderer): Promise<RecordJobDeps> {
   const signer = await localSealSigner();
   const timestamps = await localTimestampAuthority();
-  return documentalRecordHandler({
-    files: s3RecordFiles(projectFilesFromEnv()),
-    renderer,
+  return {
+    files: recordFiles,
+    renderer: rendering,
     signer: async () => signer,
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
     validator: veraPdf,
     appendixLimitBytes: LIMIT_BYTES,
-  });
+  };
+}
+
+async function recordHandler(): Promise<OutboxHandler> {
+  return documentalRecordHandler(await recordDeps());
 }
 
 const onboard = async (legalName: string): Promise<Company> => {
@@ -292,6 +304,10 @@ beforeAll(async () => {
   const c1 = await api.projectCreator();
   const k1 = await onboard(K1_NAME);
   at = await buildTower(api, { c1, k1 }, "APX");
+  // C1's Stamp and K1's logo, for the Re-produce below to find again.
+  for (const [company, kind, colour] of [[c1, "stamp", [30, 30, 90]], [k1, "logo", [210, 180, 20]], [k1, "stamp", [90, 30, 30]]] as const) {
+    await ok(company.caller.request("PUT", `/v1/companies/${company.company.companyId}/${kind}`, { contentType: "image/png", data: png(32, 32, colour).toString("base64") }), 200);
+  }
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
   const k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
   c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
@@ -503,5 +519,102 @@ describe("scenarios RP-147-1 and RP-147-2: only the Documents the other Particip
   it("is still the plain 404 for C2", async () => {
     await expectHidden(downloadLink(c2Engineer, fullId), "C2");
     await expectHidden(downloadLink(c2Engineer, heldId), "C2");
+  });
+});
+
+describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps, a logo and an appendix", () => {
+  const REASON = "The PDF maker had a layout bug";
+  const shifted: PdfRenderer = {
+    // A layout that pushes everything down a page: where things land changes, no fact does.
+    render: (html) => renderer.render(html.replace(/<body[^>]*>/, (body) => `${body}<div style="height:150mm"></div>`)),
+    close: async () => undefined,
+  };
+  const recordRow = async (id: string) =>
+    (
+      await sql<{ pdf_sha256: string; code: string; token_hash: string; status: string; data_key: string }>`
+        select encode(r.pdf_sha256, 'hex') as pdf_sha256, r.verification_code as code, encode(r.verification_token_hash, 'hex') as token_hash,
+          r.status, f.storage_key as data_key
+        from documental_record r join stored_file f on f.id = r.record_data_file_id where r.work_item_id = ${id}::uuid
+      `.execute(migrator)
+    ).rows[0]!;
+  // The admin-only history, read as the migrator.
+  const replaced = async (id: string) =>
+    (
+      await sql<{ replaced_storage_key: string; replaced_sha256: string }>`
+        select x.replaced_storage_key, encode(x.replaced_sha256, 'hex') as replaced_sha256
+        from documental_record_reproduction x join documental_record r on r.id = x.documental_record_id
+        where r.work_item_id = ${id}::uuid
+      `.execute(migrator)
+    ).rows;
+  const checks = async (id: string) =>
+    (
+      await sql<{ run_kind: string; passed: boolean; problems: string[] }>`
+        select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
+        where r.work_item_id = ${id}::uuid order by c.ran_at
+      `.execute(migrator)
+    ).rows;
+  let engineer: Awaited<ReturnType<typeof admin.signedInEngineer>>;
+  const reproduce = async (id: string, rendering: PdfRenderer = renderer) => {
+    expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: REASON })).statusCode).toBe(202);
+    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(await recordDeps(rendering)) });
+  };
+  /** The Record Data's facts: without where things land on the pages (the worker's LAYOUT_DERIVED). */
+  const facts = (xml: string) =>
+    xml
+      .replace(/<pages first="\d+" last="\d+"\/>/g, "<pages/>")
+      .replace(/(<comments) page="\d+"/g, "$1")
+      .replace(/\n *<replyFullText page="\d+"\/>/g, "");
+
+  beforeAll(async () => {
+    engineer = await admin.signedInEngineer();
+  });
+
+  it("prints the same Signatures, Stamps and logo, finds the appendix's files again, and only the pages move", { timeout: 300_000 }, async () => {
+    const before = made.full!;
+    const row = await recordRow(fullId);
+    for (const flag of ["logo", "image", "signature"]) expect(before.xml).toMatch(new RegExp(`<${flag} sha256="[0-9a-f]{64}"/>`));
+    expect(appendixOf(before.xml).map((f) => f.way)).toEqual(expect.arrayContaining(["pages", "attached"]));
+
+    await reproduce(fullId, shifted);
+
+    const after = await download(c1Pm, fullId);
+    const next = await recordRow(fullId);
+    expect(next.status).toBe("published");
+    expect(next.pdf_sha256).toBe(sha256(after.bytes));
+    expect(next.pdf_sha256).not.toBe(row.pdf_sha256);
+    expect((await checks(fullId)).at(-1)).toMatchObject({ run_kind: "reproduce", passed: true });
+    // The verification fields stay, and the stored Record Data file is not changed.
+    expect([next.code, next.token_hash, next.data_key]).toEqual([row.code, row.token_hash, row.data_key]);
+    expect(new TextDecoder().decode((await recordFiles.get(row.data_key))!)).toBe(before.xml);
+    // The new PDF carries the remade Record Data: the appendix's pages moved with the layout, every fact is the same.
+    const wasPages = appendixOf(before.xml).find((f) => f.way === "pages")!;
+    const nowPages = appendixOf(after.xml).find((f) => f.name === wasPages.name)!;
+    expect(nowPages.first).not.toBe(wasPages.first);
+    expect(after.xml).not.toBe(before.xml);
+    expect(facts(after.xml)).toBe(facts(before.xml));
+    expect(after.attached.map((f) => f.name)).toEqual(before.attached.map((f) => f.name));
+    // The history keeps the old PDF.
+    const kept = await replaced(fullId);
+    expect(kept.map((k) => k.replaced_sha256)).toEqual([sha256(before.bytes)]);
+    expect(sha256((await recordFiles.get(kept[0]!.replaced_storage_key))!)).toBe(sha256(before.bytes));
+  });
+
+  it("refuses when the remade Record Data would differ in a fact, and replaces nothing", { timeout: 300_000 }, async () => {
+    const row = await recordRow(fullId);
+    const storedXml = new TextDecoder().decode((await recordFiles.get(row.data_key))!);
+    const current = await bytesOf(c1Pm, fullId);
+    // A stored Record Data the maker can't write back as it is: a second subject, which it drops.
+    const subject = /<subject>[^<]*<\/subject>/.exec(storedXml)![0];
+    await recordFiles.put(row.data_key, new TextEncoder().encode(storedXml.replace(subject, `${subject}\n    <subject>Another subject</subject>`)), "application/xml");
+    try {
+      await reproduce(fullId);
+    } finally {
+      await recordFiles.put(row.data_key, new TextEncoder().encode(storedXml), "application/xml");
+    }
+    expect(sha256(await bytesOf(c1Pm, fullId))).toBe(sha256(current));
+    expect((await recordRow(fullId)).pdf_sha256).toBe(row.pdf_sha256);
+    const last = (await checks(fullId)).at(-1)!;
+    expect(last).toMatchObject({ run_kind: "reproduce", passed: false });
+    expect(last.problems.join(" ")).toContain("differs from the stored one");
   });
 });
