@@ -173,7 +173,7 @@ export function RecordVerificationView({
     <div className="flex flex-col gap-4" data-testid="record-verification">
       <div
         role="status"
-        className={cn("flex items-start gap-3 rounded-lg px-4 py-3.5", genuine ? "bg-success-tint text-success-fg" : "bg-warning-tint text-warning-fg")}
+        className={cn("flex items-start gap-3 rounded-lg px-4 py-3", genuine ? "bg-success-tint text-success-fg" : "bg-warning-tint text-warning-fg")}
       >
         <Icon name={genuine ? "circle-check" : "alert-triangle"} size={24} className="mt-0.5 shrink-0" />
         <div className="min-w-0">

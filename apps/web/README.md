@@ -11,6 +11,8 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `page.tsx` | `/` | Home across the Member's Projects; the welcome when signed out |
 | `sign-in/page.tsx` | `/sign-in` | Sign-in form |
 | `accept-invitation/page.tsx` | `/accept-invitation` | Accept an invitation to a Company or Project |
+| `verify/page.tsx` | `/verify` | Public: verify a Documental Record by its Verification Code and Document Number (RP-157) |
+| `verify/[token]/page.tsx` | `/verify/:token` | Public: the page a Documental Record's QR opens (RP-157) |
 | `health/page.tsx` | `/health` | API health check |
 | `profile/page.tsx` | `/profile` | The Member's profile: their Signature and notification settings |
 | `profile/signature/page.tsx` | `/profile/signature` | Add Signature: draw, type or upload it; `?returnTo=` the item the pop-up came from (RP-85) |
