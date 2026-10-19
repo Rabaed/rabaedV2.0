@@ -97,12 +97,13 @@ export class AppStack extends Stack {
     });
     const appDatabase = databaseConnection(data, "rabaed_app");
     appDatabase.grantRead(apiTaskRole);
-    // Read and write objects under projects/ only: what the signed URLs it
-    // creates may do, since a signed URL carries the signer's permissions.
+    // Read and write objects under projects/, and the Signatures, logos and
+    // Stamps it stores itself (RP-951), only: what the signed URLs it creates
+    // may do, since a signed URL carries the signer's permissions.
     apiTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-        resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)],
+        resources: [`${PROJECT_FILES_PREFIX}*`, ...RECORD_IMAGE_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
       }),
     );
     // So S3 answers 404, not 403, for a file not uploaded yet: confirming a
@@ -200,6 +201,11 @@ export class AppStack extends Stack {
       securityGroup: network.securityGroups.loadBalancer,
       dropInvalidHeaderFields: true,
     }));
+    // X-Forwarded-For: keep what the browser sent and append the address the load balancer saw (AWS's
+    // default, pinned so a console change can't drop it). The verification page limits typed codes per
+    // visitor by that last entry (RP-157, apps/api/src/routes/verification.ts): `preserve` would let a
+    // browser choose its own address, `remove` would make every visitor one.
+    loadBalancer.setAttribute("routing.http.xff_header_processing.mode", "append");
     // Every request, for the audit trail; the logs bucket (storage stack) keeps them a year.
     loadBalancer.logAccessLogs(storage.logs, "load-balancer");
 

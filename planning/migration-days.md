@@ -90,3 +90,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270829 | RP-958 | 22 | outbox_attempt_on_take |
 | 20270912 | RP-650 | 22 | record_signatures |
 | 20270913 | RP-147 | 22 | record_appendix |
+| 20270910 | RP-157 | 23 | documental_record_verification |

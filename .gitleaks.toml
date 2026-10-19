@@ -2,8 +2,10 @@
 [extend]
 useDefault = true
 
-# A font inlined into CSS, HTML or JS as base64. Font files themselves are
-# binary, which gitleaks skips: scripts/check-no-fonts.ts refuses those by path.
+# A font inlined into CSS, HTML or JS as a base64 data URL. Font files themselves
+# are binary, which gitleaks skips: scripts/check-no-fonts.ts refuses those by path,
+# and also font data embedded in a Claude Design export's manifest, which this rule
+# misses (RP-962). Strip an export's fonts with `pnpm design:strip-fonts <in> <out>`.
 # The licensed Thmanyah fonts come only from the private build assets bucket (RP-211).
 [[rules]]
 id = "inlined-font"

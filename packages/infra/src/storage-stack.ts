@@ -26,8 +26,9 @@ export const PDF_SEALING_TAG = { key: "rabaed-purpose", value: "pdf-sealing" } a
 export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
 
 /**
- * The images a record prints besides the Documents (RP-650): Members' Signatures and Companies'
- * logos and Stamps, where the api stores them (apps/api/src/identity). The worker only reads them.
+ * The images a record prints besides the Documents: Members' Signatures (RP-85) and Companies'
+ * logos and Stamps (RP-617), where the api stores them (apps/api/src/identity). The api writes them
+ * (RP-951); the worker only reads them (RP-650).
  */
 export const RECORD_IMAGE_OBJECTS = ["members/*/signatures/*", "companies/*/logo/*", "companies/*/stamp/*"] as const;
 
@@ -35,7 +36,8 @@ export const RECORD_IMAGE_OBJECTS = ["members/*/signatures/*", "companies/*/logo
 // owner-enforced (no ACLs) and refuses requests not made over TLS.
 //
 // - Project files: encrypted with the storage key. Only the api's task role
-//   and the worker's can read or write objects, only under projects/, and the
+//   and the worker's can read or write objects, only under projects/ (and the
+//   Signatures, logos and Stamps under members/ and companies/), and the
 //   bucket policy refuses everyone else, administrators included. Browsers
 //   upload and get files through signed URLs the api creates, refused once 15
 //   minutes old. The worker reads Documents and writes only Documental Records.

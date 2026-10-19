@@ -1,6 +1,7 @@
-import { documentalRecordReproductionSource, reproduceDocumentalRecord, type OutboxHandler } from "@rabaed/db";
+import { documentalRecordReproductionSource, reproduceDocumentalRecord, saveDocumentalRecordFace, type OutboxHandler, type ReproductionSource } from "@rabaed/db";
 import { appendixFrom } from "./appendix.ts";
 import { IMAGE_TYPES, inlinePhotos, type PhotoCandidate } from "./assets.ts";
+import { recordFace } from "./face.ts";
 import { checkRecord, environmentValidator, expectationOf } from "./checks.ts";
 import type { RecordFiles } from "./files.ts";
 import type { RecordJobDeps } from "./job.ts";
@@ -149,5 +150,6 @@ export function reproduceHandler(deps: RecordJobDeps): OutboxHandler {
       newPdf: { sha256: await sha256(pdf), size: pdf.length, sealedAt },
       verdict,
     });
+    if (verdict.passed) await saveDocumentalRecordFace(trx, row.id, recordFace(data)); // the verification page's (RP-157)
   };
 }
