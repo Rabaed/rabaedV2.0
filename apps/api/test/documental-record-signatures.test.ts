@@ -327,7 +327,8 @@ beforeAll(async () => {
   made.cancelled = await download(c1Pm, x);
   made.draftCancelled = await download(c1Pm, dx);
   made.ownerB = await download(c1Pm, ob);
-}, 180_000);
+  // Seven records, each validated by veraPDF before it is published (RP-155).
+}, 420_000);
 
 const cards = (m: Made) => /<cards>([\s\S]*?)<\/cards>/.exec(m.xml)![1]!.split("<card ").slice(1);
 const en = (part: string, tag: string) => new RegExp(`<${tag} lang="en">([^<]+)</${tag}>`).exec(part)?.[1];

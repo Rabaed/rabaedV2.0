@@ -350,7 +350,8 @@ beforeAll(async () => {
   made.fullAsK1 = await bytesOf(k1Pm, fullId);
   made.held = await download(c1Engineer, heldId);
   made.heldAsK1 = await download(k1Engineer, heldId);
-}, 180_000);
+  // Each record is validated by veraPDF before it is published (RP-155).
+}, 300_000);
 
 describe("scenario RP-147-1: the appendix holds the shared Documents, after the Disclaimer", () => {
   it("is the same record for the raiser and for K1", () => {
