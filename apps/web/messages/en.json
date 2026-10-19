@@ -748,7 +748,7 @@
       "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +#}}",
       "raisedBy": "Raised by",
       "issuedCode": "Issued Code",
-      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags" },
+      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
       "raisedItemCounts": "{open} open / {closed} closed"
     },
     "invalid": "Give a Subject and a Trade.",
