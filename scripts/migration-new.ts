@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseReservations, reservationsFile } from "./check-migrations-days.ts";
+import { reservationsFile } from "./check-migrations-days.ts";
 import { laneOf } from "./lanes.ts";
+import { fetchOrigin, freeDay, type FreeDaySeam, readRepoFile, realFreeDaySeam, repoGit } from "./migration-free-days.ts";
 import { migrationsDir } from "./migrations.ts";
 
 // `pnpm migration:new <name> --issue RP-nnn` (RP-583, from the RP-580 / RP-582
@@ -11,22 +11,15 @@ import { migrationsDir } from "./migrations.ts";
 // too), every day planning/migration-days.md reserves and every migration in
 // this worktree, and reserves that day for the issue. Lanes that picked a day
 // by hand were overtaken by main: PR #199 left the queue four times on
-// `migrations immutable`, each time a full CI run.
+// `migrations immutable`, each time a full CI run. The day comes from freeDay
+// (scripts/migration-free-days.ts), which `pnpm migration:days --next` shares.
 // The git and file calls sit behind NewMigrationSeam so the tests touch no repo.
 
-export interface NewMigrationSeam {
+export interface NewMigrationSeam extends FreeDaySeam {
   /** `git fetch origin --prune`; false when it fails. */
   fetch(): boolean;
-  /** The migrations' file names on every origin branch, origin/main included. */
-  remoteMigrations(): string[];
-  /** The migrations' file names in this worktree. */
-  localMigrations(): string[];
-  /** The reservations file's text on origin/main, then in this worktree ("" when missing). */
-  reservations(): [onMain: string, here: string];
   /** This worktree's lane, from its .env; "" when it has none. */
   lane(): string;
-  /** Today as `yyyymmdd`, for a repository with no migrations or reservations yet. */
-  today(): string;
   /** Writes a file, relative to the repository root. */
   write(path: string, text: string): void;
 }
@@ -39,12 +32,6 @@ export interface NewMigrationResult {
 // eslint-disable-next-line rabaed/no-avoid-terms -- a migration file's name, not a person's
 const usage = "Usage: pnpm migration:new <name> --issue RP-nnn   (name in snake_case, e.g. card_layout)";
 const fail = (...lines: string[]): NewMigrationResult => ({ ok: false, lines });
-
-/** A date's UTC day as `yyyymmdd`. */
-export const dayOfDate = (date: Date): string => date.toISOString().slice(0, 10).replaceAll("-", "");
-
-/** The calendar day after `day` (`yyyymmdd`). */
-export const nextDay = (day: string): string => dayOfDate(new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)) + 1)));
 
 /** The text with `row` after its last table row (so text after the table stays after it); at the end when it has no table. */
 export function withRow(text: string, row: string): string {
@@ -63,37 +50,21 @@ export function newMigration(args: string[], seam: NewMigrationSeam): NewMigrati
 
   if (!seam.fetch()) return fail("git fetch origin failed; the free day needs today's main and branches. Get online and run `pnpm migration:new` again.");
 
-  const [onMain, onBranch] = seam.reservations();
-  const days = [
-    ...[...seam.remoteMigrations(), ...seam.localMigrations()].map((file) => file.slice(0, 8)).filter((day) => /^\d{8}$/.test(day)),
-    ...[...parseReservations(onMain), ...parseReservations(onBranch)].map((r) => r.day),
-  ];
-  const latest = days.reduce((max, day) => (day > max ? day : max), "");
-  const day = latest === "" ? seam.today() : nextDay(latest);
-
+  const { first: day, warnings } = freeDay(seam);
+  const [, onBranch] = seam.reservations();
   const file = `${migrationsDir}/${day}000000_${name}.sql`;
   seam.write(file, `-- ${issue}: ${name.replaceAll("_", " ")}.\n`);
   seam.write(reservationsFile, withRow(onBranch, `| ${day} | ${issue} | ${seam.lane()} | ${name} |`));
-  return { ok: true, lines: [`Created ${file}`, `Reserved ${day} for ${issue} in ${reservationsFile}; commit both together.`] };
+  return { ok: true, lines: [...warnings, `Created ${file}`, `Reserved ${day} for ${issue} in ${reservationsFile}; commit both together.`] };
 }
 
 /** The real git and file calls, in the repository at `repo`. */
 export function realSeam(repo: string = process.cwd()): NewMigrationSeam {
-  const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  const lines = (text: string) => text.split("\n").filter(Boolean);
-  const read = (path: string) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
+  const git = repoGit(repo);
   return {
-    fetch: () => git("fetch", "origin", "--prune").status === 0,
-    remoteMigrations: () =>
-      lines(git("for-each-ref", "--format=%(refname)", "refs/remotes/origin").stdout)
-        .filter((ref) => ref !== "refs/remotes/origin/HEAD")
-        // A branch without the migrations folder has none: ls-tree fails, stdout is empty.
-        .flatMap((ref) => lines(git("ls-tree", "--name-only", `${ref}:${migrationsDir}`).stdout))
-        .filter((name) => name.endsWith(".sql")),
-    localMigrations: () => readdirSync(join(repo, migrationsDir)).filter((name) => name.endsWith(".sql")),
-    reservations: () => [git("show", `origin/main:${reservationsFile}`).stdout ?? "", read(reservationsFile)],
-    lane: () => laneOf(read(".env")),
-    today: () => dayOfDate(new Date()),
+    ...realFreeDaySeam(repo, git),
+    fetch: () => fetchOrigin(git),
+    lane: () => laneOf(readRepoFile(repo, ".env")),
     write: (path, text) => writeFileSync(join(repo, path), text),
   };
 }
