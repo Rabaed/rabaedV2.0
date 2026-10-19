@@ -149,6 +149,34 @@ def import_register_xlsx():
     book.save(path("import-register.xlsx"))
 
 
+def import_values_xlsx():
+    """The Register Import's values register (RP-639): Paper ref, Scopes, Location and Form
+    fields beside Subject, Type and Trade, with headings in English and Arabic. Row 2 is good;
+    row 3's Paper ref is a number (read as stored: 12) and its Trade "Elec" is matched by hand;
+    row 4's Type "Document" too; rows 5 to 7 are bad (see the seam-1 test); row 8 is a MAR, whose
+    Form has no Sheets field."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Register"
+    sheet.append(["Ref", "Description", "النوع", "Discipline", "Scope", "الموقع", "Sheets", "Issued", "Document type", "Remarks"])
+    rows = [
+        ["DAR-P-001", "Lighting layout, Floor 1", "dar", " electrical ", "Lighting, Emergency lighting", "building a / floor 1", 12, datetime.date(2026, 11, 5), "plan", "First"],
+        [12, "Panel schedule", "DAR", "Elec", "Power", "BA", 3, datetime.date(2026, 11, 9), "Report", None],
+        ["DAR-P-004", "Cable routes", "Document", "ELEC", None, None, None, None, None, None],
+        ["DAR-P-005", "Pump sets", "DAR", "Electrical", "Pumps", "Tower 9", "twelve", "05-Nov-26", "Blueprint", None],
+        ["DAR-P-005", "Fire alarm", "DAR", "Mechanical", "Plumbing works", None, None, None, None, None],
+        ["R" * 101, "Long reference", "DAR", "Mechanical", None, None, None, None, None, None],
+        ["MAR-001", "Cable trays", "mar", "Mechanical", None, None, 5, None, None, None],
+    ]
+    for values in rows:
+        sheet.append(values)
+    # Shown as 0012, stored as the number 12: read as 12 (RP-631, owner's decision on cells as stored).
+    sheet["A3"].number_format = "0000"
+    sheet["H2"].number_format = "dd-mmm-yy"
+    sheet["H3"].number_format = "dd-mmm-yy"
+    book.save(path("import-values.xlsx"))
+
+
 def write_bytes(name, data):
     with open(path(name), "wb") as file:
         file.write(data)
@@ -182,6 +210,7 @@ def csv_files():
 
 register_xlsx()
 import_register_xlsx()
+import_values_xlsx()
 too_many_rows_xlsx()
 formats_xlsx()
 inflated_xlsx()

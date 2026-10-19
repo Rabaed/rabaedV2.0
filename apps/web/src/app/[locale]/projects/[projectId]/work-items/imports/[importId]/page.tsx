@@ -1,8 +1,8 @@
 import { formatNumber, type Locale } from "@rabaed/domain";
-import { Icon, KeyValues, TableCard } from "@rabaed/ui";
+import { Icon, KeyValues, PackageCell, TableCard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { ImportRows } from "@/components/register-import-rows";
+import { RegisterImportDownloads, RegisterImportRows } from "@/components/register-import-wizard";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getRegisterImport } from "@/lib/session";
 
@@ -30,18 +30,52 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
           <Icon name="arrow-left" size={14} />
           {t("imports")}
         </Link>
-        <h1 className="text-h3 font-bold">
-          <bdi>{record.fileName}</bdi>
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-h3 font-bold">
+            <bdi>{record.fileName}</bdi>
+          </h1>
+          <RegisterImportDownloads record={record} locale={locale} />
+        </div>
       </div>
       <div className="rounded-md border border-border bg-surface px-5 py-4">
         <KeyValues
           items={[
-            { key: "by", label: t("list.importedBy"), value: record.runBy.name[locale] },
+            // A Rabaed Engineer's import reads "Rabaed", never the Engineer (RP-645, RP-589-3).
+            { key: "by", label: t("list.importedBy"), value: record.runBy?.name[locale] ?? t("rabaed") },
             { key: "sheet", label: t("detail.sheet"), value: <bdi>{t("detail.worksheetValue", { worksheet: record.sheet, row: n(record.headerRow) })}</bdi> },
             { key: "subject", label: t("fields.subject"), value: <bdi>{columnOf(record.mapping.subject, () => "—")}</bdi> },
             { key: "type", label: t("fields.type"), value: <bdi>{columnOf(record.mapping.type, (v) => t("detail.everyRow", { value: v }))}</bdi> },
             { key: "trade", label: t("fields.trade"), value: <bdi>{columnOf(record.mapping.trade, (v) => t("detail.everyRow", { value: fixedTrade(v) }))}</bdi> },
+            // The optional fields it mapped (RP-639, RP-640): Scopes, Location, Paper ref, Assign to and Form fields, each by its column.
+            ...(["scopes", "location", "package", "paperRef", "assignTo"] as const).flatMap((field) => {
+              const mapped = record.mapping[field];
+              return mapped ? [{ key: field, label: t(`fields.${field}`), value: <bdi>{columnOf(mapped, () => "—")}</bdi> }] : [];
+            }),
+            // RP-644: the Packages it created and added to, by number.
+            ...(record.packages.length > 0
+              ? [
+                  {
+                    key: "packages",
+                    label: t("validate.packages"),
+                    value: (
+                      <span className="flex flex-col gap-1">
+                        {record.packages.map((p) => (
+                          <span key={p.package?.id ?? `new:${p.newName}`} className="flex flex-wrap items-center gap-2">
+                            <span className="text-muted">{p.newName !== null ? t("result.newPackage") : t("result.addedTo")}</span>
+                            <PackageCell value={{ text: "", match: p.package, new: p.package ? null : p.newName }} locale={locale} newLabel={t("validate.newPackage")} marked={false} />
+                            <span className="text-muted">{t("packages.rows", { count: p.rows, n: n(p.rows) })}</span>
+                          </span>
+                        ))}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+            ...(record.mapping.fields ?? []).map((f) => ({
+              key: `field:${f.key}`,
+              label: t("detail.formField", { label: f.label?.[locale] ?? f.key }),
+              value: <bdi>{columnOf(f, () => "—")}</bdi>,
+            })),
             { key: "rows", label: t("list.rows"), value: n(record.rowsTotal) },
             { key: "created", label: t("list.created"), value: n(record.rowsCreated ?? 0) },
             { key: "leftOut", label: t("list.leftOut"), value: n(record.rowsRejected) },
@@ -49,7 +83,7 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
         />
       </div>
       <TableCard>
-        <ImportRows rows={record.rows} label={t("detail.rows")} locale={locale} results />
+        <RegisterImportRows rows={record.rows} label={t("detail.rows")} locale={locale} mapping={record.mapping} importer={record.defaultRaiser.name} />
       </TableCard>
     </div>
   );
