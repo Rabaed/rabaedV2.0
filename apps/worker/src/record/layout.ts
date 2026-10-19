@@ -4,7 +4,7 @@ import type { RecordFonts } from "./fonts.ts";
 import { isShortCode, NO_IMAGES, REPLACED, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData, type RecordImages } from "./record-data.ts";
 import { APPENDIX_CSS, appendixHtml } from "./appendix-layout.ts";
 import { qrSvg } from "./qr.ts";
-import { texts, type RecordLanguage, type RecordText } from "./record-text.ts";
+import { headingHtml, html, ltr, texts, WORDS, type RecordLanguage, type RecordText, type Word } from "./record-text.ts";
 
 // The one Rabaed layout (form-engine.md §6; ADR 0023), printed from the Record
 // Data only. Page 1 is the Companies, the title block, the Parties and
@@ -17,11 +17,6 @@ import { texts, type RecordLanguage, type RecordText } from "./record-text.ts";
 // electronically through Rabaed", the Verification Code and page X of Y.
 // RP-650 adds the cards, Stamps and Comments, RP-147 the appendix; they change
 // this file and LAYOUT_VERSION.
-
-const html = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-/** Left to right whatever surrounds it: Document Numbers, codes, hashes, links. */
-const ltr = (s: string) => `<bdi dir="ltr" class="ltr">${html(s)}</bdi>`;
 
 /** Text in the record's languages: Arabic, then English on its own line when it differs, so a wrapped line never mixes the two. */
 function txt(t: RecordText): string {
@@ -40,65 +35,13 @@ function inline(t: RecordText): string {
   return t.ar !== undefined && t.en !== undefined && t.ar !== t.en ? `${txt({ ar: t.ar })} · ${txt({ en: t.en })}` : txt(t);
 }
 
-const WORDS = {
-  project: { ar: "المشروع", en: "Project" },
-  subject: { ar: "الموضوع", en: "Subject" },
-  number: { ar: "رقم المستند", en: "Document Number" },
-  parties: { ar: "الأطراف", en: "Parties" },
-  classification: { ar: "التصنيف", en: "Classification" },
-  trade: { ar: "التخصص", en: "Trade" },
-  location: { ar: "الموقع", en: "Location" },
-  scopes: { ar: "نطاق العمل", en: "Scopes" },
-  decision: { ar: "القرار النهائي", en: "Final decision" },
-  issuedBy: { ar: "أصدره", en: "Issued by" },
-  confirmedBy: { ar: "أكّده", en: "Confirmed by" },
-  submitted: { ar: "تاريخ التقديم", en: "Submission Date" },
-  replied: { ar: "تاريخ الرد", en: "Reply date" },
-  comments: { ar: "عدد الملاحظات", en: "Review Comments" },
-  code: { ar: "رمز التحقق", en: "Verification Code" },
-  link: { ar: "رابط التحقق", en: "Verification link" },
-  reply: { ar: "الرد", en: "Reply" },
-  flow: { ar: "مسار الاعتماد", en: "Approval flow" },
-  step: { ar: "الإجراء", en: "Step" },
-  member: { ar: "العضو", en: "Member" },
-  company: { ar: "الشركة", en: "Company" },
-  date: { ar: "التاريخ", en: "Date" },
-  hash: { ar: "بصمة المحتوى", en: "Content hash" },
-  documents: { ar: "المستندات", en: "Documents" },
-  documentName: { ar: "المستند", en: "Document" },
-  pages: { ar: "الصفحات", en: "Pages" },
-  takenAt: { ar: "تاريخ التصوير", en: "Taken" },
-  totals: { ar: "الإجمالي", en: "Total" },
-  revisionOf: { ar: "مراجعة للمستند", en: "Revision of" },
-  closedAtCode: { ar: "أُغلق بالرمز", en: "closed at Code" },
-  closedOn: { ar: "بتاريخ", en: "on" },
-  footer: { ar: "صادر إلكترونيًا عبر رابد", en: "Issued electronically through Rabaed" },
-  page: { ar: "صفحة", en: "page" },
-  of: { ar: "من", en: "of" },
-  reviewDuration: { ar: "مدة المراجعة (أيام)", en: "Review duration (days)" },
-  fullText: { ar: "النص الكامل: صفحة", en: "Full text: page" },
-  cancelledBy: { ar: "ألغاه", en: "Cancelled by" },
-  reason: { ar: "السبب", en: "Reason" },
-  byRabaed: { ar: "ألغاه رابد:", en: "Cancelled by Rabaed:" },
-  leftProject: { ar: "غادرت المشروع", en: "left the Project" },
-  reviewComments: { ar: "ملاحظات المراجعة", en: "Review Comments" },
-  reference: { ar: "المرجع", en: "Reference" },
-  signatures: { ar: "التواقيع", en: "Signatures" },
-  signature: { ar: "التوقيع", en: "Signature" },
-  nextStep: { ar: "الخطوة التالية", en: "Next step" },
-  revision: { ar: "المراجعة", en: "Revision" },
-  by: { ar: "من", en: "by" },
-  stamps: { ar: "الأختام", en: "Stamps" },
-  disclaimer: { ar: "إخلاء المسؤولية", en: "Disclaimer" },
-} satisfies Record<string, { ar: string; en: string }>;
-type Word = keyof typeof WORDS;
-
 /**
  * Where a probe render stops (pages.ts): before the Review Comments, or at the start of the answers
  * of the last card (the issuing one, which holds the reply's full text). Nothing after it is drawn,
- * so its page count says on which page that part is.
+ * so its page count says on which page that part is. `appendixList` (RP-147, appendix.ts) draws
+ * the whole record and the appendix's list, but not the appendix's pages: where they start.
  */
-export type RecordCut = { readonly beforeComments: true } | { readonly replyCard: true };
+export type RecordCut = { readonly beforeComments: true } | { readonly replyCard: true } | { readonly appendixList: true };
 
 /**
  * The record's HTML. `images` are the data URLs of the images it prints by storage key, and
@@ -110,21 +53,12 @@ export function recordHtml(
   images: ReadonlyMap<string, string> = new Map(),
   marks: RecordImages = NO_IMAGES,
   cut?: RecordCut,
-  /** Whether the appendix's pages are drawn after its list (RP-147): not in the render that finds where they start. */
-  appendixPages = true,
 ): string {
   const language: RecordLanguage = data.language;
   const locales: Locale[] = language === "bilingual" ? ["ar", "en"] : [language];
 
   /** An Arabic heading with its English label beside it (bilingual), or one language. */
-  const heading = (word: Word) => {
-    const w = WORDS[word];
-    return language === "ar"
-      ? `<span lang="ar">${w.ar}</span>`
-      : language === "en"
-        ? `<span lang="en" dir="ltr">${w.en}</span>`
-        : `<span lang="ar">${w.ar}</span> <span lang="en" dir="ltr" class="en">${w.en}</span>`;
-  };
+  const heading = (word: Word) => headingHtml(word, language);
 
   /** The language of dates in fields: the record's, or English when it prints both. */
   const primary: Locale = language === "ar" ? "ar" : "en";
@@ -320,7 +254,8 @@ export function recordHtml(
     cut !== undefined && "beforeComments" in cut
       ? ""
       : `<section class="${data.comments.length === 0 ? "after-start " : ""}signatures"><h2 class="part">${heading("signatures")}</h2>${cardsHtml}</section>`;
-  const ended = cut === undefined;
+  const appendixList = cut !== undefined && "appendixList" in cut;
+  const ended = cut === undefined || appendixList;
   const nextStepPart =
     ended && data.nextStep
       ? `<section class="box next"><h2>${heading("nextStep")}</h2>${
@@ -337,7 +272,7 @@ export function recordHtml(
       : "";
   const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
   // The appendix (element 15, RP-147) comes after the Disclaimer.
-  const appendixPart = ended ? appendixHtml(data, images, marks.appendix ?? [], appendixPages) : "";
+  const appendixPart = ended ? appendixHtml(data, images, marks.appendix ?? [], !appendixList) : "";
   const after = `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}`;
 
   const dir = language === "en" ? "ltr" : "rtl";

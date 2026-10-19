@@ -124,21 +124,37 @@ export interface RecordData {
 }
 
 /**
- * How the record holds an appendix file: its pages follow in the record, it travels inside the
- * PDF (opened from the paperclip), or, past the size limit, it is only listed and held in Rabaed.
+ * A shared Document of the appendix, by how the record holds it: its pages follow in the record,
+ * it travels inside the PDF (opened from the paperclip), or, past the size limit, it is only listed
+ * and held in Rabaed.
  */
-export type AppendixWay = "pages" | "attached" | "held";
+export type AppendixEntry = AppendixPages | AppendixAttached | AppendixHeld;
 
-/** A shared Document of the appendix, as the record lists it. */
-export interface AppendixEntry {
+interface AppendixFile {
   readonly fileName: string;
-  /** Its bytes' SHA-256 (hex, RP-618). */
-  readonly sha256: string | null;
-  readonly way: AppendixWay;
-  /** The record's pages that give it, found by rendering (appendix.ts); null for a file not given as pages, or until then. */
-  readonly pages: { readonly first: number; readonly last: number } | null;
+  /** Its bytes' SHA-256 (hex, RP-618; worked out from the stored bytes for a Document from before it). */
+  readonly sha256: string;
+}
+
+/** A PDF or image whose pages follow in the record. */
+export interface AppendixPages extends AppendixFile {
+  readonly way: "pages";
   /** How many pages it takes (one for an image); the Record Data holds its first and last page instead. */
   readonly pageCount: number;
+  /** The record's pages that give it, once rendering has counted them (appendix.ts); null only until then. */
+  readonly pages: { readonly first: number; readonly last: number } | null;
+}
+
+/** A file carried inside the PDF: any other file, or a PDF the record can't give as pages. */
+export interface AppendixAttached extends AppendixFile {
+  readonly way: "attached";
+  /** A PDF with more pages than the record gives (MAX_APPENDIX_PDF_PAGES): the list says so. */
+  readonly tooManyPages: boolean;
+}
+
+/** A file past the size limit: only listed, held in Rabaed. */
+export interface AppendixHeld extends AppendixFile {
+  readonly way: "held";
 }
 
 export interface ReplyExcerpt {
@@ -527,9 +543,13 @@ function appendixXml(appendix: readonly AppendixEntry[]): string[] {
   return [
     "  <appendix>",
     ...appendix.flatMap((f, i) => [
-      `    <file n="${i + 1}"${f.sha256 ? ` sha256="${escape(f.sha256)}"` : ""}>`,
+      `    <file n="${i + 1}" sha256="${escape(f.sha256)}">`,
       `      <name>${escape(f.fileName)}</name>`,
-      f.way === "pages" ? (f.pages ? `      <pages first="${f.pages.first}" last="${f.pages.last}"/>` : "      <pages/>") : f.way === "attached" ? "      <attached/>" : "      <held/>",
+      ...(f.way === "pages"
+        ? [f.pages ? `      <pages first="${f.pages.first}" last="${f.pages.last}"/>` : "      <pages/>"]
+        : f.way === "attached"
+          ? ["      <attached/>", ...(f.tooManyPages ? ["      <tooManyPages/>"] : [])]
+          : ["      <held/>"]),
       "    </file>",
     ]),
     "  </appendix>",

@@ -1,5 +1,5 @@
 import type { AppendixEntry, RecordData } from "./record-data.ts";
-import type { RecordLanguage } from "./record-text.ts";
+import { headingHtml, html, ltr, WORDS, type Word } from "./record-text.ts";
 
 // The appendix's part of the one layout (form-engine.md §6, element 15; RP-147), after the
 // Disclaimer: the list of its files, each by name and fingerprint with where the record holds it,
@@ -11,26 +11,6 @@ import type { RecordLanguage } from "./record-text.ts";
 
 /** Where the frame of an appended page is, from the page's top left corner (millimetres). */
 export const APPENDIX_FRAME_MM = { top: 16 + 8, left: 13, width: 184, height: 245 } as const;
-
-const WORDS = {
-  appendix: { ar: "الملحق", en: "Appendix" },
-  document: { ar: "المستند", en: "Document" },
-  fingerprint: { ar: "البصمة (SHA-256)", en: "Fingerprint (SHA-256)" },
-  where: { ar: "في هذا السجل", en: "In this record" },
-  pages: { ar: "الصفحات", en: "pages" },
-  page: { ar: "صفحة", en: "page" },
-  of: { ar: "من", en: "of" },
-  attached: { ar: "مرفق داخل ملف PDF هذا", en: "Attached inside this PDF" },
-  held: { ar: "محفوظ في رابد", en: "Held in Rabaed" },
-  howToOpen: {
-    ar: "المستندات المرفقة داخل هذا الملف تُفتح من أيقونة المرفقات (مشبك الورق) في قارئ PDF. المستندات المحفوظة في رابد تتجاوز الحد المسموح لحجم السجل، وتُعرف ببصماتها.",
-    en: "Documents attached inside open from the PDF reader's attachments (paperclip). Documents held in Rabaed are past the record's size limit; their fingerprints identify them.",
-  },
-} satisfies Record<string, { ar: string; en: string }>;
-type Word = keyof typeof WORDS;
-
-const html = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const ltr = (s: string) => `<bdi dir="ltr" class="ltr">${html(s)}</bdi>`;
 
 export const APPENDIX_CSS = `
 .appendix .lead { color: #444; font-size: 8pt; margin-bottom: 3mm; }
@@ -52,37 +32,42 @@ export function appendixHtml(
   withPages = true,
 ): string {
   if (data.appendix.length === 0) return "";
-  const language: RecordLanguage = data.language;
+  const language = data.language;
   const locales = language === "bilingual" ? (["ar", "en"] as const) : ([language] as const);
   const dirOf = (l: "ar" | "en") => (l === "ar" ? "rtl" : "ltr");
-  const heading = (word: Word) => {
-    const w = WORDS[word];
-    return language === "ar"
-      ? `<span lang="ar">${w.ar}</span>`
-      : language === "en"
-        ? `<span lang="en" dir="ltr">${w.en}</span>`
-        : `<span lang="ar">${w.ar}</span> <span lang="en" dir="ltr" class="en">${w.en}</span>`;
-  };
+  const heading = (word: Word) => headingHtml(word, language);
   /** A sentence in each of the record's languages, each on its own line. */
   const sentence = (fn: (l: "ar" | "en") => string) => locales.map((l) => `<div class="line" lang="${l}" dir="${dirOf(l)}">${fn(l)}</div>`).join("");
-  const range = (f: AppendixEntry, l: "ar" | "en") => {
-    if (!f.pages) return WORDS.pages[l];
-    return f.pages.first === f.pages.last ? `${WORDS.page[l]} ${ltr(String(f.pages.first))}` : `${WORDS.pages[l]} ${ltr(String(f.pages.first))}–${ltr(String(f.pages.last))}`;
+  const where = (f: AppendixEntry) => {
+    switch (f.way) {
+      case "pages": {
+        const range = f.pages;
+        return sentence((l) =>
+          !range
+            ? WORDS.pages[l]
+            : range.first === range.last
+              ? `${WORDS.page[l]} ${ltr(String(range.first))}`
+              : `${WORDS.pages[l]} ${ltr(String(range.first))}–${ltr(String(range.last))}`,
+        );
+      }
+      case "attached":
+        return sentence((l) => html(WORDS[f.tooManyPages ? "tooManyPages" : "attachedInside"][l]));
+      case "held":
+        return sentence((l) => html(WORDS.heldInRabaed[l]));
+    }
   };
-  const where = (f: AppendixEntry) =>
-    f.way === "pages" ? sentence((l) => range(f, l)) : sentence((l) => html(WORDS[f.way][l]));
 
   const list = `<section class="after-start appendix"><h2 class="part">${heading("appendix")}</h2>
 <div class="lead">${sentence((l) => html(WORDS.howToOpen[l]))}</div>
-<table><thead><tr><th>#</th><th>${heading("document")}</th><th>${heading("fingerprint")}</th><th>${heading("where")}</th></tr></thead><tbody>${data.appendix
+<table><thead><tr><th>#</th><th>${heading("documentName")}</th><th>${heading("fingerprint")}</th><th>${heading("inThisRecord")}</th></tr></thead><tbody>${data.appendix
     .map(
       (f, i) =>
-        `<tr><td class="n">${i + 1}</td><td><bdi dir="ltr">${html(f.fileName)}</bdi></td><td class="fp">${f.sha256 ? ltr(f.sha256) : "—"}</td><td class="where">${where(f)}</td></tr>`,
+        `<tr><td class="n">${i + 1}</td><td><bdi dir="ltr">${html(f.fileName)}</bdi></td><td class="fp">${ltr(f.sha256)}</td><td class="where">${where(f)}</td></tr>`,
     )
     .join("")}</tbody></table></section>`;
   if (!withPages) return list;
 
-  const caption = (n: number, f: AppendixEntry, k: number) =>
+  const caption = (n: number, f: AppendixEntry & { way: "pages" }, k: number) =>
     `<div class="appendix-caption"><span class="num">${n}</span><bdi dir="ltr">${html(f.fileName)}</bdi><span>·</span>${locales
       .map((l) => `<span lang="${l}" dir="${dirOf(l)}">${WORDS.page[l]} ${ltr(String(k))} ${WORDS.of[l]} ${ltr(String(f.pageCount))}</span>`)
       .join("<span>·</span>")}</div>`;

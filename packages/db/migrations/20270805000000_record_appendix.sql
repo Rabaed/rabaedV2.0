@@ -19,8 +19,38 @@
 --     record never does;
 --   - none removed, none unconfirmed, as before.
 --   The Form's photos, the Documents list and the appendix all read this one list.
+--   The rule is one function, app.documents_shared_before_close, below.
 -- app.take_transition, app.transition_effects, app.save_documental_record,
 -- app.documental_record_file and the documental_record_written_once trigger are not touched.
+
+-- The Documents of closed item `p_work_item_id` the other Participants saw before it closed: the
+-- Documental Record's own rule (its appendix, its Documents list and its Form photos), stricter on
+-- purpose than the download rule (app.item_row_as_arrived), which gives a closed item's Documents
+-- to everyone who sees it, the holder's last additions included (V19).
+-- * The item was Submitted: before that only its raiser ever saw it.
+-- * Confirmed and not removed. A Document others have seen is frozen and never removed
+--   (data-model.md, document), so `removed_at` only ever drops one nobody else saw.
+-- * Added before the arrival the close follows: `arrival < arrivals - 1`. It relies on the close
+--   counting one arrival itself: app.share_answers_on_leaving adds one to `arrivals` when
+--   `closed_at` is first set (app.take_transition's closing update, or any other close), in the
+--   same update as a crossing, so `arrivals - 1` is the last arrival before the close. A Document
+--   the holding Participant added during that arrival (its raiser after a Send Back) was only
+--   ever its own.
+-- Nothing for an open item. Owner-run (the record job's facts); not the app role's to call.
+create function app.documents_shared_before_close(p_work_item_id uuid) returns setof document
+  language plpgsql stable
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      return query
+        select d.* from document d
+        join work_item w on w.id = d.work_item_id
+        where d.work_item_id = p_work_item_id and w.closed_at is not null and w.submitted_at is not null
+          and d.confirmed_at is not null and d.removed_at is null
+          and d.arrival < w.arrivals - 1;
+    end
+  $$;
+revoke all on function app.documents_shared_before_close(uuid) from public;
 
 create or replace function app.documental_record_facts(p_outbox_id uuid) returns jsonb
   language plpgsql stable security definer
@@ -197,9 +227,7 @@ create or replace function app.documental_record_facts(p_outbox_id uuid) returns
               'fieldKey', d.field_key, 'itemKey', d.item_key, 'takenAt', app.iso_utc(d.taken_at),
               'sha256', encode(d.file_sha256, 'hex')
             ) order by d.created_at, d.id) -- hidden-sort-key: the order they were added is what app.document_times (seq) already tells every reader, never the times
-            from document d
-            where d.work_item_id = w.id and d.confirmed_at is not null and d.removed_at is null
-              and w.submitted_at is not null and d.arrival < w.arrivals - 1
+            from app.documents_shared_before_close(w.id) d
           ), '[]'::jsonb),
           'transitions', coalesce((
             -- The Owner's review writes one copy of a move for each side of it: one is enough.
