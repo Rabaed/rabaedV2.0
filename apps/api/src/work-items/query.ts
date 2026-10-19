@@ -26,6 +26,7 @@ import {
   type BilingualText,
   type ListColumnLayout,
   type Outcome,
+  type RaisedFromSource,
   type Locale,
   type WorkItemCursorSort,
   type WorkItemExport,
@@ -608,39 +609,45 @@ function toRow(r: Row, now: Date): WorkItemRow {
 
 /** A Snag List row's source and photo (RP-94), from `snagColumns`. */
 function snagFields(r: Row & SnagRow): Pick<WorkItemRow, "raisedFrom" | "photo"> {
+  return { raisedFrom: raisedFromOf(r), photo: r.photo_id ? { documentId: r.photo_id, contentType: r.photo_type! } : null };
+}
+
+type SourceRow = Pick<SnagRow, "source_number" | "source_subject" | "source_id" | "source_outcome" | "source_outcome_name" | "source_outcomes">;
+
+/** The item a row was raised from (RP-94), from `sourceColumns`; null when it was raised by hand. */
+function raisedFromOf(r: SourceRow): RaisedFromSource | null {
+  if (r.source_number === null) return null;
   const outcome = r.source_outcomes?.find((o) => o.code === r.source_outcome);
   return {
-    raisedFrom:
-      r.source_number === null
-        ? null
-        : {
-            documentNumber: r.source_number,
-            subject: r.source_subject ?? "",
-            workItemId: r.source_id,
-            // Its live data only for a viewer who sees it (E1): source_outcome is read through RLS.
-            outcome:
-              r.source_id && outcome && r.source_outcome_name
-                ? { code: outcome.code, name: r.source_outcome_name, look: outcomeLook(outcome, r.source_outcomes!) }
-                : null,
-          },
-    photo: r.photo_id ? { documentId: r.photo_id, contentType: r.photo_type! } : null,
+    documentNumber: r.source_number,
+    subject: r.source_subject ?? "",
+    workItemId: r.source_id,
+    // Its live data only for a viewer who sees it (E1): source_outcome is read through RLS.
+    outcome:
+      r.source_id && outcome && r.source_outcome_name
+        ? { code: outcome.code, name: r.source_outcome_name, look: outcomeLook(outcome, r.source_outcomes!) }
+        : null,
   };
 }
 
 /**
- * The Snag List's own columns (RP-94) over a row of `visibleRows` (as `r`), with `snagJoins`:
- * - its source, the item its `raised_from` Link names, by Document Number and Subject as
- *   app.work_item_links gives them (E1), its id only when the viewer sees it. Its outcome is
- *   read from work_item through RLS, so only for a viewer who sees the source: a Link never
- *   carries the target's live data;
- * - its first photo the viewer sees: a Document of a Form field (not a checklist item's
- *   evidence, nor an annotated copy) that is an image, in upload order (app.document_times),
- *   read through the documents policy (V19).
+ * The item `workItemId` was raised from, as its Snag List row names it (RP-628, the item page's
+ * Raised from card); null when it was raised by hand. Read as the Member, like the row.
  */
-const snagColumns = sql`rf.document_number as source_number, rf.subject as source_subject, rf.work_item_id as source_id,
-  rfo.outcome as source_outcome, rfo.name as source_outcome_name, rfo.outcomes as source_outcomes,
-  ph.id as photo_id, ph.content_type as photo_type`;
-const snagJoins = sql`left join lateral (
+export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<RaisedFromSource | null> {
+  const { rows } = await sql<SourceRow>`select ${sourceColumns} from (select ${workItemId}::uuid as id) r ${sourceJoins}`.execute(trx);
+  return rows[0] ? raisedFromOf(rows[0]) : null;
+}
+
+/**
+ * Over a row of `visibleRows` (as `r`), with `sourceJoins`: its source, the item its
+ * `raised_from` Link names, by Document Number and Subject as app.work_item_links gives them
+ * (E1), its id only when the viewer sees it. Its outcome is read from work_item through RLS, so
+ * only for a viewer who sees the source: a Link never carries the target's live data.
+ */
+const sourceColumns = sql`rf.document_number as source_number, rf.subject as source_subject, rf.work_item_id as source_id,
+  rfo.outcome as source_outcome, rfo.name as source_outcome_name, rfo.outcomes as source_outcomes`;
+const sourceJoins = sql`left join lateral (
     select l.document_number, l.subject, l.work_item_id from app.work_item_links(r.id) l
     where l.kind = 'raised_from' order by l.created_at limit 1
   ) rf on true
@@ -652,7 +659,17 @@ const snagJoins = sql`left join lateral (
     from work_item s
     join outcome o on o.project_id = s.project_id and o.work_item_type_id = s.work_item_type_id and o.code = s.outcome
     where s.id = rf.work_item_id
-  ) rfo on true
+  ) rfo on true`;
+
+/**
+ * The Snag List's own columns (RP-94) over a row of `visibleRows` (as `r`), with `snagJoins`:
+ * - its source (`sourceColumns`);
+ * - its first photo the viewer sees: a Document of a Form field (not a checklist item's
+ *   evidence, nor an annotated copy) that is an image, in upload order (app.document_times),
+ *   read through the documents policy (V19).
+ */
+const snagColumns = sql`${sourceColumns}, ph.id as photo_id, ph.content_type as photo_type`;
+const snagJoins = sql`${sourceJoins}
   left join lateral (
     select d.id, d.content_type from app.document_times(r.id) t
     join document d on d.id = t.document_id

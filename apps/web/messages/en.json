@@ -818,6 +818,16 @@
         "unavailable": "It couldn't be saved. Try again."
       }
     },
+    "snag": {
+      "raisedFrom": "Raised from",
+      "raisedManually": "Raised by hand.",
+      "open": "Open",
+      "comment": "From the Consultant's review",
+      "response": "Response",
+      "before": "Before",
+      "after": "After",
+      "noPhoto": "No photo"
+    },
     "invalid": "Give a Subject and a Trade.",
     "notContractor": "Only a Contractor can raise this Submittal.",
     "outsideVisibility": "Choose a Trade and Location your Visibility covers.",
