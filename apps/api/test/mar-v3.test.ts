@@ -126,6 +126,7 @@ describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
         ["WIR", 3],
         ["CMT", 2],
         ["SNG", 1],
+        ["OBS", 1],
         ["QSN", 1],
         ["QSC", 1],
       ]);
