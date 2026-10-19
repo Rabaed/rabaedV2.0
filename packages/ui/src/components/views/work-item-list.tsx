@@ -384,6 +384,7 @@ function WorkItemListBody({
     />
   );
   const filtered = isFilteredWorkItemQuery(query);
+  const chosenPackage = query.packageId === undefined ? undefined : packages?.choices.find((p) => p.id === query.packageId);
 
   const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
   /** A field of several values, any of them (RP-410). */
@@ -678,6 +679,28 @@ function WorkItemListBody({
           </Link>
         )}
         </span>
+        {/* The Package chosen (RP-662), named: its number left to right beside its owning Company (V14), as the Package page links here. */}
+        {chosenPackage && packages && (
+          <span
+            data-package-filter=""
+            className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border border-control-border bg-surface ps-2.5 text-sm pointer-coarse:min-h-11"
+          >
+            <Icon name="packages" size={15} className="text-muted" />
+            <span className="sr-only">{packages.label}: </span>
+            <bdi dir="ltr" translate="no" className="font-ui font-semibold text-text">
+              {chosenPackage.number}
+            </bdi>{" "}
+            <span className="text-muted">{chosenPackage.owner.companyName[locale]}</span>
+            <Link
+              href={hrefFor({ ...query, packageId: undefined })}
+              aria-label={`${packages.label}: ${t("clearField")}`}
+              title={`${packages.label}: ${t("clearField")}`}
+              className={cn("inline-flex h-full w-7 items-center justify-center rounded-e-sm text-muted hover:bg-hover hover:text-text pointer-coarse:w-11", focusRing)}
+            >
+              <Icon name="x" size={14} />
+            </Link>
+          </span>
+        )}
         <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
         {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
         {query.bucket.length + query.codeC.length > 0 && (
