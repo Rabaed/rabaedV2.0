@@ -22,7 +22,7 @@ alter table notification add constraint notification_kind_check
 
 alter table outbox drop constraint outbox_kind_check;
 alter table outbox add constraint outbox_kind_check
-  check (kind in ('notification', 'email', 'digest', 'step_age_report', 'drafts_imported'));
+  check (kind in ('notification', 'email', 'digest', 'step_age_report', 'documental_record', 'drafts_imported'));
 
 -- Each assignee of a confirmed import's created rows but the importer: one outbox row.
 create function app.outbox_drafts_imported() returns trigger
