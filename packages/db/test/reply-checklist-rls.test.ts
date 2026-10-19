@@ -289,10 +289,10 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     (await call<{ item: unknown }>(as, sql`select app.raised_from_check_item(${snag}::uuid) as item`))[0]!.item;
 
   it("C1, K1 and the Owner read the Snag, its photo, its check item and its count", async () => {
-    for (const reader of [c1.members.engineer, c1Pm, k1.members.engineer, k1.members.manager, ow.members.representative]) {
+    for (const reader of [c1.members.engineer, c1.members.project_manager, k1.members.engineer, k1.members.manager, ow.members.representative]) {
       expect(await seesSnag(reader), reader).toBe(true);
       expect(await snagPhotos(reader), reader).toBe(1);
-      expect(await checkItem(reader), reader).toEqual({ key: "formwork", text: label("Formwork tight") });
+      expect(await checkItem(reader), reader).toEqual({ key: "formwork", text: bilingual("Formwork tight") });
       expect(await snagCount(reader), reader).toEqual([{ type_code: "SNG", open_count: 1 }]);
     }
   });
@@ -312,7 +312,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     const held = await atConsultantReview("Slab pour, unticked");
     expect(await save(k1.members.engineer, held, unticked)).toBe("saved");
     expect(await answersAs(k1.members.manager, held)).toEqual([{ field_key: FIELD, answers: unticked }]);
-    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative, c2.members.engineer, other.ap]) {
+    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative, c2.members.engineer, other.ap]) {
       expect(await answersAs(outsider, held), outsider).toEqual([]);
     }
     await addPhoto(k1.members.engineer, held);
@@ -338,7 +338,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
       c1.members.engineer,
       sql`select type, audience, company_name from app.work_item_history(${snag}::uuid) order by seq limit 1`,
     );
-    expect(raise).toEqual({ type: "transition", audience: "shared", company_name: label("K1") });
+    expect(raise).toEqual({ type: "transition", audience: "shared", company_name: bilingual("K1") });
     const held = await migrator.query("select participant_id from step_assignment where work_item_id = $1 and status in ('pooled', 'picked_up')", [snag]);
     expect(held.rows.map((r) => r.participant_id)).toEqual([c1.participantId]);
   });
