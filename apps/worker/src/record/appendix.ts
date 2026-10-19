@@ -30,6 +30,11 @@ import type { PdfRenderer } from "./render.ts";
 // Participants saw, never one only its holder saw); a file whose bytes don't match its
 // fingerprint, or that is missing from the store, fails the job (retried, then dead-lettered),
 // rather than a record holding something other than what was submitted.
+//
+// Two entry points, for whatever makes the record's PDF (job.ts today): `appendixOf(facts,
+// files, limit)` before rendering, then `renderWithAppendix(...)` in place of pages.ts's
+// `renderRecord` (it calls it), and `Appendix.attachments` after the Record Data in the PDF/A-3
+// step. Nothing else here makes or seals a PDF.
 
 /** What the appendix carries in all, at most, in production: past it a file is only listed (spec RP-632). */
 export const APPENDIX_LIMIT_BYTES = 100 * 1024 * 1024;
@@ -177,11 +182,13 @@ const PROBE_PAGE = 888;
  */
 export async function renderWithAppendix(
   renderer: PdfRenderer,
-  data: RecordData,
+  record: RecordData,
   fonts: RecordFonts,
-  images: ReadonlyMap<string, string>,
-  pdfs: ReadonlyMap<number, PDFDocument>,
+  recordImages: ReadonlyMap<string, string>,
+  { entries, pdfs, images: appendixImages }: Appendix,
 ): Promise<{ data: RecordData; pdf: Uint8Array }> {
+  const data = { ...record, appendix: entries };
+  const images = new Map([...recordImages, ...appendixImages]);
   const givesPages = data.appendix.some((f) => f.way === "pages");
   const probe = { ...data, appendix: data.appendix.map((f) => (f.way === "pages" ? { ...f, pages: { first: PROBE_PAGE, last: PROBE_PAGE } } : f)) };
   const rendered = await renderRecord(renderer, givesPages ? probe : data, fonts, images);

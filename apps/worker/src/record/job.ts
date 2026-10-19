@@ -63,16 +63,12 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     const token = randomBytes(32).toString("base64url");
     const assets = await documentAssets(facts, deps.files);
     const appendix = await appendixOf(facts, deps.files, deps.appendixLimitBytes);
-    const images = new Map([...assets.images, ...appendix.images]);
     const { data, pdf: rendered } = await renderWithAppendix(
       deps.renderer,
-      {
-        ...recordDataOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) => assets.images.has(key)),
-        appendix: appendix.entries,
-      },
+      recordDataOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) => assets.images.has(key)),
       await deps.fonts(),
-      images,
-      appendix.pdfs,
+      assets.images,
+      appendix,
     );
     const xml = new TextEncoder().encode(recordDataXml(data));
     const sealedAt = now();
