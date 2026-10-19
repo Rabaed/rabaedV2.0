@@ -1,5 +1,5 @@
-import type { RecordFacts, TransitionFact } from "@rabaed/db";
-import { offersReplacement, offersRevision, outcomeLook, type OutcomeLook } from "@rabaed/domain";
+import type { CommentFact, RecordFacts, TransitionFact } from "@rabaed/db";
+import { offersReplacement, offersRevision, outcomeLook, riyadhDay, type BilingualText, type OutcomeLook } from "@rabaed/domain";
 import { actionAnswerLines, type CardLine } from "./action-answers.ts";
 import { formContent, isListedDocument, type RecordBlock, type RecordSection } from "./form-content.ts";
 import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
@@ -41,8 +41,8 @@ export type FlowMark = "done" | "revise" | "rejected";
 export interface CompanyLine {
   readonly name: RecordText;
   readonly role: RecordText;
-  /** Its logo in force at close; the layout prints the name without one. */
-  readonly logoKey?: ImageKey;
+  /** Whether it prints its logo in force at the close (the companies strip only); its name always. */
+  readonly logo?: boolean;
 }
 
 export interface PersonLine {
@@ -94,8 +94,8 @@ export interface RecordData {
   readonly location: readonly RecordText[];
   readonly scopes: readonly RecordText[];
   readonly classification: readonly RecordBlock[];
-  /** The first lines of the issued Code's Remarks. */
-  readonly reply: string | null;
+  /** The first lines of the issued Code's Remarks, and whether page 1 cut them short. */
+  readonly reply: ReplyExcerpt | null;
   /** The Transitions on the path to the outcome (recordPath). */
   readonly transitions: readonly FlowEntry[];
   readonly sections: readonly RecordSection[];
@@ -137,14 +137,31 @@ export interface AppendixEntry {
   readonly way: AppendixWay;
   /** The record's pages that give it, found by rendering (appendix.ts); null for a file not given as pages, or until then. */
   readonly pages: { readonly first: number; readonly last: number } | null;
-  /** How many pages it takes (one for an image): the job's, never part of the Record Data. */
+  /** How many pages it takes (one for an image); the Record Data holds its first and last page instead. */
   readonly pageCount: number;
-  /** Where the image drawn on its page is (an image file): found by the job, never part of the Record Data. */
-  readonly imageKey: ImageKey;
 }
 
-/** Where an image the job inlines is stored: found by the job, never part of the Record Data. */
-export type ImageKey = string | null;
+export interface ReplyExcerpt {
+  readonly text: string;
+  /** Whether lines or characters were left out: page 1 then points to the full text. */
+  readonly cut: boolean;
+}
+
+/**
+ * Where the images the record prints are stored, for the renderer only: never part of the
+ * Record Data, which only flags them (visibility.md, Documental Record row). Each list is in the
+ * order of the Record Data's `companies` (logos), `cards` (Signatures) and `stamps`; null where
+ * there is none, or the job could not read it.
+ */
+export interface RecordImages {
+  readonly logos: readonly (string | null)[];
+  readonly signatures: readonly (string | null)[];
+  readonly stamps: readonly (string | null)[];
+  /** The image each appendix entry draws on its page, in the order of `appendix` (RP-147); null for any other entry. */
+  readonly appendix?: readonly (string | null)[];
+}
+
+export const NO_IMAGES: RecordImages = { logos: [], signatures: [], stamps: [] };
 
 export interface Cancellation {
   /** The Member who took the Cancel; null when Rabaed cancelled it. */
@@ -165,8 +182,8 @@ export interface SignatureCard extends PersonLine {
   readonly verb: RecordText;
   readonly label: RecordText;
   readonly at: string;
-  /** The Signature the Transition's event recorded. */
-  readonly signatureKey: ImageKey;
+  /** Whether it prints the Signature the Transition's event recorded. */
+  readonly signature: boolean;
   readonly lines: readonly CardLine[];
 }
 
@@ -175,7 +192,8 @@ export type NextStep = { readonly kind: "revision"; readonly revisionNo: number;
 export interface StampLine {
   readonly company: RecordText;
   readonly role: RecordText;
-  readonly stampKey: ImageKey;
+  /** Whether it prints the Stamp in force at the close. */
+  readonly image: boolean;
 }
 
 /** The Transitions that give an item back, never on the record (V7): a Return, and a Send Back (a Code the Owner sent back is one). */
@@ -213,11 +231,15 @@ const VERBS = {
   cancelled: { ar: "ألغاه", en: "Cancelled" },
 } satisfies Record<string, { ar: string; en: string }>;
 
-/** The days between two instants' calendar dates in Riyadh (UTC+3, no daylight saving). */
+/** The days between two instants' calendar dates in Riyadh. */
 export function calendarDays(fromIso: string, toIso: string): number {
-  const day = (iso: string) => Math.floor((new Date(iso).getTime() + 3 * 3_600_000) / 86_400_000);
+  const day = (iso: string) => Date.parse(`${riyadhDay(new Date(iso))}T00:00:00Z`) / 86_400_000;
   return day(toIso) - day(fromIso);
 }
+
+/** "Code D" (or the outcome's name when it has no short code): what the Owner's review's Recommendation prints as (ADR 0022). */
+const codeLabel = (code: string, name: BilingualText): BilingualText =>
+  isShortCode(code) ? { ar: `الرمز ${code}`, en: `Code ${code}` } : name;
 
 /** A name's initials: the first letter of its first and last words. */
 export function initialsOf(name: string): string {
@@ -231,28 +253,38 @@ const mapText = (t: RecordText, fn: (s: string) => string): RecordText => ({
   ...(t.en !== undefined ? { en: fn(t.en) } : {}),
 });
 
-/** The lines of a Reply's Remarks the first page shows: the first lines, up to a limit. */
-export function replyExcerpt(remarks: string | null): string | null {
+/** The lines of a Reply's Remarks the first page shows: the first lines, up to a limit, with "…" where it cut them. */
+export function replyExcerpt(remarks: string | null): ReplyExcerpt | null {
   const lines = (remarks ?? "")
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l !== "");
   if (lines.length === 0) return null;
   const shown = lines.slice(0, 6).join("\n");
-  const cut = shown.length > 700 ? `${shown.slice(0, 700).trimEnd()}…` : shown;
-  return lines.length > 6 && cut === shown ? `${shown}…` : cut;
+  if (shown.length > 700) return { text: `${shown.slice(0, 700).trimEnd()}…`, cut: true };
+  return lines.length > 6 ? { text: `${shown}…`, cut: true } : { text: shown, cut: false };
 }
 
 export function recordDataOf(
+  facts: RecordFacts,
+  verification: RecordData["verification"],
+  pageCounts: ReadonlyMap<string, number | null> = new Map(),
+  hasImage: (key: string) => boolean = () => true,
+): RecordData {
+  return recordOf(facts, verification, pageCounts, hasImage).data;
+}
+
+/** The Record Data of a closed item, and where the images it flags are stored (for the renderer only). */
+export function recordOf(
   facts: RecordFacts,
   verification: RecordData["verification"],
   /** The page counts of the Documents, by storage key. */
   pageCounts: ReadonlyMap<string, number | null> = new Map(),
   /** Whether the image stored under a key could be read: one that can't is printed as missing, and the Record Data says so. */
   hasImage: (key: string) => boolean = () => true,
-): RecordData {
+): { data: RecordData; images: RecordImages } {
   const language = facts.recordLanguage;
-  const imageKey = (image: { readonly storageKey: string } | null): ImageKey => (image && hasImage(image.storageKey) ? image.storageKey : null);
+  const imageKey = (image: { readonly storageKey: string } | null): string | null => (image && hasImage(image.storageKey) ? image.storageKey : null);
   const path = recordPath(facts.transitions);
   const cancelled = facts.outcome === "cancelled";
   const set = facts.outcomes;
@@ -280,53 +312,60 @@ export function recordDataOf(
   const acted = new Set(path.map((t) => t.participantId));
   const companyOf = (participantId: string) => facts.companies.find((c) => c.participantId === participantId);
 
-  const verbOf = (t: TransitionFact, i: number) =>
-    i === 0
-      ? VERBS.prepared
-      : t.kind === "cancel"
-        ? VERBS.cancelled
-        : t.outcomeMode === "confirm_code"
-          ? VERBS.confirmed
-          : t === issuer
-            ? issuedOutcome?.polarity === "positive"
-              ? VERBS.approved
-              : VERBS.reviewed
-            : t.kind === "submit"
-              ? VERBS.submitted
-              : VERBS.reviewed;
+  // The Owner's review (ADR 0022): the Consultant PM's Recommendation prints as the Code it issued, never
+  // as a Recommendation, a step the Contractor never sees; its Remarks stay with the two Companies.
+  const recommendStep = confirmation && issuer?.outcomeMode === "recommend_code" ? issuer : undefined;
+  const labelOf = (t: TransitionFact, i: number): BilingualText =>
+    t === recommendStep
+      ? codeLabel(facts.outcome, issuedOutcome?.name ?? { ar: facts.outcome, en: facts.outcome })
+      : i === 0 && t.kind !== "cancel"
+        ? PREPARED
+        : t.label;
+  const verbOf = (t: TransitionFact, i: number): BilingualText => {
+    if (t.kind === "cancel") return VERBS.cancelled;
+    if (i === 0) return VERBS.prepared;
+    if (t.outcomeMode === "confirm_code") return VERBS.confirmed;
+    if (t === issuer) return issuedOutcome?.polarity === "positive" ? VERBS.approved : VERBS.reviewed;
+    return t.kind === "submit" ? VERBS.submitted : VERBS.reviewed;
+  };
+  const signatures = path.map((t) => imageKey(t.signature));
   const cards: SignatureCard[] = path.map((t, i) => ({
     ...person(t),
     verb: pick(verbOf(t, i), language),
-    label: i === 0 ? pick(PREPARED, language) : pick(t.label, language),
+    label: pick(labelOf(t, i), language),
     at: t.at,
-    signatureKey: imageKey(t.signature),
-    lines: actionAnswerLines(t.actionForm, t.answers, language),
+    signature: signatures[i] !== null,
+    lines: t === recommendStep ? [] : actionAnswerLines(t.actionForm, t.answers, language),
   }));
 
-  // The Comments by author, in the reply's order, numbered through.
+  // The Comments by author, in the reply's order, numbered through: a new author card whenever who raised them changes.
   const comments: CommentGroup[] = [];
-  let lastAuthor = "";
+  const sameAuthor = (a: CommentFact, b: CommentFact) =>
+    a.participantId === b.participantId && a.at === b.at && a.memberName.en === b.memberName.en && a.memberName.ar === b.memberName.ar;
+  let group: { first: CommentFact; items: CommentGroup["items"][number][] } | undefined;
+  const groups: { first: CommentFact; items: CommentGroup["items"][number][] }[] = [];
   facts.comments.forEach((c, i) => {
-    const item = { n: i + 1, documentNumber: c.documentNumber, comment: c.comment, reference: c.reference };
-    const author = JSON.stringify([c.participantId, c.memberName, c.at]);
-    if (author === lastAuthor) {
-      (comments.at(-1)!.items as CommentGroup["items"][number][]).push(item);
-      return;
+    if (!group || !sameAuthor(group.first, c)) {
+      group = { first: c, items: [] };
+      groups.push(group);
     }
-    lastAuthor = author;
+    group.items.push({ n: i + 1, documentNumber: c.documentNumber, comment: c.comment, reference: c.reference });
+  });
+  for (const { first: c, items } of groups) {
     const name = pick(c.memberName, language);
     comments.push({
       author: { name, positions: c.positions.map((p) => pick(p, language)), company: pick(c.companyName, language), role: pick(c.roleName, language) },
       initials: mapText(name, initialsOf),
       at: c.at,
-      items: [item],
+      items,
     });
-  });
+  }
 
-  const stamps: StampLine[] = [...new Set(path.map((t) => t.participantId))].flatMap((id) => {
-    const c = companyOf(id);
-    return c ? [{ company: pick(c.name, language), role: pick(c.roleName, language), stampKey: imageKey(c.stamp) }] : [];
-  });
+  const stampCompanies = [...new Set(path.map((t) => t.participantId))].flatMap((id) => companyOf(id) ?? []);
+  const stampKeys = stampCompanies.map((c) => imageKey(c.stamp));
+  const stamps: StampLine[] = stampCompanies.map((c, i) => ({ company: pick(c.name, language), role: pick(c.roleName, language), image: stampKeys[i] !== null }));
+  const stripCompanies = facts.companies.filter((c) => c.baseRole === "owner" || acted.has(c.participantId));
+  const logoKeys = stripCompanies.map((c) => imageKey(c.logo));
 
   const raiser = companyOf(facts.raiserParticipantId);
   const nextStep: NextStep | null =
@@ -345,7 +384,7 @@ export function recordDataOf(
       ? { by: null, reason: null, companyLeft: pick(facts.cancelledByRabaed!.companyName, language) }
       : { by: closing?.kind === "cancel" ? person(closing) : null, reason, companyLeft: null };
 
-  return {
+  const data: RecordData = {
     layoutVersion: LAYOUT_VERSION,
     language,
     hijri: facts.hijriDates,
@@ -368,9 +407,7 @@ export function recordDataOf(
     issuedBy: issuer ? person(issuer) : null,
     confirmedBy: confirmation && confirmation !== issuer ? person(confirmation) : null,
     reviewComments: facts.reviewComments,
-    companies: facts.companies
-      .filter((c) => c.baseRole === "owner" || acted.has(c.participantId))
-      .map((c) => ({ ...company(c), logoKey: imageKey(c.logo) })),
+    companies: stripCompanies.map((c, i) => ({ ...company(c), logo: logoKeys[i] !== null })),
     parties: facts.companies.map(company),
     trades: facts.trades.map((t) => ({ name: pick(t.name, language), selected: t.selected })),
     location: (facts.location ?? []).map((l) => pick(l, language)),
@@ -379,7 +416,7 @@ export function recordDataOf(
     reply: replyExcerpt(codeEntry?.remarks ?? null),
     transitions: path.map((t, i) => ({
       ...person(t),
-      label: i === 0 ? pick(PREPARED, language) : pick(t.label, language),
+      label: pick(labelOf(t, i), language),
       at: t.at,
       mark: markOf(t),
       contentSha256: t.contentSha256,
@@ -399,6 +436,7 @@ export function recordDataOf(
     pages: { comments: null, reply: null },
     appendix: [],
   };
+  return { data, images: { logos: logoKeys, signatures, stamps: stampKeys } };
 }
 
 const escape = (s: string) =>
@@ -511,7 +549,7 @@ export function recordDataXml(data: RecordData): string {
       "    <company>",
       ...lang("name", c.name, "      "),
       ...lang("role", c.role, "      "),
-      ...(c.logoKey ? ["      <logo/>"] : []),
+      ...(c.logo ? ["      <logo/>"] : []),
       "    </company>",
     ]),
     "  </companies>",
@@ -555,7 +593,7 @@ export function recordDataXml(data: RecordData): string {
     ...(data.reviewDays === null ? [] : [`    <reviewDays>${data.reviewDays}</reviewDays>`]),
     ...(data.cancellation ? cancellationXml(data.cancellation, "    ") : []),
     "  </decision>",
-    ...(data.reply === null ? [] : [`  <reply>${escape(data.reply)}</reply>`]),
+    ...(data.reply === null ? [] : [`  <reply>${escape(data.reply.text)}</reply>`]),
     ...(data.reply !== null && data.pages.reply !== null ? [`  <replyFullText page="${data.pages.reply}"/>`] : []),
     "  <transitions>",
     ...data.transitions.flatMap((t, i) => [
@@ -596,7 +634,7 @@ export function recordDataXml(data: RecordData): string {
       ...lang("verb", c.verb, "      "),
       ...lang("label", c.label, "      "),
       ...person(c, "      "),
-      ...(c.signatureKey ? ["      <signature/>"] : []),
+      ...(c.signature ? ["      <signature/>"] : []),
       ...c.lines.flatMap((line) => [
         "      <answer>",
         ...lang("label", line.label, "        "),
@@ -618,7 +656,7 @@ export function recordDataXml(data: RecordData): string {
       "    <stamp>",
       ...lang("name", s.company, "      "),
       ...lang("role", s.role, "      "),
-      ...(s.stampKey ? ["      <image/>"] : []),
+      ...(s.image ? ["      <image/>"] : []),
       "    </stamp>",
     ]),
     "  </stamps>",

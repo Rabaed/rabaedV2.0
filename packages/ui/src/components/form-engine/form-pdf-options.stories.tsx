@@ -82,6 +82,10 @@ export const OneLanguageOnly: Story = {
     const arabic = context.canvas.getByRole("textbox", { name: storyText(context, copy.disclaimerAr) });
     await expect(arabic).toHaveAttribute("aria-invalid", "true");
     await expect(arabic).toHaveAccessibleDescription(expect.stringContaining(storyText(context, copy.disclaimerBothLanguages)));
+    // Spaces alone are no text, as the Form schema reads them.
+    await userEvent.type(arabic, "   ");
+    await expect(arabic).toHaveAttribute("aria-invalid", "true");
+    await userEvent.clear(arabic);
     await userEvent.clear(context.canvas.getByRole("textbox", { name: storyText(context, copy.disclaimerEn) }));
     await expect(valueOf(context).disclaimer).toBeUndefined();
   },

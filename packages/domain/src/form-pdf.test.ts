@@ -25,8 +25,13 @@ describe("a Form Version's pdf block", () => {
     expect(formSchema.safeParse({ sections, pdf: { disclaimer: { en: "Text" } } }).success).toBe(false);
   });
 
-  it("refuses anything else in it", () => {
-    expect(formSchema.safeParse({ sections, pdf: { due_in_days: 7 } }).success).toBe(false);
+  it("keeps the block's other keys, which form-engine.md §6 gives it, as they are", () => {
+    const pdf = { header_fields: ["model"], show_review_duration: false };
+    expect(formSchema.parse({ sections, pdf }).pdf).toEqual(pdf);
+  });
+
+  it("refuses a review duration choice that is not Yes or No, and a block that is not an object", () => {
     expect(formSchema.safeParse({ sections, pdf: { show_review_duration: "yes" } }).success).toBe(false);
+    expect(formSchema.safeParse({ sections, pdf: "none" }).success).toBe(false);
   });
 });

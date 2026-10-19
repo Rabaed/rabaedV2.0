@@ -44,7 +44,13 @@ export const APPENDIX_CSS = `
 `;
 
 /** The appendix: its list, and (unless `withPages` is false, for the render that finds where its pages start) its pages. */
-export function appendixHtml(data: RecordData, images: ReadonlyMap<string, string>, withPages = true): string {
+export function appendixHtml(
+  data: RecordData,
+  images: ReadonlyMap<string, string>,
+  /** The image each entry draws on its page, by storage key, in the entries' order (RecordImages.appendix). */
+  imageKeys: readonly (string | null)[],
+  withPages = true,
+): string {
   if (data.appendix.length === 0) return "";
   const language: RecordLanguage = data.language;
   const locales = language === "bilingual" ? (["ar", "en"] as const) : ([language] as const);
@@ -83,7 +89,8 @@ export function appendixHtml(data: RecordData, images: ReadonlyMap<string, strin
   const pages = data.appendix
     .flatMap((f, i) => {
       if (f.way !== "pages") return [];
-      const src = f.imageKey ? images.get(f.imageKey) : undefined;
+      const key = imageKeys[i];
+      const src = key ? images.get(key) : undefined;
       return Array.from(
         { length: f.pageCount },
         (_, k) => `<section class="appendix-page">${caption(i + 1, f, k + 1)}<div class="appendix-frame">${src ? `<img src="${src}" alt="">` : ""}</div></section>`,

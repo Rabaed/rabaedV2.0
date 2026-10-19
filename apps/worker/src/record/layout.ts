@@ -1,7 +1,7 @@
 import { formatDate, formatHijriDate, type Locale } from "@rabaed/domain";
 import type { RecordBlock, RecordPhoto } from "./form-content.ts";
 import type { RecordFonts } from "./fonts.ts";
-import { isShortCode, REPLACED, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
+import { isShortCode, NO_IMAGES, REPLACED, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData, type RecordImages } from "./record-data.ts";
 import { APPENDIX_CSS, appendixHtml } from "./appendix-layout.ts";
 import { qrSvg } from "./qr.ts";
 import { texts, type RecordLanguage, type RecordText } from "./record-text.ts";
@@ -94,15 +94,21 @@ const WORDS = {
 type Word = keyof typeof WORDS;
 
 /**
- * Where a probe render stops (pages.ts): before the Review Comments, or before or after one
- * Signature card. Nothing after it is drawn, so its page count says where that part falls.
+ * Where a probe render stops (pages.ts): before the Review Comments, or at the start of the answers
+ * of the last card (the issuing one, which holds the reply's full text). Nothing after it is drawn,
+ * so its page count says on which page that part is.
  */
-export type RecordCut = { readonly beforeComments: true } | { readonly card: number; readonly withCard: boolean };
+export type RecordCut = { readonly beforeComments: true } | { readonly replyCard: true };
 
+/**
+ * The record's HTML. `images` are the data URLs of the images it prints by storage key, and
+ * `marks` says which of them each logo, Signature, Stamp and appendix image is (RecordImages: never in the Record Data).
+ */
 export function recordHtml(
   data: RecordData,
   fonts: RecordFonts,
   images: ReadonlyMap<string, string> = new Map(),
+  marks: RecordImages = NO_IMAGES,
   cut?: RecordCut,
   /** Whether the appendix's pages are drawn after its list (RP-147): not in the render that finds where they start. */
   appendixPages = true,
@@ -158,8 +164,9 @@ export function recordHtml(
 
   const person = (p: PersonLine) =>
     `<div class="person"><div class="strong">${txt(p.name)}</div>${p.positions.map((pos) => `<div class="muted">${txt(pos)}</div>`).join("")}<div class="muted">${txt(p.company)}</div></div>`;
-  const companyBox = (c: CompanyLine) => {
-    const logo = c.logoKey ? images.get(c.logoKey) : undefined;
+  const companyBox = (c: CompanyLine, i: number) => {
+    const key = c.logo ? marks.logos[i] : null;
+    const logo = key ? images.get(key) : undefined;
     return `<div class="company">${logo ? `<img class="logo" src="${logo}" alt="">` : ""}<div class="strong">${txt(c.name)}</div><div class="muted">${txt(c.role)}</div></div>`;
   };
 
@@ -290,13 +297,16 @@ export function recordHtml(
           )
           .join("")}</section>`;
 
-  const cardHtml = (c: RecordData["cards"][number], i: number) => `<article class="card">
+  // The issuing card, when page 1 points to the reply's full text in it, may run across pages, so its
+  // answers start right after its head, where a probe that stops there finds them (pages.ts).
+  const replyCard = data.reply?.cut ? data.cards.length - 1 : -1;
+  const cardHtml = (c: RecordData["cards"][number], i: number, withLines = true) => `<article class="card${i === replyCard ? " flows" : ""}">
   <div class="card-head"><span class="num">${i + 1}</span> <span class="strong">${inline(c.verb)}</span>${i === 0 ? "" : ` <span class="muted">· ${inline(c.label)}</span>`}</div>
   <div class="card-body">
     <div>${person(c)}<div class="muted">${when(c.at)}</div></div>
-    <div class="sigbox">${image(c.signatureKey, "sig")}<div class="muted">${heading("signature")}</div></div>
+    <div class="sigbox">${image(c.signature ? marks.signatures[i] : null, "sig")}<div class="muted">${heading("signature")}</div></div>
   </div>
-  ${c.lines
+  ${(withLines ? c.lines : [])
     .map((line) =>
       line.kind === "text"
         ? `<div class="answer"><div class="alabel">${txt(line.label)}</div><div class="pre">${txt(line.value)}</div></div>`
@@ -304,11 +314,12 @@ export function recordHtml(
     )
     .join("")}
 </article>`;
-  const cardsShown = cut === undefined ? data.cards : "beforeComments" in cut ? [] : data.cards.slice(0, cut.card + (cut.withCard ? 1 : 0));
+  // A probe to the reply's card draws every card, the last without its answers.
+  const cardsHtml = data.cards.map((c, i) => cardHtml(c, i, !(cut && "replyCard" in cut && i === data.cards.length - 1))).join("");
   const signaturesPart =
     cut !== undefined && "beforeComments" in cut
       ? ""
-      : `<section class="${data.comments.length === 0 ? "after-start " : ""}signatures"><h2 class="part">${heading("signatures")}</h2>${cardsShown.map(cardHtml).join("")}</section>`;
+      : `<section class="${data.comments.length === 0 ? "after-start " : ""}signatures"><h2 class="part">${heading("signatures")}</h2>${cardsHtml}</section>`;
   const ended = cut === undefined;
   const nextStepPart =
     ended && data.nextStep
@@ -321,12 +332,12 @@ export function recordHtml(
   const stampsPart =
     ended && data.stamps.length > 0
       ? `<section class="box"><h2>${heading("stamps")}</h2><div class="stamps">${data.stamps
-          .map((s) => `<figure class="stamp">${image(s.stampKey, "stampimg") || '<div class="nostamp"></div>'}<figcaption><div class="strong">${txt(s.role)}</div><div class="muted">${txt(s.company)}</div></figcaption></figure>`)
+          .map((s, i) => `<figure class="stamp">${image(s.image ? marks.stamps[i]! : null, "stampimg") || '<div class="nostamp"></div>'}<figcaption><div class="strong">${txt(s.role)}</div><div class="muted">${txt(s.company)}</div></figcaption></figure>`)
           .join("")}</div></section>`
       : "";
   const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
   // The appendix (element 15, RP-147) comes after the Disclaimer.
-  const appendixPart = ended ? appendixHtml(data, images, appendixPages) : "";
+  const appendixPart = ended ? appendixHtml(data, images, marks.appendix ?? [], appendixPages) : "";
   const after = `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}`;
 
   const dir = language === "en" ? "ltr" : "rtl";
@@ -426,6 +437,8 @@ ol.review-items > li, ol.numbered > li { display: flex; gap: 2mm; padding: 1.2mm
 ol.numbered > li { border-bottom: none; padding: 0.4mm 0; }
 li > .n { font-weight: 700; min-width: 6mm; }
 .card { border: 0.75pt solid #777; border-radius: 1.5mm; padding: 2.5mm 4mm; margin-bottom: 3mm; break-inside: avoid; }
+.card.flows { break-inside: auto; }
+.card-head, .card-body, .alabel { break-inside: avoid; break-after: avoid; }
 .card > .card-head { border-bottom: 0.5pt solid #ccc; padding-bottom: 1.2mm; margin-bottom: 2mm; }
 .card .num { display: inline-block; min-width: 5mm; height: 5mm; border-radius: 1mm; background: #111; color: #fff; text-align: center; font-weight: 700; font-size: 8pt; }
 .card-body { display: grid; grid-template-columns: 1fr 48mm; gap: 4mm; align-items: start; }
@@ -498,7 +511,7 @@ ${APPENDIX_CSS}
 </section>
 ${
   data.reply
-    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(data.reply)}</bdi></div>${
+    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(data.reply.text)}</bdi></div>${
         data.pages.reply !== null ? `<div class="pointer muted">${heading("fullText")} ${ltr(String(data.pages.reply))}</div>` : ""
       }</section>`
     : ""

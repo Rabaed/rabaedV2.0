@@ -8,7 +8,7 @@ import { attachmentFieldKeysOf, isListedDocument } from "./form-content.ts";
 import { recordHtml } from "./layout.ts";
 import { renderRecord } from "./pages.ts";
 import { fontProblems, type PdfA3Attachment } from "./pdfa.ts";
-import type { AppendixEntry, RecordData } from "./record-data.ts";
+import type { AppendixEntry, RecordData, RecordImages } from "./record-data.ts";
 import type { PdfRenderer } from "./render.ts";
 
 // The record's appendix (ADR 0023; form-engine.md §6, element 15; workflow-engine.md §7 step 3;
@@ -46,8 +46,10 @@ export interface Appendix {
   readonly entries: readonly AppendixEntry[];
   /** The PDF of each entry given as PDF pages, by its index in `entries`. */
   readonly pdfs: ReadonlyMap<number, PDFDocument>;
-  /** The data URL of each image given a page, by its key. */
+  /** The data URL of each image given a page, by its storage key. */
   readonly images: ReadonlyMap<string, string>;
+  /** The storage key of the image each entry draws on its page, in the entries' order (RecordImages.appendix): never in the Record Data. */
+  readonly imageKeys: readonly (string | null)[];
   /** The files carried inside the PDF, in the list's order. */
   readonly attachments: readonly PdfA3Attachment[];
 }
@@ -65,11 +67,13 @@ export async function appendixOf(facts: RecordFacts, files: RecordFiles, limitBy
   const entries: AppendixEntry[] = [];
   const pdfs = new Map<number, PDFDocument>();
   const images = new Map<string, string>();
+  const imageKeys: (string | null)[] = [];
   const attachments: PdfA3Attachment[] = [];
   const names = new Set<string>();
   let carried = 0;
   for (const d of listed) {
-    const entry = { fileName: d.fileName, sha256: d.sha256, pages: null, pageCount: 0, imageKey: null };
+    const entry = { fileName: d.fileName, sha256: d.sha256, pages: null, pageCount: 0 };
+    imageKeys.push(null);
     if (carried + d.size > limitBytes) {
       entries.push({ ...entry, way: "held" });
       continue;
@@ -85,7 +89,8 @@ export async function appendixOf(facts: RecordFacts, files: RecordFiles, limitBy
       entries.push({ ...entry, sha256: fingerprint, way: "pages", pageCount: pdf.getPageCount() });
     } else if (PAGE_IMAGE_TYPES.has(d.contentType)) {
       images.set(d.storageKey, `data:${d.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
-      entries.push({ ...entry, sha256: fingerprint, way: "pages", pageCount: 1, imageKey: d.storageKey });
+      imageKeys[entries.length] = d.storageKey;
+      entries.push({ ...entry, sha256: fingerprint, way: "pages", pageCount: 1 });
     } else {
       entries.push({ ...entry, sha256: fingerprint, way: "attached" });
       attachments.push({
@@ -98,7 +103,7 @@ export async function appendixOf(facts: RecordFacts, files: RecordFiles, limitBy
       });
     }
   }
-  return { entries, pdfs, images, attachments };
+  return { entries, pdfs, images, imageKeys, attachments };
 }
 
 /** `name`, or `name (2)`… when an earlier file took it: the PDF's attachments are named uniquely. */
@@ -185,16 +190,18 @@ export async function renderWithAppendix(
   record: RecordData,
   fonts: RecordFonts,
   recordImages: ReadonlyMap<string, string>,
-  { entries, pdfs, images: appendixImages }: Appendix,
+  recordMarks: RecordImages,
+  { entries, pdfs, images: appendixImages, imageKeys }: Appendix,
 ): Promise<{ data: RecordData; pdf: Uint8Array }> {
   const data = { ...record, appendix: entries };
   const images = new Map([...recordImages, ...appendixImages]);
+  const marks: RecordImages = { ...recordMarks, appendix: imageKeys };
   const givesPages = data.appendix.some((f) => f.way === "pages");
   const probe = { ...data, appendix: data.appendix.map((f) => (f.way === "pages" ? { ...f, pages: { first: PROBE_PAGE, last: PROBE_PAGE } } : f)) };
-  const rendered = await renderRecord(renderer, givesPages ? probe : data, fonts, images);
+  const rendered = await renderRecord(renderer, givesPages ? probe : data, fonts, images, marks);
   if (!givesPages) return rendered;
 
-  const listEnds = (await PDFDocument.load(await renderer.render(recordHtml(rendered.data, fonts, images, undefined, false)), { updateMetadata: false })).getPageCount();
+  const listEnds = (await PDFDocument.load(await renderer.render(recordHtml(rendered.data, fonts, images, marks, undefined, false)), { updateMetadata: false })).getPageCount();
   let next = listEnds + 1;
   const appendix = data.appendix.map((f) => {
     if (f.way !== "pages") return f;
@@ -203,7 +210,7 @@ export async function renderWithAppendix(
     return { ...f, pages };
   });
   const placed = { ...rendered.data, appendix };
-  const out = await PDFDocument.load(await renderer.render(recordHtml(placed, fonts, images)), { updateMetadata: false });
+  const out = await PDFDocument.load(await renderer.render(recordHtml(placed, fonts, images, marks)), { updateMetadata: false });
   if (out.getPageCount() !== next - 1) throw new Error(`the appendix's pages did not land where its list says (${out.getPageCount()} pages, ${next - 1} expected)`);
 
   for (const [index, source] of pdfs) {

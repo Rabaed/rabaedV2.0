@@ -52,6 +52,9 @@ const DISCLAIMER = {
 const INTERNAL_NOTE = "Internal note never on the record";
 const RETURN_REASON = "Return reason never on the record";
 const CANCEL_REASON = "The supplier withdrew the product";
+const DRAFT_CANCEL_REASON = "Raised against the wrong Trade";
+const RECOMMENDATION_REMARKS = "Recommendation remarks for the Owner only";
+const CONFIRMED_COMMENT = "Fire-stop every penetration";
 const REMARKS = ["Approved with the Comments listed.", "Fix the trays at 1.5 m centres.", "Earth every section.", "Seal the penetrations.", "Label both ends.", "Photograph the fixing.", "The seventh line is on the card only."];
 const COMMENTS = [{ comment: "Fix the trays at 1.5 m centres", reference: "Spec 26 05 36" }, { comment: "Earth every tray section" }];
 const SENT_BACK_REMARKS = "Code B remarks the Owner sent back";
@@ -127,6 +130,8 @@ const INK = {
   stampK1: [90, 30, 30],
   stampOwner: [30, 90, 30],
   logoK1: [210, 180, 20],
+  stampC1Later: [70, 140, 210],
+  logoK1Later: [20, 210, 180],
 } as const satisfies Record<string, readonly [number, number, number]>;
 
 const sign = (by: Caller, ink: readonly [number, number, number]) =>
@@ -196,7 +201,7 @@ let ownerPm: Caller;
 let outsider: Caller;
 let c1Name = "";
 let handler: OutboxHandler;
-const made: Record<"a" | "b" | "c" | "owner" | "cancelled", Made> = {} as never;
+const made: Record<"a" | "b" | "c" | "owner" | "cancelled" | "draftCancelled" | "ownerB", Made> = {} as never;
 
 async function recordHandler(): Promise<OutboxHandler> {
   const signer = await localSealSigner();
@@ -294,6 +299,19 @@ beforeAll(async () => {
   await take(c1Engineer, x, "send_for_review");
   await ok(c1Pm.post(`/v1/work-items/${x}/pick-up`));
   await take(c1Pm, x, "cancel_review", { reason: CANCEL_REASON });
+  // Cancelled straight from the Draft, with a reason.
+  const dx = await draft("Signature trays cancelled in Draft");
+  await take(c1Engineer, dx, "cancel", { reason: DRAFT_CANCEL_REASON });
+  // The Owner's review: a Code B whose Recommendation carries Remarks, confirmed.
+  const ob = await submitted("Signature trays owner B", OWNER_TYPE);
+  await ok(k1Pm.post(`/v1/work-items/${ob}/pick-up`));
+  await take(k1Pm, ob, "recommend_b", { answers: { remarks: RECOMMENDATION_REMARKS, items_to_create: [{ comment: CONFIRMED_COMMENT }] } });
+  await ok(ownerPm.post(`/v1/work-items/${ob}/pick-up`));
+  await take(ownerPm, ob, "confirm_b");
+
+  // After every close, before the records are made: C1 replaces its Stamp and K1 its logo.
+  await brand(c1, "stamp", INK.stampC1Later);
+  await brand(k1, "logo", INK.logoK1Later);
 
   await drainOutbox(worker, { documental_record: handler });
   made.a = await download(c1Pm, a);
@@ -301,6 +319,8 @@ beforeAll(async () => {
   made.c = await download(c1Pm, c);
   made.owner = await download(c1Pm, o);
   made.cancelled = await download(c1Pm, x);
+  made.draftCancelled = await download(c1Pm, dx);
+  made.ownerB = await download(c1Pm, ob);
 }, 180_000);
 
 const cards = (m: Made) => /<cards>([\s\S]*?)<\/cards>/.exec(m.xml)![1]!.split("<card ").slice(1);
@@ -380,7 +400,10 @@ describe("the Signature cards", () => {
     expect(issuer).toMatch(/<item n="1" lang="en">Fix the trays at 1\.5 m centres — Spec 26 05 36<\/item>/);
     expect(issuer).toMatch(/<item n="2" lang="en">Earth every tray section<\/item>/);
     const page = Number(/<replyFullText page="(\d+)"\/>/.exec(made.b.xml)![1]);
-    expect(made.b.pages[page - 1]).toContain(squeeze(REMARKS[6]!));
+    // The full text starts on that page, in the issuing card's answers, and runs on from there.
+    expect(made.b.pages[page - 1]).toContain(`Remarks${squeeze(REMARKS[0]!)}`);
+    expect(made.b.pages.slice(page - 1).join("")).toContain(squeeze(REMARKS[6]!));
+    expect(made.b.pages.slice(1, page - 1).join("")).not.toContain(squeeze(REMARKS[6]!));
     // Page 1's reply stops at its sixth line and points to the card (the reply box may run onto page 2).
     const replyBox = made.b.text.slice(made.b.text.indexOf(squeeze(REMARKS[0]!)), made.b.text.indexOf("Approvalflow"));
     expect(replyBox).not.toContain(squeeze(REMARKS[6]!));
@@ -434,6 +457,29 @@ describe("the Owner's review", () => {
     }
     expect(made.owner.xml).not.toContain("<comments");
   });
+
+  it("prints the Recommendation as the Code it issued, never as a Recommendation, on the card and in the approval flow", () => {
+    const flowLabels = (m: Made) => /<transitions>([\s\S]*?)<\/transitions>/.exec(m.xml)![1]!.split("<transition ").slice(1).map((t) => en(t, "label"));
+    expect(flowLabels(made.owner)).toEqual(["Prepared", "Submit", "Code D", "Confirm"]);
+    expect(flowLabels(made.ownerB)).toEqual(["Prepared", "Submit", "Code B", "Confirm"]);
+    expect(en(cards(made.owner)[2]!, "label")).toBe("Code D");
+    expect(made.owner.xml).toContain('<label lang="ar">الرمز D</label>');
+    for (const record of [made.owner, made.ownerB]) {
+      expect(record.xml.toLowerCase(), "xml").not.toContain("recommend");
+      expect(record.text.toLowerCase(), "pages").not.toContain("recommend");
+    }
+  });
+
+  it("scenario RP-650-1: never prints the Remarks of the Recommendation it confirmed, on the card or as page 1's reply; its Comments still print", () => {
+    expect(made.ownerB.xml).not.toContain(RECOMMENDATION_REMARKS);
+    expect(made.ownerB.text).not.toContain(squeeze(RECOMMENDATION_REMARKS));
+    // The Owner's Confirm asks no Remarks: no reply on page 1, so no pointer to its full text.
+    expect(made.ownerB.xml).not.toContain("<reply>");
+    expect(made.ownerB.xml).not.toContain("<replyFullText");
+    expect(cards(made.ownerB)[2]).not.toContain("<answer>");
+    expect(made.ownerB.xml).toMatch(/<comment n="1">[\s\S]*Fire-stop every penetration/);
+    expect(made.ownerB.text).toContain(squeeze(CONFIRMED_COMMENT));
+  });
 });
 
 describe("the endings", () => {
@@ -463,6 +509,16 @@ describe("the endings", () => {
     expect(made.cancelled.xml).not.toContain("<reviewDays>");
     expect(made.cancelled.xml).not.toContain("<issuedBy>");
   });
+
+  it("Cancelled straight from the Draft: one Cancelled card with who and why, never Prepared", () => {
+    expect(cards(made.draftCancelled).map((c) => [en(c, "verb"), memberOf(c)])).toEqual([["Cancelled", "Omar Haddad"]]);
+    const cancelled = /<cancelled>([\s\S]*?)<\/cancelled>/.exec(made.draftCancelled.xml)![1]!;
+    expect(cancelled).toContain("Omar Haddad");
+    expect(cancelled).toContain(`<reason>${DRAFT_CANCEL_REASON}</reason>`);
+    expect(made.draftCancelled.xml).not.toContain("Prepared");
+    expect(made.draftCancelled.text).not.toContain("Prepared");
+    for (const value of ["Cancelledby", "OmarHaddad", squeeze(DRAFT_CANCEL_REASON)]) expect(made.draftCancelled.text, value).toContain(value);
+  });
 });
 
 describe("the Stamps", () => {
@@ -485,6 +541,15 @@ describe("the Stamps", () => {
     const strip = /<companies>([\s\S]*?)<\/companies>/.exec(made.b.xml)![1]!;
     expect(strip).toMatch(new RegExp(`${K1_NAME}[^]*?<logo/>`));
     expect(strip.split("<company>").filter((c) => c.includes("<logo/>"))).toHaveLength(1);
+  });
+
+  it("are those in force at the close: a Stamp or logo replaced afterwards never reaches a record made from that close", () => {
+    for (const record of [made.a, made.b, made.c]) {
+      expect(record.inks).toContain(inkOf(INK.stampC1));
+      expect(record.inks).not.toContain(inkOf(INK.stampC1Later));
+      expect(record.inks).toContain(inkOf(INK.logoK1));
+      expect(record.inks).not.toContain(inkOf(INK.logoK1Later));
+    }
   });
 });
 

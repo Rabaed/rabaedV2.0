@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createEngineer, onboardCompany, publishRabaedDefaults } from "@rabaed/admin/services";
 import type { Db } from "@rabaed/db";
-import type { BaseRole, BilingualText, Locale, StartedDocumentUpload, VisibilityGrant } from "@rabaed/domain";
+import { companyImagePrefix, type BaseRole, type BilingualText, type Locale, type StartedDocumentUpload, type VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
 import { SESSION_COOKIE } from "../app.ts";
@@ -183,7 +183,7 @@ export async function seedDemo(
         await caller("PUT", `/v1/companies/${companyId}/${kind}`, { contentType: "image/png", data: png.toString("base64") });
         continue;
       }
-      const fileId = await storedFileAsOwner(`companies/${companyId}/${kind}/${randomUUID()}.png`, png, authorizedPersonId);
+      const fileId = await storedFileAsOwner(`${companyImagePrefix(companyId, kind)}${randomUUID()}.png`, png, authorizedPersonId);
       await sql`
         update company set logo_file_id = case when ${kind} = 'logo' then ${fileId}::uuid else logo_file_id end,
           stamp_file_id = case when ${kind} = 'stamp' then ${fileId}::uuid else stamp_file_id end

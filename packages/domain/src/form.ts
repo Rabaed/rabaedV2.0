@@ -483,9 +483,10 @@ export const DISCLAIMER_MAX_LENGTH = 2000;
  * A Form Version's `pdf` block (form-engine.md §6; ADR 0023; RP-650): the Disclaimer every
  * Documental Record made with it ends with, in Arabic and English, and whether the record shows
  * the review duration (the calendar days from the Submission Date to the reply: information,
- * never a deadline).
+ * never a deadline). The block's other keys (`header_fields`, the sections' print options, §6) are
+ * kept as they are: this part checks only the two it reads.
  */
-export const formPdf = z.strictObject({
+export const formPdf = z.looseObject({
   disclaimer: z
     .strictObject({
       en: z.string().trim().min(1).max(DISCLAIMER_MAX_LENGTH),

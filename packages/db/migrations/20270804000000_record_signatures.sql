@@ -264,16 +264,38 @@ create or replace function app.documental_record_facts(p_outbox_id uuid) returns
     end
   $$;
 
--- A Company's logo or Stamp (`p_kind`) in force at `p_at`: the last one stored under its key
--- (app.set_company_image's `companies/<id>/<kind>/`) at or before then, so a later upload never
--- changes a record. Null without one. For the record job's facts only (owner read).
+-- Prefix searches on storage keys (the database's collation is not C, so the unique index can't serve them).
+create index stored_file_storage_key_prefix on stored_file (storage_key text_pattern_ops);
+
+-- Where a Company's logos or Stamps (`p_kind`) are stored: `companies/<id>/<kind>/`, one object per
+-- upload (the api's companyImagePrefix, @rabaed/domain, is the same).
+create function app.company_image_prefix(p_company_id uuid, p_kind text) returns text
+  language plpgsql immutable
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      if p_kind is null or p_kind not in ('logo', 'stamp') then
+        raise exception 'A Company image is its logo or its Stamp' using errcode = '22023';
+      end if;
+      return 'companies/' || p_company_id::text || '/' || p_kind || '/';
+    end
+  $$;
+revoke all on function app.company_image_prefix(uuid, text) from public;
+
+-- A Company's logo or Stamp (`p_kind`) in force at `p_at`. The company row keeps only the one in
+-- force now (logo_file_id, stamp_file_id), and every upload is its own stored_file row under the
+-- Company's prefix, so the history is those rows: the last created at or before then, so a later
+-- upload never changes a record. Null without one. For the record job's facts only (owner read).
 create function app.company_image_at(p_company_id uuid, p_kind text, p_at timestamptz) returns jsonb
   language sql stable
   set search_path = pg_catalog, public
   as $$
     select jsonb_build_object('storageKey', f.storage_key, 'contentType', f.mime)
     from stored_file f
-    where f.storage_key like 'companies/' || p_company_id::text || '/' || p_kind || '/%'
+    -- The keys under the prefix, as a byte-wise range the index above serves even for a prefix known
+    -- only at run time: from the prefix up to it with its last character, '/', moved on to '0'.
+    where f.storage_key ~>=~ app.company_image_prefix(p_company_id, p_kind)
+      and f.storage_key ~<~ (rtrim(app.company_image_prefix(p_company_id, p_kind), '/') || '0')
       and f.created_at <= p_at
     order by f.created_at desc, f.id desc -- hidden-sort-key: Rabaed's own file rows, to find the one in force; never an item's time shown to anyone
     limit 1

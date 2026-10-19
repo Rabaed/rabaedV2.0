@@ -32,19 +32,22 @@ export type FormPdfOptionsProps = {
   readOnly?: boolean;
 };
 
-/** The block with `disclaimer` set to these texts, or left out when both are empty. */
+/** Empty once trimmed, as `formPdf` reads it. */
+const blank = (text: string) => text.trim() === "";
+
+/** The block with `disclaimer` set to these texts (kept as typed), or left out when both are blank. */
 function withDisclaimer(value: FormPdf, ar: string, en: string): FormPdf {
   const { disclaimer: _old, ...rest } = value;
   // The Form's own text, as the author types it: not a translation of the panel's words.
   // eslint-disable-next-line rabaed/no-ui-translations
-  return ar === "" && en === "" ? rest : { ...rest, disclaimer: { ar, en } };
+  return blank(ar) && blank(en) ? rest : { ...rest, disclaimer: { ar, en } };
 }
 
 /** Edits a Form Version's `pdf` block: its Disclaimer and the review duration choice. */
 export function FormPdfOptions({ value, onChange, labels, readOnly = false }: FormPdfOptionsProps) {
   const ar = value.disclaimer?.ar ?? "";
   const en = value.disclaimer?.en ?? "";
-  const half = (ar.trim() === "") !== (en.trim() === "");
+  const half = blank(ar) !== blank(en);
   const titleId = useId();
   return (
     <section className="flex flex-col gap-4" aria-labelledby={titleId}>
@@ -54,10 +57,10 @@ export function FormPdfOptions({ value, onChange, labels, readOnly = false }: Fo
         </h2>
         <p className="text-body text-muted">{labels.intro}</p>
       </div>
-      <Field label={labels.disclaimerAr} help={labels.disclaimerHelp} error={half && ar.trim() === "" ? labels.disclaimerBothLanguages : undefined} readOnly={readOnly}>
+      <Field label={labels.disclaimerAr} help={labels.disclaimerHelp} error={half && blank(ar) ? labels.disclaimerBothLanguages : undefined} readOnly={readOnly}>
         <Textarea dir="rtl" lang="ar" rows={4} maxLength={DISCLAIMER_MAX_LENGTH} value={ar} onChange={(e) => onChange(withDisclaimer(value, e.target.value, en))} />
       </Field>
-      <Field label={labels.disclaimerEn} error={half && en.trim() === "" ? labels.disclaimerBothLanguages : undefined} readOnly={readOnly}>
+      <Field label={labels.disclaimerEn} error={half && blank(en) ? labels.disclaimerBothLanguages : undefined} readOnly={readOnly}>
         <Textarea dir="ltr" lang="en" rows={4} maxLength={DISCLAIMER_MAX_LENGTH} value={en} onChange={(e) => onChange(withDisclaimer(value, ar, e.target.value))} />
       </Field>
       <Field layout="inline" label={labels.reviewDuration} help={labels.reviewDurationHelp} readOnly={readOnly}>

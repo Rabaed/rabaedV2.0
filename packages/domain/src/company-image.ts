@@ -14,6 +14,12 @@ import { imageFileTypes, type ImageFileType } from "./image-file.ts";
 export const companyImageKinds = ["logo", "stamp"] as const;
 export type CompanyImageKind = (typeof companyImageKinds)[number];
 
+/**
+ * Where a Company's logos or Stamps are stored: `companies/<id>/<kind>/`, one object per upload, so a
+ * record keeps the one in force at its close (the database's `app.company_image_prefix` is the same).
+ */
+export const companyImagePrefix = (companyId: string, kind: CompanyImageKind): string => `companies/${companyId}/${kind}/`;
+
 /** The image types a logo or Stamp is saved as: an image file's, as a Signature's (kept for callers of the older name). */
 export const companyImageTypes = imageFileTypes;
 export type CompanyImageType = ImageFileType;
