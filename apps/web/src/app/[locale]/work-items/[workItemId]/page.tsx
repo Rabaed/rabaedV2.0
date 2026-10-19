@@ -27,6 +27,7 @@ import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
 import { DownloadRecordButton } from "@/components/download-record-button";
+import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { SnagHeroPhoto, SnagItemCards } from "@/components/snag-item-cards";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
@@ -142,6 +143,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <div className="flex flex-wrap items-center gap-2">
               {/* A closed item's sealed Documental Record, for everyone who sees it (RP-620, V7). */}
               {item.outcome && <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} />}
+              {/* An open item's Working Copy, the same for everyone who sees it (RP-621). */}
+              {!item.outcome && <DownloadWorkingCopyButton workItemId={item.id} />}
               {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
               {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
             </div>

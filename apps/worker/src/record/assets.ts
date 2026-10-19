@@ -58,7 +58,11 @@ export async function inlinePhotos(
   return { images, fingerprints };
 }
 
-export async function documentAssets(facts: RecordFacts, files: RecordFiles): Promise<DocumentAssets> {
+/**
+ * The Form's and Documents' assets: the listed Documents' page counts and the Form's photos inlined. A
+ * Working Copy prints these only (RP-621: no Signature, logo or Stamp); the record adds its marks below.
+ */
+export async function formAssets(facts: Pick<RecordFacts, "form" | "documents">, files: RecordFiles): Promise<DocumentAssets> {
   const attachmentFields = attachmentFieldKeysOf(facts);
   const pageCounts = new Map<string, number | null>();
   for (const d of facts.documents) {
@@ -71,6 +75,13 @@ export async function documentAssets(facts: RecordFacts, files: RecordFiles): Pr
     facts.documents.filter((d) => !isListedDocument(d, attachmentFields)),
     files,
   );
+  return { pageCounts, images, fingerprints };
+}
+
+export async function documentAssets(facts: RecordFacts, files: RecordFiles): Promise<DocumentAssets> {
+  const { pageCounts, images: formImages, fingerprints: formFingerprints } = await formAssets(facts, files);
+  const images = new Map(formImages);
+  const fingerprints = new Map(formFingerprints);
   // The Signatures the path's events recorded, and the acting Companies' logos and Stamps in force
   // at close (RP-650): stored under members/ and companies/, which the worker may read (ADR 0023).
   // Inlined as the photos are, with their fingerprints, within limits of their own.

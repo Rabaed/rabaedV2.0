@@ -131,3 +131,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270925 | RP-650 | 22 | record_signatures |
 | 20270926 | RP-147 | 22 | record_appendix |
 | 20270929 | RP-653 | 43 | previous_item_raised_counts |
+| 20270928 | RP-621 | 24 | working_copy |

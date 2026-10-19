@@ -88,7 +88,7 @@ export function isListedDocument(document: DocumentFact, attachmentFieldKeys: Re
 }
 
 /** The keys of the Form's `attachments` fields: their files are listed with the shared Documents. */
-export function attachmentFieldKeysOf(facts: RecordFacts): Set<string> {
+export function attachmentFieldKeysOf(facts: Pick<RecordFacts, "form">): Set<string> {
   const schema = formSchema.parse({ sections: facts.form.sections });
   return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === "attachments").map((f) => f.key)));
 }
@@ -110,7 +110,7 @@ function camelLinks(answers: Readonly<Record<string, unknown>>): Record<string, 
 }
 
 /** The Form's sections as the record prints them, and the blocks of its Classification section. */
-export function formContent(facts: RecordFacts, language: RecordLanguage): { sections: RecordSection[]; classification: RecordBlock[]; attachmentFieldKeys: Set<string> } {
+export function formContent(facts: Pick<RecordFacts, "form" | "documents">, language: RecordLanguage): { sections: RecordSection[]; classification: RecordBlock[]; attachmentFieldKeys: Set<string> } {
   const schema = formSchema.parse({ sections: facts.form.sections });
   const shown = formVisibility(schema, camelLinks(facts.form.answers));
   const answers = shown.answers;
