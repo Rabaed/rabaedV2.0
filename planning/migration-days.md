@@ -81,11 +81,13 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270705 | RP-668 | 33 | comment_not_raised_directly |
 | 20270630 | RP-651 | 42 | Project Checklist Templates and the Checklist Template choice (moved from 20270612) |
 | 20270713 | RP-640 | 5B | Unused: the migration moved to 20270721, after main's 20270714 and 20270716 |
+| 20270714 | RP-673 | 41 | Unused: the migration moved to 20270726 (main took 20270714, 20270716 and 20270720 first) |
 | 20270706 | RP-625 | 3A | Unused: the migration moved to 20270714, after main's 20270708 and 20270709 |
 | 20270708 | RP-85 | 21 | stored_file |
 | 20270709 | RP-620 | 22 | documental_record |
 | 20270716 | RP-626 | 33 | The Question Types (QSN, QSC) and the Consultant's `submit` (moved from 20270706, then 20270705) |
 | 20270714 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, then 20270706: main's later days) |
+| 20270716 | RP-673 | 41 | Unused: the migration moved to 20270726 (main took 20270716 and 20270720 first) |
 | 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
 | 20270721 | RP-640 | 5B | Unused: the migration moved to 20270724 (RP-151 took 20270720 on main) |
 | 20270722 | RP-640 | 5B | Unused: the migration moved to 20270725 |
@@ -93,3 +95,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270723 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, then 20270720) |
 | 20270724 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, then 20270721) |
 | 20270725 | RP-640 | 5B | Unused: RP-640's notification dropped (owner, 2026-10-19) |
+| 20270720 | RP-673 | 41 | Unused: the migration moved to 20270726, after RP-151's 20270720 on main |
+| 20270720 | RP-151 | 22 | record_page_one |
+| 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
