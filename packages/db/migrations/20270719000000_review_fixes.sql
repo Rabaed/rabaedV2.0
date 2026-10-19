@@ -1,11 +1,11 @@
 -- RP-632 review fixes (spec RP-632: RP-85 the Signature, RP-617 the Company's logo and Stamp;
 -- data-model.md §1 member_signature and company).
 --
--- * app.set_member_signature: as 20270710000000_member_signature.sql left it, plus: the image's
+-- * app.set_member_signature: as 20270716000000_member_signature.sql left it, plus: the image's
 --   `p_storage_key` must be under the acting Member's own Signatures,
 --   `members/<member>/signatures/`, and never climb out of it (`..`); anything else is refused
 --   (22023) with nothing written.
--- * app.set_company_image: as 20270712000000_company_stamp.sql left it, plus: `p_storage_key`
+-- * app.set_company_image: as 20270718000000_company_stamp.sql left it, plus: `p_storage_key`
 --   must be under the Company's own folder for that kind, `companies/<company>/<logo|stamp>/`,
 --   and never climb out of it; refused (22023) with nothing written. Checked after `not_found`
 --   and `forbidden`, so another Company's Member still learns nothing.
