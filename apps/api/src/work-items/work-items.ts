@@ -68,6 +68,7 @@ import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
+import { itemRaisedFrom } from "./query.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -733,11 +734,12 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       workflow_version_no: number;
       paper_ref: string | null;
       draft_step: boolean;
+      module_key: ModuleKey;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
         -- The Paper ref (RP-639): everyone who sees the item reads it; it changes only while a Draft.
         w.paper_ref, coalesce(st.category = 'draft', false) as draft_step,
-        wf.name as workflow_name, wf.version_no as workflow_version_no,
+        wf.name as workflow_name, wf.version_no as workflow_version_no, ty.module_key,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
         raiser.legal_name as raised_by, coalesce(app.with_owner_review(w.id), holder.legal_name) as held_by, m.full_name as holder_name,
@@ -789,6 +791,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows: record } = await sql<{ state: "preparing" | "published" | null }>`select app.documental_record_state(${workItemId}::uuid) as state`.execute(trx);
     return {
       ...toSummary(row, now),
+      module: d.module_key,
+      // A Snag List item's Raised from card (RP-628), as its row names it (E1).
+      raisedFrom: d.module_key === "snag_list" ? await itemRaisedFrom(trx, workItemId) : null,
       formVersionId: d.form_version_id,
       workflow: { name: d.workflow_name, versionNo: d.workflow_version_no },
       revisionNo: d.revision_no,
