@@ -271,6 +271,10 @@ create function app.participants_offered(p_work_item_id uuid, p_transition_id uu
     declare
       v_holder uuid;
     begin
+      -- Nothing about an item the caller can't see.
+      if not app.sees_work_item(p_work_item_id) then
+        return;
+      end if;
       select h.participant_id into v_holder
       from app.held_work_item(p_work_item_id) h
       join workflow_transition tr on tr.id = p_transition_id
