@@ -301,7 +301,8 @@ export function WorkItemListOrKanban(
       }
       action={action}
       hints={hints}
-      packages={props.packages && { label: t("list.package"), choices: props.packages }}
+      // No Package field for a Member who sees none, unless the URL already holds one (so it can be cleared).
+      packages={props.packages && (props.packages.length > 0 || query.packageId) ? { label: t("list.package"), choices: props.packages } : undefined}
       moreActions={moreActions && moreActions.length > 0 && <MoreActionsMenu actions={moreActions} label={t("moreActions")} linkAs={NextLink} />}
       viewSwitch={
         <>
