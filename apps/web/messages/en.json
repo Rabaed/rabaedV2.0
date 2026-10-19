@@ -1082,6 +1082,7 @@
   "documentalRecord": {
     "download": "Download PDF",
     "notReady": "The record isn't ready yet. Try again in a minute.",
+    "preparing": "Record being prepared",
     "unavailable": "That didn't work. Try again."
   },
   "watch": {
@@ -1511,7 +1512,8 @@
     "unavailable": "Something went wrong. Try again.",
     "revisionCreated": "New Revision",
     "cancelled": "Cancelled",
-    "sentBack": "Sent Back to you by {company}"
+    "sentBack": "Sent Back to you by {company}",
+    "recordReady": "Record ready to download"
   },
   "handover": {
     "title": "Hand over {name}'s Steps",
