@@ -39,6 +39,9 @@ async function call(path: string, method: string, body?: unknown): Promise<Resul
   return { ok: false, reason: error ?? "unavailable" };
 }
 
+/** The columns the Package page's table shows, by the words of its own messages (packages.columns). */
+const packageColumns = ["documentNumber", "revision", "subject", "type", "trade", "owner", "stage", "stepAge"] as const satisfies readonly ListColumnKey[];
+
 /** The Package page's words, from the app's messages. */
 function usePackageLabels(): PackagePageLabels {
   const t = useTranslations("packages");
@@ -66,7 +69,8 @@ function usePackageLabels(): PackagePageLabels {
     refusals: keys("refusals", ["unavailable", "in_another_package", "item_not_offered", "package_not_open", "project_closed", "nothing_to_submit", "invalid_name"] as const),
     table: {
       table: t("table"),
-      columns: Object.fromEntries(listColumnKeys.map((key) => [key, v(`list.columns.${key}`)])) as Record<ListColumnKey, string>,
+      // The Package's own words for the columns it shows (the Reference, RP-633); the List's for the rest, never shown here.
+      columns: { ...(Object.fromEntries(listColumnKeys.map((key) => [key, v(`list.columns.${key}`)])) as Record<ListColumnKey, string>), ...keys("columns", packageColumns) },
       sortBy: (column) => v("list.sortBy", { column }),
       noNumber: v("list.noNumber"),
       revisionNoNumber: (revision) => v("list.revisionNoNumber", { revision }),
@@ -99,7 +103,7 @@ function usePackageLabels(): PackagePageLabels {
  * each through the Packages API (RP-636, RP-638), which checks each again. After a change the page
  * reads the Package again; a deleted one leads back to the Submittals.
  */
-export function PackageView({ pkg, rows, filters, locale }: Pick<PackagePageProps, "pkg" | "rows" | "filters" | "locale">) {
+export function PackageView({ pkg, locale }: Pick<PackagePageProps, "pkg" | "locale">) {
   const router = useRouter();
   const labels = usePackageLabels();
   const bulk = usePackageBulkCalls(pkg.id);
@@ -147,8 +151,6 @@ export function PackageView({ pkg, rows, filters, locale }: Pick<PackagePageProp
   return (
     <PackagePage
       pkg={pkg}
-      rows={rows}
-      filters={filters}
       locale={locale}
       labels={labels}
       backHref={getPathname({ href: back, locale })}

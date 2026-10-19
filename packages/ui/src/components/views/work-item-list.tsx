@@ -273,7 +273,7 @@ export type WorkItemListProps = {
  * The table's scroll padding: what has keyboard focus scrolls clear of the pinned header row,
  * the pinned checkbox column at the start and the pinned settings column at the end (WCAG 2.4.11).
  */
-const scrollClear = "scroll-pt-[42px] scroll-ps-11 scroll-pe-[60px] pointer-coarse:scroll-pt-12 pointer-coarse:scroll-ps-16";
+export const scrollClear = "scroll-pt-[42px] scroll-ps-11 scroll-pe-[60px] pointer-coarse:scroll-pt-12 pointer-coarse:scroll-ps-16";
 
 /** The List, with its own place for the short confirmations it shows (the shared toast). */
 export function WorkItemList(props: WorkItemListProps) {

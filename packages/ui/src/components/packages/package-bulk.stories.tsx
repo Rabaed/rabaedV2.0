@@ -64,15 +64,7 @@ const codes: BulkOffer[] = [
   { key: "revise_c", label: b("Code C", "الرمز C"), form: "screen:pm-1" },
 ];
 const otherScreen: BulkOffer[] = codes.map((c) => ({ ...c, form: "screen:pm-2" }));
-const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({
-  id: r.id,
-  documentNumber: r.documentNumber,
-  title: r.title,
-  trade: r.trade,
-  with: r.with,
-  outcome: r.outcome,
-  bulkTransitions,
-});
+const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({ ...r, bulkTransitions, toSubmit: false });
 
 const pkg: PackageDetail = {
   id: pkgId,
@@ -83,13 +75,13 @@ const pkg: PackageDetail = {
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: contractor },
   counts: { total: 5, open: 4, codes: { A: 1 } },
   items: [itemOf(tiles, codes), itemOf(ware, codes), itemOf(lights, codes), itemOf(fans, otherScreen), itemOf(basins, [])],
+  owned: false,
+  filters: {
+    outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
+    locations: [],
+    trades: [electrical],
+  },
   actions: { rename: false, addItems: false, removeItems: false, delete: false, submit: false },
-};
-
-const filters: PackagePageProps["filters"] = {
-  outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
-  locations: [],
-  trades: [electrical],
 };
 
 const remarks = formSchema.parse({
@@ -111,8 +103,6 @@ const meta = {
   component: PackagePage,
   args: {
     pkg,
-    rows: [tiles, ware, lights, fans, basins],
-    filters,
     locale: "en",
     labels: packagePageLabels.en,
     backHref: "#submittals",
@@ -178,7 +168,7 @@ export const Selection: Story = {
 
 /** "Select all" picks only the ones waiting on the PM. */
 export const SelectAll: Story = {
-  args: { pkg: { ...pkg, items: pkg.items.filter((i) => i.id !== fans.id) }, rows: [tiles, ware, lights, basins] },
+  args: { pkg: { ...pkg, items: pkg.items.filter((i) => i.id !== fans.id) } },
   play: async (context) => {
     await userEvent.click(within(tableOf(context)).getByRole("checkbox", { name: labelsOf(context).selectAll }));
     await expect(bulkBar(context)).toHaveTextContent(labelsOf(context).selected("3", 3));

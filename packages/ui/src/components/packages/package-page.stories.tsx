@@ -5,7 +5,7 @@ import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { packagePageLabels } from "../../storybook/packages.ts";
-import { PackagePage, type PackagePageProps } from "./package-page.tsx";
+import { PackagePage } from "./package-page.tsx";
 import type { PackageItemSearch } from "./add-package-items-dialog.tsx";
 import type { SubmitPackageCall } from "./submit-package-dialog.tsx";
 
@@ -90,6 +90,8 @@ const openPkg: PackageDetail = {
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: ownCompany },
   counts: { total: 3, open: 3, codes: {} },
   items: [],
+  owned: true,
+  filters: { outcomes: [], locations: [], trades: [] },
   actions: { rename: true, addItems: true, removeItems: true, delete: true, submit: true },
 };
 const inProgress: PackageDetail = {
@@ -99,14 +101,24 @@ const inProgress: PackageDetail = {
   actions: { rename: true, addItems: true, removeItems: false, delete: false, submit: true },
 };
 // Another Company (the Consultant) reads it and changes nothing.
-const asConsultant: PackageDetail = { ...inProgress, counts: { total: 3, open: 2, codes: { A: 1 } }, actions: { rename: false, addItems: false, removeItems: false, delete: false, submit: false } };
+const asConsultant: PackageDetail = { ...inProgress, owned: false, counts: { total: 3, open: 2, codes: { A: 1 } }, actions: { rename: false, addItems: false, removeItems: false, delete: false, submit: false } };
 const done: PackageDetail = { ...inProgress, status: "done", counts: { total: 2, open: 0, codes: { A: 1, B: 1 } }, actions: { ...inProgress.actions, submit: false } };
 
-const filters: PackagePageProps["filters"] = {
+const filters: PackageDetail["filters"] = {
   outcomes: [...defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })), ...defaultOutcomeSets.review_code.map((o) => ({ ...o, type: sar.code }))],
   locations: [],
   trades: [electrical, mechanical],
 };
+
+/**
+ * Package `pkg` with `rows` as its items, as the API gives them: each still to Submit when the
+ * viewer owns it and it was never Submitted nor closed (the API's rule), with the table's filters.
+ */
+const withItems = (pkg: PackageDetail, rows: WorkItemRow[]): PackageDetail => ({
+  ...pkg,
+  filters,
+  items: rows.map((r) => ({ ...r, bulkTransitions: [], toSubmit: pkg.owned && r.submissionDate === null && r.outcome === null })),
+});
 
 const ok = async () => ({ ok: true as const });
 const found: WorkItemRow[] = [
@@ -121,9 +133,7 @@ const meta = {
   title: "Packages/PackagePage",
   component: PackagePage,
   args: {
-    pkg: openPkg,
-    rows: [tiles, ware, mixer],
-    filters,
+    pkg: withItems(openPkg, [tiles, ware, mixer]),
     locale: "en",
     labels: packagePageLabels.en,
     backHref: "#submittals",
@@ -179,13 +189,13 @@ export const OpenPackage: Story = {
 export const RemoveItem: Story = {
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: labelsOf(context).remove(ware.title) }));
-    await expect(context.args.onRemove).toHaveBeenCalledWith(ware);
+    await expect(context.args.onRemove).toHaveBeenCalledWith(expect.objectContaining({ id: ware.id }));
   },
 };
 
 /** In Progress: items are added and it is renamed, never an item removed nor the Package deleted. */
 export const InProgress: Story = {
-  args: { pkg: inProgress, rows: [lights, fans, mixer, tiles] },
+  args: { pkg: withItems(inProgress, [lights, fans, mixer, tiles]) },
   play: async (context) => {
     const l = labelsOf(context);
     const actions = within(actionsOf(context));
@@ -201,7 +211,7 @@ export const InProgress: Story = {
 
 /** Nothing left to Submit: Submit Package is gone. */
 export const NothingLeftToSubmit: Story = {
-  args: { pkg: { ...inProgress, actions: { ...inProgress.actions, submit: false } }, rows: [lights, fans] },
+  args: { pkg: withItems({ ...inProgress, actions: { ...inProgress.actions, submit: false } }, [lights, fans]) },
   play: async (context) => {
     await expect(context.canvas.queryByRole("button", { name: labelsOf(context).submit.trigger })).toBeNull();
   },
@@ -209,7 +219,7 @@ export const NothingLeftToSubmit: Story = {
 
 /** The Consultant reads it: its counts and items as they see them, by Company name only, and no action at all. */
 export const ReadByAnotherCompany: Story = {
-  args: { pkg: asConsultant, rows: [lights, fans, mixer] },
+  args: { pkg: withItems(asConsultant, [lights, fans, mixer]) },
   play: async (context) => {
     await expect(within(actionsOf(context)).queryAllByRole("button")).toHaveLength(0);
     await expect(context.canvas.queryByRole("button", { name: /Remove|إزالة/ })).toBeNull();
@@ -222,12 +232,12 @@ export const ReadByAnotherCompany: Story = {
  * Code; its Subject opens the item, where its Transitions are taken.
  */
 export const ItemTable: Story = {
-  args: { pkg: asConsultant, rows: [lights, fans, mixer] },
+  args: { pkg: withItems(asConsultant, [lights, fans, mixer]) },
   play: async (context) => {
     const locale = storyLocale(context);
     const l = labelsOf(context);
     const table = context.canvas.getByRole("table", { name: l.table.table });
-    for (const column of [l.table.columns.documentNumber, l.table.columns.subject, l.table.columns.trade, l.with, l.table.columns.outcome]) {
+    for (const column of [l.table.columns.documentNumber, l.table.columns.subject, l.table.columns.trade, l.with, l.table.columns.stage]) {
       await expect(within(table).getByRole("columnheader", { name: new RegExp(escaped(column)) })).toBeVisible();
     }
     const lightsRow = within(table).getByRole("link", { name: lights.title }).closest("tr")!;
@@ -241,9 +251,60 @@ export const ItemTable: Story = {
   },
 };
 
+/**
+ * The counts name the codes of its submittals' Types on the Project, as the API's outcome set gives them,
+ * never a fixed A to D: here the Project's MAR has no Code D, and a Code E of its own.
+ */
+export const CodesOfItsOutcomeSet: Story = {
+  args: {
+    pkg: {
+      ...withItems(done, [fans]),
+      counts: { total: 2, open: 0, codes: { A: 1, E: 1 } },
+      filters: {
+        ...filters,
+        outcomes: [
+          ...defaultOutcomeSets.review_code.filter((o) => o.code !== "D").map((o) => ({ ...o, type: mar.code })),
+          { ...defaultOutcomeSets.review_code[0]!, code: "E", type: mar.code },
+        ],
+      },
+    },
+  },
+  play: async (context) => {
+    const tiles = [...context.canvasElement.querySelectorAll("[data-code]")].map((t) => t.getAttribute("data-code"));
+    await expect(tiles).toEqual(["A", "B", "C", "E", "open"]);
+    await expect(context.canvasElement.querySelector('[data-code="E"]')).toHaveTextContent("1");
+  },
+};
+
+/** The Stage column shows the Review Code once there is one: one column, "Review Code or Stage". */
+export const ReviewCodeOrStage: Story = {
+  args: { pkg: withItems(asConsultant, [lights, fans]) },
+  play: async (context) => {
+    const l = labelsOf(context);
+    const locale = storyLocale(context);
+    const table = within(context.canvas.getByRole("table", { name: l.table.table }));
+    // Document Number, Rev, Subject, Type, Trade, With, Review Code or Stage, Step Age: no Code column of its own.
+    await expect(table.getAllByRole("columnheader")).toHaveLength(8);
+    const fansRow = table.getByRole("link", { name: fans.title }).closest("tr")!;
+    await expect(fansRow).toHaveTextContent(l.table.code("A"));
+    const lightsRow = table.getByRole("link", { name: lights.title }).closest("tr")!;
+    await expect(lightsRow).toHaveTextContent(stages.pending.name[locale]);
+  },
+};
+
+/** The table scrolls in its own box, its scrollbar on screen, as the List's does: the page never scrolls sideways. */
+export const TableScrollsInItsBox: Story = {
+  args: { pkg: withItems(inProgress, [lights, fans, mixer, tiles]) },
+  play: async (context) => {
+    const region = context.canvasElement.querySelector<HTMLElement>("[data-package-table]")!;
+    await expect(getComputedStyle(region).overflowX).toBe("auto");
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
 /** Done: says so; nothing to Submit. */
 export const Done: Story = {
-  args: { pkg: done, rows: [fans, row(16, { title: "Basins", stage: stages.approved, outcome: "B", stepAgeWeeks: null, with: null })] },
+  args: { pkg: withItems(done, [fans, row(16, { title: "Basins", stage: stages.approved, outcome: "B", stepAgeWeeks: null, with: null })]) },
   play: async (context) => {
     const l = labelsOf(context);
     await expect(context.canvas.getByRole("note")).toHaveTextContent(l.done);
@@ -254,7 +315,7 @@ export const Done: Story = {
 
 /** A new Open Package with nothing in it yet. */
 export const Empty: Story = {
-  args: { pkg: { ...openPkg, counts: { total: 0, open: 0, codes: {} }, actions: { ...openPkg.actions, submit: false } }, rows: [] },
+  args: { pkg: withItems({ ...openPkg, counts: { total: 0, open: 0, codes: {} }, actions: { ...openPkg.actions, submit: false } }, []) },
   play: async (context) => {
     await expect(context.canvas.getByText(labelsOf(context).empty)).toBeVisible();
     await expect(context.canvas.queryByRole("button", { name: labelsOf(context).submit.trigger })).toBeNull();

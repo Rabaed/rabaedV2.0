@@ -235,7 +235,7 @@ export {
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
 export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
 export { PackageComments, type PackageCommentsLabels, type PackageCommentsProps } from "./components/packages/package-comments.tsx";
-export { PackagePage, packageItemsToSubmit, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
+export { PackagePage, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
 export {
   sharedBulkTransitions,
   type BulkStopped,

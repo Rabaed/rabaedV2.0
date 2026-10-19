@@ -3,7 +3,6 @@
 import {
   formatNumber,
   intlLocaleOf,
-  isOpenStageCategory,
   workItemSortOrders,
   type BilingualText,
   type ListColumnKey,
@@ -11,7 +10,6 @@ import {
   type Locale,
   type PackageDetail,
   type PackageStatus,
-  type WorkItemList as WorkItemListData,
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
@@ -24,6 +22,7 @@ import { CompanyChip } from "../data/avatar.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { TableCard } from "../list/table-card.tsx";
+import { scrollClear } from "../views/work-item-list.tsx";
 import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work-item-table.tsx";
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
 import { usePackageBulk, type PackageBulkProps } from "./package-bulk.tsx";
@@ -83,11 +82,8 @@ export type PackagePageLabels = {
 };
 
 export type PackagePageProps = {
+  /** The Package as the API gives it: its submittals the viewer sees (each its List row), and what the table reads around them. */
   pkg: PackageDetail;
-  /** Its submittals the viewer sees, as the List gives them (the work item query's `packageId`). */
-  rows: WorkItemRow[];
-  /** What the List read around them: the Types' outcomes and the Location tree. */
-  filters: Pick<WorkItemListData["filters"], "outcomes" | "locations" | "trades">;
   locale: Locale;
   labels: PackagePageLabels;
   /** The Submittals, where the breadcrumb leads back. */
@@ -107,21 +103,17 @@ export type PackagePageProps = {
 
 const statusTone = { open: "neutral", in_progress: "info", done: "success" } as const;
 
-/** The table's columns: Document Number, Subject, Type, Trade, With, Review Code or Stage, Step Age; never a date. */
-const columns: ListColumnLayout = (["documentNumber", "revision", "subject", "type", "trade", "owner", "stage", "outcome", "stepAge"] as const).map((key) => ({
+/**
+ * The table's columns, as the Reference (RP-633) has them: Document Number, Rev, Subject, Type, Trade,
+ * With, Review Code or Stage (one column: the Code once there is one), Step Age; never a date.
+ */
+const columns: ListColumnLayout = (["documentNumber", "revision", "subject", "type", "trade", "owner", "stage", "stepAge"] as const).map((key) => ({
   key,
   shown: true,
 }));
 
-/** The submittals still to Submit: open, never Submitted (a Sent Back one is re-Submitted alone, on its own page). */
-export function packageItemsToSubmit(rows: readonly WorkItemRow[]): WorkItemRow[] {
-  return rows.filter((r) => r.submissionDate === null && isOpenStageCategory(r.stage.category));
-}
-
 export function PackagePage({
   pkg,
-  rows,
-  filters,
   locale,
   labels,
   backHref,
@@ -140,10 +132,11 @@ export function PackagePage({
   const [error, setError] = useState<string | null>(null);
   const n = (value: number) => formatNumber(value, locale);
   const name = pkg.name[locale];
-  const toSubmit = packageItemsToSubmit(rows);
+  const { items: rows, filters } = pkg;
+  // The API says which are still to Submit, and whether the viewer owns the Package.
+  const toSubmit = rows.filter((r) => r.toSubmit);
   // Submit Package: for the owner, while anything is left to Submit; disabled in its dialog until nothing stops it.
-  const owner = pkg.actions.rename || pkg.actions.addItems;
-  const submittable = onSubmit !== undefined && (pkg.actions.submit || (owner && toSubmit.length > 0));
+  const submittable = onSubmit !== undefined && (pkg.actions.submit || (pkg.owned && toSubmit.length > 0));
   const tableLabels: WorkItemTableLabels = { ...labels.table, columns: { ...labels.table.columns, owner: labels.with }, empty: labels.empty };
   const sorted = sortRows(rows, sort, locale, tableLabels, filters);
 
@@ -250,8 +243,14 @@ export function PackagePage({
         </h2>
         <TableCard>
           {bulkTable.bar}
-          {/* The table scrolls sideways in its own region, so the page never does. */}
-          <div role="region" aria-label={labels.table.table} tabIndex={0} className={cn("relative overflow-auto", focusRing)}>
+          {/* The table scrolls in its own region, as the List's does, its scrollbar on screen, so the page never does and nothing is cut unseen. */}
+          <div
+            role="region"
+            aria-label={labels.table.table}
+            tabIndex={0}
+            data-package-table=""
+            className={cn("relative overflow-auto lg:max-h-[calc(100dvh-12rem)]", scrollClear, focusRing)}
+          >
             <WorkItemTable
               rows={sorted}
               filters={filters}
@@ -263,6 +262,7 @@ export function PackagePage({
               itemHref={itemHref}
               linkAs={Link}
               selection={bulkTable.selection}
+              stageShowsCode
               rowEnd={
                 pkg.actions.removeItems && onRemove
                   ? (row) => (
@@ -285,8 +285,11 @@ function Counts({ pkg, locale, labels }: { pkg: PackageDetail; locale: Locale; l
   const n = (value: number) => formatNumber(value, locale);
   const { total, open, codes } = pkg.counts;
   const closed = total - open;
-  // A to D always, in order; any other outcome after them, as the API names it.
-  const codeKeys = [...new Set(["A", "B", "C", "D", ...Object.keys(codes).sort()])];
+  // The closing outcomes of its submittals' Types on the Project, in their set's order (as Done reads
+  // them, never fixed codes), then any other the counts name.
+  const types = new Set(pkg.items.map((i) => i.type.code));
+  const ofTypes = pkg.filters.outcomes.filter((o) => o.closing && types.has(o.type)).map((o) => o.code);
+  const codeKeys = [...new Set([...ofTypes, ...Object.keys(codes).sort()])];
   const share = total === 0 ? 0 : Math.round((closed / total) * 100);
   const ring: CSSProperties = { background: `conic-gradient(var(--color-success) ${share}%, var(--color-neutral-tint) 0)` };
   const tile = "flex min-w-[88px] flex-col items-start gap-0.5 rounded-md bg-surface-subtle px-3 py-2";
@@ -328,12 +331,14 @@ function sortRows(
   { sort, dir }: Pick<WorkItemQuery, "sort" | "dir">,
   locale: Locale,
   labels: WorkItemTableLabels,
-  filters: PackagePageProps["filters"],
+  filters: PackageDetail["filters"],
 ): WorkItemRow[] {
   const key = sort as ListColumnKey;
   if (!columns.some((c) => c.key === key)) return [...rows];
   const ascending = (dir ?? workItemSortOrders[key]) === "asc";
-  const text = (r: WorkItemRow) => (key === "stepAge" ? String(r.stepAgeWeeks ?? -1).padStart(4, "0") : cellText(key, r, locale, labels, filters));
+  // The Stage column shows the Review Code once there is one (stageShowsCode), and sorts by what it shows.
+  const shownKey = (r: WorkItemRow): ListColumnKey => (key === "stage" && r.outcome !== null ? "outcome" : key);
+  const text = (r: WorkItemRow) => (key === "stepAge" ? String(r.stepAgeWeeks ?? -1).padStart(4, "0") : cellText(shownKey(r), r, locale, labels, filters));
   const collator = new Intl.Collator(intlLocaleOf(locale), { numeric: true });
   return [...rows].sort((a, b) => (ascending ? 1 : -1) * collator.compare(text(a), text(b)) || collator.compare(a.title, b.title));
 }

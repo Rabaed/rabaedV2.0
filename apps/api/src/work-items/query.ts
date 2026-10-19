@@ -1166,6 +1166,27 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
     .orderBy("code")
     .execute();
+  return {
+    stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
+    filters: {
+      types,
+      ...(await outcomeAndDimensionChoices(trx, scope)),
+      ...(await holderChoices(trx, scope)),
+      ...(await snagChoices(trx, scope)),
+    },
+  };
+}
+
+/**
+ * What a table of the scope's items reads around its rows (the List's filters, the Package page,
+ * RP-659): each Type's outcomes on the Project, its Trades and its Locations with their tree.
+ */
+export async function outcomeAndDimensionChoices(
+  trx: Trx,
+  scope: QueryScope,
+): Promise<Pick<WorkItemList["filters"], "outcomes" | "trades" | "locations">> {
+  const { projectId } = scope;
+  const modules = modulesOf(scope);
   // Each Type's outcomes on the Project (RP-429), for the "Review Code / Result" filter and the
   // outcome badges: read like the Types themselves, the Project's copies.
   const { rows: outcomes } = await sql<WorkItemList["filters"]["outcomes"][number]>`
@@ -1192,16 +1213,10 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     order by v.depth, v.sort, v.code
   `.execute(trx);
   return {
-    stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
-    filters: {
-      types,
-      outcomes,
-      trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
-      locations: values
-        .filter((v) => v.kind === "location")
-        .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
-      ...(await holderChoices(trx, scope)),
-      ...(await snagChoices(trx, scope)),
-    },
+    outcomes,
+    trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
+    locations: values
+      .filter((v) => v.kind === "location")
+      .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
   };
 }

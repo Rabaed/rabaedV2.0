@@ -349,6 +349,29 @@ describe("Submit Package", () => {
     expect(await refusal(submitPackage(at.c1Pm, pkg.id))).toEqual({ status: 409, body: { error: "nothing_to_submit" } });
   });
 
+  it("the Package's answer says who owns it and which items are still to Submit, so no page works it out again", async () => {
+    const pkg = await createPackage(at.c1Pm, "Says what is left");
+    const left = await readyForPm("Left to Submit");
+    const sent = await submitted(at, at.c1Engineer, at.c1Pm, "Sent alone");
+    for (const id of [left, sent]) await ok(addItem(at.c1Pm, pkg.id, id));
+    const owner = await getPackage(at.c1Pm, pkg.id);
+    expect(owner.owned).toBe(true);
+    expect(new Map(owner.items.map((i) => [i.id, i.toSubmit]))).toEqual(
+      new Map([
+        [left, true],
+        [sent, false],
+      ]),
+    );
+    // Each item is its List row, and the table's outcomes, Trades and Locations come with it.
+    expect(owner.items.find((i) => i.id === sent)).toMatchObject({ type: { code: expect.any(String) }, stage: { key: expect.any(String) } });
+    expect(owner.filters.outcomes.length).toBeGreaterThan(0);
+    expect(owner.filters.trades.map((t) => t.id)).toContain(at.electrical);
+    // K1 reads it as a viewer: not theirs, nothing to Submit.
+    const k1Reads = await getPackage(at.k1Manager, pkg.id);
+    expect(k1Reads.owned).toBe(false);
+    expect(k1Reads.items.map((i) => [i.id, i.toSubmit])).toEqual([[sent, false]]);
+  });
+
   it("is all or nothing: one item not ready and nothing is Submitted; the answer lists the ones not ready, and why", async () => {
     // A second PM: C1's review is a Step Pool of two, picked up rather than held by its only Member.
     await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
@@ -637,7 +660,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       const rowsSeen = await listed(by);
       for (const item of (await getPackage(by, pkg.id)).items) {
         const r = rowsSeen.get(item.id)!;
-        expect(item).toEqual({ id: r.id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome, bulkTransitions: expect.any(Array) });
+        expect(item).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean) });
       }
     }
     const items = new Map((await getPackage(at.c1Pm, pkg.id)).items.map((i) => [i.id, i]));

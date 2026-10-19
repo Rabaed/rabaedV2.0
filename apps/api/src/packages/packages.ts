@@ -14,7 +14,7 @@ import {
 import { sql, type Transaction } from "kysely";
 import type { Database } from "@rabaed/db";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
-import { workItemRowsById } from "../work-items/query.ts";
+import { outcomeAndDimensionChoices, workItemRowsById } from "../work-items/query.ts";
 import { bulkOffers } from "../work-items/bulk-transitions.ts";
 import { allOrNothing, itemsById, lockWorkItems, Rollback, takeEach } from "../work-items/several-transitions.ts";
 
@@ -120,9 +120,10 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
       join work_item w on w.id = l.work_item_id
       order by w.document_number nulls last, w.title, w.id
     `.execute(trx);
+    const scope = { projectId: row.project_id, moduleKey: "submittals" } as const;
     const seen = await workItemRowsById(
       trx,
-      { projectId: row.project_id, moduleKey: "submittals" },
+      scope,
       ids.map((i) => i.id),
       now,
     );
@@ -130,19 +131,22 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
       trx,
       ids.map((i) => i.id),
     );
+    // Still to Submit, by the rule Submit Package takes them by: for the owner only.
+    const readiness = row.owned ? await submitReadiness(trx, packageId) : null;
+    const toSubmit = new Set(readiness?.items.map((i) => i.id) ?? []);
     const items = ids.flatMap(({ id }) => {
       const r = seen.get(id);
-      return r
-        ? [{ id, documentNumber: r.documentNumber, title: r.title, trade: r.trade, with: r.with, outcome: r.outcome, bulkTransitions: offers.get(id) ?? [] }]
-        : [];
+      return r ? [{ ...r, bulkTransitions: offers.get(id) ?? [], toSubmit: toSubmit.has(id) }] : [];
     });
     const project = await trx.selectFrom("project").select("status").where("id", "=", row.project_id).executeTakeFirst();
     const active = row.owned && project?.status === "active";
     const open = row.status === "open";
-    const submit = active && (await submitReadiness(trx, packageId)).ready;
+    const submit = active && readiness !== null && readiness.ready;
     return {
       ...toSummary(row),
       items,
+      owned: row.owned,
+      filters: await outcomeAndDimensionChoices(trx, scope),
       actions: { rename: active, addItems: active, removeItems: active && open, delete: active && open, submit },
     };
   });
