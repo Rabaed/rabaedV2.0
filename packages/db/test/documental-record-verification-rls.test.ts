@@ -1,5 +1,5 @@
 // Seam 2 for the verification of a Documental Record (RP-157, spec RP-632; ADR 0023; visibility.md,
-// the Verification page row, scenario RP-23-4; migration 20270828000000_documental_record_verification.sql),
+// the Verification page row, scenario RP-23-4; migration 20270910000000_documental_record_verification.sql),
 // as the app role, which the api's public route connects as with no Member set. The two definer
 // functions are the only way in: the app role reads no table it couldn't before, nor the helpers they
 // use, and they answer only a published record, with exactly the page's fields.
