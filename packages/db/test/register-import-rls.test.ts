@@ -625,7 +625,7 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
       if (memberId) await sql`select set_config('app.member_id', ${memberId}, true)`.execute(trx);
       return (await query.execute(trx)).rows;
     });
-  const adminFailure = (memberId: string | null, query: ReturnType<typeof sql>) =>
+  const adminFailure = (memberId: string | null, query: ReturnType<typeof sql<object>>) =>
     asAdmin(memberId, query).then(
       () => null,
       (error: { code?: string }) => error.code ?? "?",
