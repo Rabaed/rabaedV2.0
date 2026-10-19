@@ -45,6 +45,34 @@ export function RenamePackageDialog({
   refusals,
   onRename,
 }: Shared & { name: BilingualText; labels: RenamePackageLabels; onRename: (name: BilingualText) => Result }) {
+  return <PackageNameDialog name={name} labels={labels} close={close} cancel={cancel} refusals={refusals} onSave={onRename} />;
+}
+
+/** "+ New Package"'s words: as a rename's, for a name not given yet. */
+export type NewPackageLabels = RenamePackageLabels;
+
+/**
+ * "+ New Package" (RP-660, spec RP-616 story 1), on the Packages view: its name in English and
+ * Arabic. The API numbers it for the Member's own Participant (PKG-001…) and refuses anyone
+ * outside the Project; the view opens it once created.
+ */
+export function NewPackageDialog({ labels, close, cancel, refusals, onCreate }: Shared & { labels: NewPackageLabels; onCreate: (name: BilingualText) => Result }) {
+  return <PackageNameDialog name={emptyName} primary labels={labels} close={close} cancel={cancel} refusals={refusals} onSave={onCreate} />;
+}
+
+// eslint-disable-next-line rabaed/no-ui-translations -- a name not typed yet, not a label
+const emptyName: BilingualText = { en: "", ar: "" };
+
+/** A Package's name in both languages, both needed: a rename, or a new Package's (`primary`). */
+function PackageNameDialog({
+  name,
+  primary = false,
+  labels,
+  close,
+  cancel,
+  refusals,
+  onSave,
+}: Shared & { name: BilingualText; primary?: boolean; labels: RenamePackageLabels; onSave: (name: BilingualText) => Result }) {
   const [open, setOpen] = useState(false);
   const [en, setEn] = useState(name.en);
   const [ar, setAr] = useState(name.ar);
@@ -64,8 +92,8 @@ export function RenamePackageDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="secondary">
-          <Icon name="pencil" />
+        <Button variant={primary ? "primary" : "secondary"}>
+          <Icon name={primary ? "plus" : "pencil"} />
           {labels.trigger}
         </Button>
       </DialogTrigger>
@@ -78,7 +106,7 @@ export function RenamePackageDialog({
             if (missing) return setError(labels.required);
             setPending(true);
             // eslint-disable-next-line rabaed/no-ui-translations -- the name the Member typed in both languages, not a label
-            const refused = await refusalOf(() => onRename({ en: en.trim(), ar: ar.trim() }), refusals);
+            const refused = await refusalOf(() => onSave({ en: en.trim(), ar: ar.trim() }), refusals);
             setPending(false);
             if (refused) setError(refused);
             else setOpen(false);

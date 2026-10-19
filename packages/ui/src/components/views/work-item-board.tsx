@@ -13,6 +13,7 @@ import {
   type BilingualText,
   type BoardCardLayout,
   type Locale,
+  type ModuleView,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemBoardLane,
   type WorkItemMove,
@@ -675,22 +676,34 @@ export type WorkItemViewSwitchLabels = {
   view: string;
   list: string;
   kanban: string;
+  /** The Submittals' Packages view (RP-660); needed when `views` offers it. */
+  packages?: string;
 };
 
-export type WorkItemViewSwitchProps = {
-  view: WorkItemView;
+const viewIcons = { kanban: "layout-grid", list: "list", packages: "packages" } as const;
+
+export type WorkItemViewSwitchProps<V extends ModuleView = WorkItemView> = {
+  view: V;
   labels: WorkItemViewSwitchLabels;
+  /** The Views offered, in order: Kanban and List unless given; the Submittals add Packages (RP-660). */
+  views?: readonly V[];
   /** The URL of each View, its filters kept. */
-  hrefFor: (view: WorkItemView) => string;
+  hrefFor: (view: V) => string;
   /** The link component, e.g. Next.js `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
 };
 
-/** Kanban / List, as two links (the View is part of the URL): the active one filled tomato. */
-export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }: WorkItemViewSwitchProps) {
+/** Kanban / List (and on the Submittals, Packages), as links (the View is part of the URL): the active one filled tomato. */
+export function WorkItemViewSwitch<V extends ModuleView = WorkItemView>({
+  view,
+  labels,
+  views = ["kanban", "list"] as readonly ModuleView[] as readonly V[],
+  hrefFor,
+  linkAs: Link = "a",
+}: WorkItemViewSwitchProps<V>) {
   return (
     <nav aria-label={labels.view} className="inline-flex overflow-hidden rounded-sm border border-control-border bg-surface">
-      {(["kanban", "list"] as const).map((v) => (
+      {views.map((v) => (
         <Link
           key={v}
           href={hrefFor(v)}
@@ -701,7 +714,7 @@ export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }
             focusRing,
           )}
         >
-          <Icon name={v === "list" ? "list" : "layout-grid"} size={16} />
+          <Icon name={viewIcons[v]} size={16} />
           {labels[v]}
         </Link>
       ))}

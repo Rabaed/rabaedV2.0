@@ -216,6 +216,31 @@ export const ReadByAnotherCompany: Story = {
   },
 };
 
+/**
+ * The item table (RP-660, story 34 and 38): each submittal the viewer sees with its Document Number
+ * left to right, Subject, Trade, who it is With (another Company by its name, V14) and its Review
+ * Code; its Subject opens the item, where its Transitions are taken.
+ */
+export const ItemTable: Story = {
+  args: { pkg: asConsultant, rows: [lights, fans, mixer] },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const l = labelsOf(context);
+    const table = context.canvas.getByRole("table", { name: l.table.table });
+    for (const column of [l.table.columns.documentNumber, l.table.columns.subject, l.table.columns.trade, l.with, l.table.columns.outcome]) {
+      await expect(within(table).getByRole("columnheader", { name: new RegExp(escaped(column)) })).toBeVisible();
+    }
+    const lightsRow = within(table).getByRole("link", { name: lights.title }).closest("tr")!;
+    await expect(within(table).getByRole("link", { name: lights.title })).toHaveAttribute("href", `#${lights.id}`);
+    await expect(within(lightsRow).getByText(consultant[locale])).toBeVisible();
+    await expect(lightsRow).toHaveTextContent(electrical.name[locale]);
+    const number = within(lightsRow).getByText(lights.documentNumber!);
+    await expect(number.closest("[dir=ltr]")).not.toBeNull();
+    const fansRow = within(table).getByRole("link", { name: fans.title }).closest("tr")!;
+    await expect(fansRow).toHaveTextContent(l.table.code("A"));
+  },
+};
+
 /** Done: says so; nothing to Submit. */
 export const Done: Story = {
   args: { pkg: done, rows: [fans, row(16, { title: "Basins", stage: stages.approved, outcome: "B", stepAgeWeeks: null, with: null })] },

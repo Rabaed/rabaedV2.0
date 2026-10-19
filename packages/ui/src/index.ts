@@ -224,7 +224,8 @@ export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps 
 export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
 export { PackagePage, packageItemsToSubmit, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
 export { type AddPackageItemsLabels, type PackageItemSearch } from "./components/packages/add-package-items-dialog.tsx";
-export { type DeletePackageLabels, type RenamePackageLabels } from "./components/packages/package-dialogs.tsx";
+export { type DeletePackageLabels, type NewPackageLabels, type RenamePackageLabels } from "./components/packages/package-dialogs.tsx";
+export { PackagesBoard, type PackagesBoardLabels, type PackagesBoardProps } from "./components/packages/packages-board.tsx";
 export { type SubmitPackageCall, type SubmitPackageLabels, type SubmitPackageResult } from "./components/packages/submit-package-dialog.tsx";
 export { outcomesOfType } from "./components/views/outcomes-of-type.ts";
 export {

@@ -8,6 +8,7 @@ import {
   type BoardCardLayout,
   type BoardCardLayoutChange,
   type Locale,
+  type ModuleView,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemExport,
   type WorkItemDetail,
@@ -311,11 +312,17 @@ export function WorkItemListOrKanban(
             />
           )}
           {/* The Kanban has no pages: switching keeps the filters, from the first page. */}
-          <WorkItemViewSwitch
+          <WorkItemViewSwitch<ModuleView>
             view={view}
-            labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
-            // Each View in its own order: the List by Submittal No., the Kanban by Step Age.
-            hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? "documentNumber" : "stepAge", dir: undefined })}
+            // The Submittals also offer their Packages (RP-660).
+            views={module === "submittals" ? ["kanban", "list", "packages"] : ["kanban", "list"]}
+            labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban"), packages: t("viewSwitch.packages") }}
+            // Each View in its own order: the List by Submittal No., the Kanban by Step Age. The Packages view takes no filter.
+            hrefFor={(v) =>
+              v === "packages"
+                ? `${pathname}?view=packages`
+                : hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? "documentNumber" : "stepAge", dir: undefined })
+            }
             linkAs={NextLink}
           />
         </>

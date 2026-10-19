@@ -1,5 +1,6 @@
 import type { Locale } from "@rabaed/domain";
 import type { PackagePageLabels } from "../components/packages/package-page.tsx";
+import type { PackagesBoardLabels } from "../components/packages/packages-board.tsx";
 import { workItemListLabels } from "./views.ts";
 
 // The Package page's words for stories (RP-659), as the web's messages say them.
@@ -180,6 +181,54 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
         refused: "رُفض تقديمه.",
       },
       othersNotReady: "يمنعه أيضًا اعتماد لا تراه.",
+    },
+  },
+};
+
+// The Packages view's words for stories (RP-660), as the web's messages say them.
+export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
+  en: {
+    board: "Packages",
+    toolbar: "Packages toolbar",
+    status: packagePageLabels.en.status,
+    noPackages: "No Packages",
+    ownedBy: packagePageLabels.en.ownedBy,
+    code: packagePageLabels.en.code,
+    stillOpen: packagePageLabels.en.stillOpen,
+    closedOf: packagePageLabels.en.closedOf,
+    close: "Close",
+    cancel: "Cancel",
+    refusals: { ...refusalsEn, invalid_name: "Enter both names, in English and in Arabic." },
+    create: {
+      trigger: "New Package",
+      title: "New Package",
+      description: "In English and in Arabic. It gets your Company's next number.",
+      nameEn: "Name (English)",
+      nameAr: "Name (Arabic)",
+      required: "Enter both names, in English and in Arabic.",
+      save: "Create",
+    },
+  },
+  ar: {
+    board: "الحزم",
+    toolbar: "شريط أدوات الحزم",
+    status: packagePageLabels.ar.status,
+    noPackages: "لا توجد حزم",
+    ownedBy: packagePageLabels.ar.ownedBy,
+    code: packagePageLabels.ar.code,
+    stillOpen: packagePageLabels.ar.stillOpen,
+    closedOf: packagePageLabels.ar.closedOf,
+    close: "إغلاق",
+    cancel: "إلغاء",
+    refusals: { ...refusalsAr, invalid_name: "أدخل الاسم بالإنجليزية والعربية." },
+    create: {
+      trigger: "حزمة جديدة",
+      title: "حزمة جديدة",
+      description: "اسمها بالإنجليزية والعربية. تأخذ الرقم التالي لشركتك.",
+      nameEn: "الاسم بالإنجليزية",
+      nameAr: "الاسم بالعربية",
+      required: "أدخل الاسم بالإنجليزية والعربية.",
+      save: "إنشاء",
     },
   },
 };
