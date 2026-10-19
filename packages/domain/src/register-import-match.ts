@@ -90,17 +90,17 @@ export function suggestRegisterValue(text: string, candidates: readonly Register
 }
 
 /** A field a column may fill, with the headings that name it, in English and Arabic. */
-export type RegisterFieldTarget = { field: string; names: readonly string[] };
+export type RegisterFieldTarget<F extends string = string> = { field: F; names: readonly string[] };
 
 /**
  * A field for each column of the header row, from its heading: each field taken once,
  * the most alike pairs first; null where nothing is at least registerSuggestionFloor alike.
  */
-export function suggestRegisterFields(
+export function suggestRegisterFields<F extends string>(
   headers: readonly string[],
-  targets: readonly RegisterFieldTarget[],
-): ({ field: string; score: number } | null)[] {
-  const pairs: { column: number; field: string; score: number }[] = [];
+  targets: readonly RegisterFieldTarget<F>[],
+): ({ field: F; score: number } | null)[] {
+  const pairs: { column: number; field: F; score: number }[] = [];
   headers.forEach((header, column) => {
     for (const target of targets) {
       const score = Math.max(0, ...target.names.map((name) => registerSimilarity(header, name)));
@@ -108,8 +108,8 @@ export function suggestRegisterFields(
     }
   });
   pairs.sort((a, b) => b.score - a.score || a.column - b.column);
-  const out: ({ field: string; score: number } | null)[] = headers.map(() => null);
-  const taken = new Set<string>();
+  const out: ({ field: F; score: number } | null)[] = headers.map(() => null);
+  const taken = new Set<F>();
   for (const pair of pairs) {
     if (out[pair.column] !== null || taken.has(pair.field)) continue;
     out[pair.column] = { field: pair.field, score: pair.score };

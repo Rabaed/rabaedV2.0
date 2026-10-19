@@ -38,6 +38,18 @@ export type RegisterSheetRow = z.infer<typeof registerSheetRow>;
 /** How many top rows of a sheet the header-row step shows. */
 export const registerTopRows = 12;
 
+/**
+ * The fields a column can fill (the Map fields step's choices, and the suggestions):
+ * these, and `field:<key>` for a Form field of a mapped Type (registerFormFieldId).
+ */
+export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "package", "paperRef", "assignTo"] as const;
+export const registerFieldId = z.union([z.enum(registerFieldIds), z.templateLiteral(["field:", z.string()])]);
+export type RegisterFieldId = z.infer<typeof registerFieldId>;
+/** A Form field's id among the fields a column can fill. */
+export const registerFormFieldId = (key: string): RegisterFieldId & `field:${string}` => `field:${key}`;
+/** The Form field's key a field id names (registerFormFieldId); null for any other field. */
+export const registerFormFieldKey = (field: string): string | null => (field.startsWith("field:") ? field.slice("field:".length) : null);
+
 /** A register as read, for the sheet and header-row step and the mapping step. */
 export const registerSheet = z.object({
   /** Every sheet, with how many non-empty rows it has (a .csv has one, named after the file). */
@@ -56,7 +68,7 @@ export const registerSheet = z.object({
    * A field suggested for each column from its heading, in English or Arabic, with how
    * alike they are (0–100): a RegisterFieldId; null where nothing is (RP-639, story 8).
    */
-  suggestions: z.array(z.object({ field: z.string(), score: z.int().min(0).max(100) }).nullable()),
+  suggestions: z.array(z.object({ field: registerFieldId, score: z.int().min(0).max(100) }).nullable()),
 });
 export type RegisterSheet = z.infer<typeof registerSheet>;
 
@@ -65,15 +77,6 @@ const column = z.object({ column: z.int().min(0) });
 
 /** The longest Paper ref: the old paper number of a submittal still under review on paper (story 27). */
 export const paperRefMaxLength = 100;
-
-/**
- * The fields a column can fill (the Map fields step's choices, and the suggestions):
- * these, and `field:<key>` for a Form field of a mapped Type (registerFormFieldId).
- */
-export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "package", "paperRef", "assignTo"] as const;
-export type RegisterFieldId = (typeof registerFieldIds)[number] | `field:${string}`;
-/** A Form field's id among the fields a column can fill. */
-export const registerFormFieldId = (key: string): RegisterFieldId => `field:${key}`;
 
 /**
  * The Form field types a register fills (spec RP-631, "Values"): plain text, numbers,

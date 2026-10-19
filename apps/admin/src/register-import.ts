@@ -58,6 +58,26 @@ async function checkFor(trx: Trx, imported: AdminRegisterImportFor): Promise<voi
 }
 
 /**
+ * One step of an Engineer's import: one admin_action, `action` with the reason, run as the
+ * Member `actingAs` names (none: nobody is acted as, so the api's step finds nothing), and
+ * logged with the target and `after` that `log` says of its result.
+ */
+function engineerStep<R>(
+  adminDb: Db,
+  context: { engineerId: string; action: AdminActionTable["action"]; reason: string },
+  actingAs: (trx: Trx) => Promise<string | null>,
+  log: (result: R) => { target: { kind: string; id: string | null }; after?: unknown },
+): RegisterImporter<R>["run"] {
+  return (fn) =>
+    asEngineer(adminDb, context, async (trx) => {
+      const member = await actingAs(trx);
+      if (member) await actAs(trx, member);
+      const result = await fn(trx);
+      return { ...log(result), result };
+    });
+}
+
+/**
  * The Engineer importing for a Participant as its default Member: each step one
  * admin_action, `action` with the reason, whose target the step's result names.
  */
@@ -68,18 +88,19 @@ function engineerImporter<R>(
   action: AdminActionTable["action"],
   targetOf: (result: R) => { kind: string; id: string | null } = () => ({ kind: "project", id: imported.projectId }),
   after: (result: R) => Record<string, unknown> = () => ({}),
-): RegisterImporter {
+): RegisterImporter<R> & { engineer: { id: string; participantId: string } } {
   return {
     engineer: { id: engineerId, participantId: imported.participantId },
-    run: <T>(fn: (trx: Trx) => Promise<T>) =>
-      asEngineer(adminDb, { engineerId, action, reason: imported.reason }, async (trx) => {
+    run: engineerStep<R>(
+      adminDb,
+      { engineerId, action, reason: imported.reason },
+      async (trx) => {
         await checkFor(trx, imported);
-        await actAs(trx, imported.defaultMemberId);
-        const result = await fn(trx);
-        const outcome = result as unknown as R;
-        // Whom it was for, never a time.
-        return { target: targetOf(outcome), after: { participantId: imported.participantId, defaultMemberId: imported.defaultMemberId, ...after(outcome) }, result };
-      }),
+        return imported.defaultMemberId;
+      },
+      // Whom it was for, never a time.
+      (result) => ({ target: targetOf(result), after: { participantId: imported.participantId, defaultMemberId: imported.defaultMemberId, ...after(result) } }),
+    ),
   };
 }
 
@@ -198,19 +219,21 @@ function ownImporter<R>(
   reason: string,
   action: AdminActionTable["action"],
   after?: (result: R) => unknown,
-): RegisterImporter {
+): RegisterImporter<R> {
   return {
-    engineer: { id: engineerId, participantId: null },
-    run: <T>(fn: (trx: Trx) => Promise<T>) =>
-      asEngineer(adminDb, { engineerId, action, reason }, async (trx) => {
+    engineer: { id: engineerId },
+    run: engineerStep<R>(
+      adminDb,
+      { engineerId, action, reason },
+      async (trx) => {
         const { rows } = await sql<{ default_member_id: string }>`
           select default_member_id from submittal_register_import where id = ${importId}::uuid and run_by_engineer_id = ${engineerId}::uuid
         `.execute(trx);
         // Not theirs: nobody is acted as, so the api's steps find nothing.
-        if (rows[0]) await actAs(trx, rows[0].default_member_id);
-        const result = await fn(trx);
-        return { target: { kind: "submittal_register_import", id: importId }, after: after?.(result as unknown as R), result };
-      }),
+        return rows[0]?.default_member_id ?? null;
+      },
+      (result) => ({ target: { kind: "submittal_register_import", id: importId }, after: after?.(result) }),
+    ),
   };
 }
 

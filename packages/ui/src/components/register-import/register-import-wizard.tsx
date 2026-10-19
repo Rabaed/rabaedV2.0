@@ -2,8 +2,11 @@
 
 import {
   formatNumber,
+  registerFormFieldId,
+  registerFormFieldKey,
   registerImportMaxBytes,
   type BilingualText,
+  type RegisterFieldId,
   type Locale,
   type RegisterImport,
   type RegisterImportFields,
@@ -79,8 +82,8 @@ type Source = { from: "column"; column: number | null } | { from: "value"; value
 
 type Uploaded = RegisterImportFile & { sizeBytes: number };
 
-/** The optional fields a column fills besides Subject, Type and Trade: Scopes, Location, Paper ref, `field:<key>`. */
-type OtherField = string;
+/** The optional fields a column fills besides Subject, Type and Trade: Scopes, Location, Paper ref, a Form field's. */
+type OtherField = Exclude<RegisterFieldId, "subject" | "type" | "trade">;
 
 /** The values matched by hand on Map values: by field (`type`, `trade`, `location`, `scopes`, `field:<key>`), by the value's key. */
 type Matches = Record<string, Record<string, string>>;
@@ -137,7 +140,8 @@ function base64Of(file: File): Promise<string> {
 /** Whether a field's values are matched to the Project's on Map values: the Type, Trade, Location, Scopes and choice fields. */
 function matchesValues(field: string, fields: RegisterImportFields): boolean {
   if (field === "type" || field === "trade" || field === "location" || field === "scopes") return true;
-  const form = field.startsWith("field:") ? fields.formFields.find((f) => `field:${f.key}` === field) : undefined;
+  const key = registerFormFieldKey(field);
+  const form = key === null ? undefined : fields.formFields.find((f) => f.key === key);
   return form !== undefined && (form.type === "select" || form.type === "multi_select" || form.type === "option_list");
 }
 
@@ -224,8 +228,9 @@ export function RegisterImportWizard({
 
   /** A field's name on the Map fields step: Subject, Type… or "Form · its label (its Types)". */
   const fieldName = (field: string): string => {
-    if (!field.startsWith("field:")) return t(`fields.${field}`);
-    const form = fields.formFields.find((f) => `field:${f.key}` === field);
+    const key = registerFormFieldKey(field);
+    if (key === null) return t(`fields.${field}`);
+    const form = fields.formFields.find((f) => f.key === key);
     return form ? t("map.formField", { label: form.label[locale], types: form.types.join(" · ") }) : field;
   };
 
@@ -283,7 +288,7 @@ export function RegisterImportWizard({
     }
     for (const f of m.fields ?? []) {
       const column = inSheet(f);
-      if (column !== null) rest[column] = `field:${f.key}`;
+      if (column !== null) rest[column] = registerFormFieldId(f.key);
     }
     setOthers(rest);
     // Every value column's values matched again on Map values, as Map fields ticks them.
@@ -298,7 +303,7 @@ export function RegisterImportWizard({
       ...(mappedValues.location ? { location: mappedValues.location } : {}),
       ...(mappedValues.scopes ? { scopes: mappedValues.scopes } : {}),
       ...(mappedValues.package ? { package: mappedValues.package } : {}),
-      ...Object.fromEntries(Object.entries(mappedValues.fields ?? {}).map(([key, byHand]) => [`field:${key}`, byHand])),
+      ...Object.fromEntries(Object.entries(mappedValues.fields ?? {}).map(([key, byHand]) => [registerFormFieldId(key), byHand])),
     });
     setDefaultAssignee(m.assign?.default ?? null);
     setRules(m.assign?.rules ?? []);
@@ -381,11 +386,15 @@ export function RegisterImportWizard({
       const entry = Object.entries(others).find(([, f]) => f === field);
       return entry ? { column: Number(entry[0]) } : undefined;
     };
-    const formFields = Object.entries(others)
-      .filter(([, f]) => f.startsWith("field:"))
-      .map(([column, f]) => ({ key: f.slice("field:".length), column: Number(column) }));
+    const formFields = Object.entries(others).flatMap(([column, f]) => {
+      const key = registerFormFieldKey(f);
+      return key === null ? [] : [{ key, column: Number(column) }];
+    });
     const byHand = (field: string) => (Object.keys(matches[field] ?? {}).length > 0 ? matches[field] : undefined);
-    const fieldMatches = Object.fromEntries(formFields.flatMap((f) => (byHand(`field:${f.key}`) ? [[f.key, byHand(`field:${f.key}`)!]] : [])));
+    const fieldMatches = Object.fromEntries(formFields.flatMap((f) => {
+      const matched = byHand(registerFormFieldId(f.key));
+      return matched ? [[f.key, matched]] : [];
+    }));
     const valueMatches = {
       ...(byHand("type") ? { type: byHand("type") } : {}),
       ...(byHand("trade") ? { trade: byHand("trade") } : {}),
@@ -585,7 +594,7 @@ export function RegisterImportWizard({
     { value: "package", label: t("fields.package") },
     { value: "paperRef", label: t("fields.paperRef") },
     { value: "assignTo", label: t("fields.assignTo") },
-    ...fields.formFields.map((f) => ({ value: `field:${f.key}`, label: fieldName(`field:${f.key}`) })),
+    ...fields.formFields.map((f) => ({ value: registerFormFieldId(f.key), label: fieldName(registerFormFieldId(f.key)) })),
   ];
 
   /** The Project's values a value field's value may be matched to, as Map values offers them. */
@@ -597,7 +606,7 @@ export function RegisterImportWizard({
       const tradeName = (id: string) => fields.trades.find((tr) => tr.id === id)?.name[locale] ?? "";
       return fields.scopes.map((s) => ({ value: s.id, label: `${s.name[locale]} · ${tradeName(s.tradeId)}` }));
     }
-    const form = fields.formFields.find((f) => `field:${f.key}` === field);
+    const form = fields.formFields.find((f) => f.key === registerFormFieldKey(field));
     return (form?.options ?? []).map((o) => ({ value: o.value, label: o.label[locale] }));
   };
 

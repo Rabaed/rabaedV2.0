@@ -50,15 +50,12 @@ type Trx = Transaction<Database>;
  * Who imports, and the transaction an import step runs in, with `app.member_id` set:
  * the Member importing (memberImporter), or the default Member a Rabaed Engineer imports
  * for (Rabaed Admin, which logs each step as an admin_action with the Engineer's reason).
- * Each step runs exactly one transaction.
+ * Each step runs exactly one transaction, answering an `R` (what Rabaed Admin logs of it).
  */
-export interface RegisterImporter {
-  run<T>(fn: (trx: Trx) => Promise<T>): Promise<T>;
-  /**
-   * The Rabaed Engineer and the Participant they import for (null once the import names it:
-   * reading or confirming their own); null for a Member's own import.
-   */
-  engineer: { id: string; participantId: string | null } | null;
+export interface RegisterImporter<R = unknown> {
+  run<T extends R>(fn: (trx: Trx) => Promise<T>): Promise<T>;
+  /** The Rabaed Engineer importing; null for a Member's own import. */
+  engineer: { id: string } | null;
   /**
    * Where a preview's original register is kept, under the Project's prefix (RP-644, story 34):
    * the api's file store. Rabaed Admin has none, so an Engineer's import keeps no original.
@@ -66,8 +63,14 @@ export interface RegisterImporter {
   files?: FileStore;
 }
 
+/**
+ * An importer who previews: a Rabaed Engineer names the Participant they import for (reading
+ * or confirming their own import, the import names it); a Member imports for their own.
+ */
+export type PreviewingImporter = RegisterImporter<PreviewRegisterImportResult> & { engineer: { id: string; participantId: string } | null };
+
 /** A Member importing their own Company's register: each step one transaction as them, through row-level security. */
-export const memberImporter = (db: Db, memberId: string, files?: FileStore): RegisterImporter => ({
+export const memberImporter = (db: Db, memberId: string, files?: FileStore): RegisterImporter & { engineer: null } => ({
   run: (fn) => withMember(db, memberId, fn),
   engineer: null,
   ...(files ? { files } : {}),
@@ -208,7 +211,7 @@ export function registerImportValues(importer: RegisterImporter, projectId: stri
  * the Project.
  */
 export function previewRegisterImport(
-  importer: RegisterImporter,
+  importer: PreviewingImporter,
   projectId: string,
   request: PreviewRegisterImportRequest,
   now: Date,
@@ -226,7 +229,6 @@ export function previewRegisterImport(
         ${JSON.stringify(mapping)}::jsonb, ${JSON.stringify(mappedRows(table, mapping, context))}::jsonb,
         ${"value" in mapping.type ? mapping.type.value : null}, ${"value" in mapping.trade ? mapping.trade.value : null}::uuid, ${now}`;
     const { engineer } = importer;
-    if (engineer && !engineer.participantId) throw new Error("An Engineer's preview names the Participant it is for");
     const { rows } = await (
       engineer
         ? sql<{ outcome: string; import_id: string | null }>`
@@ -494,7 +496,7 @@ function packagesOfRows(rows: RegisterImport["rows"]): RegisterImport["packages"
 }
 
 /** Creates the Drafts of the importer's own preview: one per good row, all or nothing. */
-export function confirmRegisterImport(importer: RegisterImporter, importId: string, now: Date): Promise<ConfirmRegisterImportResult> {
+export function confirmRegisterImport(importer: RegisterImporter<ConfirmRegisterImportResult>, importId: string, now: Date): Promise<ConfirmRegisterImportResult> {
   return importer.run(async (trx): Promise<ConfirmRegisterImportResult> => {
     const { engineer } = importer;
     const { rows } = await (

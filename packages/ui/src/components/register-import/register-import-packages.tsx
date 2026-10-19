@@ -8,7 +8,7 @@ import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Select } from "../form/select.tsx";
 import { Icon } from "../icon/icon.tsx";
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
-import { within } from "./register-import-rows.tsx";
+import { packageLabel, within } from "./register-import-rows.tsx";
 
 // The Packages card of the wizard's Assign & packages step (RP-644, spec RP-631 stories 28–31;
 // the owner's design RP-634 › Assign & packages › Packages): no Package, one Package for the
@@ -56,11 +56,10 @@ export function PackagesCard({
   const t = within(messages, "packages");
   const open = packages.filter((k) => k.status === "open");
   const byId = new Map(packages.map((k) => [k.id, k]));
-  const label = (k: RegisterImportPackage) => `${k.number} · ${k.name[locale]}`;
   /** The Open Packages to choose from, and the chosen one when it no longer is Open (to show it). */
   const optionsWith = (chosen: string | null) => {
     const shown = chosen && !open.some((k) => k.id === chosen) && byId.has(chosen) ? [byId.get(chosen)!, ...open] : open;
-    return shown.map((k) => ({ value: k.id, label: label(k) }));
+    return shown.map((k) => ({ value: k.id, label: packageLabel(k, locale) }));
   };
   const statusBadge = (id: string | null) => {
     const pkg = id ? byId.get(id) : undefined;

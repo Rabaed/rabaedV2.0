@@ -4,6 +4,7 @@ import {
   isBuiltInField,
   matchRegisterValue,
   registerFormFieldId,
+  registerFormFieldKey,
   registerFormFieldTypes,
   registerMatchKey,
   splitRegisterValues,
@@ -15,6 +16,7 @@ import {
   type OptionList,
   type OptionNode,
   type RegisterCandidate,
+  type RegisterFieldId,
   type RegisterFieldTarget,
   type RegisterFormFieldType,
   type RegisterImportFields,
@@ -222,7 +224,7 @@ export async function savedMappingsOf(trx: Trx, projectId: string): Promise<Regi
 }
 
 /** The headings that name each field a column can fill, in English and Arabic: the Built-in ones first. */
-const builtInTargets: RegisterFieldTarget[] = [
+const builtInTargets: RegisterFieldTarget<RegisterFieldId>[] = [
   { field: "subject", names: ["Subject", "Description", "Submittal", "Item", "الموضوع", "الوصف", "البند", "العنوان"] },
   { field: "type", names: ["Type", "Submittal type", "Work Item Type", "النوع", "نوع التقديم"] },
   // eslint-disable-next-line rabaed/no-avoid-terms -- a heading registers use for the Trade, matched to it, never shown
@@ -235,7 +237,7 @@ const builtInTargets: RegisterFieldTarget[] = [
 ];
 
 /** Every field a column can fill on the Project, with the headings that name it. */
-export function fieldTargets(context: RegisterContext): RegisterFieldTarget[] {
+export function fieldTargets(context: RegisterContext): RegisterFieldTarget<RegisterFieldId>[] {
   return [
     ...builtInTargets,
     ...[...context.fillable.values()].map(({ field }) => ({
@@ -468,7 +470,8 @@ function valueCandidates(field: string, context: RegisterContext): RegisterCandi
   if (field === "location") return context.locations;
   if (field === "scopes") return context.scopes.map((s) => ({ id: s.id, names: named(s.name) }));
   if (field === "assignTo") return context.assignees;
-  const fillable = context.fillable.get(field.slice("field:".length));
+  const key = registerFormFieldKey(field);
+  const fillable = key === null ? undefined : context.fillable.get(key);
   return fillable ? fieldCandidates(fillable.field, context) : [];
 }
 
