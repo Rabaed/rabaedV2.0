@@ -290,6 +290,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             projectId={item.projectId}
             schema={form.schema}
             optionLists={optionLists}
+            documents={documents.documents}
             locale={locale}
           />
         )}

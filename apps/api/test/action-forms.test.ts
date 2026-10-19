@@ -104,8 +104,10 @@ beforeAll(async () => {
 
 describe("publish check 7", () => {
   it("passes every published Workflow Version: each Action Form is a valid Form schema", async () => {
-    const { rows } = await sql<{ key: string; actionForm: unknown }>`
-      select v.id || '/' || tr.key as key, tr.action_form as "actionForm"
+    const { rows } = await sql<{ key: string; actionForm: unknown; screen: boolean }>`
+      select v.id || '/' || tr.key as key, tr.action_form as "actionForm",
+        -- A Transition naming a Screen keeps its copy, which may hold the Screen's files (ADR 0024).
+        tr.screen_key is not null as screen
       from workflow_transition tr join workflow_version v on v.id = tr.workflow_version_id
       where v.status = 'published'
       order by v.id, tr.sort
