@@ -34,11 +34,18 @@ export async function ModuleWorkItemsPage({
     const [me, project, packages, raisable] = await Promise.all([getMe(), getProject(projectId), getPackages(projectId), getRaisableTypes(projectId, module)]);
     if (!me) return redirect({ href: "/sign-in", locale });
     if (!project || !packages) notFound();
+    // The filter fields' names in the other language, small after each (RP-953, as the List's).
+    const otherBoard = await getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "packages.board" });
     return (
       <>
         <h1 className="sr-only">{tabs(module)}</h1>
         {/* "+ New Package" for a Member who may raise a Submittals Type: a Package holds their Participant's submittals (the API checks again). */}
-        <PackagesBoardView packages={packages.packages} projectId={project.id} canCreate={(raisable?.types.length ?? 0) > 0} />
+        <PackagesBoardView
+          packages={packages.packages}
+          projectId={project.id}
+          canCreate={(raisable?.types.length ?? 0) > 0}
+          hints={{ trade: otherBoard("trade"), company: otherBoard("company") }}
+        />
       </>
     );
   }

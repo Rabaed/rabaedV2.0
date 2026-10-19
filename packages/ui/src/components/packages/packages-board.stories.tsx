@@ -1,4 +1,5 @@
-import type { PackageSummary } from "@rabaed/domain";
+import type { PackageSummary, PackagesFilter } from "@rabaed/domain";
+import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
@@ -19,6 +20,9 @@ const labelsOf = (context: { globals: Record<string, unknown> }) => packagesBoar
 const project = "00000000-0000-4000-8000-000000000100";
 const alFuttaim = { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: b("Al Futtaim Contracting", "شركة الفطيم للمقاولات") };
 const nesma = { participantId: "00000000-0000-4000-8000-0000000000a2", companyName: b("Nesma & Partners", "نسما وشركاه") };
+const electrical = { id: "00000000-0000-4000-8000-0000000000e1", code: "EL", name: b("Electrical", "الكهرباء") };
+const mechanical = { id: "00000000-0000-4000-8000-0000000000e2", code: "ME", name: b("Mechanical", "الميكانيكا") };
+const architectural = { id: "00000000-0000-4000-8000-0000000000e3", code: "AR", name: b("Architectural", "المعماري") };
 const pkg = (n: number, rest: Partial<PackageSummary>): PackageSummary => ({
   id: `00000000-0000-4000-8000-0000000000f${n}`,
   projectId: project,
@@ -26,15 +30,16 @@ const pkg = (n: number, rest: Partial<PackageSummary>): PackageSummary => ({
   name: b(`Package ${n}`, `الحزمة ${n}`),
   status: "in_progress",
   owner: alFuttaim,
+  trades: [],
   counts: { total: 0, open: 0, codes: {} },
   ...rest,
 });
 
-const bathrooms = pkg(1, { name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), status: "open", counts: { total: 3, open: 3, codes: {} } });
-const lighting = pkg(2, { name: b("Lighting – Podium", "الإنارة – المنصة"), counts: { total: 8, open: 5, codes: { A: 2, C: 1 } } });
+const bathrooms = pkg(1, { name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), status: "open", trades: [mechanical], counts: { total: 3, open: 3, codes: {} } });
+const lighting = pkg(2, { name: b("Lighting – Podium", "الإنارة – المنصة"), trades: [electrical], counts: { total: 8, open: 5, codes: { A: 2, C: 1 } } });
 // Another Contractor's own PKG-001: numbers count per owning Participant, so its Company shows beside it.
-const facade = pkg(3, { number: "PKG-001", name: b("Façade – Tower 2", "الواجهة – البرج 2"), owner: nesma, counts: { total: 4, open: 1, codes: { A: 1, B: 1, D: 1 } } });
-const lifts = pkg(4, { name: b("Lifts", "المصاعد"), status: "done", counts: { total: 2, open: 0, codes: { A: 1, B: 1 } } });
+const facade = pkg(3, { number: "PKG-001", name: b("Façade – Tower 2", "الواجهة – البرج 2"), owner: nesma, trades: [architectural], counts: { total: 4, open: 1, codes: { A: 1, B: 1, D: 1 } } });
+const lifts = pkg(4, { name: b("Lifts", "المصاعد"), status: "done", trades: [electrical, mechanical], counts: { total: 2, open: 0, codes: { A: 1, B: 1 } } });
 
 const meta = {
   title: "Packages/PackagesBoard",
@@ -195,5 +200,73 @@ export const NewPackageRefused: Story = {
     await userEvent.type(within(dialog).getByLabelText(new RegExp(escaped(l.nameAr))), "المطابخ");
     await userEvent.click(within(dialog).getByRole("button", { name: l.save }));
     await expect(await within(dialog).findByRole("alert")).toHaveTextContent(labels.refusals.project_closed!);
+  },
+};
+
+/** The board with its search and filters, kept as a page would keep them (its URL). */
+function FilteredBoard(props: Parameters<typeof PackagesBoard>[0]) {
+  const [filter, setFilter] = useState<PackagesFilter>(props.filter ?? { trade: [], company: [] });
+  return <PackagesBoard {...props} filter={filter} onFilterChange={setFilter} />;
+}
+const filterOf = (context: { globals: Record<string, unknown> }) => labelsOf(context).filter;
+const shownCards = (context: { canvasElement: HTMLElement }) =>
+  [...context.canvasElement.querySelectorAll<HTMLElement>("[data-package-card]")].map((a) => a.getAttribute("href"));
+
+/**
+ * The search (RP-953): by the PKG number, whatever its case, or by the name in either
+ * language; each column counts only the Packages it finds.
+ */
+export const Search: Story = {
+  render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
+  play: async (context) => {
+    const f = filterOf(context);
+    const search = () => context.canvas.getByRole("searchbox", { name: f.search });
+    await userEvent.type(search(), "pkg-001{Enter}");
+    await waitFor(() => expect(shownCards(context)).toEqual([`#${bathrooms.id}`, `#${facade.id}`]));
+    // A new search is a new box (its key), showing its own words.
+    await expect(search()).toHaveValue("pkg-001");
+    await userEvent.clear(search());
+    await userEvent.type(search(), "المنصة{Enter}");
+    await waitFor(() => expect(shownCards(context)).toEqual([`#${lighting.id}`]));
+    const l = labelsOf(context);
+    await expect(context.canvas.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([`${l.status.open}0`, `${l.status.in_progress}1`, `${l.status.done}0`]);
+  },
+};
+
+/**
+ * The Filter panel: Trade and owning Company, their choices only those of the Packages given
+ * (the viewer's), each once; a Trade keeps the Packages with a submittal of it.
+ */
+export const FilterByTradeAndCompany: Story = {
+  parameters: { overlay: true },
+  render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const f = filterOf(context);
+    await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(escaped(f.filters)) }));
+    const trades = await screen.findByRole("group", { name: f.trade });
+    const tradeNames = within(trades).getAllByRole("checkbox").map((c) => c.textContent);
+    await expect(tradeNames).toEqual([architectural, electrical, mechanical].map((t) => `${t.name[locale]} (${t.code})`));
+    await userEvent.click(within(trades).getByRole("checkbox", { name: new RegExp(escaped(electrical.name[locale])) }));
+    await waitFor(() => expect(shownCards(context)).toEqual([`#${lighting.id}`, `#${lifts.id}`]));
+    await userEvent.click(await screen.findByRole("tab", { name: new RegExp(escaped(f.company)) }));
+    const companies = await screen.findByRole("group", { name: f.company });
+    await expect(within(companies).getAllByRole("checkbox")).toHaveLength(2);
+    await userEvent.click(within(companies).getByRole("checkbox", { name: nesma.companyName[locale] }));
+    await waitFor(() => expect(context.canvas.getByRole("heading", { name: f.noMatchesTitle })).toBeVisible());
+  },
+};
+
+/** Nothing found: one message, and the × clears the search and every filter. */
+export const NoMatches: Story = {
+  args: { filter: { q: "zzz", trade: [], company: [] } },
+  render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
+  play: async (context) => {
+    const f = filterOf(context);
+    await expect(context.canvas.getByRole("heading", { name: f.noMatchesTitle })).toBeVisible();
+    await expect(context.canvas.queryByRole("region", { name: labelsOf(context).board })).toBeNull();
+    await userEvent.click(context.canvas.getByRole("button", { name: f.clear }));
+    await waitFor(() => expect(shownCards(context)).toHaveLength(4));
+    await expect(context.canvas.getByRole("searchbox", { name: f.search })).toHaveValue("");
   },
 };

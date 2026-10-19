@@ -1,12 +1,26 @@
 "use client";
 
-import { formatNumber, packageStatuses, type BilingualText, type Locale, type PackageStatus, type PackageSummary } from "@rabaed/domain";
+import {
+  filterPackages,
+  formatNumber,
+  packageFilterChoices,
+  packageStatuses,
+  type BilingualText,
+  type Locale,
+  type PackageStatus,
+  type PackageSummary,
+  type PackagesFilter,
+} from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { Avatar, CompanyChip } from "../data/avatar.tsx";
 import { Badge } from "../data/badge.tsx";
-import { CompanyChip } from "../data/avatar.tsx";
+import { EmptyState } from "../feedback/states.tsx";
 import { focusRing } from "../form/control-styles.ts";
-import { ListToolbar } from "../list/list-toolbar.tsx";
+import { Icon } from "../icon/icon.tsx";
+import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
+import { ListToolbar, ToolbarSearch } from "../list/list-toolbar.tsx";
+import { tradeChipClass } from "../views/kanban-card.tsx";
 import { NewPackageDialog, type NewPackageLabels } from "./package-dialogs.tsx";
 
 // The Packages view of the Submittals (RP-660, spec RP-616 stories 24, 29–33; reference: the
@@ -16,6 +30,42 @@ import { NewPackageDialog, type NewPackageLabels } from "./package-dialogs.tsx";
 // owning Participant, so two Companies' Packages can both be PKG-001), its name, status and the
 // viewer's counts, as the board API gives them (RP-641): of the submittals they see only. No
 // dates, ever. Presentational: the view reads the Packages and makes the calls.
+//
+// Search and filters (RP-953, design/prompts/packages.md "1. Packages view"): the search box
+// finds a Package by its PKG number or its name in either language; the Filter panel narrows by
+// Trade and by owning Company, as the List's does. Their choices come from the Packages given
+// only (packageFilterChoices): the Trades of the submittals the viewer sees in them, and their
+// owners, so no choice names a Trade or a Company the viewer sees nothing of.
+
+/** The search and Filter panel's words. */
+export type PackagesFilterLabels = {
+  /** The search box's name. */
+  search: string;
+  searchPlaceholder: string;
+  /** What the search looks in, read with the box. */
+  searchHelp: string;
+  /** The Filter button's and panel's name. */
+  filters: string;
+  clearAll: string;
+  done: string;
+  /** The × beside the Filter button: clears the search and every filter. */
+  clear: string;
+  /** Clears one field. */
+  clearField: string;
+  /** A field's value search. */
+  searchValues: string;
+  /** When a field's value search finds nothing. */
+  noMatches: string;
+  /** The panel's footer: `n` written for the locale; `count` chooses the plural. */
+  applied: (n: string, count: number) => string;
+  trade: string;
+  company: string;
+  /** Each field's name in the other language, small after it. */
+  hints?: { trade?: string; company?: string };
+  /** When the search and filters leave no Package. */
+  noMatchesTitle: string;
+  noMatchesBody: string;
+};
 
 export type PackagesBoardLabels = {
   /** The board's name, e.g. "Packages". */
@@ -37,6 +87,7 @@ export type PackagesBoardLabels = {
   /** A refused create, by the API's error code, and `unavailable` for any other. */
   refusals: Record<string, string> & { unavailable: string };
   create: NewPackageLabels;
+  filter: PackagesFilterLabels;
 };
 
 export type PackagesBoardProps = {
@@ -51,7 +102,13 @@ export type PackagesBoardProps = {
   viewSwitch?: ReactNode;
   /** "+ New Package", for a Member whose Company can build one; none, no button. */
   onCreate?: (name: BilingualText) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** The search and filters the page keeps (its URL); none, nothing narrowed. */
+  filter?: PackagesFilter;
+  /** Asked for with the new search and filters; none, no search box or Filter button. */
+  onFilterChange?: (filter: PackagesFilter) => void;
 };
+
+const noFilter: PackagesFilter = { trade: [], company: [] };
 
 const statusTone = { open: "neutral", in_progress: "info", done: "success" } as const;
 const statusDot = { open: "bg-neutral-fg", in_progress: "bg-info-fg", done: "bg-success" } as const;
@@ -63,16 +120,162 @@ const codeColour: Record<string, string> = {
   D: "bg-code-d-bg text-code-d-fg",
 };
 
-export function PackagesBoard({ packages, locale, labels, packageHref, linkAs: Link = "a", viewSwitch, onCreate }: PackagesBoardProps) {
+export function PackagesBoard({
+  packages: all,
+  locale,
+  labels,
+  packageHref,
+  linkAs: Link = "a",
+  viewSwitch,
+  onCreate,
+  filter = noFilter,
+  onFilterChange,
+}: PackagesBoardProps) {
   const n = (value: number) => formatNumber(value, locale);
-  const toolbar = viewSwitch !== undefined || onCreate !== undefined;
+  const toolbar = viewSwitch !== undefined || onCreate !== undefined || onFilterChange !== undefined;
+  const packages = filterPackages(all, filter);
+  const narrowed = filter.q !== undefined || filter.trade.length > 0 || filter.company.length > 0;
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {toolbar && (
         <ListToolbar label={labels.toolbar} end={viewSwitch}>
           {onCreate && <NewPackageDialog labels={labels.create} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onCreate={onCreate} />}
+          {onFilterChange && (
+            <PackagesFilterControls packages={all} filter={filter} narrowed={narrowed} locale={locale} labels={labels.filter} close={labels.close} onChange={onFilterChange} />
+          )}
         </ListToolbar>
       )}
+      {narrowed && packages.length === 0 ? (
+        <EmptyState icon="search" title={labels.filter.noMatchesTitle}>
+          {labels.filter.noMatchesBody}
+        </EmptyState>
+      ) : (
+        <PackageColumns packages={packages} locale={locale} labels={labels} packageHref={packageHref} linkAs={Link} n={n} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The search box and the Filter button with its Trade and owning Company fields, then a × that
+ * clears them all while any is on; each change asked for at once.
+ */
+function PackagesFilterControls({
+  packages,
+  filter,
+  narrowed,
+  locale,
+  labels,
+  close,
+  onChange,
+}: {
+  packages: PackageSummary[];
+  filter: PackagesFilter;
+  narrowed: boolean;
+  locale: Locale;
+  labels: PackagesFilterLabels;
+  /** The Filter sheet's close button. */
+  close: string;
+  onChange: (filter: PackagesFilter) => void;
+}) {
+  const n = (value: number) => formatNumber(value, locale);
+  const choices = packageFilterChoices(packages, locale);
+  const valueLabels = { clear: labels.clearField, search: labels.searchValues, noMatches: labels.noMatches };
+  const field = (key: "trade" | "company", options: FilterChoice[]): FilterMenuField => ({
+    key,
+    label: labels[key],
+    hint: labels.hints?.[key],
+    count: filter[key].length,
+    content: (
+      <FilterValues
+        label={labels[key]}
+        hint={labels.hints?.[key]}
+        values={filter[key]}
+        choices={options}
+        labels={valueLabels}
+        onChange={(values) => onChange({ ...filter, [key]: values })}
+      />
+    ),
+  });
+  const filtered = filter.trade.length > 0 || filter.company.length > 0;
+  return (
+    <>
+      <ToolbarSearch
+        tall
+        // A new filter (back button, the ×) shows its own words.
+        key={filter.q ?? ""}
+        value={filter.q}
+        label={labels.search}
+        placeholder={labels.searchPlaceholder}
+        description={labels.searchHelp}
+        maxLength={100}
+        onSearch={(q) => onChange({ ...filter, q })}
+      />
+      <span className="inline-flex shrink-0 items-center">
+        <FilterMenu
+          triggerClassName={narrowed ? "rounded-e-none" : undefined}
+          fields={[
+            field(
+              "trade",
+              choices.trades.map((v) => ({
+                value: v.id,
+                text: `${v.name[locale]} ${v.code}`,
+                label: (
+                  <span className={cn("inline-flex h-5 items-center rounded-[6px] px-1.5 text-notes font-semibold", tradeChipClass(v.code))}>
+                    {v.name[locale]} (<bdi translate="no">{v.code}</bdi>)
+                  </span>
+                ),
+              })),
+            ),
+            // Each owning Company by its name only (V14).
+            field(
+              "company",
+              choices.companies.map((c) => ({
+                value: c.participantId,
+                label: c.companyName[locale],
+                mark: <Avatar name={c.companyName[locale]} initialsFrom={c.companyName.en} kind="company" size="sm" decorative className="size-5" />,
+              })),
+            ),
+          ]}
+          labels={{ filters: labels.filters, clearAll: labels.clearAll, done: labels.done, close, applied: labels.applied, number: n }}
+          onClearAll={filtered ? () => onChange({ ...filter, trade: [], company: [] }) : undefined}
+        />
+        {narrowed && (
+          <button
+            type="button"
+            aria-label={labels.clear}
+            title={labels.clear}
+            onClick={() => onChange(noFilter)}
+            className={cn(
+              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-control-border bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
+              focusRing,
+            )}
+          >
+            <Icon name="x" size={16} />
+          </button>
+        )}
+      </span>
+    </>
+  );
+}
+
+/** The three columns, Open, In Progress and Done, each with its count and cards. */
+function PackageColumns({
+  packages,
+  locale,
+  labels,
+  packageHref,
+  linkAs: Link,
+  n,
+}: {
+  packages: PackageSummary[];
+  locale: Locale;
+  labels: PackagesBoardLabels;
+  packageHref: (id: string) => string;
+  linkAs: ElementType;
+  n: (value: number) => string;
+}) {
+  return (
       <section
         aria-label={labels.board}
         // Focusable, so the board can be scrolled with the keyboard.
@@ -107,7 +310,6 @@ export function PackagesBoard({ packages, locale, labels, packageHref, linkAs: L
           })}
         </ol>
       </section>
-    </div>
   );
 }
 

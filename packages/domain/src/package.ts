@@ -33,6 +33,10 @@ export const packageCounts = z.object({
 });
 export type PackageCounts = z.infer<typeof packageCounts>;
 
+/** A Trade, as a Package names it (the shape of a Work Item's Trade; work-item.ts imports this file). */
+export const packageTrade = z.object({ id: z.uuid(), code: z.string(), name: bilingualText });
+export type PackageTrade = z.infer<typeof packageTrade>;
+
 /**
  * A Package as the board shows it (RP-641): what every Member who sees it reads. Its
  * status comes from all its submittals, one word for everyone (spec RP-616 "Status");
@@ -47,6 +51,11 @@ export const packageSummary = z.object({
   status: packageStatus,
   /** The owning Participant, by its Company's name only (V14), for every viewer. */
   owner: z.object({ participantId: z.uuid(), companyName: bilingualText }),
+  /**
+   * The Trades of the submittals in it the viewer sees (RP-953), in the Project's order of
+   * Trades: what the Packages view's Trade filter matches. Never a Trade of one they don't see.
+   */
+  trades: z.array(packageTrade),
   counts: packageCounts,
 });
 export type PackageSummary = z.infer<typeof packageSummary>;

@@ -9,6 +9,7 @@ import {
   type PackageNotReadyReason,
   type PackageStatus,
   type PackageSummary,
+  type PackageTrade,
   type SubmitPackageRequest,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
@@ -60,6 +61,7 @@ type SummaryRow = {
   codes: Record<string, number>;
   /** Whether the viewer is of the owning Participant: only they may change it. */
   owned: boolean;
+  trades: PackageTrade[];
 };
 
 /**
@@ -74,11 +76,23 @@ async function summaryRows(trx: Trx, where: { projectId: string } | { packageId:
   const { rows } = await sql<SummaryRow>`
     select k.id, k.project_id, k.participant_id, k.seq, k.name, k.status, o.name as company_name,
       coalesce(s.total, 0) as total, coalesce(s.open, 0) as open, coalesce(s.codes, '{}'::jsonb) as codes,
-      app.owns_package(k.id) as owned
+      app.owns_package(k.id) as owned, tr.trades
     from package k
     -- The owning Participant's Company by name only (V14).
     cross join lateral (select app.package_owner_name(k.id) as name) o
     left join lateral app.package_summary(k.id) s on true
+    -- The Trades of the items the page lists (RP-953): the latest of each chain the viewer sees,
+    -- each Trade as the viewer may know it (work_item_dimension_value_seen, V19), in the Project's order.
+    cross join lateral (
+      select coalesce(jsonb_agg(jsonb_build_object('id', v.id, 'code', v.code, 'name', v.name) order by v.sort, v.code, v.id), '[]'::jsonb) as trades
+      from dimension_value v
+      join visibility_dimension d on d.id = v.dimension_id and d.kind = 'trade'
+      where v.id in (
+        select tdv.dimension_value_id
+        from app.package_latest_items(k.id) l
+        join work_item_dimension_value_seen tdv on tdv.work_item_id = l.work_item_id and tdv.dimension_id = d.id
+      )
+    ) tr
     where ${condition}
     order by o.name ->> 'en', k.participant_id, k.seq, k.id
   `.execute(trx);
@@ -92,6 +106,7 @@ const toSummary = (r: SummaryRow): PackageSummary => ({
   name: r.name,
   status: r.status,
   owner: { participantId: r.participant_id, companyName: r.company_name },
+  trades: r.trades,
   counts: { total: r.total, open: r.open, codes: r.codes },
 });
 

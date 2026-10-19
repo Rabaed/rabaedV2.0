@@ -9,7 +9,16 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { PackageComments, PackageDetail, PackageSummary, WorkItemDetail, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
+import {
+  filterPackages,
+  packageFilterChoices,
+  type PackageComments,
+  type PackageDetail,
+  type PackageSummary,
+  type WorkItemDetail,
+  type WorkItemHistory,
+  type WorkItemRow,
+} from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { demoSignaturePng } from "../src/demo/demo-signature.ts";
@@ -660,7 +669,10 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
   });
 
   it("RP-588-2: K1's PM (Visibility all) reads 8; its engineer narrowed to Electrical reads 6 and the status, never the Mechanical items", async () => {
-    const summary = (counts: PackageSummary["counts"]): PackageSummary => ({
+    // The Trades of the items each reads (RP-953), in the Project's order of Trades.
+    const projectTrades = (await getPackage(at.c1Pm, pkg.id)).filters.trades;
+    const tradesOf = (...ids: string[]) => projectTrades.filter((t) => ids.includes(t.id));
+    const summary = (counts: PackageSummary["counts"], trades = tradesOf(at.electrical, at.mechanical)): PackageSummary => ({
       id: pkg.id,
       projectId: at.projectId,
       number: pkg.number,
@@ -668,6 +680,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       status: "in_progress",
       // The owner by its Company's name, for every viewer (V14).
       owner: { participantId: at.c1ParticipantId, companyName: c1Name },
+      trades,
       counts,
     });
     const all = summary({ total: 8, open: 6, codes: { A: 1, C: 1 } });
@@ -678,7 +691,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       expect(p.items).toHaveLength(8);
     }
 
-    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } });
+    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } }, tradesOf(at.electrical));
     expect(await boardEntry(k1Electrical)).toEqual(narrowed);
     const p = await getPackage(k1Electrical, pkg.id);
     expect(p).toMatchObject(narrowed);
@@ -693,6 +706,37 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     // Each Electrical item's row names its Package for them too.
     const rowsSeen = await listed(k1Electrical);
     for (const id of electricalItems) expect(rowsSeen.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Plant room – Tower 1") });
+  });
+
+  it("RP-953-1: an engineer narrowed to Electrical gets no Mechanical-only Trade choice, and no Package or owning Company they can't see", async () => {
+    // A Mechanical-only Package of C1, Submitted: K1's manager sees it, the Electrical engineer nothing of it.
+    const mechanicalOnly = await createPackage(at.c1Pm, "Chillers – Tower 1");
+    await ok(addItem(at.c1Pm, mechanicalOnly.id, await readyForPm("Chillers ME 1", at.mechanical)));
+    await ok(submitPackage(at.c1Pm, mechanicalOnly.id), 200);
+    // C2's Open Package: C2's alone (RP-588-1), so C2 is no owning Company K1 may filter by.
+    const c2Open = await createPackage(c2Engineer, "C2's chillers");
+
+    const managers = await listPackages(at.k1Manager);
+    expect(managers.map((p) => p.id)).toContain(mechanicalOnly.id);
+    expect(packageFilterChoices(managers, "en").trades.map((t) => t.id)).toContain(at.mechanical);
+
+    const listed = await listPackages(k1Electrical);
+    const ids = listed.map((p) => p.id);
+    expect(ids).toContain(pkg.id);
+    expect(ids).not.toContain(mechanicalOnly.id);
+    expect(ids).not.toContain(c2Open.id);
+    // Each Package's Trades are those of the items the engineer sees: Electrical only.
+    for (const p of listed) expect(p.trades.map((t) => t.id)).toEqual([at.electrical]);
+    const choices = packageFilterChoices(listed, "en");
+    expect(choices.trades.map((t) => t.id)).toEqual([at.electrical]);
+    expect(choices.companies).toEqual([{ participantId: at.c1ParticipantId, companyName: c1Name }]);
+    const body = (await k1Electrical.get(`/v1/projects/${at.projectId}/packages`)).body;
+    for (const text of [at.mechanical, mechanicalOnly.id, "Chillers", "C2's"]) expect(body).not.toContain(text);
+    // Filtering by Mechanical leaves them nothing; their search finds the Package by number and by either name.
+    expect(filterPackages(listed, { trade: [at.mechanical], company: [] })).toEqual([]);
+    for (const q of [pkg.number, "plant room", name("Plant room – Tower 1").ar]) {
+      expect(filterPackages(listed, { q, trade: [], company: [] }).map((p) => p.id)).toContain(pkg.id);
+    }
   });
 
   it("lists each item the viewer sees with its Document Number, Subject, Trade, 'With' whom and Review Code, as the List gives them", async () => {
