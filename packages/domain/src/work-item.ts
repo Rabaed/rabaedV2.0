@@ -679,6 +679,13 @@ export const workItemDetail = workItemSummary.extend({
   outcome: workItemOutcome.nullable(),
   closedAt: z.iso.datetime().nullable(),
   /**
+   * A closed item's Documental Record (RP-155): "preparing" while its job is waiting or
+   * running and its checks have not passed, "published" once it can be downloaded; null
+   * for an item with no record, one whose checks failed included (the item then shows no
+   * record, and Rabaed Admin is alerted).
+   */
+  documentalRecord: z.enum(["preparing", "published"]).nullable(),
+  /**
    * The Creation Date: when it got its Document Number, first leaving Draft. Only
    * for the raiser's Participant; null for everyone else and while in Draft. When
    * the Draft was started is never shown (visibility.md "Creation Date").

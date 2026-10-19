@@ -6,13 +6,22 @@ import { useState } from "react";
 
 /**
  * "Download PDF" on a closed item (RP-620, ADR 0023): its sealed Documental
- * Record, through the api's short-lived signed link. Until the record is made
- * the api answers 404 like any hidden thing; RP-155 adds "record being
- * prepared" from the item read.
+ * Record, through the api's short-lived signed link. The item read says where
+ * the record is (RP-155): "being prepared" while its job and checks run, the
+ * button once it is published, and nothing for an item with no record (its
+ * checks failed: Rabaed is alerted, and the item shows no record).
  */
-export function DownloadRecordButton({ workItemId }: { workItemId: string }) {
+export function DownloadRecordButton({ workItemId, status }: { workItemId: string; status: "preparing" | "published" | null }) {
   const t = useTranslations("documentalRecord");
   const [message, setMessage] = useState<string | null>(null);
+  if (status === null) return null;
+  if (status === "preparing") {
+    return (
+      <p role="status" className="text-sm text-muted">
+        {t("preparing")}
+      </p>
+    );
+  }
 
   async function download() {
     setMessage(null);

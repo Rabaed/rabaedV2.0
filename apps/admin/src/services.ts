@@ -3,6 +3,7 @@
 // admin service's HTTP sign-in. Never imported by the customer api itself
 // (apps/api/src/admin-boundary.test.ts checks).
 export { asEngineer } from "./admin-action.ts";
+export { listDocumentalRecordAlerts, reproduceDocumentalRecord, type DocumentalRecordAlert, type ReproduceResult } from "./documental-records.ts";
 export { createEngineer } from "./engineers.ts";
 export { publishFormVersion, rabaedDefaultFormId, type PublishFormResult } from "./forms.ts";
 export {

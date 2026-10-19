@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompiler, type ZodTypeProvider } from "fastify-type-provider-zod";
 import type { AdminConfig } from "./config.ts";
 import { companyRoutes } from "./routes/companies.ts";
+import { documentalRecordRoutes } from "./routes/documental-records.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { numberingRoutes } from "./routes/numbering.ts";
 import { workflowDefaultRoutes } from "./routes/workflow-defaults.ts";
@@ -163,5 +164,6 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   await app.register(workflowRoutes(context));
   await app.register(workflowDefaultRoutes(context));
   await app.register(registerImportRoutes(context));
+  await app.register(documentalRecordRoutes(context));
   return app;
 }

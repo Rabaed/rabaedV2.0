@@ -1,6 +1,7 @@
 import type { RecordFacts, TransitionFact } from "@rabaed/db";
 import { outcomeLook, type OutcomeLook } from "@rabaed/domain";
-import { formContent, isListedDocument, type RecordBlock, type RecordSection } from "./form-content.ts";
+import { formContent, isListedDocument, type RecordBlock, type RecordPhoto, type RecordSection } from "./form-content.ts";
+import { sectionsWithFingerprints, withFingerprints } from "./photo-fingerprints.ts";
 import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 
 // The Record Data (ADR 0023; workflow-engine.md §7; form-engine.md §6): one XML
@@ -15,6 +16,12 @@ import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 // Classification, Final decision, the reply's excerpt, the approval flow), the
 // Form's sections and the shared Documents. RP-650 adds Signatures, Stamps,
 // Review Comments and the endings; RP-147 the appendix.
+//
+// Each Form photo whose image the page prints also carries that image's fingerprint (a
+// `sha256` attribute, RP-155), so a Re-produce finds the same file again. It is not text on
+// the page: it fingerprints the picture the page prints. It is an additive attribute, so the
+// namespace stays at version 2 (a change that removes or renames what a reader depends on
+// bumps it).
 
 /** The layout version the Record Data is printed with (layout.ts). */
 export const LAYOUT_VERSION = "2";
@@ -135,6 +142,8 @@ export function recordDataOf(
   verification: RecordData["verification"],
   /** The page counts of the Documents, by storage key. */
   pageCounts: ReadonlyMap<string, number | null> = new Map(),
+  /** The SHA-256 (hex) of each Form photo's image the page prints, by storage key. */
+  fingerprints: ReadonlyMap<string, string> = new Map(),
 ): RecordData {
   const language = facts.recordLanguage;
   const path = recordPath(facts.transitions);
@@ -189,7 +198,7 @@ export function recordDataOf(
     trades: facts.trades.map((t) => ({ name: pick(t.name, language), selected: t.selected })),
     location: (facts.location ?? []).map((l) => pick(l, language)),
     scopes: facts.scopes.map((s) => pick(s, language)),
-    classification,
+    classification: withFingerprints(classification, fingerprints),
     reply: replyExcerpt(codeEntry?.remarks ?? null),
     transitions: path.map((t, i) => ({
       ...person(t),
@@ -198,7 +207,7 @@ export function recordDataOf(
       mark: markOf(t),
       contentSha256: t.contentSha256,
     })),
-    sections,
+    sections: sectionsWithFingerprints(sections, fingerprints),
     documents: facts.documents
       .filter((d) => isListedDocument(d, attachmentFieldKeys))
       .map((d) => ({ fileName: d.fileName, pages: pageCounts.get(d.storageKey) ?? null })),
@@ -237,6 +246,8 @@ function person(p: PersonLine, indent: string): string[] {
   ];
 }
 
+const photoXml = (p: RecordPhoto) => `<photo${p.takenAt ? at(p.takenAt) : ""}${p.sha256 ? ` sha256="${escape(p.sha256)}"` : ""}>${escape(p.fileName)}</photo>`;
+
 function blockXml(block: RecordBlock, indent: string): string[] {
   const i2 = `${indent}  `;
   switch (block.kind) {
@@ -263,7 +274,7 @@ function blockXml(block: RecordBlock, indent: string): string[] {
           ...lang("text", item.text, `${i2}  `),
           ...lang("answer", item.answer, `${i2}  `),
           ...(item.comment === null ? [] : [`${i2}  <comment>${escape(item.comment)}</comment>`]),
-          ...item.photos.map((p) => `${i2}  <photo${p.takenAt ? at(p.takenAt) : ""}>${escape(p.fileName)}</photo>`),
+          ...item.photos.map((p) => `${i2}  ${photoXml(p)}`),
           `${i2}</item>`,
         ]),
         `${indent}</checklist>`,
@@ -272,7 +283,7 @@ function blockXml(block: RecordBlock, indent: string): string[] {
       return [
         `${indent}<photos>`,
         ...lang("label", block.label, i2),
-        ...block.photos.map((p) => `${i2}<photo${p.takenAt ? at(p.takenAt) : ""}>${escape(p.fileName)}</photo>`),
+        ...block.photos.map((p) => `${i2}${photoXml(p)}`),
         `${indent}</photos>`,
       ];
   }

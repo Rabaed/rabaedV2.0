@@ -142,6 +142,8 @@ export interface AdminActionTable {
     | "rename_default_stage"
     | "reorder_default_stages"
     | "refuse_workflow_publish"
+    | "reproduce_documental_record"
+    | "read_documental_record_alerts"
     | "read_register_import"
     | "preview_register_import"
     | "confirm_register_import";
