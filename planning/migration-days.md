@@ -82,3 +82,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270717 | RP-85 | 21 | drop_is_signing |
 | 20270718 | RP-617 | 21 | company_stamp |
 | 20270719 | RP-632 | 21 | review_fixes |
+| 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
