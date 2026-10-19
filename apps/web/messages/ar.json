@@ -271,7 +271,8 @@
       "searchValues": "بحث",
       "noMatches": "لا نتائج",
       "searchPlaceholderBoard": "البحث في اللوحة",
-      "revisions": "المراجعات"
+      "revisions": "المراجعات",
+      "package": "الحزمة"
     },
     "buckets": {
       "pending": "قيد الانتظار",
@@ -2381,6 +2382,14 @@
     }
   },
   "packages": {
+    "comments": {
+      "title": "الملاحظات",
+      "forInformation": "للعلم",
+      "notPartOf": "الملاحظات ليست جزءًا من الحزمة ولا تدخل في أي من أعدادها.",
+      "empty": "لا توجد ملاحظات يمكنك رؤيتها أُنشئت من هذه الاعتمادات.",
+      "raisedFrom": "المصدر",
+      "noNumber": "بلا رقم بعد"
+    },
     "breadcrumb": "مسار التنقل",
     "back": "الاعتمادات",
     "kind": "حزمة",

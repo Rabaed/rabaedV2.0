@@ -1,9 +1,10 @@
 import { workItemQuery, type Locale, type WorkItemList, type WorkItemRow } from "@rabaed/domain";
 import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { PackageCommentsView } from "@/components/package-comments-view";
 import { PackageView } from "@/components/package-view";
 import { redirect } from "@/i18n/navigation";
-import { getMe, getPackage, getWorkItems } from "@/lib/session";
+import { getMe, getPackage, getPackageComments, getWorkItems } from "@/lib/session";
 
 /** The most pages of 50 a Package's table reads: 1,000 submittals. */
 const maxPages = 20;
@@ -17,7 +18,8 @@ const maxPages = 20;
 export default async function PackagePage({ params }: { params: Promise<{ locale: Locale; packageId: string }> }) {
   const { locale, packageId } = await params;
   setRequestLocale(locale);
-  const [me, pkg] = await Promise.all([getMe(), getPackage(packageId)]);
+  // Its Comments (RP-662): the ones the Member sees, for information.
+  const [me, pkg, comments] = await Promise.all([getMe(), getPackage(packageId), getPackageComments(packageId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!pkg) notFound();
 
@@ -33,11 +35,14 @@ export default async function PackagePage({ params }: { params: Promise<{ locale
   const filters = read?.filters ?? { outcomes: [], locations: [], trades: [] };
 
   return (
-    <PackageView
-      pkg={pkg}
-      rows={rows}
-      filters={{ outcomes: filters.outcomes, locations: filters.locations, trades: filters.trades }}
-      locale={locale}
-    />
+    <>
+      <PackageView
+        pkg={pkg}
+        rows={rows}
+        filters={{ outcomes: filters.outcomes, locations: filters.locations, trades: filters.trades }}
+        locale={locale}
+      />
+      <PackageCommentsView comments={comments?.comments ?? []} locale={locale} />
+    </>
   );
 }

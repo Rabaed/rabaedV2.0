@@ -206,7 +206,7 @@ export {
   type MembersCardProps,
 } from "./components/members/members-card.tsx";
 export { NumberedPager, type NumberedPagerLabels, type NumberedPagerProps } from "./components/list/numbered-pager.tsx";
-export { Outcome, WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { Outcome, WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemPackageFilter, type WorkItemListProps } from "./components/views/work-item-list.tsx";
 export { WorkItemTable, type WorkItemTableLabels, type WorkItemTableProps } from "./components/views/work-item-table.tsx";
 export { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps, type SnagNewType } from "./components/views/snag-list.tsx";
 export { type SnagBulkActions, type SnagBulkLabels } from "./components/views/snag-bulk.tsx";
@@ -234,6 +234,7 @@ export {
 } from "./components/views/kanban-card.tsx";
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
 export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
+export { PackageComments, type PackageCommentsLabels, type PackageCommentsProps } from "./components/packages/package-comments.tsx";
 export { PackagePage, packageItemsToSubmit, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
 export { type AddPackageItemsLabels, type PackageItemSearch } from "./components/packages/add-package-items-dialog.tsx";
 export { type DeletePackageLabels, type NewPackageLabels, type RenamePackageLabels } from "./components/packages/package-dialogs.tsx";
