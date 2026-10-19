@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { withMember, type Database, type Db } from "@rabaed/db";
 import type { PackageItem, TakeTransitionRequest } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
+import { withFileCopies, type CopyFiles } from "../documents/copy-files.ts";
+import type { FileStore } from "../documents/file-store.ts";
 import { takeTransitionIn, type TakeTransitionResult } from "./work-items.ts";
 
 // Several Transitions in one transaction, all or nothing (Submit Package, RP-638; a bulk
@@ -23,10 +25,14 @@ export class Rollback<R> extends Error {
   }
 }
 
-/** `run` in the acting Member's transaction; a Rollback thrown in it undoes the transaction and answers its result. */
-export async function allOrNothing<R>(db: Db, memberId: string, run: (trx: Trx) => Promise<R>): Promise<R> {
+/**
+ * `run` in the acting Member's transaction; a Rollback thrown in it undoes the transaction and
+ * answers its result. `copy` copies files (a code's Snags' photos, RP-577) that are deleted again
+ * when it doesn't commit (withFileCopies).
+ */
+export async function allOrNothing<R>(db: Db, files: FileStore, memberId: string, run: (trx: Trx, copy: CopyFiles) => Promise<R>): Promise<R> {
   try {
-    return await withMember(db, memberId, run);
+    return await withFileCopies(files, (copy) => withMember(db, memberId, (trx) => run(trx, copy)));
   } catch (e) {
     if (e instanceof Rollback) return e.result as R;
     throw e;
@@ -58,11 +64,11 @@ export async function takeEach(
   trx: Trx,
   memberId: string,
   takes: ItemTransition[],
-  { command, key, now, stopAtFirst }: { command: string; key: string; now: Date; stopAtFirst: boolean },
+  { command, key, now, stopAtFirst, copy }: { command: string; key: string; now: Date; stopAtFirst: boolean; copy: CopyFiles },
 ): Promise<ItemRefusal[]> {
   const refusals: ItemRefusal[] = [];
   for (const { workItemId, input } of takes) {
-    const taken = await takeTransitionIn(trx, memberId, workItemId, { ...input, confirmed: true, idempotencyKey: itemKey(command, key, workItemId) }, now);
+    const taken = await takeTransitionIn(trx, copy, memberId, workItemId, { ...input, confirmed: true, idempotencyKey: itemKey(command, key, workItemId) }, now);
     if (taken.ok) continue;
     refusals.push({ workItemId, refused: taken });
     if (stopAtFirst) break;

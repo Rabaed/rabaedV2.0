@@ -1,6 +1,7 @@
 import type { Database, Db } from "@rabaed/db";
 import type { BilingualText, BulkOffer, BulkStop, BulkStopReason, BulkTransitionRequest, PackageItem } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
+import type { FileStore } from "../documents/file-store.ts";
 import { allOrNothing, itemKey, itemsById, lockWorkItems, Rollback, takeEach } from "./several-transitions.ts";
 import type { TakeTransitionResult } from "./work-items.ts";
 
@@ -109,9 +110,9 @@ function stopFrom(item: Candidate, taken: Exclude<TakeTransitionResult, { ok: tr
  * each is taken through the single Transition's path, in one transaction. All or
  * nothing: the first item that stops it is named with why, and nothing is taken.
  */
-export async function takeBulkTransition(db: Db, memberId: string, input: Required<BulkTransitionRequest>, now: Date): Promise<BulkTransitionResult> {
+export async function takeBulkTransition(db: Db, files: FileStore, memberId: string, input: Required<BulkTransitionRequest>, now: Date): Promise<BulkTransitionResult> {
   const ids = [...new Set(input.workItemIds)];
-  return allOrNothing(db, memberId, async (trx): Promise<BulkTransitionResult> => {
+  return allOrNothing(db, files, memberId, async (trx, copy): Promise<BulkTransitionResult> => {
     // The request's key first: the same request again waits for this one to commit, then replays.
     await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/bulk/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
     // Then every item, by id, before any Package (the lock order).
@@ -130,7 +131,7 @@ export async function takeBulkTransition(db: Db, memberId: string, input: Requir
 
     const { transition, answers, internalNote, assignTo } = input;
     const takes = items.map((item) => ({ workItemId: item.id, input: { transition, answers, internalNote, assignTo, recommendedCode: null } }));
-    const [refusal] = await takeEach(trx, memberId, takes, { command: COMMAND, key: input.idempotencyKey, now, stopAtFirst: true });
+    const [refusal] = await takeEach(trx, memberId, takes, { command: COMMAND, key: input.idempotencyKey, now, stopAtFirst: true, copy });
     if (refusal) {
       const item = items.find((i) => i.id === refusal.workItemId)!;
       throw new Rollback<BulkTransitionResult>({ ok: false, reason: "bulk_refused", stoppedBy: stopFrom(item, refusal.refused) });

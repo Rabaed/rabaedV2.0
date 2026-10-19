@@ -29,6 +29,7 @@ import {
   type RaisedFromSource,
   type Locale,
   type WorkItemCursorSort,
+  type WorkItemDetail,
   type WorkItemExport,
   type BoardCardLayout,
   type BoardCardLayoutChange,
@@ -632,11 +633,15 @@ function raisedFromOf(r: SourceRow): RaisedFromSource | null {
 
 /**
  * The item `workItemId` was raised from, as its Snag List row names it (RP-628, the item page's
- * Raised from card); null when it was raised by hand. Read as the Member, like the row.
+ * Raised from card), with the failed check item a code raised it from (RP-577,
+ * app.raised_from_check_item); null when it was raised by hand. Read as the Member, like the row.
  */
-export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<RaisedFromSource | null> {
-  const { rows } = await sql<SourceRow>`select ${sourceColumns} from (select ${workItemId}::uuid as id) r ${sourceJoins}`.execute(trx);
-  return rows[0] ? raisedFromOf(rows[0]) : null;
+export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<WorkItemDetail["raisedFrom"]> {
+  const { rows } = await sql<SourceRow & { check_item: { key: string; text: BilingualText } | null }>`
+    select ${sourceColumns}, app.raised_from_check_item(r.id) as check_item from (select ${workItemId}::uuid as id) r ${sourceJoins}
+  `.execute(trx);
+  const source = rows[0] ? raisedFromOf(rows[0]) : null;
+  return source && { ...source, checkItem: rows[0]!.check_item };
 }
 
 /**

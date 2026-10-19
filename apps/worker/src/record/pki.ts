@@ -39,7 +39,8 @@ export const toBytes = (buffer: ArrayBuffer | ArrayBufferView): Uint8Array =>
   buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 
 /** A copy as a plain ArrayBuffer, which pkijs and Web Crypto take. */
-export const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer;
+/** Exactly `bytes`' own bytes as an ArrayBuffer: never the rest of a pooled Buffer's pool. */
+export const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 
 export async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
   return toBytes(await subtle.digest("SHA-256", toArrayBuffer(bytes)));

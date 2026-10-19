@@ -62,7 +62,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
-import { withFileCopies } from "../documents/copy-files.ts";
+import { withFileCopies, type CopyFiles, type FileCopy } from "../documents/copy-files.ts";
 import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
@@ -1568,24 +1568,30 @@ async function replyFileCounts(trx: Trx, workItemId: string): Promise<Record<str
  * hold is refused like a Transition that isn't there, by the database; a Validate
  * rule that doesn't hold is refused with its message. "Form complete" is checked
  * here, over the whole Form as the Member reads it; the database checks the others.
+ *
+ * A code raising Snags from failed check items (RP-577) gives them the items' photos: their
+ * files are copied here, in the same transaction (withFileCopies).
  */
 export function takeTransition(
   db: Db,
+  files: FileStore,
   memberId: string,
   workItemId: string,
   input: Required<TakeTransitionRequest>,
   now: Date,
 ): Promise<TakeTransitionResult> {
-  return withMember(db, memberId, (trx) => takeTransitionIn(trx, memberId, workItemId, input, now));
+  return withFileCopies(files, (copy) => withMember(db, memberId, (trx) => takeTransitionIn(trx, copy, memberId, workItemId, input, now)));
 }
 
 /**
  * takeTransition inside a transaction the acting Member's already runs in: the
  * same checks and the same app.take_transition, so a command taking several
  * Transitions at once (Submit Package, RP-638) takes each exactly as a single one.
+ * `copy` copies the files of the photos the Snags it raises take (RP-577).
  */
 export async function takeTransitionIn(
   trx: Trx,
+  copy: CopyFiles,
   memberId: string,
   workItemId: string,
   input: Required<TakeTransitionRequest>,
@@ -1681,7 +1687,15 @@ export async function takeTransitionIn(
     const rule = (routed ?? (await routedTransition(trx, workItemId, input.transition, answers)))?.rules.validate?.[Number(failed[1])];
     if (rule) return validationRefused(rule, pinned.form.schema, actionForm);
   }
-  return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
+  const result = commandResult(rows[0]!.outcome, "applied", transitionRefusals);
+  // The "before" photos of the Snags a code raised from failed check items (RP-577): none on a replay.
+  if (result.ok) {
+    const { rows: copies } = await sql<FileCopy>`
+      select storage_key, source_storage_key from app.raised_document_copies(${workItemId}::uuid)
+    `.execute(trx);
+    await copy(copies);
+  }
+  return result;
 }
 
 const saveAnswersRefusals = [

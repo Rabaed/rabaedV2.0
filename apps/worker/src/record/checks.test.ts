@@ -85,16 +85,23 @@ describe("checkRecord", () => {
 });
 
 describe("expectationOf", () => {
-  const data = (transitions: object[], rest: object = {}) => ({ transitions, ...rest }) as unknown as RecordData;
+  const card = (name: string, signature: boolean, signatureSha256: string | null = null) => ({ name: { en: name }, company: { en: "C1" }, signature, signatureSha256 });
+  const data = (cards: object[], appendix: object[] = []) => ({ cards, appendix }) as unknown as RecordData;
 
-  it("expects none of what the Record Data does not name yet", () => {
-    expect(expectationOf(data([{}, {}]), 2)).toEqual({ signatures: 0, layoutPages: 2, appendixPages: 0 });
+  it("expects no Signature or appendix page the Record Data does not print", () => {
+    expect(expectationOf(data([card("Omar", false), card("Sara", false)]), 2)).toEqual({ signatures: 0, layoutPages: 2, appendixPages: 0 });
   });
 
-  it("expects one Signature image for each distinct Signature on the path, and the appendix's pages", () => {
-    const named = data([{ signatureId: "s1" }, { signatureId: "s2" }, { signatureId: "s1" }, { signatureId: null }], {
-      documents: [{ appendedPages: 3 }, { appendedPages: 1 }, {}],
-    });
-    expect(expectationOf(named, 2)).toEqual({ signatures: 2, layoutPages: 2, appendixPages: 4 });
+  it("expects one Signature image for each distinct Signature the cards print, and the appendix's pages", () => {
+    const named = data(
+      [card("Omar", true, "s1"), card("Sara", true, "s2"), card("Omar", true, "s1"), card("Huda", false), card("Faisal", true), card("Faisal", true)],
+      [
+        { way: "pages", pageCount: 3 },
+        { way: "pages", pageCount: 1 },
+        { way: "attached", tooManyPages: false },
+        { way: "held" },
+      ],
+    );
+    expect(expectationOf(named, 2)).toEqual({ signatures: 3, layoutPages: 2, appendixPages: 4 });
   });
 });

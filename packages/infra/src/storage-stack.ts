@@ -27,7 +27,8 @@ export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
 
 /**
  * The images a record prints besides the Documents: Members' Signatures (RP-85) and Companies'
- * logos and Stamps (RP-617), where the api stores them (apps/api/src/identity). The api writes them (RP-951).
+ * logos and Stamps (RP-617), where the api stores them (apps/api/src/identity). The api writes them
+ * (RP-951); the worker only reads them (RP-650).
  */
 export const RECORD_IMAGE_OBJECTS = ["members/*/signatures/*", "companies/*/logo/*", "companies/*/stamp/*"] as const;
 
