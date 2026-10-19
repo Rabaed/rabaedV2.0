@@ -38,6 +38,7 @@ export const packageBulkLabels: Record<Locale, PackageBulkLabels> = {
       assignee_not_offered: "The Member you chose can't take its next step. Choose someone from the list.",
       refused: "Its Transition was refused. Open it to see why.",
       no_signature: "You have no saved Signature yet. Add one in your profile: each submittal is signed as on its own.",
+      no_stamp: "Your Company has no Stamp yet. Its Authorized Person must add it in the Company profile.",
       unknown: "It can't take this Transition now. Open it to see why.",
     },
     refusals: {
@@ -77,6 +78,7 @@ export const packageBulkLabels: Record<Locale, PackageBulkLabels> = {
       assignee_not_offered: "العضو الذي اخترته لا يمكنه تولي خطوته التالية. اختر من القائمة.",
       refused: "رُفض انتقاله. افتحه لترى السبب.",
       no_signature: "ليس لديك توقيع محفوظ بعد. أضفه في ملفك الشخصي: يُوقَّع كل اعتماد كما لو نُفِّذ وحده.",
+      no_stamp: "لا يوجد ختم لشركتك بعد. يجب أن يضيفه المفوض عنها في ملف الشركة.",
       unknown: "لا يمكنه تنفيذ هذا الانتقال الآن. افتحه لترى السبب.",
     },
     refusals: {

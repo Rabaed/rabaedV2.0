@@ -6,8 +6,8 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
 
-/** Reasons a bulk Transition may name beyond the ones the API's types list now: RP-85's missing Signature. */
-const laterReasons = ["no_signature"] as const;
+/** Reasons a bulk Transition may name beyond the ones the API's types list now: RP-85's missing Signature, RP-617's missing Stamp (passed through by the spec's review fixes). */
+const laterReasons = ["no_signature", "no_stamp"] as const;
 
 /** Bulk Transitions' words, from the app's messages (packages.bulk). */
 function useBulkLabels(): PackageBulkLabels {

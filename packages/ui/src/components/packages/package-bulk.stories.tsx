@@ -279,6 +279,16 @@ export const RefusedNoSignature: Story = {
   },
 };
 
+/** The PM's Company has no Stamp (RP-617's `no_stamp`): said as a sentence, with the item. */
+export const RefusedNoStamp: Story = {
+  args: { onTake: stoppedBy("no_stamp") },
+  play: async (context) => {
+    const alert = await refuse(context);
+    await expect(alert).toHaveTextContent(labelsOf(context).reasons.no_stamp!);
+    await expect(alert).not.toHaveTextContent("no_stamp");
+  },
+};
+
 /** A Validate rule's refusal says why in its own words, in the viewer's language. */
 export const RefusedByRule: Story = {
   args: { onTake: stoppedBy("validation_failed", { message: b("Enter the cost impact before you submit.", "أدخل الأثر المالي قبل التقديم.") }) },
