@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
+    "@rabaed/api": "workspace:*",
     "@rabaed/auth": "workspace:*",
     "@rabaed/db": "workspace:*",
     "@rabaed/domain": "workspace:*",

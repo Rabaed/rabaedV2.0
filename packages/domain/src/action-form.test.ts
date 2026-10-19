@@ -51,6 +51,15 @@ describe("actionFormProblems", () => {
     );
   });
 
+  it("takes photos and attachments in a Screen's Action Form, never the others (ADR 0024)", () => {
+    const fields = [
+      { key: "who", type: "member", label: label("Who") },
+      { key: "files", type: "attachments", label: label("Files") },
+      { key: "pictures", type: "photos", label: label("Pictures") },
+    ];
+    expect(actionFormProblems(schema(...fields), {}, { screen: true })).toEqual([{ key: "who", code: "not_in_action_form" }]);
+  });
+
   it("takes a checklist whose items ask no photos, and refuses one asking photos (RP-516: files are Documents)", () => {
     const checklist = (photo: string) => ({
       key: "checks",

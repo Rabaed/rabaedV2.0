@@ -38,6 +38,42 @@ describe("screenProblems", () => {
     expect(screenProblems(withTrade, [])).toEqual([{ key: "trade", code: "not_in_action_form" }]);
     expect(screenProblems({ sections: [] }, [])).toEqual([{ key: "sections", code: "invalid_schema" }]);
   });
+
+  // ADR 0024 (RP-623): a reply Screen may hold photos and attachments, always shared.
+  const withFiles = {
+    sections: [
+      {
+        ...codeReply.sections[0],
+        fields: [
+          ...codeReply.sections[0]!.fields,
+          { key: "after_photos", type: "photos", label: label("After photos") },
+          { key: "evidence", type: "attachments", label: label("Evidence") },
+        ],
+      },
+    ],
+  };
+
+  it("takes photos and attachments fields, which are shared", () => {
+    expect(screenProblems(withFiles, ["verification_note"])).toEqual([]);
+  });
+
+  it("refuses a file field marked internal: its files are shared once the Transition takes them", () => {
+    expect(screenProblems(withFiles, ["after_photos", "evidence"])).toEqual([
+      { key: "after_photos", code: "internal_file_field" },
+      { key: "evidence", code: "internal_file_field" },
+    ]);
+  });
+
+  it("still refuses a checklist whose items ask for photos", () => {
+    const checklist = {
+      key: "checks",
+      type: "checklist",
+      label: label("Checks"),
+      items: [{ key: "level", text: label("Level"), photo: "optional" }],
+    };
+    const withChecklist = { sections: [{ ...codeReply.sections[0], fields: [checklist] }] };
+    expect(screenProblems(withChecklist, [])).toEqual([{ key: "checks", code: "not_in_action_form" }]);
+  });
 });
 
 describe("createScreenRequest", () => {
