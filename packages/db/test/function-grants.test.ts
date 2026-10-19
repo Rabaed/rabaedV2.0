@@ -33,6 +33,9 @@ const allow: GrantAllowList = {
   "app.mark_workflow_published_with_change_note": ["rabaed_admin"],
   // A Rabaed Default publish holds each counted Project's sets, shared, until it commits (RP-566).
   "app.lock_project_sets_shared": ["rabaed_admin"],
+  // Rabaed Admin lists the Documental Record alerts and asks for a Re-produce (RP-155).
+  "app.documental_record_alerts": ["rabaed_admin"],
+  "app.request_documental_record_reproduction": ["rabaed_admin"],
   // Security invoker reads both roles' Workflow checks and reads share (RP-427 review).
   "app.workflow_type": both,
   "app.workflow_version_rows": both,
