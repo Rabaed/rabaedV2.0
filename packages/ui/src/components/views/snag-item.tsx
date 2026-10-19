@@ -5,7 +5,7 @@ import { buttonVariants } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import { HeaderBadge } from "./kanban-card.tsx";
+import { SourceOutcomeBadge } from "./snag-list.tsx";
 
 // The Snag item page's cards (RP-628; design/reference/claude-design/ui_kits/app/snag-list.html,
 // the item detail): where it was raised from, and the Contractor's response with its "after"
@@ -28,7 +28,10 @@ export type SnagItemLabels = {
 /** A photo the viewer sees: its image URL once it is fetched (null until then, or for a type the browser can't show). */
 export type SnagPhoto = { id: string; url: string | null; name: string };
 
-/** One card of the item page: a small heading over its content, as a named region. */
+/**
+ * One card of the item page: a small uppercase heading over its content, as a named region. The
+ * reference's item cards (`.box`), lighter than TitledCard (the kit's `.pc`, a ruled 16px heading row).
+ */
 export function SnagItemCard({ title, icon, aside, children, className }: { title: string; icon?: IconName; aside?: ReactNode; children: ReactNode; className?: string }) {
   const id = useId();
   return (
@@ -81,17 +84,7 @@ export function RaisedFromCard({
           <DocNo value={source.documentNumber} locale={locale} className="font-ui text-[12px] font-semibold text-muted" />
           <bdi className="text-[14px] font-semibold text-text">{source.subject}</bdi>
         </div>
-        {source.outcome && (
-          <HeaderBadge
-            badge={{
-              kind: "outcome",
-              look: source.outcome.look,
-              label: source.outcome.code.length <= 3 ? labels.code(source.outcome.code) : source.outcome.name[locale],
-              name: source.outcome.name[locale],
-              code: source.outcome.code,
-            }}
-          />
-        )}
+        {source.outcome && <SourceOutcomeBadge outcome={source.outcome} locale={locale} code={labels.code} />}
       </div>
       {text && (
         <blockquote className="rounded-e-[8px] border-s-[3px] border-info-fg bg-info-tint px-3 py-2.5 text-[13px] leading-normal text-text">

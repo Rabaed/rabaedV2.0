@@ -1,10 +1,11 @@
 "use client";
 
-import type { BilingualText, DocumentSummary, Locale, RaisedFromSource } from "@rabaed/domain";
+import type { DocumentSummary, Locale, RaisedFromSource } from "@rabaed/domain";
 import { RaisedFromCard, SnagResponse, type SnagItemLabels, type SnagPhoto } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useImageUrls } from "@/components/use-documents";
 import { Link } from "@/i18n/navigation";
+import type { SnagResponseRead } from "@/lib/snag-response";
 
 function useSnagItemLabels(): SnagItemLabels {
   const t = useTranslations("workItems.snag");
@@ -42,7 +43,7 @@ export function SnagItemCards({
   source: RaisedFromSource | null;
   /** A Comment's own comment, quoted under its source. */
   quote: string | null;
-  response: { resolution: string; by: BilingualText | null; after: DocumentSummary[] } | null;
+  response: SnagResponseRead | null;
   before: DocumentSummary[];
 }) {
   const labels = useSnagItemLabels();

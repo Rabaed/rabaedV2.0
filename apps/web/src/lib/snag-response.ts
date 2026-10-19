@@ -2,6 +2,9 @@ import { answerFields, type BilingualText, type DocumentSummary, type FormSchema
 
 type Event = WorkItemHistory["events"][number];
 
+/** The Contractor's response to a Snag, as the page shows it: what was done, by which Company, and its "after" photos. */
+export type SnagResponseRead = { resolution: string; by: BilingualText | null; after: DocumentSummary[] };
+
 /** The Snag's reply Screen field for what was done (`apps/admin/screens/snag_resolution.json`), shared with everyone who sees the Resolve. */
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Screen field's published key, data rather than copy.
 const resolutionKey = "resolution_note";
@@ -17,13 +20,13 @@ export function snagResponse(
   events: readonly Event[],
   documents: readonly DocumentSummary[],
   { closed }: { closed: boolean },
-): { resolution: string; by: BilingualText | null; after: DocumentSummary[] } | null {
+): SnagResponseRead | null {
   const moves = events.filter((e) => e.type === "transition" && e.audience === "shared");
-  const at = moves.findLastIndex((e) => typeof e.answers?.[resolutionKey] === "string");
-  if (at === -1) return null;
-  const since = moves.length - 1 - at;
-  if (since > (closed ? 1 : 0)) return null;
-  const resolve = moves[at]!;
+  const resolveIndex = moves.findLastIndex((e) => typeof e.answers?.[resolutionKey] === "string");
+  if (resolveIndex === -1) return null;
+  const movesAfterResolve = moves.length - 1 - resolveIndex;
+  if (movesAfterResolve > (closed ? 1 : 0)) return null;
+  const resolve = moves[resolveIndex]!;
   const byId = new Map(documents.map((d) => [d.id, d]));
   return {
     resolution: resolve.answers![resolutionKey] as string,

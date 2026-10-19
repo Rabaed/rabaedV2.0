@@ -116,7 +116,17 @@ describe("the Snag item page's read (seam 1)", () => {
     expect(keys(await detail(at.c1Pm, id))).toEqual(["put_on_hold", "resolve", "start_work"]);
     expect(keys(await detail(at.k1Manager, id))).toEqual([]);
 
-    await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Covered and re-poured" } });
+    // C1's move inside its own company stays its own (V5): K1 still reads Open and the Raise only.
+    await take(at.c1Pm, id, "start_work");
+    await hold(at.c1Pm, id);
+    expect(keys(await detail(at.c1Pm, id))).toEqual(["back_to_open", "put_on_hold_in_progress", "resolve_in_progress"]);
+    const informed = await detail(at.k1Manager, id);
+    expect(informed.stage.key).toBe("open");
+    expect(keys(informed)).toEqual([]);
+    const k1History = (await ok(at.k1Manager.get(`/v1/work-items/${id}/history`), 200)).json().events as { transition: { en: string } | null }[];
+    expect(k1History.flatMap((e) => (e.transition ? [e.transition.en] : []))).toEqual(["Raise"]);
+
+    await take(at.c1Pm, id, "resolve_in_progress", { answers: { resolution_note: "Covered and re-poured" } });
     await hold(at.c1Pm, id);
     expect(keys(await detail(at.c1Pm, id))).toEqual(["close", "return_to_open"]);
     const k1 = await detail(at.k1Manager, id);
