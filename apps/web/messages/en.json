@@ -985,6 +985,8 @@
     },
     "history": {
       "title": "History",
+      "imported": "Imported from the register {fileName} by {by}",
+      "rabaed": "Rabaed",
       "created": "Created",
       "pickedUp": "Picked up",
       "returnedToPool": "Returned to pool",
@@ -2110,6 +2112,7 @@
     "imports": "Imports",
     "importsHint": "Your Company's registers imported into this Project, and what each created.",
     "backToSubmittals": "Submittals",
+    "rabaed": "Rabaed",
     "newImport": "New import",
     "subtitle": "Each good row of your register becomes a Draft raised by you. Nothing is created until you confirm.",
     "breadcrumb": "Where you are",

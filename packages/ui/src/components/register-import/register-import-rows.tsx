@@ -1,12 +1,22 @@
 "use client";
 
 import { formatNumber, type BilingualText, type Locale, type RegisterImportMapping, type RegisterImportRow, type RegisterImportRowReason } from "@rabaed/domain";
-import { Badge, EmptyState, Icon, Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "@rabaed/ui";
-import { useLocale, useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import type { ReactNode } from "react";
+import { Badge } from "../data/badge.tsx";
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
+import { EmptyState } from "../feedback/states.tsx";
+import { Icon } from "../icon/icon.tsx";
+import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
 
 // The rows of a Submittal Register Import (RP-637, RP-639, RP-640): the wizard's Validate step
-// (its errors, and what will be imported) and an import's own page (each row's result).
+// (its errors, and what will be imported) and an import's own page (each row's result). Shared
+// by the customer app and Rabaed Admin (RP-645): `t` is the `registerImport` messages.
+
+/** `t`'s messages under `namespace` (`assign`, `reasons`, `rows`…). */
+export const within =
+  (t: Translate, namespace: string): Translate =>
+  (key, values) =>
+    t(`${namespace}.${key}`, values);
 
 /** The value a reason names: what the row's cell held. */
 function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, locale: Locale): string {
@@ -23,9 +33,8 @@ function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, lo
 }
 
 /** Every reason a row is bad, one a line, each with the value it names; a Form value that doesn't fit names its field. */
-export function RowReasons({ row, mapping }: { row: RegisterImportRow; mapping: RegisterImportMapping }) {
-  const locale = useLocale() as Locale;
-  const t = useTranslations("registerImport.reasons");
+export function RowReasons({ row, mapping, t: messages, locale }: { row: RegisterImportRow; mapping: RegisterImportMapping; t: Translate; locale: Locale }) {
+  const t = within(messages, "reasons");
   const labelOf = (key: string) => mapping.fields?.find((f) => f.key === key)?.label?.[locale] ?? key;
   const reasonText = (reason: RegisterImportRowReason) => {
     const value = reasonValue(row, reason, locale);
@@ -93,6 +102,8 @@ export function ErrorRows({
   rows,
   label,
   mapping,
+  t: messages,
+  locale,
   onFixMapping,
   onFixValues,
   onFixAssign,
@@ -100,12 +111,14 @@ export function ErrorRows({
   rows: RegisterImportRow[];
   label: string;
   mapping: RegisterImportMapping;
+  /** The `registerImport` messages. */
+  t: Translate;
+  locale: Locale;
   onFixMapping?: () => void;
   onFixValues?: () => void;
   onFixAssign?: () => void;
 }) {
-  const t = useTranslations("registerImport.rows");
-  const locale = useLocale() as Locale;
+  const t = within(messages, "rows");
   const fixButton = (onClick: () => void, text: string) => (
     <button type="button" onClick={onClick} className="inline-flex items-center gap-1 rounded-xs border border-border px-2 py-0.5 font-semibold text-brand-fg hover:bg-hover">
       {text}
@@ -135,7 +148,7 @@ export function ErrorRows({
                 <TableCell className="tabular-nums text-muted">{formatNumber(row.rowNo, locale)}</TableCell>
                 <TableCell className="max-w-96 font-semibold [overflow-wrap:anywhere]">{subjectOf(row)}</TableCell>
                 <TableCell className="py-2.5">
-                  <RowReasons row={row} mapping={mapping} />
+                  <RowReasons row={row} mapping={mapping} t={messages} locale={locale} />
                 </TableCell>
                 <TableCell className="py-2.5">
                   <span className="flex flex-col items-start gap-1.5 text-[12.5px] text-muted">
@@ -178,7 +191,7 @@ export function ErrorRows({
  * The good rows as their Drafts will be: Row, Subject, Type and Trade, the Paper ref,
  * Location and Scopes when mapped, and who raises each when rows are assigned (RP-640:
  * the assignee, else `importer`). With `results` (an import's own page), every row with
- * its result: the Draft it created, linked where the reader sees it, or its reasons.
+ * its result: the Draft it created, linked where the reader sees it (`draftLink`), or its reasons.
  */
 export function ImportRows({
   rows,
@@ -186,17 +199,23 @@ export function ImportRows({
   locale,
   mapping,
   importer,
+  t: messages,
   results = false,
+  draftLink,
 }: {
   rows: RegisterImportRow[];
   label: string;
   locale: Locale;
   mapping: RegisterImportMapping;
-  /** Who imported it: the raiser of every row not assigned. */
+  /** Who raises every row not assigned: the importer, or an Engineer's import's default Member (RP-645). */
   importer: BilingualText;
+  /** The `registerImport` messages. */
+  t: Translate;
   results?: boolean;
+  /** A link to the Draft a row created, its contents `children`; without it, the Draft is named, not linked. */
+  draftLink?: (workItemId: string, children: ReactNode) => ReactNode;
 }) {
-  const t = useTranslations("registerImport.rows");
+  const t = within(messages, "rows");
   const columns = {
     paperRef: mapping.paperRef !== undefined,
     location: mapping.location !== undefined,
@@ -204,6 +223,12 @@ export function ImportRows({
     raiser: mapping.assignTo !== undefined || mapping.assign !== undefined,
   };
   const span = 4 + Number(results) + Object.values(columns).filter(Boolean).length;
+  const created = (
+    <span className="inline-flex items-center gap-1 text-muted">
+      <Icon name="circle-check" size={14} />
+      {t("draftCreated")}
+    </span>
+  );
   return (
     <Table label={label}>
       <TableHeader>
@@ -283,18 +308,18 @@ export function ImportRows({
               )}
               {results && (
                 <TableCell>
-                  {row.workItemId ? (
-                    <Link href={`/work-items/${row.workItemId}`} className="inline-flex items-center gap-1 font-semibold text-brand-fg underline-offset-4 hover:underline">
-                      <Icon name="circle-check" size={14} />
-                      {t("openDraft")}
-                    </Link>
+                  {row.workItemId && draftLink ? (
+                    draftLink(
+                      row.workItemId,
+                      <>
+                        <Icon name="circle-check" size={14} />
+                        {t("openDraft")}
+                      </>,
+                    )
                   ) : row.created ? (
-                    <span className="inline-flex items-center gap-1 text-muted">
-                      <Icon name="circle-check" size={14} />
-                      {t("draftCreated")}
-                    </span>
+                    created
                   ) : (
-                    <RowReasons row={row} mapping={mapping} />
+                    <RowReasons row={row} mapping={mapping} t={messages} locale={locale} />
                   )}
                 </TableCell>
               )}

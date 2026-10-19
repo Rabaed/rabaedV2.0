@@ -65,7 +65,8 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
                       <bdi>{i.fileName}</bdi>
                     </Link>
                   </TableCell>
-                  <TableCell>{i.runBy.name[locale]}</TableCell>
+                  {/* A Rabaed Engineer's import reads "Rabaed", never the Engineer (RP-645, RP-589-3). */}
+                  <TableCell>{i.runBy?.name[locale] ?? t("rabaed")}</TableCell>
                   <TableCell align="end" className="tabular-nums">
                     {n(i.rowsTotal)}
                   </TableCell>

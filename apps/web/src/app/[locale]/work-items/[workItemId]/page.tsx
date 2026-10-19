@@ -283,7 +283,16 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           ))}
         </dl>
 
-        {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} locale={locale} />}
+        {history && (
+          <WorkItemHistory
+            events={history.events}
+            imported={history.imported ?? null}
+            projectId={item.projectId}
+            schema={form.schema}
+            optionLists={optionLists}
+            locale={locale}
+          />
+        )}
       </div>
     </WorkItemFormProvider>
   );

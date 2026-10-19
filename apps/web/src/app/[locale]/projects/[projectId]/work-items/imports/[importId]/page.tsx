@@ -2,7 +2,7 @@ import { formatNumber, type Locale } from "@rabaed/domain";
 import { Icon, KeyValues, TableCard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { ImportRows } from "@/components/register-import-rows";
+import { RegisterImportRows } from "@/components/register-import-wizard";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getRegisterImport } from "@/lib/session";
 
@@ -37,7 +37,8 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
       <div className="rounded-md border border-border bg-surface px-5 py-4">
         <KeyValues
           items={[
-            { key: "by", label: t("list.importedBy"), value: record.runBy.name[locale] },
+            // A Rabaed Engineer's import reads "Rabaed", never the Engineer (RP-645, RP-589-3).
+            { key: "by", label: t("list.importedBy"), value: record.runBy?.name[locale] ?? t("rabaed") },
             { key: "sheet", label: t("detail.sheet"), value: <bdi>{t("detail.worksheetValue", { worksheet: record.sheet, row: n(record.headerRow) })}</bdi> },
             { key: "subject", label: t("fields.subject"), value: <bdi>{columnOf(record.mapping.subject, () => "—")}</bdi> },
             { key: "type", label: t("fields.type"), value: <bdi>{columnOf(record.mapping.type, (v) => t("detail.everyRow", { value: v }))}</bdi> },
@@ -59,7 +60,7 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
         />
       </div>
       <TableCard>
-        <ImportRows rows={record.rows} label={t("detail.rows")} locale={locale} mapping={record.mapping} importer={record.runBy.name} results />
+        <RegisterImportRows rows={record.rows} label={t("detail.rows")} locale={locale} mapping={record.mapping} importer={record.defaultRaiser.name} />
       </TableCard>
     </div>
   );

@@ -253,6 +253,12 @@ export {
 } from "./components/workflow/workflow-builder.tsx";
 export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/workflow/workflow-builder-labels.ts";
 export { workflowBuilderLabels, type Translate } from "./components/workflow/workflow-builder-labels-from.ts";
+export { ErrorRows, ImportRows, RowReasons } from "./components/register-import/register-import-rows.tsx";
+export {
+  RegisterImportWizard,
+  type RegisterImportCallResult,
+  type RegisterImportClient,
+} from "./components/register-import/register-import-wizard.tsx";
 export { WorkflowChangeList, WorkflowCompareDialog, type WorkflowCompareDialogProps } from "./components/workflow/workflow-changes.tsx";
 export { WorkflowStepList, type WorkflowStepListProps } from "./components/workflow/workflow-step-list.tsx";
 export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";
