@@ -38,12 +38,14 @@ const items = [
 ];
 /** Formwork and cover fail, cover unticked; clean answered No, which raises nothing. */
 const TWO_FAILS = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "fail", snag: false }, clean: { answer: "no" } };
+const SECOND_PHOTO = jpegWithExif({ takenAt: "2026:10:03 14:25:00", offset: "+03:00", latitude: 24.7136, longitude: 46.6753 });
 const ONE_FAIL = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" }, clean: { answer: "yes" } };
 
 let projectId = "";
 let electrical = "";
 let buildingA = "";
 let template = "";
+let k1ParticipantId = "";
 let hafiz: { id: string; caller: Caller }; // C1 Contractor Engineer: raises the WIR.
 let ali: { id: string; caller: Caller }; // C1's only Project Manager: holds C1's Step Pool.
 let ahmed: { id: string; caller: Caller }; // K1 Consultant Engineer.
@@ -66,19 +68,19 @@ async function raisedFrom(by: Caller, wir: string, type: string): Promise<WorkIt
   const number = (await detail(mohammed.caller, wir)).documentNumber!;
   return (await snagList(by, `?raisedFrom=${encodeURIComponent(number)}`)).filter((i) => i.type.code === type);
 }
-/** C1's name, as its own first move on WIR `wir` (Send for review) names it. */
-const c1Name = async (wir: string) => (await history(hafiz.caller, wir)).find((e) => e.type === "transition")!.by.companyName;
 const snagCount = async (by: Caller, wir: string) => {
   const line = (await detail(by, wir)).raisedItems.find((r) => r.type.code === "SNG");
   return line ? { open: line.open, closed: line.closed } : null;
 };
 
-/** Uploads `body` as a photo of check item `item` of WIR `id`, as Ahmed; returns the Document's id. */
-async function addPhoto(id: string, item: string, body: Buffer, annotatedFromId?: string): Promise<string> {
+/** Uploads `body` as photo `fileName` of check item `item` of WIR `id`, as Ahmed; returns the Document's id. */
+async function addPhoto(id: string, item: string, body: Buffer, fileName = `${item}.jpg`): Promise<string> {
   const started = await ahmed.caller.post(`/v1/work-items/${id}/documents`, {
-    ...(annotatedFromId ? { annotatedFromId } : { fieldKey: FIELD, itemKey: item, reply: true }),
-    fileName: annotatedFromId ? `${item}-annotated.png` : `${item}.jpg`,
-    contentType: annotatedFromId ? "image/png" : "image/jpeg",
+    fieldKey: FIELD,
+    itemKey: item,
+    reply: true,
+    fileName,
+    contentType: "image/jpeg",
     sizeBytes: body.byteLength,
   });
   expect(started.statusCode, started.body).toBe(201);
@@ -131,7 +133,7 @@ beforeAll(async () => {
     return id;
   };
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  const k1ParticipantId = await participant(k1, "consultant");
+  k1ParticipantId = await participant(k1, "consultant");
   const o1ParticipantId = await participant(o1, "owner_representative");
   const c2ParticipantId = await participant(c2, "contractor");
   hafiz = await memberOnProject(api, c1, c1ParticipantId, ["engineer"], { name: "Hafiz Hamdan" });
@@ -160,7 +162,7 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
   beforeAll(async () => {
     wir = await atManager("Two fails", TWO_FAILS);
     const original = (await documentsOf(ahmed.caller, wir)).documents.find((d) => d.itemKey === "formwork")!.id;
-    photos = [original, await addPhoto(wir, "formwork", Buffer.from("\x89PNG annotated: arrow"), original)];
+    photos = [original, await addPhoto(wir, "formwork", SECOND_PHOTO, "formwork-joint.jpg")];
     await sendToManager(wir, "C");
     await take(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
     const raised = await raisedFrom(hafiz.caller, wir, "SNG");
@@ -173,25 +175,25 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
     expect(snag.type.code).toBe("SNG");
     expect(snag.title).toBe("Formwork tight"); // A bilingual Project's record language: English first.
     expect(snag.step.key).toBe("open");
-    expect(snag.heldBy?.companyName).toEqual(await c1Name(wir));
-    expect(snag.heldBy?.memberName).toBeNull(); // C1's Step Pool.
+    // C1's Step Pool, which C1 reads by name; nobody of C1 picked it up yet.
+    expect(snag.heldBy?.memberName).toBeNull();
+    expect(snag.heldBy?.pool?.names).toEqual(expect.arrayContaining([bilingual("Ali Sonour")]));
     expect(snag.documentNumber).not.toBeNull();
     expect(snag.answers).toMatchObject({ description: "Gap at the joint", trade: electrical, location: buildingA });
     expect(snag.raisedFrom).toMatchObject({ documentNumber: source.documentNumber, subject: "Two fails", workItemId: wir, outcome: { code: "C" } });
     expect(await snagCount(hafiz.caller, wir)).toEqual({ open: 1, closed: 0 });
   });
 
-  it("copies the item's photos as the Snag's \"before\" photos, the annotated copy beside its original, the same bytes", async () => {
+  // A reply photo's annotated copy comes with RP-981; its copy follows its original's by trigger (document_copy).
+  it("copies the item's two photos as the Snag's \"before\" photos: new Documents, the same bytes", async () => {
     const copied = (await documentsOf(hafiz.caller, snag.id)).documents;
     expect(copied.map((d) => [d.fieldKey, d.itemKey, d.fileName])).toEqual([
       ["photos", null, "formwork.jpg"],
-      ["photos", null, "formwork-annotated.png"],
+      ["photos", null, "formwork-joint.jpg"],
     ]);
-    const [original, annotated] = copied;
-    expect(original!.id).not.toBe(photos[0]);
-    expect(annotated!.annotatedFromId).toBe(original!.id);
-    expect(await bytesOf(hafiz.caller, snag.id, original!.id)).toEqual(await bytesOf(hafiz.caller, wir, photos[0]!));
-    expect(await bytesOf(hafiz.caller, snag.id, annotated!.id)).toEqual(Buffer.from("\x89PNG annotated: arrow"));
+    expect(copied.map((d) => d.id)).not.toContain(photos[0]);
+    expect(await bytesOf(hafiz.caller, snag.id, copied[0]!.id)).toEqual(await bytesOf(hafiz.caller, wir, photos[0]!));
+    expect(await bytesOf(hafiz.caller, snag.id, copied[1]!.id)).toEqual(SECOND_PHOTO);
   });
 
   it("its Raised from read carries the check item's key and text", async () => {
@@ -199,10 +201,10 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
   });
 
   it("its history starts with the Raise, shared, by the Consultant", async () => {
-    const k1 = (await history(hafiz.caller, wir)).find((e) => e.type === "issue_code")!.by.companyName;
-    const events = await history(hafiz.caller, snag.id);
-    expect(events[0]).toMatchObject({ type: "transition", audience: "shared", by: { companyName: k1 } });
-    expect(k1).not.toEqual(await c1Name(wir));
+    // K1 reads its own Member's name: the Manager who issued the code raised it.
+    expect((await history(ahmed.caller, snag.id))[0]).toMatchObject({ type: "transition", audience: "shared", by: { memberName: bilingual("Mohammed Al Shamsi") } });
+    // C1 reads the same Raise, by K1's name only (V14).
+    expect((await history(hafiz.caller, snag.id))[0]).toMatchObject({ type: "transition", audience: "shared", by: { memberName: null } });
   });
 });
 
@@ -233,33 +235,6 @@ describe("every code raises them (seam 1)", () => {
   });
 });
 
-describe("a Snag Type that can't take them refuses the code (seam 1)", () => {
-  it("nothing is written: the WIR stays with the Manager, and no Snag, Comment or event is left", async () => {
-    const wir = await atManager("Refused", ONE_FAIL);
-    await sendToManager(wir, "C");
-    // The Snag Type's Workflow starts Open with the Consultant instead of the WIR's raiser.
-    await sql`
-      update workflow_step s set actor_rule = jsonb_set(s.actor_rule, '{base_role}', '"consultant"')
-      from work_item_type t, workflow_version v
-      where t.code = 'SNG' and v.work_item_type_id = t.id and s.workflow_version_id = v.id and s.key = 'open'
-        and v.project_id = ${projectId}::uuid
-    `.execute(migrator);
-    try {
-      const refused = await tryTake(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
-      expect(refused.statusCode).toBe(500);
-      expect((await detail(mohammed.caller, wir)).outcome).toBeNull();
-      expect(await raisedFrom(mohammed.caller, wir, "SNG")).toEqual([]);
-    } finally {
-      await sql`
-        update workflow_step s set actor_rule = jsonb_set(s.actor_rule, '{base_role}', '"contractor"')
-        from work_item_type t, workflow_version v
-        where t.code = 'SNG' and v.work_item_type_id = t.id and s.workflow_version_id = v.id and s.key = 'open'
-          and v.project_id = ${projectId}::uuid
-      `.execute(migrator);
-    }
-  });
-});
-
 // Scenario RP-577-1 (visibility.md): the Snag is seen where its WIR is: C2, another Contractor of
 // the same Trade, sees neither the Snag nor its count (V3); the Owner Representative sees it as
 // it sees the WIR. Seam 2: `packages/db/test/wir-snags-rls.test.ts`.
@@ -286,5 +261,28 @@ describe("RP-577-1: who sees the Snags raised at the code", () => {
       expect((await snagList(reader.caller)).map((i) => i.id), reader.id).toContain(snag);
       expect(await snagCount(reader.caller, wir), reader.id).toEqual({ open: 1, closed: 0 });
     }
+  });
+});
+
+// Last in the file: it binds the Snag Type, for K1 on this Project, to a Workflow K1 can't raise
+// on, and nothing after it raises a Snag.
+describe("a Snag Type that can't take them refuses the code (seam 1)", () => {
+  it("nothing is written: no code, no Snag, the WIR still with the Manager", async () => {
+    const wir = await atManager("Refused", ONE_FAIL);
+    await sendToManager(wir, "C");
+    // K1's Snags start on the Question to Consultant Workflow, whose Draft is the Contractor's.
+    await sql`
+      insert into workflow_binding (project_id, work_item_type_id, raising_participant_id, workflow_definition_id)
+      select ${projectId}::uuid, snag.id, ${k1ParticipantId}::uuid, question.workflow_definition_id
+      from work_item_type snag, work_item_type question
+      where snag.owner_kind = 'rabaed' and snag.code = 'SNG' and question.owner_kind = 'rabaed' and question.code = 'QSN'
+    `.execute(migrator);
+    const refused = await tryTake(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
+    expect(refused.statusCode).toBe(500);
+    const after = await detail(mohammed.caller, wir);
+    expect(after.outcome).toBeNull();
+    expect(after.step.key).toBe("consultant_manager");
+    expect((await history(mohammed.caller, wir)).map((e) => e.type)).not.toContain("issue_code");
+    expect(await raisedFrom(mohammed.caller, wir, "SNG")).toEqual([]);
   });
 });

@@ -291,18 +291,22 @@ create function app.raise_checklist_snags(
           ), copied as (
             insert into document (
               id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
-              uploaded_by_member_id, uploaded_by_participant_id, created_at, confirmed_at, frozen_at,
+              uploaded_by_member_id, uploaded_by_participant_id, created_at, confirmed_at,
               field_key, taken_at, taken_latitude, taken_longitude
             )
             select s.new_id, s.project_id, v_id, s.file_name, s.size_bytes, s.content_type,
               app.document_storage_key(s.project_id, v_id, s.new_id),
-              s.uploaded_by_member_id, s.uploaded_by_participant_id, p_at, p_at, p_at,
+              -- Their own times, as a Revision's copies keep them: listed in the order they were taken.
+              s.uploaded_by_member_id, s.uploaded_by_participant_id, s.created_at, s.confirmed_at,
               v_photos_key, s.taken_at, s.taken_latitude, s.taken_longitude
             from source s
             returning document.id
           )
           insert into document_copy (document_id, copied_from_id)
           select s.new_id, s.id from source s join copied c on c.id = s.new_id;
+          -- Frozen once document_copy's triggers have filled them in (a frozen Document never
+          -- changes): the Snag has left its Draft.
+          update document set frozen_at = p_at where work_item_id = v_id and frozen_at is null;
         end if;
       end loop;
     end
