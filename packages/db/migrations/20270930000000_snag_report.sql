@@ -14,7 +14,7 @@
 --   or 'failed' (its job was dead-lettered), for the Member who asked; no row for anyone else and
 --   for a made-up id.
 -- * app.snag_report_job / app.save_snag_report: the worker's.
--- The outbox kind 'snag_report' is allowed by 20270930000000_snag_report_outbox_kind.sql, rebuilt after main's own.
+-- The outbox kind 'snag_report' is allowed by 20271001000000_snag_report_outbox_kind.sql, rebuilt after main's own.
 
 create table snag_report (
   id uuid primary key default gen_random_uuid(),

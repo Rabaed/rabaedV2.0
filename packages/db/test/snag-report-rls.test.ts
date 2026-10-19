@@ -1,4 +1,4 @@
-// Seam 2 for the Snag report (RP-677, spec RP-619; migration 20270929000000_snag_report.sql; visibility.md
+// Seam 2 for the Snag report (RP-677, spec RP-619; migration 20270930000000_snag_report.sql; visibility.md
 // V3, scenario RP-677-2), as the app role: a report's snapshot is read by nobody through the table; its asker
 // alone learns where it is (app.snag_report_state), another Member of the same Project, a Member of no
 // Project and a made-up id learn nothing; only the worker, with no Member set, reads what to print and saves

@@ -1,5 +1,5 @@
 -- RP-677: snag report outbox kind.
--- RP-677: the outbox kind 'snag_report' (the Snag report's worker job, 20270929000000_snag_report.sql).
+-- RP-677: the outbox kind 'snag_report' (the Snag report's worker job, 20270930000000_snag_report.sql).
 -- Rebuilt after main's own change (RP-621's 'working_copy', 20270928000000_working_copy.sql) with every kind either side allows
 -- (planning/parallel-sessions.md rule 11.1).
 
