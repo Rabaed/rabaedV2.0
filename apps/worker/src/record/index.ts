@@ -8,7 +8,7 @@ export { recordHtml } from "./layout.ts";
 export { renderRecord } from "./pages.ts";
 export { pdfImages, type PdfImage } from "./pdf-images.ts";
 export { attachedFiles, pdfA3Problems, toPdfA3, type AttachedFile } from "./pdfa.ts";
-export { LAYOUT_VERSION, RECORD_DATA_NAMESPACE, recordDataOf, recordDataXml, recordPath, type RecordData } from "./record-data.ts";
+export { LAYOUT_VERSION, NO_IMAGES, RECORD_DATA_NAMESPACE, recordDataOf, recordDataXml, recordOf, recordPath, type RecordData, type RecordImages } from "./record-data.ts";
 export { chromiumRenderer, type PdfRenderer } from "./render.ts";
 export { sealPdf, sealTamperOffsets, verifySeal, withByteChanged, type SealCheck } from "./seal.ts";
 export { kmsSealSigner, LOCAL_SEAL_NAME, localSealSigner, type SealSigner } from "./signer.ts";

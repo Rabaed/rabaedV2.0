@@ -7,7 +7,7 @@ import { documentAssets } from "./assets.ts";
 import { renderRecord } from "./pages.ts";
 import { toPdfA3 } from "./pdfa.ts";
 import { sha256 } from "./pki.ts";
-import { recordDataOf, recordDataXml } from "./record-data.ts";
+import { recordDataXml, recordOf } from "./record-data.ts";
 import type { PdfRenderer } from "./render.ts";
 import { sealPdf } from "./seal.ts";
 import type { SealSigner } from "./signer.ts";
@@ -56,12 +56,10 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     if (!facts) return;
     const token = randomBytes(32).toString("base64url");
     const assets = await documentAssets(facts, deps.files);
-    const { data, pdf: rendered } = await renderRecord(
-      deps.renderer,
-      recordDataOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) => assets.images.has(key)),
-      await deps.fonts(),
-      assets.images,
+    const record = recordOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) =>
+      assets.images.has(key),
     );
+    const { data, pdf: rendered } = await renderRecord(deps.renderer, record.data, await deps.fonts(), assets.images, record.images);
     const xml = new TextEncoder().encode(recordDataXml(data));
     const sealedAt = now();
     const title = [data.type.code, data.documentNumber ?? data.subject].join(" ");

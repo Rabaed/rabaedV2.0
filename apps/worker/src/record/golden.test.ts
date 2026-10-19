@@ -5,8 +5,8 @@ import type { RecordLanguage } from "@rabaed/domain";
 import type { Browser } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fallbackFonts } from "./fonts.ts";
-import { fixtureImages, goldenData, type GoldenCode } from "./golden-fixtures.ts";
-import { recordHtml } from "./layout.ts";
+import { fixtureImages, goldenRecord, type GoldenCode } from "./golden-fixtures.ts";
+import { recordHtml, type RecordCut } from "./layout.ts";
 import { launch, screenshotHtml } from "./render.ts";
 
 // Golden screenshots of the Documental Record's layout (RP-151; form-engine.md §6): a
@@ -46,6 +46,12 @@ const cases: { name: string; code: GoldenCode; language: RecordLanguage }[] = [
   { name: "dar-owner-review-bilingual", code: "owner", language: "bilingual" },
   { name: "dar-owner-review-ar", code: "owner", language: "ar" },
 ];
+
+/** A golden record's HTML, with its images. */
+function htmlOf(code: GoldenCode, language: RecordLanguage): string {
+  const { data, images } = goldenRecord(code, language);
+  return recordHtml(data, fallbackFonts(), fixtureImages, images);
+}
 
 let browser: Browser;
 beforeAll(async () => {
@@ -96,7 +102,7 @@ async function differingShare(a: Uint8Array, b: Uint8Array): Promise<{ share: nu
 describe("the record's layout, as golden screenshots", () => {
   for (const { name, code, language } of cases) {
     it(`${name}`, async () => {
-      const png = await screenshotHtml(browser, recordHtml(goldenData(code, language), fallbackFonts(), fixtureImages));
+      const png = await screenshotHtml(browser, htmlOf(code, language));
       expect(png.length).toBeGreaterThan(10_000);
       const baseline = baselineDir(name);
       if (update) {
@@ -113,7 +119,7 @@ describe("the record's layout, as golden screenshots", () => {
 });
 
 describe("the layout's content, from the same fixtures", () => {
-  const html = (code: GoldenCode, language: RecordLanguage) => recordHtml(goldenData(code, language), fallbackFonts(), fixtureImages);
+  const html = (code: GoldenCode, language: RecordLanguage) => htmlOf(code, language);
 
   it("prints a Code D Revision's source and the rejected mark", () => {
     const text = html("D", "en");
@@ -152,16 +158,20 @@ describe("the layout's content, from the same fixtures", () => {
   });
 
   it("draws a probe only up to where it is cut, for the pages page 1 points to", () => {
-    const data = goldenData("B", "en");
-    const cut = (c: Parameters<typeof recordHtml>[3]) => recordHtml(data, fallbackFonts(), fixtureImages, c);
-    const cards = (text: string) => text.split('<article class="card">').length - 1;
+    const { data, images } = goldenRecord("B", "en");
+    const cut = (c?: RecordCut) => recordHtml(data, fallbackFonts(), fixtureImages, images, c);
+    const cards = (text: string) => text.split('<article class="card').length - 1;
+    const answers = (text: string) => text.split('<div class="answer">').length - 1;
     expect(cut({ beforeComments: true })).not.toContain("Review Comments</span></h2>");
     expect(cards(cut({ beforeComments: true }))).toBe(0);
-    expect(cut({ card: 3, withCard: false })).toContain("Review Comments</span></h2>");
-    expect(cards(cut({ card: 3, withCard: false }))).toBe(3);
-    expect(cards(cut({ card: 3, withCard: true }))).toBe(4);
-    for (const c of [{ beforeComments: true } as const, { card: 3, withCard: true }]) expect(cut(c)).not.toContain("Disclaimer");
-    expect(cards(recordHtml(data, fallbackFonts(), fixtureImages))).toBe(4);
+    // To the issuing card's answers: every card, the last without them.
+    expect(cut({ replyCard: true })).toContain("Review Comments</span></h2>");
+    expect(cards(cut({ replyCard: true }))).toBe(4);
+    expect(answers(cut({ replyCard: true }))).toBe(answers(cut()) - data.cards.at(-1)!.lines.length);
+    for (const c of [{ beforeComments: true } as const, { replyCard: true } as const]) expect(cut(c)).not.toContain("Disclaimer");
+    expect(cards(cut())).toBe(4);
+    // The issuing card holding the reply's full text may run across pages; no other card does.
+    expect(cut().match(/<article class="card flows">/g) ?? []).toHaveLength(data.reply?.cut ? 1 : 0);
   });
 
   it("says Rabaed cancelled it when a Company left the Project", () => {

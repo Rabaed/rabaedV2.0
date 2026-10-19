@@ -32,5 +32,12 @@
         { "key": "scopes", "type": "scopes", "required": false, "label": { "en": "Scopes", "ar": "النطاقات" } }
       ]
     }
-  ]
+  ],
+  "pdf": {
+    "disclaimer": {
+      "en": "‹Disclaimer: the owner's text to come›",
+      "ar": "‹إخلاء المسؤولية: نص المالك لاحقًا›"
+    },
+    "show_review_duration": false
+  }
 }

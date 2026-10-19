@@ -1,7 +1,7 @@
 import type { OutcomeFact, RecordFacts, TransitionFact } from "@rabaed/db";
 import { deflateSync } from "node:zlib";
 import type { RecordData } from "./record-data.ts";
-import { recordDataOf } from "./record-data.ts";
+import { recordOf, type RecordImages } from "./record-data.ts";
 
 // Records of fixed facts for the golden screenshots (golden.test.ts): a Material
 // Approval Request closed at Code A, a Drawing Approval Request at Code C and a
@@ -509,12 +509,20 @@ export function goldenFacts(golden: GoldenCode, language: RecordData["language"]
   };
 }
 
-/** The Record Data of a golden record, with a fixed Verification Code and link, and the Documents' page counts. */
+const PAGE_COUNTS = new Map([
+  ["doc-1", 4],
+  ["doc-2", 2],
+  ["doc-3", 12],
+  ["doc-4", 18],
+]);
+const VERIFICATION = { code: "7K2M-9QXD", link: "https://rabaed.test/verify/QmFzZTY0dXJsVG9rZW5Gb3JUaGVHb2xkZW5SZWNvcmQ" };
+
+/** A golden record: its Record Data (a fixed Verification Code and link, the Documents' page counts) and where its images are. */
+export function goldenRecord(golden: GoldenCode, language: RecordData["language"]): { data: RecordData; images: RecordImages } {
+  return recordOf(goldenFacts(golden, language), VERIFICATION, PAGE_COUNTS);
+}
+
+/** The Record Data of a golden record. */
 export function goldenData(golden: GoldenCode, language: RecordData["language"]): RecordData {
-  return recordDataOf(goldenFacts(golden, language), { code: "7K2M-9QXD", link: "https://rabaed.test/verify/QmFzZTY0dXJsVG9rZW5Gb3JUaGVHb2xkZW5SZWNvcmQ" }, new Map([
-    ["doc-1", 4],
-    ["doc-2", 2],
-    ["doc-3", 12],
-    ["doc-4", 18],
-  ]));
+  return goldenRecord(golden, language).data;
 }
