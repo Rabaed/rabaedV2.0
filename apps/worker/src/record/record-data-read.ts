@@ -1,5 +1,22 @@
+import type { CardLine } from "./action-answers.ts";
 import type { RecordBlock, RecordSection } from "./form-content.ts";
-import { RECORD_DATA_NAMESPACE, isShortCode, type Chip, type CompanyLine, type FlowEntry, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
+import {
+  RECORD_DATA_NAMESPACE,
+  isShortCode,
+  type AppendixEntry,
+  type Cancellation,
+  type Chip,
+  type CommentGroup,
+  type CompanyLine,
+  type FlowEntry,
+  type FlowMark,
+  type NextStep,
+  type PersonLine,
+  type RecordData,
+  type RecordImages,
+  type SignatureCard,
+  type StampLine,
+} from "./record-data.ts";
 import type { RecordLanguage, RecordText } from "./record-text.ts";
 
 // The Record Data read back (RP-155, Re-produce): the stored XML (record-data.ts writes it)
@@ -104,6 +121,14 @@ export interface PhotoKeys {
 
 /** The Record Data held in `xml`, the document recordDataXml wrote. */
 export function parseRecordData(xml: string, photos: PhotoKeys = { keyOf: () => null }): RecordData {
+  return parseRecord(xml, photos).data;
+}
+
+/**
+ * The Record Data held in `xml`, and where the logos, Signatures and Stamps it prints are: each
+ * found by its fingerprint through `photos` (null where it is not found, or the page printed none).
+ */
+export function parseRecord(xml: string, photos: PhotoKeys = { keyOf: () => null }): { data: RecordData; marks: RecordImages } {
   const root = parseXml(xml);
   if (root.name !== "recordData" || root.attrs.xmlns !== RECORD_DATA_NAMESPACE) throw new Error("Record Data: not a Record Data document of this version");
   const language = attr(root, "language");
@@ -127,6 +152,12 @@ export function parseRecordData(xml: string, photos: PhotoKeys = { keyOf: () => 
     };
   };
   const companyLines = (node: XmlNode): CompanyLine[] => children(node, "company").map((c) => ({ name: textOf(c, "name"), role: textOf(c, "role") }));
+  // A logo, Signature or Stamp the page prints is a flag, with its image's fingerprint.
+  const flag = (node: XmlNode, name: string) => {
+    const found = maybe(node, name);
+    return { shown: found !== undefined, sha256: found?.attrs.sha256 ?? null };
+  };
+  const keyOfMark = (m: { shown: boolean; sha256: string | null }) => (m.shown && m.sha256 ? photos.keyOf(m.sha256) : null);
   const photoOf = (p: XmlNode) => {
     const sha256 = p.attrs.sha256 ?? null;
     return { fileName: p.text, takenAt: p.attrs.at ?? null, sha256, storageKey: (sha256 && photos.keyOf(sha256)) || "" };
@@ -214,8 +245,78 @@ export function parseRecordData(xml: string, photos: PhotoKeys = { keyOf: () => 
     trades.push({ name: textOfNodes(tradeNodes.slice(i, i + per)), selected: tradeNodes[i]!.attrs.selected === "true" });
   }
 
+  // Page 1's logos, the review duration and a Cancel's who and why (RP-650).
+  const companyNodes = children(child(root, "companies"), "company");
+  const logos = companyNodes.map((c) => flag(c, "logo"));
+  const companies: CompanyLine[] = companyNodes.map((c, i) => ({ name: textOf(c, "name"), role: textOf(c, "role"), logo: logos[i]!.shown, logoSha256: logos[i]!.sha256 }));
+  const reviewDays = maybe(decision, "reviewDays");
+  const cancelled = maybe(decision, "cancelled");
+  const byRabaed = maybe(decision, "cancelledByRabaed");
+  const cancellation: Cancellation | null = byRabaed
+    ? { by: null, reason: null, companyLeft: textOf(child(byRabaed, "company"), "name") }
+    : cancelled
+      ? { by: maybe(cancelled, "by") ? personOf(child(cancelled, "by")) : null, reason: maybe(cancelled, "reason")?.text ?? null, companyLeft: null }
+      : null;
+  const replyFullText = maybe(root, "replyFullText");
+
+  // The pages after page 1: the Comments, the cards, the Next step, the Stamps, the Disclaimer (RP-650).
+  const commentsNode = maybe(root, "comments");
+  const comments: CommentGroup[] = (commentsNode ? children(commentsNode, "author") : []).map((a) => ({
+    author: personOf(a),
+    initials: textOf(a, "initials"),
+    at: attr(a, "at"),
+    items: children(a, "comment").map((c) => ({
+      n: Number(attr(c, "n")),
+      documentNumber: maybe(c, "documentNumber")?.text ?? null,
+      comment: child(c, "text").text,
+      reference: maybe(c, "reference")?.text ?? null,
+    })),
+  }));
+  const cardNodes = children(child(root, "cards"), "card");
+  const signatures = cardNodes.map((c) => flag(c, "signature"));
+  const cards: SignatureCard[] = cardNodes.map((c, i) => ({
+    ...personOf(c),
+    verb: textOf(c, "verb"),
+    label: textOf(c, "label"),
+    at: attr(c, "at"),
+    signature: signatures[i]!.shown,
+    signatureSha256: signatures[i]!.sha256,
+    lines: children(c, "answer").map((a): CardLine => {
+      const values = children(a, "value");
+      if (values.length > 0) return { kind: "text", label: textOf(a, "label"), value: textOfNodes(values) };
+      const items = children(a, "item");
+      const ns = [...new Set(items.map((n) => attr(n, "n")))];
+      return { kind: "list", label: textOf(a, "label"), items: ns.map((n) => textOfNodes(items.filter((x) => x.attrs.n === n))) };
+    }),
+  }));
+  const nextNode = maybe(root, "nextStep");
+  const nextStep: NextStep | null = !nextNode
+    ? null
+    : nextNode.attrs.revision !== undefined
+      ? { kind: "revision", revisionNo: Number(nextNode.attrs.revision), company: textOf(child(nextNode, "company"), "name") }
+      : { kind: "replacement" };
+  const stampNodes = children(child(root, "stamps"), "stamp");
+  const stampMarks = stampNodes.map((s) => flag(s, "image"));
+  const stamps: StampLine[] = stampNodes.map((s, i) => ({ company: textOf(s, "name"), role: textOf(s, "role"), image: stampMarks[i]!.shown, imageSha256: stampMarks[i]!.sha256 }));
+  const disclaimer = maybe(root, "disclaimer");
+
+  // The appendix (RP-147): each file by name and fingerprint, and how the record holds it.
+  const appendixNode = maybe(root, "appendix");
+  const appendix: AppendixEntry[] = (appendixNode ? children(appendixNode, "file") : []).map((f) => {
+    const file = { fileName: child(f, "name").text, sha256: attr(f, "sha256") };
+    const pages = maybe(f, "pages");
+    if (pages) {
+      const range = pages.attrs.first === undefined ? null : { first: Number(attr(pages, "first")), last: Number(attr(pages, "last")) };
+      if (!range) throw new Error("Record Data: an appendix file's pages are not placed");
+      return { ...file, way: "pages", pageCount: range.last - range.first + 1, pages: range };
+    }
+    if (maybe(f, "attached")) return { ...file, way: "attached", tooManyPages: maybe(f, "tooManyPages") !== undefined };
+    if (maybe(f, "held")) return { ...file, way: "held" };
+    throw new Error("Record Data: an appendix file is neither pages, attached nor held");
+  });
+
   const code = outcome.attrs.code;
-  return {
+  const data: RecordData = {
     layoutVersion: attr(root, "layoutVersion"),
     language: lang,
     hijri: attr(root, "hijri") === "true",
@@ -237,16 +338,33 @@ export function parseRecordData(xml: string, photos: PhotoKeys = { keyOf: () => 
     issuedBy: issuedBy ? personOf(issuedBy) : null,
     confirmedBy: confirmedBy ? personOf(confirmedBy) : null,
     reviewComments: Number(child(decision, "reviewComments").text),
-    companies: companyLines(child(root, "companies")),
+    companies,
     parties: companyLines(child(root, "parties")),
     trades,
     location: named(maybe(classification, "location")),
     scopes: named(maybe(classification, "scopes")),
     classification: blocksOf(classificationBlocks),
-    reply: reply ? reply.text : null,
+    // Cut short when page 1 points to its full text; the "…" it ends with says so too (a record with no cards).
+    reply: reply ? { text: reply.text, cut: replyFullText !== undefined || reply.text.endsWith("…") } : null,
     transitions,
     sections,
     documents: children(child(root, "documents"), "document").map((d) => ({ fileName: d.text, pages: d.attrs.pages === undefined ? null : Number(d.attrs.pages) })),
     verification: { code: attr(verification, "code"), link: attr(verification, "link") },
+    reviewDays: reviewDays ? Number(reviewDays.text) : null,
+    cancellation,
+    comments,
+    cards,
+    nextStep,
+    stamps,
+    disclaimer: disclaimer ? textOf(disclaimer, "text") : null,
+    pages: {
+      comments: commentsNode?.attrs.page === undefined ? null : Number(commentsNode.attrs.page),
+      reply: replyFullText ? Number(attr(replyFullText, "page")) : null,
+    },
+    appendix,
+  };
+  return {
+    data,
+    marks: { logos: logos.map(keyOfMark), signatures: signatures.map(keyOfMark), stamps: stampMarks.map(keyOfMark) },
   };
 }
