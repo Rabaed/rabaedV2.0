@@ -54,6 +54,23 @@ const allow: GrantAllowList = {
   // The module_key checks of stage, work_item_type and position_permission (RP-449 review).
   "app.module_keys": both,
   "app.is_module_key": both,
+  // A Rabaed Engineer's Submittal Register Import (RP-645): the Engineer's own preview, confirm and
+  // results, and who may import for a Participant, Rabaed Admin's only; and what the api's import
+  // code calls, run by Rabaed Admin as the default Member.
+  "app.preview_register_import_by_engineer": ["rabaed_admin"],
+  "app.confirm_register_import_by_engineer": ["rabaed_admin"],
+  "app.register_import_results_by_engineer": ["rabaed_admin"],
+  "app.register_import_raisers": ["rabaed_admin"],
+  "app.register_import_raisable_types": both,
+  "app.current_participant_ids": both,
+  "app.current_project_ids": both,
+  "app.new_item_form_version": both,
+  "app.new_item_workflow_version": both,
+  "app.form_participant_choices": both,
+  "app.actor_holder": both,
+  // RP-644: the default Member's own Packages and saved mappings, which the Admin wizard offers.
+  "app.register_import_packages": both,
+  "app.register_import_mappings": both,
 };
 
 // Function names with more than one overload on purpose. Empty: a second

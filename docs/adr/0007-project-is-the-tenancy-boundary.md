@@ -6,7 +6,7 @@ All customers share one database per Instance (pooled), with isolation enforced 
 
 1. **Application authorization** on every request.
 2. **PostgreSQL row-level security** on every tenant table. The request's Member is set as a transaction-local setting, so a missed `WHERE` clause returns nothing instead of another customer's data.
-3. **Scoped object storage.** File keys are prefixed by Project and served only through short-lived signed URLs.
+3. **Scoped object storage.** File keys are prefixed by Project and served only through short-lived signed URLs. Company-owned files are the one exception: a Member's Signature and a Company's logo and Stamp belong to no Project, so their keys are prefixed by the Member or the Company (`members/<id>/signatures/…`, `companies/<id>/logo/…`, `companies/<id>/stamp/…`), served the same way, with each service granted exactly those prefixes (amended 2026-10-19; RP-85, RP-617, RP-951).
 
 Search indexes, caches and background jobs carry the same Project context. Rabaed Admin uses a separate database role that bypasses RLS; every use of it is written to `admin_action`. Only the Rabaed Admin service holds that role, never the customer app ([ADR 0010](0010-rabaed-admin-is-a-separate-service.md)).
 

@@ -88,6 +88,17 @@ export async function bootstrap(urls: DatabaseUrls, { passwords = "always" }: Bo
       ].filter((change): change is string => !!change);
       if (changes.length) await client.query(`alter role ${role.name} ${changes.join(" ")}`);
     }
+    // Rabaed Admin runs the customer api's Register Import steps as the app role
+    // (`set local role rabaed_app`, RP-960), so a read in them is held to
+    // row-level security as the Member it acts as. Without inheritance: unswitched,
+    // rabaed_admin has none of the app role's privileges, and once switched none of
+    // its own (bypassrls included). Here, not in a migration: only a superuser, or
+    // RDS's master user, which created the roles, may give a role membership.
+    const { rows: grants } = await client.query<{ inherits: boolean }>(
+      "select inherit_option as inherits from pg_auth_members where roleid = $1::regrole and member = $2::regrole",
+      [APP_ROLE, ADMIN_ROLE],
+    );
+    if (!grants.length || grants.some((g) => g.inherits)) await client.query(`grant ${APP_ROLE} to ${ADMIN_ROLE} with inherit false, set true`);
     // On RDS the bootstrap user is not a superuser, and PostgreSQL 16 lets it
     // give the database and schema to rabaed_migrator only as a member of it.
     await client.query(`grant ${MIGRATOR_ROLE} to current_user`);
