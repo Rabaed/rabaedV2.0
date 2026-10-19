@@ -18,6 +18,7 @@ const project = (code: string, name: ProjectSummary["name"], status: ProjectSumm
   showInspectionsInSubmittals: false,
   recordLanguage: "bilingual",
   recordHijriDates: false,
+  workingCopyWatermark: b("Not Final", "غير نهائي"),
 });
 
 const projects = [

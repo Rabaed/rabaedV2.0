@@ -92,3 +92,8 @@ export function recordKeys(projectId: string, workItemId: string): { pdf: string
   const base = `projects/${projectId}/work-items/${workItemId}/documental-record`;
   return { pdf: `${base}/record.pdf`, recordData: `${base}/record-data.xml` };
 }
+
+/** Where a Working Copy's PDF is kept: beside the item's record, one file for each content printed (RP-621). */
+export function workingCopyKey(projectId: string, workItemId: string, workingCopyId: string): string {
+  return `projects/${projectId}/work-items/${workItemId}/documental-record/working-copies/${workingCopyId}.pdf`;
+}

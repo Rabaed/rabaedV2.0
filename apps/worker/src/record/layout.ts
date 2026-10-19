@@ -4,6 +4,7 @@ import type { RecordFonts } from "./fonts.ts";
 import { isShortCode, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
 import { qrSvg } from "./qr.ts";
 import type { RecordLanguage, RecordText } from "./record-text.ts";
+import type { WorkingCopyData } from "./working-copy.ts";
 
 // The one Rabaed layout (form-engine.md §6; ADR 0023), printed from the Record
 // Data only. Page 1 is the Companies, the title block, the Parties and
@@ -16,6 +17,11 @@ import type { RecordLanguage, RecordText } from "./record-text.ts";
 // electronically through Rabaed", the Verification Code and page X of Y.
 // RP-650 adds the cards, Stamps and Comments, RP-147 the appendix; they change
 // this file and LAYOUT_VERSION.
+//
+// A Working Copy (RP-621, working-copy.ts) prints the same page from the item as
+// shared: the Stage instead of the outcome, the shared moves by Company only, no
+// person, no reply, no QR or Verification Code, and the Project's watermark across
+// every page and in the footer.
 
 const html = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -72,13 +78,17 @@ const WORDS = {
   closedAtCode: { ar: "أُغلق بالرمز", en: "closed at Code" },
   closedOn: { ar: "بتاريخ", en: "on" },
   footer: { ar: "صادر إلكترونيًا عبر رابد", en: "Issued electronically through Rabaed" },
+  stage: { ar: "المرحلة", en: "Stage" },
   page: { ar: "صفحة", en: "page" },
   of: { ar: "من", en: "of" },
 } satisfies Record<string, { ar: string; en: string }>;
 type Word = keyof typeof WORDS;
 
-export function recordHtml(data: RecordData, fonts: RecordFonts, images: ReadonlyMap<string, string> = new Map()): string {
+export function recordHtml(data: RecordData | WorkingCopyData, fonts: RecordFonts, images: ReadonlyMap<string, string> = new Map()): string {
   const language: RecordLanguage = data.language;
+  /** The sealed record's own parts; null on a Working Copy. */
+  const record = "verification" in data ? data : null;
+  const copy = "verification" in data ? null : data;
   const locales: Locale[] = language === "bilingual" ? ["ar", "en"] : [language];
 
   /** An Arabic heading with its English label beside it (bilingual), or one language. */
@@ -114,15 +124,23 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
   const RLI = "\u2067";
   const PDI = "\u2069";
   type FooterPart = string | "page" | "pages";
-  const english: FooterPart[] = [`${LRI}${WORDS.footer.en} · ${data.verification.code} · ${WORDS.page.en} `, "page", ` ${WORDS.of.en} `, "pages", PDI];
+  // A Working Copy's footer is its watermark text instead: it is not issued, and has no code.
+  const footerWords = { en: copy ? (copy.watermark.en ?? "") : WORDS.footer.en, ar: copy ? (copy.watermark.ar ?? "") : WORDS.footer.ar };
+  const english: FooterPart[] = [
+    `${LRI}${footerWords.en}${record ? ` · ${record.verification.code}` : ""} · ${WORDS.page.en} `,
+    "page",
+    ` ${WORDS.of.en} `,
+    "pages",
+    PDI,
+  ];
   const arabicWithCode: FooterPart[] = [
-    `${RLI}${WORDS.footer.ar} · ${LRI}${data.verification.code}${PDI} · ${WORDS.page.ar} `,
+    `${RLI}${footerWords.ar}${record ? ` · ${LRI}${record.verification.code}${PDI}` : ""} · ${WORDS.page.ar} `,
     "page",
     ` ${WORDS.of.ar} `,
     "pages",
     PDI,
   ];
-  const arabicPage: FooterPart[] = [`${RLI}${WORDS.footer.ar} · ${WORDS.page.ar} `, "page", ` ${WORDS.of.ar} `, "pages", PDI];
+  const arabicPage: FooterPart[] = [`${RLI}${footerWords.ar} · ${WORDS.page.ar} `, "page", ` ${WORDS.of.ar} `, "pages", PDI];
   const footerParts: FooterPart[] =
     language === "en" ? english : language === "ar" ? arabicWithCode : [...english, ` · `, ...arabicPage];
   const footerContent = footerParts.map((p) => (p === "page" ? "counter(page)" : p === "pages" ? "counter(pages)" : cssString(p))).join(" ");
@@ -142,7 +160,6 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
   const check = '<svg class="mark" viewBox="0 0 16 16" width="11" height="11" role="img"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="#111" stroke-width="2.4"/></svg>';
 
   const chipText = (c: Chip) => (isShortCode(c.code) ? ltr(c.code) : txt(c.name));
-  const outcomeLarge = isShortCode(data.outcome.code) ? ltr(data.outcome.code) : txt(data.outcome.name);
 
   const photo = (p: RecordPhoto) => {
     const image = images.get(p.storageKey);
@@ -192,7 +209,56 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
     return out.join("");
   }
 
-  const flow = data.transitions
+  // A Working Copy's moves are by Company only: no Member column and no content hash.
+  const flowHead = copy
+    ? `<th>#</th><th>${heading("step")}</th><th>${heading("company")}</th><th>${heading("date")}</th><th></th>`
+    : `<th>#</th><th>${heading("step")}</th><th>${heading("member")}</th><th>${heading("company")}</th><th>${heading("date")}</th><th></th><th>${heading("hash")}</th>`;
+  const moves = (copy?.moves ?? [])
+    .map(
+      (m, i) => `
+        <tr>
+          <td class="n">${i + 1}</td>
+          <td>${txt(m.label)}</td>
+          <td>${txt(m.company)}<div class="muted">${txt(m.role)}</div></td>
+          <td>${when(m.at)}</td>
+          <td class="markcell">${mark(m.mark)}</td>
+        </tr>`,
+    )
+    .join("");
+  const chips = `<div class="chips">${data.chips.map((c) => `<span class="chip${c.issued ? " issued" : ""}">${chipText(c)}</span>`).join("")}</div>`;
+  /** The sealed record's Final decision box: the outcome, who issued it, the dates, and the QR with the Verification Code. */
+  const decisionBox = (r: RecordData) => `<section class="box">
+  <h2>${heading("decision")}</h2>
+  <div class="decision">
+    <div>
+      <div class="outcome">${isShortCode(r.outcome.code) ? ltr(r.outcome.code) : txt(r.outcome.name)}</div>
+      ${isShortCode(r.outcome.code) ? `<div>${txt(r.outcome.name)}</div>` : ""}
+      ${chips}
+      <dl>
+        ${r.issuedBy ? `<dt>${heading("issuedBy")}</dt><dd>${person(r.issuedBy)}</dd>` : ""}
+        ${r.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(r.confirmedBy)}</dd>` : ""}
+        ${r.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(r.submittedAt)}</dd>` : ""}
+        <dt>${heading("replied")}</dt><dd>${day(r.closedAt)}</dd>
+        <dt>${heading("comments")}</dt><dd>${ltr(String(r.reviewComments))}</dd>
+      </dl>
+    </div>
+    <div class="qr">
+      ${qrSvg(r.verification.link, 110)}
+      <div class="muted">${heading("code")}</div>
+      <div class="code">${ltr(r.verification.code)}</div>
+      <div class="link">${ltr(r.verification.link)}</div>
+    </div>
+  </div>
+</section>`;
+  /** A Working Copy's box in its place: the Stage the item is at, the outcomes it may close with, none issued. */
+  const stageBox = (c: WorkingCopyData) => `<section class="box">
+  <h2>${heading("stage")}</h2>
+  ${c.stage ? `<div class="stage">${txt(c.stage)}</div>` : ""}
+  ${chips}
+  ${c.submittedAt ? `<dl><dt>${heading("submitted")}</dt><dd>${day(c.submittedAt)}</dd></dl>` : ""}
+</section>`;
+
+  const flow = (record?.transitions ?? [])
     .map(
       (t, i) => `
         <tr>
@@ -289,9 +355,14 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 .photo img { width: 100%; max-height: 45mm; object-fit: cover; border: 0.5pt solid #999; display: block; }
 .photo .noimage { height: 20mm; border: 0.5pt dashed #999; }
 .mark { vertical-align: middle; }
+.stage { font-size: 16pt; font-weight: 700; line-height: 1.2; margin-bottom: 1mm; }
+/* A Working Copy's watermark: fixed, so Chromium prints it on every page, over the content. */
+.watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); z-index: 10; text-align: center; white-space: nowrap; font-size: 54pt; font-weight: 700; line-height: 1.15; color: rgba(160, 30, 30, 0.16); }
+.watermark .en { color: inherit; }
 </style>
 </head>
 <body>
+${copy ? `<div class="watermark">${txt(copy.watermark)}</div>` : ""}
 <div class="companies">${data.companies.map(companyBox).join("")}</div>
 <section class="title-block">
   <h1>${txt(data.type.name)} <span class="badge">${ltr(data.type.code)}</span></h1>
@@ -319,49 +390,19 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
     ${data.classification.length > 0 ? blocks(data.classification) : ""}
   </section>
 </div>
-<section class="box">
-  <h2>${heading("decision")}</h2>
-  <div class="decision">
-    <div>
-      <div class="outcome">${outcomeLarge}</div>
-      ${isShortCode(data.outcome.code) ? `<div>${txt(data.outcome.name)}</div>` : ""}
-      <div class="chips">${data.chips.map((c) => `<span class="chip${c.issued ? " issued" : ""}">${chipText(c)}</span>`).join("")}</div>
-      <dl>
-        ${data.issuedBy ? `<dt>${heading("issuedBy")}</dt><dd>${person(data.issuedBy)}</dd>` : ""}
-        ${data.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(data.confirmedBy)}</dd>` : ""}
-        ${data.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(data.submittedAt)}</dd>` : ""}
-        <dt>${heading("replied")}</dt><dd>${day(data.closedAt)}</dd>
-        <dt>${heading("comments")}</dt><dd>${ltr(String(data.reviewComments))}</dd>
-      </dl>
-    </div>
-    <div class="qr">
-      ${qrSvg(data.verification.link, 110)}
-      <div class="muted">${heading("code")}</div>
-      <div class="code">${ltr(data.verification.code)}</div>
-      <div class="link">${ltr(data.verification.link)}</div>
-    </div>
-  </div>
-</section>
+${record ? decisionBox(record) : stageBox(copy!)}
 ${
-  data.reply
-    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(data.reply)}</bdi></div></section>`
+  record?.reply
+    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(record.reply)}</bdi></div></section>`
     : ""
 }
 <section class="box">
   <h2>${heading("flow")}</h2>
   <table>
     <thead>
-      <tr>
-        <th>#</th>
-        <th>${heading("step")}</th>
-        <th>${heading("member")}</th>
-        <th>${heading("company")}</th>
-        <th>${heading("date")}</th>
-        <th></th>
-        <th>${heading("hash")}</th>
-      </tr>
+      <tr>${flowHead}</tr>
     </thead>
-    <tbody>${flow}
+    <tbody>${record ? flow : moves}
     </tbody>
   </table>
 </section>

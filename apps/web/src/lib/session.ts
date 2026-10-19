@@ -6,7 +6,6 @@ import type {
   SupplierChoice,
   ApprovedSuppliers,
   ProjectRequiredFields,
-  SharedWorkItem,
   ActivityFeed,
   ActivityFeedQuery,
   CompanyInvitations,
@@ -256,11 +255,6 @@ export function getPackageComments(packageId: string): Promise<PackageComments |
 /** A Project's Packages the signed-in Member sees, with their counts (RP-641, the Packages view RP-660); null if the Project isn't one of theirs. */
 export function getPackages(projectId: string): Promise<PackageList | null> {
   return apiGet<PackageList>(`/v1/projects/${encodeURIComponent(projectId)}/packages`);
-}
-
-/** Download (RP-409): a Work Item as it was shared, the same for every viewer; null before its first Submit or when unseen. */
-export function getSharedWorkItem(workItemId: string): Promise<SharedWorkItem | null> {
-  return apiGet<SharedWorkItem>(`/v1/work-items/${encodeURIComponent(workItemId)}/shared`);
 }
 
 /** A Type's outcome set on a Project (the badges read it, RP-429); null when the Member can't see the Project. */

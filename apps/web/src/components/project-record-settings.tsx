@@ -1,7 +1,7 @@
 "use client";
 
-import type { RecordLanguage } from "@rabaed/domain";
-import { Field, RadioGroup, SettingsSection, Switch } from "@rabaed/ui";
+import { WATERMARK_MAX_LENGTH, type BilingualText, type RecordLanguage } from "@rabaed/domain";
+import { Field, RadioGroup, SettingsSection, Switch, WatermarkSetting } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { refusalMessage, setupCall } from "@/lib/setup-call";
@@ -10,17 +10,19 @@ import { refusalMessage, setupCall } from "@/lib/setup-call";
  * Project → Settings → Documental Record (RP-151): the language the Project's records are printed in
  * (both languages, Arabic or English) and whether they show the Hijri date beside the Gregorian one.
  * Each change applies at once (PUT …/settings/record) and holds for records made afterwards; records
- * already made keep what they were made with. Only a Project Admin can change them; everyone else reads them.
+ * already made keep what they were made with. Below them, the Working Copy's watermark text (RP-621, PUT\n * …/settings/working-copy-watermark), for Working Copies made afterwards. Only a Project Admin can change\n * them; everyone else reads them.
  */
 export function ProjectRecordSettings({
   projectId,
   recordLanguage,
   recordHijriDates,
+  workingCopyWatermark,
   canEdit,
 }: {
   projectId: string;
   recordLanguage: RecordLanguage;
   recordHijriDates: boolean;
+  workingCopyWatermark: BilingualText;
   canEdit: boolean;
 }) {
   const t = useTranslations("projectSettings.record");
@@ -40,6 +42,11 @@ export function ProjectRecordSettings({
     }
     setLanguage(next.language);
     setHijri(next.hijriDates);
+  }
+
+  async function saveWatermark(watermark: BilingualText) {
+    const result = await setupCall("PUT", `/projects/${encodeURIComponent(projectId)}/settings/working-copy-watermark`, { watermark });
+    return result.ok ? null : refusalMessage(t, {}, result.error);
   }
 
   return (
@@ -63,6 +70,21 @@ export function ProjectRecordSettings({
           <Switch checked={hijri} onCheckedChange={(next) => void save({ language, hijriDates: next })} readOnly={!canEdit} />
         </Field>
       </SettingsSection>
+      <WatermarkSetting
+        value={workingCopyWatermark}
+        maxLength={WATERMARK_MAX_LENGTH}
+        readOnly={!canEdit}
+        onSave={saveWatermark}
+        labels={{
+          title: t("watermark.title"),
+          description: t("watermark.description"),
+          en: t("watermark.en"),
+          ar: t("watermark.ar"),
+          help: t("watermark.help"),
+          save: t("watermark.save"),
+          saved: t("watermark.saved"),
+        }}
+      />
     </>
   );
 }

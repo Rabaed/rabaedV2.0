@@ -56,7 +56,7 @@ export async function inlinePhotos(
   return { images, fingerprints };
 }
 
-export async function documentAssets(facts: RecordFacts, files: RecordFiles): Promise<DocumentAssets> {
+export async function documentAssets(facts: Pick<RecordFacts, "form" | "documents">, files: RecordFiles): Promise<DocumentAssets> {
   const attachmentFields = attachmentFieldKeysOf(facts);
   const pageCounts = new Map<string, number | null>();
   for (const d of facts.documents) {

@@ -8,6 +8,7 @@ import {
   type MyProjects,
   type ProjectSummary,
   type RecordSettingsRequest,
+  type WorkingCopyWatermarkRequest,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
@@ -55,6 +56,7 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
       "p.show_inspections_in_submittals as showInspectionsInSubmittals",
       "p.record_language as recordLanguage",
       "p.record_hijri_dates as recordHijriDates",
+      "p.working_copy_watermark as workingCopyWatermark",
       // Every Member of the Project sees the Host Company's name (V15).
       sql<BilingualText>`app.project_host_company_name(p.id)`.as("hostName"),
       "r.base_role as baseRole",
@@ -148,6 +150,20 @@ export const setRecordSettings = (db: Db, memberId: string, projectId: string, i
     db,
     memberId,
     sql`select app.set_project_record_settings(${projectId}::uuid, ${input.language}, ${input.hijriDates}) as outcome`,
+    "set",
+    projectSettingRefusals,
+  );
+
+/**
+ * A Project Admin sets the text across every page of the Project's Working Copies (RP-621), Arabic and English,
+ * never empty. It applies to Working Copies made afterwards. app.set_project_working_copy_watermark checks the
+ * Admin and tells anyone else 'not_found'.
+ */
+export const setWorkingCopyWatermark = (db: Db, memberId: string, projectId: string, input: WorkingCopyWatermarkRequest) =>
+  projectAdminCommand(
+    db,
+    memberId,
+    sql`select app.set_project_working_copy_watermark(${projectId}::uuid, ${JSON.stringify(input.watermark)}::jsonb) as outcome`,
     "set",
     projectSettingRefusals,
   );
