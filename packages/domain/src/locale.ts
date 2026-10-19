@@ -65,6 +65,12 @@ export function formatDayMonthYear(
   return weekday ? `${part("weekday")}, ${date}` : date;
 }
 
+/** The Hijri (Umm al-Qura) date of the Saudi day, in Latin digits: "7 جمادى الأولى 1448 هـ", "Jumada I 7, 1448 AH". Printed beside the Gregorian one when a Project turns Hijri dates on (RP-151). */
+export function formatHijriDate(value: Date, locale: Locale): string {
+  const tag = locale === "ar" ? "ar-SA-u-ca-islamic-umalqura-nu-latn" : "en-SA-u-ca-islamic-umalqura-nu-latn";
+  return new Intl.DateTimeFormat(tag, { timeZone, day: "numeric", month: "long", year: "numeric" }).format(value);
+}
+
 /** The calendar day in Saudi time, as YYYY-MM-DD (a spreadsheet's date, RP-409 Export). */
 export function riyadhDay(value: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(value);

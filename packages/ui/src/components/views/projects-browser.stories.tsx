@@ -23,6 +23,8 @@ const project = (n: number, rest: Partial<ProjectSummary>): ProjectSummary => ({
   needMyAction: 0,
   modules: ["submittals"],
   showInspectionsInSubmittals: false,
+  recordLanguage: "bilingual",
+  recordHijriDates: false,
   ...rest,
 });
 

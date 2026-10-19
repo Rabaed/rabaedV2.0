@@ -126,6 +126,8 @@ export default tseslint.config(
       // (header, annotation, output intent, AFRelationship, organization, serial number, file). "Seal" there is
       // ADR 0023's digital seal of the record, the meaning GLOSSARY.md keeps it for, never a Company's Stamp.
       "apps/worker/src/record/{pdfa,pki,seal,signer,timestamp}.ts",
+      // The golden screenshots' made-up MAR, DAR and DAS records: sample Forms and replies as a Company writes them.
+      "apps/worker/src/record/golden-fixtures.ts",
     ],
     plugins: { rabaed },
     rules: { "rabaed/no-avoid-terms": "error" },
