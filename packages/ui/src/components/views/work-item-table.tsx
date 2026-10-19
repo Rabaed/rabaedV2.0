@@ -83,6 +83,8 @@ export type WorkItemTableProps = {
     selectAll: string;
     /** A row's checkbox, e.g. "Select Fire Suppression System". */
     selectRow: (subject: string) => string;
+    /** Which rows have a checkbox (the Package page's: the ones waiting on the viewer); all, without. */
+    selectable?: (row: WorkItemRow) => boolean;
   };
   /** In each row's last cell, pinned at the reading end: its menu. */
   rowEnd?: (row: WorkItemRow) => ReactNode;
@@ -90,6 +92,8 @@ export type WorkItemTableProps = {
   groups?: TableGroup[];
   /** A group's header row, spanning `colSpan` cells. */
   groupHeader?: (group: TableGroup, colSpan: number) => ReactNode;
+  /** The Stage column shows the Review Code once the item has one (the Package page's "Review Code or Stage", RP-633). */
+  stageShowsCode?: boolean;
   className?: string;
 };
 
@@ -125,6 +129,7 @@ export function WorkItemTable({
   rowEnd,
   groups,
   groupHeader,
+  stageShowsCode = false,
   className,
 }: WorkItemTableProps) {
   const [dragging, setDragging] = useState<ListColumnKey | null>(null);
@@ -136,7 +141,8 @@ export function WorkItemTable({
   const colSpan = shown.length + (end ? 1 : 0) + (selection ? 1 : 0);
   // With checkboxes, only they stay pinned at the start, as the design pins them; without, the Document Number does.
   const pinnedFirst = selection ? undefined : pinnedStart;
-  const chosen = selection ? rows.filter((r) => selection.selected.has(r.id)).length : 0;
+  const choosable = selection?.selectable ? rows.filter(selection.selectable) : rows;
+  const chosen = selection ? choosable.filter((r) => selection.selected.has(r.id)).length : 0;
   return (
     <table className={cn("w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text", className)}>
       <caption className="sr-only">{labels.table}</caption>
@@ -149,9 +155,9 @@ export function WorkItemTable({
                 aria-label={selection.selectAll}
                 targetBox
                 className="align-middle"
-                disabled={rows.length === 0}
-                checked={chosen === 0 ? false : chosen === rows.length ? true : "indeterminate"}
-                onCheckedChange={() => selection.onChange(new Set(chosen === rows.length ? [] : rows.map((r) => r.id)))}
+                disabled={choosable.length === 0}
+                checked={chosen === 0 ? false : chosen === choosable.length ? true : "indeterminate"}
+                onCheckedChange={() => selection.onChange(new Set(chosen === choosable.length ? [] : choosable.map((r) => r.id)))}
               />
             </th>
           )}
@@ -256,22 +262,24 @@ export function WorkItemTable({
                     >
                       {selection && (
                         <td className={cn(cell, pinnedStart, "w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
-                          <Checkbox
-                            aria-label={selection.selectRow(row.title)}
-                            className="size-4 align-middle"
-                            checked={selected}
-                            onCheckedChange={(on) => {
-                              const next = new Set(selection.selected);
-                              if (on === true) next.add(row.id);
-                              else next.delete(row.id);
-                              selection.onChange(next);
-                            }}
-                          />
+                          {(selection.selectable?.(row) ?? true) && (
+                            <Checkbox
+                              aria-label={selection.selectRow(row.title)}
+                              className="size-4 align-middle"
+                              checked={selected}
+                              onCheckedChange={(on) => {
+                                const next = new Set(selection.selected);
+                                if (on === true) next.add(row.id);
+                                else next.delete(row.id);
+                                selection.onChange(next);
+                              }}
+                            />
+                          )}
                         </td>
                       )}
                       {shown.map((key, i) => (
                         <td key={key} className={cn(cell, i === 0 && pinnedFirst)}>
-                          <Cell column={key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
+                          <Cell column={key === "stage" && stageShowsCode && row.outcome !== null ? "outcome" : key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
                         </td>
                       ))}
                       {end && <td className={cn(cell, "sticky end-0 z-[2] w-[60px] border-s ps-0 pe-2 text-end")}>{rowEnd?.(row)}</td>}
