@@ -210,6 +210,8 @@ function PackagesFilterControls({
         description={labels.searchHelp}
         maxLength={100}
         onSearch={(q) => onChange({ ...filter, q })}
+        // Wide enough for its placeholder beside the "/" hint at 1366; the toolbar has three controls only.
+        className="sm:w-[272px]"
       />
       <span className="inline-flex shrink-0 items-center">
         <FilterMenu
