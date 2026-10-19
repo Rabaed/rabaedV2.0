@@ -2,7 +2,7 @@ import type { SnagReportContent, SnagReportLanguage } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Database } from "./schema.ts";
 
-// The Snag report's reads and writes (RP-677; migration 20270927000000_snag_report.sql). The api
+// The Snag report's reads and writes (RP-677; migration 20270929000000_snag_report.sql). The api
 // asks for a report and later for its state as the Member who asked (withMember); the worker's job
 // reads what to print and saves the PDF as the app role with no Member set.
 
