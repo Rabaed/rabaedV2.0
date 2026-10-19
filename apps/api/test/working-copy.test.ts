@@ -209,6 +209,42 @@ describe("scenario RP-23-3: C1's PM downloads a Working Copy while K1 reviews th
   });
 });
 
+describe("a Working Copy follows the item: a move makes a new one, never the old file", () => {
+  it("is printed afresh after the Submit, and K1, who got the 404 before it, now gets the new one", async () => {
+    const id = await draft(at, c1Engineer, "Trays moving on");
+    await take(c1Engineer, id, "send_for_review");
+    // In C1's internal review: C1's Members only.
+    expect(await answer(c1Engineer, id)).toEqual({ status: "preparing" });
+    await runWorker();
+    const before = await download(c1Engineer, id);
+    await expectHidden(ask(k1Pm, id), "K1 before the Submit");
+    await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(c1Pm, id, "submit");
+    // The stored copy is of the item as it was: the next ask prints the item as it is now.
+    expect(await answer(c1Engineer, id)).toEqual({ status: "preparing" });
+    expect(await answer(k1Pm, id)).toEqual({ status: "preparing" });
+    await runWorker();
+    const after = await download(c1Engineer, id);
+    const forK1 = await download(k1Pm, id);
+    expect(sha256(after.bytes)).not.toBe(sha256(before.bytes));
+    expect(sha256(forK1.bytes)).toBe(sha256(after.bytes));
+    const [then, now] = [await printed(before.bytes), await printed(after.bytes)];
+    // The Submit is a shared move, by C1's name: in the new copy only, with K1 on the item.
+    expect(then).not.toContain("SubmissionDate");
+    expect(now).toContain("SubmissionDate");
+    expect(now).toContain(squeeze(c1Name));
+    expect(after.link.url).not.toBe(before.link.url);
+  }, 180_000);
+
+  it("checks access on every ask: a Member who doesn't see the item never gets a printed copy's link", async () => {
+    const id = await withK1("Trays printed, then asked by C2");
+    expect(await answer(k1Pm, id)).toEqual({ status: "preparing" });
+    await runWorker();
+    expect((await answer(k1Pm, id)).status).toBe("ready");
+    await expectHidden(ask(c2Engineer, id), "C2, the copy printed");
+  }, 180_000);
+});
+
 describe("a Draft's Working Copy (V1)", () => {
   let id = "";
 

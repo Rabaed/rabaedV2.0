@@ -101,6 +101,16 @@ describe("app.request_working_copy", () => {
     expect(rows[0]!.jobs).toBe("1");
   });
 
+  it("checks access on every ask: once printed, the Member who sees it gets its key, and the one who doesn't gets not_found", async () => {
+    // As the worker would have printed it (the migrator stands in for it here).
+    await migrator.query(
+      "update working_copy set storage_key = 'projects/p/work-items/w/documental-record/working-copies/x.pdf', made_at = now() where work_item_id = $1 and app_version = 'test'",
+      [itemId],
+    );
+    expect(await request(seer, itemId)).toEqual({ outcome: "ready", storage_key: "projects/p/work-items/w/documental-record/working-copies/x.pdf" });
+    expect(await request(other, itemId)).toEqual({ outcome: "not_found", storage_key: null });
+  });
+
   it("is refused without a Member set: the worker asks for nothing", async () => {
     const { rows } = await sql<{ outcome: string }>`select outcome from app.request_working_copy(${itemId}::uuid, 'test')`.execute(app);
     expect(rows[0]!.outcome).toBe("not_found");

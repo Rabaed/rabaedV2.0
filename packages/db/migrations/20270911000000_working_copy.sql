@@ -10,7 +10,8 @@
 --   so it is one for every viewer: the answers as they last arrived (app.shared_answers_of),
 --   the Built-in Fields from them, the Documents as of the last arrival, the Stage other
 --   Companies read (the Step the item reached its holder at), the shared moves by Company
---   only (no person), the Companies on the item by name. Never an Internal Note, a Recommended
+--   only (no person), the Companies on the item by name (the Owner, the raiser, those it was given to
+--   and those that took a shared move). Never an Internal Note, a Recommended
 --   Code, an in-progress answer, a person, a Signature, a Stamp or a Verification Code. A
 --   Draft (never Submitted) is read as its own Members read it: its answers now, with the same
 --   rules as the shared read, and every Document on it. Only callable by the definer
@@ -174,7 +175,8 @@ create function app.working_copy_content(p_work_item_id uuid) returns jsonb
             from outcome o
             where o.project_id = w.project_id and o.work_item_type_id = w.work_item_type_id and o.closing
           ), '[]'::jsonb),
-          -- The Owner, the raiser and every Company that took a shared move, each with its Project Role.
+          -- The Owner, the raiser, every Company the item was given to and every Company that took a shared move, each
+          -- with its Project Role: the Companies every reader of the item reads (as app.work_item_companies names them).
           'companies', coalesce((
             select jsonb_agg(jsonb_build_object('participantId', p.id, 'name', co.legal_name, 'roleName', r.name, 'baseRole', r.base_role)
               order by case r.base_role when 'owner' then 1 when 'owner_representative' then 2 when 'consultant' then 3 else 4 end, p.ordinal, p.id)
@@ -185,6 +187,7 @@ create function app.working_copy_content(p_work_item_id uuid) returns jsonb
               and (
                 (r.base_role = 'owner' and p.status = 'active')
                 or p.id = w.raised_by_participant_id
+                or p.id in (select a.participant_id from step_assignment a where a.work_item_id = w.id)
                 or p.id in (
                   select e.actor_participant_id from work_item_event e
                   where e.work_item_id = w.id and e.audience = 'shared' and e.type in ('transition', 'issue_code') and e.actor_participant_id is not null)
