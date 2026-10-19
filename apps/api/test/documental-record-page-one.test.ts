@@ -176,9 +176,8 @@ interface Made {
   readonly xml: string;
 }
 
-/** The record as C1's PM downloads it: its text, page count and the Record Data inside. */
-async function madeRecord(id: string): Promise<Made> {
-  await drainOutbox(worker, { documental_record: handler });
+/** The record as C1's PM downloads it (the worker has made it): its text, page count and the Record Data inside. */
+async function fetchRecord(id: string): Promise<Made> {
   const link = (await ok(c1Pm.get(`/v1/work-items/${id}/documental-record`), 200)).json() as SignedUrl;
   const res = await fetch(link.url);
   expect(res.status).toBe(200);
@@ -275,12 +274,78 @@ const setRecordSettings = (language: string, hijriDates: boolean) =>
   at.admin!.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language, hijriDates });
 
 let recordB: Made;
+/** The records the tests read, all made in beforeAll (see there), with the ids of the items a Revision revises. */
+let shared: {
+  ar: Made;
+  en: Made;
+  hijri: Made;
+  hijriRevision: Made;
+  hijriFirst: string;
+  revision: Made;
+  revisedFirst: string;
+  codeC: Made;
+  rejected: Made;
+  sentBack: Made;
+};
+
+/** The Revision of `first` (closed at Code C), taken to Code A: its id. */
+async function reviseAfterC(first: string): Promise<string> {
+  const created = await ok(c1Engineer.post(`/v1/work-items/${first}/revisions`, { idempotencyKey: crypto.randomUUID() }), 201);
+  const revision = created.json().id as string;
+  await take(c1Engineer, revision, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${revision}/pick-up`));
+  await take(c1Pm, revision, "submit");
+  await ok(k1Pm.post(`/v1/work-items/${revision}/pick-up`));
+  await take(k1Pm, revision, "send_to_manager");
+  await ok(k1Pm.post(`/v1/work-items/${revision}/pick-up`));
+  await take(k1Pm, revision, "approve_a");
+  return revision;
+}
+
+/** A Submitted item held by K1's PM at the Consultant PM's Step. */
+async function atConsultantPm(type: string, title: string): Promise<string> {
+  const id = await draftRecord(title, {}, type);
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit");
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  return id;
+}
+const ownerTakes = async (id: string, transition: string) => {
+  await ok(ownerPm.post(`/v1/work-items/${id}/pick-up`));
+  await take(ownerPm, id, transition);
+};
+const REMARKS_B = "Secret Code B remarks sent back by the Owner";
+const sentBackComments = { items_to_create: [{ comment: "Seal the penetrations after the Owner's return" }] };
+
+/** A Code D item the Owner confirmed. */
+async function rejectedByOwner(): Promise<string> {
+  const id = await atConsultantPm(OWNER_TYPE, "Rejected trays");
+  await take(k1Pm, id, "recommend_d");
+  await ownerTakes(id, "confirm_d");
+  return id;
+}
+
+/** An item whose Code B the Owner sent back, then Code D confirmed. */
+async function sentBackByOwner(): Promise<string> {
+  const id = await atConsultantPm(OWNER_TYPE, "Sent back trays");
+  await take(k1Pm, id, "recommend_b", { answers: { remarks: REMARKS_B, ...sentBackComments } });
+  await ownerTakes(id, "owner_send_back");
+  await take(k1Pm, id, "recommend_d");
+  await ownerTakes(id, "confirm_d");
+  return id;
+}
 
 beforeAll(async () => {
-  await addSendBackType(migrator, TYPE, TYPE_NAME, schema, { withApproveB: true });
-  await addOwnerReviewType(migrator, OWNER_TYPE, schema);
-  const c1 = await api.projectCreator();
-  k1 = await onboard(K1_NAME);
+  // The steps that don't wait on each other run together (the password hashing of each Member is slow when the machine is busy).
+  const [c1, onboardedK1, owner] = await Promise.all([
+    api.projectCreator(),
+    onboard(K1_NAME),
+    onboard(OWNER_NAME),
+    addSendBackType(migrator, TYPE, TYPE_NAME, schema, { withApproveB: true }),
+    addOwnerReviewType(migrator, OWNER_TYPE, schema),
+  ]);
+  k1 = onboardedK1;
   at = await buildTower(api, { c1, k1 }, "PGO");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as {
     id: string;
@@ -289,17 +354,63 @@ beforeAll(async () => {
   }[];
   k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
   c1Name = participants.find((p) => p.isOwnCompany)!.company.legalName.en;
-  const owner = await onboard(OWNER_NAME);
-  const ownerParticipant = await api.addParticipant(at.admin!, at.projectId, owner.company, "owner");
-  await ok(at.admin!.request("PUT", `/v1/participants/${ownerParticipant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
-  ownerPm = (await memberOnProject(api, owner, ownerParticipant, ["project_manager"], { name: "Nora Owner" })).caller;
-  c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
-  c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
-  k1Pm = (await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" })).caller;
+  const [ownerMember, c1EngineerMember, c1PmMember, k1PmMember] = await Promise.all([
+    api
+      .addParticipant(at.admin!, at.projectId, owner.company, "owner")
+      .then(async (ownerParticipant) => {
+        await ok(at.admin!.request("PUT", `/v1/participants/${ownerParticipant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
+        return memberOnProject(api, owner, ownerParticipant, ["project_manager"], { name: "Nora Owner" });
+      }),
+    memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" }),
+    memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" }),
+    memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" }),
+  ]);
+  ownerPm = ownerMember.caller;
+  c1Engineer = c1EngineerMember.caller;
+  c1Pm = c1PmMember.caller;
+  k1Pm = k1PmMember.caller;
   projectName = ((await sql<{ name: { en: string } }>`select name from project where id = ${at.projectId}::uuid`.execute(migrator)).rows[0]!.name).en;
   handler = await recordHandler();
   await drainOutbox(worker, { documental_record: handler });
-  recordB = await madeRecord(await closed("Cable trays for Level 1", "approve_b"));
+
+  // Every record the tests read is made here, so a loaded machine pays for the setup once and the tests only read. The worker
+  // makes a record with the Project's settings as they stand when it runs, so the items are closed together per setting and the
+  // worker runs once for each: bilingual (the default), Arabic only, English only, then Hijri dates on.
+  const [b, codeC, rejected, sentBack, revisedFirst, hijriFirst] = await Promise.all([
+    closed("Cable trays for Level 1", "approve_b"),
+    closed("Code C trays", "revise_c", { documents: false }),
+    rejectedByOwner(),
+    sentBackByOwner(),
+    closed("Revised trays", "revise_c", { documents: false }),
+    closed("Hijri revised trays", "revise_c", { documents: false }),
+  ]);
+  const revision = await reviseAfterC(revisedFirst);
+  await drainOutbox(worker, { documental_record: handler });
+  await ok(setRecordSettings("ar", false));
+  const ar = await closed("Arabic only trays", "approve_a", { documents: false });
+  await drainOutbox(worker, { documental_record: handler });
+  await ok(setRecordSettings("en", false));
+  const en = await closed("English only trays", "approve_a", { documents: false });
+  await drainOutbox(worker, { documental_record: handler });
+  await ok(setRecordSettings("bilingual", true));
+  const [hijri, hijriRevision] = await Promise.all([closed("Hijri trays", "approve_a", { documents: false }), reviseAfterC(hijriFirst)]);
+  await drainOutbox(worker, { documental_record: handler });
+  await ok(setRecordSettings("bilingual", false));
+
+  const made = await Promise.all([b, codeC, rejected, sentBack, revision, ar, en, hijri, hijriRevision].map(fetchRecord));
+  recordB = made[0]!;
+  shared = {
+    codeC: made[1]!,
+    rejected: made[2]!,
+    sentBack: made[3]!,
+    revision: made[4]!,
+    revisedFirst,
+    ar: made[5]!,
+    en: made[6]!,
+    hijri: made[7]!,
+    hijriRevision: made[8]!,
+    hijriFirst,
+  };
   // It first makes every record other suites left behind.
 }, 240_000);
 
@@ -502,88 +613,50 @@ describe("the Project's record language and Hijri dates", () => {
     expect(refused.statusCode).toBe(400);
   });
 
-  it("print an Arabic-only record when the Project says so: no English at all, in the pages or the Record Data", async () => {
-    await ok(setRecordSettings("ar", false));
-    try {
-      const record = await madeRecord(await closed("Arabic only trays", "approve_a", { documents: false }));
-      expect(record.xml).toContain('language="ar"');
-      expect(record.xml).not.toContain('lang="en"');
-      expect(record.xml).toContain(`<name lang="ar">${TYPE_NAME.ar}</name>`);
-      expect(record.text).not.toContain("Finaldecision");
-      expect(record.text).not.toContain("Approvalflow");
-      expect(record.text).not.toContain(squeeze(TYPE_NAME.en));
-      // The Subject and codes are typed values, kept as typed; the footer is Arabic too.
-      expect(record.text).toContain("Arabiconlytrays");
-      expect(record.text).not.toContain("Issuedelectronically");
-    } finally {
-      await ok(setRecordSettings("bilingual", false));
-    }
+  it("print an Arabic-only record when the Project says so: no English at all, in the pages or the Record Data", () => {
+    const record = shared.ar;
+    expect(record.xml).toContain('language="ar"');
+    expect(record.xml).not.toContain('lang="en"');
+    expect(record.xml).toContain(`<name lang="ar">${TYPE_NAME.ar}</name>`);
+    expect(record.text).not.toContain("Finaldecision");
+    expect(record.text).not.toContain("Approvalflow");
+    expect(record.text).not.toContain(squeeze(TYPE_NAME.en));
+    // The Subject and codes are typed values, kept as typed; the footer is Arabic too.
+    expect(record.text).toContain("Arabiconlytrays");
+    expect(record.text).not.toContain("Issuedelectronically");
   });
 
-  it("print an English-only record when the Project says so: no Arabic letters on any page", async () => {
-    await ok(setRecordSettings("en", false));
-    try {
-      const record = await madeRecord(await closed("English only trays", "approve_a", { documents: false }));
-      expect(record.xml).toContain('language="en"');
-      expect(record.xml).not.toContain('lang="ar"');
-      expect(record.text).not.toMatch(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/);
-      for (const value of ["Finaldecision", "Approvalflow", "IssuedelectronicallythroughRabaed", squeeze(TYPE_NAME.en)]) expect(record.text, value).toContain(value);
-    } finally {
-      await ok(setRecordSettings("bilingual", false));
-    }
+  it("print an English-only record when the Project says so: no Arabic letters on any page", () => {
+    const record = shared.en;
+    expect(record.xml).toContain('language="en"');
+    expect(record.xml).not.toContain('lang="ar"');
+    expect(record.text).not.toMatch(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/);
+    for (const value of ["Finaldecision", "Approvalflow", "IssuedelectronicallythroughRabaed", squeeze(TYPE_NAME.en)]) expect(record.text, value).toContain(value);
   });
 
   it("put the Hijri date beside every Gregorian one when turned on, and only for records made afterwards", async () => {
-    await ok(setRecordSettings("bilingual", true));
-    try {
-      const id = await closed("Hijri trays", "approve_a", { documents: false });
-      const record = await madeRecord(id);
-      const closedAt = (await sql<{ closed: Date }>`select closed_at as closed from work_item where id = ${id}::uuid`.execute(migrator)).rows[0]!.closed;
-      expect(record.xml).toContain('hijri="true"');
-      expect(record.text).toContain(squeeze(formatHijriDate(closedAt, "en")));
-      // The record made before the setting keeps what it was made with.
-      expect(recordB.xml).toContain('hijri="false"');
-      expect(recordB.text).not.toMatch(/14ddAH/);
-    } finally {
-      await ok(setRecordSettings("bilingual", false));
-    }
+    const record = shared.hijri;
+    const closedAt = (await sql<{ closed: Date }>`select closed_at as closed from work_item where id = ${record.id}::uuid`.execute(migrator)).rows[0]!.closed;
+    expect(record.xml).toContain('hijri="true"');
+    expect(record.text).toContain(squeeze(formatHijriDate(closedAt, "en")));
+    // The record made before the setting keeps what it was made with.
+    expect(recordB.xml).toContain('hijri="false"');
+    expect(recordB.text).not.toMatch(/14ddAH/);
   });
 });
 
-/** An item closed at Code C, and its Revision closed at Code A: both ids. */
-async function revisedAfterC(title: string): Promise<{ first: string; revision: string }> {
-  const first = await closed(title, "revise_c", { documents: false });
-  await drainOutbox(worker, { documental_record: handler });
-  const created = await ok(c1Engineer.post(`/v1/work-items/${first}/revisions`, { idempotencyKey: crypto.randomUUID() }), 201);
-  const revision = created.json().id as string;
-  await take(c1Engineer, revision, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${revision}/pick-up`));
-  await take(c1Pm, revision, "submit");
-  await ok(k1Pm.post(`/v1/work-items/${revision}/pick-up`));
-  await take(k1Pm, revision, "send_to_manager");
-  await ok(k1Pm.post(`/v1/work-items/${revision}/pick-up`));
-  await take(k1Pm, revision, "approve_a");
-  return { first, revision };
-}
-
 describe("a Revision and the other outcomes", () => {
   it("puts the Hijri date in the Revision line when the Project has them on", async () => {
-    await ok(setRecordSettings("bilingual", true));
-    try {
-      const { first, revision } = await revisedAfterC("Hijri revised trays");
-      const record = await madeRecord(revision);
-      const firstClosed = (await sql<{ closed: Date }>`select closed_at as closed from work_item where id = ${first}::uuid`.execute(migrator)).rows[0]!.closed;
-      const line = record.text.slice(record.text.indexOf("closedatCodeC"), record.text.indexOf("closedatCodeC") + 140);
-      expect(line).toContain(squeeze(formatDate(firstClosed, "en")));
-      expect(line).toContain(squeeze(formatHijriDate(firstClosed, "en")));
-    } finally {
-      await ok(setRecordSettings("bilingual", false));
-    }
+    const record = shared.hijriRevision;
+    const firstClosed = (await sql<{ closed: Date }>`select closed_at as closed from work_item where id = ${shared.hijriFirst}::uuid`.execute(migrator)).rows[0]!.closed;
+    const line = record.text.slice(record.text.indexOf("closedatCodeC"), record.text.indexOf("closedatCodeC") + 140);
+    expect(line).toContain(squeeze(formatDate(firstClosed, "en")));
+    expect(line).toContain(squeeze(formatHijriDate(firstClosed, "en")));
   });
 
   it("says which item a Revision revises and when that one closed at Code C", async () => {
-    const { first, revision } = await revisedAfterC("Revised trays");
-    const record = await madeRecord(revision);
+    const first = shared.revisedFirst;
+    const record = shared.revision;
     const firstNumber = (await detail(c1Pm, first)).documentNumber!;
     const firstClosed = (await sql<{ closed: Date }>`select closed_at as closed from work_item where id = ${first}::uuid`.execute(migrator)).rows[0]!.closed;
     expect(record.text).toContain(squeeze(`${firstNumber}Rev1`));
@@ -592,8 +665,8 @@ describe("a Revision and the other outcomes", () => {
     expect(record.xml).toMatch(new RegExp(`<revisionOf outcome="C" at="[^"]+">${firstNumber}</revisionOf>`));
   });
 
-  it("marks a Code C record's last step as returned for revision", async () => {
-    const record = await madeRecord(await closed("Code C trays", "revise_c", { documents: false }));
+  it("marks a Code C record's last step as returned for revision", () => {
+    const record = shared.codeC;
     const entries = record.xml.split("<transition ").slice(1);
     expect(entries.map((e) => /mark="([a-z]+)"/.exec(e)![1])).toEqual(["done", "done", "done", "revise"]);
     expect(record.xml).toMatch(/<outcome code="C" at="[^"]+">/);
@@ -602,28 +675,8 @@ describe("a Revision and the other outcomes", () => {
 });
 
 describe("the Owner's review: Code D, and a Code the Owner sent back", () => {
-  const REMARKS_B = "Secret Code B remarks sent back by the Owner";
-  const comments = { items_to_create: [{ comment: "Seal the penetrations after the Owner's return" }] };
-
-  /** A Submitted item held by K1's PM at the Consultant PM's Step. */
-  async function atConsultantPm(type: string, title: string): Promise<string> {
-    const id = await draftRecord(title, {}, type);
-    await take(c1Engineer, id, "send_for_review");
-    await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
-    await take(c1Pm, id, "submit");
-    await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
-    return id;
-  }
-  const ownerTakes = async (id: string, transition: string) => {
-    await ok(ownerPm.post(`/v1/work-items/${id}/pick-up`));
-    await take(ownerPm, id, transition);
-  };
-
-  it("marks a Code D record's last step as rejected, with the Consultant PM who recommended it and the Owner who confirmed it", async () => {
-    const id = await atConsultantPm(OWNER_TYPE, "Rejected trays");
-    await take(k1Pm, id, "recommend_d");
-    await ownerTakes(id, "confirm_d");
-    const record = await madeRecord(id);
+  it("marks a Code D record's last step as rejected, with the Consultant PM who recommended it and the Owner who confirmed it", () => {
+    const record = shared.rejected;
     const entries = record.xml.split("<transition ").slice(1);
     expect(entries.map((e) => /<label lang="en">([^<]+)<\/label>/.exec(e)![1])).toEqual(["Prepared", "Submit", "Recommend D", "Confirm"]);
     expect(entries.map((e) => /mark="([a-z]+)"/.exec(e)![1])).toEqual(["done", "done", "done", "rejected"]);
@@ -634,13 +687,8 @@ describe("the Owner's review: Code D, and a Code the Owner sent back", () => {
     for (const value of ["Confirmedby", "Rejected"]) expect(record.text, value).toContain(value);
   });
 
-  it("never prints a Code the Owner sent back: not its Remarks, its Comments or its Recommendation", async () => {
-    const id = await atConsultantPm(OWNER_TYPE, "Sent back trays");
-    await take(k1Pm, id, "recommend_b", { answers: { remarks: REMARKS_B, ...comments } });
-    await ownerTakes(id, "owner_send_back");
-    await take(k1Pm, id, "recommend_d");
-    await ownerTakes(id, "confirm_d");
-    const record = await madeRecord(id);
+  it("never prints a Code the Owner sent back: not its Remarks, its Comments or its Recommendation", () => {
+    const record = shared.sentBack;
     for (const hidden of [REMARKS_B, "Seal the penetrations after the Owner's return", "Recommend B", "Send Back"]) {
       expect(record.xml, hidden).not.toContain(hidden);
       expect(record.text, hidden).not.toContain(squeeze(hidden));

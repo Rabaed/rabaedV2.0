@@ -1,9 +1,20 @@
 "use client";
 
-import { validateAnswers, type BilingualText, type FieldError, type FormSchema, type Locale } from "@rabaed/domain";
-import { ActionForm, Button, Field, Select } from "@rabaed/ui";
+import {
+  formFields,
+  isAnnotatedCopy,
+  isScreenFileField,
+  validateAnswers,
+  type BilingualText,
+  type DocumentList,
+  type FieldError,
+  type FormSchema,
+  type Locale,
+} from "@rabaed/domain";
+import { ActionForm, Button, Field, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useDocuments, useImageUrls } from "@/components/use-documents";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
@@ -131,10 +142,50 @@ export function useWorkItemCalls(workItemId: string) {
     return result;
   }
 
-  return { pending, error, setError, send, take };
+  return { workItemId, pending, error, setError, send, take };
 }
 
 export type WorkItemCalls = ReturnType<typeof useWorkItemCalls>;
+
+/** Until the item's Documents are read, nothing may be uploaded. */
+const noLimits: DocumentList["limits"] = { maxBytes: 0, contentTypes: [] };
+
+/**
+ * The files of a reply Screen's `photos` and `attachments` fields (ADR 0024), for the
+ * pop-up of a Transition whose Action Form has any: the ones the viewer's Participant added
+ * that no Transition took yet, read when it opens and again after each change. `counts`
+ * gives the validator each field's files; `files` is null while they are read, and for a
+ * Transition with no such field.
+ */
+function useReplyFiles(workItemId: string, actionForm: FormSchema | null) {
+  const hasFiles = actionForm !== null && formFields(actionForm).some(isScreenFileField);
+  const [list, setList] = useState<DocumentList | null>(null);
+  const reload = useCallback(async () => {
+    const res = await fetch(`/api/v1/work-items/${workItemId}/documents`).catch(() => null);
+    if (res?.ok) setList((await res.json()) as DocumentList);
+  }, [workItemId]);
+  useEffect(() => {
+    if (hasFiles) void reload();
+  }, [hasFiles, reload]);
+  const documents = useDocuments(workItemId, list?.limits ?? noLimits, { reply: true, onChanged: () => void reload() });
+  const waiting = (list?.documents ?? []).filter((d) => d.reply && !d.reply.taken);
+  const imageUrls = useImageUrls(workItemId, waiting);
+  const counts: Record<string, number> = {};
+  for (const d of waiting) if (!isAnnotatedCopy(d) && d.fieldKey !== null) counts[d.fieldKey] = (counts[d.fieldKey] ?? 0) + 1;
+  const files: FormFiles | null =
+    hasFiles && list
+      ? {
+          documents: waiting,
+          canChange: list.canChangeReplies,
+          pending: documents.pending,
+          imageUrls,
+          onUpload: (fieldKey, picked) => void documents.upload(picked, fieldKey),
+          onOpen: (documentId) => void documents.open(documentId),
+          onRemove: (fieldKey, documentId) => void documents.remove(documentId, fieldKey),
+        }
+      : null;
+  return { files, counts, message: documents.message };
+}
 
 /**
  * A Transition's pop-up, on the item's page and for a Kanban move (RP-350): its
@@ -176,6 +227,7 @@ export function TransitionDialog({
   const [recommendedCode, setRecommendedCode] = useState(NO_RECOMMENDED_CODE);
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const { pending, error, setError } = calls;
+  const reply = useReplyFiles(calls.workItemId, transition.actionForm);
 
   useEffect(() => {
     setError(null);
@@ -186,7 +238,9 @@ export function TransitionDialog({
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     // The API's own checks, before sending.
-    const checked = transition.actionForm ? validateAnswers(transition.actionForm, answers, "complete") : { ok: true as const, answers: {} };
+    const checked = transition.actionForm
+      ? validateAnswers(transition.actionForm, answers, "complete", { files: reply.counts })
+      : { ok: true as const, answers: {} };
     if (!checked.ok) {
       setFieldErrors(checked.errors);
       return setError(t("actionFormInvalid"));
@@ -231,7 +285,13 @@ export function TransitionDialog({
           onChange={(changes) => setAnswers((current) => ({ ...current, ...changes }))}
           onInternalNoteChange={setInternalNote}
           idPrefix={idPrefix}
+          {...(reply.files ? { files: reply.files } : {})}
         />
+        {reply.message && (
+          <p role="status" className="text-sm text-muted">
+            {reply.message}
+          </p>
+        )}
         {transition.recommendCode && (
           <Field label={t("recommendCode")} help={t("recommendCodeHelp")} id={`${idPrefix}-recommend-code`}>
             <Select
