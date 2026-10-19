@@ -37,6 +37,7 @@ export const schemaProblemCodes = [
   "other_participant_section",
   "unknown_link_type",
   "unknown_link_outcome",
+  "screen_only",
   // Action Forms only (action-form.ts).
   "not_in_action_form",
   "reserved_key",
@@ -82,6 +83,10 @@ export function formSchemaProblems(schema: FormSchema, context: PublishContext =
     ...(context.optionListIds ? unknownOptionLists(schema, context.optionListIds).map((key) => problem(key, "unknown_option_list")) : []),
     ...(context.workflows ? editableAtProblems(schema, context.workflows) : []),
     ...(context.types ? linkAcceptsProblems(schema, context.types) : []),
+    // A reply Screen's checklist (RP-86): the Form belongs to the raiser (ADR 0019).
+    ...formFields(schema)
+      .filter((f) => f.type === "copied_checklist")
+      .map((f) => problem(f.key, "screen_only")),
   ];
 }
 
@@ -121,14 +126,16 @@ function duplicateKeys(schema: FormSchema): string[] {
 
 /**
  * Sections and fields with a rule that reads a key that holds no answer (a
- * layout, file or checklist field, or none), and calculated fields whose formula
+ * layout, file or checklist field, a reply Screen's checklist, or none), and calculated fields whose formula
  * reads one that holds no number: a key that isn't a `number`, `currency` or
  * `calculated` field, or a `sum` over a column that isn't a table's `number` or
  * `currency` column.
  */
 function unknownReferences(schema: FormSchema): string[] {
   const fields = formFields(schema);
-  const answerKeys = new Set(fields.filter((f) => isAnswerField(f) && !isFileField(f) && f.type !== "checklist").map((f) => f.key));
+  const answerKeys = new Set(
+    fields.filter((f) => isAnswerField(f) && !isFileField(f) && f.type !== "checklist" && f.type !== "copied_checklist").map((f) => f.key),
+  );
   const numberKeys = new Set(fields.filter((f) => f.type === "number" || f.type === "currency" || f.type === "calculated").map((f) => f.key));
   const holdsNumbers = ({ key, column }: { key: string; column?: string }) => {
     if (column === undefined) return numberKeys.has(key);
