@@ -389,6 +389,14 @@ export const formField = z.discriminatedUnion("type", [
    * the first Submit.
    */
   z.object({ ...fieldBase, type: z.literal("checklist_template") }),
+  /**
+   * A reply Screen's checklist (RP-86; ADR 0024 amended 2026-10-19; form-engine.md §3.3):
+   * no items of its own, it answers the checklist the item copied by its `checklist_template`
+   * field `copyOf` (`work_item_checklist`), absent on an item with no such copy. Its answers
+   * and photos are saved over time by the Participant holding the item, before the
+   * Transition, which takes them; the pop-up never gives them. Screens only, and shared.
+   */
+  z.object({ ...fieldBase, type: z.literal("copied_checklist"), copyOf: formKey }),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -417,6 +425,7 @@ export const isFileField = (field: FormField): field is FileField => field.type 
 export const fileFieldContentTypes = (field: FileField): readonly string[] | undefined =>
   field.type === "photos" ? photoContentTypes : field.contentTypes;
 export type ChecklistField = Extract<FormField, { type: "checklist" }>;
+export type CopiedChecklistField = Extract<FormField, { type: "copied_checklist" }>;
 export type CalculatedField = Extract<FormField, { type: "calculated" }>;
 
 /** Whether a field is a calculated one. */
@@ -1019,6 +1028,7 @@ function checkValue(
     // a file field is checked by validateAnswers, which knows its files.
     case "table":
     case "checklist":
+    case "copied_checklist":
     case "calculated":
     case "attachments":
     case "photos":
@@ -1093,7 +1103,7 @@ function checkTable(
  * comment, and the photo, it requires (`photos`: how many confirmed photos each
  * item has). Errors name the item, in the checklist's order.
  */
-function checkChecklist(
+export function checkChecklist(
   field: ChecklistField,
   value: unknown,
   complete: boolean,
@@ -1277,6 +1287,11 @@ export function validateAnswers(
       const checklist = checkChecklist(field, value, mode === "complete", required, photos);
       errors.push(...checklist.errors);
       if (checklist.errors.length === 0 && Object.keys(checklist.checked).length > 0) clean[field.key] = checklist.checked;
+      continue;
+    }
+    // Saved beforehand by the holding Participant and taken by the Transition (checkReplyChecklist), never given here.
+    if (field.type === "copied_checklist") {
+      if (!isUnanswered(value)) errors.push({ key: field.key, code: "wrong_type" });
       continue;
     }
     // Its files are Documents, never answers; leaving Draft counts the confirmed ones.

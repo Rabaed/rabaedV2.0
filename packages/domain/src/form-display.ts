@@ -125,6 +125,14 @@ export function checklistSummaryText(summary: { counts: readonly ChecklistCount[
   return parts.join(" / ");
 }
 
+/** A checklist's summary counted from its answers alone, for one whose items aren't at hand: none counted as unanswered. */
+function answeredSummary(value: unknown): { counts: ChecklistCount[]; unanswered: number } {
+  const entries = typeof value === "object" && value !== null && !Array.isArray(value) ? Object.values(value) : [];
+  const answers = entries.map((e: unknown) => (typeof e === "object" && e !== null ? (e as { answer?: unknown }).answer : undefined));
+  const counts = (["pass", "fail", "yes", "no", "na"] as const).map((answer) => ({ answer, count: answers.filter((a) => a === answer).length }));
+  return { counts, unanswered: 0 };
+}
+
 /** A table cell as the viewer reads it, by its column's type; empty when there is none. */
 export function formatTableCell(column: TableColumn, value: unknown, locale: Locale, optionLists: readonly OptionList[] = []): string {
   if (value === undefined || value === null) return "";
@@ -210,6 +218,9 @@ export function formatFormValue(
     // A checklist reads as its summary, counted from its answers.
     case "checklist":
       return checklistSummaryText(checklistSummary(field, value), locale);
+    // A reply Screen's checklist (RP-86), as a code's answers hold it: its summary, counted from the answers given.
+    case "copied_checklist":
+      return checklistSummaryText(answeredSummary(value), locale);
     // Its files are Documents, listed by the page; there is no answer to show.
     case "attachments":
     case "photos":
