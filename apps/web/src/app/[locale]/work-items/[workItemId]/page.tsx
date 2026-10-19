@@ -10,7 +10,7 @@ import {
   workItemListHref,
   type Locale,
 } from "@rabaed/domain";
-import { AgeDots, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, cn, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -25,7 +25,7 @@ import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
 import { DownloadRecordButton } from "@/components/download-record-button";
-import { SnagItemCards } from "@/components/snag-item-cards";
+import { SnagHeroPhoto, SnagItemCards } from "@/components/snag-item-cards";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
@@ -50,6 +50,11 @@ import {
   getWorkItemLinks,
   getWorkItemWorkflow,
 } from "@/lib/session";
+
+/** Below `md`, a bar fixed to the bottom of the screen, the page's gutter wide (RP-630). */
+const phoneActionBar =
+  // eslint-disable-next-line rabaed/no-avoid-terms -- CSS env() name
+  "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-20 max-md:border-t max-md:border-border max-md:bg-surface max-md:px-4 max-md:pt-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:shadow-lg max-md:[&>div:first-child>button]:min-h-11 max-md:[&>div:first-child>button]:flex-1";
 
 /**
  * One Work Item, in the frame every item has (form-engine.md §1): the System
@@ -118,7 +123,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       fieldTimes={item.fieldTimes}
       autosave={item.autosave}
     >
-      <div className="max-w-3xl space-y-6">
+      {/* On a phone a Snag List item ends above its bar of actions (RP-630). */}
+      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24")}>
+        {/* On a phone a Snag List item opens with its first photo, as the kit does (RP-630). */}
+        {snag && <SnagHeroPhoto workItemId={item.id} subject={item.title} photos={beforePhotos(form.schema, documents.documents)} />}
         <div className="space-y-2">
           <Link href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
             {snag ? moduleNames.snag_list[locale] : t("title")}
@@ -162,7 +170,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
         </div>
 
-        <WorkItemActions workItemId={item.id} actions={item.actions} locale={locale} />
+        <WorkItemActions
+          workItemId={item.id}
+          actions={item.actions}
+          locale={locale}
+          // A Snag List item's actions on a phone: a bar at the bottom of the screen, in reach of a thumb (RP-630).
+          className={snag ? phoneActionBar : undefined}
+        />
         <WorkItemRevision
           workItemId={item.id}
           projectId={item.projectId}

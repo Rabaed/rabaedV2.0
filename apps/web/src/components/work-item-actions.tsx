@@ -1,7 +1,7 @@
 "use client";
 
 import { backwardKinds, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
-import { Button } from "@rabaed/ui";
+import { Button, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { StampRequired, useMyCompanyRead } from "@/components/company-stamp";
@@ -24,10 +24,13 @@ export function WorkItemActions({
   workItemId,
   actions,
   locale,
+  className,
 }: {
   workItemId: string;
   actions: Actions;
   locale: Locale;
+  /** Where the buttons sit, e.g. a bar at the bottom of a phone's screen (RP-630). */
+  className?: string;
 }) {
   const t = useTranslations("workItems.actions");
   const calls = useWorkItemCalls(workItemId);
@@ -52,7 +55,7 @@ export function WorkItemActions({
   if (none) return null;
 
   return (
-    <section id="work-item-actions" className="space-y-3" aria-label={t("title")}>
+    <section id="work-item-actions" className={cn("space-y-3", className)} aria-label={t("title")}>
       <div className="flex flex-wrap gap-3">
         {actions.transitions.map((tr) => (
           <Button
