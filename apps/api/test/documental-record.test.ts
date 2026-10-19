@@ -25,6 +25,7 @@ import {
   veraPdfDocker,
   verifySeal,
   withByteChanged,
+  type PdfAValidator,
   type PdfRenderer,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
@@ -33,6 +34,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
+
+/** Stands in for veraPDF on the records other suites left behind. */
+const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -81,7 +85,7 @@ let c2Engineer: Caller;
 let handler: OutboxHandler;
 
 /** The record job as the worker runs it, with the local adapters. */
-async function recordHandler(rendering: PdfRenderer = renderer): Promise<OutboxHandler> {
+async function recordHandler(rendering: PdfRenderer = renderer, validator: PdfAValidator = veraPdfDocker()): Promise<OutboxHandler> {
   const signer = await localSealSigner();
   const timestamps = await localTimestampAuthority();
   return documentalRecordHandler({
@@ -92,7 +96,7 @@ async function recordHandler(rendering: PdfRenderer = renderer): Promise<OutboxH
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
     // The checks before publishing (RP-155) validate with veraPDF itself.
-    validator: veraPdfDocker(),
+    validator,
   });
 }
 
@@ -173,8 +177,8 @@ beforeAll(async () => {
   const c2 = await onboard("Record Second Contractor");
   c2Engineer = (await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"])).caller;
   handler = await recordHandler();
-  // Anything earlier tests left in the outbox is not ours to judge.
-  await drainOutbox(worker, { documental_record: handler });
+  // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
+  await drainOutbox(worker, { documental_record: await recordHandler(renderer, unvalidated) });
 });
 
 /** A MAR the C1 engineer prepares, the C1 PM Returns once, then Submits with an Internal Note; K1's PM issues `code`. */

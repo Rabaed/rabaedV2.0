@@ -103,8 +103,8 @@ beforeAll(async () => {
   c2Engineer = (await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"])).caller;
   engineerId = await api.engineer();
   working = await handlers(veraPdf);
-  // Anything earlier tests left in the outbox is not ours to judge.
-  await drainOutbox(worker, working);
+  // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
+  await drainOutbox(worker, await handlers({ validate: async () => ({ compliant: true, problems: [] }) }));
 });
 
 /** A MAR the C1 engineer raises and sends, the C1 PM Submits, K1's PM Approves (Code A). */
