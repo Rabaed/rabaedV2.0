@@ -99,9 +99,14 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270808 | RP-645 | 5B | Unused: the migration moved to 20270824 before queueing |
 | 20270809 | RP-645 | 5B | Unused: the migration moved to 20270825 before queueing |
 | 20270821 | RP-644 | 5B | Unused: the migration moved to 20270826 before queueing |
-| 20270822 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) (final day, moved from 20270801 before queueing) |
-| 20270823 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) (final day, moved from 20270802 before queueing) |
-| 20270824 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) (final day, moved from 20270808 before queueing) |
-| 20270825 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day, moved from 20270804, 20270806, 20270809) |
-| 20270826 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day, moved from 20270821 before queueing) |
+| 20270822 | RP-639 | 5B | Unused: the migration moved to 20270829 (main gained 20270827) |
+| 20270823 | RP-640 | 5B | Unused: the migration moved to 20270830 (main gained 20270827) |
+| 20270824 | RP-645 | 5B | Unused: the migration moved to 20270831 (main gained 20270827) |
+| 20270825 | RP-645 | 5B | Unused: the migration moved to 20270901 (main gained 20270827) |
+| 20270826 | RP-644 | 5B | Unused: the migration moved to 20270902 (main gained 20270827) |
 | 20270827 | RP-86 | 44 | reply_checklist |
+| 20270829 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) (final day, moved from 20270822 before queueing) |
+| 20270830 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) (final day, moved from 20270823 before queueing) |
+| 20270831 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) (final day, moved from 20270824 before queueing) |
+| 20270901 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day; moved from 20270804, 20270806, 20270809, 20270825) |
+| 20270902 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day; moved from 20270821, 20270826) |
