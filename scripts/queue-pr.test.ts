@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { queuePr, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
@@ -24,6 +24,8 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     labelRuns: () => [{ status: "completed", conclusion: "success" }],
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
     removalReason: () => undefined,
+    requiredChecks: () => [],
+    checkRuns: () => [],
     enqueue: (id, head) => {
       enqueued.push([id, head]);
       return { position: 3, state: "QUEUED" };
@@ -304,6 +306,27 @@ describe("queuePr", () => {
     expect(enqueued).toEqual([]);
   });
 
+  // RP-967: a first `--wait` call that timed out on the client had in fact queued the PR.
+  it("says a PR GitHub reports as already in the queue is queued, and does not fail", () => {
+    const { seam } = fakeSeam({
+      enqueue: () => {
+        throw new Error("gh api graphql -f failed:\nGraphQL: Pull request is already in the queue (enqueuePullRequest)");
+      },
+    });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).toContain("PR #149 is already in the merge queue");
+  });
+
+  it("still fails on any other enqueue error", () => {
+    const { seam } = fakeSeam({
+      enqueue: () => {
+        throw new Error("GraphQL: 1 of 1 required status checks have not succeeded: 1 expected.");
+      },
+    });
+    expect(() => queuePr(149, seam)).toThrow(/1 expected/);
+  });
+
   it("refuses a migration that sorts before main's latest, with the immutable check's message", () => {
     const { seam, enqueued } = fakeSeam({
       check: (name) => (name === "immutable" ? { status: 1, output: "x.sql sorts before y.sql\n" } : { status: 0, output: "" }),
@@ -312,6 +335,101 @@ describe("queuePr", () => {
     expect(result.ok).toBe(false);
     expect(result.lines.join("\n")).toContain("x.sql sorts before y.sql");
     expect(enqueued).toEqual([]);
+  });
+});
+
+// RP-967: right after `gh pr create` the PR's required checks have not finished, and GitHub refuses the enqueue.
+describe("queuePrWhenChecksPass", () => {
+  type Run = { name: string; status: string; conclusion: string };
+  // Plays the given check-run lists in order (the last repeats); records sleeps, and what was enqueued after which poll.
+  function checking(polls: Run[][], overrides: Partial<QueueSeam> = {}) {
+    let poll = 0;
+    let clock = 0;
+    const sleeps: number[] = [];
+    const order: string[] = [];
+    const { seam, enqueued } = fakeSeam({
+      requiredChecks: () => ["ci", "reviewed-required"],
+      checkRuns: (commit) => {
+        order.push(`checks ${commit}`);
+        return polls[Math.min(poll++, polls.length - 1)] as Run[];
+      },
+      enqueue: (id, head) => {
+        order.push("enqueue");
+        enqueued.push([id, head]);
+        return { position: 1, state: "QUEUED" };
+      },
+      ...overrides,
+    });
+    const options = {
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+        clock += ms;
+      },
+      now: () => clock,
+    };
+    return { seam, enqueued, sleeps, order, options };
+  }
+  const done = (name: string, conclusion = "success"): Run => ({ name, status: "completed", conclusion });
+  const going = (name: string): Run => ({ name, status: "in_progress", conclusion: "" });
+
+  it("waits while a required check is pending or not reported yet, then queues the PR's head", async () => {
+    const c = checking([[], [going("ci")], [done("ci"), going("reviewed-required")], [done("ci"), done("reviewed-required", "skipped"), going("unrequired")]]);
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(true);
+    expect(c.sleeps).toEqual([60_000, 60_000, 60_000]);
+    expect(c.order).toEqual(["checks abc123", "checks abc123", "checks abc123", "checks abc123", "enqueue"]);
+    expect(c.enqueued).toEqual([["PR_node", "abc123"]]);
+  });
+
+  it("fails without queueing when a required check fails, naming it and its conclusion", async () => {
+    const c = checking([[going("ci")], [done("ci", "failure"), done("reviewed-required")]]);
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(false);
+    const text = result.lines.join("\n");
+    expect(text).toContain("ci (failure)");
+    expect(text).not.toContain("reviewed-required (");
+    expect(c.enqueued).toEqual([]);
+  });
+
+  it("ignores a failing check the ruleset does not require", async () => {
+    const c = checking([[done("ci"), done("reviewed-required"), done("e2e-nightly", "failure")]]);
+    expect((await queuePrWhenChecksPass(149, c.seam, c.options)).ok).toBe(true);
+    expect(c.sleeps).toEqual([]);
+  });
+
+  it("gives up, naming the check, when a required check never reports on the head", async () => {
+    const c = checking([[done("ci")]]);
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("reviewed-required");
+    expect(result.lines.join("\n")).toContain("never reported");
+    expect(c.sleeps.length).toBe(15);
+    expect(c.enqueued).toEqual([]);
+  });
+
+  it("keeps the refusals: a PR without a label is refused before any check is read", async () => {
+    const c = checking([[]], { labels: () => [] });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(false);
+    expect(c.order).toEqual([]);
+  });
+
+  it("treats an already-queued PR as queued after its checks pass", async () => {
+    const c = checking([[done("ci"), done("reviewed-required")]], {
+      enqueue: () => {
+        throw new Error("GraphQL: Pull request is already in the queue");
+      },
+    });
+    const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).toContain("already in the merge queue");
+  });
+
+  it("logs which required checks it is waiting for, once per change", async () => {
+    const logged: string[] = [];
+    const c = checking([[going("ci")], [going("ci")], [done("ci"), going("reviewed-required")], [done("ci"), done("reviewed-required")]]);
+    await queuePrWhenChecksPass(149, c.seam, { ...c.options, log: (line) => logged.push(line) });
+    expect(logged).toEqual(["Waiting for required checks on abc123: ci, reviewed-required.", "Waiting for required checks on abc123: reviewed-required."]);
   });
 });
 
@@ -498,6 +616,23 @@ describe("realSeam", () => {
     expect(args.find((arg) => arg.startsWith("query="))).toContain("enqueuePullRequest");
     expect(args).toContain("id=PR_node");
     expect(args).toContain("head=abc123");
+  });
+
+  it("reads the main ruleset's required checks and the head's check runs through gh api, one JSON line per item", () => {
+    const { calls, seam } = recorded((_command, args) =>
+      args.some((arg) => arg.includes("check-runs"))
+        ? { status: 0, stdout: '{"name":"lint","status":"completed","conclusion":"success"}\n{"name":"unit","status":"in_progress","conclusion":""}\n' }
+        : { status: 0, stdout: "lint\nseam 1 (API as a Member)\n" },
+    );
+    expect(seam.requiredChecks()).toEqual(["lint", "seam 1 (API as a Member)"]);
+    expect(seam.checkRuns("abc123")).toEqual([
+      { name: "lint", status: "completed", conclusion: "success" },
+      { name: "unit", status: "in_progress", conclusion: "" },
+    ]);
+    const [rules, runs] = calls.map(({ command, args }) => [command, ...args]);
+    expect(rules?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/rules/branches/main"]);
+    expect(rules?.join(" ")).toContain("required_status_checks");
+    expect(runs?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/commits/abc123/check-runs?per_page=100"]);
   });
 
   it("throws with the command's output when a required call fails", () => {

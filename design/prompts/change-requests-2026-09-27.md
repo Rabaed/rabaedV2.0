@@ -1,7 +1,7 @@
 # Change requests for the Rabaed Design System (Claude Design)
 
 Decided in the design review of 2026-09-27 (see `design/reviews/claude-design-review.md`).
-Paste one section at a time into the Claude Design project, check the result, then re-export the zip into `design/reference/claude-design/`.
+Paste one section at a time into the Claude Design project, check the result, then re-export the zip into `design/reference/claude-design/`. Before committing an HTML export, run `pnpm design:strip-fonts <in.html> <out.html>`: exports embed their fonts (Thmanyah too), which CI refuses.
 
 These prototypes show UI intent only. Sample data may mix companies; visibility is enforced and tested in the real build. The changes below are about layout, navigation, wording and the design system.
 
