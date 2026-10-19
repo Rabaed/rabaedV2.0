@@ -357,8 +357,8 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
 };
 
 export const viewSwitchLabels: Record<Locale, WorkItemViewSwitchLabels> = {
-  en: { view: "View", list: "List", kanban: "Kanban" },
-  ar: { view: "طريقة العرض", list: "قائمة", kanban: "كانبان" },
+  en: { view: "View", list: "List", kanban: "Kanban", packages: "Packages" },
+  ar: { view: "طريقة العرض", list: "قائمة", kanban: "كانبان", packages: "الحزم" },
 };
 
 export const projectDashboardLabels: Record<Locale, ProjectDashboardLabels> = {
