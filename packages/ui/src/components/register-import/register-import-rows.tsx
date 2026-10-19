@@ -1,6 +1,14 @@
 "use client";
 
-import { formatNumber, type BilingualText, type Locale, type RegisterImportMapping, type RegisterImportRow, type RegisterImportRowReason } from "@rabaed/domain";
+import {
+  formatNumber,
+  type BilingualText,
+  type Locale,
+  type RegisterImportMapping,
+  type RegisterImportPackage,
+  type RegisterImportRow,
+  type RegisterImportRowReason,
+} from "@rabaed/domain";
 import type { ReactNode } from "react";
 import { Badge } from "../data/badge.tsx";
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
@@ -18,6 +26,9 @@ export const within =
   (key, values) =>
     t(`${namespace}.${key}`, values);
 
+/** A Package as one line of text: its number and its name in the reader's language. */
+export const packageLabel = (pkg: RegisterImportPackage, locale: Locale) => `${pkg.number} · ${pkg.name[locale]}`;
+
 /** The value a reason names: what the row's cell held. */
 function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, locale: Locale): string {
   // A value it matched outside the Visibility is named as the Project names it.
@@ -26,7 +37,7 @@ function reasonValue(row: RegisterImportRow, reason: RegisterImportRowReason, lo
   // The assignee by their name, or the email as read (one that named nobody who may take it).
   if (reason.startsWith("assignee_")) return row.assignee.match?.name[locale] ?? row.assignee.text;
   // A Package by its number and name (RP-644); one named too long, as read.
-  if (reason === "package_not_open" && row.package.match) return `${row.package.match.number} · ${row.package.match.name[locale]}`;
+  if (reason === "package_not_open" && row.package.match) return packageLabel(row.package.match, locale);
   if (reason.startsWith("package_")) return row.package.text;
   if (reason.startsWith("type_")) return row.type.text;
   if (reason.startsWith("trade_")) return row.trade.text;
@@ -95,7 +106,8 @@ export function PackageCell({
 }) {
   if (value.match) {
     return (
-      <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
+      // The whole of it on hover, where a narrow column cuts the name short.
+      <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]" title={packageLabel(value.match, locale)}>
         <Icon name="packages" size={14} className="shrink-0 text-brand-fg" />
         <bdi dir="ltr" translate="no" className="shrink-0 font-semibold">
           {value.match.number}
@@ -278,6 +290,8 @@ export function ImportRows({
     package: mapping.package !== undefined || mapping.packages !== undefined,
   };
   const span = 4 + Number(results) + Object.values(columns).filter(Boolean).length;
+  /** A row of a confirmed import that created nothing. */
+  const left = (row: RegisterImportRow) => results && !row.created;
   const created = (
     <span className="inline-flex items-center gap-1 text-muted">
       <Icon name="circle-check" size={14} />
@@ -285,19 +299,20 @@ export function ImportRows({
     </span>
   );
   return (
-    <Table label={label}>
+    // Ten columns fit 1366 wide: tighter cell padding, and long values truncated or wrapped whole.
+    <Table label={label} className="[&_td]:px-2 [&_th]:px-2">
       <TableHeader>
         <TableRow>
-          <TableHead className="w-20">{t("row")}</TableHead>
-          {columns.paperRef && <TableHead>{t("paperRef")}</TableHead>}
-          <TableHead>{t("subject")}</TableHead>
+          <TableHead className="w-14">{t("row")}</TableHead>
+          {columns.paperRef && <TableHead className="whitespace-nowrap">{t("paperRef")}</TableHead>}
+          <TableHead className="min-w-32">{t("subject")}</TableHead>
           <TableHead>{t("type")}</TableHead>
-          <TableHead>{t("trade")}</TableHead>
-          {columns.location && <TableHead>{t("location")}</TableHead>}
-          {columns.scopes && <TableHead>{t("scopes")}</TableHead>}
+          <TableHead className="min-w-24">{t("trade")}</TableHead>
+          {columns.location && <TableHead className="min-w-20">{t("location")}</TableHead>}
+          {columns.scopes && <TableHead className="min-w-20">{t("scopes")}</TableHead>}
           {columns.raiser && <TableHead>{t("raiser")}</TableHead>}
           {columns.package && <TableHead>{t("package")}</TableHead>}
-          {results && <TableHead>{t("result")}</TableHead>}
+          {results && <TableHead className="min-w-40">{t("result")}</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -310,12 +325,19 @@ export function ImportRows({
             <TableRow key={row.rowNo}>
               <TableCell className="tabular-nums text-muted">{formatNumber(row.rowNo, locale)}</TableCell>
               {columns.paperRef && (
-                <TableCell className="text-[13px]">
-                  {/* A paper number reads left to right, like a Document Number. */}
-                  {row.paperRef ? <bdi dir="ltr" className="font-mono">{row.paperRef}</bdi> : <span className="text-muted">—</span>}
+                <TableCell className="text-[13px] whitespace-nowrap">
+                  {/* A paper number reads left to right, like a Document Number, on one line. */}
+                  {row.paperRef ? (
+                    <bdi dir="ltr" className="font-mono">
+                      {row.paperRef}
+                    </bdi>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
                 </TableCell>
               )}
-              <TableCell className="max-w-96 font-semibold [overflow-wrap:anywhere]">{subjectOf(row)}</TableCell>
+              {/* Words wrap whole; only a word longer than the column breaks. */}
+              <TableCell className="max-w-96 font-semibold break-words">{subjectOf(row)}</TableCell>
               <TableCell>
                 {row.type.match ? (
                   <Badge>
@@ -346,25 +368,38 @@ export function ImportRows({
                 </TableCell>
               )}
               {columns.scopes && (
-                <TableCell className="max-w-64 [overflow-wrap:anywhere]">
+                <TableCell className="max-w-64 break-words">
                   {row.scopes.matches.length > 0 ? row.scopes.matches.map((s) => s.name[locale]).join(locale === "ar" ? "، " : ", ") : <span className="text-muted">—</span>}
                 </TableCell>
               )}
               {columns.raiser && (
                 <TableCell>
-                  <span className="flex flex-col">
-                    <span className="font-medium">{(row.assignee.match?.name ?? importer)[locale]}</span>
-                    {row.assignee.text && (
-                      <small className="text-[12px] text-muted">
-                        <bdi dir="ltr">{row.assignee.text}</bdi>
-                      </small>
-                    )}
-                  </span>
+                  {/* A row an import left out raises nothing. */}
+                  {left(row) ? (
+                    <span className="text-muted">—</span>
+                  ) : (
+                    <span className="flex max-w-32 flex-col">
+                      <span className="font-medium">{(row.assignee.match?.name ?? importer)[locale]}</span>
+                      {row.assignee.text && (
+                        // An email reads left to right, cut at its end, in Arabic too.
+                        <small dir="ltr" className="truncate text-[12px] text-muted rtl:text-right" title={row.assignee.text}>
+                          {row.assignee.text}
+                        </small>
+                      )}
+                    </span>
+                  )}
                 </TableCell>
               )}
               {columns.package && (
-                <TableCell className="max-w-64">
-                  <PackageCell value={row.package} locale={locale} newLabel={messages("validate.newPackage")} />
+                <TableCell>
+                  {left(row) ? (
+                    // Only what the row asked for: a new Package it named may exist by now, made from other rows.
+                    <bdi className="block max-w-32 text-[13px] break-words text-muted">{row.package.text || (row.package.match ? packageLabel(row.package.match, locale) : row.package.new) || "—"}</bdi>
+                  ) : (
+                    <span className="flex max-w-32">
+                      <PackageCell value={row.package} locale={locale} newLabel={messages("validate.newPackage")} />
+                    </span>
+                  )}
                 </TableCell>
               )}
               {results && (
