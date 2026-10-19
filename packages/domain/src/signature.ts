@@ -69,10 +69,10 @@ export type MySignature = z.infer<typeof mySignature>;
 
 /**
  * Where saving the Signature takes the Member back to: the item page they came from (the
- * pop-up's link), or the Project page. Anything else (another site, a scheme, `//host`) is
+ * pop-up's link), the Package page (a bulk Transition's), or the Project page. Anything else (another site, a scheme, `//host`) is
  * null, and the Member stays on their profile.
  */
 export function signatureReturnPath(value: string | null | undefined): string | null {
   if (!value) return null;
-  return /^\/(work-items|projects)\/[A-Za-z0-9-]+(\/[A-Za-z0-9-]+)*\/?$/.test(value) ? value : null;
+  return /^\/(work-items|projects|packages)\/[A-Za-z0-9-]+(\/[A-Za-z0-9-]+)*\/?$/.test(value) ? value : null;
 }

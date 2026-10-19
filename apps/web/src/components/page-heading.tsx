@@ -12,6 +12,7 @@ export async function PageHeading({ segment }: { segment: string }) {
     "": t("shell.home"),
     projects: t("shell.projects"),
     "work-items": t("shell.projects"),
+    packages: t("shell.projects"),
     members: t("shell.members"),
     participants: t("shell.participations"),
     library: t("shell.library"),

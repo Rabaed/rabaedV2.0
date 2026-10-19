@@ -7,6 +7,7 @@ import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
+import { PackageChip, type PackageChipProps } from "../packages/package-chip.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 
 // The Kanban card (RP-410, the owner's Kanban Card Anatomy): header (file icon and
@@ -66,6 +67,8 @@ export type KanbanCardProps = {
   typeCode: string;
   /** The raising Company's name: only when the Card view layout shows it. */
   contractorName?: string;
+  /** Its Package's chip (RP-659): only where the API gives the item's Package. */
+  package?: Omit<PackageChipProps, "linkAs" | "className">;
   /** The plan location, top level first: only when the Card view layout shows it. */
   place?: KanbanCardPlace[];
   owner?: KanbanCardOwner;
@@ -123,6 +126,7 @@ export function KanbanCard({
   trade,
   typeCode,
   contractorName,
+  package: pkg,
   place,
   owner,
   date,
@@ -188,6 +192,11 @@ export function KanbanCard({
           {typeCode}
         </span>
       </div>
+      {pkg && (
+        <div className="mt-2 flex min-w-0">
+          <PackageChip {...pkg} linkAs={Link} />
+        </div>
+      )}
       {contractorName !== undefined && (
         <p className="mt-2 flex min-w-0 items-center gap-1.5 text-caption text-muted">
           <Icon name="briefcase" size={14} className="shrink-0" />

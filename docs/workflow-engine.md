@@ -357,7 +357,7 @@ Effects, in order:
    - `outcome` and `closed_at` are set;
    - outcome hooks run (§6);
    - a Documental Record job is written to the outbox (§7; as built, RP-620: by trigger `work_item_queues_documental_record` on `closed_at`);
-   - the Package status is recomputed;
+   - the Package status is recomputed (as built, RP-642: by the trigger on `work_item` that `outcome` and `closed_at` fire, so `app.take_transition` itself is unchanged; Done once every latest Revision in the Package is closed at an outcome offering no Revision, cancelled and discarded items left out; data-model.md `package`);
    - the parent is re-checked (a parent can't close while Subtasks are open, so that check is also a precondition when the parent itself closes);
    - **follow-up items** (as built, RP-434, WF-11): when the outcome's follow-up actions create items (`create_items`, Code B's Comments), `app.transition_follow_up_items` makes one item of that Type per row of the Action Form's `items_to_create` table, in the same transaction, after the effects above (§6).
 7. Notifications for the Transition go to the outbox. Recipients are re-checked against visibility at send time.
