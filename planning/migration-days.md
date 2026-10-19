@@ -84,9 +84,9 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270709 | RP-620 | 22 | documental_record |
 | 20270716 | RP-626 | 33 | The Question Types (QSN, QSC) and the Consultant's `submit` (moved from 20270706, then 20270705) |
 | 20270714 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, then 20270706: main's later days) |
-| 20270717 | RP-85 | 21 | drop_is_signing |
 | 20270718 | RP-617 | 21 | company_stamp |
 | 20270719 | RP-632 | 21 | review_fixes |
 | 20270716 | RP-651 | 42 | checklist_templates_review_fixes |
 | 20270720 | RP-151 | 22 | record_page_one |
 | 20270727 | RP-85 | 21 | member_signature |
+| 20270728 | RP-85 | 21 | drop_is_signing |
