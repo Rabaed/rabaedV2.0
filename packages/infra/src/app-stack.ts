@@ -197,6 +197,11 @@ export class AppStack extends Stack {
       securityGroup: network.securityGroups.loadBalancer,
       dropInvalidHeaderFields: true,
     }));
+    // X-Forwarded-For: keep what the browser sent and append the address the load balancer saw (AWS's
+    // default, pinned so a console change can't drop it). The verification page limits typed codes per
+    // visitor by that last entry (RP-157, apps/api/src/routes/verification.ts): `preserve` would let a
+    // browser choose its own address, `remove` would make every visitor one.
+    loadBalancer.setAttribute("routing.http.xff_header_processing.mode", "append");
     // Every request, for the audit trail; the logs bucket (storage stack) keeps them a year.
     loadBalancer.logAccessLogs(storage.logs, "load-balancer");
 
