@@ -39,6 +39,7 @@ import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
 import { stageRoutes } from "./routes/stages.ts";
+import { verificationRoutes } from "./routes/verification.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
 import { snagBulkRoutes } from "./routes/snag-bulk.ts";
@@ -176,6 +177,7 @@ export async function buildApp({
   await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(documentalRecordRoutes(context));
+  await app.register(verificationRoutes(context));
   await app.register(notificationRoutes(context));
   await app.register(notificationSettingsRoutes(context));
   await app.register(watchRoutes(context));

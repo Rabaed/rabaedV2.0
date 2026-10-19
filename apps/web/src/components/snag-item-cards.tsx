@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSummary, Locale, RaisedFromSource } from "@rabaed/domain";
-import { RaisedFromCard, SnagResponse, type SnagItemLabels, type SnagPhoto } from "@rabaed/ui";
+import { Icon, RaisedFromCard, SnagResponse, type SnagItemLabels, type SnagPhoto } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useImageUrls } from "@/components/use-documents";
 import { Link } from "@/i18n/navigation";
@@ -22,6 +22,24 @@ function useSnagItemLabels(): SnagItemLabels {
     noPhoto: t("noPhoto"),
     photoOf: (subject) => s("photoOf", { subject }),
   };
+}
+
+/**
+ * On a phone, a Snag List item's first "before" photo, the screen's width, above its header (RP-630;
+ * kit `snag/mobile.js`). Nothing without one, or from `md` up, where the Form shows them all.
+ */
+export function SnagHeroPhoto({ workItemId, subject, photos }: { workItemId: string; subject: string; photos: DocumentSummary[] }) {
+  const s = useTranslations("snagList");
+  const first = photos[0];
+  const urls = useImageUrls(workItemId, first ? [first] : []);
+  if (!first) return null;
+  const url = urls[first.id];
+  return (
+    <div className="-mx-4 -mt-6 flex aspect-[16/10] items-center justify-center overflow-hidden bg-surface-subtle text-faint md:hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived URL the file store signs, not for next/image to fetch and cache */}
+      {url ? <img src={url} alt={s("photoOf", { subject })} className="size-full object-cover" /> : <Icon name="photo" size={28} label={s("photoOf", { subject })} />}
+    </div>
+  );
 }
 
 /**

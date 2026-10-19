@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { takeTransition } from "./check-migration-drift.fixtures.ts";
+import { kindCheck, takeTransition } from "./check-migration-drift.fixtures.ts";
 import { mergeGroupSides, type MigrationProblems, migrationProblems } from "./check-migration-drift.ts";
 import { migrationsDir as dir } from "./migrations.ts";
 
@@ -247,6 +247,33 @@ describe("migrationProblems, with several branches merged onto one", () => {
     expect(migrationProblems(repo, "main", "integration").ordering).toEqual([
       { object: "function app.take_transition", earlier: "20270201000000_wf7.sql", later: "20270203000000_wf8.sql" },
     ]);
+  });
+});
+
+// RP-963: RP-643's branch and RP-155 on main each rebuilt notification_kind_check
+// from only the kinds they knew, then the branch merged main.
+describe("migrationProblems, when a table constraint is rebuilt", () => {
+  const kinds = ["step_reached", "watched_event"];
+  const packageSubmit = "20270816000000_package_submit_notification.sql";
+  beforeEach(() => {
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20270112000000_handover.sql`]: kindCheck(kinds) }, "handover");
+    git("switch", "-q", "-c", "packages");
+    commit({ [`${dir}/${packageSubmit}`]: kindCheck([...kinds, "package_submitted"]) }, "RP-643");
+  });
+
+  it("fails a check constraint rebuilt on the branch and, after the merge base, on main", () => {
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20270805000000_record_checks.sql`]: kindCheck([...kinds, "record_ready"]) }, "RP-155");
+    git("switch", "-q", "packages");
+    git("merge", "-q", "--no-edit", "main");
+    expect(migrationProblems(repo, "main", "packages").drift).toEqual([
+      { object: "constraint notification_kind_check on notification", branch: [packageSubmit], main: ["20270805000000_record_checks.sql"] },
+    ]);
+  });
+
+  it("passes a check constraint only the branch rebuilt", () => {
+    expect(migrationProblems(repo, "main", "packages")).toEqual(none);
   });
 });
 
