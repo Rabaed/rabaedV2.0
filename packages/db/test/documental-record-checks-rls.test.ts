@@ -1,5 +1,5 @@
 // Seam 2 for the Documental Record's checks, "record ready" and Re-produce (scenario RP-155-3; RP-155, spec
-// RP-632; ADR 0023; migration 20270803000000_record_checks.sql), as the app role: what the
+// RP-632; ADR 0023; migration 20270805000000_record_checks.sql), as the app role: what the
 // checks found and the history of replaced PDFs are admin-only, the worker's functions refuse
 // a Member, Rabaed Admin's refuse the app role, and a record changes only as its checks and
 // a Re-produce change it.
