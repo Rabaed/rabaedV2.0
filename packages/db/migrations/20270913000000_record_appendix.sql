@@ -2,7 +2,7 @@
 -- Documental Record row): the Documental Record's appendix. Only the Documents shared with the
 -- other Participants go into it, and into the Record Data.
 --
--- * app.documental_record_facts (rebuilt from 20270828000000_record_signatures.sql) gives each
+-- * app.documental_record_facts (rebuilt from 20270912000000_record_signatures.sql) gives each
 --   Document's fingerprint (`document.file_sha256`, RP-618, hex), which the appendix prints beside
 --   its name. The column stays ungranted to the app role: the worker reads it only here, through
 --   this owner-run function (app.require_worker).
