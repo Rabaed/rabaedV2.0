@@ -286,7 +286,7 @@ create function app.raise_checklist_snags(
               where d.work_item_id = p_work_item_id and d.reply_event_id = v_failed.reply_event_id
                 and d.field_key = v_failed.field_key and d.item_key = v_failed.item ->> 'key'
                 and d.confirmed_at is not null and d.removed_at is null
-              order by d.confirmed_at, d.id
+              order by d.id
             ) d
           ), copied as (
             insert into document (
@@ -411,7 +411,7 @@ create function app.raised_document_copies(p_work_item_id uuid) returns table (s
         join document s on s.id = c.copied_from_id and s.work_item_id = p_work_item_id
         where l.to_id = p_work_item_id and l.kind = 'raised_from' and l.item_key is not null
           and d.xmin = xid(pg_current_xact_id())
-        order by d.created_at, d.id;
+        order by d.id;
     end
   $$;
 
@@ -437,7 +437,7 @@ create function app.raised_from_check_item(p_work_item_id uuid) returns jsonb
         join work_item_checklist c on c.work_item_id = l.to_id and c.field_key = l.checklist_key
         cross join lateral jsonb_array_elements(c.items) i
         where l.from_id = p_work_item_id and l.kind = 'raised_from' and i ->> 'key' = l.item_key
-        order by l.created_at
+        order by l.id
         limit 1
       );
     end
