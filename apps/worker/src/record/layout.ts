@@ -283,7 +283,7 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
           .join("")}</section>`;
 
   const cardHtml = (c: RecordData["cards"][number], i: number) => `<article class="card">
-  <div class="card-head"><span class="num">${i + 1}</span> <span class="strong">${txt(c.verb)}</span>${i === 0 ? "" : ` <span class="muted">· ${txt(c.label)}</span>`}</div>
+  <div class="card-head"><span class="num">${i + 1}</span> <span class="strong">${inline(c.verb)}</span>${i === 0 ? "" : ` <span class="muted">· ${inline(c.label)}</span>`}</div>
   <div class="card-body">
     <div>${person(c)}<div class="muted">${when(c.at)}</div></div>
     <div class="sigbox">${image(c.signatureKey, "sig")}<div class="muted">${heading("signature")}</div></div>
