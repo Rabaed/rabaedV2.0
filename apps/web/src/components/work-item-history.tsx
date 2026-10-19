@@ -11,6 +11,7 @@ import {
 } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
 
 type Event = History["events"][number];
 type Change = NonNullable<Event["changes"]>[number];
@@ -32,12 +33,21 @@ const ownLines: ReadonlySet<string> = new Set(["reason", "remarks"] satisfies (k
  */
 export async function WorkItemHistory({
   events,
+  imported = null,
+  projectId,
   schema,
   optionLists,
   documents = [],
   locale,
 }: {
   events: Event[];
+  /**
+   * The Submittal Register Import that created the Draft, for its importing Company only
+   * (story 35, RP-645): by whom ("Rabaed" for a Rabaed Engineer's), from which register, linked
+   * to the import's page. Undated, as the import's time is when the Draft was started (scenario 61).
+   */
+  imported?: History["imported"] | null;
+  projectId: string;
   schema: FormSchema;
   optionLists: readonly OptionList[];
   /** The item's Documents the viewer sees, to name the reply files a Transition took (ADR 0024). */
@@ -193,6 +203,17 @@ export async function WorkItemHistory({
           </li>
           );
         })}
+        {imported && (
+          <li className="py-3 text-sm" data-testid="history-imported">
+            <Link href={`/projects/${projectId}/work-items/imports/${imported.importId}`} className="font-medium text-brand-fg underline-offset-4 hover:underline">
+              {t("imported", {
+                // Isolated, so a Latin register in an Arabic line keeps its order.
+                fileName: `\u2068${imported.fileName}\u2069`,
+                by: imported.byRabaed ? t("rabaed") : (imported.memberName?.[locale] ?? t("rabaed")),
+              })}
+            </Link>
+          </li>
+        )}
       </ol>
     </section>
   );
