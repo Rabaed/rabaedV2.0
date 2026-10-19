@@ -1,5 +1,5 @@
 // Seam 1 for the Snag List on a phone (RP-630, SNAG-10; spec RP-619; glossary Snag, Draft,
-// Transition; visibility.md V3, V5).
+// Transition; visibility.md V3, V5 and scenario RP-630-1).
 //
 // The camera-first New Snag: the Consultant takes the photos, writes the Subject and picks the
 // Trade, and the Draft is created then, its photos uploaded to it; the Location is saved to the
@@ -84,7 +84,7 @@ describe("the phone's New Snag (seam 1)", () => {
   });
 });
 
-describe("the cards' swipe actions (seam 1)", () => {
+describe("the cards' swipe actions (scenario RP-630-1, seam 1)", () => {
   /** A Snag K1's manager raised on Building A, Open with C1, picked up by C1's PM. */
   async function openWithC1(title: string): Promise<string> {
     const id = await phoneDraft(title, 0);
@@ -94,7 +94,7 @@ describe("the cards' swipe actions (seam 1)", () => {
     return id;
   }
 
-  it("are the Transitions the item offers its holder, and each is taken without a refusal", async () => {
+  it("RP-630-1: are the Transitions the item offers its holder, and each is taken without a refusal", async () => {
     const offered = (await detail(at.c1Pm, await openWithC1("Missing cable labels"))).actions.transitions;
     expect(offered.map((t) => t.key).sort()).toEqual(["put_on_hold", "resolve", "start_work"]);
     for (const transition of offered) {
@@ -106,7 +106,7 @@ describe("the cards' swipe actions (seam 1)", () => {
     }
   });
 
-  it("are none for those who may take none: the Consultant while C1 holds it, and C1's colleague who did not pick it up", async () => {
+  it("RP-630-1: are none for those who may take none: the Consultant while C1 holds it, and C1's colleague who did not pick it up", async () => {
     const id = await openWithC1("Ceiling tile cracked");
     expect((await detail(at.k1Manager, id)).actions.transitions).toEqual([]);
     expect((await detail(at.c1Engineer, id)).actions.transitions).toEqual([]);
