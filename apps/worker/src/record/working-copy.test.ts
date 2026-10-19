@@ -16,6 +16,7 @@ function content(language: WorkingCopyContent["recordLanguage"]): WorkingCopyCon
     recordLanguage: language,
     watermark: { en: "Not Final", ar: "غير نهائي" },
     stage: { en: "Under Review", ar: "قيد المراجعة" },
+    links: [{ documentNumber: "RGT-MAR-EL-0009", subject: "Cable ladders for Building A" }],
     moves: transitions.map((t) => ({ kind: t.kind, label: t.label, at: t.at, participantId: t.participantId, companyName: t.companyName, roleName: t.roleName })),
   };
 }
@@ -49,6 +50,12 @@ describe("a Working Copy's page", () => {
     expect(html).toContain("Under Review");
     for (const m of data.moves) expect(html).toContain(m.company.en!);
     expect(html).not.toContain("chip issued");
+  });
+
+  it("lists the Links not tied to a link question, each by its number and Subject", async () => {
+    const html = recordHtml(workingCopyDataOf(content("en")), await fallbackFonts());
+    expect(html).toContain("RGT-MAR-EL-0009");
+    expect(html).toContain("Cable ladders for Building A");
   });
 
   it("marks a move that gave the item back as returned for revision", () => {

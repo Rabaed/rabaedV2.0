@@ -8,7 +8,7 @@
 --   with the Project row. It applies to Working Copies made afterwards.
 -- * app.working_copy_content(item): what a Working Copy prints, read without a calling Member,
 --   so it is one for every viewer: the answers as they last arrived (app.shared_answers_of),
---   the Built-in Fields from them, the Documents as of the last arrival, the Stage other
+--   the Built-in Fields from them, the Documents and Links as of the last arrival, the Stage other
 --   Companies read (the Step the item reached its holder at), the shared moves by Company
 --   only (no person), the Companies on the item by name (the Owner, the raiser, those it was given to
 --   and those that took a shared move). Never an Internal Note, a Recommended
@@ -30,10 +30,21 @@
 --   request asks for the new content).
 -- app.take_transition, app.transition_effects and the record's functions are not touched.
 
+-- A watermark text: Arabic and English, neither empty, each at most 60 characters, so it fits across
+-- an A4 page (WATERMARK_MAX_LENGTH in @rabaed/domain). The column's check and the setter both ask it.
+create function app.is_watermark(p_text jsonb) returns boolean
+  language sql immutable
+  set search_path = pg_catalog, public
+  as $$
+    select app.is_bilingual(p_text) and length(p_text ->> 'en') <= 60 and length(p_text ->> 'ar') <= 60
+  $$;
+revoke all on function app.is_watermark(jsonb) from public;
+-- A check helper, as app.is_bilingual: whichever role writes a project row runs it.
+grant execute on function app.is_watermark(jsonb) to rabaed_app, rabaed_admin;
+
 alter table project add column working_copy_watermark jsonb not null
   default '{"en": "Not Final", "ar": "غير نهائي"}'::jsonb
-  check (app.is_bilingual(working_copy_watermark)
-    and length(working_copy_watermark ->> 'en') <= 60 and length(working_copy_watermark ->> 'ar') <= 60);
+  check (app.is_watermark(working_copy_watermark));
 
 -- A Project Admin sets the watermark text. Outcome: 'set'; 'not_found' for anyone who is no Project
 -- Admin of the Project (whether it exists or not), or a text that is empty in either language or longer
@@ -47,8 +58,7 @@ create function app.set_project_working_copy_watermark(p_project_id uuid, p_wate
       v_text jsonb;
     begin
       v_text := jsonb_build_object('en', trim(p_watermark ->> 'en'), 'ar', trim(p_watermark ->> 'ar'));
-      if p_watermark is null or not app.is_bilingual(v_text)
-        or length(v_text ->> 'en') > 60 or length(v_text ->> 'ar') > 60
+      if p_watermark is null or not app.is_watermark(v_text)
         or not exists (select 1 from app.current_admin_project_ids() x where x = p_project_id)
       then
         return 'not_found';
@@ -176,7 +186,8 @@ create function app.working_copy_content(p_work_item_id uuid) returns jsonb
             where o.project_id = w.project_id and o.work_item_type_id = w.work_item_type_id and o.closing
           ), '[]'::jsonb),
           -- The Owner, the raiser, every Company the item was given to and every Company that took a shared move, each
-          -- with its Project Role: the Companies every reader of the item reads (as app.work_item_companies names them).
+          -- with its Project Role: the Companies app.work_item_companies names to every reader, and the Owner, whom the
+          -- record's Parties box always names.
           'companies', coalesce((
             select jsonb_agg(jsonb_build_object('participantId', p.id, 'name', co.legal_name, 'roleName', r.name, 'baseRole', r.base_role)
               order by case r.base_role when 'owner' then 1 when 'owner_representative' then 2 when 'consultant' then 3 else 4 end, p.ordinal, p.id)
@@ -258,6 +269,17 @@ create function app.working_copy_content(p_work_item_id uuid) returns jsonb
             from document d
             where d.work_item_id = w.id and d.confirmed_at is not null and d.removed_at is null
               and (w.submitted_at is null or d.arrival < w.arrivals)
+          ), '[]'::jsonb),
+          -- The Links not tied to a link question (those print with the Form), as of the last arrival; a Draft's
+          -- all. A linked item by its number and Subject only, never one of the chain no reader is shown.
+          'links', coalesce((
+            select jsonb_agg(jsonb_build_object('documentNumber', t.document_number, 'subject', t.title)
+              order by l.created_at, t.document_number collate "C", l.id) -- hidden-sort-key: the order app.work_item_shared_links lists them in, never the times
+            from work_item_link l
+            join work_item t on t.id = l.to_id
+            where l.from_id = w.id and l.field_key is null and t.document_number is not null
+              and not app.chain_item_unshared(w.id, t.id)
+              and (w.submitted_at is null or l.arrival < w.arrivals)
           ), '[]'::jsonb),
           -- The shared moves, each by its Company only. The Owner's review writes one copy of a move for each side of it: one is enough.
           'moves', coalesce((

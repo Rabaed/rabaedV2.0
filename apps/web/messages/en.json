@@ -222,8 +222,7 @@
         "cancel": "Cancel",
         "discarded": "Draft discarded",
         "failed": "That didn't work. Refresh the page and try again.",
-        "duplicateTooLarge": "Its Documents come to more than 200 MB, more than a Duplicate copies. Start a new Draft and attach the Documents you need.",
-        "recordNotReady": "The record isn't ready yet. Try again in a minute."
+        "duplicateTooLarge": "Its Documents come to more than 200 MB, more than a Duplicate copies. Start a new Draft and attach the Documents you need."
       },
       "columnSettings": {
         "settings": "Table settings",
@@ -1741,7 +1740,7 @@
         "description": "Printed across every page of a Working Copy, the PDF of an item that isn't closed, so nobody takes it for the record.",
         "en": "English text",
         "ar": "Arabic text",
-        "help": "Both languages, up to 60 characters each. A change applies to Working Copies made afterwards.",
+        "help": "Both languages, up to {max} characters each. A change applies to Working Copies made afterwards.",
         "save": "Save watermark",
         "saved": "Saved"
       },

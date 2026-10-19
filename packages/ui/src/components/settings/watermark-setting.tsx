@@ -1,5 +1,6 @@
 "use client";
 
+import { WATERMARK_MAX_LENGTH, workingCopyWatermarkRequest, type BilingualText } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
 import { Button } from "../button/button.tsx";
 import { Field } from "../form/field.tsx";
@@ -7,7 +8,7 @@ import { Input } from "../form/input.tsx";
 import { SettingsSection } from "./settings-layout.tsx";
 
 /** The watermark text in both languages. */
-export type WatermarkText = { en: string; ar: string };
+export type WatermarkText = BilingualText;
 
 export type WatermarkSettingLabels = {
   title: ReactNode;
@@ -21,8 +22,6 @@ export type WatermarkSettingLabels = {
 
 export type WatermarkSettingProps = {
   value: WatermarkText;
-  /** The longest each language may be. */
-  maxLength: number;
   labels: WatermarkSettingLabels;
   /** Saves the text, trimmed; resolves to an error message, or null once saved. */
   onSave: (next: WatermarkText) => Promise<ReactNode | null>;
@@ -32,18 +31,20 @@ export type WatermarkSettingProps = {
 
 /**
  * Project → Settings → Documental Record: the Working Copy's watermark (RP-621), the text across
- * every page of the PDF of an item that isn't closed. Arabic and English, both needed, each up to
- * `maxLength`; Save only once it changed and neither is empty. No reference screen yet (RP-665);
+ * every page of the PDF of an item that isn't closed. Arabic and English, as the domain's rule has them
+ * (workingCopyWatermarkRequest); Save only once it changed and fits that rule. No reference screen yet (RP-665);
  * it follows the settings cards around it.
  */
-export function WatermarkSetting({ value, maxLength, labels, onSave, readOnly = false }: WatermarkSettingProps) {
+export function WatermarkSetting({ value, labels, onSave, readOnly = false }: WatermarkSettingProps) {
   const [saved, setSaved] = useState(value);
   const [text, setText] = useState(value);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<ReactNode>(null);
   const [justSaved, setJustSaved] = useState(false);
-  const next: WatermarkText = { ...text, en: text.en.trim(), ar: text.ar.trim() };
-  const valid = next.en !== "" && next.ar !== "" && next.en.length <= maxLength && next.ar.length <= maxLength;
+  // The domain's rule trims both languages; Save sends what it gives.
+  const parsed = workingCopyWatermarkRequest.safeParse({ watermark: text });
+  const valid = parsed.success;
+  const next: WatermarkText = parsed.success ? parsed.data.watermark : text;
   const changed = next.en !== saved.en || next.ar !== saved.ar;
 
   async function save() {
@@ -76,10 +77,10 @@ export function WatermarkSetting({ value, maxLength, labels, onSave, readOnly = 
         }}
       >
         <Field label={labels.ar} required readOnly={readOnly} disabled={pending}>
-          <Input dir="rtl" lang="ar" value={text.ar} maxLength={maxLength} onChange={edit("ar")} />
+          <Input dir="rtl" lang="ar" value={text.ar} maxLength={WATERMARK_MAX_LENGTH} onChange={edit("ar")} />
         </Field>
         <Field label={labels.en} required readOnly={readOnly} disabled={pending}>
-          <Input dir="ltr" lang="en" value={text.en} maxLength={maxLength} onChange={edit("en")} />
+          <Input dir="ltr" lang="en" value={text.en} maxLength={WATERMARK_MAX_LENGTH} onChange={edit("en")} />
         </Field>
         <p className="text-sm text-muted sm:col-span-2">{labels.help}</p>
         {!readOnly && (

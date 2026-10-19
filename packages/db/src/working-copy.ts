@@ -45,6 +45,8 @@ export interface WorkingCopyContent {
   readonly scopes: readonly BilingualText[];
   readonly form: FormFacts;
   readonly documents: readonly DocumentFact[];
+  /** The Links not tied to a link question, as of the last arrival: each linked item by its number and Subject. */
+  readonly links: readonly { readonly documentNumber: string; readonly subject: string }[];
   readonly moves: readonly MoveFact[];
 }
 

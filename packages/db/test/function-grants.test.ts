@@ -46,6 +46,8 @@ const allow: GrantAllowList = {
   "app.workflow_screens": both,
   "app.current_member_id": both,
   "app.is_bilingual": both,
+  // The Working Copy watermark's check, as is_bilingual (RP-621).
+  "app.is_watermark": both,
   // The checks of outcome and workflow_transition.outcome (RP-429).
   "app.is_outcome_actions": both,
   "app.is_outcome_code": both,

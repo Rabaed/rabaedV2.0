@@ -71,6 +71,7 @@ const WORDS = {
   hash: { ar: "بصمة المحتوى", en: "Content hash" },
   documents: { ar: "المستندات", en: "Documents" },
   documentName: { ar: "المستند", en: "Document" },
+  links: { ar: "الروابط", en: "Links" },
   pages: { ar: "الصفحات", en: "Pages" },
   takenAt: { ar: "تاريخ التصوير", en: "Taken" },
   totals: { ar: "الإجمالي", en: "Total" },
@@ -355,6 +356,7 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 .photo img { width: 100%; max-height: 45mm; object-fit: cover; border: 0.5pt solid #999; display: block; }
 .photo .noimage { height: 20mm; border: 0.5pt dashed #999; }
 .mark { vertical-align: middle; }
+td.linkno { width: 45mm; }
 .stage { font-size: 16pt; font-weight: 700; line-height: 1.2; margin-bottom: 1mm; }
 /* A Working Copy's watermark: fixed, so Chromium prints it on every page, over the content. */
 .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); z-index: 10; text-align: center; white-space: nowrap; font-size: 54pt; font-weight: 700; line-height: 1.15; color: rgba(160, 30, 30, 0.16); }
@@ -413,6 +415,13 @@ ${
   data.documents.length > 0
     ? `<section class="form"><h2>${heading("documents")}</h2><table><thead><tr><th>${heading("documentName")}</th><th>${heading("pages")}</th></tr></thead><tbody>${data.documents
         .map((d) => `<tr><td><bdi dir="ltr">${html(d.fileName)}</bdi></td><td class="n">${d.pages === null ? "—" : ltr(String(d.pages))}</td></tr>`)
+        .join("")}</tbody></table></section>`
+    : ""
+}
+${
+  copy && copy.links.length > 0
+    ? `<section class="form"><h2>${heading("links")}</h2><table><tbody>${copy.links
+        .map((l) => `<tr><td class="linkno">${ltr(l.documentNumber)}</td><td><bdi>${html(l.subject)}</bdi></td></tr>`)
         .join("")}</tbody></table></section>`
     : ""
 }

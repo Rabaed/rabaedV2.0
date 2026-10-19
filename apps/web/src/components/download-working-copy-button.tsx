@@ -3,7 +3,7 @@
 import { Button } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { openItemPdf } from "@/lib/item-pdf";
+import { itemPdfProblemMessage, openItemPdf } from "@/lib/item-pdf";
 
 /**
  * "Download PDF" on an item that isn't closed (RP-621; visibility.md, the Working Copy row): its
@@ -21,7 +21,7 @@ export function DownloadWorkingCopyButton({ workItemId }: { workItemId: string }
     setPending(true);
     const problem = await openItemPdf(workItemId, false);
     setPending(false);
-    if (problem) setMessage(problem === "notReady" ? t("notReady") : problem === "failed" ? t("workingCopyFailed") : t("unavailable"));
+    if (problem) setMessage(t(itemPdfProblemMessage(problem)));
   }
 
   return (

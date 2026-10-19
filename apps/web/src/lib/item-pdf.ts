@@ -3,6 +3,11 @@ import type { SignedUrl, WorkingCopyAnswer } from "@rabaed/domain";
 /** Why an item's PDF could not be opened. */
 export type ItemPdfProblem = "notFound" | "notReady" | "failed" | "unavailable";
 
+/** The documentalRecord message that tells the viewer why there was no PDF to open. */
+export function itemPdfProblemMessage(problem: ItemPdfProblem): "notReady" | "workingCopyFailed" | "unavailable" {
+  return problem === "notReady" ? "notReady" : problem === "failed" ? "workingCopyFailed" : "unavailable";
+}
+
 /** How often, and how long, the Working Copy is asked for while the worker prints it. */
 const POLL_MS = 1500;
 const POLL_FOR_MS = 120_000;

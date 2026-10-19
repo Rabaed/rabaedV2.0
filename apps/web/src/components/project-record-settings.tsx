@@ -10,7 +10,9 @@ import { refusalMessage, setupCall } from "@/lib/setup-call";
  * Project → Settings → Documental Record (RP-151): the language the Project's records are printed in
  * (both languages, Arabic or English) and whether they show the Hijri date beside the Gregorian one.
  * Each change applies at once (PUT …/settings/record) and holds for records made afterwards; records
- * already made keep what they were made with. Below them, the Working Copy's watermark text (RP-621, PUT\n * …/settings/working-copy-watermark), for Working Copies made afterwards. Only a Project Admin can change\n * them; everyone else reads them.
+ * already made keep what they were made with. Below them, the Working Copy's watermark text (RP-621, PUT
+ * …/settings/working-copy-watermark), for Working Copies made afterwards. Only a Project Admin can change
+ * them; everyone else reads them.
  */
 export function ProjectRecordSettings({
   projectId,
@@ -72,7 +74,6 @@ export function ProjectRecordSettings({
       </SettingsSection>
       <WatermarkSetting
         value={workingCopyWatermark}
-        maxLength={WATERMARK_MAX_LENGTH}
         readOnly={!canEdit}
         onSave={saveWatermark}
         labels={{
@@ -80,7 +81,7 @@ export function ProjectRecordSettings({
           description: t("watermark.description"),
           en: t("watermark.en"),
           ar: t("watermark.ar"),
-          help: t("watermark.help"),
+          help: t("watermark.help", { max: WATERMARK_MAX_LENGTH }),
           save: t("watermark.save"),
           saved: t("watermark.saved"),
         }}

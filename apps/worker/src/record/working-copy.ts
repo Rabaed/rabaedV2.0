@@ -54,6 +54,8 @@ export interface WorkingCopyData
   /** The Stage the item is at, as every Company but its holder reads it. */
   readonly stage: RecordText | null;
   readonly moves: readonly WorkingCopyMove[];
+  /** The Links not tied to a link question, each linked item by its number and Subject. */
+  readonly links: WorkingCopyContent["links"];
 }
 
 /** A move that gives the item back: marked as returned for revision. */
@@ -92,6 +94,7 @@ export function workingCopyDataOf(content: WorkingCopyContent, pageCounts: Reado
     scopes: content.scopes.map((s) => pick(s, language)),
     classification,
     moves: content.moves.map(move),
+    links: content.links,
     sections,
     documents: content.documents
       .filter((d) => isListedDocument(d, attachmentFieldKeys))

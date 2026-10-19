@@ -39,6 +39,8 @@ let c1Engineer: Caller;
 let c1Pm: Caller;
 let k1Pm: Caller;
 let c2Engineer: Caller;
+/** RP-23-3's item, Submitted: the Draft below links to it. */
+let sharedId = "";
 const handler: OutboxHandler = workingCopyHandler({
   files: s3RecordFiles(projectFilesFromEnv()),
   renderer,
@@ -145,7 +147,7 @@ describe("scenario RP-23-3: C1's PM downloads a Working Copy while K1 reviews th
   let text = "";
 
   beforeAll(async () => {
-    id = await withK1(SUBJECT);
+    id = sharedId = await withK1(SUBJECT);
   }, 120_000);
 
   it("is printed once on request: both ask, one job, then both get the same PDF through a short-lived link", async () => {
@@ -212,6 +214,8 @@ describe("scenario RP-23-3: C1's PM downloads a Working Copy while K1 reviews th
 describe("a Working Copy follows the item: a move makes a new one, never the old file", () => {
   it("is printed afresh after the Submit, and K1, who got the 404 before it, now gets the new one", async () => {
     const id = await draft(at, c1Engineer, "Trays moving on");
+    // A free Link (no link question), added in the Draft: it arrives with the Submit.
+    await ok(c1Engineer.post(`/v1/work-items/${id}/links`, { workItemId: sharedId }), 201);
     await take(c1Engineer, id, "send_for_review");
     // In C1's internal review: C1's Members only.
     expect(await answer(c1Engineer, id)).toEqual({ status: "preparing" });
@@ -233,6 +237,9 @@ describe("a Working Copy follows the item: a move makes a new one, never the old
     expect(then).not.toContain("SubmissionDate");
     expect(now).toContain("SubmissionDate");
     expect(now).toContain(squeeze(c1Name));
+    const linked = (await detail(c1Pm, sharedId)).documentNumber!;
+    expect(now, "the Link").toContain(squeeze(linked));
+    expect(await printed(forK1.bytes), "the Link, as K1 reads it").toContain(squeeze(SUBJECT));
     expect(after.link.url).not.toBe(before.link.url);
   }, 180_000);
 

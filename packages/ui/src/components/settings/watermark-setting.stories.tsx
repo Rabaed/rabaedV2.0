@@ -31,7 +31,7 @@ const copy = {
 const labels = (context: { globals: Record<string, unknown> }): WatermarkSettingLabels =>
   Object.fromEntries(Object.entries(copy).map(([key, text]) => [key, storyText(context, text)])) as WatermarkSettingLabels;
 
-const base = { value: { en: "Not Final", ar: "غير نهائي" }, maxLength: 60 };
+const base = { value: { en: "Not Final", ar: "غير نهائي" } };
 
 /** The Project's text as it is (the default); Save waits for a change. */
 export const Default: Story = {

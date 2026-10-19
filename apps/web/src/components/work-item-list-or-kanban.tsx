@@ -43,7 +43,7 @@ import NextLink from "next/link";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
-import { openItemPdf } from "@/lib/item-pdf";
+import { itemPdfProblemMessage, openItemPdf } from "@/lib/item-pdf";
 import { listSearchParams } from "@/lib/list-url";
 
 /** An item as the viewer reads it, with what they may press now; null when it can't be read. */
@@ -202,6 +202,7 @@ export function WorkItemListOrKanban(
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
   const t = useTranslations("workItemViews");
+  const tRecord = useTranslations("documentalRecord");
   const labels = useViewLabels(props.tableLabel, module);
   const router = useRouter();
   const [moving, setMoving] = useState<{ card: WorkItemRow; move: WorkItemMove } | null>(null);
@@ -241,7 +242,7 @@ export function WorkItemListOrKanban(
       case "download": {
         // Its Documental Record once closed, else its Working Copy (RP-621): the same PDF for every viewer.
         const problem = await openItemPdf(row.id, row.outcome !== null);
-        return problem === null ? null : problem === "notReady" ? t("list.rowMenu.recordNotReady") : failed;
+        return problem === null ? null : tRecord(itemPdfProblemMessage(problem));
       }
       case "resubmit":
       case "duplicate": {
