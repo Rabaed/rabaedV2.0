@@ -725,11 +725,13 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     expect(ids).toContain(pkg.id);
     expect(ids).not.toContain(mechanicalOnly.id);
     expect(ids).not.toContain(c2Open.id);
-    // Each Package's Trades are those of the items the engineer sees: Electrical only.
-    for (const p of listed) expect(p.trades.map((t) => t.id)).toEqual([at.electrical]);
+    // Each Package's Trades are those of the items the engineer sees: Electrical only (K1's own empty Open Package has none).
+    for (const p of listed) expect(p.trades.map((t) => t.id)).toEqual(p.counts.total === 0 ? [] : [at.electrical]);
     const choices = packageFilterChoices(listed, "en");
     expect(choices.trades.map((t) => t.id)).toEqual([at.electrical]);
-    expect(choices.companies).toEqual([{ participantId: at.c1ParticipantId, companyName: c1Name }]);
+    // The owning Companies of the Packages they see: C1, and their own K1 (its own Open Package); never C2, whose Package is Open.
+    expect(choices.companies.map((c) => c.companyName)).toContainEqual(c1Name);
+    for (const c of choices.companies) expect([c1Name, k1Name]).toContainEqual(c.companyName);
     const body = (await k1Electrical.get(`/v1/projects/${at.projectId}/packages`)).body;
     for (const text of [at.mechanical, mechanicalOnly.id, "Chillers", "C2's"]) expect(body).not.toContain(text);
     // Filtering by Mechanical leaves them nothing; their search finds the Package by number and by either name.
