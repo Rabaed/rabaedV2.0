@@ -138,7 +138,7 @@ Trades, Locations and any future dimension share one generic structure, so addin
 
 **visibility_dimension**
 `id`, `project_id`, `kind {trade, location, custom}`, `name i18n`, `required_on_work_items bool`.
-Every Project gets `trade` (required) and `location` at creation, and the Trade "General" (code `GEN`, RP-627): `app.create_project_dimensions` adds it, as there is no Rabaed default Trade list table yet, and `20270811000000_site_observation_type_and_general_trade.sql` added it to the Projects that existed. A Form's `trade` field may carry `defaultCode` (the code of the Trade a new item starts on; the Site Observation Form names GEN): a starting choice the filler can change.
+Every Project gets `trade` (required) and `location` at creation, and the Trade "General" (code `GEN`, RP-627): `app.create_project_dimensions` adds it, as there is no Rabaed default Trade list table yet, and `20270828000000_site_observation_type_and_general_trade.sql` added it to the Projects that existed. A Form's `trade` field may carry `defaultCode` (the code of the Trade a new item starts on; the Site Observation Form names GEN): a starting choice the filler can change.
 
 **dimension_value**
 `id`, `dimension_id`, `parent_id` (Location tree: Zone → Building → Floor, three levels; flat for Trades), `depth`, `level_name i18n` (e.g. "Floor"), `code` (2–6 chars, used in numbering), `name i18n`, `copied_from_id` (Rabaed default Trade list), `sort`.
