@@ -305,8 +305,9 @@ create function app.raise_checklist_snags(
           insert into document_copy (document_id, copied_from_id)
           select s.new_id, s.id from source s join copied c on c.id = s.new_id;
           -- Frozen once document_copy's triggers have filled them in (a frozen Document never
-          -- changes): the Snag has left its Draft.
-          update document set frozen_at = p_at where work_item_id = v_id and frozen_at is null;
+          -- changes): the Snag has left its Draft. They came with its Draft, before its first
+          -- arrival (the insert stamped the Snag's current one), so whoever sees it reads them.
+          update document set frozen_at = p_at, arrival = 0 where work_item_id = v_id and frozen_at is null;
         end if;
       end loop;
     end

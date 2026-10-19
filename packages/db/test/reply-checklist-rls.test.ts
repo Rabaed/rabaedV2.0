@@ -9,6 +9,8 @@
 // them: C1 and the Owner read them in its event, and the photo by id. C2, another Contractor not
 // covering the Location, never reads them. Another Project's Member reads none. Leaving K1 any other way (a Send Back)
 // discards them.
+//
+// RP-577-1: the Snag a code raises from a failed item is seen where the Inspection is, never by C2.
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sql } from "kysely";
@@ -350,5 +352,59 @@ describe("leaving K1 any other way discards them", () => {
     expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await answersAs(k1.member, id)).toEqual([]);
     expect(await photosAs(k1.member, id)).toEqual([]);
+  });
+});
+
+// RP-577-1 (visibility.md): the code raises a Snag from each failed item still ticked "Raise a
+// Snag" (`formwork` here; `cover` raises none). The Snag is seen exactly where the Inspection is:
+// C1 (it holds it), K1 (it raised it) and the Owner (oversight), never C2, another Contractor of the
+// same Trade not covering the Location (V3), nor another Project's Member: not the Snag, its photos,
+// its check item, its count, nor its files to copy. Its history starts with the Raise, shared, by K1.
+describe("RP-577-1: the Snags a code raises are seen where the Inspection is", () => {
+  let id = "";
+  let snag = "";
+
+  beforeAll(async () => {
+    ({ id } = await atManager("Slab pour, Level 7"));
+    expect(await take(k1Manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    const raised = await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from'", [id]);
+    expect(raised.rows).toHaveLength(1);
+    snag = raised.rows[0].from_id as string;
+  });
+
+  const seesSnag = async (as: string) => (await call<{ id: string }>(as, sql`select id from work_item where id = ${snag}::uuid`)).length === 1;
+  const snagPhotos = async (as: string) => (await call<{ id: string }>(as, sql`select id from document where work_item_id = ${snag}::uuid`)).length;
+  const snagCount = (as: string) =>
+    call<{ type_code: string; open_count: number }>(as, sql`select type_code, open_count::integer from app.work_item_raised_item_counts(${id}::uuid)`);
+  const checkItem = async (as: string) =>
+    (await call<{ item: unknown }>(as, sql`select app.raised_from_check_item(${snag}::uuid) as item`))[0]!.item;
+
+  it("C1, K1 and the Owner read the Snag, its photo, its check item and its count", async () => {
+    for (const reader of [c1.member, c1Pm, k1.member, k1Manager, ow.member]) {
+      expect(await seesSnag(reader), reader).toBe(true);
+      expect(await snagPhotos(reader), reader).toBe(1);
+      expect(await checkItem(reader), reader).toEqual({ key: "formwork", text: label("Formwork tight") });
+      expect(await snagCount(reader), reader).toEqual([{ type_code: "SNG", open_count: 1 }]);
+    }
+  });
+
+  it("C2 and another Project's Member read none of it", async () => {
+    for (const outsider of [c2.member, other.ap]) {
+      expect(await seesSnag(outsider), outsider).toBe(false);
+      expect(await snagPhotos(outsider), outsider).toBe(0);
+      expect(await checkItem(outsider), outsider).toBeNull();
+      expect(await snagCount(outsider), outsider).toEqual([]);
+      expect(await call(outsider, sql<object>`select * from app.raised_document_copies(${id}::uuid)`), outsider).toEqual([]);
+    }
+  });
+
+  it("its history starts with the Raise, shared, by K1; it is held by C1", async () => {
+    const [raise] = await call<{ type: string; audience: string; company_name: unknown }>(
+      c1.member,
+      sql`select type, audience, company_name from app.work_item_history(${snag}::uuid) order by seq limit 1`,
+    );
+    expect(raise).toEqual({ type: "transition", audience: "shared", company_name: label("K1") });
+    const held = await migrator.query("select participant_id from step_assignment where work_item_id = $1 and status in ('pooled', 'picked_up')", [snag]);
+    expect(held.rows.map((r) => r.participant_id)).toEqual([participant.c1]);
   });
 });

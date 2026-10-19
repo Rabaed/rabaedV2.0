@@ -237,7 +237,7 @@ describe("every code raises them (seam 1)", () => {
 
 // Scenario RP-577-1 (visibility.md): the Snag is seen where its WIR is: C2, another Contractor of
 // the same Trade, sees neither the Snag nor its count (V3); the Owner Representative sees it as
-// it sees the WIR. Seam 2: `packages/db/test/wir-snags-rls.test.ts`.
+// it sees the WIR. Seam 2: `packages/db/test/reply-checklist-rls.test.ts`.
 describe("RP-577-1: who sees the Snags raised at the code", () => {
   let wir = "";
   let snag = "";
@@ -256,9 +256,10 @@ describe("RP-577-1: who sees the Snags raised at the code", () => {
     await expectHidden(yousef.caller.get(`/v1/work-items/${wir}`));
   });
 
-  it("C1, K1 and the Owner Representative see it and count it", async () => {
+  it("C1, K1 and the Owner Representative see it, its photo, and count it", async () => {
     for (const reader of [hafiz, ali, ahmed, mohammed, faisal]) {
       expect((await snagList(reader.caller)).map((i) => i.id), reader.id).toContain(snag);
+      expect((await documentsOf(reader.caller, snag)).documents.map((d) => d.fileName), reader.id).toEqual(["formwork.jpg"]);
       expect(await snagCount(reader.caller, wir), reader.id).toEqual({ open: 1, closed: 0 });
     }
   });
