@@ -177,7 +177,7 @@ export async function processOutbox(db: Db, options: ProcessOutboxOptions = {}):
   type Result = "processed" | "failed" | "dead" | "gone";
   const recordFailure = async (trx: Transaction<Database>, row: OutboxRow, error: unknown): Promise<Result> => {
     const { rows } = await sql<{ outcome: "retry" | "dead" | "gone" }>`
-      select app.outbox_failed(${row.id}::uuid, ${failureOf(error)}, ${maxAttempts}, ${retryAfterMs[row.attempts - 1] ?? 0}::integer) as outcome
+      select app.outbox_failed(${row.id}::uuid, ${row.attempts}::integer, ${failureOf(error)}, ${maxAttempts}, ${retryAfterMs[row.attempts - 1] ?? 0}::integer) as outcome
     `.execute(trx);
     return rows[0]!.outcome === "retry" ? "failed" : rows[0]!.outcome;
   };
