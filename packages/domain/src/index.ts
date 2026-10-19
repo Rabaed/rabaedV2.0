@@ -65,3 +65,4 @@ export * from "./home.ts";
 export * from "./stage.ts";
 export * from "./screen.ts";
 export * from "./company-default.ts";
+export * from "./verification.ts";

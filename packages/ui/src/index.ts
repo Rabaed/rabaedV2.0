@@ -295,3 +295,10 @@ export {
   type RecentActivityCardLabels,
   type RecentActivityCardProps,
 } from "./components/views/home-cards.tsx";
+export {
+  CopyCheck,
+  RecordVerificationView,
+  VerificationCodeForm,
+  type RecordVerificationLabels,
+  type VerificationCodeFormLabels,
+} from "./components/verification/record-verification.tsx";
