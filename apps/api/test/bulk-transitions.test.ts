@@ -14,6 +14,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { demoSignaturePng } from "../src/demo/demo-signature.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { lockedWhileWaitingOnPackage } from "./support/lock-order.ts";
 import { addActionsType, addRulesType } from "./support/rules.ts";
 import { all, bilingual, buildTower, detail, inInternalReview, memberOnProject, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -290,6 +291,28 @@ describe("the Package's answer says which Transitions each item offers in bulk",
 
     await ok(bulk(at.k1Manager, [a, b], { transition: "approve_a" }), 200);
     expect((await read(at.k1Manager)).get(a)).toEqual([]);
+  });
+});
+
+// The lock order (data-model.md "Lock order"): a single Transition locks its item, then
+// (the status trigger) its Package; a command over several items locks them all first, by
+// id, then the Package, so the two never wait on each other the other way round.
+describe("a bulk Transition locks all its items before their Package", () => {
+  it("while it waits on the Package, it already holds every item", async () => {
+    const pkg = (await ok(at.c1Pm.post(`/v1/projects/${at.projectId}/packages`, { name: bilingual("Lock order") }), 201)).json() as { id: string };
+    const items: string[] = [];
+    for (const title of ["Lock A", "Lock B", "Lock C"]) {
+      const id = await inInternalReview(at, at.c1Engineer, title);
+      await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+      await ok(at.c1Pm.post(`/v1/packages/${pkg.id}/items`, { workItemId: id }));
+      items.push(id);
+    }
+    await ok(at.c1Pm.post(`/v1/packages/${pkg.id}/submit`, { confirmed: true, idempotencyKey: randomUUID() }), 200);
+    for (const id of items) await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+
+    const { held, result } = await lockedWhileWaitingOnPackage(pkg.id, items, () => bulk(at.k1Manager, items, { transition: "approve_a" }));
+    expect(held).toEqual(Object.fromEntries(items.map((id) => [id, true])));
+    expect(result.statusCode, result.body).toBe(200);
   });
 });
 

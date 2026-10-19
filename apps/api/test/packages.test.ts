@@ -13,6 +13,7 @@ import type { PackageComments, PackageDetail, PackageSummary, WorkItemDetail, Wo
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { lockedWhileWaitingOnPackage } from "./support/lock-order.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import {
   all,
@@ -399,6 +400,19 @@ describe("Submit Package", () => {
     expect((await ok(submitPackage(at.c1Pm, pkg.id, key), 200)).json()).toEqual(first);
     const history = (await ok(at.k1Manager.get(`/v1/work-items/${id}/history`), 200)).json() as WorkItemHistory;
     expect(history.events.filter((e) => e.type === "transition")).toHaveLength(1);
+  });
+});
+
+// The lock order (data-model.md "Lock order"): a single Transition locks its item, then (the
+// status trigger) its Package; Submit Package locks all its items first, by id, then the Package.
+describe("Submit Package locks all its items before the Package", () => {
+  it("while it waits on the Package, it already holds every item still to Submit", async () => {
+    const pkg = await createPackage(at.c1Pm, "Lock order");
+    const items = [await readyForPm("Locked one"), await readyForPm("Locked two"), await readyForPm("Locked three")];
+    for (const id of items) await ok(addItem(at.c1Pm, pkg.id, id));
+    const { held, result } = await lockedWhileWaitingOnPackage(pkg.id, items, () => submitPackage(at.c1Pm, pkg.id));
+    expect(held).toEqual(Object.fromEntries(items.map((id) => [id, true])));
+    expect(result.statusCode, result.body).toBe(200);
   });
 });
 

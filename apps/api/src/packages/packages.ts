@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { withMember, type Db } from "@rabaed/db";
 import {
   packageNumber,
@@ -17,7 +16,7 @@ import type { Database } from "@rabaed/db";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { workItemRowsById } from "../work-items/query.ts";
 import { bulkOffers } from "../work-items/bulk-transitions.ts";
-import { takeTransitionIn } from "../work-items/work-items.ts";
+import { allOrNothing, itemsById, lockWorkItems, Rollback, takeEach } from "../work-items/several-transitions.ts";
 
 // Packages (spec RP-616; RP-636 an Open Package). Reads go through the package
 // table's row-level security (app.sees_package) and column grants; a Package's
@@ -27,8 +26,8 @@ import { takeTransitionIn } from "../work-items/work-items.ts";
 // a Package they don't see is 'not_found', exactly like a made-up id.
 //
 // Submit Package (RP-638) takes each item's own Submit through takeTransitionIn,
-// the single Submit's path, in one transaction; the database moves the Package to
-// In Progress (submit_package migration).
+// the single Submit's path, in one transaction (several-transitions.ts, with the lock
+// order); the database moves the Package to In Progress (submit_package migration).
 //
 // The board and the Package page (RP-641): every Member who sees one of a
 // Package's items sees the Package (app.sees_package), its owner by Company name,
@@ -269,31 +268,8 @@ export type SubmitPackageResult =
   | { ok: false; reason: "package_not_ready"; notReady: PackageNotReadyItem[]; othersNotReady: boolean }
   | { ok: false; reason: "not_found" | "project_closed" | "not_confirmed" | "nothing_to_submit" };
 
-/** Undoes a Submit Package's transaction, answering `result`. */
-class Rollback extends Error {
-  constructor(readonly result: SubmitPackageResult) {
-    super("Submit Package rolled back");
-  }
-}
-
-/** Each item's own key for its Submit, from the request's: the same request again gives the same keys. */
-function itemKey(key: string, workItemId: string): string {
-  const h = createHash("sha256").update(`submit_package/${key}/${workItemId}`).digest("hex");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-}
-
-/** Items `ids` as the acting Member reads them now. */
-async function itemsById(trx: Trx, ids: string[]): Promise<PackageItem[]> {
-  if (ids.length === 0) return [];
-  const rows = await trx
-    .selectFrom("work_item")
-    .select(["id", "document_number", "title"])
-    .where("id", "in", ids)
-    .orderBy("document_number")
-    .orderBy("id")
-    .execute();
-  return rows.map((r) => ({ id: r.id, documentNumber: r.document_number, title: r.title }));
-}
+/** The command name each item's own key is made under (itemKey). */
+const SUBMIT_COMMAND = "submit_package";
 
 const notReadyReason = (reason: string): PackageNotReadyReason =>
   reason === "form_incomplete" || reason === "invalid_action_form" || reason === "validation_failed" ? reason : "refused";
@@ -315,57 +291,53 @@ export async function submitPackage(
   input: Required<SubmitPackageRequest>,
   now: Date,
 ): Promise<SubmitPackageResult> {
-  try {
-    return await withMember(db, memberId, async (trx): Promise<SubmitPackageResult> => {
-      await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
-      const { rows } = await sql<{ outcome: string; work_item_ids: string[] | null }>`
-        select outcome, work_item_ids from app.begin_package_submit(${packageId}::uuid, ${input.idempotencyKey}::uuid)
-      `.execute(trx);
-      const begun = checkedOutcome(rows[0]!.outcome, ["ready", "replayed", "not_found", "project_closed"]);
-      if (begun === "replayed") return { ok: true, submitted: await itemsById(trx, rows[0]!.work_item_ids ?? []) };
-      if (begun !== "ready") return { ok: false, reason: begun };
-      if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
+  return allOrNothing(db, memberId, async (trx): Promise<SubmitPackageResult> => {
+    await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
+    // The items still to Submit first, by id, then the Package (app.begin_package_submit locks it):
+    // the lock order. An item added meanwhile, after this read, is locked when it is taken.
+    const { rows: unsubmitted } = await sql<{ id: string }>`
+      select w.id from app.package_items(${packageId}::uuid) i join work_item w on w.id = i
+      where w.submitted_at is null and w.closed_at is null
+    `.execute(trx);
+    await lockWorkItems(
+      trx,
+      unsubmitted.map((r) => r.id),
+    );
+    const { rows } = await sql<{ outcome: string; work_item_ids: string[] | null }>`
+      select outcome, work_item_ids from app.begin_package_submit(${packageId}::uuid, ${input.idempotencyKey}::uuid)
+    `.execute(trx);
+    const begun = checkedOutcome(rows[0]!.outcome, ["ready", "replayed", "not_found", "project_closed"]);
+    if (begun === "replayed") return { ok: true, submitted: await itemsById(trx, rows[0]!.work_item_ids ?? []) };
+    if (begun !== "ready") return { ok: false, reason: begun };
+    if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
 
-      const { items, hidden } = await submitReadiness(trx, packageId);
-      if (items.length === 0 && !hidden) return { ok: false, reason: "nothing_to_submit" };
-      const notReady: PackageNotReadyItem[] = [];
-      const item = (i: ToSubmit) => ({ id: i.id, documentNumber: i.document_number, title: i.title });
-      for (const i of items) {
-        if (i.submit_key === null) notReady.push({ ...item(i), reason: i.pick_up ? "pick_up_first" : "cannot_submit" });
-      }
-      if (notReady.length > 0 || hidden) return { ok: false, reason: "package_not_ready", notReady, othersNotReady: hidden };
+    const { items, hidden } = await submitReadiness(trx, packageId);
+    if (items.length === 0 && !hidden) return { ok: false, reason: "nothing_to_submit" };
+    const notReady: PackageNotReadyItem[] = [];
+    const item = (i: ToSubmit) => ({ id: i.id, documentNumber: i.document_number, title: i.title });
+    for (const i of items) {
+      if (i.submit_key === null) notReady.push({ ...item(i), reason: i.pick_up ? "pick_up_first" : "cannot_submit" });
+    }
+    if (notReady.length > 0 || hidden) return { ok: false, reason: "package_not_ready", notReady, othersNotReady: hidden };
 
-      for (const i of items) {
-        const taken = await takeTransitionIn(
-          trx,
-          memberId,
-          i.id,
-          {
-            transition: i.submit_key!,
-            answers: {},
-            internalNote: "",
-            assignTo: null,
-            recommendedCode: null,
-            confirmed: true,
-            idempotencyKey: itemKey(input.idempotencyKey, i.id),
-          },
-          now,
-        );
-        if (!taken.ok) notReady.push({ ...item(i), reason: notReadyReason(taken.reason) });
-      }
-      if (notReady.length > 0) throw new Rollback({ ok: false, reason: "package_not_ready", notReady, othersNotReady: false });
+    const takes = items.map((i) => ({
+      workItemId: i.id,
+      input: { transition: i.submit_key!, answers: {}, internalNote: "", assignTo: null, recommendedCode: null },
+    }));
+    const refusals = await takeEach(trx, memberId, takes, { command: SUBMIT_COMMAND, key: input.idempotencyKey, now, stopAtFirst: false });
+    if (refusals.length > 0) {
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const listed = refusals.map((r) => ({ ...item(byId.get(r.workItemId)!), reason: notReadyReason(r.refused.reason) }));
+      throw new Rollback<SubmitPackageResult>({ ok: false, reason: "package_not_ready", notReady: listed, othersNotReady: false });
+    }
 
-      const ids = items.map((i) => i.id);
-      const recorded = await sql<{ outcome: string }>`
-        select app.record_package_submit(${packageId}::uuid, ${ids}::uuid[], ${input.idempotencyKey}::uuid, ${now}) as outcome
-      `.execute(trx);
-      checkedOutcome(recorded.rows[0]!.outcome, ["recorded"]);
-      return { ok: true, submitted: await itemsById(trx, ids) };
-    });
-  } catch (e) {
-    if (e instanceof Rollback) return e.result;
-    throw e;
-  }
+    const ids = items.map((i) => i.id);
+    const recorded = await sql<{ outcome: string }>`
+      select app.record_package_submit(${packageId}::uuid, ${ids}::uuid[], ${input.idempotencyKey}::uuid, ${now}) as outcome
+    `.execute(trx);
+    checkedOutcome(recorded.rows[0]!.outcome, ["recorded"]);
+    return { ok: true, submitted: await itemsById(trx, ids) };
+  });
 }
 
 /** A Member of the owning Participant removes a submittal from an Open Package. */

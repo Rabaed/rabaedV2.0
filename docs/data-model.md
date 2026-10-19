@@ -367,6 +367,8 @@ Writes (security definer, each re-checking the caller; a Package the caller does
 
 Status is recomputed on Submit, when a submittal, Revision or replacement joins it, and on every member item's closure, cancel or discard, in the same transaction (as built, RP-642). The Package is Done when every *latest revision* in it closed at A, B or D; cancelled and discarded items are left out.
 
+**Lock order** (RP-616 review fix 5, `20270627000000_lock_order.sql`). A single Transition locks its item (`app.take_transition`'s update), then its Package (the status trigger, `app.recompute_package_status`, `for update`). A command over several items, Submit Package and a bulk Transition, locks all its items first, in order of id (`app.lock_work_items(ids)`: the ones the caller sees, `for update`, until the transaction ends), then the Package, so it and a single Transition never wait on each other the other way round. Both go through `apps/api/src/work-items/several-transitions.ts` (`lockWorkItems`, then `takeEach`). Submit Package locks the items still to Submit before `app.begin_package_submit` locks the Package; an item added between that read and the Package's lock is locked when it is taken. The single-item writes of a Package (`app.add_package_item`, `app.remove_package_item`) still lock the Package, then the item; seam 1 checks the order of both commands (`test/support/lock-order.ts`).
+
 ## 6. Documents, signing, Documental Records
 
 **stored_file**
