@@ -59,8 +59,9 @@ const formOptions = z
  * (the publish checks refuse them optional, and validateAnswers requires them
  * whatever the schema says): visibility and Consultant routing depend on them.
  */
-const builtInField = <T extends string>(type: T, required: boolean) =>
+const builtInField = <T extends string, E extends z.ZodRawShape = Record<never, never>>(type: T, required: boolean, extra?: E) =>
   z.object({
+    ...(extra ?? ({} as E)),
     key: z.literal(type),
     type: z.literal(type),
     label: bilingualText,
@@ -404,7 +405,7 @@ export const formField = z.discriminatedUnion("type", [
   /** Layout, display only: a line between groups of fields. */
   z.object({ ...layoutBase, type: z.literal("divider") }),
   /** Built-in: one of the Project's Trades, by id. Required even in a Draft. */
-  builtInField("trade", true),
+  builtInField("trade", true, { defaultCode: z.string().regex(/^[A-Z0-9]{2,6}$/).optional() }),
   /** Built-in: one of the Project's Locations, by id. Required to leave Draft. */
   builtInField("location", true),
   /** Built-in: Scopes of the chosen Trade, and Sub-scopes of the chosen Scopes, by id. */
@@ -680,6 +681,20 @@ export function requiredByProject(schema: FormSchema, keys: readonly string[]): 
 /** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
   return schema.sections.flatMap((s) => s.fields);
+}
+
+/**
+ * The id of the Trade a new item starts on (RP-627): the one of `offered` whose code the Form's
+ * Trade field names as its `defaultCode`, if there is one. Only a starting choice; the filler
+ * can change it, and nothing checks it.
+ */
+export function defaultTradeId(schema: FormSchema, offered: readonly { id: string; code: string }[]): string | undefined {
+  for (const section of schema.sections) {
+    for (const field of section.fields) {
+      if (field.type === "trade" && field.defaultCode) return offered.find((t) => t.code === field.defaultCode)?.id;
+    }
+  }
+  return undefined;
 }
 
 /** The fields that take answers, in Form order. */

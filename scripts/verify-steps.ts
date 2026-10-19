@@ -40,12 +40,8 @@ const failHeader = /^FAIL\s+(?:\|[^|]+\|\s+)?(\S+\.test\.\w+)(?:\s+>\s+(.+?))?(?
 // eslint-disable-next-line no-control-regex -- colour codes, should a run print them.
 const ansi = /\x1b\[[0-9;]*m/g;
 
-/**
- * When `step` (a seam suite) failed only on timeouts or worker start-up, the message `pnpm verify`
- * adds: likely machine load, the timed-out tests, and the command to rerun only their files.
- * Undefined for any other failure. It never makes the step pass.
- */
-export function loadFailure(step: string, output: string): string | undefined {
+/** What a seam step's output shows when it failed only on timeouts or worker start-up: the test files and tests named. Undefined for any other failure. */
+function readLoadFailure(step: string, output: string): { files: Set<string>; timedOut: Set<string> } | undefined {
   if (!step.startsWith("test:seam")) return undefined;
   const timedOut = new Set<string>();
   const files = new Set<string>();
@@ -67,14 +63,47 @@ export function loadFailure(step: string, output: string): string | undefined {
     }
     headers = [];
   }
-  if (!loadSeen) return undefined;
+  return loadSeen ? { files, timedOut } : undefined;
+}
+
+/**
+ * When `step` (a seam suite) failed only on timeouts or worker start-up, the message `pnpm verify`
+ * adds: likely machine load, the timed-out tests, and the command to rerun only their files.
+ * Undefined for any other failure. It never makes the step pass (`runStep` re-runs the files once).
+ */
+export function loadFailure(step: string, output: string): string | undefined {
+  const load = readLoadFailure(step, output);
+  if (!load) return undefined;
+  const { files, timedOut } = load;
   const rerun = `pnpm ${step}${[...files].map((file) => ` ${file}`).join("")}`;
   return [
     `${step} failed only on timeouts or worker start-up: likely machine load (other test runs on this machine), not this diff.`,
     ...(timedOut.size > 0 ? ["Timed out:", ...[...timedOut].map((name) => `  ${name}`)] : []),
     `Rerun ${files.size > 0 ? "only them" : "the step"} when the machine is quieter: ${rerun}`,
-    "The step still failed: verify does not pass it on its own.",
+    "The step still failed.",
   ].join("\n");
+}
+
+/** One run of a step: its exit code and everything it printed. */
+export type StepRun = { status: number; output: string };
+
+export type StepOutcome = { passed: true; label: string } | { passed: false; status: number; output: string; reran: boolean };
+
+/**
+ * Runs `step` through `run` (called with the step's script, then the test files to run, if any) and
+ * judges it. A seam step that failed only on timeouts or worker start-up, with its test files named
+ * (RP-979), is re-run once: only those files, same script (so the same Vitest project). If they pass
+ * the step passes, its label saying so; if they fail again, or anything failed other than a timeout,
+ * the step has failed, and a real failure is never re-run.
+ */
+export function runStep(step: string, run: (args: string[]) => StepRun): StepOutcome {
+  const first = run([step]);
+  if (first.status === 0) return { passed: true, label: step };
+  const files = [...(readLoadFailure(step, first.output)?.files ?? [])];
+  if (files.length === 0) return { passed: false, ...first, reran: false };
+  const second = run([step, ...files]);
+  if (second.status !== 0) return { passed: false, ...second, reran: true };
+  return { passed: true, label: `${step} (re-ran ${files.length} timed-out file${files.length === 1 ? "" : "s"})` };
 }
 
 /** The last `count` lines of `output`. */
