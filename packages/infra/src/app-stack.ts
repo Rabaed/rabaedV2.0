@@ -11,7 +11,7 @@ import { grantToDeployRole } from "./deploy-grants.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
-import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
+import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_IMAGE_OBJECTS, RECORD_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
 
 /**
  * The free public RFC 3161 timestamp authority the Documental Records' seals use (ADR 0023).
@@ -131,6 +131,10 @@ export class AppStack extends Stack {
     // else may use.
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)] }),
+    );
+    // The Signatures, logos and Stamps the record prints (RP-650), read only.
+    workerTaskRole.addToPolicy(
+      new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: RECORD_IMAGE_OBJECTS.map((key) => storage.projectFiles.arnForObjects(key)) }),
     );
     workerTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:PutObject"], resources: [storage.projectFiles.arnForObjects(RECORD_OBJECTS)] }));
     workerTaskRole.addToPolicy(

@@ -4,7 +4,7 @@ import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
 import { documentAssets } from "./assets.ts";
-import { recordHtml } from "./layout.ts";
+import { renderRecord } from "./pages.ts";
 import { toPdfA3 } from "./pdfa.ts";
 import { sha256 } from "./pki.ts";
 import { recordDataOf, recordDataXml } from "./record-data.ts";
@@ -25,8 +25,7 @@ import type { TimestampAuthority } from "./timestamp.ts";
 // the record is made (RP-151), so a change applies to records made afterwards.
 //
 // Not yet (later tickets of spec RP-632): the checks before publishing and the
-// "record ready" event (RP-155), the appendix (RP-147), Signatures, Stamps,
-// Review Comments and the endings (RP-650).
+// "record ready" event (RP-155) and the appendix (RP-147).
 
 export interface RecordJobDeps {
   readonly files: RecordFiles;
@@ -57,13 +56,13 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     if (!facts) return;
     const token = randomBytes(32).toString("base64url");
     const assets = await documentAssets(facts, deps.files);
-    const data = recordDataOf(
-      facts,
-      { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` },
-      assets.pageCounts,
+    const { data, pdf: rendered } = await renderRecord(
+      deps.renderer,
+      recordDataOf(facts, { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` }, assets.pageCounts, (key) => assets.images.has(key)),
+      await deps.fonts(),
+      assets.images,
     );
     const xml = new TextEncoder().encode(recordDataXml(data));
-    const rendered = await deps.renderer.render(recordHtml(data, await deps.fonts(), assets.images));
     const sealedAt = now();
     const title = [data.type.code, data.documentNumber ?? data.subject].join(" ");
     const archival = await toPdfA3(rendered, { title, at: sealedAt }, [

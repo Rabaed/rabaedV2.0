@@ -19,6 +19,9 @@ const t = (n: number, kind: string, from: string, to: string): TransitionFact =>
   remarks: null,
   participantId: "p",
   roleName: { en: "Contractor", ar: "مقاول" },
+  answers: null,
+  actionForm: null,
+  signature: null,
 });
 const labels = (path: TransitionFact[]) => path.map((p) => p.label.en);
 

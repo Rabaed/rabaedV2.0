@@ -1,4 +1,4 @@
-import type { BilingualText, OutcomeAction, RecordLanguage } from "@rabaed/domain";
+import type { BilingualText, FormPdf, OutcomeAction, RecordLanguage } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Database } from "./schema.ts";
 
@@ -30,6 +30,36 @@ export interface TransitionFact {
   readonly participantId: string;
   /** The Project Role of the Member's Company on the Project. */
   readonly roleName: BilingualText;
+  /**
+   * What the Member wrote in the Transition's Action Form, when its event is shared (RP-650): the
+   * answers of its shared fields, never an `internal_answers` event's, an Internal Note or a
+   * Recommended Code. Null for a move inside one Participant, or one of the Owner's review's.
+   */
+  readonly answers: Readonly<Record<string, unknown>> | null;
+  /** The Transition's Action Form as its Workflow Version pinned it (`{sections}`), to label the answers. */
+  readonly actionForm: unknown;
+  /** The Signature the event recorded (`work_item_event.signature_id`): the one in force when the Member acted. */
+  readonly signature: ImageFact | null;
+}
+
+/** An image Rabaed keeps (stored_file): where it is and its type. */
+export interface ImageFact {
+  readonly storageKey: string;
+  readonly contentType: string;
+}
+
+/** A Comment the issued Code raised (Code B's Comments, RP-434), with who raised it as they were then. */
+export interface CommentFact {
+  readonly documentNumber: string | null;
+  readonly comment: string;
+  readonly reference: string | null;
+  /** When it was raised (ISO 8601, UTC): when the item closed. */
+  readonly at: string;
+  readonly memberName: BilingualText;
+  readonly positions: readonly BilingualText[];
+  readonly companyName: BilingualText;
+  readonly roleName: BilingualText;
+  readonly participantId: string;
 }
 
 export type BaseRoleFact = "owner" | "owner_representative" | "consultant" | "contractor";
@@ -40,6 +70,9 @@ export interface CompanyFact {
   readonly name: BilingualText;
   readonly roleName: BilingualText;
   readonly baseRole: BaseRoleFact;
+  /** Its logo and Stamp in force when the item closed (RP-650); null without one. */
+  readonly logo: ImageFact | null;
+  readonly stamp: ImageFact | null;
 }
 
 /** One of the Type's closing outcomes, for the chips of the Final decision box. */
@@ -115,6 +148,14 @@ export interface RecordFacts {
   readonly form: FormFacts;
   readonly documents: readonly DocumentFact[];
   readonly transitions: readonly TransitionFact[];
+  /** The raiser's Participant: a Code C's Revision is theirs to make. */
+  readonly raiserParticipantId: string;
+  /** The Comments the issued Code raised, in the order its reply listed them (RP-650). */
+  readonly comments: readonly CommentFact[];
+  /** The Form Version's `pdf` block: its Disclaimer and whether the review duration shows. */
+  readonly pdf: FormPdf | null;
+  /** When Rabaed cancelled the item because a Company left the Project: that Company. */
+  readonly cancelledByRabaed: { readonly companyName: BilingualText } | null;
 }
 
 /** The closed item of record job `outboxId`, or null when there is nothing to make (it has its record already). */

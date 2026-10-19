@@ -168,5 +168,12 @@
         }
       ]
     }
-  ]
+  ],
+  "pdf": {
+    "disclaimer": {
+      "en": "This record was issued electronically through Rabaed and is valid without a handwritten signature. Its review or approval does not relieve the Contractor of any obligation under the contract, its drawings and its specifications, nor of responsibility for the accuracy and completeness of what was submitted.",
+      "ar": "صدر هذا السجل إلكترونيًا عبر رابد، وهو معتمد دون توقيع خطي. ولا تعفي مراجعته أو اعتماده المقاول من أي من التزاماته بموجب العقد ومخططاته ومواصفاته، ولا من مسؤوليته عن دقة ما قدمه واكتماله."
+    },
+    "show_review_duration": false
+  }
 }

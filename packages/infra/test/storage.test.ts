@@ -126,16 +126,21 @@ describe("Project files", () => {
     for (const resource of api.filter((g) => !isList(g)).flatMap((g) => g.resources)) {
       expect(String(render(resource))).toMatch(/\/projects\/\*$/);
     }
-    // The worker reads Documents, and writes nothing but each item's Documental Record; it never deletes or lists.
+    // The worker reads Documents and the Signatures, logos and Stamps a record prints (RP-650), and writes
+    // nothing but each item's Documental Record; it never deletes or lists.
     // (CDK merges one action's statements, so a statement may also name the build assets bucket.)
     const onBucket = (r: unknown) => references(r).some((ref) => env.tryResolve(ref, "app")?.logicalId === projectBucket);
     const worker = grants
       .filter((g) => g.role === "rabaed-dev-worker-task")
       .flatMap((g) => g.resources.filter(onBucket).map((r) => [g.actions.join(","), String(render(r))]));
-    expect(worker).toEqual([
+    expect(worker).toHaveLength(5);
+    expect(worker).toEqual(expect.arrayContaining([
       ["s3:GetObject", expect.stringMatching(/\/projects\/\*$/)],
+      ["s3:GetObject", expect.stringMatching(/\/members\/\*\/signatures\/\*$/)],
+      ["s3:GetObject", expect.stringMatching(/\/companies\/\*\/logo\/\*$/)],
+      ["s3:GetObject", expect.stringMatching(/\/companies\/\*\/stamp\/\*$/)],
       ["s3:PutObject", expect.stringMatching(/\/projects\/\*\/work-items\/\*\/documental-record\/\*$/)],
-    ]);
+    ]));
     // And listing, on the bucket itself, so a file not uploaded yet answers 404 rather than 403 (RP-269).
     const lists = api.filter(isList);
     expect(lists.map((g) => g.actions)).toEqual([["s3:ListBucket"]]);

@@ -41,6 +41,17 @@ export async function documentAssets(facts: RecordFacts, files: RecordFiles): Pr
       }
     }
   }
+  // The Signatures the path's events recorded, and the acting Companies' logos and Stamps in force
+  // at close (RP-650): stored under members/ and companies/, which the worker may read (ADR 0023).
+  const marks = [
+    ...facts.transitions.map((t) => t.signature),
+    ...facts.companies.flatMap((c) => [c.logo, c.stamp]),
+  ].filter((m): m is NonNullable<typeof m> => m !== null && IMAGE_TYPES.has(m.contentType));
+  for (const mark of marks) {
+    if (images.has(mark.storageKey)) continue;
+    const bytes = await files.get(mark.storageKey);
+    if (bytes && bytes.length <= MAX_PHOTO_BYTES) images.set(mark.storageKey, `data:${mark.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
+  }
   return { pageCounts, images };
 }
 

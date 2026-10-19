@@ -1,5 +1,6 @@
 import type { RecordFacts, TransitionFact } from "@rabaed/db";
-import { outcomeLook, type OutcomeLook } from "@rabaed/domain";
+import { offersReplacement, offersRevision, outcomeLook, type OutcomeLook } from "@rabaed/domain";
+import { actionAnswerLines, type CardLine } from "./action-answers.ts";
 import { formContent, isListedDocument, type RecordBlock, type RecordSection } from "./form-content.ts";
 import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 
@@ -13,14 +14,19 @@ import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 //
 // Version 2 (RP-151) holds page 1 (the Companies, title block, Parties,
 // Classification, Final decision, the reply's excerpt, the approval flow), the
-// Form's sections and the shared Documents. RP-650 adds Signatures, Stamps,
-// Review Comments and the endings; RP-147 the appendix.
+// Form's sections and the shared Documents. Version 3 (RP-650) adds the pages
+// after: the Review Comments, a Signature card per Transition on the path (with
+// what its shared Action Form holds), the Next step, the Stamps, the Disclaimer;
+// and on page 1 the logos, the review duration, a Cancel's who and why, and the
+// pages the Comments and the reply's full text are on. An image (logo, Signature,
+// Stamp) is only flagged: its bytes are printed, its storage key never held.
+// RP-147 adds the appendix.
 
 /** The layout version the Record Data is printed with (layout.ts). */
-export const LAYOUT_VERSION = "2";
+export const LAYOUT_VERSION = "3";
 
 /** Record Data's XML namespace, versioned with its shape. */
-export const RECORD_DATA_NAMESPACE = "https://rabaed.com/ns/record-data/2";
+export const RECORD_DATA_NAMESPACE = "https://rabaed.com/ns/record-data/3";
 
 export type { RecordFacts, TransitionFact };
 
@@ -33,6 +39,8 @@ export type FlowMark = "done" | "revise" | "rejected";
 export interface CompanyLine {
   readonly name: RecordText;
   readonly role: RecordText;
+  /** Its logo in force at close; the layout prints the name without one. */
+  readonly logoKey?: ImageKey;
 }
 
 export interface PersonLine {
@@ -93,6 +101,57 @@ export interface RecordData {
   readonly documents: readonly { readonly fileName: string; readonly pages: number | null }[];
   /** The short code printed on every page, and the verification page's long link. */
   readonly verification: { readonly code: string; readonly link: string };
+  /** The calendar days from the Submission Date to the reply, when the Form shows them (information, never a deadline). */
+  readonly reviewDays: number | null;
+  /** Who cancelled it and why; Rabaed's own cancel when a Company left the Project. Null unless Cancelled. */
+  readonly cancellation: Cancellation | null;
+  /** The Comments the issued Code raised, by author (form-engine.md §6, element 11). */
+  readonly comments: readonly CommentGroup[];
+  /** One card per Transition on the path (element 12). */
+  readonly cards: readonly SignatureCard[];
+  /** What comes next: a Revision by the raiser (Code C), or a replacement (Code D). */
+  readonly nextStep: NextStep | null;
+  /** The Stamp of every Company whose Member acted on the path (element 13). */
+  readonly stamps: readonly StampLine[];
+  /** The Form Version's Disclaimer (element 14). */
+  readonly disclaimer: RecordText | null;
+  /** The pages the pointers on page 1 name, found by rendering (pages.ts): null until then. */
+  readonly pages: { readonly comments: number | null; readonly reply: number | null };
+}
+
+/** Where an image the job inlines is stored: found by the job, never part of the Record Data. */
+export type ImageKey = string | null;
+
+export interface Cancellation {
+  /** The Member who took the Cancel; null when Rabaed cancelled it. */
+  readonly by: PersonLine | null;
+  readonly reason: string | null;
+  /** The Company whose leaving the Project made Rabaed cancel it. */
+  readonly companyLeft: RecordText | null;
+}
+
+export interface CommentGroup {
+  readonly author: PersonLine;
+  readonly initials: RecordText;
+  readonly at: string;
+  readonly items: readonly { readonly n: number; readonly documentNumber: string | null; readonly comment: string; readonly reference: string | null }[];
+}
+
+export interface SignatureCard extends PersonLine {
+  readonly verb: RecordText;
+  readonly label: RecordText;
+  readonly at: string;
+  /** The Signature the Transition's event recorded. */
+  readonly signatureKey: ImageKey;
+  readonly lines: readonly CardLine[];
+}
+
+export type NextStep = { readonly kind: "revision"; readonly revisionNo: number; readonly company: RecordText } | { readonly kind: "replacement" };
+
+export interface StampLine {
+  readonly company: RecordText;
+  readonly role: RecordText;
+  readonly stampKey: ImageKey;
 }
 
 /** The Transitions that give an item back, never on the record (V7): a Return, and a Send Back (a Code the Owner sent back is one). */
@@ -116,7 +175,37 @@ export function recordPath(transitions: readonly TransitionFact[]): TransitionFa
 }
 
 const CANCELLED = { ar: "ملغى", en: "Cancelled" };
+/** Code D's Next step (form-engine.md §6, element 12). */
+export const REPLACED = { ar: "يحل محله تقديم جديد", en: "A new submittal replaces this one" };
 const PREPARED = { ar: "أُعدّ", en: "Prepared" };
+
+/** A card's verb (form-engine.md §6, element 12). An internal reviewer's is "Reviewed", with no Code of his own (V7, RP-615). */
+const VERBS = {
+  prepared: { ar: "أعده", en: "Prepared" },
+  submitted: { ar: "قدمه", en: "Submitted" },
+  reviewed: { ar: "راجعه", en: "Reviewed" },
+  approved: { ar: "اعتمده", en: "Approved" },
+  confirmed: { ar: "أكده", en: "Confirmed" },
+  cancelled: { ar: "ألغاه", en: "Cancelled" },
+} satisfies Record<string, { ar: string; en: string }>;
+
+/** The days between two instants' calendar dates in Riyadh (UTC+3, no daylight saving). */
+export function calendarDays(fromIso: string, toIso: string): number {
+  const day = (iso: string) => Math.floor((new Date(iso).getTime() + 3 * 3_600_000) / 86_400_000);
+  return day(toIso) - day(fromIso);
+}
+
+/** A name's initials: the first letter of its first and last words. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => w !== "");
+  const first = (w: string | undefined) => (w ? [...w][0]! : "");
+  return words.length > 1 ? `${first(words[0])}${first(words.at(-1))}` : first(words[0]);
+}
+
+const mapText = (t: RecordText, fn: (s: string) => string): RecordText => ({
+  ...(t.ar !== undefined ? { ar: fn(t.ar) } : {}),
+  ...(t.en !== undefined ? { en: fn(t.en) } : {}),
+});
 
 /** The lines of a Reply's Remarks the first page shows: the first lines, up to a limit. */
 export function replyExcerpt(remarks: string | null): string | null {
@@ -135,8 +224,11 @@ export function recordDataOf(
   verification: RecordData["verification"],
   /** The page counts of the Documents, by storage key. */
   pageCounts: ReadonlyMap<string, number | null> = new Map(),
+  /** Whether the image stored under a key could be read: one that can't is printed as missing, and the Record Data says so. */
+  hasImage: (key: string) => boolean = () => true,
 ): RecordData {
   const language = facts.recordLanguage;
+  const imageKey = (image: { readonly storageKey: string } | null): ImageKey => (image && hasImage(image.storageKey) ? image.storageKey : null);
   const path = recordPath(facts.transitions);
   const cancelled = facts.outcome === "cancelled";
   const set = facts.outcomes;
@@ -151,8 +243,10 @@ export function recordDataOf(
   });
   const closing = path.at(-1);
   const confirmation = path.findLast((t) => t.outcomeMode === "confirm_code");
+  const byRabaed = cancelled && facts.cancelledByRabaed !== null;
   // Who issued it: the Step that gave the Code (or recommended it to the Owner, whose Confirm is `confirmedBy`).
-  const issuer = cancelled ? closing : (path.findLast((t) => t.outcomeMode === "issue_code" || t.outcomeMode === "recommend_code") ?? closing);
+  // A Cancel issues nothing: who cancelled it is the cancellation's.
+  const issuer = cancelled ? undefined : (path.findLast((t) => t.outcomeMode === "issue_code" || t.outcomeMode === "recommend_code") ?? closing);
   // The reply is the Remarks of the Code that is the outcome: never one the Owner sent back (it is off the path), none on a Cancel.
   const codeEntry = !cancelled && (closing?.outcomeMode === "issue_code" || closing?.outcomeMode === "confirm_code") ? closing : undefined;
   const markOf = (t: TransitionFact): FlowMark => (t === closing && look === "c" ? "revise" : t === closing && look === "d" ? "rejected" : "done");
@@ -160,6 +254,72 @@ export function recordDataOf(
   const { sections, classification, attachmentFieldKeys } = formContent(facts, language);
   const company = (c: RecordFacts["companies"][number]): CompanyLine => ({ name: pick(c.name, language), role: pick(c.roleName, language) });
   const acted = new Set(path.map((t) => t.participantId));
+  const companyOf = (participantId: string) => facts.companies.find((c) => c.participantId === participantId);
+
+  const verbOf = (t: TransitionFact, i: number) =>
+    i === 0
+      ? VERBS.prepared
+      : t.kind === "cancel"
+        ? VERBS.cancelled
+        : t.outcomeMode === "confirm_code"
+          ? VERBS.confirmed
+          : t === issuer
+            ? issuedOutcome?.polarity === "positive"
+              ? VERBS.approved
+              : VERBS.reviewed
+            : t.kind === "submit"
+              ? VERBS.submitted
+              : VERBS.reviewed;
+  const cards: SignatureCard[] = path.map((t, i) => ({
+    ...person(t),
+    verb: pick(verbOf(t, i), language),
+    label: i === 0 ? pick(PREPARED, language) : pick(t.label, language),
+    at: t.at,
+    signatureKey: imageKey(t.signature),
+    lines: actionAnswerLines(t.actionForm, t.answers, language),
+  }));
+
+  // The Comments by author, in the reply's order, numbered through.
+  const comments: CommentGroup[] = [];
+  let lastAuthor = "";
+  facts.comments.forEach((c, i) => {
+    const item = { n: i + 1, documentNumber: c.documentNumber, comment: c.comment, reference: c.reference };
+    const author = JSON.stringify([c.participantId, c.memberName, c.at]);
+    if (author === lastAuthor) {
+      (comments.at(-1)!.items as CommentGroup["items"][number][]).push(item);
+      return;
+    }
+    lastAuthor = author;
+    const name = pick(c.memberName, language);
+    comments.push({
+      author: { name, positions: c.positions.map((p) => pick(p, language)), company: pick(c.companyName, language), role: pick(c.roleName, language) },
+      initials: mapText(name, initialsOf),
+      at: c.at,
+      items: [item],
+    });
+  });
+
+  const stamps: StampLine[] = [...new Set(path.map((t) => t.participantId))].flatMap((id) => {
+    const c = companyOf(id);
+    return c ? [{ company: pick(c.name, language), role: pick(c.roleName, language), stampKey: imageKey(c.stamp) }] : [];
+  });
+
+  const raiser = companyOf(facts.raiserParticipantId);
+  const nextStep: NextStep | null =
+    cancelled || !issuedOutcome
+      ? null
+      : offersRevision(issuedOutcome) && raiser
+        ? { kind: "revision", revisionNo: facts.revisionNo + 1, company: pick(raiser.name, language) }
+        : offersReplacement(issuedOutcome)
+          ? { kind: "replacement" }
+          : null;
+
+  const reason = closing?.kind === "cancel" && typeof closing.answers?.reason === "string" ? closing.answers.reason.trim() || null : null;
+  const cancellation: Cancellation | null = !cancelled
+    ? null
+    : byRabaed
+      ? { by: null, reason: null, companyLeft: pick(facts.cancelledByRabaed!.companyName, language) }
+      : { by: closing?.kind === "cancel" ? person(closing) : null, reason, companyLeft: null };
 
   return {
     layoutVersion: LAYOUT_VERSION,
@@ -184,7 +344,9 @@ export function recordDataOf(
     issuedBy: issuer ? person(issuer) : null,
     confirmedBy: confirmation && confirmation !== issuer ? person(confirmation) : null,
     reviewComments: facts.reviewComments,
-    companies: facts.companies.filter((c) => c.baseRole === "owner" || acted.has(c.participantId)).map(company),
+    companies: facts.companies
+      .filter((c) => c.baseRole === "owner" || acted.has(c.participantId))
+      .map((c) => ({ ...company(c), logoKey: imageKey(c.logo) })),
     parties: facts.companies.map(company),
     trades: facts.trades.map((t) => ({ name: pick(t.name, language), selected: t.selected })),
     location: (facts.location ?? []).map((l) => pick(l, language)),
@@ -203,6 +365,14 @@ export function recordDataOf(
       .filter((d) => isListedDocument(d, attachmentFieldKeys))
       .map((d) => ({ fileName: d.fileName, pages: pageCounts.get(d.storageKey) ?? null })),
     verification,
+    reviewDays: !cancelled && facts.pdf?.show_review_duration && facts.submittedAt ? calendarDays(facts.submittedAt, facts.closedAt) : null,
+    cancellation,
+    comments,
+    cards,
+    nextStep,
+    stamps,
+    disclaimer: facts.pdf?.disclaimer ? pick(facts.pdf.disclaimer, language) : null,
+    pages: { comments: null, reply: null },
   };
 }
 
@@ -234,6 +404,16 @@ function person(p: PersonLine, indent: string): string[] {
     ...lang("name", p.company, `${indent}  `),
     `${indent}</company>`,
     ...lang("role", p.role, indent),
+  ];
+}
+
+function cancellationXml(c: Cancellation, indent: string): string[] {
+  if (c.companyLeft) return [`${indent}<cancelledByRabaed>`, `${indent}  <company>`, ...lang("name", c.companyLeft, `${indent}    `), `${indent}  </company>`, `${indent}</cancelledByRabaed>`];
+  return [
+    `${indent}<cancelled>`,
+    ...(c.by ? [`${indent}  <by>`, ...person(c.by, `${indent}    `), `${indent}  </by>`] : []),
+    ...(c.reason ? [`${indent}  <reason>${escape(c.reason)}</reason>`] : []),
+    `${indent}</cancelled>`,
   ];
 }
 
@@ -287,7 +467,13 @@ export function recordDataXml(data: RecordData): string {
     ...lang("name", data.projectName, "    "),
     "  </project>",
     "  <companies>",
-    ...data.companies.flatMap((c) => ["    <company>", ...lang("name", c.name, "      "), ...lang("role", c.role, "      "), "    </company>"]),
+    ...data.companies.flatMap((c) => [
+      "    <company>",
+      ...lang("name", c.name, "      "),
+      ...lang("role", c.role, "      "),
+      ...(c.logoKey ? ["      <logo/>"] : []),
+      "    </company>",
+    ]),
     "  </companies>",
     "  <item>",
     `    <type code="${escape(data.type.code)}">`,
@@ -326,8 +512,11 @@ export function recordDataXml(data: RecordData): string {
     ...(data.issuedBy ? ["    <issuedBy>", ...person(data.issuedBy, "      "), "    </issuedBy>"] : []),
     ...(data.confirmedBy ? ["    <confirmedBy>", ...person(data.confirmedBy, "      "), "    </confirmedBy>"] : []),
     `    <reviewComments>${data.reviewComments}</reviewComments>`,
+    ...(data.reviewDays === null ? [] : [`    <reviewDays>${data.reviewDays}</reviewDays>`]),
+    ...(data.cancellation ? cancellationXml(data.cancellation, "    ") : []),
     "  </decision>",
     ...(data.reply === null ? [] : [`  <reply>${escape(data.reply)}</reply>`]),
+    ...(data.reply !== null && data.pages.reply !== null ? [`  <replyFullText page="${data.pages.reply}"/>`] : []),
     "  <transitions>",
     ...data.transitions.flatMap((t, i) => [
       `    <transition n="${i + 1}"${at(t.at)} mark="${t.mark}"${t.contentSha256 ? ` contentSha256="${escape(t.contentSha256)}"` : ""}>`,
@@ -342,6 +531,58 @@ export function recordDataXml(data: RecordData): string {
     "  <documents>",
     ...data.documents.map((d) => `    <document${d.pages === null ? "" : ` pages="${d.pages}"`}>${escape(d.fileName)}</document>`),
     "  </documents>",
+    ...(data.comments.length > 0
+      ? [
+          `  <comments${data.pages.comments === null ? "" : ` page="${data.pages.comments}"`}>`,
+          ...data.comments.flatMap((g) => [
+            `    <author${at(g.at)}>`,
+            ...lang("initials", g.initials, "      "),
+            ...person(g.author, "      "),
+            ...g.items.flatMap((c) => [
+              `      <comment n="${c.n}">`,
+              ...(c.documentNumber ? [`        <documentNumber>${escape(c.documentNumber)}</documentNumber>`] : []),
+              `        <text>${escape(c.comment)}</text>`,
+              ...(c.reference ? [`        <reference>${escape(c.reference)}</reference>`] : []),
+              "      </comment>",
+            ]),
+            "    </author>",
+          ]),
+          "  </comments>",
+        ]
+      : []),
+    "  <cards>",
+    ...data.cards.flatMap((c, i) => [
+      `    <card n="${i + 1}"${at(c.at)}>`,
+      ...lang("verb", c.verb, "      "),
+      ...lang("label", c.label, "      "),
+      ...person(c, "      "),
+      ...(c.signatureKey ? ["      <signature/>"] : []),
+      ...c.lines.flatMap((line) => [
+        "      <answer>",
+        ...lang("label", line.label, "        "),
+        ...(line.kind === "text"
+          ? lang("value", line.value, "        ")
+          : line.items.flatMap((item, n) => lang("item", item, "        ", ` n="${n + 1}"`))),
+        "      </answer>",
+      ]),
+      "    </card>",
+    ]),
+    "  </cards>",
+    ...(data.nextStep
+      ? data.nextStep.kind === "revision"
+        ? [`  <nextStep revision="${data.nextStep.revisionNo}">`, "    <company>", ...lang("name", data.nextStep.company, "      "), "    </company>", "  </nextStep>"]
+        : ["  <nextStep>", ...lang("replacement", pick(REPLACED, data.language), "    "), "  </nextStep>"]
+      : []),
+    "  <stamps>",
+    ...data.stamps.flatMap((s) => [
+      "    <stamp>",
+      ...lang("name", s.company, "      "),
+      ...lang("role", s.role, "      "),
+      ...(s.stampKey ? ["      <image/>"] : []),
+      "    </stamp>",
+    ]),
+    "  </stamps>",
+    ...(data.disclaimer ? ["  <disclaimer>", ...lang("text", data.disclaimer, "    "), "  </disclaimer>"] : []),
     `  <verification code="${escape(data.verification.code)}" link="${escape(data.verification.link)}"/>`,
     "</recordData>",
     "",

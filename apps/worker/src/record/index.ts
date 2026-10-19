@@ -5,6 +5,8 @@ export { filesUnder, projectFilesFromEnv, recordKeys, s3Client, s3RecordFiles, t
 export { recordJobFromEnv, SEALING_CERTIFICATE_KEY, THMANYAH_PREFIX } from "./from-env.ts";
 export { fallbackFonts, thmanyahFonts, type RecordFonts } from "./fonts.ts";
 export { recordHtml } from "./layout.ts";
+export { renderRecord } from "./pages.ts";
+export { pdfImages, type PdfImage } from "./pdf-images.ts";
 export { attachedFiles, pdfA3Problems, toPdfA3, type AttachedFile } from "./pdfa.ts";
 export { LAYOUT_VERSION, RECORD_DATA_NAMESPACE, recordDataOf, recordDataXml, recordPath, type RecordData } from "./record-data.ts";
 export { chromiumRenderer, type PdfRenderer } from "./render.ts";

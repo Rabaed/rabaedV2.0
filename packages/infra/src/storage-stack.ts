@@ -25,6 +25,12 @@ export const PDF_SEALING_TAG = { key: "rabaed-purpose", value: "pdf-sealing" } a
 /** Where each item's Documental Record lives under its Project's prefix (apps/worker recordKeys). */
 export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
 
+/**
+ * The images a record prints besides the Documents (RP-650): Members' Signatures and Companies'
+ * logos and Stamps, where the api stores them (apps/api/src/identity). The worker only reads them.
+ */
+export const RECORD_IMAGE_OBJECTS = ["members/*/signatures/*", "companies/*/logo/*", "companies/*/stamp/*"] as const;
+
 // Files and the keys that protect them. Every bucket is private, versioned,
 // owner-enforced (no ACLs) and refuses requests not made over TLS.
 //

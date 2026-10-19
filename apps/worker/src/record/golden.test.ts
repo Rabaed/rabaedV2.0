@@ -29,13 +29,22 @@ const CHANNEL_TOLERANCE = 28;
 /** The share of pixels that may differ before the screenshot fails. */
 const MAX_DIFFERING_SHARE = 0.004;
 
+// Each is the whole record drawn as one tall page, so the pages after page 1 (RP-650: the Review
+// Comments, the Signature cards, the Next step, the Stamps and the Disclaimer) are in it too; the
+// running header and the footer are the paper's margins, which a screenshot has not.
 const cases: { name: string; code: GoldenCode; language: RecordLanguage }[] = [
   { name: "mar-code-a-bilingual", code: "A", language: "bilingual" },
   { name: "mar-code-a-ar", code: "A", language: "ar" },
+  { name: "mar-code-b-bilingual", code: "B", language: "bilingual" },
+  { name: "mar-code-b-en", code: "B", language: "en" },
   { name: "dar-code-c-bilingual", code: "C", language: "bilingual" },
   { name: "dar-code-c-en", code: "C", language: "en" },
   { name: "das-code-d-bilingual", code: "D", language: "bilingual" },
   { name: "das-code-d-ar", code: "D", language: "ar" },
+  { name: "mar-cancelled-bilingual", code: "cancelled", language: "bilingual" },
+  { name: "mar-cancelled-by-rabaed-en", code: "rabaed-cancelled", language: "en" },
+  { name: "dar-owner-review-bilingual", code: "owner", language: "bilingual" },
+  { name: "dar-owner-review-ar", code: "owner", language: "ar" },
 ];
 
 let browser: Browser;
@@ -117,6 +126,52 @@ describe("the layout's content, from the same fixtures", () => {
     expect(html("A", "en")).not.toMatch(/[؀-ۿ]/);
     expect(html("A", "ar")).not.toContain("Final decision");
     expect(html("A", "bilingual")).toContain("Final decision");
+  });
+
+  it("runs a header on every page but the first: the Type, the Subject, the Document Number and the outcome", () => {
+    const text = html("A", "en");
+    expect(text).toMatch(/@top-center \{\s*content: "\u2066MAR\u2069 {2}· {2}\u2068Cable tray 300 mm, galvanised, for Building A level 3\u2069 {2}· {2}\u2066RGT-MAR-EL-0012\u2069 {2}· {2}\u2066A\u2069";/);
+    expect(text).toMatch(/@page :first \{\s*@top-center \{ content: none;/);
+  });
+
+  it("draws each card's Signature, each acting Company's Stamp and the logos it has; a Company without one by name", () => {
+    const text = html("B", "en");
+    for (const key of ["sig-omar", "sig-sara", "sig-faisal", "sig-huda", "stamp-c1", "stamp-k1", "logo-owner", "logo-k1"]) {
+      expect(text, key).toContain(fixtureImages.get(key)!);
+    }
+    // The Owner never acted: its Stamp is not printed.
+    expect(text).not.toContain(fixtureImages.get("stamp-owner")!);
+    expect(text).toContain("Al Rashid Contracting");
+  });
+
+  it("ends with the Next step after Code C and D, and the Disclaimer", () => {
+    expect(html("C", "en")).toMatch(/Next step[\s\S]*Revision <bdi dir="ltr" class="ltr">1<\/bdi>, by Al Rashid Contracting/);
+    expect(html("D", "en")).toContain("A new submittal replaces this one");
+    expect(html("A", "en")).not.toContain("Next step");
+    expect(html("A", "en")).toContain("Its approval does not relieve the Contractor");
+  });
+
+  it("draws a probe only up to where it is cut, for the pages page 1 points to", () => {
+    const data = goldenData("B", "en");
+    const cut = (c: Parameters<typeof recordHtml>[3]) => recordHtml(data, fallbackFonts(), fixtureImages, c);
+    const cards = (text: string) => text.split('<article class="card">').length - 1;
+    expect(cut({ beforeComments: true })).not.toContain("Review Comments</span></h2>");
+    expect(cards(cut({ beforeComments: true }))).toBe(0);
+    expect(cut({ card: 3, withCard: false })).toContain("Review Comments</span></h2>");
+    expect(cards(cut({ card: 3, withCard: false }))).toBe(3);
+    expect(cards(cut({ card: 3, withCard: true }))).toBe(4);
+    for (const c of [{ beforeComments: true } as const, { card: 3, withCard: true }]) expect(cut(c)).not.toContain("Disclaimer");
+    expect(cards(recordHtml(data, fallbackFonts(), fixtureImages))).toBe(4);
+  });
+
+  it("says Rabaed cancelled it when a Company left the Project", () => {
+    expect(html("rabaed-cancelled", "en")).toContain("Cancelled by Rabaed: Al Rashid Contracting left the Project");
+  });
+
+  it("never calls the review duration a deadline", () => {
+    const text = html("A", "en");
+    expect(text).toContain("Review duration (days)");
+    expect(text.toLowerCase()).not.toMatch(/overdue|deadline|due date|\bsla\b/);
   });
 
   it("loads nothing outside itself", () => {

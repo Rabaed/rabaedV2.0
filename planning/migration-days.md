@@ -95,3 +95,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270730 | RP-632 | 21 | review_fixes |
 | 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
 | 20270731 | RP-629 | 34 | snag_bulk_reassign |
+| 20270804 | RP-650 | 22 | record_signatures |

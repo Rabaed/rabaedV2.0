@@ -1,9 +1,9 @@
 import { formatDate, formatHijriDate, type Locale } from "@rabaed/domain";
 import type { RecordBlock, RecordPhoto } from "./form-content.ts";
 import type { RecordFonts } from "./fonts.ts";
-import { isShortCode, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
+import { isShortCode, REPLACED, type Chip, type CompanyLine, type FlowMark, type PersonLine, type RecordData } from "./record-data.ts";
 import { qrSvg } from "./qr.ts";
-import type { RecordLanguage, RecordText } from "./record-text.ts";
+import { texts, type RecordLanguage, type RecordText } from "./record-text.ts";
 
 // The one Rabaed layout (form-engine.md §6; ADR 0023), printed from the Record
 // Data only. Page 1 is the Companies, the title block, the Parties and
@@ -74,10 +74,31 @@ const WORDS = {
   footer: { ar: "صادر إلكترونيًا عبر رابد", en: "Issued electronically through Rabaed" },
   page: { ar: "صفحة", en: "page" },
   of: { ar: "من", en: "of" },
+  reviewDuration: { ar: "مدة المراجعة (أيام)", en: "Review duration (days)" },
+  fullText: { ar: "النص الكامل: صفحة", en: "Full text: page" },
+  cancelledBy: { ar: "ألغاه", en: "Cancelled by" },
+  reason: { ar: "السبب", en: "Reason" },
+  byRabaed: { ar: "ألغاه رابد:", en: "Cancelled by Rabaed:" },
+  leftProject: { ar: "غادرت المشروع", en: "left the Project" },
+  reviewComments: { ar: "ملاحظات المراجعة", en: "Review Comments" },
+  reference: { ar: "المرجع", en: "Reference" },
+  signatures: { ar: "التواقيع", en: "Signatures" },
+  signature: { ar: "التوقيع", en: "Signature" },
+  nextStep: { ar: "الخطوة التالية", en: "Next step" },
+  revision: { ar: "المراجعة", en: "Revision" },
+  by: { ar: "من", en: "by" },
+  stamps: { ar: "الأختام", en: "Stamps" },
+  disclaimer: { ar: "إخلاء المسؤولية", en: "Disclaimer" },
 } satisfies Record<string, { ar: string; en: string }>;
 type Word = keyof typeof WORDS;
 
-export function recordHtml(data: RecordData, fonts: RecordFonts, images: ReadonlyMap<string, string> = new Map()): string {
+/**
+ * Where a probe render stops (pages.ts): before the Review Comments, or before or after one
+ * Signature card. Nothing after it is drawn, so its page count says where that part falls.
+ */
+export type RecordCut = { readonly beforeComments: true } | { readonly card: number; readonly withCard: boolean };
+
+export function recordHtml(data: RecordData, fonts: RecordFonts, images: ReadonlyMap<string, string> = new Map(), cut?: RecordCut): string {
   const language: RecordLanguage = data.language;
   const locales: Locale[] = language === "bilingual" ? ["ar", "en"] : [language];
 
@@ -129,7 +150,10 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
 
   const person = (p: PersonLine) =>
     `<div class="person"><div class="strong">${txt(p.name)}</div>${p.positions.map((pos) => `<div class="muted">${txt(pos)}</div>`).join("")}<div class="muted">${txt(p.company)}</div></div>`;
-  const companyBox = (c: CompanyLine) => `<div class="company"><div class="strong">${txt(c.name)}</div><div class="muted">${txt(c.role)}</div></div>`;
+  const companyBox = (c: CompanyLine) => {
+    const logo = c.logoKey ? images.get(c.logoKey) : undefined;
+    return `<div class="company">${logo ? `<img class="logo" src="${logo}" alt="">` : ""}<div class="strong">${txt(c.name)}</div><div class="muted">${txt(c.role)}</div></div>`;
+  };
 
   const mark = (m: FlowMark) => {
     const paths: Record<FlowMark, string> = {
@@ -217,6 +241,84 @@ export function recordHtml(data: RecordData, fonts: RecordFonts, images: Readonl
         .join("")}</div>`
     : "";
 
+  // The running header on every page after the first: the Type badge, the Subject, the Document
+  // Number and Revision, the outcome badge. Each part bidi-isolated, as in the footer.
+  const FSI = "\u2068";
+  const outcomeBadge = isShortCode(data.outcome.code) ? `${LRI}${data.outcome.code}${PDI}` : texts(data.outcome.name).map((n) => `${FSI}${n}${PDI}`).join(" / ");
+  const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${LRI}${numberLine}${PDI}  ·  ${outcomeBadge}`);
+
+  const image = (key: string | null | undefined, cls: string) => {
+    const src = key ? images.get(key) : undefined;
+    return src ? `<img class="${cls}" src="${src}" alt="">` : "";
+  };
+  /** A sentence in each of the record's languages, each on its own line. */
+  const sentence = (fn: (l: Locale) => string) => locales.map((l) => `<div class="line" lang="${l}" dir="${dirOf(l)}">${fn(l)}</div>`).join("");
+
+  const cancellation = data.cancellation
+    ? data.cancellation.companyLeft
+      ? `<dt></dt><dd>${sentence((l) => `${WORDS.byRabaed[l]} ${html(data.cancellation!.companyLeft![l] ?? "")} ${WORDS.leftProject[l]}`)}</dd>`
+      : `${data.cancellation.by ? `<dt>${heading("cancelledBy")}</dt><dd>${person(data.cancellation.by)}</dd>` : ""}${
+          data.cancellation.reason ? `<dt>${heading("reason")}</dt><dd class="pre"><bdi>${html(data.cancellation.reason)}</bdi></dd>` : ""
+        }`
+    : "";
+
+  const commentsPart =
+    data.comments.length === 0 || (cut !== undefined && "beforeComments" in cut)
+      ? ""
+      : `<section class="after-start comments"><h2 class="part">${heading("reviewComments")}</h2>${data.comments
+          .map(
+            (g) => `<div class="author">
+  <div class="avatar">${txt(g.initials)}</div>
+  <div>${person(g.author)}<div class="muted">${when(g.at)}</div></div>
+</div>
+<ol class="review-items">${g.items
+              .map(
+                (c) =>
+                  `<li value="${c.n}"><span class="n">${c.n}.</span><div><div class="pre"><bdi>${html(c.comment)}</bdi></div>${
+                    c.reference ? `<div class="muted">${heading("reference")}: <bdi>${html(c.reference)}</bdi></div>` : ""
+                  }${c.documentNumber ? `<div class="muted">${ltr(c.documentNumber)}</div>` : ""}</div></li>`,
+              )
+              .join("")}</ol>`,
+          )
+          .join("")}</section>`;
+
+  const cardHtml = (c: RecordData["cards"][number], i: number) => `<article class="card">
+  <div class="card-head"><span class="num">${i + 1}</span> <span class="strong">${txt(c.verb)}</span>${i === 0 ? "" : ` <span class="muted">· ${txt(c.label)}</span>`}</div>
+  <div class="card-body">
+    <div>${person(c)}<div class="muted">${when(c.at)}</div></div>
+    <div class="sigbox">${image(c.signatureKey, "sig")}<div class="muted">${heading("signature")}</div></div>
+  </div>
+  ${c.lines
+    .map((line) =>
+      line.kind === "text"
+        ? `<div class="answer"><div class="alabel">${txt(line.label)}</div><div class="pre">${txt(line.value)}</div></div>`
+        : `<div class="answer"><div class="alabel">${txt(line.label)}</div><ol class="numbered">${line.items.map((item, n) => `<li><span class="n">${n + 1}.</span><div>${txt(item)}</div></li>`).join("")}</ol></div>`,
+    )
+    .join("")}
+</article>`;
+  const cardsShown = cut === undefined ? data.cards : "beforeComments" in cut ? [] : data.cards.slice(0, cut.card + (cut.withCard ? 1 : 0));
+  const signaturesPart =
+    cut !== undefined && "beforeComments" in cut
+      ? ""
+      : `<section class="${data.comments.length === 0 ? "after-start " : ""}signatures"><h2 class="part">${heading("signatures")}</h2>${cardsShown.map(cardHtml).join("")}</section>`;
+  const ended = cut === undefined;
+  const nextStepPart =
+    ended && data.nextStep
+      ? `<section class="box next"><h2>${heading("nextStep")}</h2>${
+          data.nextStep.kind === "revision"
+            ? sentence((l) => `${WORDS.revision[l]} ${ltr(String((data.nextStep as { revisionNo: number }).revisionNo))}${l === "ar" ? "،" : ","} ${WORDS.by[l]} ${html((data.nextStep as { company: RecordText }).company[l] ?? "")}`)
+            : sentence((l) => html(REPLACED[l]))
+        }</section>`
+      : "";
+  const stampsPart =
+    ended && data.stamps.length > 0
+      ? `<section class="box"><h2>${heading("stamps")}</h2><div class="stamps">${data.stamps
+          .map((s) => `<figure class="stamp">${image(s.stampKey, "stampimg") || '<div class="nostamp"></div>'}<figcaption><div class="strong">${txt(s.role)}</div><div class="muted">${txt(s.company)}</div></figcaption></figure>`)
+          .join("")}</div></section>`
+      : "";
+  const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
+  const after = `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}`;
+
   const dir = language === "en" ? "ltr" : "rtl";
   return `<!doctype html>
 <html lang="${language === "en" ? "en" : "ar"}" dir="${dir}">
@@ -234,6 +336,18 @@ ${fonts.css}
     font-size: 7.5pt;
     color: #444;
   }
+  @top-center {
+    content: ${headerContent};
+    font-family: ${fonts.family};
+    font-size: 8pt;
+    color: #222;
+    border-bottom: 0.75pt solid #999;
+    vertical-align: bottom;
+    padding-bottom: 1.5mm;
+  }
+}
+@page :first {
+  @top-center { content: none; border: none; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #fff; color: #111; }
@@ -289,6 +403,31 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 .photo img { width: 100%; max-height: 45mm; object-fit: cover; border: 0.5pt solid #999; display: block; }
 .photo .noimage { height: 20mm; border: 0.5pt dashed #999; }
 .mark { vertical-align: middle; }
+.pre { white-space: pre-line; }
+.logo { display: block; max-height: 12mm; max-width: 40mm; margin-bottom: 1.5mm; }
+.pointer { margin-top: 1.5mm; }
+.after-start { break-before: page; }
+h2.part { font-size: 12pt; margin: 0 0 3mm; border-bottom: 1.5pt solid #111; padding-bottom: 1mm; }
+.signatures, .comments { margin-bottom: 4mm; }
+.author { display: flex; gap: 3mm; align-items: center; margin: 3mm 0 2mm; break-after: avoid; }
+.avatar { width: 10mm; height: 10mm; border-radius: 50%; background: #111; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 9pt; flex: none; }
+ol.review-items, ol.numbered { list-style: none; margin: 0 0 3mm; padding: 0; }
+ol.review-items > li, ol.numbered > li { display: flex; gap: 2mm; padding: 1.2mm 0; border-bottom: 0.5pt solid #ddd; break-inside: avoid; }
+ol.numbered > li { border-bottom: none; padding: 0.4mm 0; }
+li > .n { font-weight: 700; min-width: 6mm; }
+.card { border: 0.75pt solid #777; border-radius: 1.5mm; padding: 2.5mm 4mm; margin-bottom: 3mm; break-inside: avoid; }
+.card > .card-head { border-bottom: 0.5pt solid #ccc; padding-bottom: 1.2mm; margin-bottom: 2mm; }
+.card .num { display: inline-block; min-width: 5mm; height: 5mm; border-radius: 1mm; background: #111; color: #fff; text-align: center; font-weight: 700; font-size: 8pt; }
+.card-body { display: grid; grid-template-columns: 1fr 48mm; gap: 4mm; align-items: start; }
+.sigbox { text-align: center; border-bottom: 0.75pt solid #111; min-height: 18mm; display: flex; flex-direction: column; justify-content: flex-end; }
+.sig { max-height: 16mm; max-width: 46mm; margin: 0 auto; display: block; }
+.answer { margin-top: 2mm; }
+.alabel { color: #444; font-weight: 700; font-size: 8pt; }
+.stamps { display: flex; flex-wrap: wrap; gap: 5mm; }
+.stamp { margin: 0; width: 38mm; text-align: center; break-inside: avoid; }
+.stampimg { max-width: 32mm; max-height: 32mm; display: block; margin: 0 auto 1.5mm; }
+.nostamp { height: 32mm; }
+.disclaimer .pre { font-size: 8pt; color: #333; }
 </style>
 </head>
 <body>
@@ -331,7 +470,11 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
         ${data.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(data.confirmedBy)}</dd>` : ""}
         ${data.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(data.submittedAt)}</dd>` : ""}
         <dt>${heading("replied")}</dt><dd>${day(data.closedAt)}</dd>
-        <dt>${heading("comments")}</dt><dd>${ltr(String(data.reviewComments))}</dd>
+        ${data.reviewDays !== null ? `<dt>${heading("reviewDuration")}</dt><dd>${ltr(String(data.reviewDays))}</dd>` : ""}
+        <dt>${heading("comments")}</dt><dd>${ltr(String(data.reviewComments))}${
+          data.pages.comments !== null && data.comments.length > 0 ? ` <span class="muted">· ${heading("page")} ${ltr(String(data.pages.comments))}</span>` : ""
+        }</dd>
+        ${cancellation}
       </dl>
     </div>
     <div class="qr">
@@ -344,7 +487,9 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 </section>
 ${
   data.reply
-    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(data.reply)}</bdi></div></section>`
+    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(data.reply)}</bdi></div>${
+        data.pages.reply !== null ? `<div class="pointer muted">${heading("fullText")} ${ltr(String(data.pages.reply))}</div>` : ""
+      }</section>`
     : ""
 }
 <section class="box">
@@ -375,6 +520,7 @@ ${
         .join("")}</tbody></table></section>`
     : ""
 }
+${after}
 </body>
 </html>`;
 }

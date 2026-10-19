@@ -476,8 +476,28 @@ export const formSection = z.object({
 });
 export type FormSection = z.infer<typeof formSection>;
 
-/** A Form Version's schema: its sections and their fields, in order. */
-export const formSchema = z.object({ sections: z.array(formSection).min(1) });
+/** The longest Disclaimer, in each language. */
+export const DISCLAIMER_MAX_LENGTH = 2000;
+
+/**
+ * A Form Version's `pdf` block (form-engine.md §6; ADR 0023; RP-650): the Disclaimer every
+ * Documental Record made with it ends with, in Arabic and English, and whether the record shows
+ * the review duration (the calendar days from the Submission Date to the reply: information,
+ * never a deadline).
+ */
+export const formPdf = z.strictObject({
+  disclaimer: z
+    .strictObject({
+      en: z.string().trim().min(1).max(DISCLAIMER_MAX_LENGTH),
+      ar: z.string().trim().min(1).max(DISCLAIMER_MAX_LENGTH),
+    })
+    .optional(),
+  show_review_duration: z.boolean().optional(),
+});
+export type FormPdf = z.infer<typeof formPdf>;
+
+/** A Form Version's schema: its sections and their fields, in order, and how its record prints. */
+export const formSchema = z.object({ sections: z.array(formSection).min(1), pdf: formPdf.optional() });
 export type FormSchema = z.infer<typeof formSchema>;
 
 /** A published Form Version, which never changes (ADR 0006). */
