@@ -134,7 +134,8 @@ export const environments = {
       web: { cpu: 256, memoryMiB: 1024, desiredCount: 1 },
       api: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
       admin: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
-      worker: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
+      // Headless Chromium renders the Documental Records (RP-620): 512 MiB is too tight beside Node.
+      worker: { cpu: 512, memoryMiB: 1024, desiredCount: 1 },
     },
     migrationTask: { cpu: 256, memoryMiB: 512 },
     logRetentionDays: 30,
@@ -286,11 +287,11 @@ export function resourceNames(config: EnvironmentConfig) {
     keyAlias: (key: "database" | "storage" | "pdf-sealing") => `alias/${prefix}-${key}`,
     /** The last version that passed the deploy's checks; the workflow rolls back to it. */
     lastGoodVersionParameter: `/rabaed/${config.name}/deploy/last-good-version`,
-    /** The api's task role; the Project files bucket refuses everyone else. */
+    /** The api's task role; with the worker's, the only one the Project files bucket lets in. */
     apiTaskRole: `${prefix}-api-task`,
     /** Rabaed Admin's task role: the only one that may read the rabaed_admin secret. */
     adminTaskRole: `${prefix}-admin-task`,
-    /** The worker's task role: it sends the notification emails. */
+    /** The worker's task role: it sends the notification emails and makes the Documental Records (RP-620). */
     workerTaskRole: `${prefix}-worker-task`,
     /** The demo people's sign-in password (demo environments only). */
     demoPasswordSecret: `rabaed/${config.name}/demo/password`,
