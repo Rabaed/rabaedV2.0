@@ -78,7 +78,8 @@ export async function bulkMove(db: Db, memberId: string, projectId: string, requ
         join work_item w on w.id = ${id}::uuid
         join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
         join workflow_step ts on ts.id = tr.to_step_id
-        where a.action = 'transition' and ts.stage_key = ${request.stage}
+        -- One that needs the Participant field (RP-658) isn't a bulk move: it carries no pick.
+        where a.action = 'transition' and not a.picks_participant and ts.stage_key = ${request.stage}
         order by a.transition_key
       `.execute(trx);
       return rows;

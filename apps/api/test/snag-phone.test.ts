@@ -75,12 +75,16 @@ describe("the phone's New Snag (seam 1)", () => {
     expect(await photos(at.c1Pm, id)).toHaveLength(2);
   });
 
-  it("offers no Raise where two Contractors cover the Snag: the phone shows none, and the API refuses it", async () => {
+  it("offers the Raise with the Participant field where two Contractors cover the Snag (RP-658); without a pick the API refuses it", async () => {
     const id = await phoneDraft("Socket outlet loose", 1);
     await pickLocation(id, buildingB);
-    expect((await detail(at.k1Manager, id)).actions.transitions).toEqual([]);
+    const [raise] = (await detail(at.k1Manager, id)).actions.transitions;
+    expect(raise!.key).toBe("raise");
+    expect(raise!.participants).toHaveLength(2);
     const refused = await tryTake(at.k1Manager, id, "raise");
-    expect({ status: refused.statusCode, body: refused.json() }).toEqual({ status: 409, body: { error: "next_step_unavailable" } });
+    expect({ status: refused.statusCode, body: refused.json() }).toEqual({ status: 422, body: { error: "participant_not_picked" } });
+    await take(at.k1Manager, id, "raise", { participant: at.c1ParticipantId });
+    expect((await detail(at.c1Pm, id)).stage.key).toBe("open");
   });
 });
 

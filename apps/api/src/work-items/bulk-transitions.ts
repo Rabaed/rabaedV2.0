@@ -35,9 +35,10 @@ async function candidates(trx: Trx, ids: string[], transition: string): Promise<
   const { rows } = await sql<Candidate>`
     select w.id, w.document_number, w.title, app.need_my_action(w.id) as need,
       (select ${formToken}
-        from app.work_item_actions(w.id) a (action, transition_key, label, transition_kind)
+        from app.work_item_actions(w.id) a
         join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
-        where a.action = 'transition' and a.transition_key = ${transition}
+        -- One that needs the Participant field (RP-658) isn't offered in bulk: it carries no pick.
+        where a.action = 'transition' and a.transition_key = ${transition} and not a.picks_participant
         limit 1) as form
     from unnest(${ids}::uuid[]) with ordinality as u (id, n)
     join work_item w on w.id = u.id
@@ -58,9 +59,9 @@ export async function bulkOffers(trx: Trx, ids: string[]): Promise<Map<string, B
     select w.id, a.transition_key as key, a.label, ${formToken} as form
     from unnest(${ids}::uuid[]) with ordinality as u (id, n)
     join work_item w on w.id = u.id
-    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, m)
+    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, picks_participant, m)
     join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
-    where a.action = 'transition' and app.need_my_action(w.id) = 'waiting'
+    where a.action = 'transition' and not a.picks_participant and app.need_my_action(w.id) = 'waiting'
     order by u.n, a.m
   `.execute(trx);
   for (const r of rows) offers.get(r.id)?.push({ key: r.key, label: r.label, form: r.form });

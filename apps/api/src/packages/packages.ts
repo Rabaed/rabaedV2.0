@@ -254,10 +254,10 @@ type ToSubmit = { id: string; document_number: string | null; title: string; sub
 async function submitReadiness(trx: Trx, packageId: string): Promise<{ items: ToSubmit[]; hidden: boolean; ready: boolean }> {
   const { rows: items } = await sql<ToSubmit>`
     select w.id, w.document_number, w.title,
-      (select a.transition_key from app.work_item_actions(w.id) a (action, transition_key, label, transition_kind)
-        where a.action = 'transition' and a.transition_kind = 'submit' limit 1) as submit_key,
-      exists (select 1 from app.work_item_actions(w.id) a (action, transition_key, label, transition_kind)
-        where a.action = 'pick_up') as pick_up
+      -- A Submit that needs the Participant field (RP-658) isn't one a Package can take: it carries no pick.
+      (select a.transition_key from app.work_item_actions(w.id) a
+        where a.action = 'transition' and a.transition_kind = 'submit' and not a.picks_participant limit 1) as submit_key,
+      exists (select 1 from app.work_item_actions(w.id) a where a.action = 'pick_up') as pick_up
     from app.package_items(${packageId}::uuid) i
     join work_item w on w.id = i
     where w.submitted_at is null and w.closed_at is null

@@ -186,7 +186,7 @@ describe("Pick up, Return and re-send", () => {
   it("refuses a Transition that doesn't leave the current Step, or whose next Step nobody could hold", async () => {
     expect((await tryTake(pm1, id, "send_for_review")).json()).toEqual({ error: "transition_not_available" });
     // The Consultant has Engineers only: nobody could issue its Code (RP-194), which is theirs to know.
-    // Submit isn't offered (above), and the answer is the one a Gap or an Overlap gets (scenario 37).
+    // Submit isn't offered (above), and the answer is the one a Visibility Gap gets (scenario 37).
     const res = await tryTake(pm1, id, "submit");
     expect(res.statusCode).toBe(409);
     expect(res.body).toBe(JSON.stringify({ error: "next_step_unavailable" }));

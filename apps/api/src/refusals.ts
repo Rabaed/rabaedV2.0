@@ -53,6 +53,11 @@ const answers = {
   // copy outside what the acting Participant fills at that Step; one answer each,
   // whatever the reason.
   assignee_not_offered: () => new HttpError(422, "assignee_not_offered"),
+  // The Participant field (RP-658): a Submit to one of several covering Participants without
+  // a pick, and a pick it couldn't have offered (one not covering the item, of another role, a
+  // made-up id); one answer whatever it names.
+  participant_not_picked: () => new HttpError(422, "participant_not_picked"),
+  participant_not_offered: () => new HttpError(422, "participant_not_offered"),
   action_not_allowed: () => new HttpError(409, "action_not_allowed"),
   // A Recommended Code the Transition doesn't offer (RP-433): not from a Step that
   // Recommends a Code, not to the same Participant's next reviewer, or not a closing

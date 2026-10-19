@@ -73,6 +73,8 @@ export type TakeOptions = {
   assignTo?: string;
   /** The Recommended Code (RP-433), from a Step that Recommends a Code. */
   recommendedCode?: string;
+  /** The next Step's Participant, picked among those covering the item (RP-658). */
+  participant?: string;
 };
 
 /** `by` takes Transition `transition` on item `id`, and the response is returned as it came, for a test of a refusal. */
@@ -99,6 +101,7 @@ export const detail = async (by: Caller, id: string): Promise<WorkItemDetail> =>
 export type Tower = {
   projectId: string;
   c1ParticipantId: string;
+  k1ParticipantId: string;
   electrical: string;
   mechanical: string;
   buildingA: string;
@@ -125,6 +128,7 @@ export async function buildTower(api: TestApi, { c1, k1 }: { c1: Company; k1: Co
   return {
     projectId,
     c1ParticipantId,
+    k1ParticipantId,
     electrical,
     mechanical,
     buildingA,

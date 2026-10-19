@@ -28,7 +28,9 @@ import { useActionFormLabels } from "@/lib/form-labels";
  * have one. `assignTo`: the Members it offers as the next holder (WF-8), the
  * taker's own Company's only; absent when it offers none. `recommendCode`: the
  * outcomes it may recommend to the next reviewer of the taker's own Company
- * (RP-433); absent when it offers none.
+ * (RP-433); absent when it offers none. `participants`: the Participants covering
+ * the item, one of whom the taker must pick to hold the next Step (RP-658), by
+ * Company name only; absent when it goes to one.
  */
 export type TransitionChoice = {
   key: string;
@@ -36,6 +38,7 @@ export type TransitionChoice = {
   actionForm: FormSchema | null;
   assignTo?: { memberId: string; name: BilingualText }[];
   recommendCode?: { code: string; name: BilingualText }[];
+  participants?: { participantId: string; companyName: BilingualText }[];
   /** The answers the pop-up starts from: the reply that brought the item here, inside the taker's own Company (RP-437). */
   prefill?: Record<string, unknown>;
   /** The checklists its Screen takes, as the taker's own Company answered them (RP-86): read-only here. */
@@ -78,6 +81,8 @@ export function useWorkItemCalls(workItemId: string) {
     assignee_not_offered: t("assigneeNotOffered"),
     action_not_allowed: t("actionNotAllowed"),
     recommended_code_not_offered: t("recommendedCodeNotOffered"),
+    participant_not_picked: t("participantNotPicked"),
+    participant_not_offered: t("participantNotOffered"),
     transition_not_available: t("notAvailable"),
     item_closed: t("notAvailable"),
     project_closed: t("projectClosed"),
@@ -122,7 +127,7 @@ export function useWorkItemCalls(workItemId: string) {
 
   /**
    * Takes `transition` with its checked answers, Internal Note and, if picked, the
-   * next holder and the Recommended Code. Called only from the pop-up's confirm
+   * next holder, the Recommended Code and the next Step's Participant. Called only from the pop-up's confirm
    * button, so the Transition goes as confirmed (ADR 0017).
    */
   async function take(
@@ -131,6 +136,7 @@ export function useWorkItemCalls(workItemId: string) {
     internalNote: string,
     assignTo: string | null = null,
     recommendedCode: string | null = null,
+    participant: string | null = null,
   ): Promise<true | Refusal> {
     let idempotencyKey = keys.current.get(transition);
     if (!idempotencyKey) {
@@ -143,6 +149,7 @@ export function useWorkItemCalls(workItemId: string) {
       internalNote: internalNote.trim(),
       assignTo,
       recommendedCode,
+      participant,
       confirmed: true,
       idempotencyKey,
     });
@@ -236,6 +243,9 @@ export function TransitionDialog({
   const [internalNote, setInternalNote] = useState("");
   const [assignTo, setAssignTo] = useState(TO_POOL);
   const [recommendedCode, setRecommendedCode] = useState(NO_RECOMMENDED_CODE);
+  // The next Step's Participant (RP-658): none picked until the taker picks one.
+  const [participant, setParticipant] = useState("");
+  const [participantMissing, setParticipantMissing] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const { pending, error, setError } = calls;
   const reply = useReplyFiles(calls.workItemId, transition.actionForm);
@@ -252,11 +262,14 @@ export function TransitionDialog({
     const checked = transition.actionForm
       ? validateAnswers(transition.actionForm, answers, "complete", { files: reply.counts })
       : { ok: true as const, answers: {} };
+    const unpicked = transition.participants !== undefined && participant === "";
+    setParticipantMissing(unpicked);
     if (!checked.ok) {
       setFieldErrors(checked.errors);
       return setError(t("actionFormInvalid"));
     }
     setFieldErrors([]);
+    if (unpicked) return setError(t("participantNotPicked"));
     // What was typed in the item's Form goes with it: save it first.
     if (itemForm?.dirty && !(await itemForm.save())) return setError(t("saveFirst"));
     const result = await calls.take(
@@ -265,6 +278,7 @@ export function TransitionDialog({
       internalNote,
       assignTo === TO_POOL ? null : assignTo,
       recommendedCode === NO_RECOMMENDED_CODE ? null : recommendedCode,
+      participant === "" ? null : participant,
     );
     if (result === true) return dialog.current?.close();
     // The Action Form's own answers: the pop-up marks each field to fix.
@@ -303,6 +317,25 @@ export function TransitionDialog({
             )}
             <ReplyChecklistsRead workItemId={calls.workItemId} checklists={transition.checklists} locale={locale} />
           </>
+        )}
+        {transition.participants && (
+          <Field
+            label={t("participant")}
+            help={t("participantHelp")}
+            id={`${idPrefix}-participant`}
+            required
+            {...(participantMissing ? { error: t("participantRequired") } : {})}
+          >
+            <Select
+              value={participant}
+              placeholder={t("participantPlaceholder")}
+              onValueChange={(value) => {
+                setParticipant(value);
+                setParticipantMissing(false);
+              }}
+              options={transition.participants.map((p) => ({ value: p.participantId, label: p.companyName[locale] }))}
+            />
+          </Field>
         )}
         <ActionForm
           schema={transition.actionForm}
