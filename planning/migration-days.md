@@ -110,11 +110,17 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270901 | RP-645 | 5B | Unused: the migration moved to 20270907 (main gained 20270829, RP-958) |
 | 20270902 | RP-644 | 5B | Unused: the migration moved to 20270908 (main gained 20270829, RP-958) |
 | 20270829 | RP-958 | 22 | outbox_attempt_on_take |
-| 20270904 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) (final day, moved from 20270829 before queueing) |
-| 20270905 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) (final day, moved from 20270830 before queueing) |
-| 20270906 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) (final day, moved from 20270831 before queueing) |
-| 20270907 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day, moved from 20270901 before queueing) |
-| 20270908 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day, moved from 20270902 before queueing) |
-| 20270911 | RP-960 | 5B | Register Import: a Type counts as raisable only on a Rabaed or the Project's own Workflow (Rabaed Admin's import runs as the app role: bootstrap) |
+| 20270904 | RP-639 | 5B | Unused: the migration moved to 20270916 (main gained 20270914) |
+| 20270905 | RP-640 | 5B | Unused: the migration moved to 20270917 (main gained 20270914) |
+| 20270906 | RP-645 | 5B | Unused: the migration moved to 20270918 (main gained 20270914) |
+| 20270907 | RP-645 | 5B | Unused: the migration moved to 20270919 (main gained 20270914) |
+| 20270908 | RP-644 | 5B | Unused: the migration moved to 20270920 (main gained 20270914) |
+| 20270911 | RP-960 | 5B | Unused: the migration moved to 20270921 (main gained 20270914) |
 | 20270910 | RP-157 | 23 | documental_record_verification |
 | 20270914 | RP-627 | 33 | site_observation_type_and_general_trade |
+| 20270916 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) (final day, moved from 20270904 before queueing) |
+| 20270917 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) (final day, moved from 20270905 before queueing) |
+| 20270918 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) (final day, moved from 20270906 before queueing) |
+| 20270919 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day, moved from 20270907 before queueing) |
+| 20270920 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day, moved from 20270908 before queueing) |
+| 20270921 | RP-960 | 5B | Register Import: a Type counts as raisable only on a Rabaed or the Project's own Workflow (Rabaed Admin's import runs as the app role: bootstrap) (final day, moved from 20270911 before queueing) |
