@@ -17,6 +17,7 @@ const actions = (transitions: WorkItemActions["transitions"], rest: Partial<Work
   discardRevision: false,
   duplicate: false,
   discardDraft: false,
+  editPaperRef: false,
   signatureRequired: false,
   stampRequired: false,
   transitions,
