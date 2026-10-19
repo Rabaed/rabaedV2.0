@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { committedFontFiles } from "./check-no-fonts.ts";
+import { claudeDesignExport, fakeBase64, font } from "./claude-design-export.fixtures.ts";
+import { committedFontFiles, filesWithEmbeddedFonts, stagedFilesWithEmbeddedFonts } from "./check-no-fonts.ts";
+import { stripFonts } from "./design-strip-fonts.ts";
 
 // A throwaway repository; the "fonts" are binary stand-ins, like real woff2 files.
 let repo: string;
@@ -49,5 +51,52 @@ describe("committedFontFiles", () => {
   it("ignores names that only look like fonts", () => {
     commit({ "docs/woff2.md": "notes\n", "fonts.ts": "export {};\n", "x.otf.md": "notes\n" });
     expect(committedFontFiles(repo)).toEqual([]);
+  });
+});
+
+describe("filesWithEmbeddedFonts", () => {
+  it("finds a Claude Design bundle whose manifest carries a font", () => {
+    commit({ "design/export.html": claudeDesignExport({ a1: { mime: font("woff2"), data: fakeBase64 } }) });
+    expect(filesWithEmbeddedFonts(repo)).toEqual(["design/export.html"]);
+  });
+
+  it("passes the same bundle once design:strip-fonts has removed its fonts", () => {
+    const page = claudeDesignExport({ logo: { mime: "image/svg+xml", data: fakeBase64 }, a1: { mime: font("woff2"), data: fakeBase64 } });
+    commit({ "design/export.html": stripFonts(page).html });
+    expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+
+  it("finds a font inlined as a base64 data URL, under any font mime type", () => {
+    commit({
+      "a.css": `@font-face { src: url(data:${font("woff2")};base64,${fakeBase64}); }`,
+      "b.js": `const f = "data:application/font-woff;base64,${fakeBase64}";`,
+      "c.html": `<style>@font-face { src: url('data:application/x-font-ttf;charset=utf-8;base64,${fakeBase64}') }</style>`,
+    });
+    expect(filesWithEmbeddedFonts(repo).sort()).toEqual(["a.css", "b.js", "c.html"]);
+  });
+
+  it("finds embedded font data committed and later removed, on any branch: it stays in history", () => {
+    git("checkout", "-q", "-b", "feature");
+    commit({ "design/export.html": claudeDesignExport({ a1: { mime: font("woff2"), data: fakeBase64 } }) });
+    commit({ "design/export.html": claudeDesignExport({}) }, "strip");
+    git("checkout", "-q", "main");
+    expect(filesWithEmbeddedFonts(repo)).toEqual(["design/export.html"]);
+  });
+
+  it("checks only the staged files before a commit", () => {
+    commit({ "old.html": claudeDesignExport({ a1: { mime: font("woff2"), data: fakeBase64 } }) });
+    writeFileSync(join(repo, "new.css"), `src: url(data:${font("woff")};base64,${fakeBase64})`);
+    writeFileSync(join(repo, "unstaged.css"), `src: url(data:${font("woff")};base64,${fakeBase64})`);
+    git("add", "new.css");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["new.css"]);
+  });
+
+  it("ignores code that builds a font data URL at run time, and font names in prose", () => {
+    commit({
+      "fonts.ts": "const src = `url(data:" + font("woff2") + ";base64,${data})`;\n",
+      "notes.md": "Fonts are served as " + font("woff2") + " or application/font-woff from the bucket.\n",
+      "manifest.html": claudeDesignExport({ a1: { mime: "image/svg+xml", data: fakeBase64 } }),
+    });
+    expect(filesWithEmbeddedFonts(repo)).toEqual([]);
   });
 });
