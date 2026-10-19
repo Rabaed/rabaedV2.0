@@ -98,6 +98,7 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270731 | RP-623 | 3B | Unused: the migration moved to 20270803, after main's 20270731 (RP-629) |
 | 20270731 | RP-629 | 34 | snag_bulk_reassign |
 | 20270803 | RP-623 | 32 | reply_screen_files |
-| 20270805 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803) |
-| 20270806 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (moved from 20270804) |
+| 20270806 | RP-645 | 5B | Unused: the migration moved to 20270809 |
 | 20270805 | RP-155 | 23 | record_checks |
+| 20270808 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) |
+| 20270809 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (moved from 20270804, then 20270806) |

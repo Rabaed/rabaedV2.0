@@ -54,6 +54,7 @@ alter table admin_action add constraint admin_action_action_check
     'duplicate_workflow', 'add_default_outcome', 'change_default_outcome', 'reorder_default_outcomes',
     'add_default_stage', 'rename_default_stage', 'reorder_default_stages',
     'refuse_workflow_publish',
+    'reproduce_documental_record', 'read_documental_record_alerts',
     'read_register_import', 'preview_register_import', 'confirm_register_import'
   ));
 
