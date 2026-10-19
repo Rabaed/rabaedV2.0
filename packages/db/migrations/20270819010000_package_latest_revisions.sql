@@ -1,6 +1,6 @@
 -- RP-616 review fix 18 (spec story 30, as the product owner settled it on 2026-10-19): a
 -- Package's counts and its page's items are of the latest Revision of each chain only, the same
--- way its Done status reads them (20270623000000_package_done.sql). A Code C and its open R1 count
+-- way its Done status reads them (20270815000000_package_done.sql). A Code C and its open R1 count
 -- "open 1, total 1".
 --
 -- * app.package_latest_items(package): of the items the caller sees (app.package_items), not
