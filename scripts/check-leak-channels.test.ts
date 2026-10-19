@@ -15,6 +15,10 @@ const allowList: readonly AllowListed[] = [
   { table: "notification", kind: "watched_event", row: "Notifications and emails" },
   { table: "notification", kind: "sent_back", row: "Notifications and emails" },
   { table: "notification", kind: "package_submitted", row: "Notifications and emails" },
+  // RP-155: "record ready" (the bell only) is delivered like any notification; a Re-produce is a job of the record itself.
+  { table: "outbox", kind: "record_ready", row: "Notifications and emails" },
+  { table: "notification", kind: "record_ready", row: "Notifications and emails" },
+  { table: "outbox", kind: "documental_record_reproduce", row: "Documental Record" },
 ];
 
 function visibility(channels: string[]): string {

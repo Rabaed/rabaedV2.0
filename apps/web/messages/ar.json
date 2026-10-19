@@ -1076,6 +1076,7 @@
   "documentalRecord": {
     "download": "تنزيل PDF",
     "notReady": "السجل غير جاهز بعد. حاول مرة أخرى بعد دقيقة.",
+    "preparing": "السجل قيد الإعداد",
     "unavailable": "لم ينجح ذلك. حاول مرة أخرى."
   },
   "watch": {
@@ -1506,7 +1507,8 @@
     "revisionCreated": "مراجعة جديدة",
     "cancelled": "ملغى",
     "sentBack": "أرجعته إليكم {company}",
-    "packageSubmitted": "قدّم {company} {count, plural, one {تقديم واحد} two {تقديمان} few {{n} تقديمات} many {{n} تقديمًا} other {{n} تقديم}}"
+    "packageSubmitted": "قدّم {company} {count, plural, one {تقديم واحد} two {تقديمان} few {{n} تقديمات} many {{n} تقديمًا} other {{n} تقديم}}",
+    "recordReady": "السجل جاهز للتنزيل"
   },
   "handover": {
     "title": "تسليم خطوات {name}",

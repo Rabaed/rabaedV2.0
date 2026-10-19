@@ -12,6 +12,7 @@ import type {
 import { packageNumber } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "./client.ts";
+import { deliverRecordReady } from "./documental-record-checks.ts";
 import type { Database } from "./schema.ts";
 
 // The outbox processor (workflow-engine.md §5): the worker takes one due row at
@@ -32,6 +33,11 @@ export type OutboxHandler = (trx: Transaction<Database>, row: OutboxRow) => Prom
 /** Delivers an in-app notification to whoever the item reached, if they still see it. */
 export const deliverNotification: OutboxHandler = async (trx, row) => {
   await sql`select app.deliver_notification(${row.id}::uuid)`.execute(trx);
+};
+
+/** Delivers a "record ready" notification (RP-155) to the Members who see the closed item, under the Project mute. */
+export const deliverRecordReadyHandler: OutboxHandler = async (trx, row) => {
+  await deliverRecordReady(trx, row.id);
 };
 
 type NotificationEvent = NonNullable<NotificationEmailContent["event"]>;
@@ -164,7 +170,7 @@ export function notificationDigestHandler(send: SendNotificationDigest): OutboxH
 }
 
 /** No email handler by default: the worker passes one with its mailer. */
-const defaultHandlers: Record<string, OutboxHandler> = { notification: deliverNotification };
+const defaultHandlers: Record<string, OutboxHandler> = { notification: deliverNotification, record_ready: deliverRecordReadyHandler };
 
 export interface ProcessOutboxOptions {
   /** Replaces the handler of a kind (tests use this to make deliveries fail). */
