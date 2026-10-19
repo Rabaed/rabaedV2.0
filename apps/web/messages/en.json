@@ -903,7 +903,10 @@
         "tooLong": "Use at most {max} characters.",
         "summary": "Summary",
         "evidence": "Photos for {item}",
-        "itemNumber": "{n} of {of}"
+        "itemNumber": "{n} of {of}",
+        "raiseSnag": "Raise a Snag",
+        "raisesSnag": "A Snag is raised with the code",
+        "raisesNoSnag": "No Snag is raised"
       },
       "tableField": {
         "addRow": "Add row",

@@ -903,7 +903,10 @@
         "tooLong": "استخدم {max} حرفًا على الأكثر.",
         "summary": "الملخص",
         "evidence": "صور \u2068{item}\u2069",
-        "itemNumber": "{n} من {of}"
+        "itemNumber": "{n} من {of}",
+        "raiseSnag": "إنشاء عيب",
+        "raisesSnag": "يُنشأ عيب مع الرمز",
+        "raisesNoSnag": "لا يُنشأ عيب"
       },
       "tableField": {
         "addRow": "إضافة صف",

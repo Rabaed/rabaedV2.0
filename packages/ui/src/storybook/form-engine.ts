@@ -209,6 +209,9 @@ const checklist: Record<Locale, ChecklistFieldLabels> = {
     summary: "Summary",
     evidence: (item) => `Photos for ${item}`,
     itemNumber: (n, of) => `${n} of ${of}`,
+    raiseSnag: "Raise a Snag",
+    raisesSnag: "A Snag is raised with the code",
+    raisesNoSnag: "No Snag is raised",
     photosField: photos.en,
   },
   ar: {
@@ -225,6 +228,9 @@ const checklist: Record<Locale, ChecklistFieldLabels> = {
     summary: "الملخص",
     evidence: (item) => `صور \u2068${item}\u2069`,
     itemNumber: (n, of) => `${n} من ${of}`,
+    raiseSnag: "إنشاء عيب",
+    raisesSnag: "يُنشأ عيب مع الرمز",
+    raisesNoSnag: "لا يُنشأ عيب",
     photosField: photos.ar,
   },
 };
