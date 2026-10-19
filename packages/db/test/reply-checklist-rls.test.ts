@@ -15,24 +15,22 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, buildSeamTwoTower, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, bilingual, buildSeamTwoTower, digits, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
-const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
 const TYPE = `WC${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
 const FIELD = "inspection_checklist";
 const wirForm = readFileSync(new URL("../../../apps/admin/forms/WIR.json", import.meta.url), "utf8");
-const label = (en: string) => ({ en, ar: en });
 const ANSWERS = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" } };
 /** The codes' Screen: the copied checklist and Remarks. */
 const codeScreen = {
   sections: [
     {
       key: "inspection",
-      title: label("Inspection"),
+      title: bilingual("Inspection"),
       fields: [
-        { key: FIELD, type: "copied_checklist", copyOf: "checklist_template", label: label("Checklist"), required: true },
-        { key: "remarks", type: "textarea", label: label("Remarks") },
+        { key: FIELD, type: "copied_checklist", copyOf: "checklist_template", label: bilingual("Checklist"), required: true },
+        { key: "remarks", type: "textarea", label: bilingual("Remarks") },
       ],
     },
   ],
@@ -52,7 +50,6 @@ let k1: Tower["k1"];
 let ow: Tower["ow"];
 let c2: Tower["c2"];
 let other: Tower["other"];
-let c1Pm = "";
 let call: Tower["call"];
 let outcome: Tower["outcome"];
 let take: Tower["take"];
@@ -119,11 +116,11 @@ beforeAll(async () => {
   // Screen, with a Send Back from Consultant review (the WIR's own Workflow has none).
   const screenVersion = await addTestScreen(run, `rp86_${digits(6)}`, codeScreen, []);
   const workflowId = await addTestWorkflow(run, {
-    name: label(`RP-86 checklist ${digits(6)}`),
+    name: bilingual(`RP-86 checklist ${digits(6)}`),
     recommendCode: true,
     screens: { approve_a: screenVersion, revise_c: screenVersion },
   });
-  const formId = await one("insert into form_definition (owner_kind, name) values ('rabaed', $1) returning id", [JSON.stringify(label("Inspection (RP-86)"))]);
+  const formId = await one("insert into form_definition (owner_kind, name) values ('rabaed', $1) returning id", [JSON.stringify(bilingual("Inspection (RP-86)"))]);
   await migrator.query("insert into form_version (form_definition_id, version_no, status, published_at, schema) values ($1, 1, 'published', now(), $2::jsonb)", [
     formId,
     wirForm,
@@ -131,12 +128,11 @@ beforeAll(async () => {
   await migrator.query(
     `insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
      select 'rabaed', module_key, $1, $2, $3, outcome_kind, $4 from work_item_type where owner_kind = 'rabaed' and code = 'WIR'`,
-    [TYPE, JSON.stringify(label("Inspection (RP-86)")), workflowId, formId],
+    [TYPE, JSON.stringify(bilingual("Inspection (RP-86)")), workflowId, formId],
   );
 
   tower = await buildSeamTwoTower(app, migrator, towerOptions);
   ({ c1, k1, ow, c2, other, call, outcome, take, pickUp } = tower);
-  c1Pm = c1.members.project_manager;
 });
 
 afterAll(async () => {
@@ -153,7 +149,7 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
       expect(await photosAs(reader, id), reader).toEqual([photo]);
       expect(await byId(reader, photo), reader).toEqual([photo]);
     }
-    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative]) {
+    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative]) {
       // Each sees the Inspection itself (raised, oversight), never the checklist in progress.
       expect((await call<{ id: string }>(outsider, sql`select id from work_item where id = ${id}::uuid`)).length, outsider).toBe(1);
       expect(await answersAs(outsider, id), outsider).toEqual([]);
@@ -177,7 +173,7 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
     const { id } = await atManager("Slab pour, Level 3");
     expect(await save(k1.members.manager, id, { cover: { answer: "fail" } })).toBe("field_not_found");
     expect((await startPhoto(k1.members.manager, id, "cover")).outcome).toBe("field_not_found");
-    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative]) {
+    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative]) {
       expect(await save(outsider, id), outsider).toBe("not_editable");
       expect((await startPhoto(outsider, id, "cover")).outcome, outsider).toBe("not_editable");
     }
@@ -205,7 +201,7 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
     expect(await answersAs(c2.members.engineer, id)).toEqual([]);
     expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
 
-    for (const reader of [c1.members.engineer, c1Pm, ow.members.representative, k1.members.engineer, k1.members.manager]) {
+    for (const reader of [c1.members.engineer, c1.members.project_manager, ow.members.representative, k1.members.engineer, k1.members.manager]) {
       expect(await codeAnswersAs(reader, id), reader).toEqual([ANSWERS]);
       expect(await photosAs(reader, id), reader).toEqual([photo]);
       expect(await byId(reader, photo), reader).toEqual([photo]);
@@ -231,7 +227,7 @@ describe("leaving K1 any other way discards them", () => {
     expect(await save(k1.members.engineer, id)).toBe("saved");
     const photo = await addPhoto(k1.members.engineer, id);
     expect(await take(k1.members.engineer, id, "send_back")).toBe("applied");
-    for (const reader of [k1.members.engineer, c1.members.engineer, c1Pm]) {
+    for (const reader of [k1.members.engineer, c1.members.engineer, c1.members.project_manager]) {
       expect(await answersAs(reader, id), reader).toEqual([]);
       expect(await photosAs(reader, id), reader).toEqual([]);
       expect(await codeAnswersAs(reader, id), reader).toEqual([]);
@@ -240,8 +236,8 @@ describe("leaving K1 any other way discards them", () => {
     expect(left.rows[0].n).toBe(0);
     const removed = await migrator.query("select removed_at is not null as removed from document where id = $1", [photo]);
     expect(removed.rows[0].removed).toBe(true);
-    expect(await pickUp(c1Pm, id)).toBe("picked_up");
-    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await pickUp(c1.members.project_manager, id)).toBe("picked_up");
+    expect(await take(c1.members.project_manager, id, "submit")).toBe("applied");
     expect(await pickUp(k1.members.engineer, id)).toBe("picked_up");
     expect(await answersAs(k1.members.engineer, id)).toEqual([]);
     expect(await photosAs(k1.members.engineer, id)).toEqual([]);
