@@ -83,7 +83,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270706 | RP-625 | 3A | Unused: the migration moved to 20270714, after main's 20270708 and 20270709 |
 | 20270708 | RP-85 | 21 | stored_file |
 | 20270709 | RP-620 | 22 | documental_record |
-| 20270726 | RP-155 | 23 | record_checks |
 | 20270716 | RP-626 | 33 | The Question Types (QSN, QSC) and the Consultant's `submit` (moved from 20270706, then 20270705) |
 | 20270714 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, then 20270706: main's later days) |
 | 20270716 | RP-673 | 41 | Unused: the migration moved to 20270726 (main took 20270716 and 20270720 first) |
@@ -91,3 +90,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270720 | RP-673 | 41 | Unused: the migration moved to 20270726, after RP-151's 20270720 on main |
 | 20270720 | RP-151 | 22 | record_page_one |
 | 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
+| 20270803 | RP-155 | 23 | record_checks |
