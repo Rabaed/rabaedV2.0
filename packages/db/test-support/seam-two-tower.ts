@@ -2,7 +2,7 @@
 // hand, built once. Seam 1's counterpart is buildTower (apps/api/test/support/tower.ts).
 //
 //   C1  Contractor, the Project's creator and Admin: an Engineer and a Project Manager.
-//   K1  Consultant: an Engineer and a Manager.
+//   K1  Consultant: an Engineer, and a Manager with the option `k1Manager`.
 //   OW  Owner: a Representative; sees everything unless `ownerOversight` is false (V2).
 //   C2  Another Contractor of the same Trade: an Engineer; covers Building B only unless
 //       `c2OtherLocation` is false (V3).
@@ -48,6 +48,8 @@ export type SeamTwoOptions = {
   ownerOversight?: boolean;
   /** Adds `other`: the Authorized Person of a Company that has its own Project, which the Tower's Members are not on. Default false. */
   otherProject?: boolean;
+  /** K1 has a Manager besides its Engineer, so its Steps wait to be picked up. Default false: the Engineer is K1's only Member. */
+  k1Manager?: boolean;
   /** The Project's Checklist Template (a Version of it, `checklist`): `false` for none. Default: SEAM_TWO_CHECKLIST_ITEMS under "Concrete pour". */
   checklistTemplate?: false | { name?: string; items?: unknown[] };
 };
@@ -63,7 +65,7 @@ export type SeamTwoTower<O extends SeamTwoOptions = SeamTwoOptions> = {
   buildingA: string;
   buildingB: string;
   c1: SeamTwoCompany<"engineer" | "project_manager">;
-  k1: SeamTwoCompany<"engineer" | "manager">;
+  k1: SeamTwoCompany<O["k1Manager"] extends true ? "engineer" | "manager" : "engineer">;
   ow: SeamTwoCompany<"representative">;
   c2: SeamTwoCompany<"engineer">;
   /** The Checklist Template and its Version 1, unless `checklistTemplate` is false. */
@@ -79,8 +81,8 @@ export type SeamTwoTower<O extends SeamTwoOptions = SeamTwoOptions> = {
 } & (O["otherProject"] extends true ? { other: Other } : { other?: undefined });
 
 /** Builds a Tower with the `migrator` (a connected client of the test database) and the `app` role's `Db`. */
-export async function buildSeamTwoTower<const O extends SeamTwoOptions = {}>(app: Db, migrator: pg.Client, options?: O): Promise<SeamTwoTower<O>> {
-  const { projectCode = "RST", tradeCode = "EL", c2OtherLocation = true, ownerOversight = true, otherProject = false, checklistTemplate } = options ?? {};
+export async function buildSeamTwoTower<const O extends SeamTwoOptions = SeamTwoOptions>(app: Db, migrator: pg.Client, options?: O): Promise<SeamTwoTower<O>> {
+  const { projectCode = "RST", tradeCode = "EL", c2OtherLocation = true, ownerOversight = true, otherProject = false, k1Manager = false, checklistTemplate } = options ?? {};
   const one = async (text: string, values: unknown[]): Promise<string> => (await migrator.query(text, values)).rows[0].id as string;
   const call: SeamTwoTower["call"] = (as, query) => withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
   const outcome: SeamTwoTower["outcome"] = (as, query) => call(as, query).then((rows) => rows[0]!.outcome);
@@ -117,7 +119,8 @@ export async function buildSeamTwoTower<const O extends SeamTwoOptions = {}>(app
   };
 
   const c1 = await withMembers("C1", ["engineer", "project_manager"] as const);
-  const k1 = await withMembers("K1", ["engineer", "manager"] as const);
+  // A second K1 Member makes K1's Steps open to pick up (the lone Engineer holds them as they arrive).
+  const k1 = await withMembers("K1", k1Manager ? (["engineer", "manager"] as const) : (["engineer"] as const));
   const ow = await withMembers("OW", ["representative"] as const);
   const c2 = await withMembers("C2", ["engineer"] as const);
 

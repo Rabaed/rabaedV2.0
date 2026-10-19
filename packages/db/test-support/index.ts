@@ -23,7 +23,7 @@
  *   buildSeamTwoTower(app, migrator, options)   seam-two-tower.ts: C1, K1, OW, C2 (each an Authorized Person and Members by
  *                                   Position), a Project they join, its Trade, Locations, Visibility, Positions and a Checklist
  *                                   Template; with call/outcome/take/pickUp as a Member. Options: projectCode, tradeCode,
- *                                   c2OtherLocation, ownerOversight, otherProject (adds `other`), checklistTemplate.
+ *                                   c2OtherLocation, ownerOversight, otherProject (adds `other`), k1Manager, checklistTemplate.
  *   wirAtConsultant(tower, options) seam-two-tower.ts: a WIR on `options.type` with the Template copied, Submitted and picked
  *                                   up by K1's Engineer; returns its id. SEAM_TWO_CHECKLIST_ITEMS: the default Template's items.
  * Every Member of the test database has a Signature, and every Company a Stamp, by default (RP-85,
