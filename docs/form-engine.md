@@ -310,7 +310,8 @@ ADR 0024, amended 2026-10-19, and ADR 0025: the Inspection's checklist is answer
 - **The code takes it:** its shared event carries the answers under the field's key (the history labels them from the Screen, the summary from §3.1), the photos freeze, and its content hash covers both (`checklists`, ADR 0017). Leaving the Consultant any other way (a Send Back) discards them; a cancel can't happen after a Submit.
 - **The proposed code** (ADR 0025): the pop-up of each code shows the checklist read-only with its summary, the Engineer's Recommended Code marked internal (`actions.recommendedCode`), and marks the code the checklist proposes, C when any item is Fail or No, else A (`proposedCode`; `transitions[].proposed`). The Manager confirms it or takes another.
 - **WIR Workflow Version 4** (`apps/admin/workflows/WIR.json`): Version 3 (`WIR-3.json`, kept for the items on it) with its codes showing the Rabaed Default Screens `inspection_code_a` to `inspection_code_d`, each `code_a` to `code_d` with the checklist first. The submittals' code Screens are unchanged.
-- **Not yet:** the Documental Record lists the photos with the item's Documents, but doesn't yet print the checklist as at the code; a checklist item's photo can't be annotated yet (RP-656), as no reply photo can (workflow-engine.md §5.7); the on-site screen comes with RP-655.
+- **Annotating a check item's photo** (RP-981): RP-656's tool works on it, its annotated copy a reply Document of the same field and check item (workflow-engine.md §5.7).
+- **Not yet:** the Documental Record lists the photos with the item's Documents, but doesn't yet print the checklist as at the code; the on-site screen comes with RP-655.
 - Seam 1: `apps/api/test/wir-checklist.test.ts`; seam 2: `packages/db/test/reply-checklist-rls.test.ts` (scenario RP-86-1); unit: `packages/domain/src/reply-checklist.test.ts`.
 
 ### 3.4 Snags from failed check items (as built, RP-577, spec RP-649)

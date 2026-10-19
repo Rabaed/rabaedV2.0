@@ -1,5 +1,5 @@
 import { formatNumber, type Locale } from "@rabaed/domain";
-import { EmptyState, Icon, Table, TableBody, TableCard, TableCell, TableEmpty, TableHead, TableHeader, TableRow, buttonVariants, cn } from "@rabaed/ui";
+import { EmptyState, Icon, PackageCell, Table, TableBody, TableCard, TableCell, TableEmpty, TableHead, TableHeader, TableRow, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Link, redirect } from "@/i18n/navigation";
@@ -8,8 +8,10 @@ import { getMe, getProject, getRaisableTypes, getRegisterImports } from "@/lib/s
 /**
  * The Imports page (RP-637, spec RP-631 stories 32–33; the Submittals List's pattern,
  * RP-634 has no screen for it): the Project's Submittal Register Imports of the Member's
- * own Company, by file name. No time: when an import was confirmed is when its Drafts
- * were started, which nobody sees (visibility.md scenario 61).
+ * own Company, by file name, each with the Packages its Drafts went to: every Member's of
+ * it, one who may not import included (story 32); "Import register" only to one who may
+ * (story 4). No time: when an import was confirmed is when its Drafts were started, which
+ * nobody sees (visibility.md scenario 61).
  */
 export default async function RegisterImportsPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
@@ -47,11 +49,12 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
               <TableHead align="end">{t("list.rows")}</TableHead>
               <TableHead align="end">{t("list.created")}</TableHead>
               <TableHead align="end">{t("list.leftOut")}</TableHead>
+              <TableHead>{t("list.packages")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {imports.imports.length === 0 ? (
-              <TableEmpty colSpan={5}>
+              <TableEmpty colSpan={6}>
                 <EmptyState icon="upload" title={t("list.emptyTitle")}>
                   {t("list.empty")}
                 </EmptyState>
@@ -65,7 +68,8 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
                       <bdi>{i.fileName}</bdi>
                     </Link>
                   </TableCell>
-                  <TableCell>{i.runBy.name[locale]}</TableCell>
+                  {/* A Rabaed Engineer's import reads "Rabaed", never the Engineer (RP-645, RP-589-3). */}
+                  <TableCell>{i.runBy?.name[locale] ?? t("rabaed")}</TableCell>
                   <TableCell align="end" className="tabular-nums">
                     {n(i.rowsTotal)}
                   </TableCell>
@@ -74,6 +78,18 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
                   </TableCell>
                   <TableCell align="end" className={cn("tabular-nums", i.rowsRejected > 0 && "text-danger-fg")}>
                     {n(i.rowsRejected)}
+                  </TableCell>
+                  {/* The Packages its Drafts went to, created or added to (story 32): the Company's own. */}
+                  <TableCell className="max-w-72">
+                    {i.packages.length === 0 ? (
+                      <span className="text-muted">—</span>
+                    ) : (
+                      <span className="flex flex-col gap-1">
+                        {i.packages.map((p) => (
+                          <PackageCell key={p.id} value={{ text: "", match: p, new: null }} locale={locale} newLabel={t("validate.newPackage")} />
+                        ))}
+                      </span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

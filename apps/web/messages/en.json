@@ -840,6 +840,7 @@
       "type": "Type",
       "documentNumber": "Document Number",
       "duplicatedFrom": "Duplicated from",
+      "paperRef": "Paper ref",
       "step": "Step",
       "with": "With",
       "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +#}}",
@@ -848,6 +849,23 @@
       "issuedCode": "Issued Code",
       "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "OBS": "Site Observations", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
       "raisedItemCounts": "{open} open / {closed} closed"
+    },
+    "paperRef": {
+      "label": "Paper ref",
+      "none": "None",
+      "add": "Add",
+      "change": "Change",
+      "save": "Save",
+      "cancel": "Cancel",
+      "help": "The submittal's old paper number. It is never its Document Number, and can be changed only while it is a Draft.",
+      "errors": {
+        "taken": "Another submittal of your Company on this Project already has this Paper ref.",
+        "tooLong": "A Paper ref takes at most 100 characters.",
+        "notEditable": "The Paper ref can be changed only while it is your Draft.",
+        "notFound": "This item isn't available.",
+        "projectClosed": "This Project is closed.",
+        "unavailable": "It couldn't be saved. Try again."
+      }
     },
     "snag": {
       "raisedFrom": "Raised from",
@@ -1095,6 +1113,8 @@
     "history": {
       "files": "Documents",
       "title": "History",
+      "imported": "Imported from the register {fileName} by {by}",
+      "rabaed": "Rabaed",
       "created": "Created",
       "pickedUp": "Picked up",
       "returnedToPool": "Returned to pool",
@@ -2329,6 +2349,7 @@
     "imports": "Imports",
     "importsHint": "Your Company's registers imported into this Project, and what each created.",
     "backToSubmittals": "Submittals",
+    "rabaed": "Rabaed",
     "newImport": "New import",
     "subtitle": "Each good row of your register becomes a Draft raised by you. Nothing is created until you confirm.",
     "breadcrumb": "Where you are",
@@ -2337,7 +2358,9 @@
       "upload": "Upload",
       "sheet": "Worksheet & column headings",
       "map": "Map fields",
-      "validate": "Validate"
+      "values": "Map values",
+      "validate": "Validate",
+      "assign": "Assign & packages"
     },
     "back": "Back",
     "next": "Next",
@@ -2346,7 +2369,7 @@
       "drop": "Drop your submittal register here",
       "browse": "Browse",
       "anyLayout": "Any order of columns works: you map them next. Nothing is created until you confirm.",
-      "asText": "Cells are read as stored, not as shown: type references you need kept as written as text, so 0012 stays 0012."
+      "asText": "Cells are read as stored, not as shown: type each Paper ref as text in your register, so 0012 stays 0012."
     },
     "sheet": {
       "fileDetail": "{worksheets, plural, one {1 worksheet} other {{n} worksheets}} · {size} MB",
@@ -2368,16 +2391,77 @@
       "example": "e.g.",
       "fieldFor": "Rabaed field for {column}",
       "dontMap": "Don't map this column",
+      "formField": "Form · {label} ({types})",
+      "matchValues": "Map field value",
+      "matchValuesFor": "Map the values of {column}",
+      "suggested": "Suggested from the column heading",
+      "score": "{score}%",
+      "valuesHelp": "Tick Map field value to match a column's values to Rabaed's on the next step (\"Elec.\" to Electrical, for one). Values are matched by their code, or as Rabaed writes them in English or Arabic, whatever their case and spaces; any other value makes its row bad.",
+      "formFieldsHelp": "Form fields show only the simple fields (text, number, date, list, a Member or Company) of the Types you may raise. A field a row's Type doesn't have is left empty.",
+      "paperRefHelp": "Paper ref is the old paper number of a submittal still under review on paper. Type it as text in your register, so it is read exactly as written.",
       "oneValue": "Or use one value for every row",
       "fromColumn": "From column {column}",
       "sameForEvery": "Same for every row",
       "choose": "Choose…",
-      "validate": "Validate"
+      "nextValues": "Next: map values",
+      "validate": "Validate",
+      "nextAssign": "Next: assign"
+    },
+    "values": {
+      "fields": "Fields to match",
+      "fieldOf": "Field {at} of {of}",
+      "summary": "{count, plural, one {1 value} other {{values} different values}} in {rows} rows: each is matched once.",
+      "allMatched": "All matched",
+      "unmatched": "{count, plural, one {1 value not matched} other {{n} values not matched}}",
+      "caption": "Each value in the column and the Rabaed value it matches",
+      "inRegister": "Value in your register",
+      "rabaedValue": "Rabaed value",
+      "rows": "{count, plural, one {1 row} other {{n} rows}}",
+      "matchFor": "Rabaed value for {value}",
+      "notMatched": "— Not matched —",
+      "none": "Not matched",
+      "exact": "Exact",
+      "byHand": "Chosen",
+      "help": "A suggestion is chosen for you: look it over. A value left not matched makes its rows bad.",
+      "nothing": "No column to match: validate.",
+      "next": "Next: {field}"
+    },
+    "assign": {
+      "step": "Assign",
+      "title": "Assign to",
+      "raisedBy": "Drafts are raised by",
+      "default": "default",
+      "you": "{name} (you)",
+      "column": "“{column}” column",
+      "columnRule": "(emails) gives each row's assignee ·",
+      "rows": "{count, plural, one {1 row} other {{n} rows}}",
+      "unknownEmails": "{count, plural, one {1 row: its email matches nobody of your Company} other {{n} rows: their email matches nobody of your Company}}",
+      "noColumn": "No column is mapped to Assign to: map one on Map fields to give each row's assignee by email.",
+      "rules": "Group rules",
+      "ruleTrade": "All Trade = {value} rows",
+      "ruleType": "All Type = {value} rows",
+      "remove": "Remove the rule for {value}",
+      "addRule": "Add a group rule",
+      "ruleBy": "Group by",
+      "byTrade": "Trade",
+      "byType": "Type",
+      "ruleTradeValue": "Trade",
+      "ruleTypeValue": "Type",
+      "ruleMember": "Member",
+      "choose": "Choose…",
+      "chooseMember": "Member…",
+      "add": "Add",
+      "help": "Order: the “Assign to” column, then group rules, then the default. Only Members of your Company on this Project can be picked. An assignee who can't create the row's Type, or doesn't cover its Trade or Location, makes the row bad."
     },
     "fields": {
       "subject": "Subject",
       "type": "Type",
-      "trade": "Trade"
+      "trade": "Trade",
+      "scopes": "Scopes",
+      "location": "Location",
+      "paperRef": "Paper ref",
+      "assignTo": "Assign to",
+      "package": "Package"
     },
     "validate": {
       "checked": "rows checked",
@@ -2388,7 +2472,13 @@
       "tabs": "Rows",
       "errors": "Errors",
       "imported": "What will be imported",
-      "confirm": "{count, plural, one {Import 1 Draft} other {Import {n} Drafts}}"
+      "confirm": "{count, plural, one {Import 1 Draft} other {Import {n} Drafts}}",
+      "packages": "Packages",
+      "newPackage": "New Package",
+      "addTo": "Added to",
+      "noPackage": "No row goes to a Package.",
+      "downloadLog": "Download log",
+      "rejectedRows": "Rejected rows ({n})"
     },
     "result": {
       "created": "{count, plural, one {1 Draft created} other {{n} Drafts created}}",
@@ -2396,7 +2486,10 @@
       "leftOut": "Left out",
       "open": "{count, plural, one {Open the Draft} other {Open the {n} Drafts}}",
       "another": "Import another register",
-      "leftOutHelp": "Fix the rows left out in your register and import them in a new import."
+      "leftOutHelp": "Rejected rows download as your register's columns plus a “Reasons” column: fix them and import them in a new import.",
+      "newPackage": "New Package",
+      "addedTo": "Added to",
+      "downloadRejected": "Download rejected rows ({n})"
     },
     "errors": {
       "unsupportedType": "Only .xlsx and .csv registers can be imported.",
@@ -2411,10 +2504,13 @@
       "previewOutdated": "Something in the Project changed since you validated. Validate again.",
       "typeNotFound": "You can't raise that Type.",
       "tradeNotFound": "That Trade isn't in this Project.",
+      "fieldNotFound": "A mapped Form field isn't on a Type you may raise any more. Map the fields again.",
       "forbidden": "You can't raise Submittals on this Project.",
       "notFound": "This Project isn't available.",
       "projectClosed": "This Project is closed.",
-      "unavailable": "It couldn't be done. Try again."
+      "unavailable": "It couldn't be done. Try again.",
+      "packageNotFound": "A Package chosen isn't one of your Company's on this Project any more. Choose again.",
+      "nameTaken": "Your Company already has a saved mapping called that."
     },
     "reasons": {
       "subject_missing": "Subject empty",
@@ -2424,7 +2520,21 @@
       "type_not_allowed": "You can't raise {value}",
       "trade_missing": "Trade empty",
       "trade_unknown": "Trade ‘{value}’ not in this Project",
-      "trade_outside_visibility": "Trade {value} is outside your Visibility"
+      "trade_outside_visibility": "Trade {value} is outside your Visibility",
+      "scope_unknown": "Scope ‘{value}’ not in this Project",
+      "scope_not_under_trade": "Scope ‘{value}’ isn't under the row's Trade",
+      "location_unknown": "Location ‘{value}’ not in this Project",
+      "location_outside_visibility": "Location {value} is outside your Visibility",
+      "field_invalid": "‘{value}’ doesn't fit {field}",
+      "paper_ref_too_long": "Paper ref over 100 characters",
+      "paper_ref_repeated": "Paper ref ‘{value}’ is on more than one row",
+      "paper_ref_taken": "Paper ref ‘{value}’ is already on a submittal of your Company here",
+      "assignee_unknown": "‘{value}’ isn't an active Member of your Company on this Project",
+      "assignee_unknown_picked": "The Member picked is no longer an active Member of your Company on this Project",
+      "assignee_cannot_create": "{value} can't create {type}",
+      "assignee_outside_visibility": "{value} doesn't cover {values}",
+      "package_not_open": "Package {value} is {status}: only Open Packages take new Drafts",
+      "package_name_too_long": "Package ‘{value}’ is over 200 characters"
     },
     "rows": {
       "row": "Row",
@@ -2434,13 +2544,20 @@
       "noErrors": "Every row is ready to import.",
       "fixInFile": "Fix in your register",
       "mapFields": "Map fields",
+      "mapValues": "Map values",
       "type": "Type",
       "trade": "Trade",
+      "location": "Location",
+      "scopes": "Scopes",
+      "paperRef": "Paper ref",
       "result": "Draft",
       "nothingToImport": "No row is ready to import.",
       "openDraft": "Open the Draft",
       "draftCreated": "Draft created",
-      "notYours": "Only a Member who may raise it can import it"
+      "notYours": "Only a Member who may raise it can import it",
+      "assign": "Assign & packages",
+      "raiser": "Raised by",
+      "package": "Package"
     },
     "list": {
       "file": "Register",
@@ -2448,6 +2565,7 @@
       "rows": "Rows",
       "created": "Drafts created",
       "leftOut": "Left out",
+      "packages": "Packages",
       "emptyTitle": "No imports yet",
       "empty": "Import your submittal register to create its Drafts at once."
     },
@@ -2455,8 +2573,58 @@
       "sheet": "Worksheet",
       "headerRow": "Column headings in row",
       "everyRow": "{value}, every row",
+      "formField": "Form · {label}",
       "rows": "Rows of this import",
       "worksheetValue": "{worksheet}, column headings in row {row}"
+    },
+    "packages": {
+      "title": "Packages",
+      "choice": "Where the Drafts go",
+      "none": "No Package",
+      "file": "One for the whole register",
+      "column": "One per value of a column",
+      "columnLabel": "Column",
+      "noColumn": "No column is mapped to Package: map one on Map fields to put each row in the Package its value gives.",
+      "new": "New",
+      "existing": "Existing",
+      "newOrExisting": "New or existing Package for {value}",
+      "newFile": "The new Package",
+      "existingFor": "The existing Package for {value}",
+      "existingFile": "The existing Package",
+      "chooseOpen": "Choose an Open Package…",
+      "noneOpen": "Your Company has no Open Package on this Project.",
+      "rows": "{count, plural, one {1 row} other {{n} rows}}",
+      "noValue": "{count, plural, one {1 row has no Package value: no Package.} other {{n} rows have no Package value: no Package.}}",
+      "help": "Only Open Packages take new Drafts: a Package In Progress or Done makes its rows bad. New Packages get their number (PKG-…) when you confirm.",
+      "status": {
+        "open": "Open",
+        "in_progress": "In Progress",
+        "done": "Done"
+      }
+    },
+    "downloads": {
+      "reasons": "Reasons",
+      "row": "Row",
+      "subject": "Subject",
+      "rejectedSheet": "Rejected rows",
+      "logSheet": "Log",
+      "rejectedFile": "{register} - rejected rows.xlsx",
+      "logFile": "{register} - log.xlsx",
+      "original": "Download the original register",
+      "failed": "The download couldn't be made. Try again."
+    },
+    "mappings": {
+      "label": "Saved mapping",
+      "none": "None",
+      "save": "Save mapping",
+      "saveAs": "Save this mapping as",
+      "saveButton": "Save",
+      "rename": "Rename",
+      "renameAs": "Rename the mapping to",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "saved": "Saved for your Company.",
+      "help": "A saved mapping is your Company's, on this Project: its columns, values matched, assignees and Packages, applied to a register laid out the same way."
     }
   },
   "packages": {
