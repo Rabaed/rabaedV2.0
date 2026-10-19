@@ -1,5 +1,6 @@
 import {
   checklistSummary,
+  checklistSummaryOrder,
   currencyDecimals,
   isHiddenLinkChoice,
   isIsoValue,
@@ -129,7 +130,7 @@ export function checklistSummaryText(summary: { counts: readonly ChecklistCount[
 function answeredSummary(value: unknown): { counts: ChecklistCount[]; unanswered: number } {
   const entries = typeof value === "object" && value !== null && !Array.isArray(value) ? Object.values(value) : [];
   const answers = entries.map((e: unknown) => (typeof e === "object" && e !== null ? (e as { answer?: unknown }).answer : undefined));
-  const counts = (["pass", "fail", "yes", "no", "na"] as const).map((answer) => ({ answer, count: answers.filter((a) => a === answer).length }));
+  const counts = checklistSummaryOrder.map((answer) => ({ answer, count: answers.filter((a) => a === answer).length }));
   return { counts, unanswered: 0 };
 }
 

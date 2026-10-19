@@ -3,6 +3,7 @@ import {
   answerFields,
   backwardKinds,
   changedChecklistTemplates,
+  checklistsPropose,
   checklistTemplateChoices,
   type ChecklistTemplateChoice,
   discardDraftRefusals,
@@ -66,7 +67,7 @@ import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
-import { arrivalRecommendedCode, checklistsPropose, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
+import { arrivalRecommendedCode, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;

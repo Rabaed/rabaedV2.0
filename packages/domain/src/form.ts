@@ -1162,6 +1162,9 @@ export function checkChecklist(
   return { errors, checked };
 }
 
+/** The order a checklist's summary counts its answers in: Pass, Fail, Yes, No, then N/A. */
+export const checklistSummaryOrder = ["pass", "fail", "yes", "no", "na"] as const satisfies readonly ChecklistAnswer[];
+
 /** One answer of a checklist's summary: how many items were answered so. */
 export type ChecklistCount = { answer: ChecklistAnswer; count: number };
 
@@ -1173,7 +1176,7 @@ export type ChecklistCount = { answer: ChecklistAnswer; count: number };
 export function checklistSummary(field: ChecklistField, value: unknown): { counts: ChecklistCount[]; unanswered: number } {
   const answers = isRow(value) ? value : {};
   const offered = new Set<string>(field.items.flatMap((i) => checklistAnswerSets[i.answers]));
-  const counts: ChecklistCount[] = (["pass", "fail", "yes", "no", "na"] as const).filter((a) => offered.has(a)).map((answer) => ({ answer, count: 0 }));
+  const counts: ChecklistCount[] = checklistSummaryOrder.filter((a) => offered.has(a)).map((answer) => ({ answer, count: 0 }));
   let unanswered = 0;
   for (const item of field.items) {
     const entry = answers[item.key];

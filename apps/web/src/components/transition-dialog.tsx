@@ -4,7 +4,7 @@ import {
   formFields,
   isAnnotatedCopy,
   isScreenFileField,
-  proposedCode,
+  checklistsPropose,
   validateAnswers,
   type BilingualText,
   type DocumentList,
@@ -12,6 +12,7 @@ import {
   type FormSchema,
   type Locale,
   type ReplyChecklistRead,
+  type WorkItemActions,
 } from "@rabaed/domain";
 import { ActionForm, Badge, Button, Field, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
@@ -222,7 +223,7 @@ export function TransitionDialog({
   /** A line under the heading, e.g. the item's Subject on the Kanban. */
   description?: string;
   /** The Recommended Code the taker's own Company sent with the item (RP-433, RP-86): internal to it, shown with a code's checklist. */
-  recommendedCode?: { code: string; name: BilingualText } | undefined;
+  recommendedCode?: WorkItemActions["recommendedCode"];
   idPrefix: string;
   onClose: () => void;
 }) {
@@ -297,7 +298,7 @@ export function TransitionDialog({
             {transition.proposed && (
               <p className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge tone="brand">{t("proposed")}</Badge>
-                <span>{t("proposedCode", { code: transition.label[locale], reason: t(transition.checklists.some((c) => proposedCode(c.answers) === "C") ? "proposedC" : "proposedA") })}</span>
+                <span>{t("proposedCode", { code: transition.label[locale], reason: t(checklistsPropose(transition.checklists) === "C" ? "proposedC" : "proposedA") })}</span>
               </p>
             )}
             <ReplyChecklistsRead workItemId={calls.workItemId} checklists={transition.checklists} locale={locale} />

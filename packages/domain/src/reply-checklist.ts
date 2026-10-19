@@ -70,10 +70,23 @@ export const replyChecklistRead = z.object({
   label: bilingualText,
   name: bilingualText,
   items: z.array(checklistTemplateItem),
+  /** Every item wants an answer to move on (the field's `required`). */
+  required: z.boolean(),
   answers: checklistAnswers,
   canChange: z.boolean(),
 });
 export type ReplyChecklistRead = z.infer<typeof replyChecklistRead>;
+
+/** A reply checklist as read, as the checklist the api checks it as (replyChecklistOf), for drawing it. */
+export function checklistOfRead(read: ReplyChecklistRead): ChecklistField {
+  return { key: read.fieldKey, type: "checklist", label: read.label, required: read.required, items: read.items };
+}
+
+/** The code the checklists a Transition takes propose (ADR 0025): C when any item of any failed, else A; null without checklists. */
+export function checklistsPropose(checklists: readonly Pick<ReplyChecklistRead, "answers">[]): "A" | "C" | null {
+  if (checklists.length === 0) return null;
+  return checklists.some((c) => proposedCode(c.answers) === "C") ? "C" : "A";
+}
 
 /** Save a reply checklist's answers so far (RP-86): the whole set, checked item by item, replacing those saved. */
 export const saveReplyChecklistRequest = z.strictObject({ answers: z.record(z.string(), z.unknown()) });

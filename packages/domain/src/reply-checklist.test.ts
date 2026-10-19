@@ -3,7 +3,7 @@ import { actionFormProblems } from "./action-form.ts";
 import type { ChecklistCopy } from "./checklist-template.ts";
 import { formSchema, validateAnswers, type FormSchema } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
-import { checkReplyChecklist, proposedCode, replyChecklistOf } from "./reply-checklist.ts";
+import { checklistOfRead, checklistsPropose, checkReplyChecklist, proposedCode, replyChecklistOf } from "./reply-checklist.ts";
 import { screenProblems } from "./screen.ts";
 
 // Pure domain: a checklist in a reply Screen (RP-86, INSP-4; ADR 0024 amended 2026-10-19,
@@ -104,6 +104,21 @@ describe("checkReplyChecklist", () => {
     });
     const complete = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" }, clean: { answer: "na" } };
     expect(checkReplyChecklist(checklist, complete, "complete", { "inspection_checklist.formwork": 1 })).toEqual({ ok: true, answers: complete });
+  });
+});
+
+describe("a reply checklist as read", () => {
+  const read = { fieldKey: "inspection_checklist", label: label("Checklist"), name: copy.name, items: copy.items, required: true, answers: {}, canChange: true };
+
+  it("is drawn as the same checklist the api checks", () => {
+    expect(checklistOfRead(read)).toEqual(checklist);
+    expect(checklistOfRead({ ...read, required: false }).required).toBe(false);
+  });
+
+  it("proposes the code of all a Transition's checklists: C when any item of any failed, else A; none without checklists", () => {
+    expect(checklistsPropose([])).toBeNull();
+    expect(checklistsPropose([{ ...read, answers: { formwork: { answer: "pass" } } }])).toBe("A");
+    expect(checklistsPropose([{ ...read, answers: { formwork: { answer: "pass" } } }, { ...read, answers: { clean: { answer: "no" } } }])).toBe("C");
   });
 });
 

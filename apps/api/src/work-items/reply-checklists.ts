@@ -3,7 +3,6 @@ import {
   checklistItemFilesKey,
   checkReplyChecklist,
   formFields,
-  proposedCode,
   replyChecklistOf,
   type BilingualText,
   type ChecklistAnswers,
@@ -74,11 +73,13 @@ async function filledNow(trx: Trx, workItemId: string): Promise<{ field_key: str
   return rows;
 }
 
-const read = (field: CopiedChecklistField, copy: ChecklistCopy, answers: ChecklistAnswers, canChange: boolean): ReplyChecklistRead => ({
+/** The checklist `field` answers on an item holding `copy`, as read, with the answers saved so far. */
+const asRead = (field: CopiedChecklistField, copy: ChecklistCopy, answers: ChecklistAnswers, canChange: boolean): ReplyChecklistRead => ({
   fieldKey: field.key,
   label: field.label,
   name: copy.name,
   items: copy.items,
+  required: replyChecklistOf(field, copy).required === true,
   answers,
   canChange,
 });
@@ -94,7 +95,7 @@ export async function heldReplyChecklists(trx: Trx, workItemId: string): Promise
   return filled.flatMap((f) => {
     const field = fields.get(f.field_key);
     const copy = copies.find((c) => c.fieldKey === f.copy_of);
-    return field && copy ? [read(field, copy, answers.get(f.field_key) ?? {}, f.can_change)] : [];
+    return field && copy ? [asRead(field, copy, answers.get(f.field_key) ?? {}, f.can_change)] : [];
   });
 }
 
@@ -108,14 +109,8 @@ export async function transitionChecklists(trx: Trx, workItemId: string, actionF
   const [copies, answers] = await Promise.all([itemChecklistCopies(trx, workItemId), waitingAnswers(trx, workItemId)]);
   return fields.flatMap((field) => {
     const copy = copies.find((c) => c.fieldKey === field.copyOf);
-    return copy ? [read(field, copy, answers.get(field.key) ?? {}, false)] : [];
+    return copy ? [asRead(field, copy, answers.get(field.key) ?? {}, false)] : [];
   });
-}
-
-/** The code the pop-up's checklists propose (ADR 0025), when there are any: C when an item failed, else A. */
-export function checklistsPropose(checklists: readonly ReplyChecklistRead[]): "A" | "C" | null {
-  if (checklists.length === 0) return null;
-  return checklists.some((c) => proposedCode(c.answers) === "C") ? "C" : "A";
 }
 
 /**
@@ -129,9 +124,9 @@ export async function incompleteReplyChecklists(
   workItemId: string,
   { leaving, actionForm }: { leaving: boolean; actionForm: FormSchema | null },
 ): Promise<{ leaving: FieldError[]; taken: FieldError[] }> {
-  const left = leaving ? await filledNow(trx, workItemId) : [];
+  const filledAtStep = leaving ? await filledNow(trx, workItemId) : [];
   const taken = checklistFieldsOf(actionForm);
-  if (left.length === 0 && taken.length === 0) return { leaving: [], taken: [] };
+  if (filledAtStep.length === 0 && taken.length === 0) return { leaving: [], taken: [] };
   const [fields, copies, answers, photos] = await Promise.all([
     screenChecklistFields(trx, workItemId),
     itemChecklistCopies(trx, workItemId),
@@ -145,7 +140,7 @@ export async function incompleteReplyChecklists(
     return checked.ok ? [] : checked.errors;
   };
   return {
-    leaving: left.flatMap((f) => problems(fields.get(f.field_key))),
+    leaving: filledAtStep.flatMap((f) => problems(fields.get(f.field_key))),
     taken: taken.flatMap((field) => problems(field)),
   };
 }

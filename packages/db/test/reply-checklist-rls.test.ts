@@ -7,7 +7,7 @@
 // RP-86-1: until the code, only K1 reads the answers and photos: neither C1 nor an Owner with
 // oversight reads them, by list or by id, and none of them writes them. The code freezes and shares
 // them: C1 and the Owner read them in its event, and the photo by id. C2, another Contractor not
-// covering the Location, never reads them. Leaving K1 any other way (a Send Back, a cancel)
+// covering the Location, never reads them. Another Project's Member reads none. Leaving K1 any other way (a Send Back)
 // discards them.
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -51,6 +51,7 @@ let c1: Company; // Contractor: raises the Inspection.
 let k1: Company; // Consultant: inspects; its `member` is the Engineer.
 let ow: Company; // Owner: oversight of everything (V2).
 let c2: Company; // Another Contractor of the same Trade, covering Building B only (V3).
+let other: Company; // Another Project's Project Admin.
 let c1Pm = "";
 let k1Manager = "";
 let participant: Record<"c1" | "k1" | "ow" | "c2", string>;
@@ -185,6 +186,8 @@ beforeAll(async () => {
   k1 = await company(engineer, "K1");
   ow = await company(engineer, "OW");
   c2 = await company(engineer, "C2");
+  other = await company(engineer, "OT");
+  await call(other.ap, sql<object>`select app.create_project('{"en": "Elsewhere", "ar": "مكان آخر"}'::jsonb, 'RCO', 'contractor')`);
   c1Pm = await member(c1.id, "pm");
   k1Manager = await member(k1.id, "manager");
 
@@ -264,6 +267,15 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
       expect(await codeAnswersAs(outsider, id), outsider).toEqual([]);
       expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`), outsider).toEqual([]);
     }
+  });
+
+  it("another Project's Member reads and writes none of them (layer 1)", async () => {
+    const { id, photo } = await atManager("Slab pour, Level 6");
+    expect(await answersAs(other.ap, id)).toEqual([]);
+    expect(await photosAs(other.ap, id)).toEqual([]);
+    expect(await byId(other.ap, photo)).toEqual([]);
+    expect(await save(other.ap, id)).toBe("not_found");
+    expect((await startPhoto(other.ap, id, "cover")).outcome).toBe("not_found");
   });
 
   it("only the Engineer's Step writes them: not the Manager reading them at the code, and nobody outside K1", async () => {

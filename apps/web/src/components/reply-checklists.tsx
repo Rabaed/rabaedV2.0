@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  checklistItemFilesKey,
+  checklistOfRead,
   isAnnotatedCopy,
   type ChecklistAnswers,
   type DocumentList,
@@ -23,10 +25,6 @@ import { useFormRendererLabels } from "@/lib/form-labels";
 
 /** How long after the last change the answers save themselves. */
 const SAVE_MS = 800;
-
-/** The checklist as the Form engine's checklist field draws it: the copy's items under the Screen field's key. */
-const fieldOf = (checklist: ReplyChecklistRead) =>
-  ({ key: checklist.fieldKey, type: "checklist", label: checklist.label, required: true, items: checklist.items }) as const;
 
 /** The checklist's photos that no Transition took yet: its items' reply Documents. */
 const photosOf = (checklist: ReplyChecklistRead, documents: readonly DocumentSummary[]) =>
@@ -110,7 +108,7 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
       </h2>
       {checklist.canChange && <p className="text-sm text-muted">{t("intro")}</p>}
       <ChecklistField
-        field={fieldOf(checklist)}
+        field={checklistOfRead(checklist)}
         value={answers}
         mode={checklist.canChange ? "edit" : "read"}
         locale={locale}
@@ -119,7 +117,7 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
         files={{
           documents: photos,
           canChange: checklist.canChange && documents.canChangeReplies,
-          pendingItems: new Set(checklist.items.filter((i) => files.pending.has(`${checklist.fieldKey}.${i.key}`)).map((i) => i.key)),
+          pendingItems: new Set(checklist.items.filter((i) => files.pending.has(checklistItemFilesKey(checklist.fieldKey, i.key))).map((i) => i.key)),
           imageUrls,
         }}
         onChange={change}
@@ -160,7 +158,7 @@ export function ReplyChecklistsRead({ workItemId, checklists, locale }: { workIt
             {c.label[locale]} · <bdi>{c.name[locale]}</bdi>
           </h3>
           <ChecklistField
-            field={fieldOf(c)}
+            field={checklistOfRead(c)}
             value={c.answers}
             mode="read"
             locale={locale}

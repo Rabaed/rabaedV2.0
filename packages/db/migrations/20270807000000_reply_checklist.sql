@@ -318,6 +318,9 @@ create function app.save_reply_checklist(p_work_item_id uuid, p_field_key text, 
         return v_refusal;
       end if;
       select * into v_me from app.acting_project_member(p_work_item_id);
+      if v_me.participant_id is null then
+        return 'not_editable';
+      end if;
       v_field := app.reply_file_field(p_work_item_id, p_field_key);
       if v_field ->> 'type' is distinct from 'copied_checklist' or not exists (
         select 1 from work_item_checklist c where c.work_item_id = p_work_item_id and c.field_key = v_field ->> 'copyOf')

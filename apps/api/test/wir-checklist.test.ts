@@ -153,6 +153,7 @@ describe("the Consultant Engineer fills the checklist on site (seam 1)", () => {
         label: { en: "Checklist", ar: "قائمة التحقق" },
         name: bilingual("Slab pour"),
         items: expect.arrayContaining([expect.objectContaining({ key: "formwork", photo: "required_on_negative" })]),
+        required: true,
         answers: {},
         canChange: true,
       },
