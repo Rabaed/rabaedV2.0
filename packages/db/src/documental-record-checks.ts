@@ -38,6 +38,14 @@ export interface ReproductionSource {
   readonly pdfSha256: string;
   /** When it was sealed (ISO 8601, UTC). */
   readonly sealedAt: string;
+  /** The item's Documents as the record was made, in the order they were added: where a Form photo's image is. */
+  readonly documents: readonly {
+    readonly fileName: string;
+    readonly contentType: string;
+    readonly size: number;
+    readonly storageKey: string;
+    readonly takenAt: string | null;
+  }[];
 }
 
 /** The record job `outboxId` re-produces, or null when there is nothing to do (it was done already, or the record is gone). */

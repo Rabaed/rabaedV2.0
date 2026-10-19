@@ -135,7 +135,8 @@ export const environments = {
       api: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
       admin: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
       // Headless Chromium renders the Documental Records (RP-620): 512 MiB is too tight beside Node.
-      worker: { cpu: 512, memoryMiB: 1024, desiredCount: 1 },
+      // veraPDF's Java runtime checks them too (RP-155): 2048 MiB, which Fargate allows with 512 CPU (1024 to 4096).
+      worker: { cpu: 512, memoryMiB: 2048, desiredCount: 1 },
     },
     migrationTask: { cpu: 256, memoryMiB: 512 },
     logRetentionDays: 30,

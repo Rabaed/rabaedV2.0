@@ -242,7 +242,7 @@ describe("services", () => {
       "rabaed-dev-api": { launchType: "FARGATE", desired: 1, cpu: "256", memory: "512" },
       "rabaed-dev-admin": { launchType: "FARGATE", desired: 1, cpu: "256", memory: "512" },
       // Headless Chromium renders the Documental Records (RP-620).
-      "rabaed-dev-worker": { launchType: "FARGATE", desired: 1, cpu: "512", memory: "1024" },
+      "rabaed-dev-worker": { launchType: "FARGATE", desired: 1, cpu: "512", memory: "2048" },
     });
   });
 

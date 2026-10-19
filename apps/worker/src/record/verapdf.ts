@@ -75,6 +75,55 @@ export function veraPdfDocker(image = "verapdf/cli:latest"): PdfAValidator {
   return throughFolder("docker", (dir) => ({ before: ["run", "--rm", "-v", `${dir}:/data:ro`, image], file: "/data/record.pdf" }));
 }
 
+export interface PdfAValidatorSession extends PdfAValidator {
+  /** Stops the container; a session that never validated started none. */
+  close(): Promise<void>;
+}
+
+/**
+ * veraPDF in one Docker container kept for many PDFs (a test file's, started at its first PDF),
+ * instead of a container for each: the PDFs go in through a folder mounted into it.
+ */
+export function veraPdfDockerSession(image = "verapdf/cli:latest"): PdfAValidatorSession {
+  let started: Promise<{ id: string; dir: string }> | undefined;
+  let count = 0;
+  const start = async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rabaed-verapdf-"));
+    const { stdout } = await run("docker", ["run", "-d", "--rm", "-v", `${dir}:/data:ro`, "--entrypoint", "sleep", image, "infinity"], { timeout: TIMEOUT_MS });
+    return { id: stdout.trim(), dir };
+  };
+  return {
+    async validate(pdf) {
+      const { id, dir } = await (started ??= start().catch((error: unknown) => {
+        started = undefined;
+        throw error;
+      }));
+      const name = `record-${count++}.pdf`;
+      await writeFile(join(dir, name), pdf);
+      try {
+        const out = await run("docker", ["exec", id, "/opt/verapdf/verapdf", "--flavour", "3b", "--format", "xml", `/data/${name}`], {
+          timeout: TIMEOUT_MS,
+          maxBuffer: 64 * 1024 * 1024,
+        }).catch((error: { stdout?: string }) => {
+          if (typeof error.stdout === "string" && error.stdout.includes("<validationReport")) return { stdout: error.stdout };
+          throw error;
+        });
+        return parseVeraPdfReport(out.stdout);
+      } finally {
+        await rm(join(dir, name), { force: true });
+      }
+    },
+    async close() {
+      const open = started;
+      started = undefined;
+      if (!open) return;
+      const { id, dir } = await open;
+      await run("docker", ["rm", "-f", id]).catch(() => undefined);
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
 const env = z.object({
   VERAPDF: z.enum(["cli", "docker"]).optional(),
   VERAPDF_PATH: z.string().min(1).optional(),

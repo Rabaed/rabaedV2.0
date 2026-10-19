@@ -291,7 +291,16 @@ create function app.documental_record_reproduction_source(p_outbox_id uuid) retu
           'pdfKey', f.storage_key,
           'recordDataKey', d.storage_key,
           'pdfSha256', encode(r.pdf_sha256, 'hex'),
-          'sealedAt', app.iso_utc(r.sealed_at))
+          'sealedAt', app.iso_utc(r.sealed_at),
+          -- The Documents the record was made with, to find a Form photo's image again by name and time.
+          'documents', coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'fileName', d.file_name, 'contentType', d.content_type, 'size', d.size_bytes::bigint, 'storageKey', d.storage_key,
+              'takenAt', app.iso_utc(d.taken_at)
+            ) order by d.created_at, d.id) -- hidden-sort-key: the order they were added, as the record job read them
+            from document d
+            where d.work_item_id = r.work_item_id and d.confirmed_at is not null and d.removed_at is null
+          ), '[]'::jsonb))
         from outbox o
         join documental_record r on r.work_item_id = (o.payload ->> 'work_item_id')::uuid
         join stored_file f on f.id = r.pdf_file_id

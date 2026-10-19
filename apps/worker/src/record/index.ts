@@ -3,7 +3,7 @@
 export { checkRecord, expectationOf, pageCountOf, recordProblems, type RecordExpectation } from "./checks.ts";
 export { parseRecordData } from "./record-data-read.ts";
 export { replacedRecordKey, reproduceHandler } from "./reproduce.ts";
-export { parseVeraPdfReport, veraPdfCli, veraPdfDocker, veraPdfFromEnv, type PdfAValidation, type PdfAValidator } from "./verapdf.ts";
+export { parseVeraPdfReport, veraPdfCli, veraPdfDocker, veraPdfDockerSession, veraPdfFromEnv, type PdfAValidation, type PdfAValidator, type PdfAValidatorSession } from "./verapdf.ts";
 export { documentalRecordHandler, verificationCode, type RecordJobDeps } from "./job.ts";
 export { filesUnder, projectFilesFromEnv, recordKeys, s3Client, s3RecordFiles, type RecordFiles, type S3Settings } from "./files.ts";
 export { recordJobFromEnv, SEALING_CERTIFICATE_KEY, THMANYAH_PREFIX } from "./from-env.ts";

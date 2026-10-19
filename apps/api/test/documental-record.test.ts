@@ -22,7 +22,7 @@ import {
   projectFilesFromEnv,
   s3RecordFiles,
   sealTamperOffsets,
-  veraPdfDocker,
+  veraPdfDockerSession,
   verifySeal,
   withByteChanged,
   type PdfAValidator,
@@ -35,6 +35,8 @@ import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
+/** veraPDF, in one container for the file. */
+const veraPdf = veraPdfDockerSession();
 /** Stands in for veraPDF on the records other suites left behind. */
 const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
 
@@ -45,6 +47,7 @@ const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
 const renderer = chromiumRenderer();
 afterAll(async () => {
+  await veraPdf.close();
   await renderer.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
@@ -85,7 +88,7 @@ let c2Engineer: Caller;
 let handler: OutboxHandler;
 
 /** The record job as the worker runs it, with the local adapters. */
-async function recordHandler(rendering: PdfRenderer = renderer, validator: PdfAValidator = veraPdfDocker()): Promise<OutboxHandler> {
+async function recordHandler(rendering: PdfRenderer = renderer, validator: PdfAValidator = veraPdf): Promise<OutboxHandler> {
   const signer = await localSealSigner();
   const timestamps = await localTimestampAuthority();
   return documentalRecordHandler({
@@ -179,7 +182,7 @@ beforeAll(async () => {
   handler = await recordHandler();
   // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
   await drainOutbox(worker, { documental_record: await recordHandler(renderer, unvalidated) });
-});
+}, 240_000);
 
 /** A MAR the C1 engineer prepares, the C1 PM Returns once, then Submits with an Internal Note; K1's PM issues `code`. */
 async function closedAt(code: "approve_a" | "revise_c", subject = SUBJECT): Promise<string> {
@@ -303,7 +306,7 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
 
   it("validates as PDF/A-3: our own rules, and veraPDF's (the checks before publishing ran it)", async () => {
     expect(await pdfA3Problems(record)).toEqual([]);
-    expect(await veraPdfDocker().validate(record)).toEqual({ compliant: true, problems: [] });
+    expect(await veraPdf.validate(record)).toEqual({ compliant: true, problems: [] });
   });
 });
 
