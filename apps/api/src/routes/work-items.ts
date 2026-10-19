@@ -23,6 +23,7 @@ import {
   revisionChain,
   saveAnswersRequest,
   savedAnswers,
+  saveReplyChecklistRequest,
   takeTransitionRequest,
   workItemTypeCode,
   workItemBoard,
@@ -46,6 +47,7 @@ import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, saveListColumns, type QueryScope } from "../work-items/query.ts";
+import { saveReplyChecklist } from "../work-items/reply-checklists.ts";
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   pickUpStep,
@@ -253,6 +255,26 @@ export const workItemRoutes =
         if (!result.ok) throw refusal(result);
         // Without `basedOn` there is nothing to report: as it always was.
         return result.saved ? reply.code(200).send(result.saved) : reply.code(204).send(null);
+      },
+    );
+
+    // A reply Screen's checklist (RP-86): the holding Participant saves its answers as it goes,
+    // until the Transition whose Screen holds it takes them. A refusal changes nothing.
+    app.put(
+      "/v1/work-items/:workItemId/reply-checklists/:fieldKey",
+      {
+        schema: {
+          params: z.object({ workItemId: z.string(), fieldKey: z.string() }),
+          body: saveReplyChecklistRequest,
+          response: { 204: z.null().describe("saved") },
+        },
+      },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await saveReplyChecklist(ctx.db, memberId, id, request.params.fieldKey, request.body.answers, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(204).send(null);
       },
     );
 

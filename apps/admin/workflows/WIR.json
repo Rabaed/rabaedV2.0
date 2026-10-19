@@ -170,7 +170,7 @@
       "outcome": "A",
       "permission": "approve",
       "actionForm": null,
-      "screen": "code_a"
+      "screen": "inspection_code_a"
     },
     {
       "key": "approve_b",
@@ -181,7 +181,7 @@
       "outcome": "B",
       "permission": "approve",
       "actionForm": null,
-      "screen": "code_b"
+      "screen": "inspection_code_b"
     },
     {
       "key": "revise_c",
@@ -192,7 +192,7 @@
       "outcome": "C",
       "permission": "approve",
       "actionForm": null,
-      "screen": "code_c"
+      "screen": "inspection_code_c"
     },
     {
       "key": "reject_d",
@@ -203,7 +203,7 @@
       "outcome": "D",
       "permission": "approve",
       "actionForm": null,
-      "screen": "code_d"
+      "screen": "inspection_code_d"
     },
     {
       "key": "cancel",

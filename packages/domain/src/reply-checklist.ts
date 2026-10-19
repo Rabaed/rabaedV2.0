@@ -1,7 +1,11 @@
+import { z } from "zod";
 import type { ChecklistCopy } from "./checklist-template.ts";
+import { bilingualText } from "./company.ts";
 import {
   checkChecklist,
   checklistItemFilesKey,
+  checklistTemplateItem,
+  formKey,
   isNegativeAnswer,
   type ChecklistAnswers,
   type ChecklistField,
@@ -51,3 +55,26 @@ export function checkReplyChecklist(
 export function proposedCode(answers: ChecklistAnswers): "A" | "C" {
   return Object.values(answers).some((entry) => entry.answer !== undefined && isNegativeAnswer(entry.answer)) ? "C" : "A";
 }
+
+/** A check item's answer and comment, as saved: the answers of a checklist by item key. */
+export const checklistAnswers = z.record(z.string(), z.object({ answer: z.string().optional(), comment: z.string().optional() }));
+
+/**
+ * A reply Screen's checklist as the Participant holding the item reads it (RP-86): the field, the
+ * copy it answers (its name and items) and the answers saved so far. `canChange`: the viewer may
+ * save them, and add and remove their photos, now (a Member of that Participant, at a Step that
+ * fills it); the code pop-up reads it with `canChange` false.
+ */
+export const replyChecklistRead = z.object({
+  fieldKey: formKey,
+  label: bilingualText,
+  name: bilingualText,
+  items: z.array(checklistTemplateItem),
+  answers: checklistAnswers,
+  canChange: z.boolean(),
+});
+export type ReplyChecklistRead = z.infer<typeof replyChecklistRead>;
+
+/** Save a reply checklist's answers so far (RP-86): the whole set, checked item by item, replacing those saved. */
+export const saveReplyChecklistRequest = z.strictObject({ answers: z.record(z.string(), z.unknown()) });
+export type SaveReplyChecklistRequest = z.infer<typeof saveReplyChecklistRequest>;

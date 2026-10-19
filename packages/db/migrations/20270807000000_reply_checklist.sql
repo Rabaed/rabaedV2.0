@@ -293,8 +293,8 @@ create or replace function app.confirm_document_upload(
 
 -- Saves `p_answers` (checked by the api: checkReplyChecklist, draft mode) as the answers of the
 -- reply checklist `p_field_key` of the item, replacing those waiting: 'saved'; 'not_found' for an
--- item the Member doesn't see; 'project_closed'; 'not_editable' (another Participant holds it, or
--- it is closed); 'forbidden' (without the permission of the Step their Participant holds);
+-- item the Member doesn't see; or, as for its photos (app.reply_documents_refusal), 'project_closed',
+-- 'not_editable' (another Participant holds it, or it is closed) or 'forbidden' (no `attach`);
 -- 'field_not_found' (no checklist of that key is filled at this Step, or the item copied none).
 create function app.save_reply_checklist(p_work_item_id uuid, p_field_key text, p_answers jsonb, p_now timestamptz) returns text
   language plpgsql volatile security definer
@@ -306,33 +306,18 @@ create function app.save_reply_checklist(p_work_item_id uuid, p_field_key text, 
       v_item record;
       v_me record;
       v_field jsonb;
+      v_refusal text;
     begin
       if not app.sees_work_item(p_work_item_id) then
         return 'not_found';
       end if;
       -- Locked, so the Transition taking the answers can't pass in between.
-      select w.id, w.project_id, w.closed_at, w.current_step_id, pr.status as project_status, t.module_key, s.actor_rule
-      into v_item
-      from work_item w
-      join project pr on pr.id = w.project_id
-      join work_item_type t on t.id = w.work_item_type_id
-      left join workflow_step s on s.id = w.current_step_id
-      where w.id = p_work_item_id
-      for update of w;
-      if v_item.project_status is distinct from 'active' then
-        return 'project_closed';
+      select w.id, w.project_id into v_item from work_item w where w.id = p_work_item_id for update;
+      v_refusal := app.reply_documents_refusal(p_work_item_id);
+      if v_refusal is not null then
+        return v_refusal;
       end if;
       select * into v_me from app.acting_project_member(p_work_item_id);
-      if v_me.project_member_id is null or v_item.closed_at is not null or not exists (
-        select 1 from step_assignment h
-        where h.work_item_id = p_work_item_id and h.step_id = v_item.current_step_id
-          and h.status in ('pooled', 'picked_up', 'vacant') and h.participant_id = v_me.participant_id
-      ) then
-        return 'not_editable';
-      end if;
-      if not app.project_member_has_permission(v_me.project_member_id, v_item.module_key, v_item.actor_rule ->> 'permission') then
-        return 'forbidden';
-      end if;
       v_field := app.reply_file_field(p_work_item_id, p_field_key);
       if v_field ->> 'type' is distinct from 'copied_checklist' or not exists (
         select 1 from work_item_checklist c where c.work_item_id = p_work_item_id and c.field_key = v_field ->> 'copyOf')
@@ -348,6 +333,37 @@ create function app.save_reply_checklist(p_work_item_id uuid, p_field_key text, 
         set answers = excluded.answers, participant_id = excluded.participant_id,
           updated_by_member_id = excluded.updated_by_member_id, updated_at = excluded.updated_at;
       return 'saved';
+    end
+  $$;
+
+-- The reply checklists of the item's Screens filled at its current Step, for a Member of the
+-- Participant holding it (none for anyone else): each field's key, the `checklist_template` field
+-- whose copy it answers (the item holds one), and whether the Member may save it and its photos
+-- now (app.reply_documents_refusal).
+create function app.reply_checklists_filled_now(p_work_item_id uuid)
+  returns table (field_key text, copy_of text, can_change boolean)
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      if not (app.sees_work_item(p_work_item_id) and app.holds_work_item(p_work_item_id)) then
+        return;
+      end if;
+      return query
+        select k.key, f ->> 'copyOf', app.reply_documents_refusal(p_work_item_id) is null
+        from (
+          select distinct fl ->> 'key' as key
+          from work_item w
+          join workflow_transition t on t.workflow_version_id = w.workflow_version_id and t.screen_version_id is not null
+          cross join lateral jsonb_array_elements(coalesce(t.action_form -> 'sections', '[]')) s
+          cross join lateral jsonb_array_elements(coalesce(s -> 'fields', '[]')) fl
+          where w.id = p_work_item_id and fl ->> 'type' = 'copied_checklist'
+        ) k
+        cross join lateral (select app.reply_file_field(p_work_item_id, k.key) as f) found
+        where f ->> 'type' = 'copied_checklist'
+          and exists (select 1 from work_item_checklist c where c.work_item_id = p_work_item_id and c.field_key = f ->> 'copyOf')
+        order by k.key;
     end
   $$;
 
@@ -504,9 +520,11 @@ revoke all on function
   app.reply_checklist_item(uuid, jsonb, text),
   app.reply_field_refusal(uuid, text, text, text, uuid),
   app.start_reply_document_upload(uuid, text, text, text, bigint, text, timestamptz),
-  app.save_reply_checklist(uuid, text, jsonb, timestamptz)
+  app.save_reply_checklist(uuid, text, jsonb, timestamptz),
+  app.reply_checklists_filled_now(uuid)
   from public;
 grant execute on function
   app.start_reply_document_upload(uuid, text, text, text, bigint, text, timestamptz),
-  app.save_reply_checklist(uuid, text, jsonb, timestamptz)
+  app.save_reply_checklist(uuid, text, jsonb, timestamptz),
+  app.reply_checklists_filled_now(uuid)
   to rabaed_app;

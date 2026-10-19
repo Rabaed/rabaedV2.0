@@ -66,6 +66,7 @@ import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
+import { arrivalRecommendation, checklistsPropose, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
@@ -787,6 +788,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
       checklistCopies: await itemChecklistCopies(trx, workItemId),
+      replyChecklists: await heldReplyChecklists(trx, workItemId),
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
       sentBackForComment: d.sent_back_for_comment,
@@ -1229,6 +1231,8 @@ type ActionRow = {
   offers_assign_to: boolean;
   /** Whether it may carry a Recommended Code (RP-433): a `send` from a Step that Recommends a Code. */
   may_recommend: boolean;
+  /** The outcome it issues, if any. */
+  outcome: string | null;
 };
 
 /**
@@ -1240,7 +1244,7 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
   const { rows } = await sql<ActionRow>`
     select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form,
       coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to,
-      coalesce(tr.kind = 'send' and src.outcome_mode = 'recommend_code', false) as may_recommend
+      coalesce(tr.kind = 'send' and src.outcome_mode = 'recommend_code', false) as may_recommend, tr.outcome
     from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
     left join work_item w on w.id = ${workItemId}::uuid
     left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
@@ -1278,6 +1282,10 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
     transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
   );
   const arrival = transitions.length > 0 ? await ownArrivalAnswers(trx, workItemId) : {};
+  // The checklists each Transition's Screen takes (RP-86), read-only, and the code they propose (ADR 0025).
+  const checklists = await Promise.all(transitions.map((r) => transitionChecklists(trx, workItemId, parseActionForm(r.action_form))));
+  const proposed = checklistsPropose(checklists.flat());
+  const recommendation = transitions.length > 0 ? await arrivalRecommendation(trx, workItemId) : null;
   return {
     pickUp: rows.some((r) => r.action === "pick_up"),
     returnToPool: rows.some((r) => r.action === "return_to_pool"),
@@ -1296,8 +1304,11 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
         ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
         ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
         ...(Object.keys(prefill).length > 0 ? { prefill } : {}),
+        ...(checklists[i]!.length > 0 ? { checklists: checklists[i] } : {}),
+        ...(checklists[i]!.length > 0 && r.outcome === proposed ? { proposed: true as const } : {}),
       };
     }),
+    ...(recommendation ? { recommendedCode: recommendation } : {}),
   };
 }
 
@@ -1551,6 +1562,14 @@ export function takeTransition(
       if (routed && !back && missing.length > 0) {
         return { ok: false, reason: "form_incomplete", errors: missing };
       }
+    }
+    // A reply Screen's checklist (RP-86): moving on from a Step that fills it checks it as a
+    // required section, and the Transition whose Screen takes it checks it too, naming the items.
+    if (routed) {
+      const back = routed.kind === "cancel" || backwardKinds.includes(routed.kind);
+      const incomplete = await incompleteReplyChecklists(trx, workItemId, { leaving: !back, actionForm });
+      if (incomplete.leaving.length > 0) return { ok: false, reason: "form_incomplete", errors: incomplete.leaving };
+      if (incomplete.taken.length > 0) return { ok: false, reason: "invalid_action_form", errors: incomplete.taken };
     }
     // Validate "the Form is complete": the whole Form, as this Member reads it.
     const validate = routed?.rules.validate ?? [];
