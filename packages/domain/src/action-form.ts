@@ -25,6 +25,7 @@ export const notInActionForm = [
   "work_item_ref",
   "attachments",
   "photos",
+  "copied_checklist",
 ] as const satisfies readonly FormFieldType[];
 
 /**
@@ -43,6 +44,13 @@ export const screenFileFieldTypes = ["attachments", "photos"] as const satisfies
 /** Whether `field` is a file field a reply Screen may hold. */
 export const isScreenFileField = (field: FormField): boolean => (screenFileFieldTypes as readonly string[]).includes(field.type);
 
+/**
+ * The fields a reply Screen holds that the holding Participant fills before the Transition,
+ * which takes them, shared (ADR 0024): its file fields, and a checklist bound to the item's
+ * copy (RP-86), whose items take photos.
+ */
+export const isScreenReplyField = (field: FormField): boolean => isScreenFileField(field) || field.type === "copied_checklist";
+
 /** What an Action Form is checked as: `screen` when a Screen gives it, which may hold file fields. */
 export type ActionFormOptions = { screen?: boolean };
 
@@ -58,9 +66,10 @@ export const actionFormReservedKeys = ["document_number", "outcome", "internal_n
 export function actionFormProblems(schema: FormSchema, context: PublishContext = {}, options: ActionFormOptions = {}): SchemaProblem[] {
   const fields = formFields(schema);
   const refused = (f: FormField) =>
-    ((notInActionForm as readonly string[]).includes(f.type) && !(options.screen === true && isScreenFileField(f))) || takesPhotos(f);
+    ((notInActionForm as readonly string[]).includes(f.type) && !(options.screen === true && isScreenReplyField(f))) || takesPhotos(f);
   return [
-    ...formSchemaProblems(schema, context).filter((p) => !p.code.startsWith("built_in_")),
+    // `screen_only` is the Form's: an Action Form says `not_in_action_form` below where it applies.
+    ...formSchemaProblems(schema, context).filter((p) => !p.code.startsWith("built_in_") && p.code !== "screen_only"),
     ...fields
       .filter(refused)
       .map((f): SchemaProblem => ({ key: f.key, code: "not_in_action_form" })),

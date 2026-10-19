@@ -64,7 +64,7 @@ const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_st
 async function addAfterPhoto(as: string, id: string): Promise<string> {
   const [started] = await call<{ outcome: string; document_id: string }>(
     as,
-    sql`select outcome, document_id from app.start_reply_document_upload(${id}::uuid, 'after_photos', 'after.jpg', 1024, 'image/jpeg', now())`,
+    sql`select outcome, document_id from app.start_reply_document_upload(${id}::uuid, 'after_photos', null, 'after.jpg', 1024, 'image/jpeg', now())`,
   );
   expect(started!.outcome).toBe("started");
   const confirmed = await outcome(
@@ -180,7 +180,7 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
     }
     // Nobody else adds one: K1 doesn't hold it.
     expect(
-      (await call<{ outcome: string }>(k1.member, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', 'k1.jpg', 10, 'image/jpeg', now())`))[0]!
+      (await call<{ outcome: string }>(k1.member, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', null, 'k1.jpg', 10, 'image/jpeg', now())`))[0]!
         .outcome,
     ).toBe("not_editable");
   });
@@ -194,7 +194,7 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
     expect(await afterPhotos(c2.member, id)).toEqual([]);
     expect(await byId(c2.member, photo)).toEqual([]);
     expect(
-      (await call<{ outcome: string }>(c2.member, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', 'c2.jpg', 10, 'image/jpeg', now())`))[0]!
+      (await call<{ outcome: string }>(c2.member, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', null, 'c2.jpg', 10, 'image/jpeg', now())`))[0]!
         .outcome,
     ).toBe("not_found");
   });
@@ -213,7 +213,7 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
     );
     expect(row).toEqual({ frozen: true, taken: true });
     expect(
-      (await call<{ outcome: string }>(c1Pm, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', 'late.jpg', 10, 'image/jpeg', now())`))[0]!
+      (await call<{ outcome: string }>(c1Pm, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', null, 'late.jpg', 10, 'image/jpeg', now())`))[0]!
         .outcome,
     ).toBe("not_editable");
 
