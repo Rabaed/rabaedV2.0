@@ -96,6 +96,55 @@
     "noSearchMatchTitle": "Nothing you can see matches this search",
     "clearFilters": "Clear filters",
     "searchPlaceholder": "Search number or Subject",
+    "mobile": {
+      "swipeHint": "Swipe a card for what you can do on it",
+      "showItems": "{count, plural, one {Show 1 item} other {Show {n} items}}",
+      "transitionsOf": "What you can do on {subject}",
+      "loadingTransitions": "Loading…",
+      "noTransitions": "Nothing for you to do here now",
+      "transitionsUnavailable": "Couldn't read what you can do on it",
+      "flow": {
+        "newSnag": "New Snag",
+        "stepOf": "Step {n} of {of}",
+        "back": "Back",
+        "cancel": "Cancel",
+        "draftSaved": "Draft saved",
+        "saving": "Saving…",
+        "next": "Next",
+        "camera": {
+          "takePhoto": "Take a photo",
+          "library": "Library",
+          "skip": "Skip",
+          "pointAt": "Point the camera at the snag",
+          "remove": "Remove {name}"
+        },
+        "subject": {
+          "heading": "What's wrong?",
+          "subject": "Subject",
+          "placeholder": "e.g. Cable tray not bonded",
+          "description": "Description",
+          "trade": "Trade"
+        },
+        "location": {
+          "heading": "Where is it?",
+          "allZones": "All Zones",
+          "hint": "Pick the Zone, then the Building and the Floor. It is saved to the Draft as you pick."
+        },
+        "raise": {
+          "heading": "Ready to raise",
+          "raise": "Raise",
+          "notOffered": "Raise isn't offered to you on this Draft now. It is saved: open it to see it.",
+          "openDraft": "Open the Draft"
+        },
+        "errors": {
+          "subject": "Write the Subject.",
+          "description": "Describe the snag.",
+          "trade": "Pick the Trade.",
+          "notSaved": "The Location wasn't saved. Pick it again.",
+          "photosMissing": "Some photos weren't added to the Draft. Add them on the Draft's page."
+        }
+      }
+    },
     "bulk": {
       "selected": "{count, plural, one {1 selected} other {{n} selected}}",
       "clearSelection": "Clear selection",
@@ -797,7 +846,7 @@
       "raisedBy": "Raised by",
       "package": "Package",
       "issuedCode": "Issued Code",
-      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
+      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "OBS": "Site Observations", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
       "raisedItemCounts": "{open} open / {closed} closed"
     },
     "snag": {
@@ -2559,5 +2608,49 @@
       },
       "othersNotReady": "A submittal you don't see stops it too."
     }
+  },
+  "verification": {
+    "title": "Verify a Documental Record",
+    "intro": "Rabaed confirms the records it issues. Scan a record's QR, or type its Verification Code with its Document Number.",
+    "genuine": "This record is genuine",
+    "replaced": "This record was replaced by a corrected copy on {date}",
+    "replacedHint": "Verify your copy below: an older copy is no longer the current record.",
+    "documentNumber": "Document Number",
+    "project": "Project",
+    "outcome": "Outcome",
+    "sealed": "Sealed",
+    "signers": "Signed by",
+    "checkCopy": "Verify your copy",
+    "checkCopyHint": "Drop the PDF you received here, or choose it. It is verified in your browser and never uploaded.",
+    "chooseFile": "Choose PDF",
+    "checking": "Verifying…",
+    "original": "This copy is the original record.",
+    "copyReplaced": "This copy was replaced by a corrected copy on {date}: it is not the current record.",
+    "different": "This PDF is not this record. It may have been changed.",
+    "noFile": "This PDF could not be read. Choose another.",
+    "form": {
+      "title": "Verify a record by its code",
+      "hint": "Type the Verification Code printed under the record's QR and in its footer, with its Document Number.",
+      "code": "Verification Code",
+      "documentNumber": "Document Number",
+      "submit": "Verify"
+    },
+    "notFound": {
+      "title": "No record matches",
+      "body": "Type the Verification Code and the Document Number exactly as the record prints them."
+    },
+    "linkNotFound": {
+      "title": "No record matches this link",
+      "body": "Type the record's Verification Code with its Document Number instead."
+    },
+    "tooMany": {
+      "title": "Too many attempts",
+      "body": "Try again in {minutes} minutes, or scan the record's QR."
+    },
+    "unavailable": {
+      "title": "Rabaed can't verify records just now",
+      "body": "Try again in a few minutes."
+    },
+    "checkAnother": "Verify another record"
   }
 }

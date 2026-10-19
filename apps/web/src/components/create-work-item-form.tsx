@@ -17,6 +17,7 @@ import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
+import { useCreateRefusal } from "@/lib/create-refusal";
 import { useFormRendererLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
 
@@ -35,6 +36,7 @@ export function CreateWorkItemForm({
   optionLists,
   suppliers,
   checklistTemplates,
+  startTradeId,
   locale,
 }: {
   projectId: string;
@@ -50,12 +52,15 @@ export function CreateWorkItemForm({
   suppliers: readonly SupplierChoice[];
   /** The Project's Checklist Templates: its `checklist_template` fields offer the Trade's active ones (RP-651). */
   checklistTemplates: readonly ChecklistTemplateChoice[];
+  /** The Trade the Form starts on (RP-627: the Site Observation's General), when its Form names one. */
+  startTradeId?: string;
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
   const formLabels = useFormRendererLabels();
   const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const refusal = useCreateRefusal();
+  const [answers, setAnswers] = useState<Record<string, unknown>>(startTradeId ? { trade: startTradeId } : {});
   const [fieldErrors, setFieldErrors] = useState<readonly FieldError[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -99,19 +104,7 @@ export function CreateWorkItemForm({
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
       if (body.error === "invalid_answers" && body.fields) setFieldErrors(body.fields);
-      const errors: Record<string, string> = {
-        invalid_request: t("invalid"),
-        invalid_answers: t("form.invalid"),
-        forbidden: t("notContractor"),
-        outside_visibility: t("outsideVisibility"),
-        // A Trade, Location or Scope removed meanwhile.
-        value_not_found: t("form.valueNotFound"),
-        project_closed: t("projectClosed"),
-        form_version_not_latest: t("form.newVersion"),
-        // An answer in a Form Section another Participant fills.
-        not_editable: t("form.notEditable"),
-      };
-      setError(errors[body.error ?? ""] ?? t("unavailable"));
+      setError(refusal(body.error));
       // A newer Form Version, or other choices, arrived meanwhile: show them.
       if (body.error === "form_version_not_latest" || body.error === "value_not_found") router.refresh();
     } catch {

@@ -1,10 +1,12 @@
 "use client";
 
+import type { Locale } from "@rabaed/domain";
 import { useToast } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useEffect, type ReactNode } from "react";
 import { StampRequired, useMyCompanyRead } from "@/components/company-stamp";
 import { SignatureRequired, useMySignatureRead } from "@/components/signature";
+import { TransitionDialog, useWorkItemCalls, type TransitionChoice } from "@/components/transition-dialog";
 import { mapRead, transitionGate } from "@/lib/transition-gate";
 
 /**
@@ -43,4 +45,31 @@ export function TransitionOpening({ returnTo, onClose, children }: { returnTo: s
     case "actionForm":
       return children;
   }
+}
+
+/**
+ * One of an item's own Transitions (from its `actions`), opened away from its page: the Snag List
+ * card's swipe and the phone's Raise (RP-630). The Signature and Stamp checks, then its pop-up.
+ */
+export function TransitionPopup({
+  workItemId,
+  subject,
+  transition,
+  locale,
+  idPrefix,
+  onClose,
+}: {
+  workItemId: string;
+  subject: string;
+  transition: TransitionChoice;
+  locale: Locale;
+  idPrefix: string;
+  onClose: () => void;
+}) {
+  const calls = useWorkItemCalls(workItemId);
+  return (
+    <TransitionOpening returnTo={`/work-items/${workItemId}`} onClose={onClose}>
+      <TransitionDialog transition={transition} calls={calls} locale={locale} description={subject} idPrefix={idPrefix} onClose={onClose} />
+    </TransitionOpening>
+  );
 }
