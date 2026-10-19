@@ -110,3 +110,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270831 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) (final day, moved from 20270824 before queueing) |
 | 20270901 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day; moved from 20270804, 20270806, 20270809, 20270825) |
 | 20270902 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day; moved from 20270821, 20270826) |
+| 20270829 | RP-958 | 22 | outbox_attempt_on_take |
