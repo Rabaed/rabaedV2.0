@@ -92,9 +92,11 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270721 | RP-640 | 5B | Unused: the migration moved to 20270724 (RP-151 took 20270720 on main) |
 | 20270722 | RP-640 | 5B | Unused: the migration moved to 20270725 |
 | 20270720 | RP-151 | 22 | record_page_one |
-| 20270723 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, then 20270720) |
-| 20270724 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, then 20270721) |
+| 20270723 | RP-639 | 5B | Unused: the migration moved to 20270801 (main gained 20270726) |
+| 20270724 | RP-640 | 5B | Unused: the migration moved to 20270802 (main gained 20270726) |
 | 20270725 | RP-640 | 5B | Unused: RP-640's notification dropped (owner, 2026-10-19) |
 | 20270720 | RP-673 | 41 | Unused: the migration moved to 20270726, after RP-151's 20270720 on main |
 | 20270720 | RP-151 | 22 | record_page_one |
 | 20270726 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714, 20270716, 20270720) |
+| 20270801 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) |
+| 20270802 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) |
