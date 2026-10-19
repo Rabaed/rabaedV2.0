@@ -741,3 +741,309 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
     });
   });
 });
+
+// RP-644: Packages from an import. The api hands each row an existing Package (`package_id`) or
+// the name of a new one (`package_name`); the database checks every id again, makes a row naming
+// a Package no longer Open bad, and creates the new Packages only on confirm, through the Package
+// functions. The new Packages are C1's alone (RP-589-1).
+describe("RP-589-1: Packages from C1's import (RP-644)", () => {
+  let open = ""; // C1's Open Package.
+  let started = ""; // C1's Package already In Progress.
+  let theirs = ""; // C2's Open Package.
+  let importId = "";
+
+  const createPackage = async (as: string, name: string) =>
+    (await call<{ package_id: string }>(as, sql`select package_id from app.create_package(${projectId}::uuid, ${JSON.stringify({ en: name, ar: name })}::jsonb, now())`))[0]!
+      .package_id;
+  const packagesOf = (as: string) => call<{ package_id: string; seq: number; status: string }>(as, sql`select package_id, seq, status from app.register_import_packages(${projectId}::uuid)`);
+  const packagesSeen = (as: string) => call<{ id: string }>(as, sql`select id from package`).then((r) => r.map((x) => x.id));
+  const reasonsOf = (as: string, id: string) =>
+    call<{ row_no: number; reasons: string[] }>(as, sql`select row_no, reasons from submittal_register_import_row where import_id = ${id}::uuid order by row_no`).then((r) =>
+      Object.fromEntries(r.map((x) => [x.row_no, x.reasons])),
+    );
+  const packageRows = [
+    row(2, "Basins", "MAR", "Electrical", { package: "Bathrooms", package_name: "Bathrooms" }),
+    row(3, "Taps", "SAR", "ME", { package: "bathrooms", package_name: "Bathrooms" }),
+    row(4, "Cable trays", "MAR", "Electrical", { package: "Electrical L1", package_id: "" }),
+    row(5, "Pumps", "SAR", "ME", { package: "Started", package_id: "" }),
+  ];
+
+  beforeAll(async () => {
+    open = await createPackage(c1.member, "Electrical L1");
+    started = await createPackage(c1.member, "Started");
+    theirs = await createPackage(c2.member, "C2 Package");
+    // As a Submit leaves it: In Progress.
+    await migrator.query("update package set status = 'in_progress' where id = $1", [started]);
+    packageRows[2]!.package_id = open;
+    packageRows[3]!.package_id = started;
+  });
+
+  it("offers the importer their own Participant's Packages only, each with its status", async () => {
+    expect((await packagesOf(c1.member)).map((p) => [p.package_id, p.status])).toEqual(
+      expect.arrayContaining([
+        [open, "open"],
+        [started, "in_progress"],
+      ]),
+    );
+    expect((await packagesOf(c1.member)).map((p) => p.package_id)).not.toContain(theirs);
+    expect((await packagesOf(c2.member)).map((p) => p.package_id)).toEqual([theirs]);
+    for (const as of [k1.member, ow.member]) expect(await packagesOf(as)).toEqual([]);
+  });
+
+  it("refuses the whole preview naming another Participant's Package, a discarded one or a made-up one, whoever matched it", async () => {
+    const discarded = await createPackage(c1.member, "Gone");
+    expect(await outcome(c1.member, sql`select app.discard_package(${discarded}::uuid, now()) as outcome`)).toBe("discarded");
+    for (const id of [theirs, discarded, randomUUID()]) {
+      expect((await preview(c1.member, [row(2, "Basins", "MAR", "Electrical", { package_id: id })])).outcome).toBe("package_not_found");
+    }
+    expect((await preview(c2.member, [row(2, "Basins", "MAR", "Electrical", { package_id: open })])).outcome).toBe("package_not_found");
+  });
+
+  it("makes a row bad whose Package is In Progress, and creates no Package before confirm", async () => {
+    const before = (await packagesOf(c1.member)).length;
+    const previewed = await preview(c1.member, packageRows);
+    expect(previewed.outcome).toBe("previewed");
+    importId = previewed.import_id!;
+    expect(await reasonsOf(c1.member, importId)).toEqual({ 2: [], 3: [], 4: [], 5: ["package_not_open"] });
+    expect(await packagesOf(c1.member)).toHaveLength(before);
+    const planned = await call<{ row_no: number; package_text: string; package_id: string | null; package_name: string | null }>(
+      c1.member,
+      sql`select row_no, package_text, package_id, package_name from submittal_register_import_row where import_id = ${importId}::uuid order by row_no`,
+    );
+    expect(planned).toEqual([
+      { row_no: 2, package_text: "Bathrooms", package_id: null, package_name: "Bathrooms" },
+      { row_no: 3, package_text: "bathrooms", package_id: null, package_name: "Bathrooms" },
+      { row_no: 4, package_text: "Electrical L1", package_id: open, package_name: null },
+      { row_no: 5, package_text: "Started", package_id: started, package_name: null },
+    ]);
+  });
+
+  it("refuses a Package name over 200 characters on its row", async () => {
+    const long = "P".repeat(201);
+    const previewed = await preview(c1.member, [row(2, "Basins", "MAR", "Electrical", { package: long, package_name: long })]);
+    expect(await reasonsOf(c1.member, previewed.import_id!)).toEqual({ 2: ["package_name_too_long"] });
+  });
+
+  describe("on confirm", () => {
+    let created = "";
+    let drafts: Record<number, string> = {};
+
+    beforeAll(async () => {
+      expect(await confirm(c1.member, importId)).toEqual({ outcome: "created", rows_created: 3 });
+      const made = await call<{ row_no: number; package_id: string }>(
+        c1.member,
+        sql`select row_no, package_id from submittal_register_import_row where import_id = ${importId}::uuid and package_name is not null`,
+      );
+      created = made[0]!.package_id;
+      drafts = Object.fromEntries((await results(c1.member, importId)).flatMap((r) => (r.work_item_id ? [[r.row_no, r.work_item_id]] : [])));
+    });
+
+    it("creates the new Package once for its name, numbered next, by the importer, and puts each Draft in its Package", async () => {
+      const { rows: packages } = await migrator.query("select id, seq, name, status, created_by_member_id from package where id = $1", [created]);
+      expect(packages).toEqual([
+        { id: created, seq: expect.any(Number), name: { en: "Bathrooms", ar: "Bathrooms" }, status: "open", created_by_member_id: c1.member },
+      ]);
+      const { rows: seqs } = await migrator.query("select max(seq) as max from package where project_id = $1 and participant_id = $2 and id <> $3", [
+        projectId,
+        c1Participant,
+        created,
+      ]);
+      expect(packages[0].seq).toBe(seqs[0].max + 1);
+      const { rows: items } = await migrator.query("select id, package_id from work_item where id = any ($1) order by id", [Object.values(drafts)]);
+      expect(Object.fromEntries(items.map((i: { id: string; package_id: string }) => [i.id, i.package_id]))).toEqual({
+        [drafts[2]!]: created,
+        [drafts[3]!]: created,
+        [drafts[4]!]: open,
+      });
+      // Through the Package functions: its trail says so.
+      const { rows: events } = await migrator.query("select type, count(*)::int as n from package_event where package_id = $1 group by type order by type", [created]);
+      expect(events).toEqual([
+        { type: "created", n: 1 },
+        { type: "item_added", n: 2 },
+      ]);
+    });
+
+    it("is read by C1's Members and by nobody of C2, K1 or the Owner", async () => {
+      expect(await packagesSeen(c1Colleague)).toEqual(expect.arrayContaining([created, open]));
+      for (const other of [c2.member, c2.ap, k1.member, k1.ap, ow.member, ow.ap]) {
+        const seen = await packagesSeen(other);
+        expect(seen).not.toContain(created);
+        expect(seen).not.toContain(open);
+        expect(await call(other, sql`select app.sees_package(${created}::uuid) as sees`)).toEqual([{ sees: false }]);
+      }
+    });
+  });
+
+  it("refuses the whole confirm when its Package is no longer Open, creating nothing: preview again", async () => {
+    const later = await createPackage(c1.member, "Later");
+    const previewed = await preview(c1.member, [
+      row(2, "Doors", "MAR", "Electrical", { package: "New one", package_name: "New one" }),
+      row(3, "Frames", "MAR", "Electrical", { package: "Later", package_id: later }),
+    ]);
+    await migrator.query("update package set status = 'in_progress' where id = $1", [later]);
+    const before = (await packagesOf(c1.member)).length;
+    expect(await confirm(c1.member, previewed.import_id!)).toEqual({ outcome: "preview_outdated", rows_created: null });
+    expect(await packagesOf(c1.member)).toHaveLength(before);
+    const { rows: made } = await migrator.query("select id from work_item where import_id = $1", [previewed.import_id]);
+    expect(made).toEqual([]);
+  });
+
+  it("puts an assignee's Draft in the Package as its raiser", async () => {
+    // A C1 engineer seeing all of the Project (earlier tests narrow the others).
+    const assignee = await member(c1.id, "assignee");
+    await call(c1.ap, sql<{ outcome: string }>`select app.add_project_member(${c1Participant}::uuid, ${assignee}::uuid, now())`);
+    for (const kind of ["trade", "location"]) {
+      await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${assignee}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`);
+    }
+    await outcome(c1.ap, sql`select app.set_project_member_positions(${c1Participant}::uuid, ${assignee}::uuid, ${["engineer"]}::text[]) as outcome`);
+    const previewed = await preview(c1.member, [row(2, "Valves", "SAR", "ME", { assignee_member_id: assignee, package: "Valves", package_name: "Valves" })]);
+    expect(await reasonsOf(c1.member, previewed.import_id!)).toEqual({ 2: [] });
+    expect((await confirm(c1.member, previewed.import_id!)).outcome).toBe("created");
+    const { rows } = await migrator.query(
+      "select w.created_by_member_id, k.created_by_member_id as package_by, e.actor_member_id from work_item w join package k on k.id = w.package_id join package_event e on e.package_id = k.id and e.type = 'item_added' where w.import_id = $1",
+      [previewed.import_id],
+    );
+    expect(rows).toEqual([{ created_by_member_id: assignee, package_by: c1.member, actor_member_id: assignee }]);
+  });
+
+  it("writes a row's Package only through the import's functions, and never gives the app role a Package's creation", async () => {
+    expect(await failure(c1.member, sql`update submittal_register_import_row set package_id = null`)).toBe("42501");
+    expect(await failure(c1.member, sql`select created_at from package`)).toBe("42501");
+  });
+});
+
+// RP-644 (story 34): the original register, stored by the api under the Project's prefix.
+describe("The original register of an import (RP-644)", () => {
+  it("is recorded only by its importer, on their own preview, once; and its upload time is read by nobody", async () => {
+    const previewed = (await preview(c1.member)).import_id!;
+    const file = randomUUID();
+    expect(await outcome(c1Colleague, sql`select app.store_register_import_file(${previewed}::uuid, ${file}::uuid) as outcome`)).toBe("not_found");
+    expect(await outcome(c2.member, sql`select app.store_register_import_file(${previewed}::uuid, ${file}::uuid) as outcome`)).toBe("not_found");
+    expect(await outcome(c1.member, sql`select app.store_register_import_file(${previewed}::uuid, ${file}::uuid) as outcome`)).toBe("stored");
+    expect(await outcome(c1.member, sql`select app.store_register_import_file(${previewed}::uuid, ${randomUUID()}::uuid) as outcome`)).toBe("not_found");
+    expect(await call(c1.member, sql`select source_file_id from submittal_register_import where id = ${previewed}::uuid`)).toEqual([{ source_file_id: file }]);
+    expect(await call(c1.member, sql`select app.register_import_file_key(${projectId}::uuid, ${previewed}::uuid, ${file}::uuid) as key`)).toEqual([
+      { key: `projects/${projectId}/register-imports/${previewed}/${file}` },
+    ]);
+  });
+
+  it("goes with its preview: the clean-up leaves the file's key for the api to delete, once", async () => {
+    const stale = (await preview(c1.member)).import_id!;
+    const file = randomUUID();
+    await outcome(c1.member, sql`select app.store_register_import_file(${stale}::uuid, ${file}::uuid) as outcome`);
+    await migrator.query("update submittal_register_import set created_at = now() - interval '8 days' where id = $1", [stale]);
+    await app.transaction().execute((trx) => sql`select app.clean_previewed_register_imports(now())`.execute(trx));
+    const key = `projects/${projectId}/register-imports/${stale}/${file}`;
+    expect(await failure(c1.member, sql`select storage_key from register_import_file_removal`)).toBe("42501");
+    const taken = (await call<{ key: string }>(c1.member, sql`select app.take_register_import_file_removals(100) as key`)).map((r) => r.key);
+    expect(taken).toContain(key);
+    const again = (await call<{ key: string }>(c1.member, sql`select app.take_register_import_file_removals(100) as key`)).map((r) => r.key);
+    expect(again).not.toContain(key);
+  });
+});
+
+// RP-644 (story 11): a mapping saved under a name for the importer's Participant.
+describe("Saved mappings (RP-644)", () => {
+  const save = (as: string, name: string) =>
+    call<{ outcome: string; mapping_id: string | null }>(as, sql`select outcome, mapping_id from app.save_register_import_mapping(${projectId}::uuid, ${name}, ${JSON.stringify(mapping)}::jsonb, now())`).then(
+      (r) => r[0]!,
+    );
+  const listedBy = (as: string) => call<{ name: string }>(as, sql`select name from app.register_import_mappings(${projectId}::uuid)`).then((r) => r.map((x) => x.name));
+  const tableBy = (as: string) => call<{ name: string }>(as, sql`select name from register_import_mapping`).then((r) => r.map((x) => x.name));
+
+  it("is saved by a Member for their Participant, read by its Members, and by no other Company", async () => {
+    const saved = await save(c1.member, "Monthly register");
+    expect(saved.outcome).toBe("saved");
+    expect(await save(c1Colleague, " monthly REGISTER ")).toEqual({ outcome: "name_taken", mapping_id: null });
+    for (const as of [c1.member, c1Colleague]) {
+      expect(await listedBy(as)).toContain("Monthly register");
+      expect(await tableBy(as)).toContain("Monthly register");
+    }
+    for (const other of [c2.member, k1.member, ow.member]) {
+      expect(await listedBy(other)).not.toContain("Monthly register");
+      expect(await tableBy(other)).not.toContain("Monthly register");
+      expect(await outcome(other, sql`select app.rename_register_import_mapping(${saved.mapping_id}::uuid, 'Theirs') as outcome`)).toBe("not_found");
+      expect(await outcome(other, sql`select app.delete_register_import_mapping(${saved.mapping_id}::uuid) as outcome`)).toBe("not_found");
+    }
+    // C2 keeps its own, under the same name.
+    expect((await save(c2.member, "Monthly register")).outcome).toBe("saved");
+    expect(await listedBy(c1.member)).toEqual(["Monthly register"]);
+  });
+
+  it("is renamed and deleted by its Participant's Members; never read with who saved it or when", async () => {
+    const saved = await save(c1.member, "Long-lead items");
+    expect(await outcome(c1Colleague, sql`select app.rename_register_import_mapping(${saved.mapping_id}::uuid, 'Monthly register') as outcome`)).toBe("name_taken");
+    expect(await outcome(c1Colleague, sql`select app.rename_register_import_mapping(${saved.mapping_id}::uuid, 'Long lead') as outcome`)).toBe("renamed");
+    expect(await listedBy(c1.member)).toContain("Long lead");
+    for (const column of ["created_at", "created_by_member_id"]) {
+      expect(await failure(c1.member, sql.raw(`select ${column} from register_import_mapping`))).toBe("42501");
+    }
+    expect(await failure(c1.member, sql`delete from register_import_mapping`)).toBe("42501");
+    expect(await outcome(c1Colleague, sql`select app.delete_register_import_mapping(${saved.mapping_id}::uuid) as outcome`)).toBe("deleted");
+    expect(await listedBy(c1.member)).not.toContain("Long lead");
+  });
+});
+
+// RP-644 on Rabaed Admin's connection (bypassrls): an Engineer's import, acting as C1's default
+// Member, never reaches another Participant's Package or saved mapping.
+describe("RP-589-3: an Engineer's import never reaches another Participant's Package or mapping (RP-644)", () => {
+  let adminDb: Db;
+  let engineer = "";
+  let theirs = "";
+  let ours = "";
+
+  const asAdmin = <T extends object>(memberId: string, query: ReturnType<typeof sql<T>>) =>
+    adminDb.transaction().execute(async (trx) => {
+      await sql`select set_config('app.member_id', ${memberId}, true)`.execute(trx);
+      return (await query.execute(trx)).rows;
+    });
+  const engineerPreview = (of: Row[]) =>
+    asAdmin<{ outcome: string; import_id: string | null }>(
+      c1.member,
+      sql`select outcome, import_id from app.preview_register_import_by_engineer(${engineer}::uuid, ${c1Participant}::uuid, ${projectId}::uuid,
+        'engineer-register.xlsx', 'Register', 1, ${JSON.stringify(headers)}::jsonb, ${JSON.stringify(mapping)}::jsonb,
+        ${JSON.stringify(of.map(asMatched))}::jsonb, null, null, now())`,
+    ).then((r) => r[0]!);
+
+  beforeAll(async () => {
+    adminDb = createDb(urls.admin, { max: 1 });
+    engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Package Seam') returning id", [email("package-eng")]);
+    const name = (n: string) => JSON.stringify({ en: n, ar: n });
+    theirs = (await call<{ package_id: string }>(c2.member, sql`select package_id from app.create_package(${projectId}::uuid, ${name("Shared name")}::jsonb, now())`))[0]!.package_id;
+    ours = (await call<{ package_id: string }>(c1.member, sql`select package_id from app.create_package(${projectId}::uuid, ${name("Ours")}::jsonb, now())`))[0]!.package_id;
+    await call(c2.member, sql`select * from app.save_register_import_mapping(${projectId}::uuid, 'C2 only', ${JSON.stringify(mapping)}::jsonb, now())`);
+  });
+  afterAll(() => adminDb.destroy());
+
+  it("offers the default Member's own Packages and saved mappings, as the Member's import reads them", async () => {
+    const offered = await asAdmin<{ package_id: string }>(c1.member, sql`select package_id from app.register_import_packages(${projectId}::uuid)`);
+    expect(offered.map((p) => p.package_id).sort()).toEqual(
+      (await call<{ package_id: string }>(c1.member, sql`select package_id from app.register_import_packages(${projectId}::uuid)`)).map((p) => p.package_id).sort(),
+    );
+    expect(offered.map((p) => p.package_id)).toContain(ours);
+    expect(offered.map((p) => p.package_id)).not.toContain(theirs);
+    const mappings = await asAdmin<{ name: string }>(c1.member, sql`select name from app.register_import_mappings(${projectId}::uuid)`);
+    expect(mappings.map((m) => m.name)).not.toContain("C2 only");
+  });
+
+  it("refuses another Participant's Package with the Member's answer, and adds nothing to it", async () => {
+    expect((await engineerPreview([row(2, "Basins", "MAR", "Electrical", { package: "Shared name", package_id: theirs })])).outcome).toBe("package_not_found");
+    const { rows } = await migrator.query("select count(*)::int as n from work_item where package_id = $1", [theirs]);
+    expect(rows[0].n).toBe(0);
+  });
+
+  it("creates its new Package for C1, by the default Member, on confirm", async () => {
+    const previewed = await engineerPreview([row(2, "Basins", "MAR", "Electrical", { package: "Shared name", package_name: "Shared name" })]);
+    expect(previewed.outcome).toBe("previewed");
+    const [confirmed] = await asAdmin<{ outcome: string }>(
+      c1.member,
+      sql`select outcome from app.confirm_register_import_by_engineer(${engineer}::uuid, ${previewed.import_id}::uuid, now())`,
+    );
+    expect(confirmed!.outcome).toBe("created");
+    const { rows } = await migrator.query(
+      "select k.participant_id, k.created_by_member_id from work_item w join package k on k.id = w.package_id where w.import_id = $1",
+      [previewed.import_id],
+    );
+    expect(rows).toEqual([{ participant_id: c1Participant, created_by_member_id: c1.member }]);
+  });
+});

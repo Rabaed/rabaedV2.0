@@ -66,6 +66,9 @@ const allow: GrantAllowList = {
   "app.new_item_workflow_version": both,
   "app.form_participant_choices": both,
   "app.actor_holder": both,
+  // RP-644: the default Member's own Packages and saved mappings, which the Admin wizard offers.
+  "app.register_import_packages": both,
+  "app.register_import_mappings": both,
 };
 
 // Function names with more than one overload on purpose. Empty: a second
