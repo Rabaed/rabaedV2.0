@@ -12,6 +12,7 @@
 //
 // The seam suites' global setup runs the migrations, then the demo seed, which publishes the
 // Rabaed Defaults.
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, DocumentList, StartedDocumentUpload, WorkItemDetail, WorkItemHistory, WorkItemList } from "@rabaed/domain";
@@ -224,6 +225,18 @@ describe("every code raises them (seam 1)", () => {
     await sendToManager(wir, "A");
     await take(mohammed.caller, wir, "approve_a", { answers: { ...VERIFIED, remarks: "Approved" } });
     expect((await raisedFrom(hafiz.caller, wir, "SNG")).map((s) => s.title)).toEqual(["Formwork tight"]);
+  });
+
+  it("the same code again (its key replayed) raises no second Snag, and the Snag's photo still opens", async () => {
+    const wir = await atManager("Replayed", ONE_FAIL);
+    await sendToManager(wir, "C");
+    const code = { transition: "revise_c", answers: { ...VERIFIED, remarks: "Seal the formwork" }, confirmed: true, idempotencyKey: randomUUID() };
+    await ok(mohammed.caller.post(`/v1/work-items/${wir}/transitions`, code), 204);
+    await ok(mohammed.caller.post(`/v1/work-items/${wir}/transitions`, code), 204);
+    const raised = await raisedFrom(hafiz.caller, wir, "SNG");
+    expect(raised).toHaveLength(1);
+    const [copied] = (await documentsOf(hafiz.caller, raised[0]!.id)).documents;
+    expect(await bytesOf(hafiz.caller, raised[0]!.id, copied!.id)).toEqual(jpegWithExif());
   });
 
   it("an item answered Pass or N/A, or unticked, raises none", async () => {

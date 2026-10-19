@@ -44,8 +44,8 @@ const copy = {
   fail: { en: "Fail", ar: "مرفوض" },
   no: { en: "No", ar: "لا" },
   raiseSnag: { en: "Raise a Snag", ar: "إنشاء عيب" },
-  raisesSnag: { en: "A Snag is raised with the code", ar: "يُنشأ عيب مع الرمز" },
-  raisesNoSnag: { en: "No Snag is raised", ar: "لا يُنشأ عيب" },
+  snagRaised: { en: "A Snag is raised with the code", ar: "يُنشأ عيب مع الرمز" },
+  noSnagRaised: { en: "No Snag is raised", ar: "لا يُنشأ عيب" },
 };
 
 const meta = {
@@ -119,8 +119,8 @@ export const Read: Story = {
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.queryByRole("checkbox")).toBeNull();
-    await expect(canvas.getByText(storyText(context, copy.raisesSnag))).toBeVisible();
-    await expect(canvas.queryByText(storyText(context, copy.raisesNoSnag))).toBeNull();
+    await expect(canvas.getByText(storyText(context, copy.snagRaised))).toBeVisible();
+    await expect(canvas.queryByText(storyText(context, copy.noSnagRaised))).toBeNull();
   },
 };
 
@@ -128,7 +128,7 @@ export const Read: Story = {
 export const ReadUnticked: Story = {
   args: { mode: "read", value: { formwork: { answer: "fail", snag: false } } as ChecklistAnswers },
   play: async (context) => {
-    await expect(context.canvas.getByText(storyText(context, copy.raisesNoSnag))).toBeVisible();
-    await expect(context.canvas.queryByText(storyText(context, copy.raisesSnag))).toBeNull();
+    await expect(context.canvas.getByText(storyText(context, copy.noSnagRaised))).toBeVisible();
+    await expect(context.canvas.queryByText(storyText(context, copy.snagRaised))).toBeNull();
   },
 };

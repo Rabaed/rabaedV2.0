@@ -52,7 +52,7 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270602 | RP-652 | 4C | Show Inspections in the Submittals tab (moved from 20270424) |
 | 20270603 | RP-651 | 4B | Unused: the migration moved to 20270630 (via 20270612), after main's later days |
 | 20270604 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
-| 20270605 | RP-577 | 4A | Snags from failed check items |
+| 20270605 | RP-577 | 4A | Unused: the migration moved to 20270911, after main's later days |
 | 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
 | 20270607 | spec RP-649 | 4A | Review fixes |
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
@@ -88,5 +88,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270805 | RP-155 | 23 | record_checks |
 | 20270827 | RP-86 | 44 | reply_checklist |
 | 20270829 | RP-958 | 22 | outbox_attempt_on_take |
-| 20270911 | RP-577 | 42 | snags_from_failed_check_items |
 | 20270910 | RP-157 | 23 | documental_record_verification |
+| 20270911 | RP-577 | 42 | snags_from_failed_check_items |

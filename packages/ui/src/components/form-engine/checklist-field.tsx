@@ -9,7 +9,7 @@ import {
   isNegativeAnswer,
   maxChecklistComment,
   maxItemPhotos,
-  raisesSnag,
+  snagTick,
   type ChecklistAnswers,
   type ChecklistField as ChecklistFieldSchema,
   type ChecklistItem,
@@ -55,8 +55,8 @@ export type ChecklistFieldLabels = {
   itemNumber: (n: string, of: string) => string;
   /** The tick on a failed item that raises a Snag (RP-577), and what read mode says of it. */
   raiseSnag: string;
-  raisesSnag: string;
-  raisesNoSnag: string;
+  snagRaised: string;
+  noSnagRaised: string;
   /** An item's photos. */
   photosField: PhotosFieldLabels;
 };
@@ -198,7 +198,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
         );
       }
       const negative = given !== undefined && isNegativeAnswer(given);
-      const snag = negative && raisesSnag(item);
+      const tick = snagTick(item, entry);
       return (
         <li key={item.key} className="flex flex-col gap-2 rounded-md border border-border p-3">
           <p className="text-body text-text"><bdi>{item.text[locale]}</bdi></p>
@@ -210,10 +210,10 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
               checklistAnswerLabels[locale][given as keyof (typeof checklistAnswerLabels)["en"]]
             )}
           </p>
-          {snag && (
+          {tick && (
             <p className="flex items-center gap-1 text-sm text-muted">
-              <Icon name={entry?.snag === false ? "minus" : "check"} size={16} />
-              {entry?.snag === false ? text.raisesNoSnag : text.raisesSnag}
+              <Icon name={tick === "ticked" ? "check" : "minus"} size={16} />
+              {tick === "ticked" ? text.snagRaised : text.noSnagRaised}
             </p>
           )}
           {entry?.comment && <p className="whitespace-pre-wrap text-body text-text"><bdi>{entry.comment}</bdi></p>}
@@ -227,7 +227,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
     const set = checklistAnswerSets[item.answers];
     const commentId = `${id ?? field.key}-${item.key}-comment`;
     const snagId = `${id ?? field.key}-${item.key}-snag`;
-    const negative = entry?.answer !== undefined && isNegativeAnswer(entry.answer);
+    const tick = snagTick(item, entry);
     return (
       <li key={item.key} className="flex flex-col gap-3 rounded-md border border-border p-3">
         <div className="flex flex-col gap-0.5">
@@ -242,9 +242,9 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
             value={entry?.answer ?? ""}
             onValueChange={(answer) => change(item.key, { ...entry, answer })}
           />
-          {negative && raisesSnag(item) && (
+          {tick && (
             <div className="flex items-center gap-2">
-              <Checkbox id={snagId} checked={entry?.snag !== false} onCheckedChange={(checked) => change(item.key, withSnagTick(entry, checked === true))} />
+              <Checkbox id={snagId} checked={tick === "ticked"} onCheckedChange={(checked) => change(item.key, withSnagTick(entry, checked === true))} />
               <label htmlFor={snagId} className="text-body text-text">
                 {text.raiseSnag}
               </label>

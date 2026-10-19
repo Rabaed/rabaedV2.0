@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { actionFormProblems } from "./action-form.ts";
 import type { ChecklistCopy } from "./checklist-template.ts";
-import { formSchema, validateAnswers, type FormSchema } from "./form.ts";
+import { formSchema, snagTick, validateAnswers, type FormSchema } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
-import { checklistOfRead, checklistsPropose, checkReplyChecklist, proposedCode, replyChecklistOf, snagsToRaise } from "./reply-checklist.ts";
+import { checklistOfRead, checklistsPropose, checkReplyChecklist, proposedCode, replyChecklistOf } from "./reply-checklist.ts";
 import { screenProblems } from "./screen.ts";
 
 // Pure domain: a checklist in a reply Screen (RP-86, INSP-4; ADR 0024 amended 2026-10-19,
@@ -130,11 +130,17 @@ describe("the \"Raise a Snag\" tick (RP-577)", () => {
     });
   });
 
-  it("raises a Snag from an item answered Fail or No that raises one, unless unticked", () => {
+  it("is offered on an item answered Fail or No that raises a Snag, ticked unless taken off", () => {
     const items = checklistOf("create_snag").items;
-    expect(snagsToRaise(items, { formwork: { answer: "fail" }, cover: { answer: "fail", snag: false }, clean: { answer: "no" } })).toEqual(["formwork", "clean"]);
-    expect(snagsToRaise(items, { formwork: { answer: "pass" }, cover: { answer: "na" } })).toEqual([]);
-    expect(snagsToRaise(checklist.items, { formwork: { answer: "fail" }, cover: { answer: "fail" } })).toEqual(["formwork"]);
+    const [formwork, cover, clean] = items;
+    expect(snagTick(formwork!, { answer: "fail" })).toBe("ticked");
+    expect(snagTick(cover!, { answer: "fail", snag: false })).toBe("unticked");
+    expect(snagTick(clean!, { answer: "no" })).toBe("ticked");
+    // No tick: answered Pass or N/A, not answered, or an item that raises none.
+    expect(snagTick(formwork!, { answer: "pass" })).toBeNull();
+    expect(snagTick(cover!, { answer: "na", snag: false })).toBeNull();
+    expect(snagTick(formwork!, undefined)).toBeNull();
+    expect(snagTick(checklist.items[1]!, { answer: "fail" })).toBeNull();
   });
 });
 

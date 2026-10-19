@@ -398,6 +398,15 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     }
   });
 
+  it("the files to copy are only the code's own transaction's: once it committed, none, for K1 that raised them too", async () => {
+    // The photo was copied (a Document of the Snag) ...
+    expect(await snagPhotos(k1Manager)).toBe(1);
+    // ... but a later transaction (a replayed code) is given nothing to copy again.
+    for (const reader of [k1Manager, c1.member]) {
+      expect(await call(reader, sql<object>`select * from app.raised_document_copies(${id}::uuid)`), reader).toEqual([]);
+    }
+  });
+
   it("its history starts with the Raise, shared, by K1; it is held by C1", async () => {
     const [raise] = await call<{ type: string; audience: string; company_name: unknown }>(
       c1.member,

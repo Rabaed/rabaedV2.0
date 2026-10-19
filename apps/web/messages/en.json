@@ -954,8 +954,8 @@
         "evidence": "Photos for {item}",
         "itemNumber": "{n} of {of}",
         "raiseSnag": "Raise a Snag",
-        "raisesSnag": "A Snag is raised with the code",
-        "raisesNoSnag": "No Snag is raised"
+        "snagRaised": "A Snag is raised with the code",
+        "noSnagRaised": "No Snag is raised"
       },
       "tableField": {
         "addRow": "Add row",
@@ -989,7 +989,7 @@
         "photoRequired": "Photo required on {answer}",
         "commentOptional": "Comment optional",
         "photoOptional": "Photos optional",
-        "raisesSnag": "{answer} raises a Snag"
+        "snagRaised": "{answer} raises a Snag"
       },
       "linkQuestion": {
         "remove": "Remove {number}"

@@ -7,10 +7,8 @@ import {
   checklistTemplateItem,
   formKey,
   isNegativeAnswer,
-  raisesSnag,
   type ChecklistAnswers,
   type ChecklistField,
-  type ChecklistItem,
   type CopiedChecklistField,
   type FieldError,
   type ValidationMode,
@@ -56,19 +54,6 @@ export function checkReplyChecklist(
 /** The Review Code a checklist proposes to the Consultant Manager (ADR 0025): C when any item failed (Fail or No), else A. */
 export function proposedCode(answers: ChecklistAnswers): "A" | "C" {
   return Object.values(answers).some((entry) => entry.answer !== undefined && isNegativeAnswer(entry.answer)) ? "C" : "A";
-}
-
-/**
- * The items of `items` whose answers raise a Snag when the code is issued (RP-577, ADR 0025):
- * each answered Fail or No that raises one (raisesSnag) and is not unticked, in the checklist's order.
- */
-export function snagsToRaise(items: readonly ChecklistItem[], answers: ChecklistAnswers): string[] {
-  return items
-    .filter((item) => {
-      const entry = answers[item.key];
-      return raisesSnag(item) && entry?.answer !== undefined && isNegativeAnswer(entry.answer) && entry.snag !== false;
-    })
-    .map((item) => item.key);
 }
 
 /** A check item's answer and comment, and its "Raise a Snag" tick when unticked (RP-577), as saved: the answers of a checklist by item key. */

@@ -153,6 +153,16 @@ export type ChecklistTemplateItem = z.infer<typeof checklistTemplateItem>;
  */
 export const raisesSnag = (item: ChecklistItem): boolean => "on_negative" in item && item.on_negative === "create_snag";
 
+/**
+ * The "Raise a Snag" tick of `item` answered `entry` (RP-577): offered once an item that raises a
+ * Snag is answered Fail or No, ticked unless taken off (`snag: false`); null when not offered.
+ * A ticked one becomes a Snag when the code is issued (app.raise_checklist_snags, the same rule).
+ */
+export function snagTick(item: ChecklistItem, entry: { answer?: string; snag?: false } | undefined): "ticked" | "unticked" | null {
+  if (!raisesSnag(item) || entry?.answer === undefined || !isNegativeAnswer(entry.answer)) return null;
+  return entry.snag === false ? "unticked" : "ticked";
+}
+
 /** 1 to maxChecklistItems items of `item`'s shape, each key once. */
 const checklistItems = <T extends z.ZodType<{ key: string }>>(item: T) =>
   z
