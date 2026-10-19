@@ -9,6 +9,7 @@ import {
   isNegativeAnswer,
   maxChecklistComment,
   maxItemPhotos,
+  snagTick,
   type ChecklistAnswers,
   type ChecklistField as ChecklistFieldSchema,
   type ChecklistItem,
@@ -18,6 +19,7 @@ import {
   type PhotosField as PhotosFieldSchema,
 } from "@rabaed/domain";
 import { cn } from "../../lib/cn.ts";
+import { Checkbox } from "../form/checkbox.tsx";
 import { OutsideField, useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Textarea } from "../form/textarea.tsx";
@@ -31,6 +33,10 @@ import { PhotosField, type PhotosFieldFiles, type PhotosFieldLabels } from "./ph
 // comment or photo is "required on negative" shows it once the answer is
 // negative, and says what is missing when the item leaves Draft. Presentational:
 // the page uploads photos and passes the field's Documents back in.
+//
+// A checklist copied from a Checklist Template (a reply Screen's, RP-86) may raise Snags (RP-577):
+// an item whose template says `create_snag` shows "Raise a Snag" once answered negatively, ticked
+// by default; unticking it saves `snag: false`. Read mode says whether it raises one.
 
 /** The checklist's words, from the app's messages. A number is given already formatted for the locale. */
 export type ChecklistFieldLabels = {
@@ -47,6 +53,10 @@ export type ChecklistFieldLabels = {
   summary: string;
   evidence: (item: string) => string;
   itemNumber: (n: string, of: string) => string;
+  /** The tick on a failed item that raises a Snag (RP-577), and what read mode says of it. */
+  raiseSnag: string;
+  snagRaised: string;
+  noSnagRaised: string;
   /** An item's photos. */
   photosField: PhotosFieldLabels;
 };
@@ -82,14 +92,21 @@ const answersOf = (value: unknown): ChecklistAnswers => {
   const out: ChecklistAnswers = {};
   for (const [key, entry] of Object.entries(value)) {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
-    const { answer, comment } = entry as Record<string, unknown>;
+    const { answer, comment, snag } = entry as Record<string, unknown>;
     out[key] = {
       ...(typeof answer === "string" ? { answer } : {}),
       ...(typeof comment === "string" ? { comment } : {}),
+      ...(snag === false ? { snag } : {}),
     };
   }
   return out;
 };
+
+/** Item `entry` with its "Raise a Snag" tick set: ticked is the default, so only unticked is kept. */
+function withSnagTick(entry: ChecklistAnswers[string] | undefined, ticked: boolean): ChecklistAnswers[string] {
+  const { snag: _snag, ...rest } = entry ?? {};
+  return ticked ? rest : { ...rest, snag: false };
+}
 
 /** What an item shows beside its answer: the comment and the photos it takes (an item that requires them on a negative answer takes them then, or when it holds some). */
 export function itemEvidence(item: ChecklistItem, entry: ChecklistAnswers[string] | undefined, photos: number) {
@@ -181,6 +198,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
         );
       }
       const negative = given !== undefined && isNegativeAnswer(given);
+      const tick = snagTick(item, entry);
       return (
         <li key={item.key} className="flex flex-col gap-2 rounded-md border border-border p-3">
           <p className="text-body text-text"><bdi>{item.text[locale]}</bdi></p>
@@ -192,6 +210,12 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
               checklistAnswerLabels[locale][given as keyof (typeof checklistAnswerLabels)["en"]]
             )}
           </p>
+          {tick && (
+            <p className="flex items-center gap-1 text-sm text-muted">
+              <Icon name={tick === "ticked" ? "check" : "minus"} size={16} />
+              {tick === "ticked" ? text.snagRaised : text.noSnagRaised}
+            </p>
+          )}
           {entry?.comment && <p className="whitespace-pre-wrap text-body text-text"><bdi>{entry.comment}</bdi></p>}
           {documents.length > 0 && (
             <PhotosField field={evidenceField(item)} files={itemFiles} mode="read" locale={locale} labels={text.photosField} label={label} onOpen={onOpen} />
@@ -202,6 +226,8 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
 
     const set = checklistAnswerSets[item.answers];
     const commentId = `${id ?? field.key}-${item.key}-comment`;
+    const snagId = `${id ?? field.key}-${item.key}-snag`;
+    const tick = snagTick(item, entry);
     return (
       <li key={item.key} className="flex flex-col gap-3 rounded-md border border-border p-3">
         <div className="flex flex-col gap-0.5">
@@ -216,6 +242,14 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
             value={entry?.answer ?? ""}
             onValueChange={(answer) => change(item.key, { ...entry, answer })}
           />
+          {tick && (
+            <div className="flex items-center gap-2">
+              <Checkbox id={snagId} checked={tick === "ticked"} onCheckedChange={(checked) => change(item.key, withSnagTick(entry, checked === true))} />
+              <label htmlFor={snagId} className="text-body text-text">
+                {text.raiseSnag}
+              </label>
+            </div>
+          )}
           {shown.comment && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor={commentId} className="text-sm font-medium text-text">

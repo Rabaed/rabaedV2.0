@@ -365,7 +365,7 @@ export const workItemRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
-        const result = await takeTransition(ctx.db, memberId, id, request.body, ctx.now());
+        const result = await takeTransition(ctx.db, ctx.files, memberId, id, request.body, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },
@@ -378,7 +378,7 @@ export const workItemRoutes =
       { schema: { body: bulkTransitionRequest, response: { 200: bulkTransitionTaken } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await takeBulkTransition(ctx.db, memberId, request.body, ctx.now());
+        const result = await takeBulkTransition(ctx.db, ctx.files, memberId, request.body, ctx.now());
         if (result.ok) return { taken: result.taken };
         if (result.reason === "bulk_refused") throw new HttpError(409, "bulk_refused", { stoppedBy: result.stoppedBy });
         throw refusal(result);
