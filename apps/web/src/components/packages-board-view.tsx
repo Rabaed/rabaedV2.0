@@ -52,7 +52,7 @@ function usePackagesBoardLabels(hints?: PackagesFilterLabels["hints"]): Packages
       company: t("board.company"),
       hints,
       noMatchesTitle: t("board.noMatchesTitle"),
-      noMatchesBody: t("board.noMatches"),
+      noMatchesBody: t("board.noMatchesBody"),
     },
   };
 }
@@ -84,7 +84,7 @@ export function PackagesBoardView({
   const pathname = usePathname();
   const hrefFor = (v: ModuleView) => (v === "list" ? pathname : `${pathname}?view=${v}`);
   // The search and filters live in the URL (RP-953), so a link or the back button opens the same board.
-  const filter = packagesFilterFromSearchParams(new URLSearchParams(useSearchParams().toString()));
+  const filter = packagesFilterFromSearchParams(useSearchParams());
   const onCreate = async (name: BilingualText) => {
     const res = await fetch(`/api/v1/projects/${projectId}/packages`, {
       method: "POST",

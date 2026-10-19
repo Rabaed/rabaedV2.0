@@ -2520,7 +2520,7 @@
       "trade": "Trade",
       "company": "Owning Company",
       "noMatchesTitle": "No Packages match",
-      "noMatches": "Try another search, or clear the filters."
+      "noMatchesBody": "Try another search, or clear the filters."
     },
     "create": {
       "trigger": "New Package",

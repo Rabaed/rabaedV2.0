@@ -9,7 +9,7 @@ import { matchesSearch } from "./search-match.ts";
 // and by owning Company. They apply to the Packages the board API gives the viewer, and their
 // choices come from those Packages only (packageFilterChoices): the Trades of the submittals
 // the viewer sees in them and their owning Companies, so no choice names a Trade or a Company
-// the viewer sees nothing of (visibility.md RP-588-1 to RP-588-3).
+// the viewer sees nothing of (visibility.md RP-953-1; RP-588-1 to RP-588-3 still hold).
 
 /** What the Packages view is narrowed to. A Trade or Company list matches any of its values; the three together, all of them. */
 export type PackagesFilter = {
@@ -33,7 +33,7 @@ export function filterPackages(packages: readonly PackageSummary[], filter: Pack
   );
 }
 
-/** The filter's choices, from `packages` alone: their Trades by code, their owning Companies by name in `locale`, each once. */
+/** The filter's choices, from `packages` alone, each once: their Trades by code (across Packages, so not each one's Project order), their owning Companies by name in `locale`. */
 export function packageFilterChoices(packages: readonly PackageSummary[], locale: Locale): { trades: PackageTrade[]; companies: PackageCompanyChoice[] } {
   const trades = new Map<string, PackageTrade>();
   const companies = new Map<string, PackageCompanyChoice>();

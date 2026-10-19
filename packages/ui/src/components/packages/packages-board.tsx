@@ -13,14 +13,14 @@ import {
 } from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { Avatar, CompanyChip } from "../data/avatar.tsx";
+import { CompanyChip } from "../data/avatar.tsx";
 import { Badge } from "../data/badge.tsx";
 import { EmptyState } from "../feedback/states.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
+import { companyFilterChoice, filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { ListToolbar, ToolbarSearch } from "../list/list-toolbar.tsx";
-import { tradeChipClass } from "../views/kanban-card.tsx";
 import { NewPackageDialog, type NewPackageLabels } from "./package-dialogs.tsx";
 
 // The Packages view of the Submittals (RP-660, spec RP-616 stories 24, 29–33; reference: the
@@ -217,24 +217,12 @@ function PackagesFilterControls({
           fields={[
             field(
               "trade",
-              choices.trades.map((v) => ({
-                value: v.id,
-                text: `${v.name[locale]} ${v.code}`,
-                label: (
-                  <span className={cn("inline-flex h-5 items-center rounded-[6px] px-1.5 text-notes font-semibold", tradeChipClass(v.code))}>
-                    {v.name[locale]} (<bdi translate="no">{v.code}</bdi>)
-                  </span>
-                ),
-              })),
+              choices.trades.map((v) => tradeFilterChoice(v, locale)),
             ),
             // Each owning Company by its name only (V14).
             field(
               "company",
-              choices.companies.map((c) => ({
-                value: c.participantId,
-                label: c.companyName[locale],
-                mark: <Avatar name={c.companyName[locale]} initialsFrom={c.companyName.en} kind="company" size="sm" decorative className="size-5" />,
-              })),
+              choices.companies.map((c) => companyFilterChoice(c.participantId, c.companyName, locale)),
             ),
           ]}
           labels={{ filters: labels.filters, clearAll: labels.clearAll, done: labels.done, close, applied: labels.applied, number: n }}
@@ -246,10 +234,7 @@ function PackagesFilterControls({
             aria-label={labels.clear}
             title={labels.clear}
             onClick={() => onChange(noFilter)}
-            className={cn(
-              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-control-border bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
-              focusRing,
-            )}
+            className={filterClearClass}
           >
             <Icon name="x" size={16} />
           </button>

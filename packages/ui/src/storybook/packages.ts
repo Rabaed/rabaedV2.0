@@ -287,7 +287,7 @@ export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
       clearField: "مسح",
       searchValues: "بحث",
       noMatches: "لا نتائج",
-      applied: (n, count) => (count === 0 ? "لا توجد عوامل تصفية" : `${n} عوامل تصفية مطبقة`),
+      applied: (n, count) => (count === 0 ? "لا تصفية مطبقة" : count === 1 ? "تصفية واحدة مطبقة" : count === 2 ? "تصفيتان مطبقتان" : `${n} تصفيات مطبقة`),
       trade: "التخصص",
       company: "الشركة المالكة",
       hints: { trade: "Trade", company: "Owning Company" },
