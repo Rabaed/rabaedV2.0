@@ -633,9 +633,10 @@ export const workItemDetail = workItemSummary.extend({
   module: moduleKeySchema,
   /**
    * The item it was raised from, as its Snag List row names it (RP-628). Null when it was raised
-   * by hand, and for an item of another Module.
+   * by hand, and for an item of another Module. `checkItem`: the failed check item a code raised
+   * it from (RP-577), by its key and text as the source's copy holds it; null otherwise.
    */
-  raisedFrom: raisedFromSource.nullable(),
+  raisedFrom: raisedFromSource.extend({ checkItem: z.object({ key: z.string(), text: bilingualText }).nullable() }).nullable(),
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
   /**
