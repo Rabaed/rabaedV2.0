@@ -846,7 +846,7 @@
       "raisedBy": "Raised by",
       "package": "Package",
       "issuedCode": "Issued Code",
-      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
+      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "OBS": "Site Observations", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
       "raisedItemCounts": "{open} open / {closed} closed"
     },
     "snag": {
