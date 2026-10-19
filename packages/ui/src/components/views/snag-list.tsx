@@ -9,6 +9,7 @@ import {
   withoutFilters,
   type BilingualText,
   type Locale,
+  type RaisedFromSource,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemList as WorkItemListData,
   type WorkItemQuery,
@@ -163,7 +164,7 @@ const otherType = { icon: "tag" as IconName, classes: "bg-neutral-tint text-neut
 const lookOf = (code: string) => typeLooks[code] ?? otherType;
 
 /** An item's Type, as a chip: its shape, its name. */
-function SnagTypeChip({ code, name, className }: { code: string; name: string; className?: string }) {
+export function SnagTypeChip({ code, name, className }: { code: string; name: string; className?: string }) {
   const look = lookOf(code);
   return (
     <span className={cn("inline-flex h-[22px] items-center gap-1 rounded-[6px] px-1.5 text-caption font-semibold whitespace-nowrap", look.classes, className)}>
@@ -503,18 +504,23 @@ function RaisedFrom({ row, locale, labels, itemHref, linkAs: Link }: { row: Work
       ) : (
         <span className="text-text-secondary">{number}</span>
       )}
-      {source.outcome && (
-        <HeaderBadge
-          badge={{
-            kind: "outcome",
-            look: source.outcome.look,
-            label: source.outcome.code.length <= 3 ? labels.code(source.outcome.code) : source.outcome.name[locale],
-            name: source.outcome.name[locale],
-            code: source.outcome.code,
-          }}
-        />
-      )}
+      {source.outcome && <SourceOutcomeBadge outcome={source.outcome} locale={locale} code={labels.code} />}
     </span>
+  );
+}
+
+/** A source's outcome as the card badge shows it: "Code B" for a short code, else the outcome's name (RP-94, RP-628). */
+export function SourceOutcomeBadge({ outcome, locale, code }: { outcome: NonNullable<RaisedFromSource["outcome"]>; locale: Locale; code: (code: string) => string }) {
+  return (
+    <HeaderBadge
+      badge={{
+        kind: "outcome",
+        look: outcome.look,
+        label: outcome.code.length <= 3 ? code(outcome.code) : outcome.name[locale],
+        name: outcome.name[locale],
+        code: outcome.code,
+      }}
+    />
   );
 }
 

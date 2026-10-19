@@ -5,20 +5,21 @@ import { workItemOutcome } from "./work-item.ts";
 
 /**
  * What an in-app notification is about: a Step reached the Member or their
- * pool, something happened on an item they watch, or an item was Sent Back to
- * their Participant.
+ * pool, something happened on an item they watch, an item was Sent Back to
+ * their Participant, or a closed item's Documental Record is ready (RP-155: in
+ * the bell only; it names no Company and no person).
  */
-export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back"] as const;
+export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back", "record_ready"] as const;
 
 /** What happened on a watched item. */
 export const watchedEventTypes = ["transition", "issue_code", "revision_created", "cancelled"] as const;
 
 /**
- * One in-app notification. Its number and title, and what happened, are read
+ * One in-app notification about an item. Its number and title, and what happened, are read
  * when it is shown, so they are only ever what the Member may see now
  * (visibility.md, "Notifications and emails").
  */
-export const notification = z.object({
+export const itemNotification = z.object({
   id: z.uuid(),
   kind: z.enum(inAppNotificationKinds),
   workItemId: z.uuid(),
@@ -44,6 +45,36 @@ export const notification = z.object({
   createdAt: z.iso.datetime(),
   readAt: z.iso.datetime().nullable(),
 });
+export type ItemNotification = z.infer<typeof itemNotification>;
+
+/**
+ * A Package's submittals reached the Member at once (RP-643): one notification for
+ * the Submit Package, instead of a "Step reached" per submittal. Its Package, and how
+ * many of its submittals the Member sees now (never a total with others), are read
+ * when it is shown; the Package's owner is named by its Company only (V14).
+ */
+export const packageNotification = z.object({
+  id: z.uuid(),
+  kind: z.literal("package_submitted"),
+  /** None: it is about its Package (kept so every notification reads the same fields). */
+  workItemId: z.null(),
+  step: z.null(),
+  event: z.null(),
+  package: z.object({
+    id: z.uuid(),
+    /** PKG-001…, always left-to-right (packageNumber). */
+    number: z.string(),
+    name: bilingualText,
+    companyName: bilingualText,
+    count: z.number().int().positive(),
+  }),
+  createdAt: z.iso.datetime(),
+  readAt: z.iso.datetime().nullable(),
+});
+export type PackageNotification = z.infer<typeof packageNotification>;
+
+/** One in-app notification: about an item, or about a Package Submit. */
+export const notification = z.discriminatedUnion("kind", [itemNotification, packageNotification]);
 export type Notification = z.infer<typeof notification>;
 
 /**
@@ -51,8 +82,18 @@ export type Notification = z.infer<typeof notification>;
  * the in-app kinds, Sent Back included (RP-356). The weekly report is an email
  * of its own, never a notification row.
  */
-export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back"] as const;
+export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back", "package_submitted"] as const;
 export type NotificationEmailKind = (typeof notificationEmailKinds)[number];
+
+/** A Package Submit's email (RP-643): the Package, its owner's Company by name, and how many of its submittals the recipient sees. */
+export interface NotificationEmailPackage {
+  id: string;
+  /** PKG-001…, left-to-right. */
+  number: string;
+  name: BilingualText;
+  companyName: BilingualText;
+  count: number;
+}
 
 /**
  * What one notification email says, read when it is sent as its recipient may
@@ -62,10 +103,14 @@ export type NotificationEmailKind = (typeof notificationEmailKinds)[number];
  * signer of a final Code (V14).
  */
 export interface NotificationEmailContent {
-  workItemId: string;
-  /** Null while the item has none. */
+  /** Null for a Package Submit's, which is about `package`. */
+  workItemId: string | null;
+  /** Null while the item has none, and for a Package Submit's: a Package's number is not a Document Number (GLOSSARY), it is package.number. */
   documentNumber: string | null;
+  /** The item's Subject; a Package Submit's: the Package's name in the email's language. */
   subject: string;
+  /** A Package Submit's Package (RP-643); left out for any other. */
+  package?: NotificationEmailPackage;
   /** A Step reached them: the Step, their own Company's. */
   step: BilingualText | null;
   event: {
@@ -109,9 +154,15 @@ export interface NotificationDigestProject {
 }
 
 export interface NotificationDigestItem {
-  workItemId: string;
-  /** Null while the item has none. */
+  /** Null for a Package Submit's entry, which is about `packageId`. */
+  workItemId: string | null;
+  /** A Package Submit's Package (RP-643); left out for an item. */
+  packageId?: string;
+  /** A Package Submit's: the Package's number (PKG-001), which is not a Document Number; left out for an item. */
+  packageNumber?: string;
+  /** Null while the item has none, and for a Package's. */
   documentNumber: string | null;
+  /** The item's Subject, or the Package's name. */
   subject: string;
   /** What happened on it, oldest first. */
   entries: NotificationDigestEntry[];
@@ -122,6 +173,8 @@ export interface NotificationDigestEntry {
   kind: NotificationEmailKind;
   step: NotificationEmailContent["step"];
   event: NotificationEmailContent["event"];
+  /** A Package Submit's (RP-643). */
+  package?: NotificationEmailPackage;
 }
 
 /** The signed-in Member's notifications, newest first, and how many are unread (the bell). */

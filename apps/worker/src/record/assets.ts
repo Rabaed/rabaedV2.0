@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { RecordFacts } from "@rabaed/db";
 import { PDFDocument } from "pdf-lib";
 import type { RecordFiles } from "./files.ts";
@@ -14,45 +15,73 @@ const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
 /** All the inlined photos together stay under this. */
 const MAX_PHOTOS_TOTAL_BYTES = 40 * 1024 * 1024;
 /** Image types Chromium draws. */
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+export const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export interface DocumentAssets {
   /** The page count of each listed Document by storage key; null where it has no pages to count. */
   readonly pageCounts: ReadonlyMap<string, number | null>;
-  /** The data URL of each Form photo by storage key. */
+  /** The data URL of each Form photo, Signature, logo and Stamp by storage key. */
   readonly images: ReadonlyMap<string, string>;
+  /** The SHA-256 (hex) of each inlined image's bytes (photos, Signatures, logos, Stamps) by storage key: the Record Data carries it (RP-155). */
+  readonly fingerprints: ReadonlyMap<string, string>;
+}
+
+/** A Document that may be inlined as a photo. */
+export interface PhotoCandidate {
+  readonly storageKey: string;
+  readonly contentType: string;
+  /** Its stored size; 0 when not known before it is read. */
+  readonly size: number;
+}
+
+/**
+ * Reads the images among `candidates` into data URLs, within the limits above, with the
+ * SHA-256 of each one's bytes. A file it can't read, or that is too large, is left out. The
+ * record job and Re-produce both inline photos through this one function.
+ */
+export async function inlinePhotos(
+  candidates: readonly PhotoCandidate[],
+  files: RecordFiles,
+): Promise<{ images: Map<string, string>; fingerprints: Map<string, string> }> {
+  const images = new Map<string, string>();
+  const fingerprints = new Map<string, string>();
+  let inlined = 0;
+  for (const d of candidates) {
+    if (!IMAGE_TYPES.has(d.contentType) || d.size > MAX_PHOTO_BYTES || inlined + d.size > MAX_PHOTOS_TOTAL_BYTES) continue;
+    const bytes = await files.get(d.storageKey);
+    // The size is checked again on the bytes read: a Signature, logo or Stamp comes without one (0).
+    if (!bytes || bytes.length > MAX_PHOTO_BYTES || inlined + bytes.length > MAX_PHOTOS_TOTAL_BYTES) continue;
+    images.set(d.storageKey, `data:${d.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
+    fingerprints.set(d.storageKey, createHash("sha256").update(bytes).digest("hex"));
+    inlined += bytes.length;
+  }
+  return { images, fingerprints };
 }
 
 export async function documentAssets(facts: RecordFacts, files: RecordFiles): Promise<DocumentAssets> {
   const attachmentFields = attachmentFieldKeysOf(facts);
   const pageCounts = new Map<string, number | null>();
-  const images = new Map<string, string>();
-  let inlined = 0;
   for (const d of facts.documents) {
-    if (isListedDocument(d, attachmentFields)) {
-      if (IMAGE_TYPES.has(d.contentType)) pageCounts.set(d.storageKey, 1);
-      else if (d.contentType === "application/pdf") pageCounts.set(d.storageKey, await pdfPages(files, d.storageKey));
-      else pageCounts.set(d.storageKey, null);
-    } else if (IMAGE_TYPES.has(d.contentType) && d.size <= MAX_PHOTO_BYTES && inlined + d.size <= MAX_PHOTOS_TOTAL_BYTES) {
-      const bytes = await files.get(d.storageKey);
-      if (bytes) {
-        images.set(d.storageKey, `data:${d.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
-        inlined += bytes.length;
-      }
-    }
+    if (!isListedDocument(d, attachmentFields)) continue;
+    if (IMAGE_TYPES.has(d.contentType)) pageCounts.set(d.storageKey, 1);
+    else if (d.contentType === "application/pdf") pageCounts.set(d.storageKey, await pdfPages(files, d.storageKey));
+    else pageCounts.set(d.storageKey, null);
   }
+  const { images, fingerprints } = await inlinePhotos(
+    facts.documents.filter((d) => !isListedDocument(d, attachmentFields)),
+    files,
+  );
   // The Signatures the path's events recorded, and the acting Companies' logos and Stamps in force
   // at close (RP-650): stored under members/ and companies/, which the worker may read (ADR 0023).
-  const marks = [
-    ...facts.transitions.map((t) => t.signature),
-    ...facts.companies.flatMap((c) => [c.logo, c.stamp]),
-  ].filter((m): m is NonNullable<typeof m> => m !== null && IMAGE_TYPES.has(m.contentType));
-  for (const mark of marks) {
-    if (images.has(mark.storageKey)) continue;
-    const bytes = await files.get(mark.storageKey);
-    if (bytes && bytes.length <= MAX_PHOTO_BYTES) images.set(mark.storageKey, `data:${mark.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
-  }
-  return { pageCounts, images };
+  // Inlined as the photos are, with their fingerprints, within limits of their own.
+  const seen = new Set<string>();
+  const marks = [...facts.transitions.map((t) => t.signature), ...facts.companies.flatMap((c) => [c.logo, c.stamp])].flatMap((m) =>
+    m === null || images.has(m.storageKey) || seen.has(m.storageKey) ? [] : (seen.add(m.storageKey), [{ storageKey: m.storageKey, contentType: m.contentType, size: 0 }]),
+  );
+  const read = await inlinePhotos(marks, files);
+  for (const [key, url] of read.images) images.set(key, url);
+  for (const [key, sha] of read.fingerprints) fingerprints.set(key, sha);
+  return { pageCounts, images, fingerprints };
 }
 
 async function pdfPages(files: RecordFiles, key: string): Promise<number | null> {

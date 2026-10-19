@@ -22,8 +22,11 @@ import {
   projectFilesFromEnv,
   s3RecordFiles,
   sealTamperOffsets,
+  PINNED_VERAPDF_IMAGE,
+  veraPdfDockerSession,
   verifySeal,
   withByteChanged,
+  type PdfAValidator,
   type PdfRenderer,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
@@ -33,6 +36,11 @@ import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
+/** veraPDF, in one container for the file. */
+const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
+/** Stands in for veraPDF on the records other suites left behind. */
+const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
+
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
 // The worker connects as the app role, with no Member set.
@@ -40,6 +48,7 @@ const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
 const renderer = chromiumRenderer();
 afterAll(async () => {
+  await veraPdf.close();
   await renderer.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
@@ -80,7 +89,7 @@ let c2Engineer: Caller;
 let handler: OutboxHandler;
 
 /** The record job as the worker runs it, with the local adapters. */
-async function recordHandler(rendering: PdfRenderer = renderer): Promise<OutboxHandler> {
+async function recordHandler(rendering: PdfRenderer = renderer, validator: PdfAValidator = veraPdf): Promise<OutboxHandler> {
   const signer = await localSealSigner();
   const timestamps = await localTimestampAuthority();
   return documentalRecordHandler({
@@ -90,6 +99,8 @@ async function recordHandler(rendering: PdfRenderer = renderer): Promise<OutboxH
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
+    // The checks before publishing (RP-155) validate with veraPDF itself.
+    validator,
   });
 }
 
@@ -183,8 +194,8 @@ beforeAll(async () => {
   orEngineer = orMember.caller;
   c2Engineer = c2Member.caller;
   handler = await recordHandler();
-  // Anything earlier tests left in the outbox is not ours to judge.
-  await drainOutbox(worker, { documental_record: handler });
+  // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
+  await drainOutbox(worker, { documental_record: await recordHandler(renderer, unvalidated) });
 
   // Every item the read-only tests share is closed here at once, then the worker runs once
   // (one Chromium start, one sealer), so a loaded machine pays for the setup one time.
@@ -205,7 +216,7 @@ beforeAll(async () => {
   await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${signer.id}/positions`, { positions: ["engineer"] }));
   await drainOutbox(worker, { documental_record: handler });
   shared = { approved, codeC, cancelled, signed, beforeWorker };
-}, 180_000);
+}, 240_000);
 
 interface Shared {
   approved: string;
@@ -325,7 +336,8 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(xml).not.toContain(hidden);
     // Every value it holds is on the pages: element text and attributes, but its structure
     // (languages, numbering, the layout version), and the times, which the pages print in Riyadh time.
-    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri"]);
+    // sha256 is the fingerprint of a photo's image, which the page prints as a picture (RP-155: how a Re-produce finds the file).
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri", "sha256"]);
     const body = xml.replace(/^<\?xml[^>]*\?>/, "");
     const values = [
       ...[...body.matchAll(/>([^<>]+)</g)].map((m) => m[1]!),
@@ -366,8 +378,9 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     expect(xml).not.toContain(rows[0]!.at);
   });
 
-  it("validates as PDF/A-3", async () => {
+  it("validates as PDF/A-3: our own rules, and veraPDF's (the checks before publishing ran it)", async () => {
     expect(await pdfA3Problems(record)).toEqual([]);
+    expect(await veraPdf.validate(record)).toEqual({ compliant: true, problems: [] });
   });
 });
 

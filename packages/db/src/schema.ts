@@ -141,7 +141,9 @@ export interface AdminActionTable {
     | "add_default_stage"
     | "rename_default_stage"
     | "reorder_default_stages"
-    | "refuse_workflow_publish";
+    | "refuse_workflow_publish"
+    | "reproduce_documental_record"
+    | "read_documental_record_alerts";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -338,6 +340,23 @@ export interface ApprovedSupplierTable {
   trade_value_id: string;
   scope_id: string | null;
   status: Generated<"approved" | "withdrawn">;
+}
+
+/**
+ * A Package (RP-636): a named group of submittals of one Participant. Only the
+ * columns the app role may read, under `app.sees_package`; who created it, when,
+ * and whether it was discarded are the database's own. An item's Package is read through
+ * `app.work_item_package` (work_item.package_id is never granted), its items
+ * through `app.package_items`. Written through the app.* functions of the
+ * open_package migration.
+ */
+export interface PackageTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  seq: number;
+  name: ColumnType<Bilingual, string, string>;
+  status: Generated<"open" | "in_progress" | "done">;
 }
 
 /**
@@ -796,6 +815,7 @@ export interface Database {
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
+  package: PackageTable;
   submittal_register_import: SubmittalRegisterImportTable;
   submittal_register_import_row: SubmittalRegisterImportRowTable;
   project_required_field: ProjectRequiredFieldTable;

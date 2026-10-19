@@ -609,6 +609,83 @@ export const LocationLevels: Story = {
   },
 };
 
+// The Packages the viewer sees (RP-662), as `GET /v1/projects/:id/packages` gives them: numbers
+// count per owning Company, so two can both be PKG-001.
+const ownPackage = { id: "00000000-0000-4000-8000-0000000000f1", number: "PKG-001", owner: { participantId: "00000000-0000-4000-8000-0000000000b1", companyName: ownCompany } };
+const otherPackage = { id: "00000000-0000-4000-8000-0000000000f2", number: "PKG-001", owner: { participantId: consultantId, companyName: consultant } };
+const packageFilter = { label: "Package", choices: [ownPackage, otherPackage] };
+const packageField = b("Package", "الحزمة");
+const packageArgs = (context: PlayContext) => ({ ...packageFilter, label: storyText(context, packageField) });
+
+/**
+ * The Package filter (RP-662): only the Packages the viewer sees, each by its PKG number (left
+ * to right) beside its owning Company, so two Companies' PKG-001 tell apart. One at a time.
+ */
+export const PackageChoices: Story = {
+  args: { packages: packageFilter },
+  render: (args, context) => <WorkItemList {...args} packages={packageArgs(context)} locale={storyLocale(context)} labels={workItemListLabels[storyLocale(context)]} />,
+  play: async (context) => {
+    const panel = await openFilters(context, packageField);
+    const choices = within(within(panel).getByRole("radiogroup", { name: storyText(context, packageField) })).getAllByRole("radio");
+    await expect(choices).toHaveLength(2);
+    await expect(choices[0]).toHaveAccessibleName(`PKG-001 ${storyText(context, ownCompany)}`);
+    await expect(choices[1]).toHaveAccessibleName(`PKG-001 ${storyText(context, consultant)}`);
+    await expectLaidOutLeftToRight(within(choices[1]!).getByText("PKG-001"));
+    await userEvent.click(choices[1]!);
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, packageId: otherPackage.id });
+  },
+};
+
+/** A Package chosen counts as a filter, is ticked in its field, and "Clear all" clears it. */
+export const PackageChosen: Story = {
+  args: { packages: packageFilter, query: { ...defaults, packageId: ownPackage.id } },
+  render: PackageChoices.render,
+  play: async (context) => {
+    const panel = await openFilters(context, packageField);
+    await expect(within(panel).getByRole("tab", { name: `${storyText(context, packageField)} 1` })).toBeVisible();
+    await expect(within(panel).getAllByRole("radio")[0]).toBeChecked();
+    await userEvent.click(within(panel).getByRole("button", { name: storyText(context, copy.clearAll) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith(defaults);
+  },
+};
+
+/**
+ * The Package chosen is named in the toolbar, not only counted: its PKG number (left to right)
+ * and owning Company, as the Package page links here (`?packageId=`), on the List and the Kanban.
+ * Its × leads to the same query without it.
+ */
+export const PackageNamedInToolbar: Story = {
+  args: { packages: packageFilter, query: { ...defaults, packageId: otherPackage.id } },
+  render: PackageChoices.render,
+  play: async (context) => {
+    const chip = context.canvasElement.querySelector<HTMLElement>("[data-package-filter]")!;
+    await expect(chip).toHaveTextContent(`PKG-001 ${storyText(context, consultant)}`);
+    await expectLaidOutLeftToRight(within(chip).getByText("PKG-001"));
+    const clear = within(chip).getByRole("link");
+    await expect(clear).toHaveAccessibleName(new RegExp(storyText(context, packageField)));
+    await expect(clear.getAttribute("href")).not.toContain(otherPackage.id);
+  },
+};
+
+/** The Kanban shares the toolbar, so it filters by Package too. */
+export const PackageOnTheKanban: Story = {
+  args: { packages: packageFilter, board: <p>Kanban</p> },
+  render: PackageChoices.render,
+  play: async (context) => {
+    const panel = await openFilters(context, packageField);
+    await userEvent.click(within(panel).getAllByRole("radio")[0]!);
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, packageId: ownPackage.id });
+  },
+};
+
+/** Without Packages (another Module, or a viewer who sees none), the panel has no Package field. */
+export const NoPackageField: Story = {
+  play: async (context) => {
+    const panel = await openFilters(context, copy.status);
+    await expect(within(panel).queryByRole("tab", { name: new RegExp(`^${storyText(context, packageField)}`) })).toBeNull();
+  },
+};
+
 /**
  * The filters applied: the Filters button counts them, each field its values,
  * the chosen value is pressed, and "Clear all" clears them but not the search

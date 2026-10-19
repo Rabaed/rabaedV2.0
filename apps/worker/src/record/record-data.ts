@@ -1,7 +1,8 @@
 import type { CommentFact, RecordFacts, TransitionFact } from "@rabaed/db";
 import { offersReplacement, offersRevision, outcomeLook, riyadhDay, type BilingualText, type OutcomeLook } from "@rabaed/domain";
 import { actionAnswerLines, type CardLine } from "./action-answers.ts";
-import { formContent, isListedDocument, type RecordBlock, type RecordSection } from "./form-content.ts";
+import { formContent, isListedDocument, type RecordBlock, type RecordPhoto, type RecordSection } from "./form-content.ts";
+import { sectionsWithFingerprints, withFingerprints } from "./photo-fingerprints.ts";
 import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 
 // The Record Data (ADR 0023; workflow-engine.md §7; form-engine.md §6): one XML
@@ -23,6 +24,11 @@ import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 // Version 4 (RP-147) adds the appendix: each shared Document of it by name and
 // fingerprint, and whether the record gives its pages (which), carries it inside
 // the PDF, or only lists it, held in Rabaed. Never its storage key or its size.
+//
+// Each Form photo, logo, Signature and Stamp whose image the page prints also carries
+// that image's fingerprint (a `sha256` attribute, RP-155), so a Re-produce finds the
+// same file again. It is not text on the page: it fingerprints the picture the page
+// prints.
 
 /** The layout version the Record Data is printed with (layout.ts). */
 export const LAYOUT_VERSION = "4";
@@ -43,6 +49,8 @@ export interface CompanyLine {
   readonly role: RecordText;
   /** Whether it prints its logo in force at the close (the companies strip only); its name always. */
   readonly logo?: boolean;
+  /** The fingerprint (hex SHA-256) of the logo it prints (RP-155: how a Re-produce finds it again). */
+  readonly logoSha256?: string | null;
 }
 
 export interface PersonLine {
@@ -200,6 +208,8 @@ export interface SignatureCard extends PersonLine {
   readonly at: string;
   /** Whether it prints the Signature the Transition's event recorded. */
   readonly signature: boolean;
+  /** The fingerprint (hex SHA-256) of the Signature it prints. */
+  readonly signatureSha256?: string | null;
   readonly lines: readonly CardLine[];
 }
 
@@ -210,6 +220,8 @@ export interface StampLine {
   readonly role: RecordText;
   /** Whether it prints the Stamp in force at the close. */
   readonly image: boolean;
+  /** The fingerprint (hex SHA-256) of the Stamp it prints. */
+  readonly imageSha256?: string | null;
 }
 
 /** The Transitions that give an item back, never on the record (V7): a Return, and a Send Back (a Code the Owner sent back is one). */
@@ -286,8 +298,9 @@ export function recordDataOf(
   verification: RecordData["verification"],
   pageCounts: ReadonlyMap<string, number | null> = new Map(),
   hasImage: (key: string) => boolean = () => true,
+  fingerprints: ReadonlyMap<string, string> = new Map(),
 ): RecordData {
-  return recordOf(facts, verification, pageCounts, hasImage).data;
+  return recordOf(facts, verification, pageCounts, hasImage, fingerprints).data;
 }
 
 /** The Record Data of a closed item, and where the images it flags are stored (for the renderer only). */
@@ -298,9 +311,12 @@ export function recordOf(
   pageCounts: ReadonlyMap<string, number | null> = new Map(),
   /** Whether the image stored under a key could be read: one that can't is printed as missing, and the Record Data says so. */
   hasImage: (key: string) => boolean = () => true,
+  /** The SHA-256 (hex) of each image the page prints (Form photos, logos, Signatures, Stamps), by storage key. */
+  fingerprints: ReadonlyMap<string, string> = new Map(),
 ): { data: RecordData; images: RecordImages } {
   const language = facts.recordLanguage;
   const imageKey = (image: { readonly storageKey: string } | null): string | null => (image && hasImage(image.storageKey) ? image.storageKey : null);
+  const fingerprintOf = (key: string | null): string | null => (key === null ? null : (fingerprints.get(key) ?? null));
   const path = recordPath(facts.transitions);
   const cancelled = facts.outcome === "cancelled";
   const set = facts.outcomes;
@@ -351,6 +367,7 @@ export function recordOf(
     label: pick(labelOf(t, i), language),
     at: t.at,
     signature: signatures[i] !== null,
+    signatureSha256: fingerprintOf(signatures[i] ?? null),
     lines: t === recommendStep ? [] : actionAnswerLines(t.actionForm, t.answers, language),
   }));
 
@@ -379,7 +396,7 @@ export function recordOf(
 
   const stampCompanies = [...new Set(path.map((t) => t.participantId))].flatMap((id) => companyOf(id) ?? []);
   const stampKeys = stampCompanies.map((c) => imageKey(c.stamp));
-  const stamps: StampLine[] = stampCompanies.map((c, i) => ({ company: pick(c.name, language), role: pick(c.roleName, language), image: stampKeys[i] !== null }));
+  const stamps: StampLine[] = stampCompanies.map((c, i) => ({ company: pick(c.name, language), role: pick(c.roleName, language), image: stampKeys[i] !== null, imageSha256: fingerprintOf(stampKeys[i] ?? null) }));
   const stripCompanies = facts.companies.filter((c) => c.baseRole === "owner" || acted.has(c.participantId));
   const logoKeys = stripCompanies.map((c) => imageKey(c.logo));
 
@@ -423,12 +440,12 @@ export function recordOf(
     issuedBy: issuer ? person(issuer) : null,
     confirmedBy: confirmation && confirmation !== issuer ? person(confirmation) : null,
     reviewComments: facts.reviewComments,
-    companies: stripCompanies.map((c, i) => ({ ...company(c), logo: logoKeys[i] !== null })),
+    companies: stripCompanies.map((c, i) => ({ ...company(c), logo: logoKeys[i] !== null, logoSha256: fingerprintOf(logoKeys[i] ?? null) })),
     parties: facts.companies.map(company),
     trades: facts.trades.map((t) => ({ name: pick(t.name, language), selected: t.selected })),
     location: (facts.location ?? []).map((l) => pick(l, language)),
     scopes: facts.scopes.map((s) => pick(s, language)),
-    classification,
+    classification: withFingerprints(classification, fingerprints),
     reply: replyExcerpt(codeEntry?.remarks ?? null),
     transitions: path.map((t, i) => ({
       ...person(t),
@@ -437,7 +454,7 @@ export function recordOf(
       mark: markOf(t),
       contentSha256: t.contentSha256,
     })),
-    sections,
+    sections: sectionsWithFingerprints(sections, fingerprints),
     documents: facts.documents
       .filter((d) => isListedDocument(d, attachmentFieldKeys))
       .map((d) => ({ fileName: d.fileName, pages: pageCounts.get(d.storageKey) ?? null })),
@@ -495,6 +512,10 @@ function cancellationXml(c: Cancellation, indent: string): string[] {
     `${indent}</cancelled>`,
   ];
 }
+/** An image's fingerprint attribute, when the job read the image. */
+const sha = (sha256: string | null | undefined) => (sha256 ? ` sha256="${escape(sha256)}"` : "");
+
+const photoXml = (p: RecordPhoto) => `<photo${p.takenAt ? at(p.takenAt) : ""}${sha(p.sha256)}>${escape(p.fileName)}</photo>`;
 
 function blockXml(block: RecordBlock, indent: string): string[] {
   const i2 = `${indent}  `;
@@ -522,7 +543,7 @@ function blockXml(block: RecordBlock, indent: string): string[] {
           ...lang("text", item.text, `${i2}  `),
           ...lang("answer", item.answer, `${i2}  `),
           ...(item.comment === null ? [] : [`${i2}  <comment>${escape(item.comment)}</comment>`]),
-          ...item.photos.map((p) => `${i2}  <photo${p.takenAt ? at(p.takenAt) : ""}>${escape(p.fileName)}</photo>`),
+          ...item.photos.map((p) => `${i2}  ${photoXml(p)}`),
           `${i2}</item>`,
         ]),
         `${indent}</checklist>`,
@@ -531,7 +552,7 @@ function blockXml(block: RecordBlock, indent: string): string[] {
       return [
         `${indent}<photos>`,
         ...lang("label", block.label, i2),
-        ...block.photos.map((p) => `${i2}<photo${p.takenAt ? at(p.takenAt) : ""}>${escape(p.fileName)}</photo>`),
+        ...block.photos.map((p) => `${i2}${photoXml(p)}`),
         `${indent}</photos>`,
       ];
   }
@@ -569,7 +590,7 @@ export function recordDataXml(data: RecordData): string {
       "    <company>",
       ...lang("name", c.name, "      "),
       ...lang("role", c.role, "      "),
-      ...(c.logo ? ["      <logo/>"] : []),
+      ...(c.logo ? [`      <logo${sha(c.logoSha256)}/>`] : []),
       "    </company>",
     ]),
     "  </companies>",
@@ -654,7 +675,7 @@ export function recordDataXml(data: RecordData): string {
       ...lang("verb", c.verb, "      "),
       ...lang("label", c.label, "      "),
       ...person(c, "      "),
-      ...(c.signature ? ["      <signature/>"] : []),
+      ...(c.signature ? [`      <signature${sha(c.signatureSha256)}/>`] : []),
       ...c.lines.flatMap((line) => [
         "      <answer>",
         ...lang("label", line.label, "        "),
@@ -676,7 +697,7 @@ export function recordDataXml(data: RecordData): string {
       "    <stamp>",
       ...lang("name", s.company, "      "),
       ...lang("role", s.role, "      "),
-      ...(s.image ? ["      <image/>"] : []),
+      ...(s.image ? [`      <image${sha(s.imageSha256)}/>`] : []),
       "    </stamp>",
     ]),
     "  </stamps>",

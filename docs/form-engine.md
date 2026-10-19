@@ -412,6 +412,8 @@ Every Form Version carries a `pdf` block: its sections' `include`, `width` and `
 - **Integrity:** a carried file's bytes must match its fingerprint and be in the store; otherwise the job fails and retries (then dead-letters), rather than a record holding something other than what was submitted. A Document from before RP-618 (no fingerprint) is fingerprinted from its stored bytes: a carried one as it is read, a held one streamed and hashed without being held in memory.
 - Seam 1: `apps/api/test/documental-record-appendix.test.ts` (scenarios RP-147-1, RP-147-2).
 
+**Photo fingerprints (RP-155):** each Form photo in the Record Data carries the SHA-256 of its image (`<photo sha256="…">`), a structural attribute that is not printed. It fingerprints a picture the page already prints, so it tells a holder nothing the pages don't, and it lets Re-produce prove it prints the very bytes the item closed with (settled 2026-10-19). The logos, Signatures and Stamps carry theirs the same way (`<logo sha256="…"/>`, `<signature sha256="…"/>`, `<image sha256="…"/>`, set when the job read the image), and the appendix's files already carry theirs, so a Re-produce remakes all of them from the same files, through the same PDF maker (`make-pdf.ts`), and fails rather than replace the record when its Record Data comes out different.
+
 ### PDF Templates
 
 Retired (2026-10-16, ADR 0023): a Form no longer has several PDF Templates, and there are no paper-matching templates. The term now names the one Rabaed layout above (GLOSSARY.md).

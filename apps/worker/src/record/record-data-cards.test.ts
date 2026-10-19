@@ -134,10 +134,18 @@ describe("a Cancelled record", () => {
 describe("the Stamps", () => {
   it("are every Company whose Member acted on the path, labelled by role; never the Owner who did not act", () => {
     expect(data("B").stamps).toEqual([
-      { company: { en: "Al Rashid Contracting" }, role: { en: "Main Contractor" }, image: true },
-      { company: { en: "Gulf Engineering Consultants" }, role: { en: "Consultant" }, image: true },
+      { company: { en: "Al Rashid Contracting" }, role: { en: "Main Contractor" }, image: true, imageSha256: null },
+      { company: { en: "Gulf Engineering Consultants" }, role: { en: "Consultant" }, image: true, imageSha256: null },
     ]);
     expect(recordOf(goldenFacts("B", "en"), verification).images.stamps).toEqual(["stamp-c1", "stamp-k1"]);
+    // With the job's fingerprints, each image carries its own (RP-155: how a Re-produce finds it again).
+    const fingerprints = new Map([["stamp-c1", "c1".repeat(32)], ["sig-omar", "0a".repeat(32)], ["logo-k1", "1c".repeat(32)]]);
+    const fingerprinted = recordOf(goldenFacts("B", "en"), verification, new Map(), () => true, fingerprints).data;
+    expect(fingerprinted.stamps.map((s) => s.imageSha256)).toEqual(["c1".repeat(32), null]);
+    expect(fingerprinted.cards.filter((c) => c.name.en === "Omar Haddad").map((c) => c.signatureSha256)).toContain("0a".repeat(32));
+    expect(fingerprinted.companies.map((c) => c.logoSha256)).toContain("1c".repeat(32));
+    const xml = recordDataXml(fingerprinted);
+    for (const tag of [`<image sha256="${"c1".repeat(32)}"/>`, `<signature sha256="${"0a".repeat(32)}"/>`, `<logo sha256="${"1c".repeat(32)}"/>`]) expect(xml).toContain(tag);
     expect(data("owner").stamps.map((s) => s.role.en)).toEqual(["Main Contractor", "Consultant", "Owner"]);
   });
 });

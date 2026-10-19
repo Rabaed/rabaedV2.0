@@ -8,6 +8,8 @@ import {
   type BoardCardLayout,
   type BoardCardLayoutChange,
   type Locale,
+  type ModuleView,
+  type PackageSummary,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemExport,
   type WorkItemDetail,
@@ -165,6 +167,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       code: (code) => t("board.code", { code }),
       createdOn: (date) => t("board.createdOn", { date }),
       submittedOn: (date) => t("board.submittedOn", { date }),
+      openPackage: (number, name) => t("board.openPackage", { number, name }),
     },
     layout: Object.fromEntries(layoutKeys.map((key) => [key, t(`layout.${key}`)])) as BoardLayoutMenuLabels,
   };
@@ -192,6 +195,8 @@ export function WorkItemListOrKanban(
     projectName?: string;
     /** The filter fields' names in the other language. */
     hints?: WorkItemFilterHints;
+    /** The Submittals' Package filter (RP-662): the Project's Packages the Member sees; none, no Package field. */
+    packages?: PackageSummary[];
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
@@ -296,6 +301,8 @@ export function WorkItemListOrKanban(
       }
       action={action}
       hints={hints}
+      // No Package field for a Member who sees none, unless the URL already holds one (so it can be cleared).
+      packages={props.packages && (props.packages.length > 0 || query.packageId) ? { label: t("list.package"), choices: props.packages } : undefined}
       moreActions={moreActions && moreActions.length > 0 && <MoreActionsMenu actions={moreActions} label={t("moreActions")} linkAs={NextLink} />}
       viewSwitch={
         <>
@@ -310,11 +317,17 @@ export function WorkItemListOrKanban(
             />
           )}
           {/* The Kanban has no pages: switching keeps the filters, from the first page. */}
-          <WorkItemViewSwitch
+          <WorkItemViewSwitch<ModuleView>
             view={view}
-            labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
-            // Each View in its own order: the List by Submittal No., the Kanban by Step Age.
-            hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? "documentNumber" : "stepAge", dir: undefined })}
+            // The Submittals also offer their Packages (RP-660).
+            views={module === "submittals" ? ["kanban", "list", "packages"] : ["kanban", "list"]}
+            labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban"), packages: t("viewSwitch.packages") }}
+            // Each View in its own order: the List by Submittal No., the Kanban by Step Age. The Packages view takes no filter.
+            hrefFor={(v) =>
+              v === "packages"
+                ? `${pathname}?view=packages`
+                : hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? "documentNumber" : "stepAge", dir: undefined })
+            }
             linkAs={NextLink}
           />
         </>
@@ -333,6 +346,8 @@ export function WorkItemListOrKanban(
               className="-mx-4 px-4 sm:-mx-7 sm:px-7"
               listHrefFor={(q) => hrefIn("list", q)}
               itemHref={itemHref}
+              // A card's Package chip, where the API gives the item's Package (RP-659).
+              packageHref={(id) => getPathname({ href: `/packages/${id}`, locale })}
               linkAs={NextLink}
               onMove={(card, move) => setMoving({ card, move })}
             />

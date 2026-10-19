@@ -14,6 +14,7 @@ import {
   listColumns,
   outcomeLook,
   ownStepCounts,
+  packageNumber,
   parseActionForm,
   raisedFromManual,
   stageCategories,
@@ -25,6 +26,7 @@ import {
   type BilingualText,
   type ListColumnLayout,
   type Outcome,
+  type RaisedFromSource,
   type Locale,
   type WorkItemCursorSort,
   type WorkItemExport,
@@ -140,6 +142,8 @@ type Row = {
   /** Who closed it: my own Company's person by name, else the closing Company only (V14). */
   closer_name: BilingualText | null;
   closer_company_name: BilingualText | null;
+  /** Its Package (RP-636), only where the viewer sees the Package (app.work_item_package); else null. */
+  package: { id: string; seq: number; name: BilingualText } | null;
 } & Partial<SnagRow>;
 
 /** What a Snag List row adds (RP-94, `snagColumns`): its source and its first photo. */
@@ -320,6 +324,10 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
             ) select 1 from up where ${named(sql.ref("up.name"))}))`;
     conditions.push(sql`(r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text)) or ${onCard})`);
   }
+  // One Package's submittals (RP-647), through app.package_items: the items of a Package the viewer
+  // sees that they see too, none of one they don't (work_item.package_id is not theirs to read). So a
+  // Package they don't see matches nothing, exactly like a made-up id.
+  if (q.packageId !== undefined) conditions.push(sql`r.id in (select app.package_items(${q.packageId}::uuid))`);
   if (q.type.length > 0) conditions.push(sql`r.type_code = any(${q.type}::text[])`);
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);
@@ -566,6 +574,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,
     ...(r.raiser_name ? { raiserCompanyName: r.raiser_name } : {}),
+    ...(r.package ? { package: { id: r.package.id, number: packageNumber(r.package.seq), name: r.package.name } } : {}),
     // Who closed it (RP-410): my own Company's person, or the Company only (V14).
     closedBy: open
       ? null
@@ -598,39 +607,45 @@ function toRow(r: Row, now: Date): WorkItemRow {
 
 /** A Snag List row's source and photo (RP-94), from `snagColumns`. */
 function snagFields(r: Row & SnagRow): Pick<WorkItemRow, "raisedFrom" | "photo"> {
+  return { raisedFrom: raisedFromOf(r), photo: r.photo_id ? { documentId: r.photo_id, contentType: r.photo_type! } : null };
+}
+
+type SourceRow = Pick<SnagRow, "source_number" | "source_subject" | "source_id" | "source_outcome" | "source_outcome_name" | "source_outcomes">;
+
+/** The item a row was raised from (RP-94), from `sourceColumns`; null when it was raised by hand. */
+function raisedFromOf(r: SourceRow): RaisedFromSource | null {
+  if (r.source_number === null) return null;
   const outcome = r.source_outcomes?.find((o) => o.code === r.source_outcome);
   return {
-    raisedFrom:
-      r.source_number === null
-        ? null
-        : {
-            documentNumber: r.source_number,
-            subject: r.source_subject ?? "",
-            workItemId: r.source_id,
-            // Its live data only for a viewer who sees it (E1): source_outcome is read through RLS.
-            outcome:
-              r.source_id && outcome && r.source_outcome_name
-                ? { code: outcome.code, name: r.source_outcome_name, look: outcomeLook(outcome, r.source_outcomes!) }
-                : null,
-          },
-    photo: r.photo_id ? { documentId: r.photo_id, contentType: r.photo_type! } : null,
+    documentNumber: r.source_number,
+    subject: r.source_subject ?? "",
+    workItemId: r.source_id,
+    // Its live data only for a viewer who sees it (E1): source_outcome is read through RLS.
+    outcome:
+      r.source_id && outcome && r.source_outcome_name
+        ? { code: outcome.code, name: r.source_outcome_name, look: outcomeLook(outcome, r.source_outcomes!) }
+        : null,
   };
 }
 
 /**
- * The Snag List's own columns (RP-94) over a row of `visibleRows` (as `r`), with `snagJoins`:
- * - its source, the item its `raised_from` Link names, by Document Number and Subject as
- *   app.work_item_links gives them (E1), its id only when the viewer sees it. Its outcome is
- *   read from work_item through RLS, so only for a viewer who sees the source: a Link never
- *   carries the target's live data;
- * - its first photo the viewer sees: a Document of a Form field (not a checklist item's
- *   evidence, nor an annotated copy) that is an image, in upload order (app.document_times),
- *   read through the documents policy (V19).
+ * The item `workItemId` was raised from, as its Snag List row names it (RP-628, the item page's
+ * Raised from card); null when it was raised by hand. Read as the Member, like the row.
  */
-const snagColumns = sql`rf.document_number as source_number, rf.subject as source_subject, rf.work_item_id as source_id,
-  rfo.outcome as source_outcome, rfo.name as source_outcome_name, rfo.outcomes as source_outcomes,
-  ph.id as photo_id, ph.content_type as photo_type`;
-const snagJoins = sql`left join lateral (
+export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<RaisedFromSource | null> {
+  const { rows } = await sql<SourceRow>`select ${sourceColumns} from (select ${workItemId}::uuid as id) r ${sourceJoins}`.execute(trx);
+  return rows[0] ? raisedFromOf(rows[0]) : null;
+}
+
+/**
+ * Over a row of `visibleRows` (as `r`), with `sourceJoins`: its source, the item its
+ * `raised_from` Link names, by Document Number and Subject as app.work_item_links gives them
+ * (E1), its id only when the viewer sees it. Its outcome is read from work_item through RLS, so
+ * only for a viewer who sees the source: a Link never carries the target's live data.
+ */
+const sourceColumns = sql`rf.document_number as source_number, rf.subject as source_subject, rf.work_item_id as source_id,
+  rfo.outcome as source_outcome, rfo.name as source_outcome_name, rfo.outcomes as source_outcomes`;
+const sourceJoins = sql`left join lateral (
     select l.document_number, l.subject, l.work_item_id from app.work_item_links(r.id) l
     where l.kind = 'raised_from' order by l.created_at limit 1
   ) rf on true
@@ -642,7 +657,17 @@ const snagJoins = sql`left join lateral (
     from work_item s
     join outcome o on o.project_id = s.project_id and o.work_item_type_id = s.work_item_type_id and o.code = s.outcome
     where s.id = rf.work_item_id
-  ) rfo on true
+  ) rfo on true`;
+
+/**
+ * The Snag List's own columns (RP-94) over a row of `visibleRows` (as `r`), with `snagJoins`:
+ * - its source (`sourceColumns`);
+ * - its first photo the viewer sees: a Document of a Form field (not a checklist item's
+ *   evidence, nor an annotated copy) that is an image, in upload order (app.document_times),
+ *   read through the documents policy (V19).
+ */
+const snagColumns = sql`${sourceColumns}, ph.id as photo_id, ph.content_type as photo_type`;
+const snagJoins = sql`${sourceJoins}
   left join lateral (
     select d.id, d.content_type from app.document_times(r.id) t
     join document d on d.id = t.document_id
@@ -659,7 +684,10 @@ const snagReads = ({ moduleKey }: QueryScope) =>
 // shows only their own Company's people (V14).
 const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name, cm.full_name as closer_name,
   m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me,
-  hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role`;
+  hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role,
+  -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package. A column of
+  -- the rows read, not of visibleRows, so the counts never ask for it and a page asks for its own rows only.
+  (select jsonb_build_object('id', pk.package_id, 'seq', pk.seq, 'name', pk.name) from app.work_item_package(r.id) pk) as package`;
 // RP-410:
 // - The closing move of a closed item: the latest event, as RLS lets the viewer read it (the
 //   closing Transition is shared), that brought it to the Step it is at. Its actor is named only
@@ -783,6 +811,23 @@ export function exportWorkItems(
     // Stopped by the cap, not by the pages a search read so far.
     return { items: rows.slice(0, read).map((r) => toRow(r, now)), capped: read === max && rows.length > read };
   });
+}
+
+/**
+ * Items `ids` of the scope as the viewer reads them in the List, every Revision (not only the
+ * latest), by id; one they don't see is absent. A Package's page (RP-641) reads its items through
+ * this, so their "With" (V14) and Review Code are the List's own.
+ */
+export async function workItemRowsById(trx: Trx, scope: QueryScope, ids: readonly string[], now: Date): Promise<Map<string, WorkItemRow>> {
+  if (ids.length === 0) return new Map();
+  const { rows } = await sql<Row>`
+    with r as (${visibleRows(scope, true)})
+    select r.*, ${holderColumns}
+    from r
+    ${holderJoins}
+    where r.id = any(${ids}::uuid[])
+  `.execute(trx);
+  return new Map(rows.map((r) => [r.id, toRow(r, now)]));
 }
 
 function pageCounts(rows: Row[]): Map<string, number> {
@@ -1121,6 +1166,27 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
     .orderBy("code")
     .execute();
+  return {
+    stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
+    filters: {
+      types,
+      ...(await outcomeAndDimensionChoices(trx, scope)),
+      ...(await holderChoices(trx, scope)),
+      ...(await snagChoices(trx, scope)),
+    },
+  };
+}
+
+/**
+ * What a table of the scope's items reads around its rows (the List's filters, the Package page,
+ * RP-659): each Type's outcomes on the Project, its Trades and its Locations with their tree.
+ */
+export async function outcomeAndDimensionChoices(
+  trx: Trx,
+  scope: QueryScope,
+): Promise<Pick<WorkItemList["filters"], "outcomes" | "trades" | "locations">> {
+  const { projectId } = scope;
+  const modules = modulesOf(scope);
   // Each Type's outcomes on the Project (RP-429), for the "Review Code / Result" filter and the
   // outcome badges: read like the Types themselves, the Project's copies.
   const { rows: outcomes } = await sql<WorkItemList["filters"]["outcomes"][number]>`
@@ -1147,16 +1213,10 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     order by v.depth, v.sort, v.code
   `.execute(trx);
   return {
-    stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
-    filters: {
-      types,
-      outcomes,
-      trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
-      locations: values
-        .filter((v) => v.kind === "location")
-        .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
-      ...(await holderChoices(trx, scope)),
-      ...(await snagChoices(trx, scope)),
-    },
+    outcomes,
+    trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
+    locations: values
+      .filter((v) => v.kind === "location")
+      .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
   };
 }

@@ -519,8 +519,13 @@ const PAGE_COUNTS = new Map([
 const VERIFICATION = { code: "7K2M-9QXD", link: "https://rabaed.test/verify/QmFzZTY0dXJsVG9rZW5Gb3JUaGVHb2xkZW5SZWNvcmQ" };
 
 /** A golden record: its Record Data (a fixed Verification Code and link, the Documents' page counts) and where its images are. */
-export function goldenRecord(golden: GoldenCode, language: RecordData["language"]): { data: RecordData; images: RecordImages } {
-  return recordOf(goldenFacts(golden, language), VERIFICATION, PAGE_COUNTS);
+export function goldenRecord(
+  golden: GoldenCode,
+  language: RecordData["language"],
+  /** The fingerprints of its images by storage key, as the job reads them (RP-155): none unless given. */
+  fingerprints: ReadonlyMap<string, string> = new Map(),
+): { data: RecordData; images: RecordImages } {
+  return recordOf(goldenFacts(golden, language), VERIFICATION, PAGE_COUNTS, () => true, fingerprints);
 }
 
 /** The Record Data of a golden record. */

@@ -179,6 +179,11 @@ const queryFields = {
   company: list(uuid),
   /** What it was raised from (the Snag List, RP-94): `manual`, or the Document Number of its source. */
   raisedFrom: list(raisedFromFilterValue),
+  /**
+   * One Package's submittals (RP-647), only those the viewer sees. A Package they don't see
+   * matches nothing, the same answer as a made-up id: no row tells that an item is in it.
+   */
+  packageId: uuid.optional(),
   trade: list(uuid),
   /** A Location takes in the Locations under it. */
   location: list(uuid),
@@ -247,7 +252,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "owner", "role", "company", "raisedFrom", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
+const filterKeys = [...listKeys, "packageId", "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort, in its own order, and never with a numbered page. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -305,6 +310,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     const values = query[key];
     if (values && values.length > 0) params.set(key, values.join(","));
   }
+  if (query.packageId) params.set("packageId", query.packageId);
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
   if (query.createdWithin !== undefined) params.set("createdWithin", String(query.createdWithin));
   if (query.q) params.set("q", query.q);

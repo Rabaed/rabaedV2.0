@@ -132,6 +132,8 @@ async function recordHandler(): Promise<OutboxHandler> {
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
+    // PDF/A-3 is checked with veraPDF in documental-record.test.ts and record-checks.test.ts; this suite is about the pages.
+    validator: { validate: async () => ({ compliant: true, problems: [] }) },
   });
 }
 
@@ -414,7 +416,8 @@ beforeAll(async () => {
     hijriRevision: made[8]!,
     hijriFirst,
   };
-}, 180_000);
+  // It first makes every record other suites left behind.
+}, 240_000);
 
 describe("page 1 of a Code B record with Comments, in both languages", () => {
   it("opens with the Owner and every Company whose Member acted, by name", () => {
@@ -581,7 +584,8 @@ describe("page 1 of a Code B record with Comments, in both languages", () => {
       expect(recordB.text.toLowerCase()).not.toContain(squeeze(hidden).toLowerCase());
     }
     // The Record Data: every value is printed, Arabic and Arabic-locale dates included (isPrinted).
-    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri"]);
+    // sha256 is the fingerprint of a photo's image, which the page prints as a picture (RP-155: how a Re-produce finds the file).
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri", "sha256"]);
     const body = recordB.xml.replace(/^<\?xml[^>]*\?>/, "");
     const values = [
       ...[...body.matchAll(/>([^<>]+)</g)].map((m) => m[1]!),
