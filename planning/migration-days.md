@@ -52,7 +52,7 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270602 | RP-652 | 4C | Show Inspections in the Submittals tab (moved from 20270424) |
 | 20270603 | RP-651 | 4B | Unused: the migration moved to 20270630 (via 20270612), after main's later days |
 | 20270604 | RP-86 | 4A | The Consultant Engineer's checklist on site; the proposed Result |
-| 20270605 | RP-577 | 4A | Snags from failed check items |
+| 20270605 | RP-577 | 4A | Unused: the migration moved to 20270922, after main's later days |
 | 20270606 | RP-653 | 4A | "Snags from Rev 0" on a WIR Revision |
 | 20270607 | spec RP-649 | 4A | Review fixes |
 | 20270608 | spec RP-649 | 4A | Reconciliation after `main` redefines an `app.*` function a ticket also redefines (rule 11.1) |
@@ -117,6 +117,9 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270908 | RP-644 | 5B | Unused: the migration moved to 20270920 (main gained 20270914) |
 | 20270911 | RP-960 | 5B | Unused: the migration moved to 20270921 (main gained 20270914) |
 | 20270910 | RP-157 | 23 | documental_record_verification |
+| 20270911 | RP-577 | 42 | Unused: the migration moved to 20270922, after 20270914 on main |
+| 20270914 | RP-627 | 33 | site_observation_type_and_general_trade |
+| 20270922 | RP-577 | 41 | snags_from_failed_check_items |
 | 20270915 | RP-981 | 42 | annotate_reply_photos |
 | 20270914 | RP-627 | 33 | site_observation_type_and_general_trade |
 | 20270923 | RP-677 | 34 | snag_report |
@@ -126,3 +129,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270919 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day, moved from 20270907 before queueing) |
 | 20270920 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day, moved from 20270908 before queueing) |
 | 20270921 | RP-960 | 5B | Register Import: a Type counts as raisable only on a Rabaed or the Project's own Workflow (Rabaed Admin's import runs as the app role: bootstrap) (final day, moved from 20270911 before queueing) |
+| 20270925 | RP-650 | 22 | record_signatures |
+| 20270926 | RP-147 | 22 | record_appendix |

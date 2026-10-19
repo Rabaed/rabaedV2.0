@@ -10,6 +10,7 @@ import type {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { checkedOutcome } from "../outcomes.ts";
+import type { FileStore } from "../documents/file-store.ts";
 import { takeTransition } from "./work-items.ts";
 
 // The Snag List's bulk actions (RP-629, spec RP-619). Each acts item by item through the
@@ -59,7 +60,7 @@ export function onProject(db: Db, memberId: string, projectId: string): Promise<
  * `stage`, taken and confirmed as in its pop-up. One that asks for an Action Form (a Resolve's note)
  * is not taken here: the item is skipped as `needs_input`.
  */
-export async function bulkMove(db: Db, memberId: string, projectId: string, request: SnagBulkMoveRequest, now: Date): Promise<SnagBulkResult> {
+export async function bulkMove(db: Db, files: FileStore, memberId: string, projectId: string, request: SnagBulkMoveRequest, now: Date): Promise<SnagBulkResult> {
   const result: SnagBulkResult = { done: [], skipped: [] };
   for (const id of [...new Set(request.ids)]) {
     const item = await visibleItem(db, memberId, projectId, id);
@@ -94,6 +95,7 @@ export async function bulkMove(db: Db, memberId: string, projectId: string, requ
     }
     const taken = await takeTransition(
       db,
+      files,
       memberId,
       id,
       {

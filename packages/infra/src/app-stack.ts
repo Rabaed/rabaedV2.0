@@ -133,6 +133,10 @@ export class AppStack extends Stack {
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)] }),
     );
+    // The Signatures, logos and Stamps the record prints (RP-650), read only.
+    workerTaskRole.addToPolicy(
+      new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: RECORD_IMAGE_OBJECTS.map((key) => storage.projectFiles.arnForObjects(key)) }),
+    );
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["s3:PutObject"],
