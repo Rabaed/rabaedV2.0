@@ -52,7 +52,8 @@
       "to": "open",
       "outcome": null,
       "permission": "create",
-      "actionForm": null
+      "actionForm": null,
+      "inform": ["consultant"]
     },
     {
       "key": "start_work",
