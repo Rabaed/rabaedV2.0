@@ -81,8 +81,9 @@ describe("Trades and Locations", () => {
     const res = await hostMember.caller.get(`/v1/projects/${projectId}/dimensions`);
     expect(res.statusCode).toBe(200);
     const { trade: trades, location } = res.json();
-    expect(trades.map((t: DimensionValue) => t.code)).toEqual(["EL", "ME"]);
-    expect(trades[0]).toEqual({
+    expect(trades.map((t: DimensionValue) => t.code)).toEqual(["GEN", "EL", "ME"]); // General first (RP-627), then the Trades the Admin added
+    expect(trades.find((t: DimensionValue) => t.code === "GEN").name).toEqual({ en: "General", ar: "عام" });
+    expect(trades[1]).toEqual({
       id: trade.electrical,
       parentId: null,
       depth: 1,

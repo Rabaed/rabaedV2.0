@@ -185,6 +185,11 @@ describe("load balancer", () => {
     expect(familyBehind(group)).toBe("rabaed-dev-web");
   });
 
+  it("appends the address it saw to X-Forwarded-For, which the verification page limits typed codes by (RP-157)", () => {
+    const alb = app.toJSON().Resources[loadBalancerId("LoadBalancer")] as Resource;
+    expect(alb.Properties?.LoadBalancerAttributes).toContainEqual({ Key: "routing.http.xff_header_processing.mode", Value: "append" });
+  });
+
   it("drops invalid headers, on every load balancer", () => {
     const all = resourcesOfType(env.synthesised, "AWS::ElasticLoadBalancingV2::LoadBalancer");
     expect(all).toHaveLength(2);
