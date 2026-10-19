@@ -311,6 +311,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     const values = query[key];
     if (values && values.length > 0) params.set(key, values.join(","));
   }
+  if (query.packageId) params.set("packageId", query.packageId);
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
   if (query.createdWithin !== undefined) params.set("createdWithin", String(query.createdWithin));
   if (query.q) params.set("q", query.q);
