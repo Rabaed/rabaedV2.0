@@ -143,7 +143,7 @@ export function PackagesCard({
               return (
                 <li key={v.key} className="grid gap-2 rounded-sm bg-surface-subtle px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.3fr)] sm:items-center">
                   <span className="flex min-w-0 flex-col">
-                    <bdi className="truncate font-semibold">{v.text}</bdi>
+                    <bdi className="font-semibold [overflow-wrap:anywhere]">{v.text}</bdi>
                     <span className="text-[12.5px] text-muted">{t("rows", { count: v.rows, n: n(v.rows) })}</span>
                   </span>
                   <SegmentedControl

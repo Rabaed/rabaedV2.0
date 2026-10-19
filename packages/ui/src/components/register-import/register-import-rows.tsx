@@ -81,7 +81,18 @@ export function RowReasons({ row, mapping, t: messages, locale }: { row: Registe
  * A row's Package (RP-644): its number (left-to-right) and name, or a new one's name marked
  * new; a dash for none.
  */
-export function PackageCell({ value, locale, newLabel }: { value: RegisterImportRow["package"]; locale: Locale; newLabel: string }) {
+export function PackageCell({
+  value,
+  locale,
+  newLabel,
+  marked = true,
+}: {
+  value: RegisterImportRow["package"];
+  locale: Locale;
+  newLabel: string;
+  /** Mark a new one "New Package"; false where a label beside it says so already. */
+  marked?: boolean;
+}) {
   if (value.match) {
     return (
       <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
@@ -96,8 +107,8 @@ export function PackageCell({ value, locale, newLabel }: { value: RegisterImport
   if (value.new) {
     return (
       <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
-        <Badge tone="brand">{newLabel}</Badge>
-        <bdi className="truncate">{value.new}</bdi>
+        {marked ? <Badge tone="brand">{newLabel}</Badge> : <Icon name="packages" size={14} className="shrink-0 text-brand-fg" />}
+        <bdi className="truncate font-semibold">{value.new}</bdi>
       </span>
     );
   }

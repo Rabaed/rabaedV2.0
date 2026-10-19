@@ -62,7 +62,7 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
                         {record.packages.map((p) => (
                           <span key={p.package?.id ?? `new:${p.newName}`} className="flex flex-wrap items-center gap-2">
                             <span className="text-muted">{p.newName !== null ? t("result.newPackage") : t("result.addedTo")}</span>
-                            <PackageCell value={{ text: "", match: p.package, new: p.package ? null : p.newName }} locale={locale} newLabel={t("validate.newPackage")} />
+                            <PackageCell value={{ text: "", match: p.package, new: p.package ? null : p.newName }} locale={locale} newLabel={t("validate.newPackage")} marked={false} />
                             <span className="text-muted">{t("packages.rows", { count: p.rows, n: n(p.rows) })}</span>
                           </span>
                         ))}

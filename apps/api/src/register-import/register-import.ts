@@ -253,8 +253,9 @@ async function keepOriginal(trx: Trx, files: FileStore, projectId: string, impor
   await files.put(rows[0]!.key, Buffer.from(file.content, "base64"), registerContentType(file.fileName));
   const { rows: stored } = await sql<{ outcome: string }>`select app.store_register_import_file(${importId}::uuid, ${fileId}::uuid) as outcome`.execute(trx);
   checkedOutcome(stored[0]!.outcome, ["stored"]);
+  // A file the store fails to delete never fails the Member's preview: it stays, unread (its key is gone).
   const { rows: gone } = await sql<{ key: string }>`select app.take_register_import_file_removals(100) as key`.execute(trx);
-  for (const { key } of gone) await files.remove(key);
+  await Promise.allSettled(gone.map(({ key }) => files.remove(key)));
 }
 
 /** An import's original register, as its reader downloads it: its name as uploaded, never a time. */

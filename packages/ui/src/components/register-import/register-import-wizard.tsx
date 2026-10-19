@@ -795,8 +795,8 @@ export function RegisterImportWizard({
                   {t("mappings.label")}
                 </span>
                 <Select
-                  className="min-w-56"
-                  aria-labelledby="saved-mapping-label"
+                  className="w-full sm:w-72 sm:flex-none"
+                  aria-label={t("mappings.label")}
                   value={appliedMapping ?? "none"}
                   onValueChange={(id) => {
                     setMappingSaved(false);
@@ -1246,7 +1246,7 @@ export function RegisterImportWizard({
                   {preview.packages.map((p) => (
                     <li key={p.package?.id ?? `new:${p.newName}`} className="flex flex-wrap items-center gap-2 text-[14px]">
                       <span className="w-24 shrink-0 text-[12.5px] text-muted">{p.package ? t("validate.addTo") : t("validate.newPackage")}</span>
-                      <PackageCell value={{ text: "", match: p.package, new: p.package ? null : p.newName }} locale={locale} newLabel={t("validate.newPackage")} />
+                      <PackageCell value={{ text: "", match: p.package, new: p.package ? null : p.newName }} locale={locale} newLabel={t("validate.newPackage")} marked={false} />
                       <span className="ms-auto text-[12.5px] text-muted">{t("packages.rows", { count: p.rows, n: n(p.rows) })}</span>
                     </li>
                   ))}
@@ -1442,7 +1442,7 @@ function AssignStep({
 
   return (
     <section aria-label={t("step")} className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <section aria-labelledby="assign-heading" className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-surface p-4">
           <h2 id="assign-heading" className="flex items-center gap-1.5 text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">
             {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy */}
