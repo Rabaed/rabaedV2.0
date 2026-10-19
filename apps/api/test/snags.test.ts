@@ -206,7 +206,7 @@ describe("a Snag where two Contractors cover its Trade and Location (a Visibilit
       const unpicked = await tryTake(at.k1Manager, id, "raise");
       expect({ status: unpicked.statusCode, body: unpicked.json() }).toEqual({ status: 422, body: { error: "participant_not_picked" } });
       // C2 covers Building B only; K1 is the raiser itself; and an id that names nothing.
-      for (const participant of [c2Participant, at.k1ParticipantId, randomUUID()]) {
+      for (const participant of [c2Participant, at.k1ParticipantId!, randomUUID()]) {
         const refused = await tryTake(at.k1Manager, id, "raise", { participant });
         expect({ status: refused.statusCode, body: refused.json() }, participant).toEqual({ status: 422, body: { error: "participant_not_offered" } });
       }

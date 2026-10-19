@@ -329,7 +329,7 @@ export async function submitPackage(
 
     const takes = items.map((i) => ({
       workItemId: i.id,
-      input: { transition: i.submit_key!, answers: {}, internalNote: "", assignTo: null, recommendedCode: null },
+      input: { transition: i.submit_key!, answers: {}, internalNote: "", assignTo: null, recommendedCode: null, participant: null },
     }));
     const refusals = await takeEach(trx, memberId, takes, { command: SUBMIT_COMMAND, key: input.idempotencyKey, now, stopAtFirst: false, copy });
     if (refusals.length > 0) {

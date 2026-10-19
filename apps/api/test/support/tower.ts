@@ -101,7 +101,8 @@ export const detail = async (by: Caller, id: string): Promise<WorkItemDetail> =>
 export type Tower = {
   projectId: string;
   c1ParticipantId: string;
-  k1ParticipantId: string;
+  /** K1's Participant (set by buildTower; a Tower built by hand may lack it). */
+  k1ParticipantId?: string;
   electrical: string;
   mechanical: string;
   buildingA: string;

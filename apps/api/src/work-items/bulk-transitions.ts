@@ -130,7 +130,7 @@ export async function takeBulkTransition(db: Db, files: FileStore, memberId: str
     if (stop) return { ok: false, reason: "bulk_refused", stoppedBy: { ...asItem(stop.item), reason: stop.reason } };
 
     const { transition, answers, internalNote, assignTo } = input;
-    const takes = items.map((item) => ({ workItemId: item.id, input: { transition, answers, internalNote, assignTo, recommendedCode: null } }));
+    const takes = items.map((item) => ({ workItemId: item.id, input: { transition, answers, internalNote, assignTo, recommendedCode: null, participant: null } }));
     const [refusal] = await takeEach(trx, memberId, takes, { command: COMMAND, key: input.idempotencyKey, now, stopAtFirst: true, copy });
     if (refusal) {
       const item = items.find((i) => i.id === refusal.workItemId)!;

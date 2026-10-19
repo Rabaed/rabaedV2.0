@@ -105,6 +105,7 @@ export async function bulkMove(db: Db, files: FileStore, memberId: string, proje
         internalNote: "",
         assignTo: null,
         recommendedCode: null,
+        participant: null,
         confirmed: true,
         idempotencyKey: itemKey(request.idempotencyKey, id),
       },
