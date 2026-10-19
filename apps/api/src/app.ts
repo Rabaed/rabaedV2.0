@@ -28,6 +28,7 @@ import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
 import { approvedSupplierRoutes } from "./routes/approved-suppliers.ts";
+import { packageRoutes } from "./routes/packages.ts";
 import { registerImportRoutes } from "./routes/register-imports.ts";
 import { requiredFieldRoutes } from "./routes/required-fields.ts";
 import { checklistTemplateRoutes } from "./routes/checklist-templates.ts";
@@ -169,6 +170,7 @@ export async function buildApp({
   await app.register(checklistTemplateRoutes(context));
   await app.register(registerImportRoutes(context));
   await app.register(workItemRoutes(context));
+  await app.register(packageRoutes(context));
   await app.register(snagBulkRoutes(context));
   await app.register(workflowRoutes(context));
   await app.register(workflowSettingsRoutes(context));

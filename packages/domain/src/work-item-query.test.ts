@@ -164,6 +164,14 @@ describe("the query in the URL", () => {
     expect(workItemQueryFromSearchParams({ needMyAction: "nonsense" }).needMyAction).toBe(false);
   });
 
+  it("keeps the Package filter as packageId, and reads it back (RP-662)", () => {
+    const packageId = "00000000-0000-4000-8000-0000000000f1";
+    expect(workItemSearchParams({ ...defaults, packageId }).toString()).toBe(`packageId=${packageId}`);
+    expect(workItemQueryFromSearchParams({ packageId }).packageId).toBe(packageId);
+    expect(isFilteredWorkItemQuery({ ...defaults, packageId })).toBe(true);
+    expect(withoutFilters({ ...defaults, packageId }).packageId).toBeUndefined();
+  });
+
   it("drops a cursor made for the other sort", () => {
     const cursor = encodeWorkItemCursor("stepAge", ["false", "2026-10-01T00:00:00.000000Z", "", row]);
     expect(workItemQueryFromSearchParams({ sort: "documentNumber", cursor }).cursor).toBeUndefined();

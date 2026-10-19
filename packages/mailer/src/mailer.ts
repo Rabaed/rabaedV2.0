@@ -42,12 +42,18 @@ const oneAddress = z.email();
  * recipient's language, linking to the item on the customer web (`webUrl`).
  */
 export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
-  return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link: itemLink(content.workItemId, language, webUrl) } };
+  const link = content.package ? packageLink(content.package.id, language, webUrl) : itemLink(content.workItemId!, language, webUrl);
+  return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link } };
 }
 
 /** An item's page on the customer web (`webUrl`), in `language`. */
 function itemLink(workItemId: string, language: Locale, webUrl: string): string {
   return new URL(`/${language}/work-items/${encodeURIComponent(workItemId)}`, webUrl).href;
+}
+
+/** A Package's page on the customer web (`webUrl`), in `language` (RP-643). */
+function packageLink(packageId: string, language: Locale, webUrl: string): string {
+  return new URL(`/${language}/packages/${encodeURIComponent(packageId)}`, webUrl).href;
 }
 
 /**
@@ -87,7 +93,10 @@ export function notificationDigestMessage({ to, language, projects }: Notificati
     values: {
       projects: projects.map(({ name, items }) => ({
         name,
-        items: items.map((item) => ({ ...item, link: itemLink(item.workItemId, language, webUrl) })),
+        items: items.map((item) => ({
+          ...item,
+          link: item.packageId ? packageLink(item.packageId, language, webUrl) : itemLink(item.workItemId!, language, webUrl),
+        })),
       })),
     },
   };
