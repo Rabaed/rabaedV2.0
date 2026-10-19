@@ -4,11 +4,13 @@
 // Participant reads its Creation Date; when the Draft was started reaches
 // nobody. An item not yet Submitted has no Submission Date and is left out of
 // any date range. Sorting by Submission Date pages with the cursor.
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { decodeWorkItemCursor, workItemSearchParams, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { copyWorkItem } from "./support/copy-work-items.ts";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, approvedSupplier, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
@@ -208,25 +210,26 @@ describe("cursor paging by Submission Date", () => {
     const { project, tradeId, locationId, own } = await setUpProject();
     const engineer = await projectMember(api, c1, own, ["engineer"]);
     await projectMember(api, c1, own, ["project_manager"]);
-    const created: string[] = [];
-    const subjects = new Map<string, string>();
-    for (let i = 0; i < 53; i++) {
-      // Five Subjects, shared, in an order unlike the order they were made in.
-      const title = `Item ${"DBEAC"[(i * 7) % 5]}`;
-      const res = await ok(engineer.post(`/v1/projects/${project}/work-items`, { type: "MAR", title, answers: { trade: tradeId, location: locationId } }), 201);
-      created.push(res.json().id);
-      subjects.set(res.json().id, title);
-    }
+    // Five Subjects, shared, in an order unlike the order they were made in.
+    const titleOf = (i: number) => `Item ${"DBEAC"[(i * 7) % 5]}`;
+    // The first goes through the api; the other 52 are copies of it, made in one go (53 requests took over 60 s in CI, RP-978).
+    const first = await ok(engineer.post(`/v1/projects/${project}/work-items`, { type: "MAR", title: titleOf(0), answers: { trade: tradeId, location: locationId } }), 201);
+    const copies = Array.from({ length: 52 }, (_, i) => ({ id: randomUUID(), title: titleOf(i + 1) }));
+    await copyWorkItem(migrator, first.json().id, copies);
+    const created: string[] = [first.json().id, ...copies.map((c) => c.id)];
+    const subjects = new Map<string, string>([[first.json().id, titleOf(0)], ...copies.map((c) => [c.id, c.title] as const)]);
     // Un-numbered Drafts and items not yet Submitted: by Subject, then id, never by when they were made (ADR 0015).
     // Code-unit order is `collate "C"`'s byte order for these ASCII Subjects and the ids' lowercase hex.
     const byCodeUnits = (a: string, b: string) => Number(a > b) - Number(a < b);
     const bySubject = (a: string, b: string) => byCodeUnits(subjects.get(a)!, subjects.get(b)!) || byCodeUnits(a, b);
     // 49 carry a Submission Date, in groups that share one (the id breaks the tie); 4 have none.
     const submitted = created.slice(0, 49);
-    for (const [i, id] of submitted.entries()) {
-      const at = new Date(Date.UTC(2026, 5, 1) + Math.floor(i / 7) * DAY).toISOString();
-      await sql`update work_item set submitted_at = ${at}::timestamptz where id = ${id}::uuid`.execute(migrator);
-    }
+    const submittedAt = submitted.map((_, i) => new Date(Date.UTC(2026, 5, 1) + Math.floor(i / 7) * DAY).toISOString());
+    await sql`
+      update work_item set submitted_at = s.at
+      from unnest(${submitted}::uuid[], ${submittedAt}::timestamptz[]) as s (id, at)
+      where work_item.id = s.id
+    `.execute(migrator);
     const seen: string[] = [];
     let cursor: string | undefined;
     let pages = 0;
