@@ -235,11 +235,18 @@ export function SnagList({
       setReport({ status: "failed" });
     }
   };
+  const reporting = report?.status === "asking" || report?.status === "preparing";
   const polledId = report?.status === "preparing" ? report.id : undefined;
   useEffect(() => {
     if (!bulk || polledId === undefined) return;
     let stopped = false;
+    let tries = 0;
     const timer = setInterval(() => {
+      // The worker never answered (a stopped worker): stop asking, say it failed.
+      if (++tries > 90) {
+        setReport((was) => (was?.id === polledId ? { status: "failed" } : was));
+        return;
+      }
       void bulk.report
         .check(polledId)
         .then((got) => {
@@ -372,7 +379,7 @@ export function SnagList({
             onSelect: select,
             exporting,
             onExport: (rows) => void exportRows(async () => ({ items: rows, capped: false })),
-            reporting: report?.status === "asking" || report?.status === "preparing",
+            reporting,
             onExportPdf: (ids) => void exportPdf(ids),
           }
         }
@@ -421,7 +428,7 @@ export function SnagList({
           <Button
             variant="secondary"
             size="sm"
-            disabled={report?.status === "asking" || report?.status === "preparing"}
+            disabled={reporting}
             onClick={() => void exportPdf(null)}
             className="h-[34px]"
           >
@@ -432,7 +439,7 @@ export function SnagList({
       </ListToolbar>
       {bulk && report !== null && (
         <p role="status" className="text-caption text-muted">
-          {report.status === "asking" || report.status === "preparing" ? (
+          {reporting ? (
             bulk.report.labels.preparing
           ) : report.status === "failed" ? (
             bulk.report.labels.failed

@@ -10,7 +10,7 @@
 -- * app.request_snag_report(project, language, content): for a Member of the Project; queues the
 --   row for the worker (outbox kind 'snag_report', ids only) and returns the report's id; null for
 --   anyone who is not on the Project.
--- * app.snag_report_state(report): 'preparing', 'ready' (with the PDF's storage key and file name)
+-- * app.snag_report_state(report): (only while the Member is still on the Project) 'preparing', 'ready' (with the PDF's storage key and file name)
 --   or 'failed' (its job was dead-lettered), for the Member who asked; no row for anyone else and
 --   for a made-up id.
 -- * app.snag_report_job / app.save_snag_report: the worker's.
@@ -35,7 +35,8 @@ create table snag_report (
 );
 alter table snag_report enable row level security;
 revoke all on snag_report from rabaed_app;
-create policy snag_report_owner on snag_report for select to rabaed_app using (member_id = app.current_member_id());
+create policy snag_report_owner on snag_report for select to rabaed_app
+  using (member_id = app.current_member_id() and project_id in (select app.current_project_ids()));
 
 create function app.request_snag_report(p_project_id uuid, p_language text, p_content jsonb) returns uuid
   language plpgsql volatile security definer
@@ -48,6 +49,11 @@ create function app.request_snag_report(p_project_id uuid, p_language text, p_co
     begin
       if v_member is null or p_language not in ('en', 'ar') or jsonb_typeof(p_content) is distinct from 'object'
         or not exists (select 1 from app.current_project_ids() x where x = p_project_id)
+        -- A photo is read by its storage key: only ones under this Project's own prefix (the api reads them as the Member).
+        or exists (
+          select 1 from jsonb_array_elements(coalesce(p_content -> 'items', '[]'::jsonb)) i
+          where jsonb_typeof(i -> 'photo') = 'object' and (i -> 'photo' ->> 'storageKey') not like 'projects/' || p_project_id::text || '/%'
+        )
       then
         return null;
       end if;
@@ -79,7 +85,8 @@ create function app.snag_report_state(p_report_id uuid)
         from snag_report r
         left join outbox o on o.id = r.outbox_id
         left join stored_file f on f.id = r.file_id
-        where r.id = p_report_id and r.member_id = app.current_member_id();
+        where r.id = p_report_id and r.member_id = app.current_member_id()
+          and r.project_id in (select app.current_project_ids());
     end
   $$;
 revoke all on function app.snag_report_state(uuid) from public;

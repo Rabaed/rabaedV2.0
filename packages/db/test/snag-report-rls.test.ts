@@ -89,6 +89,14 @@ describe("a report, from request to PDF", () => {
     expect(job.rows[0]).toEqual({ kind: "snag_report", payload: { snag_report_id: id } });
   });
 
+  it("refuses a photo that is not under the Project's own files", async () => {
+    const withPhoto = (key: string) => ({ ...content, items: [{ photo: { storageKey: key, contentType: "image/jpeg", size: 1 } }] });
+    const ask = (c: unknown) =>
+      withMember(app, asker, async (trx) => (await sql<{ id: string | null }>`select app.request_snag_report(${projectId}::uuid, 'en', ${JSON.stringify(c)}::jsonb) as id`.execute(trx)).rows[0]!.id);
+    expect(await ask(withPhoto(`projects/${randomUUID()}/work-items/x/photo.jpg`))).toBeNull();
+    expect(await ask(withPhoto(`projects/${projectId}/work-items/x/photo.jpg`))).toBeTruthy();
+  });
+
   it("is preparing to its asker, and nothing to a colleague on the Project, a Member of no Project and a made-up id", async () => {
     expect(await state(asker, id)).toEqual([{ status: "preparing", storage_key: null }]);
     expect(await state(colleague, id)).toEqual([]);

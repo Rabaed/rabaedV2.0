@@ -2,6 +2,7 @@ import { requestSnagReport, snagReportState, withMember, type Db } from "@rabaed
 import {
   isOpenStageCategory,
   snagReportMax,
+  workItemExportMax,
   type SignedUrl,
   type SnagReportContent,
   type SnagReportItem,
@@ -35,11 +36,12 @@ export async function askForSnagReport(
   request: SnagReportRequest,
   now: Date,
 ): Promise<SnagReportState | null> {
-  const exported = await exportWorkItems(db, memberId, { projectId, moduleKey: "snag_list" }, { ...query, module: "snag_list" }, now, snagReportMax);
+  const exported = await exportWorkItems(db, memberId, { projectId, moduleKey: "snag_list" }, { ...query, module: "snag_list" }, now, request.ids === undefined ? snagReportMax : workItemExportMax);
   if (!exported) return null;
   const chosen = request.ids === undefined ? undefined : new Set(request.ids);
   const rows = chosen ? exported.items.filter((r) => chosen.has(r.id)) : exported.items;
   if (rows.length === 0) return null;
+  // Chosen ids are narrowed from every row the List's filters match (at most the Export's cap), then held to the report's own.
   return withMember(db, memberId, async (trx) => {
     const project = await sql<{ name: { en: string; ar: string } }>`select name from project where id = ${projectId}`.execute(trx);
     if (!project.rows[0]) return null;
