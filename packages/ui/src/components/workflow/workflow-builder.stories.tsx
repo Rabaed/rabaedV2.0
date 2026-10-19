@@ -358,6 +358,29 @@ export const TransitionSend: Story = {
   },
 };
 
+/** RP-625: a Submit informs the Owner (its Participants covering the item read it, never acting); a Send informs nobody, and says why. */
+export const TransitionInforms: Story = {
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickTransition(canvas, "send_for_review", locale);
+    let editor = editorOf(canvas, labels);
+    await expect(editor.getByText(labels.informOnlyOnSubmit)).toBeVisible();
+    await expect(editor.getByRole("checkbox", { name: labels.map.role("owner") })).toBeDisabled();
+
+    await pickTransition(canvas, "submit", locale);
+    editor = editorOf(canvas, labels);
+    await expect(editor.getByRole("group", { name: labels.inform })).toBeVisible();
+    await expect(editor.getByText(labels.informHelp)).toBeVisible();
+    await userEvent.click(editor.getByRole("checkbox", { name: labels.map.role("owner") }));
+    await waitFor(() =>
+      expect(args.onChange).toHaveBeenLastCalledWith(expect.objectContaining({ transitions: expect.arrayContaining([expect.objectContaining({ key: "submit", inform: ["owner"] })]) })),
+    );
+    await expect(editorOf(canvas, labels).getByRole("checkbox", { name: labels.map.role("owner") })).toBeChecked();
+  },
+};
+
 /** V2 15: Code B's reply: its Screen's blocks, the table of Comments it creates, and Edit in Screens. */
 export const TransitionCodeB: Story = {
   render,

@@ -303,8 +303,8 @@ The app role reads only its own Participant's rows, so never another Company's i
 Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `waiting` when the caller holds the open Step (`picked_up` by them) or is in the Step Pool (`app.step_pool`) of a `pooled` one, `own_draft` for a Draft they raised (listed, never counted), and null otherwise, for an item they don't see, a closed item, or anything on a closed Project. The List's `needMyAction` filter and the Projects page's count both use it, and both keep one row per Revision chain (`app.latest_visible_revision`), so the count is the toggle's rows minus the Member's own Drafts.
 
 **work_item_access** (materialized, maintained by the engine)
-`work_item_id`, `participant_id`, `since`, `reason {raised, handling, oversight}`.
-- A Participant gets a row when it raises the item, when a Step is first assigned to it, or (Owner / Owner Representative) on first Submit if the item is within their Visibility.
+`work_item_id`, `participant_id`, `since`, `reason {raised, handling, oversight, informed}`.
+- A Participant gets a row when it raises the item, when a Step is first assigned to it, (Owner / Owner Representative) on first Submit if the item is within their Visibility, or (`informed`, RP-625) when a Submit naming its role to inform is taken and its Visibility covers the item (workflow-engine.md §5.1 "Informed Participants", `app.inform_participants`).
 - `since` is never granted to the app role: the raiser's is when the Draft was started (RP-334).
 - Row-level security joins this table with the Member's own Visibility grant. This keeps "Contractor B never sees Contractor A's submittals" a cheap, indexable check instead of a runtime rule walk.
 
@@ -487,5 +487,6 @@ Allowed actions are an explicit list: onboard Company, invite its Authorized Per
 ## Settled points
 
 - **Oversight:** Owner and Owner Representative get access at first Submit, within their Visibility (`reason = oversight`). See docs/visibility.md V2.
+- **Informed:** a Submit may name roles to inform; their covering Participants get access at that Submit (`reason = informed`, RP-625), read-only. See docs/visibility.md V2.
 - **Snags assigned to a Contractor:** the Contractor sees the shared history only, never the raiser's internal events (V5).
 - **Search:** Postgres full-text search first, always filtered through RLS. As built (RP-347): `work_item_search`, one row per Work Item kept by triggers, holds the Document Number, Subject, Type name, Trade and Location names and the raiser's Company name (English and Arabic), never answers or Documents, with a trigram and a full-text index. The app role can't read it; the List's `q` finds items through `app.search_work_items(project, q)`, which returns only the ids of matching items the caller sees. Every word must match: one of three letters or more as a part of a word, a shorter one as a whole word. A search's Stage counts are of the List's page, or the Kanban's shown cards, only.
