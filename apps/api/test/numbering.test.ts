@@ -76,7 +76,7 @@ describe("the Numbering page's settings", () => {
     expect(s.canEdit).toBe(true);
     expect(s.project).toBeNull();
     expect(s.types.find((x) => x.code === "MAR")).toMatchObject({ override: null, name: { en: expect.any(String) } });
-    expect(s.example).toEqual({ projectCode: "NDF", tradeCode: "EL", participant: { code: null, ordinal: 1 }, locationPath: ["BA"] });
+    expect(s.example).toEqual({ projectCode: "NDF", tradeCode: "GEN", participant: { code: null, ordinal: 1 }, locationPath: ["BA"] });
   });
 
   it("give the example the reader's own Participant Code once it is set, its order on the Project only to a Project Admin", async () => {

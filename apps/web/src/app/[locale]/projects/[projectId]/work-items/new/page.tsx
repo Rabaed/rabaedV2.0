@@ -1,4 +1,4 @@
-import { moduleKeySchema, moduleTabPaths, type Locale } from "@rabaed/domain";
+import { defaultTradeId, moduleKeySchema, moduleTabPaths, type Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { CreateWorkItemForm } from "@/components/create-work-item-form";
@@ -85,6 +85,7 @@ export default async function NewWorkItemPage({
               optionLists={optionLists}
               suppliers={suppliers}
               checklistTemplates={checklistTemplates}
+              startTradeId={defaultTradeId(form.schema, mine.trade)}
               locale={locale}
             />
           )}

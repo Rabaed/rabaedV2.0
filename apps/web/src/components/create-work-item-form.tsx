@@ -35,6 +35,7 @@ export function CreateWorkItemForm({
   optionLists,
   suppliers,
   checklistTemplates,
+  startTradeId,
   locale,
 }: {
   projectId: string;
@@ -50,12 +51,14 @@ export function CreateWorkItemForm({
   suppliers: readonly SupplierChoice[];
   /** The Project's Checklist Templates: its `checklist_template` fields offer the Trade's active ones (RP-651). */
   checklistTemplates: readonly ChecklistTemplateChoice[];
+  /** The Trade the Form starts on (RP-627: the Site Observation's General), when its Form names one. */
+  startTradeId?: string;
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
   const formLabels = useFormRendererLabels();
   const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>(startTradeId ? { trade: startTradeId } : {});
   const [fieldErrors, setFieldErrors] = useState<readonly FieldError[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
