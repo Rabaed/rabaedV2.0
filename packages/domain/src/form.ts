@@ -148,6 +148,22 @@ export type NegativeAction = (typeof negativeActions)[number];
 export const checklistTemplateItem = checklistItem.extend({ on_negative: z.enum(negativeActions).default("create_snag") });
 export type ChecklistTemplateItem = z.infer<typeof checklistTemplateItem>;
 
+/**
+ * Whether a negative answer to `item` raises a Snag (RP-577): an item copied from a Checklist
+ * Template with `create_snag`. A Form's own checklist item raises none.
+ */
+export const raisesSnag = (item: ChecklistItem): boolean => "on_negative" in item && item.on_negative === "create_snag";
+
+/**
+ * The "Raise a Snag" tick of `item` answered `entry` (RP-577): offered once an item that raises a
+ * Snag is answered Fail or No, ticked unless taken off (`snag: false`); null when not offered.
+ * A ticked one becomes a Snag when the code is issued (app.raise_checklist_snags, the same rule).
+ */
+export function snagTick(item: ChecklistItem, entry: { answer?: string; snag?: false } | undefined): "ticked" | "unticked" | null {
+  if (!raisesSnag(item) || entry?.answer === undefined || !isNegativeAnswer(entry.answer)) return null;
+  return entry.snag === false ? "unticked" : "ticked";
+}
+
 /** 1 to maxChecklistItems items of `item`'s shape, each key once. */
 const checklistItems = <T extends z.ZodType<{ key: string }>>(item: T) =>
   z
@@ -467,7 +483,7 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
 export type FormValue = string | number | boolean | string[] | FormRow[] | ChecklistAnswers | (string | HiddenLinkChoice)[];
 
 /** A checklist's answers: for each item answered or commented on, by item key, its answer and comment. */
-export type ChecklistAnswers = Record<string, { answer?: string; comment?: string }>;
+export type ChecklistAnswers = Record<string, { answer?: string; comment?: string; snag?: false }>;
 
 /** One row of a table: its cells by column key. A cell is text, a number, Yes/No or an option value. */
 export type FormRow = Record<string, string | number | boolean>;
@@ -486,8 +502,29 @@ export const formSection = z.object({
 });
 export type FormSection = z.infer<typeof formSection>;
 
-/** A Form Version's schema: its sections and their fields, in order. */
-export const formSchema = z.object({ sections: z.array(formSection).min(1) });
+/** The longest Disclaimer, in each language. */
+export const DISCLAIMER_MAX_LENGTH = 2000;
+
+/**
+ * A Form Version's `pdf` block (form-engine.md §6; ADR 0023; RP-650): the Disclaimer every
+ * Documental Record made with it ends with, in Arabic and English, and whether the record shows
+ * the review duration (the calendar days from the Submission Date to the reply: information,
+ * never a deadline). The block's other keys (`header_fields`, the sections' print options, §6) are
+ * kept as they are: this part checks only the two it reads.
+ */
+export const formPdf = z.looseObject({
+  disclaimer: z
+    .strictObject({
+      en: z.string().trim().min(1).max(DISCLAIMER_MAX_LENGTH),
+      ar: z.string().trim().min(1).max(DISCLAIMER_MAX_LENGTH),
+    })
+    .optional(),
+  show_review_duration: z.boolean().optional(),
+});
+export type FormPdf = z.infer<typeof formPdf>;
+
+/** A Form Version's schema: its sections and their fields, in order, and how its record prints. */
+export const formSchema = z.object({ sections: z.array(formSection).min(1), pdf: formPdf.optional() });
 export type FormSchema = z.infer<typeof formSchema>;
 
 /** A published Form Version, which never changes (ADR 0006). */
@@ -1142,7 +1179,7 @@ export function checkChecklist(
       fault("wrong_type");
       continue;
     }
-    const { answer, comment } = given;
+    const { answer, comment, snag } = given;
     if (answer !== undefined && typeof answer !== "string") {
       fault("wrong_type");
       continue;
@@ -1159,9 +1196,15 @@ export function checkChecklist(
       fault("too_long");
       continue;
     }
+    // The "Raise a Snag" tick (RP-577), on an item that raises one: ticked unless it says false.
+    if (snag !== undefined && (typeof snag !== "boolean" || !raisesSnag(item))) {
+      fault("wrong_type");
+      continue;
+    }
     const entry: ChecklistAnswers[string] = {};
     if (answer !== undefined) entry.answer = answer;
     if (typeof comment === "string" && comment.trim() !== "") entry.comment = comment;
+    if (snag === false) entry.snag = false;
     if (Object.keys(entry).length > 0) checked[item.key] = entry;
   }
   if (!complete) return { errors, checked };

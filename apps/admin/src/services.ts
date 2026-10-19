@@ -19,3 +19,4 @@ export { closeOnboardingLead, listOnboardingLeads, type CloseLeadResult } from "
 export { inviteAuthorizedPerson, onboardCompany, type OnboardingResult } from "./onboarding.ts";
 export { addOption, createOptionList, listOptionLists, renameOption, setOptionRetired } from "./option-lists.ts";
 export { readProjectNumbering, saveNumberingPattern, setNumberingCounterStart, setParticipantCode } from "./numbering.ts";
+export { confirmRegisterImportFor, getRegisterImportFor, previewRegisterImportFor } from "./register-import.ts";

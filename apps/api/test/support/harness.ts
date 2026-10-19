@@ -1,8 +1,17 @@
 import { randomInt, randomUUID } from "node:crypto";
-import { closeOnboardingLead, createEngineer, listOnboardingLeads, onboardCompany, type CloseLeadResult } from "@rabaed/admin/services";
+import {
+  closeOnboardingLead,
+  confirmRegisterImportFor,
+  createEngineer,
+  listOnboardingLeads,
+  onboardCompany,
+  previewRegisterImportFor,
+  type CloseLeadResult,
+} from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { runAsOwner, testDatabaseUrls, withoutSignature, withoutStamp } from "@rabaed/db/test-support";
 import type {
+  AdminPreviewRegisterImportRequest,
   BaseRole,
   CreateProjectRequest,
   InviteMemberRequest,
@@ -44,10 +53,14 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 /**
  * A file to upload to a Work Item: to a named file field with `fieldKey` (a
  * checklist item's photo with `itemKey` too), else to the Attachments System Field.
+ * With `reply`, the field is a reply Screen's (ADR 0024); with `annotatedFromId`,
+ * the file is that photo's annotated copy, naming no field (RP-656).
  */
 export interface TestFile {
   fieldKey?: string;
   itemKey?: string;
+  reply?: boolean;
+  annotatedFromId?: string;
   fileName: string;
   contentType: string;
   body: string | Uint8Array;
@@ -128,6 +141,14 @@ export interface TestApi {
   onboardingLeads(reason: string): Promise<OnboardingLeads["leads"]>;
   /** A Rabaed Engineer closes an open onboarding lead, with a reason, through Rabaed Admin's service. */
   closeOnboardingLead(leadId: string, reason: string): Promise<CloseLeadResult>;
+  /**
+   * A new Rabaed Engineer (named `fullName`) imports a register for a Participant through
+   * Rabaed Admin's service (RP-645): previews it as its default Member, then confirms it.
+   */
+  engineerImport(
+    request: AdminPreviewRegisterImportRequest,
+    fullName?: string,
+  ): Promise<{ engineer: { id: string; email: string; fullName: string }; importId: string; rowsCreated: number }>;
   /**
    * Accepts an invitation and returns the signed-in caller. Like every Member of the test
    * database, they have a Signature by default (RP-85, @rabaed/db/test-support test-defaults.ts);
@@ -300,6 +321,16 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
 
     async closeOnboardingLead(leadId, reason) {
       return closeOnboardingLead(adminDb, await theEngineer(), leadId, reason, now());
+    },
+
+    async engineerImport(request, fullName = "Test Engineer") {
+      const engineer = { email: uniqueEmail("engineer"), fullName };
+      const engineerId = await createEngineer(migratorDb, { ...engineer, password: DEFAULT_PASSWORD });
+      const previewed = await previewRegisterImportFor(adminDb, engineerId, request, now());
+      if (!previewed.ok) throw new Error(`engineer preview: ${previewed.reason}`);
+      const confirmed = await confirmRegisterImportFor(adminDb, engineerId, previewed.id, request.for.reason, now());
+      if (!confirmed.ok) throw new Error(`engineer confirm: ${confirmed.reason}`);
+      return { engineer: { id: engineerId, ...engineer }, importId: previewed.id, rowsCreated: confirmed.rowsCreated };
     },
 
     async acceptInvitation(token, password = DEFAULT_PASSWORD) {

@@ -28,6 +28,8 @@ export interface PdfA3Attachment {
   readonly mimeType: string;
   readonly description: string;
   readonly bytes: Uint8Array;
+  /** How it relates to the record: `Data` (the Record Data, the default) or `Source` (an appendix file, RP-147). */
+  readonly relationship?: "Data" | "Source";
 }
 
 export interface PdfA3Info {
@@ -167,7 +169,7 @@ export async function toPdfA3(pdf: Uint8Array, info: PdfA3Info, attachments: rea
       description: a.description,
       creationDate: at,
       modificationDate: at,
-      afRelationship: AFRelationship.Data,
+      afRelationship: a.relationship === "Source" ? AFRelationship.Source : AFRelationship.Data,
     });
   }
   const metadata = ctx.stream(xmp({ ...info, at }), { Type: "Metadata", Subtype: "XML" });
@@ -249,6 +251,22 @@ function fontsOf(dict: PDFDict | undefined, seen: Set<PDFDict>, out: PDFDict[]) 
   }
 }
 
+/** The fonts the pages of `doc` use (in their forms too) that are not embedded, as PDF/A asks every font to be. */
+export function fontProblems(doc: PDFDocument): string[] {
+  const seen = new Set<PDFDict>();
+  const fonts: PDFDict[] = [];
+  for (const page of doc.getPages()) fontsOf(page.node.Resources(), seen, fonts);
+  const problems: string[] = [];
+  for (const font of fonts) {
+    const subtype = nameOf(font.get(PDFName.of("Subtype")));
+    if (subtype === "Type0" || subtype === "Type3") continue;
+    const descriptor = font.lookupMaybe(PDFName.of("FontDescriptor"), PDFDict);
+    const embedded = ["FontFile", "FontFile2", "FontFile3"].some((k) => descriptor?.get(PDFName.of(k)));
+    if (!embedded) problems.push(`the font ${nameOf(font.get(PDFName.of("BaseFont"))) ?? "?"} is not embedded`);
+  }
+  return problems;
+}
+
 /**
  * The PDF/A-3b rules `pdf` breaks, of those a renderer like ours can break:
  * none when it passes. Not a full validator (veraPDF is one); these are the
@@ -287,16 +305,7 @@ export async function pdfA3Problems(pdf: Uint8Array): Promise<string[]> {
 
   if (catalog.lookupMaybe(PDFName.of("Names"), PDFDict)?.get(PDFName.of("JavaScript"))) problems.push("it carries JavaScript");
 
-  const seen = new Set<PDFDict>();
-  const fonts: PDFDict[] = [];
-  for (const page of doc.getPages()) fontsOf(page.node.Resources(), seen, fonts);
-  for (const font of fonts) {
-    const subtype = nameOf(font.get(PDFName.of("Subtype")));
-    if (subtype === "Type0" || subtype === "Type3") continue;
-    const descriptor = font.lookupMaybe(PDFName.of("FontDescriptor"), PDFDict);
-    const embedded = ["FontFile", "FontFile2", "FontFile3"].some((k) => descriptor?.get(PDFName.of(k)));
-    if (!embedded) problems.push(`the font ${nameOf(font.get(PDFName.of("BaseFont"))) ?? "?"} is not embedded`);
-  }
+  problems.push(...fontProblems(doc));
 
   for (const page of doc.getPages()) {
     const annots = page.node.lookupMaybe(PDFName.of("Annots"), PDFArray);

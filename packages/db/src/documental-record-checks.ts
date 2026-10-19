@@ -48,6 +48,18 @@ export interface ReproductionSource {
     /** The file's fingerprint (hex SHA-256, `document.file_sha256`); null for a Document confirmed before RP-618. */
     readonly sha256: string | null;
   }[];
+  /**
+   * The Signatures the item's events recorded, and the logos and Stamps of the Project's Companies
+   * up to its close (RP-650): where a logo, Signature or Stamp the record printed is found again by
+   * its fingerprint. Rabaed's own files, read by the worker only.
+   */
+  readonly marks: readonly {
+    readonly storageKey: string;
+    readonly contentType: string;
+    readonly size: number;
+    /** The file's fingerprint (hex SHA-256, `stored_file.sha256`). */
+    readonly sha256: string;
+  }[];
 }
 
 /** The record job `outboxId` re-produces, or null when there is nothing to do (it was done already, or the record is gone). */

@@ -529,6 +529,10 @@ export type CreateRevisionRequest = z.infer<typeof createRevisionRequest>;
 export const createReplacementRequest = z.object({ idempotencyKey: z.uuid() });
 export type CreateReplacementRequest = z.infer<typeof createReplacementRequest>;
 
+/** Set a Draft's Paper ref (RP-639), or clear it with null or blank. At most 100 characters once trimmed. */
+export const setPaperRefRequest = z.object({ paperRef: z.string().max(1000).nullable() });
+export type SetPaperRefRequest = z.infer<typeof setPaperRefRequest>;
+
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
@@ -562,6 +566,8 @@ export const workItemActions = z.object({
    * Revision, while it has no Document Number, for a Member of the raiser's Participant.
    */
   discardDraft: z.boolean(),
+  /** Change the Paper ref (RP-639): the viewer may edit the Draft now, and it has no Document Number. */
+  editPaperRef: z.boolean(),
   /**
    * The viewer may take the `transitions` below but has no Signature yet (RP-85, ADR 0023):
    * opening one shows the pop-up that sends them to Profile → Add Signature, before its
@@ -633,9 +639,10 @@ export const workItemDetail = workItemSummary.extend({
   module: moduleKeySchema,
   /**
    * The item it was raised from, as its Snag List row names it (RP-628). Null when it was raised
-   * by hand, and for an item of another Module.
+   * by hand, and for an item of another Module. `checkItem`: the failed check item a code raised
+   * it from (RP-577), by its key and text as the source's copy holds it; null otherwise.
    */
-  raisedFrom: raisedFromSource.nullable(),
+  raisedFrom: raisedFromSource.extend({ checkItem: z.object({ key: z.string(), text: bilingualText }).nullable() }).nullable(),
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
   /**
@@ -729,6 +736,12 @@ export const workItemDetail = workItemSummary.extend({
    * and Subject. It has no time, so it never tells when the Draft was started.
    */
   duplicatedFrom: z.object({ workItemId: z.uuid(), documentNumber: z.string().nullable(), subject: z.string() }).nullable(),
+  /**
+   * The Paper ref (RP-639, spec RP-631 story 27): the old paper number of a submittal
+   * brought in from a register while still under review on paper. Never its Document
+   * Number. Everyone who sees the item reads it; it changes only while a Draft. Null when none.
+   */
+  paperRef: z.string().nullable(),
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**
@@ -838,5 +851,15 @@ export const workItemHistory = z.object({
       answersForm: formSchema.nullable().optional(),
     }),
   ),
+  /**
+   * The Submittal Register Import that created the Draft (spec RP-631 story 35; RP-645):
+   * which import, and who ran it, a Member of the viewer's own Company or "Rabaed" for a
+   * Rabaed Engineer's (`byRabaed`, `memberName` null), never the Engineer. No time (its
+   * import's is when the Draft was started, scenario 61). Only for the importing Company's
+   * Members (visibility.md RP-589-3); absent for anyone else and for an item not imported.
+   */
+  imported: z
+    .object({ importId: z.uuid(), fileName: z.string(), byRabaed: z.boolean(), memberName: bilingualText.nullable() })
+    .optional(),
 });
 export type WorkItemHistory = z.infer<typeof workItemHistory>;

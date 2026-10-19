@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import { bilingualText, engineerReason } from "./company.ts";
+import { formKey } from "./form.ts";
+import { packageStatus } from "./package.ts";
 import { workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -36,6 +38,18 @@ export type RegisterSheetRow = z.infer<typeof registerSheetRow>;
 /** How many top rows of a sheet the header-row step shows. */
 export const registerTopRows = 12;
 
+/**
+ * The fields a column can fill (the Map fields step's choices, and the suggestions):
+ * these, and `field:<key>` for a Form field of a mapped Type (registerFormFieldId).
+ */
+export const registerFieldIds = ["subject", "type", "trade", "scopes", "location", "package", "paperRef", "assignTo"] as const;
+export const registerFieldId = z.union([z.enum(registerFieldIds), z.templateLiteral(["field:", z.string()])]);
+export type RegisterFieldId = z.infer<typeof registerFieldId>;
+/** A Form field's id among the fields a column can fill. */
+export const registerFormFieldId = (key: string): RegisterFieldId & `field:${string}` => `field:${key}`;
+/** The Form field's key a field id names (registerFormFieldId); null for any other field. */
+export const registerFormFieldKey = (field: string): string | null => (field.startsWith("field:") ? field.slice("field:".length) : null);
+
 /** A register as read, for the sheet and header-row step and the mapping step. */
 export const registerSheet = z.object({
   /** Every sheet, with how many non-empty rows it has (a .csv has one, named after the file). */
@@ -50,21 +64,99 @@ export const registerSheet = z.object({
   examples: z.array(z.string()),
   /** How many non-empty rows lie below the header row. */
   dataRows: z.int().min(0),
+  /**
+   * A field suggested for each column from its heading, in English or Arabic, with how
+   * alike they are (0–100): a RegisterFieldId; null where nothing is (RP-639, story 8).
+   */
+  suggestions: z.array(z.object({ field: registerFieldId, score: z.int().min(0).max(100) }).nullable()),
 });
 export type RegisterSheet = z.infer<typeof registerSheet>;
 
 /** A column of the header row, from 0. */
 const column = z.object({ column: z.int().min(0) });
 
+/** The longest Paper ref: the old paper number of a submittal still under review on paper (story 27). */
+export const paperRefMaxLength = 100;
+
+/**
+ * The Form field types a register fills (spec RP-631, "Values"): plain text, numbers,
+ * dates, choices, and a Member or Participant named unambiguously. Every other field
+ * is left for the raiser.
+ */
+export const registerFormFieldTypes = ["text", "textarea", "number", "date", "select", "multi_select", "option_list", "member", "participant"] as const;
+export type RegisterFormFieldType = (typeof registerFormFieldTypes)[number];
+
+/** Values matched by hand once, by the cell's registerMatchKey, applying to every row with it (story 10). */
+const matchesOf = <T extends z.ZodType<string>>(value: T) =>
+  z.record(z.string().max(500), value).refine((matches) => Object.keys(matches).length <= 2000, "At most 2,000 matches");
+
+/**
+ * Who raises a row's Draft (RP-640, story 24), besides its email in the "Assign to"
+ * column: the first rule naming the row's Trade (an id) or Type (a code), else the
+ * default; each a Member of the importer's own Participant on the Project (their id).
+ * Neither: the importer.
+ */
+export const registerImportAssign = z.object({
+  default: z.uuid().optional(),
+  rules: z
+    .array(z.object({ by: z.enum(["trade", "type"]), value: z.string().min(1).max(64), member: z.uuid() }))
+    .max(200)
+    .optional(),
+});
+export type RegisterImportAssign = z.infer<typeof registerImportAssign>;
+
+/** The longest Package name (as a Package's own, RP-636). */
+export const registerPackageNameMaxLength = 200;
+
+/**
+ * One Package for every row of the register (RP-644, story 28): a new one, named in the
+ * import, or an Open Package of the importer's own Participant (its id).
+ */
+export const registerImportPackages = z.union([
+  z.object({ new: z.string().trim().min(1).max(registerPackageNameMaxLength) }),
+  z.object({ existing: z.uuid() }),
+]);
+export type RegisterImportPackages = z.infer<typeof registerImportPackages>;
+
 /**
  * Which column gives each field: the Subject from a column, the Type and the Trade
- * each from a column or one value for every row (a Type code; a Trade's id).
- * Columns not mapped are ignored.
+ * each from a column or one value for every row (a Type code; a Trade's id), and the
+ * optional Scopes, Location, Package, Paper ref, "Assign to" (each row's assignee by
+ * email) and Form fields (a Form field's `label` is filled in by the preview, as the Form
+ * names it). `values` holds the values matched by hand: a Type code, an id, or an
+ * option's value; for a Package name, an existing Package's id or `new` (RP-644). `assign`
+ * picks the assignee of the rows the "Assign to" column leaves empty (RP-640); `packages`
+ * puts every row in one Package, instead of a Package column (RP-644). Columns not
+ * mapped are ignored.
  */
 export const registerImportMapping = z.object({
   subject: column,
   type: z.union([column, z.object({ value: workItemTypeCode })]),
   trade: z.union([column, z.object({ value: z.uuid() })]),
+  scopes: column.optional(),
+  location: column.optional(),
+  /** The Package column (RP-644): each different name an Open Package of the Participant, or a new one. */
+  package: column.optional(),
+  paperRef: column.optional(),
+  assignTo: column.optional(),
+  fields: z
+    .array(column.extend({ key: formKey, label: bilingualText.optional() }))
+    .max(100)
+    .refine((fields) => new Set(fields.map((f) => f.key)).size === fields.length, "Each Form field once")
+    .optional(),
+  values: z
+    .object({
+      type: matchesOf(workItemTypeCode),
+      trade: matchesOf(z.uuid()),
+      location: matchesOf(z.uuid()),
+      scopes: matchesOf(z.uuid()),
+      fields: z.record(formKey, matchesOf(z.string().max(64))),
+      package: matchesOf(z.union([z.uuid(), z.literal("new")])),
+    })
+    .partial()
+    .optional(),
+  assign: registerImportAssign.optional(),
+  packages: registerImportPackages.optional(),
 });
 export type RegisterImportMapping = z.infer<typeof registerImportMapping>;
 
@@ -90,9 +182,26 @@ export const registerImportRowReasons = [
   "trade_missing",
   "trade_unknown",
   "trade_outside_visibility",
+  "scope_unknown",
+  "scope_not_under_trade",
+  "location_unknown",
+  "location_outside_visibility",
+  "field_invalid",
+  "paper_ref_too_long",
+  "paper_ref_repeated",
+  "paper_ref_taken",
+  "assignee_unknown",
+  "assignee_cannot_create",
+  "assignee_outside_visibility",
+  "package_not_open",
+  "package_name_too_long",
 ] as const;
 export const registerImportRowReason = z.enum(registerImportRowReasons);
 export type RegisterImportRowReason = z.infer<typeof registerImportRowReason>;
+
+/** A Package of the importing Company's own (RP-644): its number (PKG-001…, left-to-right), name and status. */
+export const registerImportPackage = z.object({ id: z.uuid(), number: z.string(), name: bilingualText, status: packageStatus });
+export type RegisterImportPackage = z.infer<typeof registerImportPackage>;
 
 /** One row of an import: as read, what it matched, why it is bad, and the Draft it created. */
 export const registerImportRow = z.object({
@@ -103,6 +212,27 @@ export const registerImportRow = z.object({
   subject: z.string(),
   type: z.object({ text: z.string(), match: z.object({ code: workItemTypeCode, name: bilingualText }).nullable() }),
   trade: z.object({ text: z.string(), match: z.object({ id: z.uuid(), code: z.string(), name: bilingualText }).nullable() }),
+  /** The Location cell as read ("" when not mapped) and the Location it matched. */
+  location: z.object({ text: z.string(), match: z.object({ id: z.uuid(), code: z.string(), name: bilingualText }).nullable() }),
+  /** The Scopes cell as read ("" when not mapped) and the Scopes and Sub-scopes it matched. */
+  scopes: z.object({ text: z.string(), matches: z.array(z.object({ id: z.uuid(), name: bilingualText })) }),
+  /** The Paper ref as read, trimmed ("" when none). */
+  paperRef: z.string(),
+  /** The mapped Form fields of the row's Type, each cell as read, and whether its value doesn't fit the field. */
+  fields: z.array(z.object({ key: formKey, text: z.string(), invalid: z.boolean() })),
+  /**
+   * Who raises its Draft (RP-640): the "Assign to" cell as read ("" when the Member was
+   * picked, or none), and the Member of the importer's own Company it is assigned to;
+   * null for the importer, or when the cell names nobody who may take it.
+   */
+  assignee: z.object({ text: z.string(), match: z.object({ id: z.uuid(), name: bilingualText }).nullable() }),
+  /**
+   * Its Package (RP-644): the Package cell as read ("" when none, or one Package for the
+   * whole register); the existing Package it goes to (after confirm, also the new one it
+   * went to), one of the importing Company's own; and the name of the new Package it goes to
+   * (null when none).
+   */
+  package: z.object({ text: z.string(), match: registerImportPackage.nullable(), new: z.string().nullable() }),
   /** Empty for a good row. */
   reasons: z.array(registerImportRowReason),
   /** Whether confirm created a Draft from it. */
@@ -117,8 +247,12 @@ export const registerImportSummary = z.object({
   id: z.uuid(),
   fileName: z.string(),
   status: z.enum(["previewed", "created"]),
-  /** Who imported it: a Member of the caller's own Company. */
-  runBy: z.object({ id: z.uuid(), name: bilingualText }),
+  /**
+   * Who imported it: a Member of the caller's own Company; null when a Rabaed Engineer
+   * imported it for the Company in Rabaed Admin (RP-645), which the Company reads as
+   * "Rabaed", never the Engineer's name.
+   */
+  runBy: z.object({ id: z.uuid(), name: bilingualText }).nullable(),
   rowsTotal: z.int().min(0),
   rowsRejected: z.int().min(0),
   /** Null until confirmed. */
@@ -126,19 +260,176 @@ export const registerImportSummary = z.object({
 });
 export type RegisterImportSummary = z.infer<typeof registerImportSummary>;
 
-export const registerImports = z.object({ imports: z.array(registerImportSummary) });
+/**
+ * An import on the Imports page (story 32): with the Packages its Drafts went to, created or
+ * added to, by number; each one of the importing Company's own, a discarded one left out.
+ */
+export const registerImportListed = registerImportSummary.extend({ packages: z.array(registerImportPackage) });
+export type RegisterImportListed = z.infer<typeof registerImportListed>;
+
+export const registerImports = z.object({ imports: z.array(registerImportListed) });
 export type RegisterImports = z.infer<typeof registerImports>;
 
 /** One import with its rows: the preview before confirm, the record after. */
 export const registerImport = registerImportSummary.extend({
   projectId: z.uuid(),
+  /**
+   * Who raises every row nobody else is assigned (RP-640, RP-645): the importing Member,
+   * or for a Rabaed Engineer's import the default Member of the Company they chose.
+   */
+  defaultRaiser: z.object({ id: z.uuid(), name: bilingualText }),
   sheet: z.string(),
   headerRow: z.int().min(1),
   headers: z.array(z.string()),
   mapping: registerImportMapping,
   rows: z.array(registerImportRow),
+  /**
+   * The Packages it creates and adds to (RP-644, story 16): of a preview, its good rows'; of
+   * a confirmed import, its created rows'. A new one has no number until confirm.
+   */
+  packages: z.array(
+    z.object({
+      /** Null for a new Package of a preview. */
+      package: registerImportPackage.nullable(),
+      /** The new Package's name as the import gives it; null for an existing one. */
+      newName: z.string().nullable(),
+      rows: z.int().min(1),
+    }),
+  ),
+  /** Whether its original register can be downloaded (a Member's import keeps it; story 34). */
+  original: z.boolean(),
 });
 export type RegisterImport = z.infer<typeof registerImport>;
 
+/** A mapping saved under a name for the importer's Participant (RP-644, story 11). No time, nor who saved it. */
+export const registerImportSavedMapping = z.object({ id: z.uuid(), name: z.string(), mapping: registerImportMapping });
+export type RegisterImportSavedMapping = z.infer<typeof registerImportSavedMapping>;
+
+/**
+ * What a register may fill on the Project, for the Map fields and Map values steps: the
+ * Submittals Types the Member may raise, the Project's Trades, Locations (with their
+ * path) and active Scopes, and the simple Form fields of those Types' Forms, editable
+ * at the Draft, with their choices (registerFormFieldTypes). Matching takes any of the
+ * Project's values; the preview then refuses one outside the Member's Visibility.
+ */
+export const registerImportFields = z.object({
+  types: z.array(z.object({ code: workItemTypeCode, name: bilingualText })),
+  trades: z.array(z.object({ id: z.uuid(), code: z.string(), name: bilingualText })),
+  locations: z.array(z.object({ id: z.uuid(), code: z.string(), name: bilingualText, path: bilingualText })),
+  scopes: z.array(z.object({ id: z.uuid(), tradeId: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
+  formFields: z.array(
+    z.object({
+      key: formKey,
+      label: bilingualText,
+      type: z.enum(registerFormFieldTypes),
+      /** The Types whose Form has it. */
+      types: z.array(workItemTypeCode),
+      /** A choice field's options (an Option List's by their path); empty for any other. */
+      options: z.array(z.object({ value: z.string(), label: bilingualText })),
+    }),
+  ),
+  /** The active Members of the Member's own Participant on the Project: whom rows may be assigned to (RP-640). */
+  members: z.array(z.object({ id: z.uuid(), name: bilingualText, email: z.string() })),
+  /**
+   * The Packages of the Member's own Participant on the Project, by number, each with its
+   * status (RP-644): what a Package column's names match; only the Open ones take Drafts.
+   */
+  packages: z.array(registerImportPackage),
+  /** The mappings saved for the Member's own Participant on the Project, by name (RP-644, story 11). */
+  mappings: z.array(registerImportSavedMapping),
+});
+export type RegisterImportFields = z.infer<typeof registerImportFields>;
+
+/** Save the mapping under a name, or rename a saved one. */
+export const registerImportMappingName = z.string().trim().min(1).max(100);
+export const saveRegisterImportMappingRequest = z.object({ name: registerImportMappingName, mapping: registerImportMapping });
+export type SaveRegisterImportMappingRequest = z.infer<typeof saveRegisterImportMappingRequest>;
+export const renameRegisterImportMappingRequest = z.object({ name: registerImportMappingName });
+
+/** The Participant's saved mappings, by name: the answer to a save, a rename or a delete. */
+export const registerImportMappings = z.object({ mappings: z.array(registerImportSavedMapping) });
+export type RegisterImportMappings = z.infer<typeof registerImportMappings>;
+
+/** The fields whose values Map values matches: these, and `field:<key>` for a choice field. */
+export const registerValueFields = ["type", "trade", "location", "scopes"] as const;
+
+/**
+ * Each mapped column whose values are matched (Type, Trade, Location, Scopes, choice
+ * fields): every different value in it, once by registerMatchKey, with how many rows
+ * hold it, and what it matches: `exact` by code or name, `manual` by the mapping's
+ * `values`, or `suggested` (the most alike value, with its score, which the importer
+ * confirms); null when nothing. The "Assign to" column (`assignTo`, RP-640) too: each
+ * email and the Member it names exactly (never suggested), for the Assign step's counts.
+ */
+export const registerValues = z.object({
+  fields: z.array(
+    z.object({
+      field: z.string(),
+      column: z.int().min(0),
+      values: z.array(
+        z.object({
+          key: z.string(),
+          text: z.string(),
+          rows: z.int().min(1),
+          match: z.string().nullable(),
+          how: z.enum(["exact", "manual", "suggested"]).nullable(),
+          score: z.int().min(0).max(100).nullable(),
+        }),
+      ),
+    }),
+  ),
+});
+export type RegisterValues = z.infer<typeof registerValues>;
+
 export const confirmedRegisterImport = z.object({ rowsCreated: z.int().min(0) });
 export type ConfirmedRegisterImport = z.infer<typeof confirmedRegisterImport>;
+
+/*
+ * Rabaed Admin (RP-645, stories 38–41): a Rabaed Engineer runs the same import for a
+ * Participant, with a default Member of it who raises every row nobody else is assigned
+ * (the importer's place), and a reason. Every call carries the reason: each is an
+ * admin_action (V9). The Company reads the import as "Rabaed"'s.
+ */
+
+/** Whom an Engineer imports for, and why. */
+export const adminRegisterImportFor = z.object({
+  projectId: z.uuid(),
+  participantId: z.uuid(),
+  /** The Member of the Participant who raises every row nobody else is assigned. */
+  defaultMemberId: z.uuid(),
+  reason: engineerReason,
+});
+export type AdminRegisterImportFor = z.infer<typeof adminRegisterImportFor>;
+
+export const adminReadRegisterRequest = readRegisterRequest.extend({ for: adminRegisterImportFor });
+export type AdminReadRegisterRequest = z.infer<typeof adminReadRegisterRequest>;
+export const adminRegisterImportFieldsRequest = z.object({ for: adminRegisterImportFor });
+export type AdminRegisterImportFieldsRequest = z.infer<typeof adminRegisterImportFieldsRequest>;
+export const adminPreviewRegisterImportRequest = previewRegisterImportRequest.extend({ for: adminRegisterImportFor });
+export type AdminPreviewRegisterImportRequest = z.infer<typeof adminPreviewRegisterImportRequest>;
+/** Reading or confirming an Engineer's own preview: only the reason (its Participant and default Member are the preview's). */
+export const adminRegisterImportReason = z.object({ reason: engineerReason });
+
+/** The Projects an Engineer may import for, by name. */
+export const adminRegisterImportProjects = z.object({
+  projects: z.array(z.object({ id: z.uuid(), name: bilingualText, code: z.string() })),
+});
+export type AdminRegisterImportProjects = z.infer<typeof adminRegisterImportProjects>;
+
+/**
+ * A Project's active Participants, each with its active Members, and whether each may
+ * import there (a Submittals Type they may raise): a Participant none of whose Members may
+ * (a Consultant, the Client) raises no submittals.
+ */
+export const adminRegisterImportParticipants = z.object({
+  participants: z.array(
+    z.object({
+      id: z.uuid(),
+      companyName: bilingualText,
+      roleName: bilingualText,
+      mayImport: z.boolean(),
+      members: z.array(z.object({ id: z.uuid(), name: bilingualText, email: z.string(), mayImport: z.boolean() })),
+    }),
+  ),
+});
+export type AdminRegisterImportParticipants = z.infer<typeof adminRegisterImportParticipants>;

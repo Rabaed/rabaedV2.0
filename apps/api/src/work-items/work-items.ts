@@ -62,7 +62,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
-import { withFileCopies } from "../documents/copy-files.ts";
+import { withFileCopies, type CopyFiles, type FileCopy } from "../documents/copy-files.ts";
 import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
@@ -132,12 +132,17 @@ function toFormVersion(r: FormVersionRow): FormVersion {
  * one: the latest published Version of the Project's own Form for the Type, else of the
  * Type's Rabaed Default Form (RP-554), as app.create_work_item checks it.
  */
-async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
+export async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
   const { rows } = await sql<FormVersionRow & { type_id: string | null }>`
     select v.id, v.version_no, v.schema,
       (select t.id from work_item_type t where t.code = ${typeCode} and (t.project_id = ${projectId}::uuid or t.project_id is null)
        order by t.project_id is null, t.id limit 1) as type_id
-    from form_version v where v.id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
+    from form_version v
+    join form_definition f on f.id = v.form_definition_id
+    where v.id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
+      -- form_definition's policy, said again: Rabaed Admin (an Engineer's Register Import, run as
+      -- the default Member) reads past it (RP-657). A Rabaed Default, or one of their Projects' own.
+      and (f.owner_kind = 'rabaed' or (f.owner_kind = 'project' and f.project_id in (select app.current_project_ids())))
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
@@ -151,7 +156,7 @@ async function withProjectRequired(trx: Trx, form: FormVersion, projectId: strin
 }
 
 /** The Project's Scopes and Sub-scopes, which the validator checks `scopes` against. */
-async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]> {
+export async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]> {
   const { rows } = await sql<{ id: string; trade_value_id: string; parent_id: string | null }>`
     select id, trade_value_id, parent_id from scope where project_id = ${projectId}
   `.execute(trx);
@@ -163,7 +168,7 @@ async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]
  * that uses one. They are never copied into a Form (RP-282), so an option added
  * since the Form Version was published is offered at once.
  */
-async function optionListsFor(trx: Trx, schema: FormSchema) {
+export async function optionListsFor(trx: Trx, schema: FormSchema) {
   const uses = formFields(schema).some(
     (f) => f.type === "option_list" || (f.type === "table" && f.columns.some((c) => c.type === "option_list")),
   );
@@ -222,7 +227,7 @@ async function syncChecklists(trx: Trx, schema: FormSchema, workItemId: string, 
 }
 
 /** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
-function storedAnswers({ trade, location, scopes, ...data }: Record<string, unknown>) {
+export function storedAnswers({ trade, location, scopes, ...data }: Record<string, unknown>) {
   return {
     data: JSON.stringify(data),
     tradeId: (trade as string | undefined) ?? null,
@@ -402,7 +407,7 @@ async function workflowStepsOf(trx: Trx, workflowVersionIds: readonly string[]):
 }
 
 /** `form` as it is filled in at `step`: the sections editable there. */
-function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEditContext): FormToFill {
+export function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEditContext): FormToFill {
   return { ...form, editableSections: [...editableSections(form.schema, steps, at)] };
 }
 
@@ -464,13 +469,23 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
  * on `projectId` starts on, and its Draft: the latest published Version of the
  * Workflow bound for their Participant, as app.create_work_item resolves it (RP-426).
  */
-async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
+export async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
+  // app.new_item_workflow_version is security invoker: Rabaed Admin (an Engineer's Register
+  // Import, run as the default Member) reads past row-level security through it, so the Version
+  // it answers is kept only when the Member reads its Workflow (workflow_definition's policy,
+  // said again): a Rabaed Default, or one of their Projects' own (RP-657). A binding names
+  // nothing else (app.check_workflow_binding).
   const { rows } = await sql<{ type_id: string; workflow_version_id: string | null }>`
-    select t.id as type_id, app.new_item_workflow_version(${projectId}::uuid, t.id, (
-      select pm.participant_id from project_member pm
-      where pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
-        and pm.participant_id in (select app.current_participant_ids())
-    )) as workflow_version_id
+    select t.id as type_id, (
+      select v.id from workflow_version v
+      join workflow_definition d on d.id = v.workflow_definition_id
+      where v.id = app.new_item_workflow_version(${projectId}::uuid, t.id, (
+          select pm.participant_id from project_member pm
+          where pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
+            and pm.participant_id in (select app.current_participant_ids())
+        ))
+        and (d.owner_kind = 'rabaed' or (d.owner_kind = 'project' and d.project_id in (select app.current_project_ids())))
+    ) as workflow_version_id
     from work_item_type t
     where t.owner_kind = 'rabaed' and t.code = ${typeCode} and not t.raised_from_item_only
   `.execute(trx);
@@ -489,7 +504,7 @@ async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[
  * one else's); their own Participant, the Host Company's and, on an item, those
  * on it (app.form_participant_choices).
  */
-async function formChoices(trx: Trx, projectId: string, workItemId: string | null): Promise<FormChoices> {
+export async function formChoices(trx: Trx, projectId: string, workItemId: string | null): Promise<FormChoices> {
   const { rows: members } = await sql<{ id: string; name: BilingualText }>`
     select m.id, m.full_name as name
     from project_member pm
@@ -734,9 +749,13 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       can_discard_draft: boolean;
       workflow_name: BilingualText;
       workflow_version_no: number;
+      paper_ref: string | null;
+      draft_step: boolean;
       module_key: ModuleKey;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
+        -- The Paper ref (RP-639): everyone who sees the item reads it; it changes only while a Draft.
+        w.paper_ref, coalesce(st.category = 'draft', false) as draft_step,
         wf.name as workflow_name, wf.version_no as workflow_version_no, ty.module_key,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
@@ -747,9 +766,10 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         app.can_create_replacement(w.id) as can_create_replacement,
         ${canDuplicate(sql.ref("w"))} as can_duplicate, app.can_discard_draft(w.id) as can_discard_draft
       from work_item w
-      join work_item_type ty on ty.id = w.work_item_type_id
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
+      join work_item_type ty on ty.id = w.work_item_type_id
+      left join stage st on st.project_id = w.project_id and st.module_key = ty.module_key and st.key = seen.stage_key
       -- Its Workflow's name and Version, for whoever sees the item, whatever Workflow rows they read (V20).
       left join lateral app.work_item_workflow(w.id) wf on true
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
@@ -825,6 +845,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       duplicatedFrom: source[0]
         ? { workItemId: source[0].work_item_id, documentNumber: source[0].document_number, subject: source[0].subject }
         : null,
+      paperRef: d.paper_ref,
       raisedItems: raisedItems.map((f) => ({ type: { code: f.type_code, name: f.type_name }, open: f.open_count, closed: f.closed_count })),
       ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name } } : {}),
       actions: {
@@ -835,6 +856,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         discardRevision: d.can_discard_revision,
         duplicate: d.can_duplicate,
         discardDraft: d.can_discard_draft,
+        // As app.set_work_item_paper_ref decides it: a Draft never numbered, which they may edit now.
+        editPaperRef: d.can_save_answers && d.draft_step && row.document_number === null,
       },
     };
   });
@@ -1017,6 +1040,21 @@ export function discardDraft(db: Db, memberId: string, workItemId: string, now: 
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`select app.discard_draft(${workItemId}::uuid, ${now}) as outcome`.execute(trx);
     return commandResult(rows[0]!.outcome, "discarded", discardDraftRefusals);
+  });
+}
+
+const setPaperRefRefusals = ["not_found", "project_closed", "not_editable", "paper_ref_too_long", "paper_ref_taken"] as const;
+
+/**
+ * The Paper ref (RP-639, spec RP-631 story 27): the raiser sets or clears it while the item
+ * is a Draft they may edit (app.set_work_item_paper_ref); one per Participant on the Project.
+ */
+export function setPaperRef(db: Db, memberId: string, workItemId: string, paperRef: string | null, now: Date) {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_work_item_paper_ref(${workItemId}::uuid, ${paperRef}, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "saved", setPaperRefRefusals);
   });
 }
 
@@ -1289,7 +1327,7 @@ async function hasStamp(trx: Trx): Promise<boolean> {
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft" | "editPaperRef">> {
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));
@@ -1508,24 +1546,30 @@ async function replyFileCounts(trx: Trx, workItemId: string): Promise<Record<str
  * hold is refused like a Transition that isn't there, by the database; a Validate
  * rule that doesn't hold is refused with its message. "Form complete" is checked
  * here, over the whole Form as the Member reads it; the database checks the others.
+ *
+ * A code raising Snags from failed check items (RP-577) gives them the items' photos: their
+ * files are copied here, in the same transaction (withFileCopies).
  */
 export function takeTransition(
   db: Db,
+  files: FileStore,
   memberId: string,
   workItemId: string,
   input: Required<TakeTransitionRequest>,
   now: Date,
 ): Promise<TakeTransitionResult> {
-  return withMember(db, memberId, (trx) => takeTransitionIn(trx, memberId, workItemId, input, now));
+  return withFileCopies(files, (copy) => withMember(db, memberId, (trx) => takeTransitionIn(trx, copy, memberId, workItemId, input, now)));
 }
 
 /**
  * takeTransition inside a transaction the acting Member's already runs in: the
  * same checks and the same app.take_transition, so a command taking several
  * Transitions at once (Submit Package, RP-638) takes each exactly as a single one.
+ * `copy` copies the files of the photos the Snags it raises take (RP-577).
  */
 export async function takeTransitionIn(
   trx: Trx,
+  copy: CopyFiles,
   memberId: string,
   workItemId: string,
   input: Required<TakeTransitionRequest>,
@@ -1621,7 +1665,15 @@ export async function takeTransitionIn(
     const rule = (routed ?? (await routedTransition(trx, workItemId, input.transition, answers)))?.rules.validate?.[Number(failed[1])];
     if (rule) return validationRefused(rule, pinned.form.schema, actionForm);
   }
-  return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
+  const result = commandResult(rows[0]!.outcome, "applied", transitionRefusals);
+  // The "before" photos of the Snags a code raised from failed check items (RP-577): none on a replay.
+  if (result.ok) {
+    const { rows: copies } = await sql<FileCopy>`
+      select storage_key, source_storage_key from app.raised_document_copies(${workItemId}::uuid)
+    `.execute(trx);
+    await copy(copies);
+  }
+  return result;
 }
 
 const saveAnswersRefusals = [
@@ -1764,6 +1816,11 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
       action_form: unknown;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
+    // The import that created it (RP-645, story 35), for its importing Company's Members only, with no time.
+    const { rows: imports } = await sql<{ import_id: string; file_name: string; member_name: BilingualText | null; by_rabaed: boolean }>`
+      select import_id, file_name, member_name, by_rabaed from app.register_import_of_work_item(${workItemId}::uuid)
+    `.execute(trx);
+    const imported = imports[0];
     // The reply files each Transition took (ADR 0024), as RLS shows them: they freeze at its event's
     // time (the history names no event id). The Owner's review writes one Transition as two events
     // of the same time, each read by one Participant, and both name the same files.
@@ -1778,6 +1835,9 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       return files.length > 0 ? { files } : {};
     };
     return {
+      ...(imported
+        ? { imported: { importId: imported.import_id, fileName: imported.file_name, byRabaed: imported.by_rabaed, memberName: imported.member_name } }
+        : {}),
       events: rows.map((r) => ({
         ...(r.answers ? { answersForm: parseActionForm(r.action_form ?? null) } : {}),
         seq: r.seq,
