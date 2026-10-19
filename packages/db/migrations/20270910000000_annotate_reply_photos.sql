@@ -28,14 +28,18 @@
 -- since the reply_checklist migration (RP-86), extracted for its next redefinition (spec RP-649).
 create function app.reply_files_waiting(p_work_item_id uuid, p_field_key text, p_item_key text, p_except uuid)
   returns bigint
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select count(*) from document d
-    where d.work_item_id = p_work_item_id and d.reply and d.reply_event_id is null
-      and d.field_key = p_field_key and d.item_key is not distinct from p_item_key
-      and d.confirmed_at is not null and d.removed_at is null
-      and d.annotated_from_id is null and d.id is distinct from p_except
+    begin
+      return (
+        select count(*) from document d
+        where d.work_item_id = p_work_item_id and d.reply and d.reply_event_id is null
+          and d.field_key = p_field_key and d.item_key is not distinct from p_item_key
+          and d.confirmed_at is not null and d.removed_at is null
+          and d.annotated_from_id is null and d.id is distinct from p_except
+      );
+    end
   $$;
 
 -- As in the reply_checklist migration (its counts through app.reply_files_waiting), except for an
