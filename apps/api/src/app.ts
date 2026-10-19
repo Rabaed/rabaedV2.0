@@ -15,6 +15,7 @@ import { resolveSession, type Principal, type Session } from "./identity/session
 import { loggerOptions } from "./logging.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { documentalRecordRoutes } from "./routes/documental-record.ts";
+import { workingCopyRoutes } from "./routes/working-copy.ts";
 import { documentRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { homeRoutes } from "./routes/home.ts";
@@ -179,6 +180,7 @@ export async function buildApp({
   await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(documentalRecordRoutes(context));
+  await app.register(workingCopyRoutes(context));
   await app.register(verificationRoutes(context));
   await app.register(notificationRoutes(context));
   await app.register(notificationSettingsRoutes(context));

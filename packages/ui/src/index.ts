@@ -161,6 +161,7 @@ export {
   type SettingsNavProps,
   type SettingsSectionProps,
 } from "./components/settings/settings-layout.tsx";
+export { WatermarkSetting, type WatermarkSettingLabels, type WatermarkSettingProps, type WatermarkText } from "./components/settings/watermark-setting.tsx";
 export { cn } from "./lib/cn.ts";
 export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {

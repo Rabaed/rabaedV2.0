@@ -1175,7 +1175,9 @@
     "download": "Download PDF",
     "notReady": "The record isn't ready yet. Try again in a minute.",
     "preparing": "Record being prepared",
-    "unavailable": "That didn't work. Try again."
+    "unavailable": "That didn't work. Try again.",
+    "workingCopyPreparing": "Preparing the Working Copy…",
+    "workingCopyFailed": "The Working Copy could not be made. Try again later."
   },
   "watch": {
     "watch": "Watch",
@@ -1808,6 +1810,15 @@
         "description": "Government Owners often ask for the Hijri date beside the Gregorian one.",
         "label": "Show Hijri dates",
         "help": "Off: dates are Gregorian only. On: every date on the record has its Hijri date beside it."
+      },
+      "watermark": {
+        "title": "Working Copy watermark",
+        "description": "Printed across every page of a Working Copy, the PDF of an item that isn't closed, so nobody takes it for the record.",
+        "en": "English text",
+        "ar": "Arabic text",
+        "help": "Both languages, up to {max} characters each. A change applies to Working Copies made afterwards.",
+        "save": "Save watermark",
+        "saved": "Saved"
       },
       "errors": {
         "unavailable": "That could not be done. Try again.",

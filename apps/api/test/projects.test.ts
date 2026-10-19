@@ -48,6 +48,7 @@ describe("creating a Project", () => {
       showInspectionsInSubmittals: false,
       recordLanguage: "bilingual",
       recordHijriDates: false,
+      workingCopyWatermark: { en: "Not Final", ar: "غير نهائي" },
     });
     expect(projectIds(await a.caller.get("/v1/projects"))).toContain(projectId);
   });
