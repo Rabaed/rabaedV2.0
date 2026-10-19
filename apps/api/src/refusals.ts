@@ -158,6 +158,17 @@ const answers = {
   // Form made for another Work Item Type.
   not_published: () => new HttpError(409, "not_published"),
   not_for_type: () => new HttpError(422, "not_for_type"),
+  // Packages (RP-636): an item the Package can't take, one answer whatever the reason (not seen,
+  // another Participant's, not a submittal, a made-up id); an item already in another of the
+  // Participant's Packages; removing or deleting once the Package is no longer Open; removing an
+  // item that isn't in it (or one the Member doesn't see).
+  item_not_offered: () => new HttpError(422, "item_not_offered"),
+  in_another_package: () => new HttpError(409, "in_another_package"),
+  package_not_open: () => new HttpError(409, "package_not_open"),
+  item_not_in_package: () => new HttpError(422, "item_not_in_package"),
+  // Submit Package (RP-638): no item in it is left to Submit. Not ready, it is the route's
+  // own 409 `package_not_ready`, listing what stops it.
+  nothing_to_submit: () => new HttpError(409, "nothing_to_submit"),
   // The Submittal Register Import (RP-637): a register the reader can't read, or a sheet or
   // header row it doesn't have (the body may add the reader's numbers, never a cell); a
   // mapped column past the header row's; a preview with no good row to create; a preview a

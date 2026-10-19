@@ -19,6 +19,7 @@ import {
   isHiddenLinkChoice,
   linkAccepts,
   offeredChoices,
+  packageNumber,
   requiredByProject,
   type SupplierChoice,
   parseActionForm,
@@ -775,6 +776,10 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
     `.execute(trx);
+    // Its Package (RP-659), as its row gives it: only one the viewer sees (work_item.package_id is not theirs to read).
+    const { rows: pkg } = await sql<{ package_id: string; seq: number; name: BilingualText }>`
+      select package_id, seq, name from app.work_item_package(${workItemId}::uuid)
+    `.execute(trx);
     const { rows: record } = await sql<{ state: "preparing" | "published" | null }>`select app.documental_record_state(${workItemId}::uuid) as state`.execute(trx);
     return {
       ...toSummary(row, now),
@@ -812,6 +817,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         ? { workItemId: source[0].work_item_id, documentNumber: source[0].document_number, subject: source[0].subject }
         : null,
       raisedItems: raisedItems.map((f) => ({ type: { code: f.type_code, name: f.type_name }, open: f.open_count, closed: f.closed_count })),
+      ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name } } : {}),
       actions: {
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,
@@ -1492,91 +1498,104 @@ export function takeTransition(
   input: Required<TakeTransitionRequest>,
   now: Date,
 ): Promise<TakeTransitionResult> {
-  return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
-    // The Member's key first, the lock app.take_transition takes (RP-600): a request
-    // with the same key waits for this one to commit, so its checks below read the
-    // item as moved and it reaches the replay, rather than being refused (no_route).
-    // Taken before the 404: it is the Member's own key, not the item's.
-    await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
-    const pinned = await pinnedForm(trx, workItemId);
-    if (!pinned) return { ok: false, reason: "not_found" };
-    // A hidden item is the plain 404 first; then nothing moves unconfirmed.
-    if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
-    // Only a Transition the Member may take is checked here, so anyone else is told why
-    // they can't act (by the database), never what its Action Form or the Form lacks.
-    const [taking] = await actionRows(trx, workItemId, input.transition);
-    // No Signature, no Transition (RP-85): refused before its answers are checked, as the
-    // pop-up asks for one before its Action Form. Only for a Transition they may take.
-    if (taking && !(await hasSignature(trx))) return { ok: false, reason: "no_signature" };
-    // No Stamp, no Transition (RP-617): right after the Signature, as the database checks it.
-    if (taking && !(await hasStamp(trx))) return { ok: false, reason: "no_stamp" };
-    const routed = taking ? await routedTransition(trx, workItemId, input.transition, input.answers) : null;
-    if (taking && !routed) return { ok: false, reason: "no_route" };
-    const actionForm = routed ? parseActionForm(routed.action_form) : null;
-    // Its Action Form's answers, as the Form's are checked when leaving Draft. The
-    // database takes only keys the schema has, with what it always requires.
-    let answers: Record<string, unknown> = input.answers;
-    if (routed) {
-      if (actionForm) {
-        // A Screen's file fields count the files waiting in them, which the Transition takes (ADR 0024).
-        const checked = validateAnswers(actionForm, input.answers, "complete", {
-          optionLists: await optionListsFor(trx, actionForm),
-          files: await replyFileCounts(trx, workItemId),
-        });
-        if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
-        answers = checked.answers;
-      } else if (Object.keys(input.answers).length > 0) {
-        return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
-      }
-    }
-    // The Form's answers as they stand, checked as complete: a retired option they
-    // hold stays valid (held).
-    const checkFormComplete = async () =>
-      validateAnswers(pinned.form.schema, pinned.data, "complete", {
-        scopes: await projectScopes(trx, pinned.projectId),
-        optionLists: await optionListsFor(trx, pinned.form.schema),
-        held: pinned.data,
-        suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
-        checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
-        files: await fieldFileCounts(trx, workItemId),
+  return withMember(db, memberId, (trx) => takeTransitionIn(trx, memberId, workItemId, input, now));
+}
+
+/**
+ * takeTransition inside a transaction the acting Member's already runs in: the
+ * same checks and the same app.take_transition, so a command taking several
+ * Transitions at once (Submit Package, RP-638) takes each exactly as a single one.
+ */
+export async function takeTransitionIn(
+  trx: Trx,
+  memberId: string,
+  workItemId: string,
+  input: Required<TakeTransitionRequest>,
+  now: Date,
+): Promise<TakeTransitionResult> {
+  // The Member's key first, the lock app.take_transition takes (RP-600): a request
+  // with the same key waits for this one to commit, so its checks below read the
+  // item as moved and it reaches the replay, rather than being refused (no_route).
+  // Taken before the 404: it is the Member's own key, not the item's.
+  await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
+  const pinned = await pinnedForm(trx, workItemId);
+  if (!pinned) return { ok: false, reason: "not_found" };
+  // A hidden item is the plain 404 first; then nothing moves unconfirmed.
+  if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
+  // Only a Transition the Member may take is checked here, so anyone else is told why
+  // they can't act (by the database), never what its Action Form or the Form lacks.
+  const [taking] = await actionRows(trx, workItemId, input.transition);
+  // No Signature, no Transition (RP-85): refused before its answers are checked, as the
+  // pop-up asks for one before its Action Form. Only for a Transition they may take.
+  if (taking && !(await hasSignature(trx))) return { ok: false, reason: "no_signature" };
+  // No Stamp, no Transition (RP-617): right after the Signature, as the database checks it.
+  if (taking && !(await hasStamp(trx))) return { ok: false, reason: "no_stamp" };
+  const routed = taking ? await routedTransition(trx, workItemId, input.transition, input.answers) : null;
+  if (taking && !routed) return { ok: false, reason: "no_route" };
+  const actionForm = routed ? parseActionForm(routed.action_form) : null;
+  // Its Action Form's answers, as the Form's are checked when leaving Draft. The
+  // database takes only keys the schema has, with what it always requires.
+  let answers: Record<string, unknown> = input.answers;
+  if (routed) {
+    if (actionForm) {
+      // A Screen's file fields count the files waiting in them, which the Transition takes (ADR 0024).
+      const checked = validateAnswers(actionForm, input.answers, "complete", {
+        optionLists: await optionListsFor(trx, actionForm),
+        files: await replyFileCounts(trx, workItemId),
       });
-    // Moving on by a Member who may save the answers now (other than a cancel or a Return),
-    // and every Submit whoever takes it (the PM, who may not save), needs the required
-    // fields of the sections naming the Step being left (form-engine.md §4); the database
-    // refuses answers that weren't checked.
-    if (pinned.canSave || routed?.kind === "submit") {
-      const checked = await checkFormComplete();
-      const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.sectionsAtStep, checked.errors);
-      // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
-      const kind = routed?.kind;
-      const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
-      if (routed && !back && missing.length > 0) {
-        return { ok: false, reason: "form_incomplete", errors: missing };
-      }
+      if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
+      answers = checked.answers;
+    } else if (Object.keys(input.answers).length > 0) {
+      return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
     }
-    // Validate "the Form is complete": the whole Form, as this Member reads it.
-    const validate = routed?.rules.validate ?? [];
-    const formComplete = validate.find((v) => v.type === "form_complete");
-    if (formComplete && !(await checkFormComplete()).ok) {
-      return validationRefused(formComplete, pinned.form.schema, actionForm);
+  }
+  // The Form's answers as they stand, checked as complete: a retired option they
+  // hold stays valid (held).
+  const checkFormComplete = async () =>
+    validateAnswers(pinned.form.schema, pinned.data, "complete", {
+      scopes: await projectScopes(trx, pinned.projectId),
+      optionLists: await optionListsFor(trx, pinned.form.schema),
+      held: pinned.data,
+      suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
+      checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
+      files: await fieldFileCounts(trx, workItemId),
+    });
+  // Moving on by a Member who may save the answers now (other than a cancel or a Return),
+  // and every Submit whoever takes it (the PM, who may not save), needs the required
+  // fields of the sections naming the Step being left (form-engine.md §4); the database
+  // refuses answers that weren't checked.
+  if (pinned.canSave || routed?.kind === "submit") {
+    const checked = await checkFormComplete();
+    const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.sectionsAtStep, checked.errors);
+    // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
+    const kind = routed?.kind;
+    const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
+    if (routed && !back && missing.length > 0) {
+      return { ok: false, reason: "form_incomplete", errors: missing };
     }
-    // A pick with no copy yet (a Revision's, carried from the item it revises) gets it before
-    // the item moves on, so it never leaves the raiser without its checklist (RP-651).
-    if (routed && pinned.canSave) await syncChecklists(trx, pinned.form.schema, workItemId, now);
-    const { rows } = await sql<{ outcome: string }>`
-      select app.take_transition(
-        ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
-        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid,
-        ${input.recommendedCode}::text) as outcome
-    `.execute(trx);
-    // A Validate rule the database found not holding, by its place in `validate`.
-    const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
-    if (failed) {
-      const rule = (routed ?? (await routedTransition(trx, workItemId, input.transition, answers)))?.rules.validate?.[Number(failed[1])];
-      if (rule) return validationRefused(rule, pinned.form.schema, actionForm);
-    }
-    return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
-  });
+  }
+  // Validate "the Form is complete": the whole Form, as this Member reads it.
+  const validate = routed?.rules.validate ?? [];
+  const formComplete = validate.find((v) => v.type === "form_complete");
+  if (formComplete && !(await checkFormComplete()).ok) {
+    return validationRefused(formComplete, pinned.form.schema, actionForm);
+  }
+  // A pick with no copy yet (a Revision's, carried from the item it revises) gets it before
+  // the item moves on, so it never leaves the raiser without its checklist (RP-651).
+  if (routed && pinned.canSave) await syncChecklists(trx, pinned.form.schema, workItemId, now);
+  const { rows } = await sql<{ outcome: string }>`
+    select app.take_transition(
+      ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
+      ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid,
+      ${input.recommendedCode}::text) as outcome
+  `.execute(trx);
+  // A Validate rule the database found not holding, by its place in `validate`.
+  const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
+  if (failed) {
+    const rule = (routed ?? (await routedTransition(trx, workItemId, input.transition, answers)))?.rules.validate?.[Number(failed[1])];
+    if (rule) return validationRefused(rule, pinned.form.schema, actionForm);
+  }
+  return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
 }
 
 const saveAnswersRefusals = [

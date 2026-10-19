@@ -18,8 +18,11 @@ export function DialogContent({ className, ...props }: DialogContentProps) {
   return (
     <ModalContent
       // Centred with auto margins rather than a translate, which does not flip in right-to-left.
+      // Its height rounds up to an even number of pixels, so on a screen of even height it sits on
+      // a whole pixel: centred at a fraction, a box inside it near a pixel edge was drawn a pixel
+      // higher or lower from one render to the next (RP-660's NewPackageRefused screenshot).
       className={cn(
-        "inset-0 m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100%-2rem))] overflow-y-auto rounded-md",
+        "inset-0 m-auto h-fit supports-[height:calc-size(fit-content,size)]:h-[calc-size(fit-content,round(up,size,2px))] max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100%-2rem))] overflow-y-auto rounded-md",
         className,
       )}
       {...props}

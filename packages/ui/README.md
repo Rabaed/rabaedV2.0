@@ -22,6 +22,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `notifications/` | `NotificationSettings` |
 | `numbering/` | Document Numbering settings: `DocumentNumbering`, `NumberingCounters`, `NumberingVersions`, `ParticipantCodes`, pattern editor |
 | `overlay/` | `Dialog`, `Sheet`, `Popover`, `Tooltip`, `ToastProvider`, `useToast` |
+| `packages/` | Packages (spec RP-616): `PackageChip`, `PackagePage` and its dialogs (rename, delete, Add items, Submit Package) |
 | `photo/` | The one photo tool (RP-656): `PhotoTool` (Take photo / Upload, thumbnails), `PhotoViewer` (Annotated / Original), `PhotoAnnotator` (the annotate view); `annotate-marks.ts` |
 | `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
 | `settings/` | `SettingsLayout` (the Project Settings frame) |

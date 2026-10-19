@@ -182,7 +182,16 @@ export type WorkItemListLabels = {
 };
 
 /** The filter fields' names in the other language, shown small after each (the anatomy's bilingual field list). */
-export type WorkItemFilterHints = Partial<Record<"stage" | "trade" | "documentType" | "owner" | "role" | "createdDate" | "stepAge" | "outcome" | "submissionDate" | "revisions", string>>;
+export type WorkItemFilterHints = Partial<Record<"stage" | "trade" | "documentType" | "owner" | "role" | "createdDate" | "stepAge" | "outcome" | "submissionDate" | "revisions" | "package", string>>;
+
+/**
+ * The Package filter (RP-662): the field's name, and the Packages the viewer sees as the API lists
+ * them, each by its PKG number and owning Company (numbers count per Company, so two can both be PKG-001).
+ */
+export type WorkItemPackageFilter = {
+  label: string;
+  choices: { id: string; number: string; owner: { companyName: BilingualText } }[];
+};
 
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
@@ -230,6 +239,8 @@ export type WorkItemListProps = {
   board?: ReactNode;
   /** The filter fields' names in the other language. */
   hints?: WorkItemFilterHints;
+  /** The Submittals' Package filter (RP-662), one Package at a time. Without it, the panel has no Package field. */
+  packages?: WorkItemPackageFilter;
   /** The table's columns at first, in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
   columns?: ListColumnLayout;
   /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
@@ -262,7 +273,7 @@ export type WorkItemListProps = {
  * The table's scroll padding: what has keyboard focus scrolls clear of the pinned header row,
  * the pinned checkbox column at the start and the pinned settings column at the end (WCAG 2.4.11).
  */
-const scrollClear = "scroll-pt-[42px] scroll-ps-11 scroll-pe-[60px] pointer-coarse:scroll-pt-12 pointer-coarse:scroll-ps-16";
+export const scrollClear = "scroll-pt-[42px] scroll-ps-11 scroll-pe-[60px] pointer-coarse:scroll-pt-12 pointer-coarse:scroll-ps-16";
 
 /** The List, with its own place for the short confirmations it shows (the shared toast). */
 export function WorkItemList(props: WorkItemListProps) {
@@ -287,6 +298,7 @@ function WorkItemListBody({
   linkAs: Link = "a",
   board,
   hints,
+  packages,
   columns: initialColumns,
   onSaveColumns,
   loadExportRows,
@@ -372,6 +384,7 @@ function WorkItemListBody({
     />
   );
   const filtered = isFilteredWorkItemQuery(query);
+  const chosenPackage = query.packageId === undefined ? undefined : packages?.choices.find((p) => p.id === query.packageId);
 
   const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
   /** A field of several values, any of them (RP-410). */
@@ -424,6 +437,41 @@ function WorkItemListBody({
         ),
       })),
     ),
+    // One Package of those the viewer sees (RP-662): its number left to right, beside its owning Company by name only (V14).
+    ...(packages
+      ? [
+          {
+            key: "package",
+            label: packages.label,
+            hint: hints?.package,
+            group: "workflow",
+            count: query.packageId === undefined ? 0 : 1,
+            content: (
+              <FilterValues
+                label={packages.label}
+                hint={hints?.package}
+                multiple={false}
+                values={query.packageId === undefined ? [] : [query.packageId]}
+                choices={packages.choices.map((p) => ({
+                  value: p.id,
+                  text: `${p.number} ${p.owner.companyName[locale]}`,
+                  label: (
+                    <>
+                      <bdi dir="ltr" translate="no" className="font-ui font-semibold text-text">
+                        {p.number}
+                      </bdi>{" "}
+                      <span className="text-muted">{p.owner.companyName[locale]}</span>
+                    </>
+                  ),
+                  mark: <Icon name="packages" size={15} className="text-muted" />,
+                }))}
+                labels={valueLabels}
+                onChange={([v]) => change({ packageId: v })}
+              />
+            ),
+          } satisfies FilterMenuField,
+        ]
+      : []),
     many(
       "type",
       t("documentType"),
@@ -608,6 +656,7 @@ function WorkItemListBody({
               trade: [],
               location: [],
               outcome: [],
+              packageId: undefined,
               stepAgeMin: undefined,
               createdWithin: undefined,
               submittedFrom: undefined,
@@ -630,6 +679,28 @@ function WorkItemListBody({
           </Link>
         )}
         </span>
+        {/* The Package chosen (RP-662), named: its number left to right beside its owning Company (V14), as the Package page links here. */}
+        {chosenPackage && packages && (
+          <span
+            data-package-filter=""
+            className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border border-control-border bg-surface ps-2.5 text-sm pointer-coarse:min-h-11"
+          >
+            <Icon name="packages" size={15} className="text-muted" />
+            <span className="sr-only">{packages.label}: </span>
+            <bdi dir="ltr" translate="no" className="font-ui font-semibold text-text">
+              {chosenPackage.number}
+            </bdi>{" "}
+            <span className="text-muted">{chosenPackage.owner.companyName[locale]}</span>
+            <Link
+              href={hrefFor({ ...query, packageId: undefined })}
+              aria-label={`${packages.label}: ${t("clearField")}`}
+              title={`${packages.label}: ${t("clearField")}`}
+              className={cn("inline-flex h-full w-7 items-center justify-center rounded-e-sm text-muted hover:bg-hover hover:text-text pointer-coarse:w-11", focusRing)}
+            >
+              <Icon name="x" size={14} />
+            </Link>
+          </span>
+        )}
         <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
         {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
         {query.bucket.length + query.codeC.length > 0 && (

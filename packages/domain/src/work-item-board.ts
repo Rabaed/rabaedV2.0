@@ -2,6 +2,7 @@ import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
 import { formSchema } from "./form.ts";
+import type { ModuleKey } from "./module.ts";
 import { transitionKinds, workItemList, workItemRow, type WorkItemRow } from "./work-item.ts";
 
 /**
@@ -23,6 +24,18 @@ export type WorkItemView = (typeof workItemViews)[number];
 export function workItemViewFromSearchParams(params: URLSearchParams | Record<string, string | string[] | undefined>): WorkItemView {
   const raw = params instanceof URLSearchParams ? params.get("view") : [params.view].flat()[0];
   return raw === "kanban" ? "kanban" : "list";
+}
+
+/**
+ * A Module tab's Views: its Work Items' List and Kanban, and on the Submittals also its
+ * Packages (RP-660, spec RP-616 story 29), a Kanban of the Packages the viewer sees.
+ */
+export type ModuleView = WorkItemView | "packages";
+
+/** The View a Module tab's URL holds: `view=packages` on the Submittals only, else as workItemViewFromSearchParams. */
+export function moduleViewFromSearchParams(params: URLSearchParams | Record<string, string | string[] | undefined>, module: ModuleKey): ModuleView {
+  const raw = params instanceof URLSearchParams ? params.get("view") : [params.view].flat()[0];
+  return raw === "packages" && module === "submittals" ? "packages" : workItemViewFromSearchParams(params);
 }
 
 /** A card: the item as a List row, so it reads the same on both Views. */

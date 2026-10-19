@@ -4,6 +4,7 @@ import {
   cardNumber,
   dropTargets,
   lanesInLocale,
+  moduleViewFromSearchParams,
   ownStepCounts,
   workItemViewFromSearchParams,
   type BoardCardInput,
@@ -132,6 +133,21 @@ describe("workItemViewFromSearchParams", () => {
     expect(workItemViewFromSearchParams({ view: "list" })).toBe("list");
     expect(workItemViewFromSearchParams({ view: "board" })).toBe("list");
     expect(workItemViewFromSearchParams({})).toBe("list");
+  });
+});
+
+describe("moduleViewFromSearchParams", () => {
+  it("reads the Packages view from view=packages on the Submittals only (RP-660)", () => {
+    expect(moduleViewFromSearchParams(new URLSearchParams("view=packages"), "submittals")).toBe("packages");
+    expect(moduleViewFromSearchParams({ view: "packages" }, "submittals")).toBe("packages");
+    // Another Module has no Packages: its List.
+    expect(moduleViewFromSearchParams({ view: "packages" }, "snag_list")).toBe("list");
+  });
+
+  it("reads the List and the Kanban as before", () => {
+    expect(moduleViewFromSearchParams({ view: "kanban" }, "submittals")).toBe("kanban");
+    expect(moduleViewFromSearchParams({ view: "kanban" }, "snag_list")).toBe("kanban");
+    expect(moduleViewFromSearchParams({}, "submittals")).toBe("list");
   });
 });
 

@@ -343,6 +343,23 @@ export interface ApprovedSupplierTable {
 }
 
 /**
+ * A Package (RP-636): a named group of submittals of one Participant. Only the
+ * columns the app role may read, under `app.sees_package`; who created it, when,
+ * and whether it was discarded are the database's own. An item's Package is read through
+ * `app.work_item_package` (work_item.package_id is never granted), its items
+ * through `app.package_items`. Written through the app.* functions of the
+ * open_package migration.
+ */
+export interface PackageTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  seq: number;
+  name: ColumnType<Bilingual, string, string>;
+  status: Generated<"open" | "in_progress" | "done">;
+}
+
+/**
  * A Project's Checklist Template (RP-651): its latest Version and whether it is retired. Only
  * the columns the app role may read; who created or retired it, and when, are the database's
  * own. Written through `app.create_checklist_template`, `app.edit_checklist_template` and
@@ -798,6 +815,7 @@ export interface Database {
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
   approved_supplier: ApprovedSupplierTable;
+  package: PackageTable;
   submittal_register_import: SubmittalRegisterImportTable;
   submittal_register_import_row: SubmittalRegisterImportRowTable;
   project_required_field: ProjectRequiredFieldTable;

@@ -328,6 +328,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     code: (code) => `Code ${code}`,
     createdOn: (date) => `Created ${date}`,
     submittedOn: (date) => `Submitted ${date}`,
+    openPackage: (number, name) => `Open Package ${number} ${name}`,
   },
   ar: {
     board: "كانبان",
@@ -351,12 +352,13 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     code: (code) => `Code ${code}`,
     createdOn: (date) => `أُنشئ في ${date}`,
     submittedOn: (date) => `قُدِّم في ${date}`,
+    openPackage: (number, name) => `فتح الحزمة ${number} ${name}`,
   },
 };
 
 export const viewSwitchLabels: Record<Locale, WorkItemViewSwitchLabels> = {
-  en: { view: "View", list: "List", kanban: "Kanban" },
-  ar: { view: "طريقة العرض", list: "قائمة", kanban: "كانبان" },
+  en: { view: "View", list: "List", kanban: "Kanban", packages: "Packages" },
+  ar: { view: "طريقة العرض", list: "قائمة", kanban: "كانبان", packages: "الحزم" },
 };
 
 export const projectDashboardLabels: Record<Locale, ProjectDashboardLabels> = {

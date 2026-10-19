@@ -1,6 +1,7 @@
 import {
   directionOf,
   formatNumber,
+  intlLocaleOf,
   isWatchOutcome,
   stepAgeReportGroups,
   watchOutcomeNames,
@@ -39,6 +40,8 @@ export interface EmailTemplateValues {
   "notification-watched-event": NotificationEmailValues;
   /** An item was Sent Back to the Member's Participant (RP-356). */
   "notification-sent-back": NotificationEmailValues;
+  /** A Package's submittals reached the Member with one Submit Package (RP-643). */
+  "notification-package-submitted": NotificationEmailValues;
   /** The daily digest of the notifications routed to it (RP-358). */
   "daily-digest": DailyDigestValues;
   /** The weekly Step Age report (RP-359). */
@@ -176,6 +179,8 @@ const notificationCopy = {
     updated: "Updated",
     by: (company: string) => `By ${company}.`,
     signedBy: (name: string) => `Signed by ${name}.`,
+    packageSubmitted: (company: string, count: number) =>
+      `${company} Submitted ${count === 1 ? "1 submittal" : `${formatNumber(count, "en")} submittals`}`,
     open: "Open it on Rabaed:",
     settings: "You choose which emails you get in your notification settings on Rabaed.",
     digestSubject: "Your Rabaed daily digest",
@@ -190,6 +195,7 @@ const notificationCopy = {
     updated: "حُدّث",
     by: (company: string) => `من ${company}.`,
     signedBy: (name: string) => `وقّعه ${name}.`,
+    packageSubmitted: (company: string, count: number) => `قدّم ${company} ${arabicSubmittals(count)}`,
     open: "افتحه على ربائد:",
     settings: "تختار الرسائل التي تصلك من إعدادات الإشعارات على ربائد.",
     digestSubject: "ملخصك اليومي من ربائد",
@@ -221,11 +227,13 @@ const stepName = (locale: Locale, step: BilingualText | null) => step?.[locale] 
 
 function notificationEmail(locale: Locale, values: NotificationEmailValues, happened: string, details: Paragraph[]): Content {
   const copy = notificationCopy[locale];
-  const { documentNumber, subject } = values;
+  const { subject } = values;
+  // The item's Document Number, or a Package Submit's Package number: both left to right.
+  const number = values.package?.number ?? values.documentNumber;
   return {
-    subject: [documentNumber && isolate(documentNumber), subject, happened].filter(Boolean).join(" · "),
+    subject: [number && isolate(number), subject, happened].filter(Boolean).join(" · "),
     paragraphs: [
-      itemLine(documentNumber, subject),
+      itemLine(number, subject),
       [happened],
       ...details,
       [copy.open],
@@ -236,7 +244,12 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   };
 }
 
-type Happening = Pick<NotificationEmailContent, "step" | "event">;
+type Happening = Pick<NotificationEmailContent, "step" | "event" | "package">;
+
+/** A Package Submit: who Submitted it (the owning Company, by name) and how many of its submittals the recipient sees. */
+function packageHappened(locale: Locale, { package: pkg }: Happening): string {
+  return pkg ? notificationCopy[locale].packageSubmitted(pkg.companyName[locale], pkg.count) : notificationCopy[locale].updated;
+}
 
 /**
  * Each kind of notification: the template it is emailed with; what happened, in
@@ -258,6 +271,11 @@ const notificationKinds = {
     template: "notification-sent-back",
     happened: (locale: Locale) => notificationCopy[locale].sentBack,
     details: (locale: Locale, { event }: Happening) => actedBy(locale, event),
+  },
+  package_submitted: {
+    template: "notification-package-submitted",
+    happened: packageHappened,
+    details: (): Paragraph[] => [],
   },
 } as const satisfies Record<
   NotificationEmailKind,
@@ -349,7 +367,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
         ...projects.flatMap((project) => [
           [project.name[locale]],
           ...project.items.flatMap((item): Paragraph[] => [
-            itemLine(item.documentNumber, item.subject),
+            itemLine(item.packageNumber ?? item.documentNumber, item.subject),
             ...item.entries.map(entryLine),
             [{ ltr: webLink(item.link), link: true }],
           ]),
@@ -376,6 +394,23 @@ function arabicMinutes(count: number): string {
   return count >= 3 && count <= 10 ? "دقائق" : "دقيقة";
 }
 
+// A count of submittals in Arabic, as the web says it (messages/ar.json "submittals").
+function arabicSubmittals(count: number): string {
+  const n = formatNumber(count, "ar");
+  switch (new Intl.PluralRules(intlLocaleOf("ar")).select(count)) {
+    case "one":
+      return "تقديم واحد";
+    case "two":
+      return "تقديمان";
+    case "few":
+      return `${n} تقديمات`;
+    case "many":
+      return `${n} تقديمًا`;
+    default:
+      return `${n} تقديم`;
+  }
+}
+
 /** Only web links go in an email; anything else (javascript:, data:) is a bug upstream. */
 function webLink(link: string): string {
   const url = new URL(link);
@@ -383,9 +418,9 @@ function webLink(link: string): string {
   return url.href;
 }
 
-/** An item's line: its Document Number (left to right), when it has one, then `rest` (its Subject, and more). */
-function itemLine(documentNumber: string | null, rest: string): Paragraph {
-  return documentNumber ? [{ ltr: documentNumber, inline: true }, ` · ${rest}`] : [rest];
+/** An item's line: its number (left to right: a Document Number, or a Package's), when it has one, then `rest` (its Subject, and more). */
+function itemLine(number: string | null, rest: string): Paragraph {
+  return number ? [{ ltr: number, inline: true }, ` · ${rest}`] : [rest];
 }
 
 /** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */
