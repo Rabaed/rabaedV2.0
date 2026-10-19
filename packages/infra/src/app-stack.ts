@@ -11,7 +11,7 @@ import { grantToDeployRole } from "./deploy-grants.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
-import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
+import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_IMAGE_OBJECTS, RECORD_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
 
 /**
  * The free public RFC 3161 timestamp authority the Documental Records' seals use (ADR 0023).
@@ -97,12 +97,13 @@ export class AppStack extends Stack {
     });
     const appDatabase = databaseConnection(data, "rabaed_app");
     appDatabase.grantRead(apiTaskRole);
-    // Read and write objects under projects/ only: what the signed URLs it
-    // creates may do, since a signed URL carries the signer's permissions.
+    // Read and write objects under projects/, and the Signatures, logos and
+    // Stamps it stores itself (RP-951), only: what the signed URLs it creates
+    // may do, since a signed URL carries the signer's permissions.
     apiTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-        resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)],
+        resources: [`${PROJECT_FILES_PREFIX}*`, ...RECORD_IMAGE_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
       }),
     );
     // So S3 answers 404, not 403, for a file not uploaded yet: confirming a
