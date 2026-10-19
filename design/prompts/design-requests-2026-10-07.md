@@ -1,6 +1,6 @@
 # Design requests: pages with no design yet (Epic RP-405)
 
-Decided in the grilling session of 2026-10-07 ("Frontend to the design", Epic RP-405). Each screen below has its own prompt file and a "Design:" task in Jira assigned to the product owner. Paste the **shared brief** first, then one screen's prompt, check the result, and re-export the zip into `design/reference/claude-design/`. Mark the Jira task Done; its build ticket is then created.
+Decided in the grilling session of 2026-10-07 ("Frontend to the design", Epic RP-405). Each screen below has its own prompt file and a "Design:" task in Jira assigned to the product owner. Paste the **shared brief** first, then one screen's prompt, check the result, and re-export the zip into `design/reference/claude-design/` (an HTML export goes through `pnpm design:strip-fonts <in.html> <out.html>` first: exports embed their fonts, which CI refuses). Mark the Jira task Done; its build ticket is then created.
 
 | Prompt | Jira |
 |---|---|

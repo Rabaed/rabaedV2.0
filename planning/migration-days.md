@@ -116,3 +116,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270907 | RP-645 | 5B | Rabaed Admin may call app.current_project_ids() (final day, moved from 20270901 before queueing) |
 | 20270908 | RP-644 | 5B | Register Import: Packages from an import, downloads and saved mappings (final day, moved from 20270902 before queueing) |
 | 20270911 | RP-960 | 5B | Register Import: a Type counts as raisable only on a Rabaed or the Project's own Workflow (Rabaed Admin's import runs as the app role: bootstrap) |
+| 20270910 | RP-157 | 23 | documental_record_verification |

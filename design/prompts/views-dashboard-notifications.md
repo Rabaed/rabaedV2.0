@@ -1,7 +1,7 @@
 # Change requests: views, Dashboard and notifications
 
 Decided in the grilling session of 2026-10-06 (Work item views, Need My Action, Dashboard and Activity; RP-25, RP-33).
-Paste one section at a time into the Claude Design project, check the result, then re-export the zip into `design/reference/claude-design/`.
+Paste one section at a time into the Claude Design project, check the result, then re-export the zip into `design/reference/claude-design/`. Before committing an HTML export, run `pnpm design:strip-fonts <in.html> <out.html>`: exports embed their fonts (Thmanyah too), which CI refuses.
 
 These prototypes show UI intent only. Terms follow `GLOSSARY.md`. Every screen only needs to be responsive; a dedicated phone and app design comes later.
 

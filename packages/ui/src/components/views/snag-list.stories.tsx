@@ -6,6 +6,8 @@ import { storyLocale, storyText } from "../../storybook/locale.ts";
 import type { SnagBulkLabels } from "./snag-bulk.tsx";
 import type { SnagExportLabels } from "./snag-export.ts";
 import { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps } from "./snag-list.tsx";
+import type { SnagSwipe } from "./snag-phone.tsx";
+import type { SwipeAction } from "./snag-swipe.ts";
 
 // The Snag List's desktop views (RP-94, design/reference/claude-design/ui_kits/app/snag-list.html)
 // as TMC's PM sees them: Snags raised by the Consultant on TMC, and Comments raised from
@@ -72,6 +74,14 @@ const labels: Record<Locale, SnagListLabels> = {
     lastPage: "Last page",
     page: (page) => `Page ${page}`,
     pageOf: (page, last) => `Page ${page} of ${last}`,
+    phone: {
+      swipeHint: "Swipe a card for what you can do on it",
+      showItems: (n, count) => (count === 1 ? "Show 1 item" : `Show ${n} items`),
+      transitionsOf: (subject) => `What you can do on ${subject}`,
+      loadingTransitions: "Loading…",
+      noTransitions: "Nothing for you to do here now",
+      transitionsUnavailable: "Couldn't read what you can do on it",
+    },
   },
   ar: {
     toolbar: "التصفية والترتيب",
@@ -132,6 +142,14 @@ const labels: Record<Locale, SnagListLabels> = {
     lastPage: "الصفحة الأخيرة",
     page: (page) => `صفحة ${page}`,
     pageOf: (page, last) => `صفحة ${page} من ${last}`,
+    phone: {
+      swipeHint: "اسحب البطاقة لترى ما يمكنك فعله عليها",
+      showItems: (n, count) => (count === 1 ? "عرض عنصر واحد" : `عرض ${n} عنصر`),
+      transitionsOf: (subject) => `ما يمكنك فعله على ${subject}`,
+      loadingTransitions: "جارٍ التحميل…",
+      noTransitions: "لا إجراء لك عليها الآن",
+      transitionsUnavailable: "تعذّرت قراءة ما يمكنك فعله عليها",
+    },
   },
 };
 
@@ -514,5 +532,109 @@ export const BulkMove: Story = {
     await userEvent.click(await dialog.findByRole("radio", { name: stages.inProgress.name[storyLocale(context)] }));
     await userEvent.click(dialog.getByRole("button", { name: text.moveConfirm }));
     await expect((await dialog.findAllByText(text.reasons.not_offered))[0]).toBeVisible();
+  },
+};
+
+// The phone (RP-630; design/reference/claude-design/ui_kits/app/snag-list-mobile.html): the same List as cards.
+
+/** The Transitions each card's item offers TMC's engineer, as its `actions` would list them. Story data only. */
+const offered: Record<string, SwipeAction[]> = {
+  [items[0]!.id]: [
+    { key: "resolve", label: b("Resolve", "حل"), kind: "submit", tone: "forward" },
+    { key: "put_on_hold", label: b("Put on hold", "تعليق"), kind: "send", tone: "move" },
+  ],
+};
+const swipeStub = (take = fn<SnagSwipe["take"]>()): SnagSwipe => ({ load: async (id) => offered[id] ?? [], take });
+const phoneCard = (context: { canvas: ReturnType<typeof within> }, subject: string) => context.canvas.getByRole("link", { name: subject }).closest("li")!;
+/** A finger dragging a card `dx` pixels sideways. */
+async function swipe(card: HTMLElement, dx: number) {
+  const surface = card.querySelector<HTMLElement>("[data-swipe-card]")!;
+  const box = surface.getBoundingClientRect();
+  const y = box.top + box.height / 2;
+  const x = box.left + box.width / 2;
+  const send = async (type: string, clientX: number) => {
+    surface.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: "touch", isPrimary: true, button: 0, clientX, clientY: y }));
+    // Each event's render lands before the next, as between a finger's moves.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  };
+  await send("pointerdown", x);
+  await send("pointermove", x + dx / 2);
+  await send("pointermove", x + dx);
+  await send("pointerup", x + dx);
+}
+const towardsStart = (context: Parameters<NonNullable<Story["play"]>>[0], px: number) => (storyLocale(context) === "ar" ? px : -px);
+// The cards' "Actions for …" button is for the keyboard: hidden until it has focus, so its box is the screen reader's 1px.
+const phoneParameters = { phone: true, touchTargets: { exempt: [{ selector: "[data-card-actions]", reason: "keyboard-only, shown on focus" }] } };
+
+/**
+ * A phone: photo-first cards with the type's shape, the number (left to right in Arabic too), the
+ * Subject, the Stage and its Step Age dots, where it is and who holds it; the type chips and
+ * Need My Action in one row; the filters behind one button; a large "+". The desktop table is gone.
+ */
+export const Phone: Story = {
+  parameters: phoneParameters,
+  args: { phoneNewHref: (code: string) => `#camera-${code}` },
+  render: (args, context) => <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} swipe={swipeStub()} />,
+  play: async (context) => {
+    const text = labels[storyLocale(context)];
+    await expect(context.canvas.queryByRole("table")).toBeNull();
+    const cards = context.canvas.getByRole("region", { name: text.table });
+    await expect(within(cards).getAllByRole("listitem").filter((li) => li.querySelector("[data-swipe-card]"))).toHaveLength(items.length);
+    const number = within(cards).getByText("TWR-DCL-EL-SNG-011");
+    await expect(getComputedStyle(number).direction).toBe("ltr");
+    await expectLaidOutLeftToRight(number);
+    await expect(within(cards).getByText(text.phone.swipeHint)).toBeVisible();
+    await expect(within(cards).getByRole("link", { name: text.newOfType(snag.name[storyLocale(context)]) })).toHaveAttribute("href", "#camera-SNG");
+    const chips = within(cards).getByRole("navigation", { name: text.types });
+    await expect(within(chips).getByRole("link", { name: text.needMyAction })).toHaveAttribute("href", expect.stringContaining("needMyAction=true"));
+  },
+};
+
+/** Swiping a card shows only what its item offers the viewer; one tap opens that Transition's Action Form (here, the stub's `take`). */
+export const PhoneSwipe: Story = {
+  parameters: phoneParameters,
+  args: { swipe: swipeStub() },
+  render: (args, context) => <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} />,
+  play: async (context) => {
+    const card = phoneCard(context, "Cable tray not bonded");
+    await swipe(card, towardsStart(context, 170));
+    const resolve = await within(card).findByRole("button", { name: storyText(context, b("Resolve", "حل")) });
+    await expect(within(card).getAllByRole("button").filter((el) => !el.hasAttribute("data-card-actions"))).toHaveLength(2);
+    await userEvent.click(resolve);
+    await expect(context.args.swipe!.take).toHaveBeenCalledWith(items[0]!.id, "resolve");
+  },
+};
+
+/** A card whose item offers the viewer nothing says so, and shows no button; the keyboard opens it too. */
+export const PhoneNothingToTake: Story = {
+  parameters: phoneParameters,
+  args: { swipe: swipeStub() },
+  render: (args, context) => <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} />,
+  play: async (context) => {
+    const text = labels[storyLocale(context)];
+    const card = phoneCard(context, "Socket outlet loose");
+    await userEvent.click(within(card).getByRole("button", { name: text.phone.transitionsOf("Socket outlet loose") }));
+    await expect(await within(card).findByText(text.phone.noTransitions)).toBeVisible();
+    await expect(within(card).getAllByRole("button").filter((el) => !el.hasAttribute("data-card-actions"))).toHaveLength(0);
+  },
+};
+
+/** The filters in a bottom sheet: Stage and Trade chips and Need My Action, each applied at once; "Show 6 items" closes it. */
+export const PhoneFilters: Story = {
+  parameters: phoneParameters,
+  args: { query: { ...defaults, stage: ["open"] } },
+  play: async (context) => {
+    const text = labels[storyLocale(context)];
+    await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(text.filters) }));
+    const sheet = within(await within(document.body).findByRole("dialog", { name: text.filters }));
+    await expect(sheet.getByRole("button", { name: stages.open.name[storyLocale(context)] })).toHaveAttribute("aria-pressed", "true");
+    // Drafts are never a Stage to filter the List by.
+    await expect(sheet.queryByRole("button", { name: stages.draft.name[storyLocale(context)] })).toBeNull();
+    await userEvent.click(sheet.getByRole("button", { name: stages.onHold.name[storyLocale(context)] }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith(expect.objectContaining({ stage: ["open", "on_hold"] }));
+    await userEvent.click(sheet.getByRole("switch", { name: text.needMyAction }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith(expect.objectContaining({ needMyAction: true }));
+    await userEvent.click(sheet.getByRole("button", { name: text.phone.showItems(storyLocale(context) === "ar" ? "6" : "6", 6) }));
+    await expect(within(document.body).queryByRole("dialog")).toBeNull();
   },
 };
