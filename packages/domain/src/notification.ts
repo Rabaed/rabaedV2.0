@@ -5,10 +5,11 @@ import { workItemOutcome } from "./work-item.ts";
 
 /**
  * What an in-app notification is about: a Step reached the Member or their
- * pool, something happened on an item they watch, or an item was Sent Back to
- * their Participant.
+ * pool, something happened on an item they watch, an item was Sent Back to
+ * their Participant, or a closed item's Documental Record is ready (RP-155: in
+ * the bell only; it names no Company and no person).
  */
-export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back"] as const;
+export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back", "record_ready"] as const;
 
 /** What happened on a watched item. */
 export const watchedEventTypes = ["transition", "issue_code", "revision_created", "cancelled"] as const;

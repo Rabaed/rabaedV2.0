@@ -1076,6 +1076,7 @@
   "documentalRecord": {
     "download": "Download PDF",
     "notReady": "The record isn't ready yet. Try again in a minute.",
+    "preparing": "Record being prepared",
     "unavailable": "That didn't work. Try again."
   },
   "watch": {
@@ -1506,7 +1507,8 @@
     "revisionCreated": "New Revision",
     "cancelled": "Cancelled",
     "sentBack": "Sent Back to you by {company}",
-    "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}"
+    "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}",
+    "recordReady": "Record ready to download"
   },
   "handover": {
     "title": "Hand over {name}'s Steps",
