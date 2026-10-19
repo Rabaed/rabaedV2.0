@@ -1,5 +1,5 @@
-import { withMember, type Db } from "@rabaed/db";
-import { packageNumber, type BilingualText, type ItemNotification, type Notification, type NotificationList } from "@rabaed/domain";
+import { notificationPackageOf, withMember, type Db, type NotificationPackageColumns } from "@rabaed/db";
+import type { BilingualText, ItemNotification, Notification, NotificationList } from "@rabaed/domain";
 import { sql } from "kysely";
 
 // In-app notifications. The worker writes them (app.deliver_notification); a
@@ -27,14 +27,9 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       transition_label: BilingualText | null;
       outcome: NonNullable<ItemNotification["event"]>["outcome"];
       company_name: BilingualText | null;
-      package_id: string | null;
-      package_seq: number | null;
-      package_name: BilingualText | null;
-      package_company_name: BilingualText | null;
-      item_count: number | null;
       created_at: Date;
       read_at: Date | null;
-    }>`
+    } & NotificationPackageColumns>`
       with latest as (
         select * from notification order by created_at desc, id desc limit ${LIMIT}
       )
@@ -67,13 +62,7 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
             workItemId: null,
             step: null,
             event: null,
-            package: {
-              id: r.package_id!,
-              number: packageNumber(r.package_seq!),
-              name: r.package_name!,
-              companyName: r.package_company_name!,
-              count: r.item_count!,
-            },
+            package: notificationPackageOf(r)!,
           };
         }
         return {

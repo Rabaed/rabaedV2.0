@@ -41,7 +41,7 @@ type NotificationEvent = NonNullable<NotificationEmailContent["event"]>;
  * (app.notification_email_content): a row of app.take_notification_email, and,
  * with its Project, of app.take_notification_digest.
  */
-interface NotificationRow {
+interface NotificationRow extends NotificationPackageColumns {
   to_address: string;
   language: Locale;
   kind: NotificationEmailKind;
@@ -55,6 +55,10 @@ interface NotificationRow {
   outcome: string | null;
   company_name: BilingualText | null;
   signer_name: BilingualText | null;
+}
+
+/** The columns app.notification_package gives a Package Submit's notification (RP-643): null on any other. */
+export interface NotificationPackageColumns {
   package_id: string | null;
   package_seq: number | null;
   package_name: BilingualText | null;
@@ -62,8 +66,8 @@ interface NotificationRow {
   item_count: number | null;
 }
 
-/** A Package Submit's Package, as its recipient sees it; null for any other notification. */
-function packageOf(row: NotificationRow): NotificationEmailPackage | null {
+/** A Package Submit's Package, as its recipient sees it, for the bell (api) and the emails (here); null for any other notification. */
+export function notificationPackageOf(row: NotificationPackageColumns): NotificationEmailPackage | null {
   return row.package_id
     ? { id: row.package_id, number: packageNumber(row.package_seq!), name: row.package_name!, companyName: row.package_company_name!, count: row.item_count! }
     : null;
@@ -71,12 +75,12 @@ function packageOf(row: NotificationRow): NotificationEmailPackage | null {
 
 /**
  * What a notification email says of its subject: the item's number and Subject, or a
- * Package Submit's Package number and name (in `language`).
+ * Package Submit's Package and its name (in `language`), with no Document Number.
  */
 function aboutOf(row: NotificationRow, language: Locale): Pick<NotificationEmailContent, "workItemId" | "documentNumber" | "subject" | "package"> {
-  const pkg = packageOf(row);
+  const pkg = notificationPackageOf(row);
   return pkg
-    ? { workItemId: null, documentNumber: pkg.number, subject: pkg.name[language], package: pkg }
+    ? { workItemId: null, documentNumber: null, subject: pkg.name[language], package: pkg }
     : { workItemId: row.work_item_id, documentNumber: row.document_number, subject: row.subject ?? "" };
 }
 
@@ -145,7 +149,7 @@ export function notificationDigestHandler(send: SendNotificationDigest): OutboxH
       if (!item) {
         item = {
           workItemId: about.workItemId,
-          ...(about.package ? { packageId: about.package.id } : {}),
+          ...(about.package ? { packageId: about.package.id, packageNumber: about.package.number } : {}),
           documentNumber: about.documentNumber,
           subject: about.subject,
           entries: [],

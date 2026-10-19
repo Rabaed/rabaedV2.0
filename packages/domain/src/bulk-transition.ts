@@ -36,8 +36,9 @@ export type BulkTransitionTaken = z.infer<typeof bulkTransitionTaken>;
  * Transition (`transition_not_offered`: another Step, or still to pick up), it offers
  * it with another Action Form than the first item's (`different_action_form`: another
  * Screen Version), or its own Transition refuses it as a single one would: its Form
- * incomplete, the Action Form's answers, a Validate rule, the "Assign to" pick, or
- * another refusal of the engine (`refused`).
+ * incomplete, the Action Form's answers, a Validate rule, the "Assign to" pick, the
+ * Member's missing Signature (`no_signature`, RP-85) or their Company's missing Stamp
+ * (`no_stamp`, RP-617), or another refusal of the engine (`refused`).
  */
 export const bulkStopReasons = [
   "not_waiting",
@@ -47,6 +48,8 @@ export const bulkStopReasons = [
   "invalid_action_form",
   "validation_failed",
   "assignee_not_offered",
+  "no_signature",
+  "no_stamp",
   "refused",
 ] as const;
 export const bulkStopReason = z.enum(bulkStopReasons);

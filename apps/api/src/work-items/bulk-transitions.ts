@@ -1,13 +1,13 @@
-import { createHash } from "node:crypto";
-import { withMember, type Database, type Db } from "@rabaed/db";
+import type { Database, Db } from "@rabaed/db";
 import type { BilingualText, BulkOffer, BulkStop, BulkStopReason, BulkTransitionRequest, PackageItem } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
-import { takeTransitionIn, type TakeTransitionResult } from "./work-items.ts";
+import { allOrNothing, itemKey, itemsById, lockWorkItems, Rollback, takeEach } from "./several-transitions.ts";
+import type { TakeTransitionResult } from "./work-items.ts";
 
 // Bulk Transitions (spec RP-616 stories 39–45; RP-646): one Transition on several
-// items at once, all or nothing, in one transaction. Each item is taken through the
-// single Transition's path (takeTransitionIn, app.take_transition), so each gets its
-// own events, Issued Code and notifications, exactly as if taken alone. Not tied to
+// items at once, all or nothing, in one transaction (several-transitions.ts). Each item
+// is taken through the single Transition's path (takeTransitionIn, app.take_transition),
+// so each gets its own events, Issued Code and notifications, exactly as if taken alone. Not tied to
 // Packages: the Package page offers it (packages.ts), the List may later.
 //
 // Each item is signed exactly as in a single Transition, so a bulk action never
@@ -15,7 +15,8 @@ import { takeTransitionIn, type TakeTransitionResult } from "./work-items.ts";
 // check of its own: since ADR 0017 every Transition is confirmed and signed, and
 // nothing in a Workflow marks one as signing (`workflow_step.is_signing` is read by
 // nothing, always false, and RP-85 drops it). Each item's own `app.take_transition`
-// checks the Member's Signature, so a Member without one is refused all or nothing.
+// checks the Member's Signature and their Company's Stamp, so a Member without either
+// is refused all or nothing, `stoppedBy` naming `no_signature` or `no_stamp`.
 
 type Trx = Transaction<Database>;
 
@@ -82,24 +83,14 @@ export type BulkTransitionResult =
   | { ok: false; reason: "bulk_refused"; stoppedBy: BulkStop }
   | { ok: false; reason: "not_found" | "not_confirmed" | "idempotency_key_reused" };
 
-/** Undoes a bulk Transition's transaction, answering `result`. */
-class Rollback extends Error {
-  constructor(readonly result: BulkTransitionResult) {
-    super("Bulk Transition rolled back");
-  }
-}
-
-/** Each item's own key for its Transition, from the request's: the same request again gives the same keys. */
-function itemKey(key: string, workItemId: string): string {
-  const h = createHash("sha256").update(`bulk_transition/${key}/${workItemId}`).digest("hex");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-}
+/** The command name each item's own key is made under (itemKey). */
+const COMMAND = "bulk_transition";
 
 const asItem = (c: Candidate): PackageItem => ({ id: c.id, documentNumber: c.document_number, title: c.title });
 
 /** Why an item's own Transition refused it, as a bulk stop. */
 function stopFrom(item: Candidate, taken: Exclude<TakeTransitionResult, { ok: true }>): BulkStop {
-  const passed: BulkStopReason[] = ["form_incomplete", "invalid_action_form", "validation_failed", "assignee_not_offered"];
+  const passed: BulkStopReason[] = ["form_incomplete", "invalid_action_form", "validation_failed", "assignee_not_offered", "no_signature", "no_stamp"];
   const reason = (passed as string[]).includes(taken.reason) ? (taken.reason as BulkStopReason) : "refused";
   return {
     ...asItem(item),
@@ -119,55 +110,30 @@ function stopFrom(item: Candidate, taken: Exclude<TakeTransitionResult, { ok: tr
  */
 export async function takeBulkTransition(db: Db, memberId: string, input: Required<BulkTransitionRequest>, now: Date): Promise<BulkTransitionResult> {
   const ids = [...new Set(input.workItemIds)];
-  try {
-    return await withMember(db, memberId, async (trx): Promise<BulkTransitionResult> => {
-      // The request's key first: the same request again waits for this one to commit, then replays.
-      await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/bulk/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
-      const items = await candidates(trx, ids, input.transition);
-      // One the Member doesn't see is the plain 404, whichever it is.
-      if (items.length !== ids.length) return { ok: false, reason: "not_found" };
-      if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
-      // Applied before: every item's key is used, and each take below replays. Some only: the key was used for other items.
-      const keys = ids.map((id) => itemKey(input.idempotencyKey, id));
-      const { rows } = await sql<{ used: number }>`select app.command_keys_used(${keys}::uuid[]) as used`.execute(trx);
-      const used = rows[0]!.used;
-      if (used > 0 && used < keys.length) return { ok: false, reason: "idempotency_key_reused" };
-      const stop = used === 0 ? firstStop(items) : null;
-      if (stop) return { ok: false, reason: "bulk_refused", stoppedBy: { ...asItem(stop.item), reason: stop.reason } };
+  return allOrNothing(db, memberId, async (trx): Promise<BulkTransitionResult> => {
+    // The request's key first: the same request again waits for this one to commit, then replays.
+    await sql`select pg_advisory_xact_lock(hashtextextended(${memberId}::uuid::text || '/bulk/' || ${input.idempotencyKey}::uuid::text, 0))`.execute(trx);
+    // Then every item, by id, before any Package (the lock order).
+    await lockWorkItems(trx, ids);
+    const items = await candidates(trx, ids, input.transition);
+    // One the Member doesn't see is the plain 404, whichever it is.
+    if (items.length !== ids.length) return { ok: false, reason: "not_found" };
+    if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
+    // Applied before: every item's key is used, and each take below replays. Some only: the key was used for other items.
+    const keys = ids.map((id) => itemKey(COMMAND, input.idempotencyKey, id));
+    const { rows } = await sql<{ used: number }>`select app.command_keys_used(${keys}::uuid[]) as used`.execute(trx);
+    const used = rows[0]!.used;
+    if (used > 0 && used < keys.length) return { ok: false, reason: "idempotency_key_reused" };
+    const stop = used === 0 ? firstStop(items) : null;
+    if (stop) return { ok: false, reason: "bulk_refused", stoppedBy: { ...asItem(stop.item), reason: stop.reason } };
 
-      for (const item of items) {
-        const taken = await takeTransitionIn(
-          trx,
-          memberId,
-          item.id,
-          {
-            transition: input.transition,
-            answers: input.answers,
-            internalNote: input.internalNote,
-            assignTo: input.assignTo,
-            recommendedCode: null,
-            confirmed: true,
-            idempotencyKey: itemKey(input.idempotencyKey, item.id),
-          },
-          now,
-        );
-        if (!taken.ok) throw new Rollback({ ok: false, reason: "bulk_refused", stoppedBy: stopFrom(item, taken) });
-      }
-      return { ok: true, taken: await movedItems(trx, ids) };
-    });
-  } catch (e) {
-    if (e instanceof Rollback) return e.result;
-    throw e;
-  }
-}
-
-/** Items `ids` as the acting Member reads them now, in the order given. */
-async function movedItems(trx: Trx, ids: string[]): Promise<PackageItem[]> {
-  const { rows } = await sql<{ id: string; document_number: string | null; title: string }>`
-    select w.id, w.document_number, w.title
-    from unnest(${ids}::uuid[]) with ordinality as u (id, n)
-    join work_item w on w.id = u.id
-    order by u.n
-  `.execute(trx);
-  return rows.map((r) => ({ id: r.id, documentNumber: r.document_number, title: r.title }));
+    const { transition, answers, internalNote, assignTo } = input;
+    const takes = items.map((item) => ({ workItemId: item.id, input: { transition, answers, internalNote, assignTo, recommendedCode: null } }));
+    const [refusal] = await takeEach(trx, memberId, takes, { command: COMMAND, key: input.idempotencyKey, now, stopAtFirst: true });
+    if (refusal) {
+      const item = items.find((i) => i.id === refusal.workItemId)!;
+      throw new Rollback<BulkTransitionResult>({ ok: false, reason: "bulk_refused", stoppedBy: stopFrom(item, refusal.refused) });
+    }
+    return { ok: true, taken: await itemsById(trx, ids) };
+  });
 }

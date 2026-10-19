@@ -64,15 +64,7 @@ const codes: BulkOffer[] = [
   { key: "revise_c", label: b("Code C", "الرمز C"), form: "screen:pm-1" },
 ];
 const otherScreen: BulkOffer[] = codes.map((c) => ({ ...c, form: "screen:pm-2" }));
-const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({
-  id: r.id,
-  documentNumber: r.documentNumber,
-  title: r.title,
-  trade: r.trade,
-  with: r.with,
-  outcome: r.outcome,
-  bulkTransitions,
-});
+const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({ ...r, bulkTransitions, toSubmit: false });
 
 const pkg: PackageDetail = {
   id: pkgId,
@@ -83,13 +75,13 @@ const pkg: PackageDetail = {
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: contractor },
   counts: { total: 5, open: 4, codes: { A: 1 } },
   items: [itemOf(tiles, codes), itemOf(ware, codes), itemOf(lights, codes), itemOf(fans, otherScreen), itemOf(basins, [])],
+  owned: false,
+  filters: {
+    outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
+    locations: [],
+    trades: [electrical],
+  },
   actions: { rename: false, addItems: false, removeItems: false, delete: false, submit: false },
-};
-
-const filters: PackagePageProps["filters"] = {
-  outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
-  locations: [],
-  trades: [electrical],
 };
 
 const remarks = formSchema.parse({
@@ -111,8 +103,6 @@ const meta = {
   component: PackagePage,
   args: {
     pkg,
-    rows: [tiles, ware, lights, fans, basins],
-    filters,
     locale: "en",
     labels: packagePageLabels.en,
     backHref: "#submittals",
@@ -178,7 +168,7 @@ export const Selection: Story = {
 
 /** "Select all" picks only the ones waiting on the PM. */
 export const SelectAll: Story = {
-  args: { pkg: { ...pkg, items: pkg.items.filter((i) => i.id !== fans.id) }, rows: [tiles, ware, lights, basins] },
+  args: { pkg: { ...pkg, items: pkg.items.filter((i) => i.id !== fans.id) } },
   play: async (context) => {
     await userEvent.click(within(tableOf(context)).getByRole("checkbox", { name: labelsOf(context).selectAll }));
     await expect(bulkBar(context)).toHaveTextContent(labelsOf(context).selected("3", 3));
@@ -210,6 +200,48 @@ export const ActionFormOpen: Story = {
     const list = dialog.getByRole("list", { name: l.appliesTo });
     await expect(within(list).getAllByRole("listitem")).toHaveLength(3);
     await expect(context.args.onTake).not.toHaveBeenCalled();
+  },
+};
+
+/**
+ * Opening a bulk Transition asks first what a single one asks (`gate`: the Signature, then the
+ * Company's Stamp, RP-85 and RP-617). While it holds the Transition back, its Action Form doesn't
+ * open, nor is it read; closing it leaves the selection as it was.
+ */
+export const GateHoldsBack: Story = {
+  render: ({ loadForm, onTake, ...args }, context) => {
+    const locale = storyLocale(context);
+    return (
+      <PackagePage
+        {...args}
+        locale={locale}
+        labels={pageLabelsOf(context)}
+        bulk={{
+          labels: packageBulkLabels[locale],
+          actionFormLabels: actionFormLabels[locale],
+          loadForm,
+          onTake,
+          gate: ({ onClose }) => (
+            <div role="alertdialog" aria-label="Add your Signature first">
+              <button type="button" onClick={onClose}>
+                Not now
+              </button>
+            </div>
+          ),
+        }}
+      />
+    );
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    await select(context, tiles, ware);
+    await userEvent.click(within(bulkBar(context)).getByRole("button", { name: codes[0]!.label[locale] }));
+    const gate = await screen.findByRole("alertdialog", { name: "Add your Signature first" });
+    await expect(screen.queryByRole("dialog", { name: codes[0]!.label[locale] })).toBeNull();
+    await expect(context.args.loadForm).not.toHaveBeenCalled();
+    await userEvent.click(within(gate).getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await expect(bulkBar(context)).toHaveTextContent(labelsOf(context).selected("2", 2));
   },
 };
 

@@ -5,11 +5,35 @@ import { workItemListLabels } from "./views.ts";
 
 // The Package page's words for stories (RP-659), as the web's messages say them.
 
+/** The columns the Package page shows, in its own words (packages.columns: the Reference, RP-633, and the glossary). */
+const columns = {
+  en: {
+    documentNumber: "Document Number",
+    revision: "Rev",
+    subject: "Subject",
+    type: "Type",
+    trade: "Trade",
+    owner: "With",
+    stage: "Review Code or Stage",
+    stepAge: "Step Age",
+  },
+  ar: {
+    documentNumber: "رقم المستند",
+    revision: "المراجعة",
+    subject: "الموضوع",
+    type: "النوع",
+    trade: "التخصص",
+    owner: "لدى",
+    stage: "رمز المراجعة أو المرحلة",
+    stepAge: "عمر الخطوة",
+  },
+} as const;
+
 const table = (locale: Locale) => {
   const l = workItemListLabels[locale];
   return {
     table: locale === "en" ? "Submittals in this Package" : "الاعتمادات في هذه الحزمة",
-    columns: l.columns,
+    columns: { ...l.columns, ...columns[locale] },
     sortBy: l.sortBy,
     noNumber: l.noNumber,
     revisionNoNumber: l.revisionNoNumber,

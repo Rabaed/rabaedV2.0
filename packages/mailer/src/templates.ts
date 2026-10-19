@@ -227,11 +227,13 @@ const stepName = (locale: Locale, step: BilingualText | null) => step?.[locale] 
 
 function notificationEmail(locale: Locale, values: NotificationEmailValues, happened: string, details: Paragraph[]): Content {
   const copy = notificationCopy[locale];
-  const { documentNumber, subject } = values;
+  const { subject } = values;
+  // The item's Document Number, or a Package Submit's Package number: both left to right.
+  const number = values.package?.number ?? values.documentNumber;
   return {
-    subject: [documentNumber && isolate(documentNumber), subject, happened].filter(Boolean).join(" · "),
+    subject: [number && isolate(number), subject, happened].filter(Boolean).join(" · "),
     paragraphs: [
-      itemLine(documentNumber, subject),
+      itemLine(number, subject),
       [happened],
       ...details,
       [copy.open],
@@ -365,7 +367,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
         ...projects.flatMap((project) => [
           [project.name[locale]],
           ...project.items.flatMap((item): Paragraph[] => [
-            itemLine(item.documentNumber, item.subject),
+            itemLine(item.packageNumber ?? item.documentNumber, item.subject),
             ...item.entries.map(entryLine),
             [{ ltr: webLink(item.link), link: true }],
           ]),
@@ -416,9 +418,9 @@ function webLink(link: string): string {
   return url.href;
 }
 
-/** An item's line: its Document Number (left to right), when it has one, then `rest` (its Subject, and more). */
-function itemLine(documentNumber: string | null, rest: string): Paragraph {
-  return documentNumber ? [{ ltr: documentNumber, inline: true }, ` · ${rest}`] : [rest];
+/** An item's line: its number (left to right: a Document Number, or a Package's), when it has one, then `rest` (its Subject, and more). */
+function itemLine(number: string | null, rest: string): Paragraph {
+  return number ? [{ ltr: number, inline: true }, ` · ${rest}`] : [rest];
 }
 
 /** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */

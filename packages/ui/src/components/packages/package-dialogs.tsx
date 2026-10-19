@@ -7,6 +7,7 @@ import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "../overlay/dialog.tsx";
+import { sayRefusal } from "../../lib/refusal.ts";
 
 // Rename and delete a Package (RP-659), from its page's header. The API decides who may
 // (the owning Participant; delete only while Open) and the page offers what it allows.
@@ -18,7 +19,7 @@ type Shared = { close: string; cancel: string; refusals: Record<string, string> 
 async function refusalOf(call: () => Result, refusals: Shared["refusals"]): Promise<string | null> {
   try {
     const result = await call();
-    return result.ok ? null : (refusals[result.reason] ?? refusals.unavailable);
+    return result.ok ? null : sayRefusal(refusals, result.reason);
   } catch {
     return refusals.unavailable;
   }

@@ -2407,6 +2407,16 @@
     "done": "Done: every latest submittal in it has closed at Code A, B or D.",
     "actions": "Manage the Package",
     "with": "With",
+    "columns": {
+      "documentNumber": "Document Number",
+      "revision": "Rev",
+      "subject": "Subject",
+      "type": "Type",
+      "trade": "Trade",
+      "owner": "With",
+      "stage": "Review Code or Stage",
+      "stepAge": "Step Age"
+    },
     "remove": "Remove {subject} from the Package",
     "close": "Close",
     "cancel": "Cancel",

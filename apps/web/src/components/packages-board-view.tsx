@@ -8,12 +8,12 @@ import { useLocale, useTranslations } from "next-intl";
 import NextLink from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getPathname } from "@/i18n/navigation";
+import { messageKeys } from "@/lib/message-keys";
 
 /** The Packages view's words, from the app's messages. */
 function usePackagesBoardLabels(): PackagesBoardLabels {
   const t = useTranslations("packages");
-  const say = (key: string) => t(key);
-  const keys = <K extends string>(prefix: string, list: readonly K[]) => Object.fromEntries(list.map((k) => [k, say(`${prefix}.${k}`)])) as Record<K, string>;
+  const keys = messageKeys((key) => t(key));
   return {
     board: t("board.board"),
     toolbar: t("board.toolbar"),

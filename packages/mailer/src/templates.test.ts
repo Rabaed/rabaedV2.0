@@ -64,8 +64,8 @@ const examples: EmailTemplateValues = {
     ...item,
     event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
   },
-  // The every-notification checks below read its number, Subject and link as an item's.
-  "notification-package-submitted": { ...item, workItemId: null, package: bathrooms },
+  // The every-notification checks below read its number (the Package's, never a Document Number), Subject and link as an item's.
+  "notification-package-submitted": { ...item, workItemId: null, documentNumber: null, package: { ...bathrooms, number: DOC } },
   "daily-digest": {
     projects: [
       {
@@ -266,7 +266,7 @@ describe("notification emails", () => {
     const values = {
       link: "https://rabaed.test/en/packages/0190a1b2-0000-7000-8000-0000000000b1",
       workItemId: null,
-      documentNumber: bathrooms.number,
+      documentNumber: null,
       subject: bathrooms.name.en,
       step: null,
       event: null,
@@ -343,7 +343,8 @@ describe("the daily digest (RP-358)", () => {
             {
               workItemId: null,
               packageId: bathrooms.id,
-              documentNumber: bathrooms.number,
+              packageNumber: bathrooms.number,
+              documentNumber: null,
               subject: bathrooms.name.en,
               link,
               entries: [{ kind: "package_submitted", step: null, event: null, package: { ...bathrooms, count: 6 } }],

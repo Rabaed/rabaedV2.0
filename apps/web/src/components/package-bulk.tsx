@@ -3,17 +3,16 @@
 import { bulkStopReasons, type BulkStop, type WorkItemDetail } from "@rabaed/domain";
 import type { BulkStopped, BulkTakeResult, PackageBulkLabels, PackageBulkProps } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
+import { useCallback, type ReactNode } from "react";
+import { TransitionOpening } from "@/components/transition-opening";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
-
-/** Reasons a bulk Transition may name beyond the ones the API's types list now: RP-85's missing Signature, RP-617's missing Stamp (passed through by the spec's review fixes). */
-const laterReasons = ["no_signature", "no_stamp"] as const;
+import { messageKeys } from "@/lib/message-keys";
 
 /** Bulk Transitions' words, from the app's messages (packages.bulk). */
 function useBulkLabels(): PackageBulkLabels {
   const t = useTranslations("packages.bulk");
-  const say = (key: string) => t(key);
-  const keys = <K extends string>(prefix: string, list: readonly K[]) => Object.fromEntries(list.map((k) => [k, say(`${prefix}.${k}`)])) as Record<K, string>;
+  const keys = messageKeys((key) => t(key));
   return {
     bar: t("bar"),
     hint: t("hint"),
@@ -33,7 +32,7 @@ function useBulkLabels(): PackageBulkLabels {
     formInvalid: t("formInvalid"),
     stoppedTitle: t("stoppedTitle"),
     stoppedBy: t("stoppedBy"),
-    reasons: keys("reasons", [...bulkStopReasons, ...laterReasons, "unknown"] as const),
+    reasons: keys("reasons", [...bulkStopReasons, "unknown"] as const),
     refusals: keys("refusals", ["unavailable", "not_found", "idempotency_key_reused", "not_confirmed"] as const),
   };
 }
@@ -44,15 +43,25 @@ function useBulkLabels(): PackageBulkLabels {
  * Action Form), then one `POST /v1/work-items/bulk-transitions` for all. Refused, its 409 names
  * the item that stopped it; its reason passes as the API gives it, also one this page doesn't
  * list yet, which the pop-up words as a sentence. After it, or when something moved under us,
- * the page reads the Package again.
+ * the page reads the Package again. Opening it asks for the Signature and the Stamp first, as a
+ * single Transition does (`TransitionOpening`); adding a Signature leads back to Package `packageId`.
  */
-export function usePackageBulkCalls(): PackageBulkProps {
+export function usePackageBulkCalls(packageId: string): PackageBulkProps {
   const router = useRouter();
   const labels = useBulkLabels();
   const actionFormLabels = useActionFormLabels();
+  const gate = useCallback(
+    ({ onClose, children }: { onClose: () => void; children: ReactNode }) => (
+      <TransitionOpening returnTo={`/packages/${packageId}`} onClose={onClose}>
+        {children}
+      </TransitionOpening>
+    ),
+    [packageId],
+  );
   return {
     labels,
     actionFormLabels,
+    gate,
     loadForm: async (transition, workItemId) => {
       const res = await fetch(`/api/v1/work-items/${workItemId}`);
       if (!res.ok) return null;
@@ -71,7 +80,7 @@ export function usePackageBulkCalls(): PackageBulkProps {
         router.refresh();
         return { ok: true };
       }
-      // `stoppedBy.reason` is read as a string: a reason added later (RP-85's `no_signature`) still reaches the pop-up.
+      // `stoppedBy.reason` is read as a string: one a newer API adds still reaches the pop-up, worded as `unknown`.
       const body = (await res.json().catch(() => ({}))) as { error?: string; stoppedBy?: Omit<BulkStop, "reason"> & { reason: string } };
       if (res.status === 404 || res.status === 409) router.refresh();
       if (body.error === "bulk_refused" && body.stoppedBy) return { ok: false, reason: "bulk_refused", stoppedBy: body.stoppedBy satisfies BulkStopped };

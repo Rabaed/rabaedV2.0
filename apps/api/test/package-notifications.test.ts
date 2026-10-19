@@ -119,7 +119,7 @@ beforeAll(async () => {
   await drainOutbox(worker);
 });
 
-describe("scenario RP-588-2 (RP-643: notification): one notification per Member for a Package Submit, counting what they see", () => {
+describe("scenario RP-588-2 (RP-643: notification): one notification per Member for a Package Submit, counting the items whose Step reached them that they still see", () => {
   it("K1's engineer who sees everything hears of 8, the one narrowed to Electrical of 6; neither gets a Step reached per submittal", async () => {
     const pkg = await packageOf("Bathrooms – Tower 1", 6, 2);
     await submitPackage(pkg.id);
@@ -168,7 +168,7 @@ describe("a Package Submit's notification", () => {
     expect(await ofPackage(k1All, pkg.id)).toMatchObject([{ package: { count: 3 } }]);
   });
 
-  it("is emailed and digested as a Step reached is, with the count the recipient sees", async () => {
+  it("is emailed and digested as a Step reached is, with the count of the items that reached the recipient and they still see", async () => {
     const emails: NotificationEmail[] = [];
     const digests: NotificationDigest[] = [];
     const handlers = {
@@ -185,7 +185,7 @@ describe("a Package Submit's notification", () => {
     expect(immediate).toHaveLength(1);
     expect(immediate[0]).toMatchObject({
       kind: "package_submitted",
-      content: { workItemId: null, documentNumber: pkg.number, package: { id: pkg.id, number: pkg.number, count: 3, companyName: c1Name } },
+      content: { workItemId: null, documentNumber: null, package: { id: pkg.id, number: pkg.number, count: 3, companyName: c1Name } },
     });
     expect(emails.filter((e) => e.to === k1Electrical.email)).toEqual([]);
 
@@ -196,7 +196,7 @@ describe("a Package Submit's notification", () => {
       .flatMap((d) => d.projects.flatMap((p) => p.items))
       .filter((i) => i.packageId === pkg.id);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ workItemId: null, documentNumber: pkg.number, entries: [{ kind: "package_submitted", package: { count: 2 } }] });
+    expect(entries[0]).toMatchObject({ workItemId: null, documentNumber: null, packageNumber: pkg.number, entries: [{ kind: "package_submitted", package: { count: 2 } }] });
     await saveStepReached(k1Electrical, "immediate");
   });
 

@@ -649,6 +649,24 @@ export const PackageChosen: Story = {
   },
 };
 
+/**
+ * The Package chosen is named in the toolbar, not only counted: its PKG number (left to right)
+ * and owning Company, as the Package page links here (`?packageId=`), on the List and the Kanban.
+ * Its × leads to the same query without it.
+ */
+export const PackageNamedInToolbar: Story = {
+  args: { packages: packageFilter, query: { ...defaults, packageId: otherPackage.id } },
+  render: PackageChoices.render,
+  play: async (context) => {
+    const chip = context.canvasElement.querySelector<HTMLElement>("[data-package-filter]")!;
+    await expect(chip).toHaveTextContent(`PKG-001 ${storyText(context, consultant)}`);
+    await expectLaidOutLeftToRight(within(chip).getByText("PKG-001"));
+    const clear = within(chip).getByRole("link");
+    await expect(clear).toHaveAccessibleName(new RegExp(storyText(context, packageField)));
+    await expect(clear.getAttribute("href")).not.toContain(otherPackage.id);
+  },
+};
+
 /** The Kanban shares the toolbar, so it filters by Package too. */
 export const PackageOnTheKanban: Story = {
   args: { packages: packageFilter, board: <p>Kanban</p> },

@@ -92,6 +92,8 @@ export type WorkItemTableProps = {
   groups?: TableGroup[];
   /** A group's header row, spanning `colSpan` cells. */
   groupHeader?: (group: TableGroup, colSpan: number) => ReactNode;
+  /** The Stage column shows the Review Code once the item has one (the Package page's "Review Code or Stage", RP-633). */
+  stageShowsCode?: boolean;
   className?: string;
 };
 
@@ -127,6 +129,7 @@ export function WorkItemTable({
   rowEnd,
   groups,
   groupHeader,
+  stageShowsCode = false,
   className,
 }: WorkItemTableProps) {
   const [dragging, setDragging] = useState<ListColumnKey | null>(null);
@@ -276,7 +279,7 @@ export function WorkItemTable({
                       )}
                       {shown.map((key, i) => (
                         <td key={key} className={cn(cell, i === 0 && pinnedFirst)}>
-                          <Cell column={key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
+                          <Cell column={key === "stage" && stageShowsCode && row.outcome !== null ? "outcome" : key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
                         </td>
                       ))}
                       {end && <td className={cn(cell, "sticky end-0 z-[2] w-[60px] border-s ps-0 pe-2 text-end")}>{rowEnd?.(row)}</td>}

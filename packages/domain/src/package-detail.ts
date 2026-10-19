@@ -1,25 +1,34 @@
 import { z } from "zod";
 import { bulkOffer } from "./bulk-transition.ts";
 import { packageItem, packageSummary } from "./package.ts";
-import { workItemRow } from "./work-item.ts";
+import { workItemList, workItemRow } from "./work-item.ts";
 
 // Apart from package.ts, which work-item.ts imports (its rows' Package chip): this
 // one reads work-item.ts's row fields, so the two import each other through no cycle.
 
 /**
- * A submittal on a Package's page (RP-641): its Document Number, Subject (`title`),
- * Trade, who it is with (as the List gives it, V14) and its Review Code once closed
- * (`outcome`), as the viewer reads it.
+ * A submittal on a Package's page (RP-641): its row exactly as the List gives it to the viewer
+ * (Document Number, Subject, Trade, who it is with, V14, its Review Code once closed), the latest
+ * Revision of its chain (spec story 30).
  */
-export const packageDetailItem = packageItem.extend(workItemRow.pick({ trade: true, with: true, outcome: true }).shape).extend({
+export const packageDetailItem = workItemRow.extend({
   /** The Transitions the viewer may take on it in bulk now, with others offering the same (RP-646); none when it doesn't wait on them. */
   bulkTransitions: z.array(bulkOffer),
+  /**
+   * Still to Submit (RP-638's rule, the api's): never Submitted and not closed, so Submit Package
+   * would take it. Always false for a viewer outside the owning Participant.
+   */
+  toSubmit: z.boolean(),
 });
 export type PackageDetailItem = z.infer<typeof packageDetailItem>;
 
 /** One Package as the viewer reads it: only the submittals they see, and what they may do with it. */
 export const packageDetail = packageSummary.extend({
   items: z.array(packageDetailItem),
+  /** Whether the viewer is of the owning Participant (app.owns_package): only they change it. */
+  owned: z.boolean(),
+  /** What the item table reads around its rows, as the List gives it: each Type's outcomes on the Project, its Trades and Locations. */
+  filters: workItemList.shape.filters.pick({ outcomes: true, trades: true, locations: true }),
   /** Every action false for a viewer outside the owning Participant: they read it, and change nothing of it. */
   actions: z.object({
     /** Rename it (also once In Progress, recorded). */

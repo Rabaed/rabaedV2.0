@@ -3,6 +3,7 @@
 import { formatNumber, type BilingualText, type Locale, type WorkItemRow } from "@rabaed/domain";
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn.ts";
+import { sayRefusal } from "../../lib/refusal.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { Checkbox } from "../form/checkbox.tsx";
@@ -194,7 +195,7 @@ export function AddPackageItemsDialog({
               try {
                 const result = await onAdd([...chosen]);
                 if (result.ok) setOpen(false);
-                else setError(refusals[result.reason] ?? refusals.unavailable);
+                else setError(sayRefusal(refusals, result.reason));
               } catch {
                 setError(refusals.unavailable);
               } finally {
