@@ -102,7 +102,7 @@ function usePackageLabels(): PackagePageLabels {
 export function PackageView({ pkg, rows, filters, locale }: Pick<PackagePageProps, "pkg" | "rows" | "filters" | "locale">) {
   const router = useRouter();
   const labels = usePackageLabels();
-  const bulk = usePackageBulkCalls();
+  const bulk = usePackageBulkCalls(pkg.id);
   // Submit Package's key, kept until it is taken, so a double click or a retry Submits once.
   const submitKey = useRef<string | null>(null);
   const back = `/projects/${pkg.projectId}/work-items`;

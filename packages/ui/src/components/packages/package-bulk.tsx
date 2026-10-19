@@ -11,7 +11,7 @@ import {
   type PackageDetailItem,
   type WorkItemRow,
 } from "@rabaed/domain";
-import { useEffect, useRef, useState, type ElementType, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ElementType, type FormEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -31,7 +31,8 @@ import type { WorkItemTableProps } from "../views/work-item-table.tsx";
 // "Assign to" when the Transition offers it: one set of answers and one Member for all. All or
 // nothing: refused, nothing is done, and the pop-up names the item that stopped it, with a link
 // to it and why, as the API says it (a reason this page doesn't know reads as a sentence, never
-// as its code). There is no signing state: each item is signed as in a single Transition.
+// as its code). There is no signing state: each item is signed as in a single Transition, and
+// opening it asks first what a single one asks, the Signature and the Company's Stamp (`gate`).
 
 /** What the pop-up needs to draw a bulk Transition: its Action Form and the Members "Assign to" offers (absent: none). */
 export type BulkTransitionForm = {
@@ -103,6 +104,12 @@ export type PackageBulkProps = {
   /** The Action Form and "Assign to" of `transition` on the item `workItemId` (they all share its Action Form); null when it can't be read. */
   loadForm: (transition: string, workItemId: string) => Promise<BulkTransitionForm | null>;
   onTake: (request: BulkTakeRequest) => Promise<BulkTakeResult>;
+  /**
+   * What opening a Transition asks first, as a single one's does (the Signature, then the
+   * Company's Stamp: RP-85, RP-617): it shows `children`, the bulk pop-up, only once that holds,
+   * else its own message, and calls `onClose` when that closes. Absent: the pop-up opens at once.
+   */
+  gate?: ComponentType<{ onClose: () => void; children: ReactNode }>;
 };
 
 /**
@@ -150,8 +157,27 @@ export function usePackageBulk({
   const selected = new Set(chosen.map((i) => i.id));
   const shared = sharedBulkTransitions(waiting, selected);
   const waitingIds = new Set(waiting.map((i) => i.id));
-  const { labels } = bulk;
+  const { labels, gate: Gate } = bulk;
   const n = (value: number) => formatNumber(value, locale);
+  const closeDialog = () => setChoice(null);
+  const dialog =
+    choice && chosen.length > 0 ? (
+      <BulkTransitionDialog
+        offer={choice}
+        items={chosen}
+        bulk={bulk}
+        locale={locale}
+        close={close}
+        cancel={cancel}
+        itemHref={itemHref}
+        linkAs={linkAs}
+        onClose={closeDialog}
+        onTaken={() => {
+          setChoice(null);
+          setPicked(new Set());
+        }}
+      />
+    ) : null;
 
   const selection: WorkItemTableProps["selection"] = {
     selected,
@@ -200,23 +226,7 @@ export function usePackageBulk({
           </>
         )}
       </div>
-      {choice && chosen.length > 0 && (
-        <BulkTransitionDialog
-          offer={choice}
-          items={chosen}
-          bulk={bulk}
-          locale={locale}
-          close={close}
-          cancel={cancel}
-          itemHref={itemHref}
-          linkAs={linkAs}
-          onClose={() => setChoice(null)}
-          onTaken={() => {
-            setChoice(null);
-            setPicked(new Set());
-          }}
-        />
-      )}
+      {dialog && (Gate ? <Gate onClose={closeDialog}>{dialog}</Gate> : dialog)}
     </>
   );
   return { selection, bar };

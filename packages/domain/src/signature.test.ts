@@ -9,6 +9,10 @@ describe("signatureReturnPath", () => {
     );
   });
 
+  it("takes the Member back to the Package page a bulk Transition sent them from", () => {
+    expect(signatureReturnPath("/packages/2c28a260-690e-4970-a79e-f14046b2d50a")).toBe("/packages/2c28a260-690e-4970-a79e-f14046b2d50a");
+  });
+
   it("is null for anywhere else: another site, a scheme, a protocol-relative link, a path that climbs, or nothing", () => {
     for (const value of [
       "https://evil.example/work-items/1",

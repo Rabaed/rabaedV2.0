@@ -213,6 +213,48 @@ export const ActionFormOpen: Story = {
   },
 };
 
+/**
+ * Opening a bulk Transition asks first what a single one asks (`gate`: the Signature, then the
+ * Company's Stamp, RP-85 and RP-617). While it holds the Transition back, its Action Form doesn't
+ * open, nor is it read; closing it leaves the selection as it was.
+ */
+export const GateHoldsBack: Story = {
+  render: ({ loadForm, onTake, ...args }, context) => {
+    const locale = storyLocale(context);
+    return (
+      <PackagePage
+        {...args}
+        locale={locale}
+        labels={pageLabelsOf(context)}
+        bulk={{
+          labels: packageBulkLabels[locale],
+          actionFormLabels: actionFormLabels[locale],
+          loadForm,
+          onTake,
+          gate: ({ onClose }) => (
+            <div role="alertdialog" aria-label="Add your Signature first">
+              <button type="button" onClick={onClose}>
+                Not now
+              </button>
+            </div>
+          ),
+        }}
+      />
+    );
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    await select(context, tiles, ware);
+    await userEvent.click(within(bulkBar(context)).getByRole("button", { name: codes[0]!.label[locale] }));
+    const gate = await screen.findByRole("alertdialog", { name: "Add your Signature first" });
+    await expect(screen.queryByRole("dialog", { name: codes[0]!.label[locale] })).toBeNull();
+    await expect(context.args.loadForm).not.toHaveBeenCalled();
+    await userEvent.click(within(gate).getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await expect(bulkBar(context)).toHaveTextContent(labelsOf(context).selected("2", 2));
+  },
+};
+
 /** No "Assign to" when the Transition offers none. */
 export const WithoutAssignTo: Story = {
   args: { loadForm: fn(async (): Promise<BulkTransitionForm> => ({ actionForm: remarks })) },
