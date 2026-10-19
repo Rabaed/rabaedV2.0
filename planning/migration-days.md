@@ -87,5 +87,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270803 | RP-623 | 32 | reply_screen_files |
 | 20270805 | RP-155 | 23 | record_checks |
 | 20270828 | RP-650 | 22 | record_signatures |
-| 20270829 | RP-147 | 22 | record_appendix |
 | 20270827 | RP-86 | 44 | reply_checklist |
+| 20270903 | RP-147 | 22 | record_appendix |
