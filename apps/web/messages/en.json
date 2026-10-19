@@ -225,7 +225,8 @@
       "searchValues": "Search",
       "noMatches": "No matches",
       "searchPlaceholderBoard": "Search this board",
-      "revisions": "Revisions"
+      "revisions": "Revisions",
+      "package": "Package"
     },
     "buckets": {
       "pending": "Pending",

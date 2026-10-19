@@ -225,7 +225,8 @@
       "searchValues": "بحث",
       "noMatches": "لا نتائج",
       "searchPlaceholderBoard": "البحث في اللوحة",
-      "revisions": "المراجعات"
+      "revisions": "المراجعات",
+      "package": "الحزمة"
     },
     "buckets": {
       "pending": "قيد الانتظار",

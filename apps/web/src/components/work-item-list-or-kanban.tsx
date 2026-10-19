@@ -9,6 +9,7 @@ import {
   type BoardCardLayoutChange,
   type Locale,
   type ModuleView,
+  type PackageSummary,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemExport,
   type WorkItemDetail,
@@ -194,6 +195,8 @@ export function WorkItemListOrKanban(
     projectName?: string;
     /** The filter fields' names in the other language. */
     hints?: WorkItemFilterHints;
+    /** The Submittals' Package filter (RP-662): the Project's Packages the Member sees; none, no Package field. */
+    packages?: PackageSummary[];
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
@@ -298,6 +301,7 @@ export function WorkItemListOrKanban(
       }
       action={action}
       hints={hints}
+      packages={props.packages && { label: t("list.package"), choices: props.packages }}
       moreActions={moreActions && moreActions.length > 0 && <MoreActionsMenu actions={moreActions} label={t("moreActions")} linkAs={NextLink} />}
       viewSwitch={
         <>

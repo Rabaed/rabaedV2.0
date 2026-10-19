@@ -47,7 +47,7 @@ export async function ModuleWorkItemsPage({
   const hints = {
     stage: other("statusField"),
     ...Object.fromEntries(
-      (["trade", "documentType", "owner", "role", "createdDate", "stepAge", "outcome", "submissionDate", "revisions"] as const).map((key) => [key, other(key)]),
+      (["trade", "documentType", "owner", "role", "createdDate", "stepAge", "outcome", "submissionDate", "revisions", "package"] as const).map((key) => [key, other(key)]),
     ),
   };
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
@@ -61,7 +61,7 @@ export async function ModuleWorkItemsPage({
     ...(view === "list" ? { ...listQuery, sort: snags && searchParams.sort === undefined ? snagListSort : listQuery.sort } : workItemQueryFromSearchParams(searchParams)),
     module,
   };
-  const [me, project, list, board, raisable] = await Promise.all([
+  const [me, project, list, board, raisable, packages] = await Promise.all([
     getMe(),
     getProject(projectId),
     // Names sort in the reader's language.
@@ -70,6 +70,8 @@ export async function ModuleWorkItemsPage({
     // The Snag List's "+ New" offers only the Types the viewer may raise (RP-94); the Submittals'
     // Import register only to a Member who may raise one of its Types (RP-637).
     snags || module === "submittals" ? getRaisableTypes(projectId, module) : null,
+    // The Submittals' Package filter (RP-662): only the Packages the Member sees.
+    module === "submittals" ? getPackages(projectId) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !(list ?? board)) notFound();
@@ -126,6 +128,7 @@ export async function ModuleWorkItemsPage({
           projectId={project.id}
           module={module}
           hints={hints}
+          packages={packages?.packages}
         />
       ) : (
         list && (
@@ -141,6 +144,7 @@ export async function ModuleWorkItemsPage({
             module={module}
             projectName={project.name[locale]}
             hints={hints}
+            packages={packages?.packages}
           />
         )
       )}
