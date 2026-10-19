@@ -122,7 +122,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270922 | RP-577 | 41 | snags_from_failed_check_items |
 | 20270915 | RP-981 | 42 | annotate_reply_photos |
 | 20270914 | RP-627 | 33 | site_observation_type_and_general_trade |
-| 20270923 | RP-677 | 34 | snag_report |
 | 20270916 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref (work_item.paper_ref; moved from 20270707, 20270720, 20270723) (final day, moved from 20270904 before queueing) |
 | 20270917 | RP-640 | 5B | Register Import: Assign to (rows raised by their assignee; moved from 20270713, 20270721, 20270724) (final day, moved from 20270905 before queueing) |
 | 20270918 | RP-645 | 5B | Register Import by a Rabaed Engineer in Rabaed Admin (moved from 20270803, then 20270805: RP-623 and RP-155 took them on main) (final day, moved from 20270906 before queueing) |
@@ -131,3 +130,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270921 | RP-960 | 5B | Register Import: a Type counts as raisable only on a Rabaed or the Project's own Workflow (Rabaed Admin's import runs as the app role: bootstrap) (final day, moved from 20270911 before queueing) |
 | 20270925 | RP-650 | 22 | record_signatures |
 | 20270926 | RP-147 | 22 | record_appendix |
+| 20270927 | RP-677 | 34 | snag_report |
