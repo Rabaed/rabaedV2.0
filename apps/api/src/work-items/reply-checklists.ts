@@ -155,7 +155,7 @@ export async function incompleteReplyChecklists(
  * of their own Participant made it (RP-433, RP-86): its `recommend_code` event is internal to that
  * Participant (V5), written with the move. Null otherwise.
  */
-export async function arrivalRecommendation(trx: Trx, workItemId: string): Promise<{ code: string; name: BilingualText } | null> {
+export async function arrivalRecommendedCode(trx: Trx, workItemId: string): Promise<{ code: string; name: BilingualText } | null> {
   const { rows } = await sql<{ code: string; name: BilingualText }>`
     with arrival as (
       select e.transition_id, e.created_at, e.audience_participant_id

@@ -66,7 +66,7 @@ import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
-import { arrivalRecommendation, checklistsPropose, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
+import { arrivalRecommendedCode, checklistsPropose, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
@@ -1285,7 +1285,7 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
   // The checklists each Transition's Screen takes (RP-86), read-only, and the code they propose (ADR 0025).
   const checklists = await Promise.all(transitions.map((r) => transitionChecklists(trx, workItemId, parseActionForm(r.action_form))));
   const proposed = checklistsPropose(checklists.flat());
-  const recommendation = transitions.length > 0 ? await arrivalRecommendation(trx, workItemId) : null;
+  const recommended = transitions.length > 0 ? await arrivalRecommendedCode(trx, workItemId) : null;
   return {
     pickUp: rows.some((r) => r.action === "pick_up"),
     returnToPool: rows.some((r) => r.action === "return_to_pool"),
@@ -1308,7 +1308,7 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
         ...(checklists[i]!.length > 0 && r.outcome === proposed ? { proposed: true as const } : {}),
       };
     }),
-    ...(recommendation ? { recommendedCode: recommendation } : {}),
+    ...(recommended ? { recommendedCode: recommended } : {}),
   };
 }
 

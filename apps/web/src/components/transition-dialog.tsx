@@ -4,16 +4,19 @@ import {
   formFields,
   isAnnotatedCopy,
   isScreenFileField,
+  proposedCode,
   validateAnswers,
   type BilingualText,
   type DocumentList,
   type FieldError,
   type FormSchema,
   type Locale,
+  type ReplyChecklistRead,
 } from "@rabaed/domain";
-import { ActionForm, Button, Field, Select, type FormFiles } from "@rabaed/ui";
+import { ActionForm, Badge, Button, Field, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ReplyChecklistsRead } from "@/components/reply-checklists";
 import { useDocuments, useImageUrls } from "@/components/use-documents";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
@@ -34,6 +37,10 @@ export type TransitionChoice = {
   recommendCode?: { code: string; name: BilingualText }[];
   /** The answers the pop-up starts from: the reply that brought the item here, inside the taker's own Company (RP-437). */
   prefill?: Record<string, unknown>;
+  /** The checklists its Screen takes, as the taker's own Company answered them (RP-86): read-only here. */
+  checklists?: ReplyChecklistRead[];
+  /** The code its checklists propose (ADR 0025): this Transition issues it. */
+  proposed?: true;
 };
 
 /** The "Assign to" choice that leaves the next Step to its Step Pool. */
@@ -205,6 +212,7 @@ export function TransitionDialog({
   calls,
   locale,
   description,
+  recommendedCode: recommended,
   idPrefix,
   onClose,
 }: {
@@ -213,6 +221,8 @@ export function TransitionDialog({
   locale: Locale;
   /** A line under the heading, e.g. the item's Subject on the Kanban. */
   description?: string;
+  /** The Recommended Code the taker's own Company sent with the item (RP-433, RP-86): internal to it, shown with a code's checklist. */
+  recommendedCode?: { code: string; name: BilingualText } | undefined;
   idPrefix: string;
   onClose: () => void;
 }) {
@@ -275,6 +285,24 @@ export function TransitionDialog({
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <h2 className="text-h6 font-semibold">{transition.label[locale]}</h2>
         {description && <p className="text-caption text-muted">{description}</p>}
+        {transition.checklists && (
+          <>
+            {/* The Engineer's Recommended Code: the taker's own Company's only (V5). */}
+            {recommended && (
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                <span>{t("recommendedCodeIs", { code: `${recommended.name[locale]} (${recommended.code})` })}</span>
+                <Badge>{t("internal")}</Badge>
+              </p>
+            )}
+            {transition.proposed && (
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge tone="brand">{t("proposed")}</Badge>
+                <span>{t("proposedCode", { code: transition.label[locale], reason: t(transition.checklists.some((c) => proposedCode(c.answers) === "C") ? "proposedC" : "proposedA") })}</span>
+              </p>
+            )}
+            <ReplyChecklistsRead workItemId={calls.workItemId} checklists={transition.checklists} locale={locale} />
+          </>
+        )}
         <ActionForm
           schema={transition.actionForm}
           answers={answers}

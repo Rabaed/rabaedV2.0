@@ -81,7 +81,7 @@ export const startDocumentUploadRequest = z.object({
   .refine((file) => file.itemKey === undefined || file.fieldKey !== undefined, "An item needs its checklist field")
   .refine(
     (file) => file.reply !== true || (file.fieldKey !== undefined && file.annotatedFromId === undefined),
-    "A reply file names its Screen field, and for a checklist's photo its check item",
+    "A reply file names its Screen field, and for a checklist's photo its item",
   )
   .refine(
     (file) => file.annotatedFromId === undefined || (file.fieldKey === undefined && file.itemKey === undefined),
