@@ -8,6 +8,7 @@ import { listColumnLayout } from "./list-columns.ts";
 import { moduleKeySchema } from "./module.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 import { workItemPackage } from "./package.ts";
+import { replyChecklistRead } from "./reply-checklist.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -611,8 +612,24 @@ export const workItemActions = z.object({
        * Absent when there are none.
        */
       prefill: z.record(z.string(), z.unknown()).optional(),
+      /**
+       * The checklists its Screen holds (RP-86; ADR 0024 amended): what the viewer's own
+       * Participant answered beforehand, read-only in the pop-up, which the Transition takes.
+       * Absent when it holds none, or the item copied no checklist for it.
+       */
+      checklists: z.array(replyChecklistRead).optional(),
+      /**
+       * The code its checklists propose (ADR 0025: C when any item failed, else A), on the
+       * Transition that issues it, which the pop-up pre-selects. Absent elsewhere.
+       */
+      proposed: z.literal(true).optional(),
     }),
   ),
+  /**
+   * The Recommended Code the viewer's own Participant sent with the move that brought the item
+   * to them (RP-433, RP-86): internal to it (V5), shown in the code pop-up. Absent otherwise.
+   */
+  recommendedCode: z.object({ code: workItemOutcome, name: bilingualText }).optional(),
 });
 export type WorkItemActions = z.infer<typeof workItemActions>;
 
@@ -661,6 +678,12 @@ export const workItemDetail = workItemSummary.extend({
   namedAnswers,
   /** The Checklist Template Versions its `checklist_template` fields picked, copied onto it (RP-651). */
   checklistCopies: z.array(checklistCopy),
+  /**
+   * The reply Screens' checklists filled at its current Step (RP-86): for the Participant holding
+   * it only, which saves their answers as it goes until the Transition takes them (V19). Empty
+   * for everyone else, and where none is filled.
+   */
+  replyChecklists: z.array(replyChecklistRead),
   /** When each answer last changed and by whom, by field key; only for a viewer who may save, else empty. */
   fieldTimes: z.record(z.string(), fieldTime),
   /** The web autosaves it: only the first Draft, where saves write no history. */

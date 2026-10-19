@@ -16,6 +16,7 @@ import { notFound } from "next/navigation";
 import { Fragment } from "react";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
+import { ReplyChecklists } from "@/components/reply-checklists";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
 import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
@@ -244,6 +245,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
 
         {/* Sent Back to a "Comment only" Step (ADR 0021): why its Form is read-only, for the raiser's Members only. */}
         {item.sentBackForComment && <SentBackNotice>{t("sentBackForComment")}</SentBackNotice>}
+        {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19). */}
+        <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />
         <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />
 
         {/* The System Fields below the Form. */}

@@ -1,0 +1,63 @@
+{
+  "key": "inspection_code_d",
+  "name": { "en": "Reject · D", "ar": "رفض · D" },
+  "schema": {
+    "sections": [
+      {
+        "key": "checklist",
+        "title": { "en": "Checklist", "ar": "قائمة التحقق" },
+        "fields": [
+          {
+            "key": "inspection_checklist",
+            "type": "copied_checklist",
+            "copyOf": "checklist_template",
+            "required": true,
+            "label": { "en": "Checklist", "ar": "قائمة التحقق" },
+            "help": { "en": "Answered by your Engineer on site, and shared with the Code.", "ar": "أجاب عنها مهندسك في الموقع، وتُشارك مع الرمز." }
+          }
+        ]
+      },
+      {
+        "key": "final_verification",
+        "title": { "en": "Final verification", "ar": "التحقق النهائي" },
+        "fields": [
+          {
+            "key": "sample_checked",
+            "type": "yes_no",
+            "required": true,
+            "label": { "en": "Sample checked", "ar": "تم فحص العينة" }
+          },
+          {
+            "key": "matches_specification",
+            "type": "yes_no",
+            "required": true,
+            "label": { "en": "Matches specification", "ar": "مطابق للمواصفات" }
+          },
+          {
+            "key": "verification_note",
+            "type": "textarea",
+            "required": { "field": "matches_specification", "op": "=", "value": false },
+            "maxLength": 4000,
+            "label": { "en": "Verification note", "ar": "ملاحظة التحقق" },
+            "help": { "en": "Filled in from your Engineer's review; correct it if needed. Shared with the Code.", "ar": "مأخوذ من مراجعة مهندسك، صحّحه إن لزم. يُشارك مع الرمز." }
+          }
+        ]
+      },
+      {
+        "key": "code_remarks",
+        "title": { "en": "Remarks", "ar": "الملاحظات" },
+        "fields": [
+          {
+            "key": "remarks",
+            "type": "textarea",
+            "required": true,
+            "maxLength": 4000,
+            "label": { "en": "Remarks", "ar": "الملاحظات" },
+            "help": { "en": "Shared with everyone who sees this item.", "ar": "يراها كل من يرى هذا العنصر." }
+          }
+        ]
+      }
+    ]
+  },
+  "internalFields": []
+}
