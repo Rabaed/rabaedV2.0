@@ -3,6 +3,7 @@
 import { formatNumber, type Locale, type PackageNotReadyItem, type PackageNotReadyReason, type WorkItemRow } from "@rabaed/domain";
 import { useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
+import { sayRefusal } from "../../lib/refusal.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -76,7 +77,7 @@ export function SubmitPackageDialog({
       const result = await onSubmit();
       if (result.ok) setOpen(false);
       else if ("notReady" in result) setNotReady({ items: result.notReady, others: result.othersNotReady });
-      else setError(refusals[result.reason] ?? refusals.unavailable);
+      else setError(sayRefusal(refusals, result.reason));
     } catch {
       setError(refusals.unavailable);
     } finally {

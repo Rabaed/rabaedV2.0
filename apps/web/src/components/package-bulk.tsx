@@ -7,12 +7,12 @@ import { useCallback, type ReactNode } from "react";
 import { TransitionOpening } from "@/components/transition-opening";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
+import { messageKeys } from "@/lib/message-keys";
 
 /** Bulk Transitions' words, from the app's messages (packages.bulk). */
 function useBulkLabels(): PackageBulkLabels {
   const t = useTranslations("packages.bulk");
-  const say = (key: string) => t(key);
-  const keys = <K extends string>(prefix: string, list: readonly K[]) => Object.fromEntries(list.map((k) => [k, say(`${prefix}.${k}`)])) as Record<K, string>;
+  const keys = messageKeys((key) => t(key));
   return {
     bar: t("bar"),
     hint: t("hint"),

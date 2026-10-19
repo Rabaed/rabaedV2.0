@@ -17,6 +17,7 @@ import {
 } from "@rabaed/domain";
 import { useState, type CSSProperties, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
+import { sayRefusal } from "../../lib/refusal.ts";
 import { IconButton } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
 import { CompanyChip } from "../data/avatar.tsx";
@@ -150,7 +151,7 @@ export function PackagePage({
     setError(null);
     try {
       const result = await call();
-      if (!result.ok) setError(labels.refusals[result.reason] ?? labels.refusals.unavailable);
+      if (!result.ok) setError(sayRefusal(labels.refusals, result.reason));
     } catch {
       setError(labels.refusals.unavailable);
     }

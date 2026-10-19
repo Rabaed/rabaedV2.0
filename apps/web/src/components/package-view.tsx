@@ -24,6 +24,7 @@ import NextLink from "next/link";
 import { useCallback, useRef } from "react";
 import { usePackageBulkCalls } from "@/components/package-bulk";
 import { getPathname, useRouter } from "@/i18n/navigation";
+import { messageKeys } from "@/lib/message-keys";
 
 type Result = { ok: true } | { ok: false; reason: string };
 
@@ -43,8 +44,7 @@ function usePackageLabels(): PackagePageLabels {
   const t = useTranslations("packages");
   const v = useTranslations("workItemViews");
   const locale = useLocale() as Locale;
-  const say = (key: string) => t(key);
-  const keys = <K extends string>(prefix: string, list: readonly K[]) => Object.fromEntries(list.map((k) => [k, say(`${prefix}.${k}`)])) as Record<K, string>;
+  const keys = messageKeys((key) => t(key));
   return {
     breadcrumb: t("breadcrumb"),
     back: t("back"),

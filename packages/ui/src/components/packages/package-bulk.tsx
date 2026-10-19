@@ -13,6 +13,7 @@ import {
 } from "@rabaed/domain";
 import { useEffect, useRef, useState, type ComponentType, type ElementType, type FormEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { sayRefusal } from "../../lib/refusal.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { ActionForm, type ActionFormLabels } from "../form-engine/action-form.tsx";
@@ -310,7 +311,7 @@ function BulkTransitionDialog({
         setStopped(result.stoppedBy);
         // The Action Form's own answers, as the item's Transition refused them: marked on the fields.
         if (result.stoppedBy.reason === "invalid_action_form" && result.stoppedBy.errors) setFieldErrors(result.stoppedBy.errors);
-      } else setError(labels.refusals[result.reason] ?? labels.refusals.unavailable);
+      } else setError(sayRefusal(labels.refusals, result.reason));
     } catch {
       setError(labels.refusals.unavailable);
     } finally {
