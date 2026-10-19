@@ -25,6 +25,7 @@ import { Icon } from "../icon/icon.tsx";
 import { TableCard } from "../list/table-card.tsx";
 import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work-item-table.tsx";
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
+import { usePackageBulk, type PackageBulkProps } from "./package-bulk.tsx";
 import { DeletePackageDialog, RenamePackageDialog, type DeletePackageLabels, type RenamePackageLabels } from "./package-dialogs.tsx";
 import { SubmitPackageDialog, type SubmitPackageCall, type SubmitPackageLabels } from "./submit-package-dialog.tsx";
 
@@ -99,6 +100,8 @@ export type PackagePageProps = {
   searchItems?: PackageItemSearch;
   onAdd?: (workItemIds: string[]) => ReturnType<PackageCall>;
   onSubmit?: SubmitPackageCall;
+  /** Bulk Transitions on the submittals waiting on the viewer (RP-661). */
+  bulk?: PackageBulkProps;
 };
 
 const statusTone = { open: "neutral", in_progress: "info", done: "success" } as const;
@@ -129,7 +132,9 @@ export function PackagePage({
   searchItems,
   onAdd,
   onSubmit,
+  bulk,
 }: PackagePageProps) {
+  const bulkTable = usePackageBulk({ items: pkg.items, bulk, locale, close: labels.close, cancel: labels.cancel, itemHref, linkAs: Link });
   const [sort, setSort] = useState<Pick<WorkItemQuery, "sort" | "dir">>({ sort: "documentNumber", dir: undefined });
   const [error, setError] = useState<string | null>(null);
   const n = (value: number) => formatNumber(value, locale);
@@ -243,6 +248,7 @@ export function PackagePage({
           <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">{n(rows.length)}</span>
         </h2>
         <TableCard>
+          {bulkTable.bar}
           {/* The table scrolls sideways in its own region, so the page never does. */}
           <div role="region" aria-label={labels.table.table} tabIndex={0} className={cn("relative overflow-auto", focusRing)}>
             <WorkItemTable
@@ -255,6 +261,7 @@ export function PackagePage({
               onSort={setSort}
               itemHref={itemHref}
               linkAs={Link}
+              selection={bulkTable.selection}
               rowEnd={
                 pkg.actions.removeItems && onRemove
                   ? (row) => (
