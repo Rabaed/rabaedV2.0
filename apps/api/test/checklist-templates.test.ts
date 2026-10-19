@@ -12,6 +12,7 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, publishProblems, type ChecklistTemplates, type FormVersion } from "@rabaed/domain";
 import { rabaedFormFile } from "@rabaed/admin/services";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { passChecklists } from "./support/checklist-template.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
@@ -235,6 +236,7 @@ describe("a WIR's Checklist Template (seam 1 acceptance)", () => {
     await take(tower.c1Engineer, id, "send_for_review");
     await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.c1Pm, id, "submit", { answers: { cover_note: "Ready from 09:00" } });
+    await passChecklists(k1Engineer, id);
     await take(k1Engineer, id, "send_to_manager", { recommendedCode: "C" });
     await tower.k1Manager.post(`/v1/work-items/${id}/pick-up`);
     await take(tower.k1Manager, id, "revise_c", { answers: { sample_checked: true, matches_specification: false, verification_note: "Cover short" }, remarks: "Cover short at gridline 4" });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { actionFormProblems, isScreenFileField } from "./action-form.ts";
+import { actionFormProblems, isScreenReplyField } from "./action-form.ts";
 import { bilingualText, type BilingualText } from "./company.ts";
 import { answerFields, formFields, formSchema, type FormSchema } from "./form.ts";
 import type { PublishContext, SchemaProblemCode } from "./form-publish.ts";
@@ -47,7 +47,7 @@ export function screenProblems(schema: unknown, internalFields: readonly string[
   const parsed = formSchema.safeParse(schema);
   if (!parsed.success) return parsed.error.issues.map((i) => ({ key: i.path.join(".") || "(schema)", code: "invalid_schema" }));
   const answered = new Set(answerFields(parsed.data).map((f) => f.key));
-  const files = new Set(formFields(parsed.data).filter(isScreenFileField).map((f) => f.key));
+  const files = new Set(formFields(parsed.data).filter(isScreenReplyField).map((f) => f.key));
   return [
     ...actionFormProblems(parsed.data, context, { screen: true }),
     ...internalFields.filter((key) => !answered.has(key)).map((key): ScreenProblem => ({ key, code: "unknown_internal_field" })),

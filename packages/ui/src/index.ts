@@ -43,6 +43,7 @@ export { ActionForm, internalNoteMaxLength, type ActionFormLabels, type ActionFo
 export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
 export { ChecklistTemplateItems, type ChecklistTemplateFieldLabels } from "./components/form-engine/checklist-template-field.tsx";
 export { FormPdfOptions, type FormPdfOptionsLabels, type FormPdfOptionsProps } from "./components/form-engine/form-pdf-options.tsx";
+export { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./components/form-engine/checklist-field.tsx";
 export { LinkSearch, type LinkSearchLabels, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
 export { LinkedFromList, type LinkedFromLabels, type LinkedFromListProps } from "./components/form-engine/linked-from.tsx";
 export { LinksSection, type LinksSectionLabels, type LinksSectionProps } from "./components/form-engine/links-section.tsx";

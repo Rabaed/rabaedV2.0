@@ -126,7 +126,7 @@ beforeAll(async () => {
 });
 
 describe("the WIR Workflow Version 2 is the document `pnpm defaults:publish` publishes", () => {
-  it("apps/admin/workflows/WIR-2.json is Version 2, published beside Version 1 for the items pinned to them (Version 3 is WIR.json, RP-673)", async () => {
+  it("apps/admin/workflows/WIR-2.json is Version 2, published beside Version 1 for the items pinned to them (Version 3 is WIR-3.json, RP-673; Version 4 WIR.json, RP-86)", async () => {
     const definitionId = (
       await migrator.selectFrom("work_item_type").select("workflow_definition_id").where("owner_kind", "=", "rabaed").where("code", "=", "WIR").executeTakeFirstOrThrow()
     ).workflow_definition_id!;
@@ -153,6 +153,7 @@ describe("the WIR Workflow Version 2 is the document `pnpm defaults:publish` pub
       [1, "published"],
       [2, "published"],
       [3, "published"],
+      [4, "published"],
     ]);
   });
 });
