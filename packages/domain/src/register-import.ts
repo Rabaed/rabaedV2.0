@@ -257,7 +257,14 @@ export const registerImportSummary = z.object({
 });
 export type RegisterImportSummary = z.infer<typeof registerImportSummary>;
 
-export const registerImports = z.object({ imports: z.array(registerImportSummary) });
+/**
+ * An import on the Imports page (story 32): with the Packages its Drafts went to, created or
+ * added to, by number; each one of the importing Company's own, a discarded one left out.
+ */
+export const registerImportListed = registerImportSummary.extend({ packages: z.array(registerImportPackage) });
+export type RegisterImportListed = z.infer<typeof registerImportListed>;
+
+export const registerImports = z.object({ imports: z.array(registerImportListed) });
 export type RegisterImports = z.infer<typeof registerImports>;
 
 /** One import with its rows: the preview before confirm, the record after. */

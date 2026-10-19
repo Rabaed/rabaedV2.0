@@ -2501,6 +2501,7 @@
       "rows": "Rows",
       "created": "Drafts created",
       "leftOut": "Left out",
+      "packages": "Packages",
       "emptyTitle": "No imports yet",
       "empty": "Import your submittal register to create its Drafts at once."
     },

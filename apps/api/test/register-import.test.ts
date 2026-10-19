@@ -231,6 +231,7 @@ describe("Previewing and confirming an import", () => {
           rowsTotal: 6,
           rowsRejected: 3,
           rowsCreated: 3,
+          packages: [],
         });
         const seen: RegisterImport = (await ok(getImport(by, previewed.id), 200)).json();
         expect(seen.rows.map((r) => r.reasons)).toEqual(record.rows.map((r) => r.reasons));
@@ -669,6 +670,7 @@ describe("RP-589-3: a Rabaed Engineer's import for C1 (RP-645)", () => {
         rowsTotal: 6,
         rowsRejected: 3,
         rowsCreated: 3,
+        packages: [],
       });
       // Its unassigned rows' raiser is the Company's own default Member.
       expect((await ok(getImport(by, imported.id), 200)).json()).toMatchObject({
@@ -1111,5 +1113,84 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       expect(deleted.mappings.map((m: { name: string }) => m.name)).toEqual(["Monthly register"]);
       await expectHidden(tower.c1Engineer.request("DELETE", `/v1/register-import-mappings/${id}`));
     });
+  });
+});
+
+// Story 32: the Imports page is every Member's of the importing Company, one who may not
+// import (story 4) included, each import with the Packages it created and added to (RP-657).
+// Confirming an import that creates a Package tells nobody either (owner, 2026-10-19).
+describe("The Imports page and its Packages (story 32, RP-657)", () => {
+  let at: Tower;
+  /** A C1 Member on the Project with no Position: may raise no Submittals Type there, so may not import. */
+  let noCreate: Awaited<ReturnType<typeof memberOnProject>>;
+  let lobby: { id: string; number: string };
+  let record: RegisterImport;
+  /** The outbox rows and notifications of the Project the confirm wrote. */
+  let outboxOfConfirm: { kind: string }[];
+  let notifiedOfConfirm: { member_id: string }[];
+
+  const imports = async (by: Caller) => (await ok(by.get(`/v1/projects/${at.projectId}/register-imports`), 200)).json().imports;
+
+  beforeAll(async () => {
+    const c1Co = await api.projectCreator();
+    const k1Co = await api.authorizedPerson();
+    at = await buildTower(api, { c1: c1Co, k1: k1Co }, "IML");
+    noCreate = await memberOnProject(api, c1Co, at.c1ParticipantId, [], { name: "Rana No Create" });
+    // C1's Submittals Types run here on the Snag's Workflow, whose Draft its raiser holds with
+    // the Create Function Permission (RP-622): a Member with no Position may raise none of them.
+    await sql`
+      insert into workflow_binding (project_id, work_item_type_id, raising_participant_id, workflow_definition_id)
+      select ${at.projectId}::uuid, t.id, ${at.c1ParticipantId}::uuid,
+        (select s.workflow_definition_id from work_item_type s where s.owner_kind = 'rabaed' and s.code = 'SNG')
+      from work_item_type t where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
+    `.execute(migrator);
+    lobby = (await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/packages`, { name: bilingual("Lobby") }), 201)).json();
+    const file = {
+      fileName: "Story 32.csv",
+      content: Buffer.from(["Subject,Type,Trade,Package", "Basins,MAR,Electrical,Bathrooms", "Doors,MAR,Electrical,lobby", "Fans,MAR,Nowhere,Bathrooms"].join("\n")).toString(
+        "base64",
+      ),
+    };
+    const mapping: RegisterImportMapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, package: { column: 3 } };
+    const previewed: RegisterImport = (await ok(tryPreview(at.c1Engineer, { file, sheet: "Story 32", headerRow: 1, mapping }, at.projectId), 201)).json();
+    const outbox = async () => (await sql<{ id: string; kind: string }>`select id, kind from outbox where project_id = ${at.projectId}::uuid`.execute(migrator)).rows;
+    const notified = async () =>
+      (await sql<{ id: string; member_id: string }>`select id, member_id from notification where project_id = ${at.projectId}::uuid`.execute(migrator)).rows;
+    const outboxBefore = new Set((await outbox()).map((o) => o.id));
+    const notifiedBefore = new Set((await notified()).map((n) => n.id));
+    expect((await ok(confirm(at.c1Engineer, previewed.id), 200)).json()).toEqual({ rowsCreated: 2 });
+    outboxOfConfirm = (await outbox()).filter((o) => !outboxBefore.has(o.id)).map(({ kind }) => ({ kind }));
+    notifiedOfConfirm = (await notified()).filter((n) => !notifiedBefore.has(n.id)).map(({ member_id }) => ({ member_id }));
+    record = (await ok(getImport(at.c1Engineer, previewed.id), 200)).json();
+  });
+
+  it("lists each import to every C1 Member, one who may not import included, with the Packages it created and added to", async () => {
+    const bathrooms = record.packages.find((p) => p.newName === "Bathrooms")!.package!;
+    expect((await read(noCreate.caller, { file: xlsx }, at.projectId)).statusCode).toBe(403);
+    for (const by of [at.c1Engineer, at.c1Pm, noCreate.caller]) {
+      expect(await imports(by)).toEqual([
+        {
+          id: record.id,
+          fileName: "Story 32.csv",
+          status: "created",
+          runBy: expect.objectContaining({ id: expect.any(String) }),
+          rowsTotal: 3,
+          rowsRejected: 1,
+          rowsCreated: 2,
+          // By number: the Open one it added to, then the new one.
+          packages: [
+            { id: lobby.id, number: lobby.number, name: bilingual("Lobby"), status: "open" },
+            { id: bathrooms.id, number: bathrooms.number, name: bilingual("Bathrooms"), status: "open" },
+          ],
+        },
+      ]);
+      expect((await ok(getImport(by, record.id), 200)).json().packages).toHaveLength(2);
+    }
+    expect(await imports(at.k1Manager)).toEqual([]);
+  });
+
+  it("tells nobody of the import or the Package it created: no outbox row, no notification", () => {
+    expect(outboxOfConfirm).toEqual([]);
+    expect(notifiedOfConfirm).toEqual([]);
   });
 });
