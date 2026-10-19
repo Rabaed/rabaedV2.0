@@ -30,14 +30,15 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270509 | RP-630 | 3D | Snag List on a phone |
 | 20270510 | RP-658 | 3A | Pick one of several covering Participants at a Submit |
 | 20270511 | spec RP-619 | 3A | Review fixes |
-| 20270620 | RP-636 | 1A | Build an Open Package (moved from 20270410: main's migrations had passed that block) |
-| 20270621 | RP-638 | 1A | Submit Package |
-| 20270622 | RP-641 | 1A | Packages board and each viewer's counts |
-| 20270623 | RP-642 | 1A | When a Package is Done |
-| 20270624 | RP-643 | 1A | Grouped notification for a Package Submit |
-| 20270625 | RP-646 | 1A | Bulk Transitions from the Package page |
-| 20270626 | RP-647 | 1A | Package filter and Comments on the Package page |
-| 20270627 | spec RP-616 | 1A | Review fixes |
+| 20270812 | RP-636 | 1A | Build an Open Package (final block, reserved at queue time: RP-675) |
+| 20270813 | RP-638 | 1A | Submit Package |
+| 20270814 | RP-641 | 1A | Packages board and each viewer's counts |
+| 20270815 | RP-642 | 1A | When a Package is Done |
+| 20270816 | RP-643 | 1A | Grouped notification for a Package Submit |
+| 20270817 | RP-646 | 1A | Bulk Transitions from the Package page |
+| 20270818 | RP-647 | 1A | Package filter and Comments on the Package page |
+| 20270819 | spec RP-616 | 1A | Review fixes |
+| 20270820 | spec RP-616 | 1A | Reconciliation after `main`: `notification_kind_check` lists `package_submitted` and RP-155's `record_ready` (rule 11.1); stays last |
 | 20270418 | RP-170 | 4A | WIR Workflow Version 2 (Engineer → Manager, Recommended Result) |
 | 20270524 | RP-637 | 5A | Register Import tracer: import tables, row-level security, confirm function |
 | 20270525 | RP-639 | 5B | Register Import: value matching, optional fields and Paper ref |
@@ -85,3 +86,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270731 | RP-629 | 34 | snag_bulk_reassign |
 | 20270803 | RP-623 | 32 | reply_screen_files |
 | 20270807 | RP-958 | 22 | outbox_attempt_on_take |
+| 20270805 | RP-155 | 23 | record_checks |

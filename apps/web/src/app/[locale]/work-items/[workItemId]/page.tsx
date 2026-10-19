@@ -1,5 +1,16 @@
-import { answerFields, formatNumber, isOpenStageCategory, sortedByName, stepAgeLabel, watchOutcomeNames, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, Outcome, outcomesOfType, SentBackNotice, StagePill, stageColour } from "@rabaed/ui";
+import {
+  answerFields,
+  formatNumber,
+  isOpenStageCategory,
+  moduleNames,
+  moduleTabPaths,
+  sortedByName,
+  stepAgeLabel,
+  watchOutcomeNames,
+  workItemListHref,
+  type Locale,
+} from "@rabaed/domain";
+import { AgeDots, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -14,10 +25,12 @@ import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
 import { DownloadRecordButton } from "@/components/download-record-button";
+import { SnagItemCards } from "@/components/snag-item-cards";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
+import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
   getLinkedFrom,
   getMe,
@@ -77,6 +90,11 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     : [null, null];
   const choices =
     mine && scopes ? fillingChoices(mine, scopes.scopes, locale, item) : readingChoices(item, locale);
+  // A Snag List item's own layout (RP-628): its Type and number over the Subject, then where it
+  // was raised from and the Contractor's response beside the "before" photos.
+  const snag = item.module === "snag_list";
+  const listHref = `/projects/${item.projectId}/${moduleTabPaths[snag ? "snag_list" : "submittals"]}`;
+  const quote = snag && typeof item.answers.comment === "string" ? item.answers.comment : null;
 
   return (
     <WorkItemFormProvider
@@ -102,14 +120,20 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
-          <Link href={`/projects/${item.projectId}/work-items`} className="text-sm text-brand-fg underline underline-offset-4">
-            {t("title")}
+          <Link href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
+            {snag ? moduleNames.snag_list[locale] : t("title")}
           </Link>
+          {snag && (
+            <div className="flex flex-wrap items-center gap-2">
+              <SnagTypeChip code={item.type.code} name={item.type.name[locale]} />
+              {item.documentNumber && <DocNo value={item.documentNumber} locale={locale} className="font-ui text-[12.5px] font-bold text-muted" />}
+            </div>
+          )}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-h4 font-semibold">{item.title}</h1>
             <div className="flex flex-wrap items-center gap-2">
               {/* A closed item's sealed Documental Record, for everyone who sees it (RP-620, V7). */}
-              {item.outcome && <DownloadRecordButton workItemId={item.id} />}
+              {item.outcome && <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} />}
               {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
               {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
             </div>
@@ -160,6 +184,18 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               </>
             )}
           </div>
+        )}
+
+        {snag && (
+          <SnagItemCards
+            workItemId={item.id}
+            subject={item.title}
+            locale={locale}
+            source={item.raisedFrom}
+            quote={quote}
+            response={history ? snagResponse(history.events, documents.documents, { closed: item.closedAt !== null }) : null}
+            before={beforePhotos(form.schema, documents.documents)}
+          />
         )}
 
         {/* The System Fields above the Form, the same on every Work Item. */}
@@ -262,15 +298,43 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
           <dt className="text-muted">{t("fields.raisedBy")}</dt>
           <dd>{item.raisedBy.companyName[locale]}</dd>
-          {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees. */}
-          {item.raisedItems.map((f) => (
-            <Fragment key={f.type.code}>
-              <dt className="text-muted">{t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale]}</dt>
-              <dd data-testid={`raised-item-counts-${f.type.code}`}>
-                {t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) })}
+          {/* Its Package (RP-659): only where the API gives it, which is only where the viewer sees the Package. */}
+          {item.package && (
+            <>
+              <dt className="text-muted">{t("fields.package")}</dt>
+              <dd className="min-w-0">
+                <PackageChip
+                  number={item.package.number}
+                  name={item.package.name[locale]}
+                  href={`/packages/${item.package.id}`}
+                  label={tViews("board.openPackage", { number: item.package.number, name: item.package.name[locale] })}
+                  linkAs={Link}
+                />
               </dd>
-            </Fragment>
-          ))}
+            </>
+          )}
+          {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees;
+              each opens the Snag List filtered to them (RP-628), where the viewer again sees only its own. */}
+          {item.raisedItems.map((f) => {
+            const counts = t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) });
+            return (
+              <Fragment key={f.type.code}>
+                <dt className="text-muted">{t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale]}</dt>
+                <dd data-testid={`raised-item-counts-${f.type.code}`}>
+                  {item.documentNumber ? (
+                    <Link
+                      href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [item.documentNumber] })}
+                      className="text-brand-fg underline underline-offset-4"
+                    >
+                      {counts}
+                    </Link>
+                  ) : (
+                    counts
+                  )}
+                </dd>
+              </Fragment>
+            );
+          })}
         </dl>
 
         {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} documents={documents.documents} locale={locale} />}

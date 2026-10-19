@@ -49,6 +49,7 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `library/page.tsx` | `/library` | My Company's Library: Workflows (RP-442) |
 | `library/workflows/[workflowId]/page.tsx` | `/library/workflows/:workflowId` | A Library Workflow: builder for the Authorized Person, map for others |
 | `work-items/[workItemId]/page.tsx` | `/work-items/:workItemId` | One item: Form, Steps, Links, Documents |
+| `packages/[packageId]/page.tsx` | `/packages/:packageId` | One Package: its submittals, counts, rename, delete, Add items, Submit Package (RP-659); its notifications link here |
 | `work-items/[workItemId]/print/page.tsx` | `/work-items/:workItemId/print` | The item's final output laid out to print (Download) |
 | `work-items/[workItemId]/links/[linkId]/page.tsx` | `/work-items/:workItemId/links/:linkId` | Where a Link opens (the item, or only its number and subject) |
 | `[...rest]/page.tsx` | any other URL | 404 |

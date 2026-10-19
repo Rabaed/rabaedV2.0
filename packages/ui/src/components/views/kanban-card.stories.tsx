@@ -35,6 +35,8 @@ const text = {
   revise: b("Revise and Resubmit", "يُعدَّل ويُعاد تقديمه"),
   // Cards write dates in English, Arabic too (the anatomy's "8 Sep").
   date: b("Sep 8", "Sep 8"),
+  bathrooms: b("Bathrooms – Tower 1", "الحمامات – البرج 1"),
+  openPackage: b("Open Package PKG-004 Bathrooms – Tower 1", "فتح الحزمة PKG-004 الحمامات – البرج 1"),
 };
 
 const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardProps => ({
@@ -57,7 +59,7 @@ const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardP
 });
 
 // Each story names what differs from the default card by a key below; the render builds it in the story's language.
-type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber";
+type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "package";
 type StoryArgs = KanbanCardProps & { variant?: Variant };
 
 const meta = {
@@ -111,6 +113,8 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
       return { ...shared, badge: { kind: "revision", label: "R2" }, contractorName: text.contractor[locale] };
     case "noNumber":
       return { number: null, place: [], date: undefined, stepAgeWeeks: null };
+    case "package":
+      return { package: { number: "PKG-004", name: text.bathrooms[locale], href: "#package", label: text.openPackage[locale] } };
     default:
       return shared;
   }
@@ -217,3 +221,24 @@ export const WithContractorName: Story = {
 
 /** A Draft with no number yet: says so, and has no date or Step Age (nobody sees when it was started). */
 export const NoNumberYet: Story = { args: { variant: "noNumber" } };
+
+/**
+ * In a Package the viewer sees (RP-659): its chip under the tags, `PKG-004 · name`, the number left
+ * to right in Arabic too. The chip opens the Package, above the card's own link to the item.
+ */
+export const InAPackage: Story = {
+  args: { variant: "package" },
+  play: async (context) => {
+    const c = card(context);
+    const locale = storyLocale(context);
+    const chip = within(c).getByRole("link", { name: text.openPackage[locale] });
+    await expect(chip).toHaveAttribute("href", "#package");
+    await expect(chip.textContent).toMatch(new RegExp(`^PKG-004\\s*·\\s*${text.bathrooms[locale]}$`));
+    await expect(within(chip).getByText("PKG-004")).toHaveAttribute("dir", "ltr");
+    // A click on the chip reaches the chip, not the card's link to the item.
+    const box = chip.getBoundingClientRect();
+    await expect(chip.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
+    // Below the tags.
+    await expect(box.top).toBeGreaterThan(within(c).getByText("MAR").getBoundingClientRect().bottom - 1);
+  },
+};
