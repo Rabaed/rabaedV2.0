@@ -46,6 +46,8 @@ describe("creating a Project", () => {
       needMyAction: 0,
       modules: await defaultModules(migrator),
       showInspectionsInSubmittals: false,
+      recordLanguage: "bilingual",
+      recordHijriDates: false,
     });
     expect(projectIds(await a.caller.get("/v1/projects"))).toContain(projectId);
   });

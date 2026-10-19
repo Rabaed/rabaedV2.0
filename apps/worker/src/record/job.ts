@@ -3,6 +3,7 @@ import { documentalRecordFacts, saveDocumentalRecord, type OutboxHandler } from 
 import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
+import { documentAssets } from "./assets.ts";
 import { recordHtml } from "./layout.ts";
 import { toPdfA3 } from "./pdfa.ts";
 import { sha256 } from "./pki.ts";
@@ -20,9 +21,12 @@ import type { TimestampAuthority } from "./timestamp.ts";
 // retries the row, then dead-letters it; the closure is never touched. Until
 // the save, nothing is issued: a retry makes the record afresh.
 //
+// The Project's record language and Hijri setting are read with the facts, when
+// the record is made (RP-151), so a change applies to records made afterwards.
+//
 // Not yet (later tickets of spec RP-632): the checks before publishing and the
-// "record ready" event (RP-155), the appendix (RP-147), page 1, the Form,
-// Signatures and Stamps (RP-151, RP-650), and the Project's record language.
+// "record ready" event (RP-155), the appendix (RP-147), Signatures, Stamps,
+// Review Comments and the endings (RP-650).
 
 export interface RecordJobDeps {
   readonly files: RecordFiles;
@@ -52,12 +56,14 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
     const facts = await documentalRecordFacts(trx, row.id);
     if (!facts) return;
     const token = randomBytes(32).toString("base64url");
-    const data = recordDataOf(facts, {
-      code: verificationCode(),
-      link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}`,
-    });
+    const assets = await documentAssets(facts, deps.files);
+    const data = recordDataOf(
+      facts,
+      { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` },
+      assets.pageCounts,
+    );
     const xml = new TextEncoder().encode(recordDataXml(data));
-    const rendered = await deps.renderer.render(recordHtml(data, await deps.fonts()));
+    const rendered = await deps.renderer.render(recordHtml(data, await deps.fonts(), assets.images));
     const sealedAt = now();
     const title = [data.type.code, data.documentNumber ?? data.subject].join(" ");
     const archival = await toPdfA3(rendered, { title, at: sealedAt }, [
