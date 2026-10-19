@@ -137,7 +137,12 @@ export async function newItemForm(trx: Trx, projectId: string, typeCode: string)
     select v.id, v.version_no, v.schema,
       (select t.id from work_item_type t where t.code = ${typeCode} and (t.project_id = ${projectId}::uuid or t.project_id is null)
        order by t.project_id is null, t.id limit 1) as type_id
-    from form_version v where v.id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
+    from form_version v
+    join form_definition f on f.id = v.form_definition_id
+    where v.id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
+      -- form_definition's policy, said again: Rabaed Admin (an Engineer's Register Import, run as
+      -- the default Member) reads past it (RP-657). A Rabaed Default, or one of their Projects' own.
+      and (f.owner_kind = 'rabaed' or (f.owner_kind = 'project' and f.project_id in (select app.current_project_ids())))
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
@@ -465,12 +470,22 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
  * Workflow bound for their Participant, as app.create_work_item resolves it (RP-426).
  */
 export async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
+  // app.new_item_workflow_version is security invoker: Rabaed Admin (an Engineer's Register
+  // Import, run as the default Member) reads past row-level security through it, so the Version
+  // it answers is kept only when the Member reads its Workflow (workflow_definition's policy,
+  // said again): a Rabaed Default, or one of their Projects' own (RP-657). A binding names
+  // nothing else (app.check_workflow_binding).
   const { rows } = await sql<{ type_id: string; workflow_version_id: string | null }>`
-    select t.id as type_id, app.new_item_workflow_version(${projectId}::uuid, t.id, (
-      select pm.participant_id from project_member pm
-      where pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
-        and pm.participant_id in (select app.current_participant_ids())
-    )) as workflow_version_id
+    select t.id as type_id, (
+      select v.id from workflow_version v
+      join workflow_definition d on d.id = v.workflow_definition_id
+      where v.id = app.new_item_workflow_version(${projectId}::uuid, t.id, (
+          select pm.participant_id from project_member pm
+          where pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
+            and pm.participant_id in (select app.current_participant_ids())
+        ))
+        and (d.owner_kind = 'rabaed' or (d.owner_kind = 'project' and d.project_id in (select app.current_project_ids())))
+    ) as workflow_version_id
     from work_item_type t
     where t.owner_kind = 'rabaed' and t.code = ${typeCode} and not t.raised_from_item_only
   `.execute(trx);

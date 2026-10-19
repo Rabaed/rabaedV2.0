@@ -101,6 +101,9 @@ function optionsOf(field: AnswerField, lists: readonly OptionList[]): { value: s
 
 /** The Project as the Member may import into it (one of their Projects, checked by the caller). */
 export async function registerContext(trx: Trx, projectId: string): Promise<RegisterContext> {
+  // The Rabaed Types only (owner 'rabaed' is project_id null, which every Member reads): never a
+  // Project's own, so Rabaed Admin reads no other Project's here. Each one's Form and Workflow are
+  // scoped in newItemForm and draftOf (RP-657).
   const { rows: types } = await sql<{ code: string; name: BilingualText; raisable: boolean }>`
     select t.code, t.name, t.id in (select r.work_item_type_id from app.register_import_raisable_types(${projectId}::uuid) r) as raisable
     from work_item_type t where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
