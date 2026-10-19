@@ -12,3 +12,11 @@ id = "inlined-font"
 description = "Font inlined as base64; fonts are never committed (Thmanyah is licensed)"
 regex = '''data:(?:font/|application/(?:font-|x-font-?))[a-z0-9.+-]*(?:;[a-z0-9=-]+)*;base64,[A-Za-z0-9+/]{16}'''
 keywords = ["base64"]
+
+# RP-157's seam-1 test once held a made-up verification link token as a literal
+# (commit 0b8f5f4be); it was never a secret, and the test now builds it at run time.
+# Only the default generic-api-key rule, and only in that one file.
+[[allowlists]]
+description = "RP-157: a made-up verification token in the verification test"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/api/test/verification\.test\.ts$''']
