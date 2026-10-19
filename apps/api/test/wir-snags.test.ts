@@ -19,7 +19,7 @@ import type { ChecklistTemplates, DocumentList, StartedDocumentUpload, WorkItemD
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -39,6 +39,8 @@ const items = [
 ];
 /** Formwork and cover fail, cover unticked; clean answered No, which raises nothing. */
 const TWO_FAILS = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "fail", snag: false }, clean: { answer: "no" } };
+/** The Engineer's annotated copy of a photo (RP-656, a reply photo's since RP-981): the canvas's PNG. */
+const DRAWN = Buffer.from("PNG annotated: arrow at the gap");
 const SECOND_PHOTO = jpegWithExif({ takenAt: "2026:10:03 14:25:00", offset: "+03:00", latitude: 24.7136, longitude: 46.6753 });
 const ONE_FAIL = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" }, clean: { answer: "yes" } };
 
@@ -164,6 +166,7 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
     wir = await atManager("Two fails", TWO_FAILS);
     const original = (await documentsOf(ahmed.caller, wir)).documents.find((d) => d.itemKey === "formwork")!.id;
     photos = [original, await addPhoto(wir, "formwork", SECOND_PHOTO, "formwork-joint.jpg")];
+    await uploadDocument(ahmed.caller, wir, { annotatedFromId: original, fileName: "formwork-annotated.png", contentType: "image/png", body: DRAWN });
     await sendToManager(wir, "C");
     await take(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
     const raised = await raisedFrom(hafiz.caller, wir, "SNG");
@@ -185,16 +188,20 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
     expect(await snagCount(hafiz.caller, wir)).toEqual({ open: 1, closed: 0 });
   });
 
-  // A reply photo's annotated copy comes with RP-981; its copy follows its original's by trigger (document_copy).
-  it("copies the item's two photos as the Snag's \"before\" photos: new Documents, the same bytes", async () => {
+  it("copies the item's two photos as the Snag's \"before\" photos, the annotated copy beside its original's copy (RP-656): new Documents, the same bytes", async () => {
     const copied = (await documentsOf(hafiz.caller, snag.id)).documents;
-    expect(copied.map((d) => [d.fieldKey, d.itemKey, d.fileName])).toEqual([
-      ["photos", null, "formwork.jpg"],
+    expect(copied.map((d) => [d.fieldKey, d.itemKey, d.fileName]).sort()).toEqual([
+      ["photos", null, "formwork-annotated.png"],
       ["photos", null, "formwork-joint.jpg"],
+      ["photos", null, "formwork.jpg"],
     ]);
+    const named = (fileName: string) => copied.find((d) => d.fileName === fileName)!;
     expect(copied.map((d) => d.id)).not.toContain(photos[0]);
-    expect(await bytesOf(hafiz.caller, snag.id, copied[0]!.id)).toEqual(await bytesOf(hafiz.caller, wir, photos[0]!));
-    expect(await bytesOf(hafiz.caller, snag.id, copied[1]!.id)).toEqual(SECOND_PHOTO);
+    expect(named("formwork-annotated.png").annotatedFromId).toBe(named("formwork.jpg").id);
+    expect(named("formwork.jpg").annotatedFromId).toBeNull();
+    expect(await bytesOf(hafiz.caller, snag.id, named("formwork.jpg").id)).toEqual(await bytesOf(hafiz.caller, wir, photos[0]!));
+    expect(await bytesOf(hafiz.caller, snag.id, named("formwork-joint.jpg").id)).toEqual(SECOND_PHOTO);
+    expect(await bytesOf(hafiz.caller, snag.id, named("formwork-annotated.png").id)).toEqual(DRAWN);
   });
 
   it("its Raised from read carries the check item's key and text", async () => {
