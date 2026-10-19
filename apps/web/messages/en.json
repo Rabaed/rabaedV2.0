@@ -1035,6 +1035,11 @@
       "unavailable": "That didn't work. Try again."
     }
   },
+  "documentalRecord": {
+    "download": "Download PDF",
+    "notReady": "The record isn't ready yet. Try again in a minute.",
+    "unavailable": "That didn't work. Try again."
+  },
   "watch": {
     "watch": "Watch",
     "watching": "Watching",
@@ -1182,6 +1187,9 @@
     "outcomeReviewCode": "Outcome · Review Code",
     "noOutcome": "—",
     "outcomeOnlyOnClose": "Only a Close sets an outcome.",
+    "inform": "Inform",
+    "informHelp": "Their Participants covering the item read it from this Submit, and never act on it.",
+    "informOnlyOnSubmit": "Only a Submit informs other Participants.",
     "actionFormHeading": "Action Form",
     "screen": "Screen",
     "screenHelp": "The Screen this Transition asks when it is taken. Screens are edited in Settings → Screens.",

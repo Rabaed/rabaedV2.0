@@ -1534,6 +1534,9 @@ export function takeTransition(
     if (formComplete && !(await checkFormComplete()).ok) {
       return validationRefused(formComplete, pinned.form.schema, actionForm);
     }
+    // A pick with no copy yet (a Revision's, carried from the item it revises) gets it before
+    // the item moves on, so it never leaves the raiser without its checklist (RP-651).
+    if (routed && pinned.canSave) await syncChecklists(trx, pinned.form.schema, workItemId, now);
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},

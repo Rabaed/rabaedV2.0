@@ -14,6 +14,7 @@ import { WorkItemReplacement } from "@/components/work-item-replacement";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
+import { DownloadRecordButton } from "@/components/download-record-button";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
@@ -107,8 +108,12 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           </Link>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-h4 font-semibold">{item.title}</h1>
-            {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
-            {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* A closed item's sealed Documental Record, for everyone who sees it (RP-620, V7). */}
+              {item.outcome && <DownloadRecordButton workItemId={item.id} />}
+              {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
+              {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
