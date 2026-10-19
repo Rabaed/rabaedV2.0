@@ -16,15 +16,19 @@ import { deliverRecordReady } from "./documental-record-checks.ts";
 import type { Database } from "./schema.ts";
 
 // The outbox processor (workflow-engine.md §5): the worker takes one due row at
-// a time in its own transaction, hands it to the handler for its kind, and
-// marks it processed. A handler that throws is rolled back to a savepoint, and
-// the row is retried later or, after its last attempt, dead-lettered; the next
-// row goes ahead either way. Rows hold ids only, so they are safe to log.
+// a time, counting the attempt and holding the row back by its backoff in a
+// transaction of its own, so a worker that dies in the handler still spends the
+// attempt (RP-958). Then, in a second transaction that locks the row, it hands
+// it to the handler for its kind and marks it processed. A handler that throws
+// is rolled back to a savepoint, and the row is retried later or, after its last
+// attempt, dead-lettered; the next row goes ahead either way. Rows hold ids
+// only, so they are safe to log.
 
 export interface OutboxRow {
   readonly id: string;
   readonly kind: string;
   readonly payload: Record<string, unknown>;
+  /** This attempt's number: counted when the row was taken. */
   readonly attempts: number;
 }
 
@@ -177,7 +181,7 @@ export interface ProcessOutboxOptions {
   handlers?: Record<string, OutboxHandler>;
   /** Attempts before a row is dead-lettered. */
   maxAttempts?: number;
-  /** How long to wait before retrying, after `attempts` failed attempts. */
+  /** How long to wait before retrying, after `attempts` failed attempts; also how long a taken row waits when its worker dies. */
   retryDelayMs?: (attempts: number) => number;
   /** Rows to take in this run at most. */
   limit?: number;
@@ -209,24 +213,40 @@ export async function processOutbox(db: Db, options: ProcessOutboxOptions = {}):
   const { maxAttempts = 8, retryDelayMs = backoff, limit = 100 } = options;
   const run: OutboxRun = { processed: 0, failed: 0, dead: 0 };
 
-  type Result = "none" | "processed" | "failed" | "dead" | "gone";
+  // How long each attempt holds its row back, by attempt number: once taken, the row is
+  // due again after this unless the attempt succeeds, or fails and says when.
+  const retryAfterMs = Array.from({ length: maxAttempts }, (_, i) => Math.round(retryDelayMs(i + 1)));
+
+  type Result = "processed" | "failed" | "dead" | "gone";
   const recordFailure = async (trx: Transaction<Database>, row: OutboxRow, error: unknown): Promise<Result> => {
-    const retryAfterMs = Math.round(retryDelayMs(row.attempts + 1));
     const { rows } = await sql<{ outcome: "retry" | "dead" | "gone" }>`
-      select app.outbox_failed(${row.id}::uuid, ${failureOf(error)}, ${maxAttempts}, ${retryAfterMs}::integer) as outcome
+      select app.outbox_failed(${row.id}::uuid, ${row.attempts}::integer, ${failureOf(error)}, ${maxAttempts}, ${retryAfterMs[row.attempts - 1] ?? 0}::integer) as outcome
     `.execute(trx);
     return rows[0]!.outcome === "retry" ? "failed" : rows[0]!.outcome;
   };
 
   for (let i = 0; i < limit; i++) {
-    let taken: OutboxRow | undefined;
+    // The attempt is counted, and committed, before the handler runs: a worker that
+    // dies in the handler has still spent it (RP-958).
+    const taken = await db.transaction().execute(async (trx) => {
+      const { rows } = await sql<OutboxRow & { dead: boolean }>`
+        select * from app.take_outbox_row(${maxAttempts}::integer, ${retryAfterMs}::integer[])
+      `.execute(trx);
+      return rows[0];
+    });
+    if (!taken) break;
+    const { dead, ...row } = taken;
+    if (dead) {
+      // Its last attempt was taken and never recorded: dead-lettered at take.
+      run.dead++;
+      continue;
+    }
     let result: Result;
     try {
-      // Counted once committed: "none" when nothing is due.
       result = await db.transaction().execute(async (trx): Promise<Result> => {
-        const { rows } = await sql<OutboxRow>`select * from app.take_outbox_row()`.execute(trx);
-        const row = (taken = rows[0]);
-        if (!row) return "none";
+        // Locked while the handler runs, so no other worker takes it meanwhile.
+        const { rows } = await sql<{ held: boolean }>`select app.hold_outbox_row(${row.id}::uuid, ${row.attempts}::integer) as held`.execute(trx);
+        if (!rows[0]!.held) return "gone";
         await sql`savepoint deliver`.execute(trx);
         try {
           const handler = handlers[row.kind];
@@ -242,12 +262,9 @@ export async function processOutbox(db: Db, options: ProcessOutboxOptions = {}):
       });
     } catch (error) {
       // The row's whole transaction failed (even recording the failure): record it
-      // afresh, so it can't stay first in line and hold up every row behind it.
-      if (!taken) throw error;
-      const row = taken;
+      // afresh, so it says why, and waits its backoff rather than its attempt's hold.
       result = await db.transaction().execute((trx) => recordFailure(trx, row, error));
     }
-    if (result === "none") break;
     if (result !== "gone") run[result]++;
   }
   return run;
