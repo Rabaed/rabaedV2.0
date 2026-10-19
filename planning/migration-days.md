@@ -80,3 +80,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270709 | RP-620 | 22 | documental_record |
 | 20270714 | RP-625 | 3A | Informed Participants: `informed` access and a shared move inside one Participant reaching the others (moved from 20270504, then 20270706: main's later days) |
 | 20270716 | RP-673 | 41 | wir_review_codes: WIR Review Codes, the Inspections Stages moved to the Submittals set, app.move_stage_key, app.recommendable_outcomes (moved from 20270714) |
+| 20270716 | RP-651 | 42 | checklist_templates_review_fixes |

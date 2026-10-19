@@ -2,7 +2,9 @@
 
 import {
   checklistTemplateRequest,
+  evidenceRules,
   formatNumber,
+  maxChecklistItems,
   negativeActions,
   type BilingualText,
   type ChecklistTemplate,
@@ -261,7 +263,7 @@ export function ChecklistTemplateEditor({
                       <Input value={item.text.ar} dir="rtl" maxLength={200} readOnly={!editable} onChange={(e) => setItem(i, { text: { ...item.text, ar: e.target.value } })} />
                     </Field>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <Field label={t("answers")}>
                       <Select
                         value={item.answers}
@@ -278,7 +280,7 @@ export function ChecklistTemplateEditor({
                         value={item.comment}
                         disabled={!editable}
                         onValueChange={(comment) => setItem(i, { comment: comment as EvidenceRule })}
-                        options={(["off", "optional", "required_on_negative"] as const).map(evidence)}
+                        options={evidenceRules.map(evidence)}
                       />
                     </Field>
                     <Field label={t("photo")}>
@@ -286,7 +288,7 @@ export function ChecklistTemplateEditor({
                         value={item.photo}
                         disabled={!editable}
                         onValueChange={(photo) => setItem(i, { photo: photo as EvidenceRule })}
-                        options={(["off", "optional", "required_on_negative"] as const).map(evidence)}
+                        options={evidenceRules.map(evidence)}
                       />
                     </Field>
                     <Field label={t("onNegative")}>
@@ -303,7 +305,7 @@ export function ChecklistTemplateEditor({
             })}
           </ol>
           {editable && (
-            <Button variant="secondary" size="sm" className="w-fit" disabled={items.length >= 100} onClick={() => setItems([...items, newItem(items)])}>
+            <Button variant="secondary" size="sm" className="w-fit" disabled={items.length >= maxChecklistItems} onClick={() => setItems([...items, newItem(items)])}>
               <Icon name="plus" size={15} />
               {t("addCheck")}
             </Button>
