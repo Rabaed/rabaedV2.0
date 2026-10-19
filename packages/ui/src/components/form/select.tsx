@@ -1,7 +1,7 @@
 "use client";
 
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Icon } from "../icon/icon.tsx";
 import { textBox } from "./control-styles.ts";
@@ -34,6 +34,10 @@ export function Select({ options, placeholder, className, value, defaultValue, o
     ...root
   } = useFieldControl(props);
   const [uncontrolled, setUncontrolled] = useState(defaultValue);
+  // Inside a modal <dialog> (the Transition pop-up), the list opens inside it: in <body> it would
+  // sit under the dialog's top layer, hidden and unclickable (RP-658).
+  const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
+  const trigger = useCallback((node: HTMLButtonElement | null) => setDialog(node?.closest("dialog") ?? null), []);
   const current = value ?? uncontrolled;
   const selected = options.find((option) => option.value === current);
   const state = readOnly
@@ -52,6 +56,7 @@ export function Select({ options, placeholder, className, value, defaultValue, o
   return (
     <SelectPrimitive.Root disabled={disabled} required={required} {...state} {...root}>
       <SelectPrimitive.Trigger
+        ref={trigger}
         id={id}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
@@ -75,7 +80,7 @@ export function Select({ options, placeholder, className, value, defaultValue, o
           <Icon name="chevron-down" size={16} />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal>
+      <SelectPrimitive.Portal container={dialog ?? undefined}>
         <SelectPrimitive.Content
           position="popper"
           sideOffset={4}

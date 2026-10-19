@@ -499,6 +499,14 @@ export const takeTransitionRequest = z.object({
    */
   assignTo: z.uuid().nullable().default(null),
   /**
+   * The next Step's Participant (RP-658, workflow-engine.md §3.1): at a Submit whose next
+   * Step more than one Participant covers, one of those the Transition offers
+   * (`participants` of its action). Without one there, refused with
+   * `participant_not_picked`; a pick it couldn't have offered is refused with
+   * `participant_not_offered`, whoever it names.
+   */
+  participant: z.uuid().nullable().default(null),
+  /**
    * The Recommended Code (RP-433, workflow-engine.md §5.3): from a Step that
    * Recommends a Code, one of the outcomes the Transition offers
    * (`recommendCode`), for the next reviewer of the same Participant; its note is
@@ -597,6 +605,12 @@ export const workItemActions = z.object({
        * another Participant's).
        */
       assignTo: z.array(z.object({ memberId: z.uuid(), name: bilingualText })).optional(),
+      /**
+       * The Participant field (RP-658): the Participants covering the item, one of whom
+       * the pop-up must pick to hold the next Step, by Company name only (V14); absent
+       * when the next Step goes to one Participant.
+       */
+      participants: z.array(z.object({ participantId: z.uuid(), companyName: bilingualText })).optional(),
       /**
        * The Recommended Code (RP-433): the outcomes the pop-up may recommend to the
        * next reviewer of the viewer's own Participant, in order; absent when the

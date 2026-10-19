@@ -1282,6 +1282,8 @@ type ActionRow = {
   action_form: unknown;
   /** Whether it offers "Assign to" (WF-8). */
   offers_assign_to: boolean;
+  /** Whether its Action Form offers the Participant field (RP-658). */
+  picks_participant: boolean;
   /** Whether it may carry a Recommended Code (RP-433): a `send` from a Step that Recommends a Code. */
   may_recommend: boolean;
   /** The outcome it issues, if any. */
@@ -1295,10 +1297,10 @@ type ActionRow = {
  */
 async function actionRows(trx: Trx, workItemId: string, transitionKey?: string): Promise<ActionRow[]> {
   const { rows } = await sql<ActionRow>`
-    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form,
+    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form, a.picks_participant,
       coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to,
       coalesce(tr.kind = 'send' and src.outcome_mode = 'recommend_code', false) as may_recommend, tr.outcome
-    from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
+    from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, picks_participant, n)
     left join work_item w on w.id = ${workItemId}::uuid
     left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
     left join workflow_step src on src.id = tr.from_step_id
@@ -1331,6 +1333,7 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));
+  const participants = await Promise.all(transitions.map((r) => (r.picks_participant ? participantsOffered(trx, workItemId, r.transition_key!) : [])));
   const recommendable = await Promise.all(
     transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
   );
@@ -1355,6 +1358,7 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
         kind: r.transition_kind!,
         actionForm,
         ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
+        ...(participants[i]!.length > 0 ? { participants: participants[i] } : {}),
         ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
         ...(Object.keys(prefill).length > 0 ? { prefill } : {}),
         ...(checklists[i]!.length > 0 ? { checklists: checklists[i] } : {}),
@@ -1440,6 +1444,22 @@ async function assignees(trx: Trx, workItemId: string, transitionKey: string): P
   return rows.map((r) => ({ memberId: r.member_id, name: r.full_name }));
 }
 
+/**
+ * The Participant field (RP-658): the Participants covering the item that the acting Member
+ * must pick one of when taking `transitionKey` (app.participants_offered), by Company name
+ * only (V14).
+ */
+async function participantsOffered(trx: Trx, workItemId: string, transitionKey: string): Promise<{ participantId: string; companyName: BilingualText }[]> {
+  const { rows } = await sql<{ participant_id: string; company_name: BilingualText }>`
+    select o.participant_id, o.company_name
+    from work_item w
+    join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = ${transitionKey}
+    cross join lateral app.participants_offered(w.id, tr.id) o
+    where w.id = ${workItemId}::uuid
+  `.execute(trx);
+  return rows.map((r) => ({ participantId: r.participant_id, companyName: r.company_name }));
+}
+
 const transitionRefusals = [
   "not_found",
   "item_closed",
@@ -1454,6 +1474,8 @@ const transitionRefusals = [
   "form_not_checked",
   "no_route",
   "assignee_not_offered",
+  "participant_not_picked",
+  "participant_not_offered",
   "action_not_allowed",
   "recommended_code_not_offered",
   "not_confirmed",
@@ -1657,7 +1679,7 @@ export async function takeTransitionIn(
     select app.take_transition(
       ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
       ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid,
-      ${input.recommendedCode}::text) as outcome
+      ${input.recommendedCode}::text, ${input.participant}::uuid) as outcome
   `.execute(trx);
   // A Validate rule the database found not holding, by its place in `validate`.
   const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
