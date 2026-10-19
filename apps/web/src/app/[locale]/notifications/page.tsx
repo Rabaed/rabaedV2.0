@@ -8,7 +8,9 @@ import { getMe, getNotifications } from "@/lib/session";
 
 /**
  * The Member's notifications, newest first. Each shows only the item's number
- * and title as the Member may see them now, and links to the item.
+ * and title as the Member may see them now, and links to the item. A Package
+ * Submit's shows the Package's number and name, and how many of its submittals
+ * the Member sees (RP-643), and links to the Package.
  */
 export default async function NotificationsPage({ params }: { params: Promise<{ locale: Locale }> }) {
   const { locale } = await params;
@@ -30,27 +32,40 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
         <ul className="divide-y divide-border border-y border-border" data-testid="notification-list">
           {list.notifications.map((n) => (
             <li key={n.id} className="flex items-start justify-between gap-4 py-3">
-              <div className="space-y-1">
-                <NotificationLink id={n.id} href={`/work-items/${n.workItemId}`} unread={!n.readAt}>
-                  {n.title}
-                </NotificationLink>
-                <p className="text-sm text-muted">
-                  {n.documentNumber && (
-                    <>
-                      <DocNo value={n.documentNumber} />
-                      {" · "}
-                    </>
-                  )}
-                  {n.kind === "step_reached" && n.step && t("reached", { step: n.step.name[locale] })}
-                  {n.kind === "record_ready" && t("recordReady")}
-                  {n.kind === "sent_back" && n.event && t("sentBack", { company: n.event.companyName?.[locale] ?? "" })}
-                  {n.kind === "watched_event" &&
-                    n.event &&
-                    (n.event.type === "revision_created"
-                      ? t("revisionCreated")
-                      : [n.event.companyName?.[locale], n.event.transition?.[locale] ?? t("cancelled")].filter(Boolean).join(" · "))}
-                </p>
-              </div>
+              {n.kind === "package_submitted" ? (
+                <div className="space-y-1">
+                  <NotificationLink id={n.id} href={`/packages/${n.package.id}`} unread={!n.readAt}>
+                    {n.package.name[locale]}
+                  </NotificationLink>
+                  <p className="text-sm text-muted">
+                    <DocNo value={n.package.number} />
+                    {" · "}
+                    {t("packageSubmitted", { company: n.package.companyName[locale], count: n.package.count, n: n.package.count })}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <NotificationLink id={n.id} href={`/work-items/${n.workItemId}`} unread={!n.readAt}>
+                    {n.title}
+                  </NotificationLink>
+                  <p className="text-sm text-muted">
+                    {n.documentNumber && (
+                      <>
+                        <DocNo value={n.documentNumber} />
+                        {" · "}
+                      </>
+                    )}
+                    {n.kind === "step_reached" && n.step && t("reached", { step: n.step.name[locale] })}
+                    {n.kind === "record_ready" && t("recordReady")}
+                    {n.kind === "sent_back" && n.event && t("sentBack", { company: n.event.companyName?.[locale] ?? "" })}
+                    {n.kind === "watched_event" &&
+                      n.event &&
+                      (n.event.type === "revision_created"
+                        ? t("revisionCreated")
+                        : [n.event.companyName?.[locale], n.event.transition?.[locale] ?? t("cancelled")].filter(Boolean).join(" · "))}
+                  </p>
+                </div>
+              )}
               <div className="shrink-0 text-end text-sm text-muted">
                 <time dateTime={n.createdAt}>
                   {format.dateTime(new Date(n.createdAt), {

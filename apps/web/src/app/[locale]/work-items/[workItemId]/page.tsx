@@ -1,5 +1,5 @@
 import { answerFields, formatNumber, isOpenStageCategory, sortedByName, stepAgeLabel, watchOutcomeNames, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, Outcome, outcomesOfType, SentBackNotice, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -272,6 +272,21 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
           <dt className="text-muted">{t("fields.raisedBy")}</dt>
           <dd>{item.raisedBy.companyName[locale]}</dd>
+          {/* Its Package (RP-659): only where the API gives it, which is only where the viewer sees the Package. */}
+          {item.package && (
+            <>
+              <dt className="text-muted">{t("fields.package")}</dt>
+              <dd className="min-w-0">
+                <PackageChip
+                  number={item.package.number}
+                  name={item.package.name[locale]}
+                  href={`/packages/${item.package.id}`}
+                  label={tViews("board.openPackage", { number: item.package.number, name: item.package.name[locale] })}
+                  linkAs={Link}
+                />
+              </dd>
+            </>
+          )}
           {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees. */}
           {item.raisedItems.map((f) => (
             <Fragment key={f.type.code}>

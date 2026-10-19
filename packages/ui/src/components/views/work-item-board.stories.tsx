@@ -304,6 +304,29 @@ export const CollapsedGroup: Story = {
   },
 };
 
+const bathrooms = { id: "00000000-0000-4000-8000-0000000000f4", number: "PKG-004", name: b("Bathrooms – Tower 1", "الحمامات – البرج 1") };
+const swap = (row: WorkItemRow, next: WorkItemRow) => (r: WorkItemRow) => (r.id === row.id ? next : r);
+const inPackage = { ...cards.fire, package: bathrooms };
+const boardWithPackage: WorkItemBoardData = {
+  ...board,
+  columns: board.columns.map((c) => ({ ...c, lanes: c.lanes.map((l) => ({ ...l, cards: l.cards.map(swap(cards.fire, inPackage)) })) })),
+};
+
+/**
+ * A card whose item the API gives a Package (RP-659): its chip opens the Package. A card the API
+ * gives none, as for a Package the viewer doesn't see, shows no chip.
+ */
+export const PackageChip: Story = {
+  args: { board: boardWithPackage, packageHref: (id: string) => `#package-${id}` },
+  play: async (context) => {
+    const name = `${bathrooms.number} ${bathrooms.name[storyLocale(context)]}`;
+    const chip = within(cardOf(context, cards.fire)).getByRole("link", { name: new RegExp(name) });
+    await expect(chip).toHaveAttribute("href", `#package-${bathrooms.id}`);
+    await expect(context.canvasElement.querySelectorAll("[data-package-chip]")).toHaveLength(1);
+    await expect(cardOf(context, cards.hvac).querySelector("[data-package-chip]")).toBeNull();
+  },
+};
+
 /** With the Contractor name switched on, and the plan location and date off (Card view layout). */
 export const OtherLayout: Story = {
   args: { layout: { contractorName: true, location: false, creationDate: false } satisfies BoardCardLayout },

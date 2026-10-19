@@ -4,6 +4,8 @@ import {
   addedLink,
   addLinkRequest,
   boardCardLayout,
+  bulkTransitionRequest,
+  bulkTransitionTaken,
   boardCardLayoutChange,
   createdWorkItem,
   createReplacementRequest,
@@ -40,9 +42,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
+import { HttpError, idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getActivityFeed } from "../work-items/activity-feed.ts";
+import { takeBulkTransition } from "../work-items/bulk-transitions.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
@@ -343,6 +346,20 @@ export const workItemRoutes =
         const result = await takeTransition(ctx.db, memberId, id, request.body, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
+      },
+    );
+
+    // A bulk Transition (RP-646): one Transition on several items, all or nothing.
+    // Refused, the 409 names the item that stopped it and why; nothing moves.
+    app.post(
+      "/v1/work-items/bulk-transitions",
+      { schema: { body: bulkTransitionRequest, response: { 200: bulkTransitionTaken } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const result = await takeBulkTransition(ctx.db, memberId, request.body, ctx.now());
+        if (result.ok) return { taken: result.taken };
+        if (result.reason === "bulk_refused") throw new HttpError(409, "bulk_refused", { stoppedBy: result.stoppedBy });
+        throw refusal(result);
       },
     );
 

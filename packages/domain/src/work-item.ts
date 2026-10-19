@@ -6,6 +6,7 @@ import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 import { handoverReasons } from "./handover.ts";
 import { listColumnLayout } from "./list-columns.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
+import { workItemPackage } from "./package.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -146,6 +147,12 @@ export const workItemRow = workItemSummary.extend({
    * filters"). Left out by reads that don't give it.
    */
   raiserCompanyName: bilingualText.optional(),
+  /**
+   * Its Package (RP-636), by number and name: only where the viewer sees the
+   * Package, so an Open Package never shows on another Company's row. Left out
+   * when it has none the viewer sees, and by reads that don't give it.
+   */
+  package: workItemPackage.optional(),
   /**
    * Who closed it (RP-410, a closed Kanban card's footer), by the Transition that
    * closed it: my own Company's person who took it, or another Company by its name
@@ -717,6 +724,11 @@ export const workItemDetail = workItemSummary.extend({
       closed: z.number().int().nonnegative(),
     }),
   ),
+  /**
+   * Its Package (RP-659, the chip on its page), by number and name: only where the
+   * viewer sees the Package, as on its row (app.work_item_package). Left out otherwise.
+   */
+  package: workItemPackage.optional(),
   /** What the viewer may press now. */
   actions: workItemActions,
 });
