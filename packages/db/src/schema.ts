@@ -183,6 +183,8 @@ export interface ProjectTable {
   /** Project settings (RP-151): the language Documental Records are printed in, and whether Hijri dates show beside the Gregorian ones. */
   record_language: Generated<"bilingual" | "ar" | "en">;
   record_hijri_dates: Generated<boolean>;
+  /** Project setting (RP-621): the text across every page of a Working Copy, Arabic and English, never empty. */
+  working_copy_watermark: ColumnType<Bilingual, string | undefined, string>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

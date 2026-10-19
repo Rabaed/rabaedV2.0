@@ -19,6 +19,8 @@ const allowList: readonly AllowListed[] = [
   { table: "outbox", kind: "record_ready", row: "Notifications and emails" },
   { table: "notification", kind: "record_ready", row: "Notifications and emails" },
   { table: "outbox", kind: "documental_record_reproduce", row: "Documental Record" },
+  // RP-621: the worker prints a Working Copy a Member asked for; it goes only to who asks, through the api.
+  { table: "outbox", kind: "working_copy", row: "Working Copy" },
 ];
 
 function visibility(channels: string[]): string {

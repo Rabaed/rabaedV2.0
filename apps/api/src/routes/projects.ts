@@ -5,12 +5,13 @@ import {
   projectSummary,
   recordSettingsRequest,
   showInspectionsInSubmittalsRequest,
+  workingCopyWatermarkRequest,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { forbidden, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
-import { createProject, getProject, listMyProjects, setRecordSettings, setShowInspectionsInSubmittals } from "../projects/projects.ts";
+import { createProject, getProject, listMyProjects, setRecordSettings, setShowInspectionsInSubmittals, setWorkingCopyWatermark } from "../projects/projects.ts";
 import { throwIfRefused } from "../refusals.ts";
 
 // Projects. Only Project Creators create one; only a Project's Members see it,
@@ -51,6 +52,18 @@ export const projectRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         throwIfRefused(await setRecordSettings(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body));
+        return reply.code(204).send();
+      },
+    );
+
+    // A Project Admin sets the Working Copy watermark text (RP-621); it applies to Working Copies made afterwards.
+    // Anyone else gets a 404 exactly like a made-up id.
+    app.put(
+      "/v1/projects/:projectId/settings/working-copy-watermark",
+      { schema: { params: z.object({ projectId: z.string() }), body: workingCopyWatermarkRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        throwIfRefused(await setWorkingCopyWatermark(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body));
         return reply.code(204).send();
       },
     );

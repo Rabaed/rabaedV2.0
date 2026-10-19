@@ -43,6 +43,7 @@ import NextLink from "next/link";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
+import { itemPdfProblemMessage, openItemPdf } from "@/lib/item-pdf";
 import { listSearchParams } from "@/lib/list-url";
 
 /** An item as the viewer reads it, with what they may press now; null when it can't be read. */
@@ -53,8 +54,8 @@ async function readItem(id: string): Promise<WorkItemDetail | null> {
 
 /**
  * A row's ⋯ menu: Edit an own Draft the viewer may change; Duplicate, Resubmit (create a Revision) and
- * Delete (discard one's own Draft, any Draft never numbered) as the item's actions say; Download once
- * the item has been shared (Submitted), for whoever reads it.
+ * Delete (discard one's own Draft, any Draft never numbered) as the item's actions say; Download for whoever reads it:
+ * its Working Copy while it is open (a Draft's too, for the Members who see it), its Documental Record once published (RP-621).
  */
 async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> {
   const item = await readItem(row.id);
@@ -63,7 +64,7 @@ async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> 
     edit: item.stage.category === "draft" && item.actions.saveAnswers,
     duplicate: item.actions.duplicate,
     resubmit: item.actions.createRevision,
-    download: item.submissionDate !== null,
+    download: item.outcome === null || item.documentalRecord === "published",
     delete: item.actions.discardDraft,
   };
 }
@@ -201,6 +202,7 @@ export function WorkItemListOrKanban(
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
   const t = useTranslations("workItemViews");
+  const tRecord = useTranslations("documentalRecord");
   const labels = useViewLabels(props.tableLabel, module);
   const router = useRouter();
   const [moving, setMoving] = useState<{ card: WorkItemRow; move: WorkItemMove } | null>(null);
@@ -237,10 +239,11 @@ export function WorkItemListOrKanban(
       case "edit":
         router.push(itemHref(row.id));
         return null;
-      case "download":
-        // The item as it was shared (its final output), printed to PDF by the viewer's browser.
-        window.open(getPathname({ href: `/work-items/${row.id}/print`, locale }), "_blank", "noopener");
-        return null;
+      case "download": {
+        // Its Documental Record once closed, else its Working Copy (RP-621): the same PDF for every viewer.
+        const problem = await openItemPdf(row.id, row.outcome !== null);
+        return problem === null ? null : tRecord(itemPdfProblemMessage(problem));
+      }
       case "resubmit":
       case "duplicate": {
         // A key per request, so a double-click makes one Revision or one Draft.

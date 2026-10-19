@@ -16,3 +16,4 @@ export * from "./schema.ts";
 export * from "./step-age-report.ts";
 export * from "./workflow-authoring.ts";
 export * from "./workflow-reads.ts";
+export * from "./working-copy.ts";
