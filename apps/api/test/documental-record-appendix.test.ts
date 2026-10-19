@@ -314,7 +314,12 @@ beforeAll(async () => {
   c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
   k1Engineer = (await memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Faisal Otaibi" })).caller;
   k1Pm = (await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" })).caller;
-  const c2 = await onboard("Appendix Second Contractor");
+  // Real Signature images for everyone who acts: the test default's Signature has no bytes in the
+  // file store, so it would print as missing and carry no fingerprint for the Re-produce below.
+  for (const [by, ink] of [[c1Engineer, [20, 40, 160]], [c1Pm, [160, 20, 40]], [k1Engineer, [20, 120, 60]], [k1Pm, [120, 60, 20]]] as const) {
+    await ok(by.request("PUT", "/v1/me/signature", { method: "uploaded", contentType: "image/png", data: png(48, 16, ink).toString("base64") }), 200);
+  }
+  const c2 =await onboard("Appendix Second Contractor");
   const c2Participant = await api.addParticipant(at.admin!, at.projectId, c2.company, "contractor");
   await ok(at.admin!.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
   c2Engineer = (await memberOnProject(api, c2, c2Participant, ["engineer"])).caller;
