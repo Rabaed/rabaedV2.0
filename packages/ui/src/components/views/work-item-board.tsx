@@ -70,6 +70,8 @@ export type WorkItemBoardLabels = {
   createdOn: (date: string) => string;
   /** …and the Submission Date on anyone else's. */
   submittedOn: (date: string) => string;
+  /** The Package chip's name (RP-659), e.g. "Open Package PKG-004 Bathrooms – Tower 1"; without it, no chip. */
+  openPackage?: (number: string, name: string) => string;
 };
 
 export type WorkItemBoardProps = {
@@ -87,6 +89,8 @@ export type WorkItemBoardProps = {
   listHrefFor: (query: WorkItemQuery) => string;
   /** An item's page. */
   itemHref: (id: string) => string;
+  /** A Package's page (RP-659): a card whose item the API gives a Package shows its chip, opening it. */
+  packageHref?: (id: string) => string;
   /** The link component, e.g. Next.js `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
   /**
@@ -131,6 +135,7 @@ export function WorkItemBoard({
   storageKey,
   listHrefFor,
   itemHref,
+  packageHref,
   linkAs: Link = "a",
   onMove,
   className,
@@ -265,6 +270,7 @@ export function WorkItemBoard({
                         layout={layout}
                         places={places}
                         itemHref={itemHref}
+                        packageHref={packageHref}
                         linkAs={Link}
                         moves={onMove ? board.moves : {}}
                         stageNames={stageNames}
@@ -417,6 +423,7 @@ function Lane({
   layout,
   places,
   itemHref,
+  packageHref,
   linkAs,
   moves,
   stageNames,
@@ -434,6 +441,7 @@ function Lane({
   layout: BoardCardLayout;
   places: Map<string, { depth: number; name: BilingualText }[]>;
   itemHref: (id: string) => string;
+  packageHref?: (id: string) => string;
   linkAs: ElementType;
   moves: Record<string, WorkItemMove[]>;
   stageNames: Map<string, BilingualText>;
@@ -505,7 +513,7 @@ function Lane({
               onDragEnd={movable ? () => onDragChange(null) : undefined}
             >
               <KanbanCard
-                {...cardContent(card, locale, labels, outcomes, layout, places)}
+                {...cardContent(card, locale, labels, outcomes, layout, places, packageHref)}
                 href={itemHref(card.id)}
                 linkAs={linkAs}
                 selected={dragging === card.id}
@@ -577,6 +585,7 @@ export function cardContent(
   outcomes: ListOutcomes,
   layout: BoardCardLayout,
   places: Map<string, { depth: number; name: BilingualText }[]>,
+  packageHref?: (id: string) => string,
 ) {
   const open = isOpenStageCategory(card.stage.category);
   // The Creation Date on my own Company's items (the API gives it to the raiser's Participant only), else the Submission Date.
@@ -594,6 +603,16 @@ export function cardContent(
     trade: { code: card.trade.code, name: card.trade.name[locale] },
     typeCode: card.type.code,
     contractorName: layout.contractorName ? card.raiserCompanyName?.[locale] : undefined,
+    // Its Package, only where the API gives it: only where the viewer sees the Package (RP-659).
+    package:
+      card.package && packageHref && labels.openPackage
+        ? {
+            number: card.package.number,
+            name: card.package.name[locale],
+            href: packageHref(card.package.id),
+            label: labels.openPackage(card.package.number, card.package.name[locale]),
+          }
+        : undefined,
     place: layout.location ? place : undefined,
     owner: ownerOf(card, locale, labels),
     date:

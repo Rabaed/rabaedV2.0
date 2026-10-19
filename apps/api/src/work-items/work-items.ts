@@ -19,6 +19,7 @@ import {
   isHiddenLinkChoice,
   linkAccepts,
   offeredChoices,
+  packageNumber,
   requiredByProject,
   type SupplierChoice,
   parseActionForm,
@@ -775,6 +776,10 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
     `.execute(trx);
+    // Its Package (RP-659), as its row gives it: only one the viewer sees (work_item.package_id is not theirs to read).
+    const { rows: pkg } = await sql<{ package_id: string; seq: number; name: BilingualText }>`
+      select package_id, seq, name from app.work_item_package(${workItemId}::uuid)
+    `.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
@@ -810,6 +815,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         ? { workItemId: source[0].work_item_id, documentNumber: source[0].document_number, subject: source[0].subject }
         : null,
       raisedItems: raisedItems.map((f) => ({ type: { code: f.type_code, name: f.type_name }, open: f.open_count, closed: f.closed_count })),
+      ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name } } : {}),
       actions: {
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,

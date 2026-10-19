@@ -258,7 +258,8 @@
       "revision": "R{n}",
       "code": "Code {code}",
       "createdOn": "Created {date}",
-      "submittedOn": "Submitted {date}"
+      "submittedOn": "Submitted {date}",
+      "openPackage": "Open Package {number} {name}"
     },
     "viewSwitch": {
       "view": "View",
@@ -746,6 +747,7 @@
       "with": "With",
       "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +#}}",
       "raisedBy": "Raised by",
+      "package": "Package",
       "issuedCode": "Issued Code",
       "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags" },
       "raisedItemCounts": "{open} open / {closed} closed"
@@ -2194,6 +2196,86 @@
       "everyRow": "{value}, every row",
       "rows": "Rows of this import",
       "worksheetValue": "{worksheet}, column headings in row {row}"
+    }
+  },
+  "packages": {
+    "breadcrumb": "Breadcrumb",
+    "back": "Submittals",
+    "kind": "Package",
+    "status": { "open": "Open", "in_progress": "In Progress", "done": "Done" },
+    "ownedBy": "Owned by",
+    "progress": "Progress",
+    "closedOf": "{closed} of {total} closed",
+    "code": "Code {code}",
+    "stillOpen": "Still open",
+    "submittals": "Submittals",
+    "table": "Submittals in this Package",
+    "empty": "No submittals in this Package yet.",
+    "done": "Done: every latest submittal in it has closed at Code A, B or D.",
+    "actions": "Manage the Package",
+    "with": "With",
+    "remove": "Remove {subject} from the Package",
+    "close": "Close",
+    "cancel": "Cancel",
+    "refusals": {
+      "unavailable": "That didn't work. Try again.",
+      "in_another_package": "One of them is already in another Package.",
+      "item_not_offered": "One of them can't be added to this Package.",
+      "package_not_open": "The Package is no longer Open.",
+      "project_closed": "The Project is closed.",
+      "nothing_to_submit": "Nothing is left to Submit.",
+      "invalid_name": "Enter both names, in English and in Arabic."
+    },
+    "rename": {
+      "trigger": "Rename",
+      "title": "Rename the Package",
+      "description": "In English and in Arabic. Once In Progress, the rename is recorded.",
+      "nameEn": "Name (English)",
+      "nameAr": "Name (Arabic)",
+      "required": "Enter both names, in English and in Arabic.",
+      "save": "Save"
+    },
+    "delete": {
+      "trigger": "Delete",
+      "title": "Delete {number}?",
+      "description": "Its submittals stay as they are, without a Package.",
+      "confirm": "Delete Package"
+    },
+    "addItems": {
+      "trigger": "Add items",
+      "title": "Add submittals",
+      "description": "Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added.",
+      "search": "Search",
+      "searchPlaceholder": "Number, Subject, Trade…",
+      "trade": "Trade",
+      "allTrades": "All Trades",
+      "loading": "Loading…",
+      "noResults": "No submittals match.",
+      "results": "Submittals found",
+      "inOther": "In {number}",
+      "inThis": "In this Package",
+      "choose": "Choose {subject}",
+      "add": "{count, plural, one {Add # submittal} other {Add # submittals}}",
+      "numberOnSubmit": "Number on submit"
+    },
+    "submit": {
+      "trigger": "Submit Package",
+      "title": "Submit {number}",
+      "description": "Each submittal below is Submitted at once and gets its own Document Number. All or nothing: if one isn't ready, none is Submitted.",
+      "count": "{count, plural, one {# submittal to Submit} other {# submittals to Submit}}",
+      "confirm": "Submit Package",
+      "numberOnSubmit": "Number on submit",
+      "notReadyTitle": "Not ready",
+      "notReadyIntro": "Nothing was Submitted. These stop it:",
+      "reasons": {
+        "pick_up_first": "Pick it up first: it waits in your Step Pool.",
+        "cannot_submit": "It waits at a Step where you can't Submit it.",
+        "form_incomplete": "Its Form has a required field to fill.",
+        "invalid_action_form": "Its Action Form isn't complete.",
+        "validation_failed": "A rule of its Form isn't met.",
+        "refused": "Its Submit was refused."
+      },
+      "othersNotReady": "A submittal you don't see stops it too."
     }
   }
 }

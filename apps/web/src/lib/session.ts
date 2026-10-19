@@ -26,6 +26,7 @@ import type {
   NotificationSettingsView,
   NumberingSettings,
   NumberingCounters,
+  PackageDetail,
   ParticipantMembers,
   ParticipantVisibility,
   ProjectInvitations,
@@ -236,6 +237,11 @@ export function getActivityFeed(projectId: string, query: Partial<ActivityFeedQu
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
+}
+
+/** One Package (RP-659); null if the signed-in Member can't see it (exactly as if it didn't exist). */
+export function getPackage(packageId: string): Promise<PackageDetail | null> {
+  return apiGet<PackageDetail>(`/v1/packages/${encodeURIComponent(packageId)}`);
 }
 
 /** Download (RP-409): a Work Item as it was shared, the same for every viewer; null before its first Submit or when unseen. */
