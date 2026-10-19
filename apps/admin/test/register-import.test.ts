@@ -235,6 +235,7 @@ describe("An Engineer's import for C1", () => {
           rowsTotal: 6,
           rowsRejected: 3,
           rowsCreated: 3,
+          packages: [],
         });
         const seen = (await ok(by.get(`/v1/register-imports/${previewed.id}`), 200)).body;
         expect(seen).not.toContain(engineer.email);
