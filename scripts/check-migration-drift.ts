@@ -13,6 +13,9 @@ import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migr
 //   every main definition, and must have been added after the branch merged them.
 //   Fix: merge main, then add a new migration, later than every one named,
 //   that starts from the newest definition and re-applies the branch's change.
+//   A table constraint dropped or added in an `alter table` counts as an object
+//   too (RP-963: RP-643 and RP-155 each rebuilt notification_kind_check from the
+//   kinds they knew); its fix rebuilds it with both sides' change.
 // - Branch order (RP-457). Two migrations on one branch that redefine the same
 //   object (two implementers building in parallel, merged onto an integration
 //   branch) can each start from the same old body; the one that sorts later
@@ -65,12 +68,26 @@ export interface Drift {
 const definition =
   /\b(?:create(?:\s+or\s+replace)?|drop)\s+(?:(?<kind>function|view)\s+(?:if\s+exists\s+)?app\."?(?<name>\w+)"?|policy\s+(?:if\s+exists\s+)?"?(?<policy>\w+)"?\s+on\s+(?:\w+\.)?"?(?<table>\w+)"?)/gi;
 const comments = /--[^\n]*|\/\*[\s\S]*?\*\//g;
+// An `alter table` statement, to its `;`, and the constraints its clauses drop or add (RP-963).
+const alterTable = /\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:\w+\.)?"?(?<table>\w+)"?(?<clauses>[^;]*)/gi;
+const constraintClause = /\b(?:drop|add)\s+constraint\s+(?:if\s+exists\s+)?"?(?<constraint>\w+)"?/gi;
 
-/** The objects a migration (re)defines, by kind and name, in the order it first does so. */
+/**
+ * The objects a migration (re)defines, by kind and name, in the order it first
+ * does so. A table constraint dropped or added in an `alter table` counts too
+ * (RP-963): RP-643 and RP-155 each rebuilt notification_kind_check from only
+ * the kinds they knew, and the later-sorting one dropped the other's kind.
+ */
 export function definedObjects(sql: string): string[] {
-  const objects = [...sql.replace(comments, "").matchAll(definition)].map(({ groups = {} }) =>
-    (groups.kind ? `${groups.kind} app.${groups.name}` : `policy ${groups.policy} on ${groups.table}`).toLowerCase(),
+  const code = sql.replace(comments, "");
+  const routines = [...code.matchAll(definition)].map(({ index, groups = {} }) => ({
+    index,
+    object: groups.kind ? `${groups.kind} app.${groups.name}` : `policy ${groups.policy} on ${groups.table}`,
+  }));
+  const constraints = [...code.matchAll(alterTable)].flatMap(({ index, groups = {} }) =>
+    [...(groups.clauses ?? "").matchAll(constraintClause)].map((clause) => ({ index: index + clause.index, object: `constraint ${clause.groups?.constraint} on ${groups.table}` })),
   );
+  const objects = [...routines, ...constraints].toSorted((a, b) => a.index - b.index).map(({ object }) => object.toLowerCase());
   return [...new Set(objects)];
 }
 
@@ -107,6 +124,16 @@ export function redefinitionDrift(main: Migration[], branch: BranchMigration[]):
     if (conflicting.length > 0) drifts.push({ object, branch: onBranch.map((m) => m.name), main: conflicting.map((m) => m.name).toSorted() });
   }
   return drifts;
+}
+
+/** The drift check's report of one Drift: the problem, then the fix (planning/parallel-sessions.md rule 11.1). */
+export function driftMessage({ object, branch, main }: Drift): [string, string] {
+  const fix = object.startsWith("constraint ")
+    ? // eslint-disable-next-line rabaed/no-avoid-terms -- a database migration and a Postgres check constraint, not Rabaed terms
+      "rebuild it in a new migration that sorts after all of these, with both sides' change: for a check constraint, every value either side allows"
+    : // eslint-disable-next-line rabaed/no-avoid-terms -- a database migration, not a data import
+      "redefine it in a new migration that sorts after all of these: start from the newest body and re-apply this branch's change";
+  return [`${object} is redefined on this branch (${branch.join(", ")}) and on main (${main.join(", ")}).`, `  Merge main, then ${fix} (planning/parallel-sessions.md rule 11.1).`];
 }
 
 /**
@@ -387,10 +414,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   const { base, head } = mergeGroup ? mergeGroupSides(process.cwd(), first, second) : { base: first, head: second };
   const problems = migrationProblems(process.cwd(), base, head);
   const { drift, ordering, overloads, duplicates } = problems;
-  for (const { object, branch, main } of drift) {
-    console.error(`${object} is redefined on this branch (${branch.join(", ")}) and on main (${main.join(", ")}).`);
-    console.error("  Merge main, then redefine it in a new migration that sorts after all of these: start from the newest body and re-apply this branch's change.");
-  }
+  for (const found of drift) for (const line of driftMessage(found)) console.error(line);
   for (const { object, earlier, later } of ordering) {
     console.error(`${object} is redefined by ${later} without its seeing ${earlier}, the previous migration on this branch that defines it; the later one replaces the earlier one's change.`);
     console.error(`  Add a new migration that sorts after both, written with both in the tree: start from ${later}'s body and re-apply ${earlier}'s change.`);
