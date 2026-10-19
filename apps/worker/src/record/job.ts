@@ -1,16 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { documentalRecordFacts, saveDocumentalRecord, type OutboxHandler } from "@rabaed/db";
-import { finishRecord, pageCountOf } from "./checks.ts";
+import { finishRecord } from "./checks.ts";
 import type { RecordFiles } from "./files.ts";
 import { recordKeys } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
 import { documentAssets } from "./assets.ts";
-import { recordHtml } from "./layout.ts";
-import { toPdfA3 } from "./pdfa.ts";
+import { makeRecordPdf } from "./make-pdf.ts";
 import { sha256 } from "./pki.ts";
 import { recordDataOf, recordDataXml } from "./record-data.ts";
 import type { PdfRenderer } from "./render.ts";
-import { sealPdf } from "./seal.ts";
 import type { SealSigner } from "./signer.ts";
 import type { TimestampAuthority } from "./timestamp.ts";
 import type { PdfAValidator } from "./verapdf.ts";
@@ -67,15 +65,11 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
       facts,
       { code: verificationCode(), link: `${deps.webUrl.replace(/\/$/, "")}/verify/${token}` },
       assets.pageCounts,
+      assets.fingerprints,
     );
     const xml = new TextEncoder().encode(recordDataXml(data));
-    const rendered = await deps.renderer.render(recordHtml(data, await deps.fonts(), assets.images));
     const sealedAt = now();
-    const title = [data.type.code, data.documentNumber ?? data.subject].join(" ");
-    const archival = await toPdfA3(rendered, { title, at: sealedAt }, [
-      { name: "record-data.xml", mimeType: "application/xml", description: "Record Data", bytes: xml },
-    ]);
-    const pdf = await sealPdf(archival, { signer: await deps.signer(), timestamps: await deps.timestamps(), at: sealedAt });
+    const { pdf, layoutPages } = await makeRecordPdf(deps, data, xml, assets.images, sealedAt);
 
     const keys = recordKeys(facts.projectId, facts.workItemId);
     await deps.files.put(keys.recordData, xml, "application/xml");
@@ -89,6 +83,6 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
       verificationTokenHash: await sha256(new TextEncoder().encode(token)),
       verificationCode: data.verification.code,
     });
-    if (saved) await finishRecord(trx, row.id, { pdf, data, layoutPages: await pageCountOf(rendered) }, deps.validator);
+    if (saved) await finishRecord(trx, row.id, { pdf, data, layoutPages }, deps.validator);
   };
 }

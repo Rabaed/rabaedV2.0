@@ -8,9 +8,12 @@ import type { RecordLanguage, RecordText } from "./record-text.ts";
 // refused. Whoever adds to recordDataXml extends this reader until its round trip test
 // (record-data-read.test.ts, over the golden records) passes again.
 //
-// What the XML never holds comes back empty: a photo's storage key (the Re-produce finds it
-// among the item's Documents by name and time, `PhotoKeys`), an outcome's or a named chip's
-// code (only its name is printed), and an outcome's look.
+// What the XML does not hold is derived, so that the same Record Data prints the same pages:
+// - a photo's storage key comes from its fingerprint (`sha256`) among the item's Documents
+//   (`PhotoKeys`); a photo with a fingerprint whose Document is not found fails the Re-produce;
+// - an outcome's or a named chip's code: the layout prints a short code (A, B, C, D) as itself and
+//   any other outcome by its name, which the XML holds, so a named one reads back as "named";
+// - an outcome's look, which only marks the approval flow's last entry: read from that mark.
 
 interface XmlNode {
   readonly name: string;
@@ -95,8 +98,8 @@ function textOfNodes(nodes: readonly XmlNode[]): RecordText {
 const textOf = (node: XmlNode, tag: string): RecordText => textOfNodes(children(node, tag));
 
 export interface PhotoKeys {
-  /** The storage key of the Document a photo of this name and time is, or null. */
-  keyOf(fileName: string, takenAt: string | null): string | null;
+  /** The storage key of the Document whose fingerprint (hex SHA-256) is `sha256`, or null. */
+  keyOf(sha256: string): string | null;
 }
 
 /** The Record Data held in `xml`, the document recordDataXml wrote. */
@@ -125,8 +128,8 @@ export function parseRecordData(xml: string, photos: PhotoKeys = { keyOf: () => 
   };
   const companyLines = (node: XmlNode): CompanyLine[] => children(node, "company").map((c) => ({ name: textOf(c, "name"), role: textOf(c, "role") }));
   const photoOf = (p: XmlNode) => {
-    const takenAt = p.attrs.at ?? null;
-    return { fileName: p.text, takenAt, storageKey: photos.keyOf(p.text, takenAt) ?? "" };
+    const sha256 = p.attrs.sha256 ?? null;
+    return { fileName: p.text, takenAt: p.attrs.at ?? null, sha256, storageKey: (sha256 && photos.keyOf(sha256)) || "" };
   };
 
   const blockOf = (node: XmlNode): RecordBlock => {

@@ -45,6 +45,8 @@ export interface ReproductionSource {
     readonly size: number;
     readonly storageKey: string;
     readonly takenAt: string | null;
+    /** The file's fingerprint (hex SHA-256, `document.file_sha256`); null for a Document confirmed before RP-618. */
+    readonly sha256: string | null;
   }[];
 }
 
@@ -54,13 +56,20 @@ export async function documentalRecordReproductionSource(trx: Transaction<Databa
   return rows[0]?.source ?? null;
 }
 
-export interface Reproduction {
-  /** Where the replaced PDF is kept, its fingerprint and size. */
-  readonly replaced: { readonly storageKey: string; readonly sha256: Uint8Array; readonly size: number };
-  /** The new PDF at the record's own storage key. */
-  readonly next: { readonly sha256: Uint8Array; readonly size: number; readonly sealedAt: Date };
-  readonly verdict: RecordCheckVerdict;
-}
+/**
+ * What a Re-produce found. A PDF that was made (passed or failed its checks) comes with the
+ * replaced PDF's storage key and fingerprint and the new one's; a Re-produce that could not
+ * make a PDF (a Form photo missing) has only its failed verdict.
+ */
+export type Reproduction =
+  | {
+      /** Where the replaced PDF is kept, its fingerprint and size. */
+      readonly replaced: { readonly storageKey: string; readonly sha256: Uint8Array; readonly size: number };
+      /** The new PDF at the record's own storage key. */
+      readonly newPdf: { readonly sha256: Uint8Array; readonly size: number; readonly sealedAt: Date };
+      readonly verdict: RecordCheckVerdict;
+    }
+  | { readonly replaced?: undefined; readonly newPdf?: undefined; readonly verdict: RecordCheckVerdict & { readonly passed: false } };
 
 /** `replaced`: the new PDF is the record's. `checks_failed`: it failed its checks and replaces nothing. */
 export type ReproductionResult = "replaced" | "checks_failed" | "not_found";
@@ -69,8 +78,9 @@ export type ReproductionResult = "replaced" | "checks_failed" | "not_found";
 export async function reproduceDocumentalRecord(trx: Transaction<Database>, outboxId: string, r: Reproduction): Promise<ReproductionResult> {
   const { rows } = await sql<{ result: ReproductionResult }>`
     select app.reproduce_documental_record(
-      ${outboxId}::uuid, ${r.replaced.storageKey}, ${Buffer.from(r.replaced.sha256)}, ${r.replaced.size},
-      ${Buffer.from(r.next.sha256)}, ${r.next.size}, ${r.next.sealedAt}, ${r.verdict.passed}, ${JSON.stringify(r.verdict.problems)}::jsonb
+      ${outboxId}::uuid, ${r.replaced?.storageKey ?? null}, ${r.replaced ? Buffer.from(r.replaced.sha256) : null}, ${r.replaced?.size ?? null},
+      ${r.newPdf ? Buffer.from(r.newPdf.sha256) : null}, ${r.newPdf?.size ?? null}, ${r.newPdf?.sealedAt ?? null},
+      ${r.verdict.passed}, ${JSON.stringify(r.verdict.problems)}::jsonb
     ) as result
   `.execute(trx);
   return rows[0]?.result ?? "not_found";

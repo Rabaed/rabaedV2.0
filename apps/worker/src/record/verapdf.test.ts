@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseVeraPdfReport, veraPdfFromEnv } from "./verapdf.ts";
+import { isPinnedImage, parseVeraPdfReport, PINNED_VERAPDF_IMAGE, veraPdfFromEnv } from "./verapdf.ts";
 
 // veraPDF's XML report as the checks read it (the real validation runs at seam 1).
 
@@ -47,6 +47,13 @@ describe("veraPdfFromEnv", () => {
   it("is never inferred", () => {
     expect(() => veraPdfFromEnv({})).toThrow(/VERAPDF is not set/);
     expect(() => veraPdfFromEnv({ VERAPDF: "cli" })).toThrow(/VERAPDF_PATH/);
-    expect(veraPdfFromEnv({ VERAPDF: "docker" }).validate).toBeTypeOf("function");
+    expect(veraPdfFromEnv({ VERAPDF: "docker", VERAPDF_IMAGE: PINNED_VERAPDF_IMAGE }).validate).toBeTypeOf("function");
+  });
+
+  it("runs only a pinned image: a version tag or a digest, never latest, an untagged name or none", () => {
+    for (const image of [undefined, "verapdf/cli", "verapdf/cli:latest", "verapdf/cli:", "registry:5000/verapdf/cli"]) {
+      expect(() => veraPdfFromEnv({ VERAPDF: "docker", ...(image ? { VERAPDF_IMAGE: image } : {}) }), String(image)).toThrow(/VERAPDF_IMAGE/);
+    }
+    for (const image of ["verapdf/cli:1.28.2", "registry:5000/verapdf/cli:1.28.2", PINNED_VERAPDF_IMAGE]) expect(isPinnedImage(image), image).toBe(true);
   });
 });

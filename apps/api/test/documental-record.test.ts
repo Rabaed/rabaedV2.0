@@ -22,6 +22,7 @@ import {
   projectFilesFromEnv,
   s3RecordFiles,
   sealTamperOffsets,
+  PINNED_VERAPDF_IMAGE,
   veraPdfDockerSession,
   verifySeal,
   withByteChanged,
@@ -36,7 +37,7 @@ import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 /** veraPDF, in one container for the file. */
-const veraPdf = veraPdfDockerSession();
+const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
 /** Stands in for veraPDF on the records other suites left behind. */
 const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
 
@@ -263,7 +264,8 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(xml).not.toContain(hidden);
     // Every value it holds is on the pages: element text and attributes, but its structure
     // (languages, numbering, the layout version), and the times, which the pages print in Riyadh time.
-    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri"]);
+    // sha256 is the fingerprint of a photo's image, which the page prints as a picture (RP-155: how a Re-produce finds the file).
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri", "sha256"]);
     const body = xml.replace(/^<\?xml[^>]*\?>/, "");
     const values = [
       ...[...body.matchAll(/>([^<>]+)</g)].map((m) => m[1]!),

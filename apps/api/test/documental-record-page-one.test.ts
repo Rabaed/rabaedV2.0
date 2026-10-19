@@ -467,7 +467,8 @@ describe("page 1 of a Code B record with Comments, in both languages", () => {
       expect(recordB.text.toLowerCase()).not.toContain(squeeze(hidden).toLowerCase());
     }
     // The Record Data: every value is printed, Arabic and Arabic-locale dates included (isPrinted).
-    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri"]);
+    // sha256 is the fingerprint of a photo's image, which the page prints as a picture (RP-155: how a Re-produce finds the file).
+    const structural = new Set(["xmlns", "lang", "n", "layoutVersion", "language", "at", "selected", "issued", "mark", "hijri", "sha256"]);
     const body = recordB.xml.replace(/^<\?xml[^>]*\?>/, "");
     const values = [
       ...[...body.matchAll(/>([^<>]+)</g)].map((m) => m[1]!),

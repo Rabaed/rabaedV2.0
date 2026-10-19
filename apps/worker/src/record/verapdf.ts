@@ -8,8 +8,12 @@ import { z } from "zod";
 // PDF/A-3 validation with veraPDF (RP-155; ADR 0023), the industry's reference validator, run
 // as its command line on a copy of the PDF in a folder of its own. Two ways to reach it, as
 // VERAPDF names them (never inferred): `cli` runs the `verapdf` program at VERAPDF_PATH (the
-// worker image carries it); `docker` runs the verapdf/cli image, for a machine or CI job with
-// Docker and no program of its own.
+// worker image carries it); `docker` runs the image VERAPDF_IMAGE names, for a machine or CI job
+// with Docker and no program of its own. The image is always pinned (a version tag or a digest,
+// never `latest`), so what validates a record does not change under us.
+
+/** The veraPDF image the tests and `.env.example` use: the one the worker image copies (Dockerfile), by digest. */
+export const PINNED_VERAPDF_IMAGE = "verapdf/cli@sha256:d565095c67a083e693aebf7d1a15784007370571053fc1aa5b502665b9a78f9c";
 
 export interface PdfAValidation {
   readonly compliant: boolean;
@@ -41,6 +45,18 @@ export function parseVeraPdfReport(xml: string): PdfAValidation {
 
 const run = promisify(execFile);
 const TIMEOUT_MS = 120_000;
+const MAX_BUFFER = 64 * 1024 * 1024;
+
+/** Runs veraPDF through `command`; its report. veraPDF exits non-zero for a PDF that is not compliant, and its report on stdout is still the answer. */
+async function reportOf(command: string, args: string[]): Promise<PdfAValidation> {
+  const out = await run(command, args, { timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER }).catch((error: { stdout?: string }) => {
+    if (typeof error.stdout === "string" && error.stdout.includes("<validationReport")) return { stdout: error.stdout };
+    throw error;
+  });
+  return parseVeraPdfReport(out.stdout);
+}
+
+const veraArgs = (file: string) => ["--flavour", "3b", "--format", "xml", file];
 
 /** A validator that writes the PDF into a folder of its own and runs `command` on it; `args(dir)` are the arguments before veraPDF's own. */
 function throughFolder(command: string, args: (dir: string) => { before: string[]; file: string }): PdfAValidator {
@@ -50,14 +66,7 @@ function throughFolder(command: string, args: (dir: string) => { before: string[
       try {
         await writeFile(join(dir, "record.pdf"), pdf);
         const { before, file } = args(dir);
-        // veraPDF exits non-zero for a PDF that is not compliant: its report on stdout is the answer.
-        const out = await run(command, [...before, "--flavour", "3b", "--format", "xml", file], { timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 }).catch(
-          (error: { stdout?: string }) => {
-            if (typeof error.stdout === "string" && error.stdout.includes("<validationReport")) return { stdout: error.stdout };
-            throw error;
-          },
-        );
-        return parseVeraPdfReport(out.stdout);
+        return await reportOf(command, [...before, ...veraArgs(file)]);
       } finally {
         await rm(dir, { recursive: true, force: true });
       }
@@ -70,8 +79,8 @@ export function veraPdfCli(path: string): PdfAValidator {
   return throughFolder(path, (dir) => ({ before: [], file: join(dir, "record.pdf") }));
 }
 
-/** veraPDF in its Docker image (the folder is mounted read-only). */
-export function veraPdfDocker(image = "verapdf/cli:latest"): PdfAValidator {
+/** veraPDF in its Docker image `image` (the folder is mounted read-only). */
+export function veraPdfDocker(image: string): PdfAValidator {
   return throughFolder("docker", (dir) => ({ before: ["run", "--rm", "-v", `${dir}:/data:ro`, image], file: "/data/record.pdf" }));
 }
 
@@ -84,7 +93,7 @@ export interface PdfAValidatorSession extends PdfAValidator {
  * veraPDF in one Docker container kept for many PDFs (a test file's, started at its first PDF),
  * instead of a container for each: the PDFs go in through a folder mounted into it.
  */
-export function veraPdfDockerSession(image = "verapdf/cli:latest"): PdfAValidatorSession {
+export function veraPdfDockerSession(image: string): PdfAValidatorSession {
   let started: Promise<{ id: string; dir: string }> | undefined;
   let count = 0;
   const start = async () => {
@@ -101,14 +110,7 @@ export function veraPdfDockerSession(image = "verapdf/cli:latest"): PdfAValidato
       const name = `record-${count++}.pdf`;
       await writeFile(join(dir, name), pdf);
       try {
-        const out = await run("docker", ["exec", id, "/opt/verapdf/verapdf", "--flavour", "3b", "--format", "xml", `/data/${name}`], {
-          timeout: TIMEOUT_MS,
-          maxBuffer: 64 * 1024 * 1024,
-        }).catch((error: { stdout?: string }) => {
-          if (typeof error.stdout === "string" && error.stdout.includes("<validationReport")) return { stdout: error.stdout };
-          throw error;
-        });
-        return parseVeraPdfReport(out.stdout);
+        return await reportOf("docker", ["exec", id, "/opt/verapdf/verapdf", ...veraArgs(`/data/${name}`)]);
       } finally {
         await rm(join(dir, name), { force: true });
       }
@@ -130,13 +132,22 @@ const env = z.object({
   VERAPDF_IMAGE: z.string().min(1).optional(),
 });
 
-/** The validator VERAPDF names (see above); unset, the record's checks fail, saying so. */
+/** Whether `image` names one exact image: a digest, or a version tag that is not `latest`. */
+export const isPinnedImage = (image: string): boolean => /@sha256:[0-9a-f]{64}$/.test(image) || /^[^@]*:(?!latest$)[^:/@]+$/.test(image);
+
+/**
+ * The validator VERAPDF names (see above). Never inferred: unset, or a `docker` without a pinned
+ * VERAPDF_IMAGE, it throws, so the record job is retried and no record is judged by a missing tool.
+ */
 export function veraPdfFromEnv(source: NodeJS.ProcessEnv = process.env): PdfAValidator {
   const settings = env.parse(source);
   if (settings.VERAPDF === "cli") {
     if (!settings.VERAPDF_PATH) throw new Error("VERAPDF=cli needs VERAPDF_PATH");
     return veraPdfCli(settings.VERAPDF_PATH);
   }
-  if (settings.VERAPDF === "docker") return veraPdfDocker(settings.VERAPDF_IMAGE);
+  if (settings.VERAPDF === "docker") {
+    if (!settings.VERAPDF_IMAGE || !isPinnedImage(settings.VERAPDF_IMAGE)) throw new Error("VERAPDF=docker needs VERAPDF_IMAGE, pinned to a version tag or a digest (never latest)");
+    return veraPdfDocker(settings.VERAPDF_IMAGE);
+  }
   throw new Error("VERAPDF is not set (cli or docker)");
 }

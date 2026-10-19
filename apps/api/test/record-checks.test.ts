@@ -1,10 +1,14 @@
 // Seam 1: the checks before a Documental Record is published, "record being prepared", the
 // "record ready" notification and Re-produce (RP-155, spec RP-632; ADR 0023;
-// workflow-engine.md §7; visibility.md V7, V14, the Documental Record and Notifications rows).
-// The record job runs in-process as in documental-record.test.ts; the PDF/A-3 check is
-// veraPDF itself (Docker image), and Rabaed Admin's side is its service as a Rabaed Engineer.
+// workflow-engine.md §7; visibility.md V7, V14, the Documental Record and Notifications rows;
+// scenarios RP-155-1, RP-155-2 and RP-155-3). The record job runs in-process as in
+// documental-record.test.ts (the harness); what is asserted is read through the seams: the Members'
+// bell and item read, the download, and Rabaed Admin's HTTP routes as a signed-in Rabaed Engineer.
+// The PDF/A-3 check is veraPDF itself (Docker image). Where no seam shows a fact (the checks' history,
+// the replaced PDFs, the record's fingerprint and seal date, the job's attempts), the test reads the
+// table as the migrator, and says so.
 import { createHash } from "node:crypto";
-import { listDocumentalRecordAlerts, reproduceDocumentalRecord } from "@rabaed/admin/services";
+import { crc32, deflateSync } from "node:zlib";
 import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationList, SignedUrl } from "@rabaed/domain";
@@ -13,50 +17,101 @@ import {
   chromiumRenderer,
   documentalRecordHandler,
   fallbackFonts,
+  imageCountOf,
   localSealSigner,
   localTimestampAuthority,
+  PINNED_VERAPDF_IMAGE,
   projectFilesFromEnv,
-  s3RecordFiles,
   reproduceHandler,
-  verifySeal,
+  s3RecordFiles,
   veraPdfDockerSession,
+  verifySeal,
   type PdfAValidator,
   type RecordJobDeps,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { buildTower, detail, draft, memberOnProject, ok, bilingual, take, type Company, type Tower } from "./support/tower.ts";
+import { createTestAdmin } from "../../admin/test/support/harness.ts";
+import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { addSendBackType } from "./support/send-back.ts";
+import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 // Each record is rendered by Chromium. veraPDF validates one representative record of each outcome (a closure, a
 // Re-produce), in one container kept for the file; the other records are judged by the rest of the checks alone.
 const SETUP_MS = 240_000;
 
 const api = await createTestApi({ files: true });
+const admin = await createTestAdmin();
 const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
-const adminDb = createDb(urls.admin, { max: 1 });
 const renderer = chromiumRenderer();
 const files = s3RecordFiles(projectFilesFromEnv());
 afterAll(async () => {
   await veraPdf.close();
   await renderer.close();
+  await admin.close();
   await api.close();
-  await Promise.all([worker.destroy(), migrator.destroy(), adminDb.destroy()]);
+  await Promise.all([worker.destroy(), migrator.destroy()]);
 });
 
 const REASON = "The PDF maker had a bug in the seal date, RP-155 test";
 /** The real PDF/A-3 validator: veraPDF, in its Docker image. */
-const veraPdf = veraPdfDockerSession();
+const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
 /** Stands in for veraPDF where the other checks are what a test is about. */
 const compliant: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
-const failing: PdfAValidator = { validate: async () => ({ compliant: false, problems: ["PDF/A-3 6.1.2: a test finding"]}) };
+const failing: PdfAValidator = { validate: async () => ({ compliant: false, problems: ["PDF/A-3 6.1.2: a test finding"] }) };
+
+const PHOTO_TYPE = "RCKPH";
+const photoSchema = {
+  sections: [
+    {
+      key: "material",
+      title: bilingual("Material"),
+      fields: [
+        { key: "model", type: "text", label: bilingual("Model") },
+        { key: "site_photos", type: "photos", label: bilingual("Site photos") },
+      ],
+    },
+    {
+      key: "classification",
+      title: bilingual("Classification"),
+      fields: [
+        { key: "trade", type: "trade", label: bilingual("Trade") },
+        { key: "location", type: "location", label: bilingual("Location") },
+        { key: "scopes", type: "scopes", label: bilingual("Scopes") },
+      ],
+    },
+  ],
+};
+
+/** A valid PNG of one pixel in the colour (r, g, b): distinct bytes for distinct colours, and no EXIF, so no time to tell two photos apart by. */
+function png(r: number, g: number, b: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc32(body));
+    return Buffer.concat([head, body, tail]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(2, 9); // truecolour
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(Buffer.from([0, r, g, b]))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 let at: Tower;
 let k1: Company;
 let k1ParticipantId = "";
-let engineerId = "";
+let engineer: { id: string; browser: Awaited<ReturnType<typeof admin.signedInEngineer>>["browser"] };
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let k1Pm: Caller;
@@ -93,6 +148,7 @@ async function participant(company: Company, role: "contractor" | "owner_represe
 }
 
 beforeAll(async () => {
+  await addSendBackType(migrator, PHOTO_TYPE, { en: "Record checks photos", ar: "صور فحص السجل" }, photoSchema);
   const c1 = await api.projectCreator();
   k1 = await onboard("Checks Consultants");
   at = await buildTower(api, { c1, k1 }, "RCK");
@@ -106,7 +162,7 @@ beforeAll(async () => {
   orEngineer = (await memberOnProject(api, or, await participant(or, "owner_representative"), ["engineer"])).caller;
   const c2 = await onboard("Checks Second Contractor");
   c2Engineer = (await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"])).caller;
-  engineerId = await api.engineer();
+  engineer = await admin.signedInEngineer();
   real = await handlers(veraPdf);
   quick = await handlers(compliant);
   // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
@@ -124,26 +180,45 @@ async function closed(subject: string): Promise<string> {
   return id;
 }
 
+/** An item of the photos Type with one Form photo for each of `photos` (all named `fileName`), closed with Code A. */
+async function closedWithPhotos(subject: string, fileName: string, photos: Buffer[]): Promise<string> {
+  const res = await ok(
+    c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+      type: PHOTO_TYPE,
+      title: subject,
+      answers: { model: "CT-100", trade: at.electrical, location: at.buildingA },
+    }),
+    201,
+  );
+  const id = res.json().id as string;
+  for (const body of photos) await uploadDocument(c1Engineer, id, { fieldKey: "site_photos", fileName, contentType: "image/png", body });
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit");
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Pm, id, "send_to_manager");
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Pm, id, "approve_a");
+  return id;
+}
+
+// The record's fingerprint, seal date and verification hash, and the checks' history, are read as the migrator:
+// no seam shows them (the verification page is RP-157, the Admin screens RP-670).
 const recordOf = (id: string) =>
-  sql<{
-    status: string;
-    pdf_sha256: string;
-    sealed_at: Date;
-    token_hash: string;
-    code: string;
-  }>`
-    select status, encode(pdf_sha256, 'hex') as pdf_sha256, sealed_at, encode(verification_token_hash, 'hex') as token_hash, verification_code as code
+  sql<{ pdf_sha256: string; sealed_at: Date; token_hash: string; code: string }>`
+    select encode(pdf_sha256, 'hex') as pdf_sha256, sealed_at, encode(verification_token_hash, 'hex') as token_hash, verification_code as code
     from documental_record where work_item_id = ${id}
   `
     .execute(migrator)
-    .then((r) => r.rows[0]);
+    .then((r) => r.rows[0]!);
 const checksOf = (id: string) =>
-  sql<{ run_kind: string; passed: boolean; problems: string[] }>`
-    select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
+  sql<{ run_kind: string; passed: boolean }>`
+    select c.run_kind, c.passed from documental_record_check c join documental_record r on r.id = c.documental_record_id
     where r.work_item_id = ${id} order by c.ran_at, c.id
   `
     .execute(migrator)
-    .then((r) => r.rows);
+    .then((r) => r.rows.map((c) => [c.run_kind, c.passed]));
+
 const bell = async (by: Caller, id: string) =>
   ((await ok(by.get("/v1/notifications"), 200)).json() as NotificationList).notifications.filter((n) => n.workItemId === id && n.kind === "record_ready");
 const download = async (by: Caller, id: string): Promise<{ link: SignedUrl; bytes: Uint8Array }> => {
@@ -157,11 +232,18 @@ const location = (link: SignedUrl) => {
   const u = new URL(link.url);
   return u.origin + u.pathname;
 };
-const alertsFor = async (id: string) => (await listDocumentalRecordAlerts(adminDb, engineerId, "Checking the record alerts")).filter((a) => a.workItemId === id);
 
-describe("a record that passes its checks", { timeout: SETUP_MS }, () => {
+// Rabaed Admin, over HTTP as a signed-in Rabaed Engineer.
+const reproduce = (id: string, reason: string = REASON) => engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason });
+const alertsFor = async (id: string) => {
+  const res = await engineer.browser.get(`/v1/documental-record-alerts?reason=${encodeURIComponent("Checking the record alerts")}`);
+  expect(res.statusCode, res.body).toBe(200);
+  return (res.json().alerts as { workItemId: string; status: string; problems: string[]; documentNumber: string | null }[]).filter((a) => a.workItemId === id);
+};
+
+describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { timeout: SETUP_MS }, () => {
   let id = "";
-  it("shows 'record being prepared' from the closure until its checks have passed, and nothing downloadable", async () => {
+  it("shows 'record being prepared' from the closure until its checks have passed, and nothing downloadable (RP-155-2)", async () => {
     await ok(k1Engineer.request("PUT", `/v1/projects/${at.projectId}/mute`));
     id = await closed("Cable trays for Building A");
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord, "before the job").toBe("preparing");
@@ -169,48 +251,53 @@ describe("a record that passes its checks", { timeout: SETUP_MS }, () => {
     await expectHidden(c1Pm.get(`/v1/work-items/${id}/documental-record`), "no record yet");
   });
 
-  it("is published with the checks on record, and its download works", async () => {
+  it("is the same for C2 as for an item that does not exist: nothing, never 'being prepared' (RP-155-2)", async () => {
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}`), "C2 reads the item itself");
+    await expectHidden(c2Engineer.get("/v1/work-items/0198f5c0-0000-7000-8000-000000000000"), "made-up id");
+  });
+
+  it("is published, and its download works (RP-155-2)", async () => {
     await drainOutbox(worker, real);
-    expect(await recordOf(id)).toMatchObject({ status: "published" });
-    expect(await checksOf(id)).toEqual([{ run_kind: "closure", passed: true, problems: [] }]);
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord, "after").toBe("published");
     expect((await download(c1Pm, id)).bytes.length).toBeGreaterThan(1000);
     expect(await alertsFor(id)).toEqual([]);
+    expect(await checksOf(id)).toEqual([["closure", true]]);
   });
 
-  it("tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named", async () => {
+  it("tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named (RP-155-1)", async () => {
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) {
       const got = await bell(by, id);
       expect(got, "a record ready notification").toHaveLength(1);
       expect(got[0]).toMatchObject({ kind: "record_ready", workItemId: id, step: null, event: null, readAt: null });
       expect(JSON.stringify(got[0])).not.toContain("Checks Consultants");
     }
+    // Whether it is emailed is read from the table: no read exposes a notification's email route.
     const routes = await sql<{ in_app: boolean; email: string }>`select in_app, email from notification where work_item_id = ${id} and kind = 'record_ready'`.execute(migrator);
+    expect(routes.rows.length).toBeGreaterThan(0);
     expect(routes.rows.every((r) => r.in_app && r.email === "none")).toBe(true);
     // Delivered once: another pass delivers nothing more.
     await drainOutbox(worker, quick);
     expect(await bell(c1Pm, id)).toHaveLength(1);
   });
 
-  it("tells nobody who can't see the item, and nobody who muted the Project", async () => {
+  it("tells nobody who can't see the item, and nobody who muted the Project (RP-155-1)", async () => {
     expect(await bell(c2Engineer, id)).toEqual([]);
     expect(await bell(k1Engineer, id)).toEqual([]);
   });
 });
 
-describe("a record that fails its checks", { timeout: SETUP_MS }, () => {
+describe("scenario RP-155-2: a record that fails its checks", { timeout: SETUP_MS }, () => {
   let id = "";
   it("publishes nothing: the item shows no record, nobody downloads one and nobody is told", async () => {
-    const bad = await handlers(failing);
     id = await closed("Cable ladders");
-    await drainOutbox(worker, bad);
-    expect(await recordOf(id)).toMatchObject({ status: "failed_checks" });
-    expect(await checksOf(id)).toEqual([{ run_kind: "closure", passed: false, problems: ["PDF/A-3 6.1.2: a test finding"] }]);
+    await drainOutbox(worker, await handlers(failing));
     for (const by of [c1Pm, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord).toBeNull();
     await expectHidden(c1Pm.get(`/v1/work-items/${id}/documental-record`), "failed record");
     await expectHidden(k1Pm.get(`/v1/work-items/${id}/documental-record`), "failed record, K1");
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documental-record`), "failed record, C2");
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect(await bell(by, id)).toEqual([]);
-    // The closure and the job are untouched: the item is closed, the job is done, not retried.
+    // The closure and the job are untouched: the item is closed, and the job is done, not retried. (The job's attempts
+    // are read from the outbox: the Job Monitor is RP-670.)
     expect((await detail(c1Pm, id)).outcome).toBe("A");
     const jobs = await sql<{ attempts: number; processed_at: Date | null }>`
       select attempts, processed_at from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = ${id}
@@ -225,30 +312,30 @@ describe("a record that fails its checks", { timeout: SETUP_MS }, () => {
     expect(alerts[0]).toMatchObject({ status: "failed_checks", problems: ["PDF/A-3 6.1.2: a test finding"] });
     expect(alerts[0]!.documentNumber).toBe((await detail(c1Pm, id)).documentNumber);
     const log = await sql<{ reason: string }>`
-      select reason from admin_action where action = 'read_documental_record_alerts' and engineer_id = ${engineerId}::uuid
+      select reason from admin_action where action = 'read_documental_record_alerts' and engineer_id = ${engineer.id}::uuid
     `.execute(migrator);
     expect(log.rows.map((r) => r.reason)).toContain("Checking the record alerts");
   });
 
   it("is made good by a Re-produce that passes: published, the alert gone, everyone told", async () => {
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id, REASON)).toBe("queued");
+    expect((await reproduce(id)).statusCode).toBe(202);
     await drainOutbox(worker, quick);
-    expect(await recordOf(id)).toMatchObject({ status: "published" });
-    expect((await checksOf(id)).map((c) => [c.run_kind, c.passed])).toEqual([
-      ["closure", false],
-      ["reproduce", true],
-    ]);
     expect((await detail(c1Pm, id)).documentalRecord).toBe("published");
     expect((await download(k1Pm, id)).bytes.length).toBeGreaterThan(1000);
     expect(await alertsFor(id)).toEqual([]);
     for (const by of [c1Pm, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
+    expect(await checksOf(id)).toEqual([
+      ["closure", false],
+      ["reproduce", true],
+    ]);
   });
 });
 
-describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
+describe("scenario RP-155-3: Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
   let id = "";
   let before: { bytes: Uint8Array; link: SignedUrl };
   let eventsBefore = "";
+  // The item's rows are read as the migrator: its hash chain is nobody's read.
   const itemState = async () =>
     JSON.stringify(
       (
@@ -265,19 +352,19 @@ describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
     id = await closed("Cable glands");
     await drainOutbox(worker, quick);
     before = await download(c1Pm, id);
-    const first = (await recordOf(id))!;
+    const first = await recordOf(id);
     const sealedBefore = (await verifySeal(before.bytes)).timestampedAt!;
     eventsBefore = await itemState();
 
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id, REASON)).toBe("queued");
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id, REASON), "while one waits").toBe("already_queued");
+    expect((await reproduce(id)).statusCode).toBe(202);
+    const again = await reproduce(id);
+    expect([again.statusCode, again.json()], "while one waits").toEqual([409, { error: "already_queued" }]);
     await drainOutbox(worker, real);
 
     const after = await download(c1Pm, id);
     expect(location(after.link), "the same location, name and URL").toBe(location(before.link));
     expect(sha(after.bytes)).not.toBe(sha(before.bytes));
-    const next = (await recordOf(id))!;
-    expect(next.status).toBe("published");
+    const next = await recordOf(id);
     expect(next.pdf_sha256).toBe(sha(after.bytes));
     expect(next.sealed_at.getTime()).toBeGreaterThan(first.sealed_at.getTime());
     const seal = await verifySeal(after.bytes);
@@ -288,13 +375,14 @@ describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
     const dataBefore = new TextDecoder().decode((await attachedFiles(before.bytes))[0]!.bytes);
     expect(new TextDecoder().decode((await attachedFiles(after.bytes))[0]!.bytes)).toBe(dataBefore);
     expect(dataBefore).toContain(first.code);
-    expect((await checksOf(id)).map((c) => [c.run_kind, c.passed])).toEqual([
+    expect(await checksOf(id)).toEqual([
       ["closure", true],
       ["reproduce", true],
     ]);
   });
 
   it("keeps the replaced PDF and its fingerprint, and the Engineer's reason", async () => {
+    // The history is admin-only and has no screen yet (RP-670): read as the migrator.
     const { rows } = await sql<{
       replaced_storage_key: string;
       replaced_sha256: string;
@@ -315,7 +403,7 @@ describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
     `.execute(migrator);
     expect(rows).toHaveLength(1);
     const kept = rows[0]!;
-    expect(kept).toMatchObject({ previous_status: "published", action: "reproduce_documental_record", reason: REASON, target_id: id, engineer_id: engineerId });
+    expect(kept).toMatchObject({ previous_status: "published", action: "reproduce_documental_record", reason: REASON, target_id: id, engineer_id: engineer.id });
     expect(kept.replaced_sha256).toBe(sha(before.bytes));
     expect(kept.new_sha256).not.toBe(kept.replaced_sha256);
     const stored = await files.get(kept.replaced_storage_key);
@@ -328,14 +416,15 @@ describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
     expect((await detail(c1Pm, id)).outcome).toBe("A");
   });
 
-  it("is refused for an item with no record, and queues one job at a time", async () => {
+  it("needs a reason and a signed-in Engineer, is the plain 404 for an item with no record, and queues one job at a time", async () => {
     const open = await draft(at, c1Engineer, "Still a Draft");
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, open, REASON)).toBe("not_found");
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, "0198f5c0-0000-7000-8000-000000000000", REASON)).toBe("not_found");
-    await expect(reproduceDocumentalRecord(adminDb, engineerId, id, "   ")).rejects.toThrow(/reason/);
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id, REASON)).toBe("queued");
+    expect((await reproduce(open)).statusCode).toBe(404);
+    expect((await reproduce("0198f5c0-0000-7000-8000-000000000000")).statusCode).toBe(404);
+    expect((await reproduce(id, "   ")).statusCode).toBe(400);
+    expect((await admin.browser().post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: REASON })).statusCode).toBe(401);
+    expect((await reproduce(id)).statusCode).toBe(202);
     await drainOutbox(worker, quick);
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id, REASON), "after it was done").toBe("queued");
+    expect((await reproduce(id)).statusCode, "after it was done").toBe(202);
     await drainOutbox(worker, quick);
     const { rows } = await sql<{ n: number }>`
       select count(*)::int as n from documental_record_reproduction x join documental_record r on r.id = x.documental_record_id where r.work_item_id = ${id}
@@ -347,17 +436,13 @@ describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
     const id2 = await closed("Cable lugs");
     await drainOutbox(worker, quick);
     const published = await download(c1Pm, id2);
-    const shaBefore = (await recordOf(id2))!.pdf_sha256;
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id2, REASON)).toBe("queued");
+    expect((await reproduce(id2)).statusCode).toBe(202);
     await drainOutbox(worker, await handlers(failing));
-    const record = (await recordOf(id2))!;
-    expect(record.status).toBe("published");
-    expect(record.pdf_sha256).toBe(shaBefore);
+    expect((await detail(c1Pm, id2)).documentalRecord).toBe("published");
     expect(sha((await download(c1Pm, id2)).bytes)).toBe(sha(published.bytes));
-    const alerts = await alertsFor(id2);
-    expect(alerts).toEqual([expect.objectContaining({ status: "published", problems: ["PDF/A-3 6.1.2: a test finding"] })]);
+    expect(await alertsFor(id2)).toEqual([expect.objectContaining({ status: "published", problems: ["PDF/A-3 6.1.2: a test finding"] })]);
     // The next good Re-produce clears the alert.
-    expect(await reproduceDocumentalRecord(adminDb, engineerId, id2, REASON)).toBe("queued");
+    expect((await reproduce(id2)).statusCode).toBe(202);
     await drainOutbox(worker, quick);
     expect(await alertsFor(id2)).toEqual([]);
   });
@@ -367,9 +452,58 @@ describe("Re-produce in Rabaed Admin", { timeout: SETUP_MS }, () => {
     const broken: PdfAValidator = { validate: () => Promise.reject(new Error("docker is not running")) };
     const run = await processOutbox(worker, { handlers: await handlers(broken), maxAttempts: 1, limit: 50 });
     expect(run.dead).toBeGreaterThanOrEqual(1);
-    const alerts = await alertsFor(id3);
-    expect(alerts).toEqual([expect.objectContaining({ status: "job_failed", problems: ["docker is not running"] })]);
+    expect(await alertsFor(id3)).toEqual([expect.objectContaining({ status: "job_failed", problems: ["docker is not running"] })]);
     // The item still shows no record, not "being prepared" forever.
     expect((await detail(c1Pm, id3)).documentalRecord).toBeNull();
+  });
+});
+
+describe("scenario RP-155-3: Re-produce finds the Form photos again by their fingerprints", { timeout: SETUP_MS }, () => {
+  const red = png(255, 0, 0);
+  const blue = png(0, 0, 255);
+
+  it("tells two photos of one name and no time apart, and prints both again", async () => {
+    const id = await closedWithPhotos("Two same-named photos", "IMG_0001.png", [red, blue]);
+    await drainOutbox(worker, quick);
+    const before = await download(c1Pm, id);
+    const dataBefore = new TextDecoder().decode((await attachedFiles(before.bytes))[0]!.bytes);
+    // The Record Data holds each printed image's fingerprint, in the order the Documents were added.
+    expect([...dataBefore.matchAll(/<photo sha256="([0-9a-f]{64})">IMG_0001\.png<\/photo>/g)].map((m) => m[1])).toEqual([sha(red), sha(blue)]);
+    expect(await imageCountOf(before.bytes)).toBe(2);
+
+    expect((await reproduce(id)).statusCode).toBe(202);
+    await drainOutbox(worker, quick);
+    const after = await download(c1Pm, id);
+    expect(sha(after.bytes)).not.toBe(sha(before.bytes));
+    expect(await imageCountOf(after.bytes), "both photos are printed again").toBe(2);
+    expect(await alertsFor(id)).toEqual([]);
+  });
+
+  it("fails when a photo's file is not what the record printed: nothing is replaced, and Rabaed Admin is alerted", async () => {
+    const id = await closedWithPhotos("A photo that changed", "IMG_0002.png", [red]);
+    await drainOutbox(worker, quick);
+    const published = await download(c1Pm, id);
+    // Where the Document's file is stored is read as the migrator: no seam shows a storage key.
+    const { rows } = await sql<{ storage_key: string }>`select storage_key from document where work_item_id = ${id}::uuid and file_name = 'IMG_0002.png'`.execute(migrator);
+    const key = rows[0]!.storage_key;
+    await files.put(key, blue, "image/png");
+
+    expect((await reproduce(id)).statusCode).toBe(202);
+    await drainOutbox(worker, quick);
+    expect(sha((await download(c1Pm, id)).bytes), "the published record stays as it was").toBe(sha(published.bytes));
+    const [alert] = await alertsFor(id);
+    expect(alert).toMatchObject({ status: "published" });
+    expect(alert!.problems).toEqual([expect.stringContaining("IMG_0002.png")]);
+    expect(await checksOf(id)).toEqual([
+      ["closure", true],
+      ["reproduce", false],
+    ]);
+
+    // Put the file back, and the next Re-produce is made and replaces it, the alert gone.
+    await files.put(key, red, "image/png");
+    expect((await reproduce(id)).statusCode).toBe(202);
+    await drainOutbox(worker, quick);
+    expect(sha((await download(c1Pm, id)).bytes)).not.toBe(sha(published.bytes));
+    expect(await alertsFor(id)).toEqual([]);
   });
 });

@@ -101,19 +101,21 @@ alter table documental_record_reproduction enable row level security;
 revoke all on documental_record_check, documental_record_reproduction from rabaed_app;
 revoke insert, update, delete, truncate on documental_record_check, documental_record_reproduction from rabaed_admin;
 
--- Written once, but for its status moving forward (checks) and a Re-produce replacing the
--- PDF's fingerprint and seal date: nothing else changes, and no row is removed.
+-- Written once, but for its status moving forward from preparing (the checks), and a Re-produce
+-- replacing the PDF's fingerprint and seal date (and publishing a record whose checks had failed):
+-- nothing else changes, and no row is removed.
 create or replace function app.refuse_documental_record_change() returns trigger
   language plpgsql
   as $$
     begin
       if tg_op = 'UPDATE' then
         if (to_jsonb(old) - 'status') = (to_jsonb(new) - 'status')
-          and (old.status, new.status) in (('preparing', 'published'), ('preparing', 'failed_checks'), ('failed_checks', 'published'))
+          and (old.status, new.status) in (('preparing', 'published'), ('preparing', 'failed_checks'))
         then
           return new;
         end if;
-        -- Only app.reproduce_documental_record sets this, for its own update.
+        -- Only app.reproduce_documental_record sets this, for its own update. The app role cannot set it around
+        -- a write of its own: it has no UPDATE on documental_record, so it has no statement to run under it.
         if coalesce(current_setting('app.documental_record_reproduce', true), '') = 'on'
           and (to_jsonb(old) - 'status' - 'pdf_sha256' - 'sealed_at') = (to_jsonb(new) - 'status' - 'pdf_sha256' - 'sealed_at')
           and (new.status = old.status or (old.status, new.status) = ('failed_checks', 'published'))
@@ -165,6 +167,33 @@ create or replace function app.save_documental_record(
     end
   $$;
 
+-- The "record ready" outbox row of item `p_work_item_id`, queued when its record is published.
+create function app.queue_record_ready(p_project_id uuid, p_work_item_id uuid) returns void
+  language plpgsql volatile security definer
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      insert into outbox (kind, project_id, payload)
+      values ('record_ready', p_project_id, jsonb_build_object('work_item_id', p_work_item_id));
+    end
+  $$;
+revoke all on function app.queue_record_ready(uuid, uuid) from public;
+
+-- Whether an outbox row of `p_kind` for item `p_work_item_id` (under payload key `p_key`) is waiting or running.
+create function app.record_job_pending(p_kind text, p_key text, p_work_item_id uuid) returns boolean
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      return exists (
+        select 1 from outbox o
+        where o.kind = p_kind and o.payload ->> p_key = p_work_item_id::text
+          and o.processed_at is null and o.dead_at is null
+      );
+    end
+  $$;
+revoke all on function app.record_job_pending(text, text, uuid) from public;
+
 -- The checks' verdict on a 'preparing' record of job `p_outbox_id`: published, or failed_checks
 -- with what was found. A published record queues its "record ready" notification. False when
 -- the job's item has no record waiting for its checks.
@@ -187,8 +216,7 @@ create function app.finish_documental_record(p_outbox_id uuid, p_passed boolean,
       values (v_record.id, 'closure', p_passed, coalesce(p_problems, '[]'::jsonb));
       update documental_record set status = case when p_passed then 'published' else 'failed_checks' end where id = v_record.id;
       if p_passed then
-        insert into outbox (kind, project_id, payload)
-        values ('record_ready', v_record.project_id, jsonb_build_object('work_item_id', v_record.work_item_id));
+        perform app.queue_record_ready(v_record.project_id, v_record.work_item_id);
       end if;
       return true;
     end
@@ -211,11 +239,7 @@ create function app.documental_record_state(p_work_item_id uuid) returns text
       end if;
       select r.status into v_status from documental_record r where r.work_item_id = p_work_item_id;
       if v_status is null then
-        if exists (
-          select 1 from outbox o
-          where o.kind = 'documental_record' and o.payload ->> 'closed_work_item_id' = p_work_item_id::text
-            and o.processed_at is null and o.dead_at is null
-        ) then
+        if app.record_job_pending('documental_record', 'closed_work_item_id', p_work_item_id) then
           return 'preparing';
         end if;
         return null;
@@ -296,7 +320,7 @@ create function app.documental_record_reproduction_source(p_outbox_id uuid) retu
           'documents', coalesce((
             select jsonb_agg(jsonb_build_object(
               'fileName', d.file_name, 'contentType', d.content_type, 'size', d.size_bytes::bigint, 'storageKey', d.storage_key,
-              'takenAt', app.iso_utc(d.taken_at)
+              'takenAt', app.iso_utc(d.taken_at), 'sha256', encode(d.file_sha256, 'hex')
             ) order by d.created_at, d.id) -- hidden-sort-key: the order they were added, as the record job read them
             from document d
             where d.work_item_id = r.work_item_id and d.confirmed_at is not null and d.removed_at is null
@@ -317,7 +341,7 @@ revoke all on function app.documental_record_reproduction_source(uuid) from publ
 grant execute on function app.documental_record_reproduction_source(uuid) to rabaed_app;
 
 -- The worker's write of a Re-produce, once the new PDF is made and checked (and stored, when it
--- passed). 'replaced': the record has the new PDF's fingerprint and seal date, the replaced
+-- passed; when the checks failed there is no new PDF, and its values are null). 'replaced': the record has the new PDF's fingerprint and seal date, the replaced
 -- one's kept; a record whose checks had failed is published (and its "record ready" queued).
 -- 'checks_failed': the new PDF failed its checks, so nothing changes but the finding, which
 -- stays in the alerts. 'not_found' for a row that is no longer a Re-produce to do.
@@ -359,8 +383,7 @@ create function app.reproduce_documental_record(
       where id = v_record.id;
       perform set_config('app.documental_record_reproduce', 'off', true);
       if v_record.status = 'failed_checks' then
-        insert into outbox (kind, project_id, payload)
-        values ('record_ready', v_record.project_id, jsonb_build_object('work_item_id', v_record.work_item_id));
+        perform app.queue_record_ready(v_record.project_id, v_record.work_item_id);
       end if;
       return 'replaced';
     end
@@ -387,11 +410,7 @@ create function app.request_documental_record_reproduction(p_work_item_id uuid, 
       if v_record.id is null then
         return 'not_found';
       end if;
-      if exists (
-        select 1 from outbox o
-        where o.kind = 'documental_record_reproduce' and o.payload ->> 'work_item_id' = p_work_item_id::text
-          and o.processed_at is null and o.dead_at is null
-      ) then
+      if app.record_job_pending('documental_record_reproduce', 'work_item_id', p_work_item_id) then
         return 'already_queued';
       end if;
       insert into outbox (kind, project_id, payload)

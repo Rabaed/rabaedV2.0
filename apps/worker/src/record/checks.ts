@@ -58,6 +58,11 @@ function imageCount(doc: PDFDocument): number {
   return [...seen].filter(isImage).length;
 }
 
+/** The number of images on the pages of `pdf`, once each; throws when it does not open. */
+export async function imageCountOf(pdf: Uint8Array): Promise<number> {
+  return imageCount(await PDFDocument.load(pdf, { updateMetadata: false }));
+}
+
 /** The number of pages of `pdf`; throws when it does not open. */
 export async function pageCountOf(pdf: Uint8Array): Promise<number> {
   return (await PDFDocument.load(pdf, { updateMetadata: false })).getPageCount();
