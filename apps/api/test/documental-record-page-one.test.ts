@@ -132,6 +132,8 @@ async function recordHandler(): Promise<OutboxHandler> {
     timestamps: async () => timestamps,
     fonts: async () => fallbackFonts(),
     webUrl: "https://rabaed.test",
+    // PDF/A-3 is checked with veraPDF in documental-record.test.ts and record-checks.test.ts; this suite is about the pages.
+    validator: { validate: async () => ({ compliant: true, problems: [] }) },
   });
 }
 
@@ -298,7 +300,8 @@ beforeAll(async () => {
   handler = await recordHandler();
   await drainOutbox(worker, { documental_record: handler });
   recordB = await madeRecord(await closed("Cable trays for Level 1", "approve_b"));
-});
+  // It first makes every record other suites left behind.
+}, 240_000);
 
 describe("page 1 of a Code B record with Comments, in both languages", () => {
   it("opens with the Owner and every Company whose Member acted, by name", () => {
