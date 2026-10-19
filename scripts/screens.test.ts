@@ -106,6 +106,13 @@ describe("plannedShots", () => {
     expect(() => plannedShots(["/a-b", "/a/b"])).toThrow(/\/a-b and \/a\/b/);
     expect(plannedShots(["/a", "/a"])).toHaveLength(4);
   });
+
+  it("with --phone, is every route at 375 only, in English and Arabic (RP-630)", () => {
+    expect(parseArgs(["/home", "--as", "ali"], at).phone).toBe(false);
+    expect(parseArgs(["/home", "--as", "ali", "--phone"], at).phone).toBe(true);
+    expect(plannedShots(["/home"], { phone: true }).map((s) => s.file)).toEqual(["home-375-en.png", "home-375-ar.png"]);
+    expect(markdownTable(plannedShots(["/home"], { phone: true }), (file) => file).split("\n")[0]).toBe("| Page | English 375 | Arabic 375 |");
+  });
 });
 
 describe("publishing", () => {
