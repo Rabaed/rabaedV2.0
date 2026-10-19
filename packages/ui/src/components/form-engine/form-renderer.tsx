@@ -386,7 +386,9 @@ const withNone = (field: { required: unknown }, options: { value: string; label:
 function control(
   // A file field holds files, not a value, and a checklist's photos are files too: FormRenderer draws them
   // (attachmentsControl, photosControl, checklistControl), and a link question too (linkQuestionControl).
-  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" | "approved_supplier" | "checklist_template" }> | TableColumn,
+  field:
+    | Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "copied_checklist" | "work_item_ref" | "approved_supplier" | "checklist_template" }>
+    | TableColumn,
   value: unknown,
   locale: Locale,
   text: FormRendererLabels,
@@ -933,7 +935,8 @@ export function FormRenderer({
       )}
       {schema.sections.map((section) => {
         if (!visibility.sections.has(section.key)) return null;
-        const fields = section.fields.filter((f) => visibility.fields.has(f.key));
+        // A reply Screen's checklist (RP-86) holds no answer of the pop-up's: the page saves it beforehand, and shows it apart.
+        const fields = section.fields.filter((f) => visibility.fields.has(f.key) && f.type !== "copied_checklist");
         const headingId = `${idPrefix}-section-${section.key}`;
         const editing = mode === "edit" && (editableSections === undefined || editableSections.includes(section.key));
         return (
@@ -967,7 +970,9 @@ export function FormRenderer({
                             ? supplierControl(field)
                             : field.type === "checklist_template"
                               ? checklistTemplateControl(field)
-                              : control(
+                              : field.type === "copied_checklist"
+                                ? { element: null }
+                                : control(
                         field,
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
