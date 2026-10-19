@@ -33,6 +33,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
   - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
   - **3.2 Project Checklist Templates and the Checklist Template choice (as built, RP-651, spec RP-649)**: read when you work on Checklist Templates, the `checklist_template` field or an item's copied checklist.
   - **3.3 A checklist in a reply Screen (as built, RP-86, spec RP-649)**: read when you work on the `copied_checklist` field, the WIR's code Screens or the proposed code.
+  - **3.4 Snags from failed check items (as built, RP-577, spec RP-649)**: read when you work on the "Raise a Snag" tick or the Snags a code raises from failed items.
 - **4. Who fills what: section editability**: read when you change which Participant fills a Form Section, and at which Step.
   - **Settled 2026-10-05 (part 3)**: read when you need the rule of one Participant per Form Section.
   - **Settled 2026-10-10: the Form belongs to the raiser (ADR 0019)**: read when you work on who may edit the raiser's Form.
@@ -269,14 +270,14 @@ A `checklist` field holds a list of **check items**:
 | `answers` | An answer set, e.g. `Yes / No / N/A` or `Pass / Fail / N/A`. |
 | `comment` | `off`, `optional`, or `required_on_negative`. |
 | `photo` | `off`, `optional`, or `required_on_negative`. |
-| `on_negative` | `none`, or `create_snag`. `create_snag` raises one Snag per failed item when the Form is submitted, `raised_from`-linked to the source item. |
+| `on_negative` | `none`, or `create_snag`. `create_snag` raises one Snag per failed item, `raised_from`-linked to the source item. As built (§3.4, RP-577): an item copied from a Checklist Template onto an Inspection, answered in a reply Screen and ticked "Raise a Snag", raises its Snag when the code is issued. |
 
 - **Checklist templates** (e.g. "Concrete pour", "HSE weekly") live in the library at Rabaed, Company or Project level. Inserting one into a Form **copies** its items, following the same library pattern as everything else. The Project level, and an Inspection's pick copied onto the item, are built (§3.2, RP-651).
 - **Checklist summary:** the PDF and list view show counts (e.g. 18 Pass / 2 Fail / 1 N/A). An Inspection's checklist proposes its Review Code (C if any item failed, else A; §3.3), which the Consultant Manager confirms or changes.
 
 ### 3.1 As built (RP-285)
 
-- A `checklist` field has `items` (1–100, unique keys). An item has `key`, `text` (`{en, ar}`), `answers` (`yes_no_na` or `pass_fail_na`, the default), `comment` (`off`, `optional` (the default) or `required_on_negative`) and `photo` (the same rules; `off` by default). `on_negative` (`create_snag`) is not in the schema yet: it comes with the Snag List module. `required` on the field asks every item for an answer when the item leaves Draft; a checklist that isn't required may leave items unanswered.
+- A `checklist` field has `items` (1–100, unique keys). An item has `key`, `text` (`{en, ar}`), `answers` (`yes_no_na` or `pass_fail_na`, the default), `comment` (`off`, `optional` (the default) or `required_on_negative`) and `photo` (the same rules; `off` by default). A Form's own checklist item has no `on_negative`: only a Checklist Template's items do (§3.2), and only a reply checklist raises Snags (§3.4). `required` on the field asks every item for an answer when the item leaves Draft; a checklist that isn't required may leave items unanswered.
 - **Answers are stored per item**, by item key, as `{"rebar_cover": {"answer": "fail", "comment": "Cover is 15 mm"}}`. The answers are `yes`, `no`, `na` or `pass`, `fail`, `na`; the one that isn't in the item's set is `unknown_option`. `no` and `fail` are the **negative** answers. A comment is text of at most 1,000 characters, taken only where the item has comments (otherwise `wrong_type`); a blank comment and an entry with nothing in it are dropped. A comment typed before the answer is kept in a Draft. A key that isn't an item is `unknown_field`. Errors name the item (`item`), not a row or column. A condition can't read a checklist, and a hidden one is cleared like any field.
 - **Photos are Documents** tied to the field and the item (`document.field_key` and `document.item_key`), never answers. They are images only, at most 10 to an item (`too_many_files`), and only for an item whose `photo` isn't `off` (`field_not_found` otherwise); they keep EXIF time and place as a `photos` field's do (V13), and freeze at the first Submit (ADR 0020, RP-515).
 - **Leaving Draft** checks, per item: `required` (the checklist is required and the item has no answer), and, for an item answered negatively, `comment_required` and `photo_required` when its rule is `required_on_negative` and the comment is blank or the item has no confirmed photo (the validator counts them from `context.files`, keyed `field.item`; the api reads the counts in the same transaction). A Draft saves any of them missing. An item answered Pass, Yes or N/A needs nothing; an optional comment or photo is never required.
@@ -311,6 +312,15 @@ ADR 0024, amended 2026-10-19, and ADR 0025: the Inspection's checklist is answer
 - **WIR Workflow Version 4** (`apps/admin/workflows/WIR.json`): Version 3 (`WIR-3.json`, kept for the items on it) with its codes showing the Rabaed Default Screens `inspection_code_a` to `inspection_code_d`, each `code_a` to `code_d` with the checklist first. The submittals' code Screens are unchanged.
 - **Not yet:** the Documental Record lists the photos with the item's Documents, but doesn't yet print the checklist as at the code; a checklist item's photo can't be annotated yet (RP-656), as no reply photo can (workflow-engine.md §5.7); the on-site screen comes with RP-655.
 - Seam 1: `apps/api/test/wir-checklist.test.ts`; seam 2: `packages/db/test/reply-checklist-rls.test.ts` (scenario RP-86-1); unit: `packages/domain/src/reply-checklist.test.ts`.
+
+### 3.4 Snags from failed check items (as built, RP-577, spec RP-649)
+
+ADR 0025: failed check items ticked "Raise a Snag" become Snags whatever the code.
+
+- **The tick:** an item of a reply checklist (§3.3) whose copy says `on_negative: create_snag` (`raisesSnag`) shows **"Raise a Snag"** ("إنشاء عيب") once answered Fail or No, ticked by default. It is saved with the item's answer, as `"snag": false` only when unticked (`{"formwork": {"answer": "fail", "snag": false}}`; a tick given is dropped). An item that raises none, a Form's own checklist, or a value other than `true` or `false` is `wrong_type`. It is an answer like the others, in `reply_checklist`: the Consultant's alone until the code takes it (V19). Read mode, in the code pop-up and the history, says of each failed item that raises one "A Snag is raised with the code" or "No Snag is raised".
+- **At the code** (any of A to D), each item still ticked, answered Fail or No, becomes a Snag (`snagsToRaise`; `app.raise_checklist_snags`, through Code B's follow-up items, workflow-engine.md §6). The Snag's Subject is the item's text in the Project's record language (English when it is bilingual, for now: the owner hasn't decided), at most 200 characters. Its `description` is the item's comment, and its `photos` (the Snag Form's "before" photos) are copies of the item's photos the code froze: new Documents with their own times, frozen, read by whoever sees the Snag, whose files the api copies in the code's transaction. Its `raised_from` Link names the check item (`work_item_link.checklist_key`, `item_key`), and the Snag's Raised from read carries its key and text (`WorkItemDetail.raisedFrom.checkItem`, `app.raised_from_check_item`). Code B's rows still become Comments beside them.
+- **Not yet:** a reply photo's annotated copy comes with RP-981; its copy follows its original's by `document_copy` (RP-656).
+- Seam 1: `apps/api/test/wir-snags.test.ts`; seam 2: `packages/db/test/reply-checklist-rls.test.ts` (scenario RP-577-1); unit: `packages/domain/src/reply-checklist.test.ts`; stories: `packages/ui/src/components/form-engine/checklist-field.stories.tsx`.
 
 ---
 
