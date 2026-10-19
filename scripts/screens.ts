@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 
-// pnpm screens <route>... --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--publish] (RP-531)
+// pnpm screens <route>... --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
 //
 // Full-page screenshots of the running app for a PR (CODING_STANDARDS.md › UI): every
 // route at 1366 and 1920 wide, in English and Arabic, signed in as a demo person.
@@ -29,6 +29,8 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 //     return { id: body.id };                          // fills {id} in the routes
 //   };
 //
+// --phone: a phone instead (RP-630): 375 × 812, touch, as a phone's browser says it is.
+//
 // --publish: commits the PNGs under <folder>/ to `screens-<branch>` on origin (an orphan
 // branch the first time, "not for merging"; later runs add to it), without touching this
 // checkout, and prints a markdown table of their raw URLs for the PR body.
@@ -40,18 +42,25 @@ export const LOCALES = ["en", "ar"] as const;
 const LOCALE_NAMES: Record<(typeof LOCALES)[number], string> = { en: "English", ar: "Arabic" };
 /** Viewport height: shots are full-page, so it only decides what is "above the fold" while the page loads. */
 const HEIGHT = 900;
+/** `--phone`'s one size (RP-630): the design's phone frame. */
+export const PHONE = { width: 375, height: 812 } as const;
 
-export type ScreensArgs = { routes: string[]; email: string; short: string; setup?: string; folder: string; out: string; publish: boolean };
+export type ScreensArgs = { routes: string[]; email: string; short: string; setup?: string; folder: string; out: string; publish: boolean; phone: boolean };
 
 /** Reads the command line. `at` gives the repository root and current branch for the defaults. Throws a plain message on bad input. */
 export function parseArgs(argv: string[], at: { root: string; branch: string }): ScreensArgs {
   const routes: string[] = [];
   const values: Record<"as" | "setup" | "folder" | "out", string | undefined> = { as: undefined, setup: undefined, folder: undefined, out: undefined };
   let publish = false;
+  let phone = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === "--publish") {
       publish = true;
+      continue;
+    }
+    if (arg === "--phone") {
+      phone = true;
       continue;
     }
     const option = /^--(as|setup|folder|out)(?:=(.*))?$/.exec(arg);
@@ -73,7 +82,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
   const { email, short } = resolvePerson(values.as);
   const folder = values.folder ?? (/^RP-\d+/.exec(at.branch)?.[0] ?? at.branch.replace(/[^A-Za-z0-9._-]/g, "-"));
   if (!/^[A-Za-z0-9._-]+$/.test(folder) || folder.startsWith(".")) throw new Error(`--folder must be a plain name (letters, digits, . _ -): got "${folder}".`);
-  return { routes, email, short, setup: values.setup, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish };
+  return { routes, email, short, setup: values.setup, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish, phone };
 }
 
 /** `route` with each `{name}` replaced by the setup's value for it. */
@@ -93,8 +102,10 @@ export function shotName(route: string, width: number, locale: string): string {
 
 export type Shot = { route: string; width: number; locale: (typeof LOCALES)[number]; file: string };
 
-/** Every shot to take, locale by locale, then width. Refuses two routes that would be saved as the same file. */
-export function plannedShots(routes: string[]): Shot[] {
+const widthsOf = (phone: boolean): readonly number[] => (phone ? [PHONE.width] : WIDTHS);
+
+/** Every shot to take, locale by locale, then width (the phone's one with `phone`). Refuses two routes that would be saved as the same file. */
+export function plannedShots(routes: string[], { phone = false }: { phone?: boolean } = {}): Shot[] {
   const byName = new Map<string, string>();
   for (const route of routes) {
     const name = shotName(route, 0, "");
@@ -102,7 +113,7 @@ export function plannedShots(routes: string[]): Shot[] {
     if (other !== undefined && other !== route) throw new Error(`Routes ${other} and ${route} would be saved as the same file: shoot them in separate runs.`);
     byName.set(name, route);
   }
-  return [...new Set(routes)].flatMap((route) => LOCALES.flatMap((locale) => WIDTHS.map((width) => ({ route, width, locale, file: shotName(route, width, locale) }))));
+  return [...new Set(routes)].flatMap((route) => LOCALES.flatMap((locale) => widthsOf(phone).map((width) => ({ route, width, locale, file: shotName(route, width, locale) }))));
 }
 
 /** The branch the shots are published to: one level, so its raw URLs never mistake a part of it for the path. */
@@ -121,7 +132,8 @@ export const rawUrl = (repo: string, ref: string, path: string) => `https://raw.
 
 /** The PR body's table: one row per route, one column per locale and width. */
 export function markdownTable(shots: Shot[], urlOf: (file: string) => string): string {
-  const columns = LOCALES.flatMap((locale) => WIDTHS.map((width) => ({ locale, width })));
+  const widths = [...new Set(shots.map((shot) => shot.width))];
+  const columns = LOCALES.flatMap((locale) => widths.map((width) => ({ locale, width })));
   const routes = [...new Set(shots.map((shot) => shot.route))];
   const cell = (route: string, locale: string, width: number) => {
     const shot = shots.find((s) => s.route === route && s.locale === locale && s.width === width);
@@ -196,10 +208,13 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
       await context.close();
     }
     const routes = args.routes.map((route) => fillRoute(route, placeholders));
-    const shots = plannedShots(routes);
+    const shots = plannedShots(routes, { phone: args.phone });
     mkdirSync(args.out, { recursive: true });
-    for (const width of WIDTHS) {
-      const context = await browser.newContext({ storageState, viewport: { width, height: HEIGHT } });
+    for (const width of widthsOf(args.phone)) {
+      const context = await browser.newContext({
+        storageState,
+        ...(args.phone ? { viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width, height: HEIGHT } }),
+      });
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {
         const response = await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" });

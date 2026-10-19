@@ -85,6 +85,8 @@ export interface Caller {
   patch(url: string, body?: unknown): Promise<LightMyRequestResponse>;
   delete(url: string): Promise<LightMyRequestResponse>;
   request(method: Method, url: string, body?: unknown): Promise<LightMyRequestResponse>;
+  /** POSTs `payload` as it is, with `contentType`: a body that is not JSON, or not what it says it is. */
+  postRaw(url: string, payload: string, contentType: string): Promise<LightMyRequestResponse>;
   /** The current session token, to replay it after sign-out. */
   readonly sessionToken: string | undefined;
   /** Replaces the session token (e.g. to replay an old one). */
@@ -113,6 +115,8 @@ export interface CreatedProject {
 export interface TestApi {
   /** A caller with no session. */
   anonymous(): Caller;
+  /** A caller with no session from a visitor at `address`, as web forwards it (X-Forwarded-For; RP-157). */
+  visitor(address: string): Caller;
   /** A new Rabaed Engineer, created as the `engineer:create` script does; returns their id. */
   engineer(): Promise<string>;
   /**
@@ -187,12 +191,13 @@ function cookieFrom(res: LightMyRequestResponse): { value: string } | undefined 
   return cookie ? { value: cookie.value } : undefined;
 }
 
-function callerFor(app: FastifyInstance): Caller {
+function callerFor(app: FastifyInstance, headers: Record<string, string> = {}): Caller {
   let token: string | undefined;
   const request = async (method: Method, url: string, body?: unknown) => {
     const res = await app.inject({
       method,
       url,
+      headers,
       cookies: token ? { [SESSION_COOKIE]: token } : {},
       ...(body === undefined ? {} : { payload: body as object }),
     });
@@ -202,6 +207,8 @@ function callerFor(app: FastifyInstance): Caller {
   };
   return {
     request,
+    postRaw: (url, payload, contentType) =>
+      app.inject({ method: "POST", url, payload, headers: { ...headers, "content-type": contentType }, cookies: token ? { [SESSION_COOKIE]: token } : {} }),
     get: (url) => request("GET", url),
     post: (url, body) => request("POST", url, body ?? {}),
     patch: (url, body) => request("PATCH", url, body ?? {}),
@@ -256,6 +263,7 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
 
   const api: TestApi = {
     anonymous: () => callerFor(app),
+    visitor: (address) => callerFor(app, { "x-forwarded-for": address }),
 
     async engineer() {
       return createEngineer(migratorDb, { email: uniqueEmail("engineer"), fullName: "Test Engineer", password: DEFAULT_PASSWORD });
