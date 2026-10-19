@@ -216,6 +216,7 @@ export function PackagePage({
               itemHref={itemHref}
               linkAs={Link}
               onSubmit={onSubmit}
+              gate={bulk?.gate}
             />
           )}
         </div>

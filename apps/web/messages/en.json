@@ -2529,6 +2529,8 @@
         "form_incomplete": "Its Form has a required field to fill.",
         "invalid_action_form": "Its Action Form isn't complete.",
         "validation_failed": "A rule of its Form isn't met.",
+        "no_signature": "You have no saved Signature yet. Add one in your profile: each submittal is signed as on its own.",
+        "no_stamp": "Your Company has no Stamp yet. Its Authorized Person must add it in the Company profile.",
         "refused": "Its Submit was refused."
       },
       "othersNotReady": "A submittal you don't see stops it too."

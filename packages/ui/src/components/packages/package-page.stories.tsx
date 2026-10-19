@@ -378,6 +378,33 @@ export const SubmitNotReady: Story = {
   },
 };
 
+/** The PM has no saved Signature (RP-85) or the Company no Stamp (RP-617): each item says so, in a sentence rather than the code. */
+export const SubmitNotSigned: Story = {
+  parameters: overlay,
+  args: {
+    onSubmit: fn<SubmitPackageCall>(async () => ({
+      ok: false,
+      reason: "package_not_ready",
+      notReady: [
+        { id: tiles.id, documentNumber: null, title: tiles.title, reason: "no_signature" },
+        { id: mixer.id, documentNumber: null, title: mixer.title, reason: "no_stamp" },
+      ],
+      othersNotReady: false,
+    })),
+  },
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(context.canvas.getByRole("button", { name: l.submit.trigger }));
+    const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
+    await userEvent.click(within(dialog).getByRole("button", { name: l.submit.confirm }));
+    const list = await within(dialog).findByRole("alert");
+    await expect(list).toHaveTextContent(l.submit.reasons.no_signature);
+    await expect(list).toHaveTextContent(l.submit.reasons.no_stamp);
+    await expect(list).not.toHaveTextContent("no_signature");
+    await expect(within(dialog).getByRole("button", { name: l.submit.confirm })).toBeDisabled();
+  },
+};
+
 /** Rename: both names, English and Arabic, saved together. */
 export const Rename: Story = {
   parameters: overlay,

@@ -12,6 +12,7 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { PackageComments, PackageDetail, PackageSummary, WorkItemDetail, WorkItemHistory, WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { demoSignaturePng } from "../src/demo/demo-signature.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { lockedWhileWaitingOnPackage } from "./support/lock-order.ts";
 import { addSendBackType } from "./support/send-back.ts";
@@ -22,6 +23,7 @@ import {
   detail,
   draft,
   inInternalReview,
+  memberOnProject,
   ok,
   only,
   projectMember,
@@ -407,6 +409,44 @@ describe("Submit Package", () => {
     await ok(at.c1Pm.post(`/v1/work-items/${engineersDraft}/pick-up`));
     expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(true);
     expect((await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(3);
+  });
+
+  /** `by`'s Package of two items they picked up; Submit Package is refused, naming `reason` on each, and nothing is Submitted. */
+  async function refusedForEach(by: Caller, reason: "no_signature" | "no_stamp", text: string, beforeSubmit: () => Promise<void> = async () => {}) {
+    const pkg = await createPackage(by, text);
+    const items: string[] = [];
+    for (const title of [`${text} one`, `${text} two`]) {
+      const id = await inInternalReview(at, at.c1Engineer, title);
+      await ok(by.post(`/v1/work-items/${id}/pick-up`));
+      await ok(addItem(by, pkg.id, id));
+      items.push(id);
+    }
+    await beforeSubmit();
+    const refused = await refusal(submitPackage(by, pkg.id));
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+    expect(refused.body.error).toBe("package_not_ready");
+    expect(refused.body.othersNotReady).toBe(false);
+    expect(new Map(refused.body.notReady.map((i: { id: string; reason: string }) => [i.id, i.reason]))).toEqual(new Map(items.map((id) => [id, reason])));
+    for (const id of items) expect(await detail(by, id)).toMatchObject({ step: { key: "internal_review" } });
+    expect((await getPackage(by, pkg.id)).status).toBe("open");
+  }
+
+  // ADR 0017: a Member needs a saved Signature before taking any Transition; each item's Submit refuses without one.
+  it("a PM without a Signature is refused, every item naming no_signature, and nothing is Submitted", async () => {
+    const unsigned = await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"]);
+    await api.withoutSignature(unsigned.id);
+    await refusedForEach(unsigned.caller, "no_signature", "Unsigned PM");
+  });
+
+  // RP-617: while the Company has no Stamp none of its Members takes a Transition.
+  it("a PM whose Company has no Stamp is refused, every item naming no_stamp, and nothing is Submitted", async () => {
+    try {
+      // The items are made while the Stamp is there; Submit Package is taken once it is gone.
+      await refusedForEach(at.c1Pm, "no_stamp", "Unstamped Company", () => api.withoutStamp(c1.company.companyId));
+    } finally {
+      const stamp = demoSignaturePng(21).toString("base64");
+      await ok(c1.caller.request("PUT", `/v1/companies/${c1.company.companyId}/stamp`, { contentType: "image/png", data: stamp }), 200);
+    }
   });
 
   it("the same request again applies nothing and answers the same; nobody outside C1 may Submit it", async () => {

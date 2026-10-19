@@ -95,7 +95,9 @@ export type SubmittedPackage = z.infer<typeof submittedPackage>;
  * Why a submittal stops a Submit Package: it waits in the viewer's Step Pool
  * (`pick_up_first`), it is at no Step where they can Submit it (`cannot_submit`),
  * or its Submit refuses it as a single Submit would: its Form incomplete, its
- * Action Form, a Validate rule, or another refusal of the engine (`refused`).
+ * Action Form, a Validate rule, the Member's missing Signature (`no_signature`, RP-85)
+ * or their Company's missing Stamp (`no_stamp`, RP-617), or another refusal of the
+ * engine (`refused`).
  */
 export const packageNotReadyReasons = [
   "pick_up_first",
@@ -103,6 +105,8 @@ export const packageNotReadyReasons = [
   "form_incomplete",
   "invalid_action_form",
   "validation_failed",
+  "no_signature",
+  "no_stamp",
   "refused",
 ] as const;
 export const packageNotReadyReason = z.enum(packageNotReadyReasons);

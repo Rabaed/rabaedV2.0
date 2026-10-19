@@ -277,7 +277,7 @@ export type SubmitPackageResult =
 const SUBMIT_COMMAND = "submit_package";
 
 const notReadyReason = (reason: string): PackageNotReadyReason =>
-  reason === "form_incomplete" || reason === "invalid_action_form" || reason === "validation_failed" ? reason : "refused";
+  reason === "form_incomplete" || reason === "invalid_action_form" || reason === "validation_failed" || reason === "no_signature" || reason === "no_stamp" ? reason : "refused";
 
 /**
  * Submit Package: a Member of the owning Participant takes, on each item of the
