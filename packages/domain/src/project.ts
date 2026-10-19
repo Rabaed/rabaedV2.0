@@ -43,6 +43,10 @@ export function moduleOfTabPath(path: string): ModuleKey | null {
   return moduleTabOrder.find((m) => moduleTabPaths[m] === path) ?? null;
 }
 
+/** The languages a Documental Record is printed in: both (Arabic headings with their English label), Arabic only, English only. */
+export const recordLanguages = ["bilingual", "ar", "en"] as const;
+export type RecordLanguage = (typeof recordLanguages)[number];
+
 /** A Project as one of its Members sees it. */
 export const projectSummary = z.object({
   id: z.uuid(),
@@ -69,6 +73,10 @@ export const projectSummary = z.object({
    * Submittals tab also lists the Inspections Module's items. Inspections stays its own Module either way.
    */
   showInspectionsInSubmittals: z.boolean(),
+  /** The language Documental Records are printed in (RP-151): both (the default), Arabic or English. A change applies to records made afterwards. */
+  recordLanguage: z.enum(recordLanguages),
+  /** Whether Documental Records print the Hijri date beside the Gregorian one (RP-151; off by default). */
+  recordHijriDates: z.boolean(),
 });
 export type ProjectSummary = z.infer<typeof projectSummary>;
 
@@ -96,6 +104,10 @@ export const projectTabModules = (project: Pick<ProjectSummary, "modules" | "sho
 /** A Project Admin turns "Show Inspections in the Submittals tab" on or off (RP-652). */
 export const showInspectionsInSubmittalsRequest = z.object({ show: z.boolean() });
 export type ShowInspectionsInSubmittalsRequest = z.infer<typeof showInspectionsInSubmittalsRequest>;
+
+/** A Project Admin sets the record language and Hijri dates (RP-151); they apply to records made afterwards. */
+export const recordSettingsRequest = z.object({ language: z.enum(recordLanguages), hijriDates: z.boolean() });
+export type RecordSettingsRequest = z.infer<typeof recordSettingsRequest>;
 
 /** What app.set_show_inspections_in_submittals refuses with: a Member who is no Project Admin of it is told `not_found`. */
 export const projectSettingRefusals = ["not_found", "project_closed"] as const;

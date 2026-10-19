@@ -1,4 +1,4 @@
-import type { BilingualText } from "@rabaed/domain";
+import type { BilingualText, OutcomeAction, RecordLanguage } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Database } from "./schema.ts";
 
@@ -23,6 +23,66 @@ export interface TransitionFact {
   readonly companyName: BilingualText;
   /** The item's content hash as the Transition left it (hex), when it has one. */
   readonly contentSha256: string | null;
+  /** The Transition's outcome mode (`issue_code` and `confirm_code` give a Code), null for the others. */
+  readonly outcomeMode: string | null;
+  /** The Remarks of a Code's own shared event; null for any other Transition, and never a Recommended Code's. */
+  readonly remarks: string | null;
+  readonly participantId: string;
+  /** The Project Role of the Member's Company on the Project. */
+  readonly roleName: BilingualText;
+}
+
+export type BaseRoleFact = "owner" | "owner_representative" | "consultant" | "contractor";
+
+/** A Company on the item (or the Owner), with its Project Role. */
+export interface CompanyFact {
+  readonly participantId: string;
+  readonly name: BilingualText;
+  readonly roleName: BilingualText;
+  readonly baseRole: BaseRoleFact;
+}
+
+/** One of the Type's closing outcomes, for the chips of the Final decision box. */
+export interface OutcomeFact {
+  readonly code: string;
+  readonly name: BilingualText;
+  readonly polarity: "positive" | "negative";
+  readonly actions: OutcomeAction[];
+}
+
+/** A Document everyone who reads the closed item reads. */
+export interface DocumentFact {
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly size: number;
+  readonly storageKey: string;
+  /** The Form's `attachments`, `photos` or `checklist` field it belongs to; null for the Attachments System Field. */
+  readonly fieldKey: string | null;
+  readonly itemKey: string | null;
+  /** When an image was taken (ISO 8601, UTC), from its EXIF. */
+  readonly takenAt: string | null;
+}
+
+/** An option of an Option List the Form uses (nested by the worker, buildOptionLists). */
+export interface OptionFact {
+  readonly id: string;
+  readonly optionListId: string;
+  readonly parentId: string | null;
+  readonly value: string;
+  readonly label: BilingualText;
+  readonly retired: boolean;
+}
+
+/** The Form the item was made with: its sections, the answers as every reader reads them, and what names their ids. */
+export interface FormFacts {
+  /** The Form Version's sections, as published (form-engine.md §1). */
+  readonly sections: unknown;
+  readonly answers: Readonly<Record<string, unknown>>;
+  readonly optionLists: readonly { readonly id: string; readonly name: BilingualText }[];
+  readonly options: readonly OptionFact[];
+  readonly suppliers: readonly { readonly id: string; readonly name: BilingualText }[];
+  /** Company names by Participant id, for the `participant` answers. */
+  readonly companyNames: Readonly<Record<string, BilingualText>>;
 }
 
 /** What the record job is told about a closed item (app.documental_record_facts). */
@@ -37,6 +97,23 @@ export interface RecordFacts {
   readonly outcome: string;
   /** When it closed (ISO 8601, UTC). */
   readonly closedAt: string;
+  /** The Project's record language and whether Hijri dates show beside the Gregorian ones, as set when the record is made. */
+  readonly recordLanguage: RecordLanguage;
+  readonly hijriDates: boolean;
+  /** The Revision's source: the item it revises and when that one closed. */
+  readonly revisionOf: { readonly documentNumber: string; readonly closedAt: string; readonly outcome: string } | null;
+  /** The Submission Date (ISO 8601, UTC). */
+  readonly submittedAt: string | null;
+  readonly outcomes: readonly OutcomeFact[];
+  readonly companies: readonly CompanyFact[];
+  /** The Project's Trades, the item's marked. */
+  readonly trades: readonly { readonly name: BilingualText; readonly selected: boolean }[];
+  /** The Location from its first level down. */
+  readonly location: readonly BilingualText[] | null;
+  readonly scopes: readonly BilingualText[];
+  readonly reviewComments: number;
+  readonly form: FormFacts;
+  readonly documents: readonly DocumentFact[];
   readonly transitions: readonly TransitionFact[];
 }
 
@@ -57,7 +134,7 @@ export interface SealedRecord {
   readonly pdf: RecordFile;
   readonly recordData: RecordFile;
   readonly layoutVersion: string;
-  readonly language: "bilingual" | "ar" | "en";
+  readonly language: RecordLanguage;
   readonly sealedAt: Date;
   /** The SHA-256 of the verification page's long link. */
   readonly verificationTokenHash: Uint8Array;
