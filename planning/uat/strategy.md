@@ -154,6 +154,8 @@ Deviations that a rule forces are **correct, not issues**: no due dates, deadlin
 | Plan, Floor and Map Views, Reports (not built) | `plan-view.html`, `plan-view-mobile.html`, `floor-view.html`, `map-view.html`, `reports.html` |
 | Register Import, Signature and Stamp, Inspections on a phone, Participants, Settings pages without a kit screen | the design prompt in `design/prompts/` (`register-import.md`, `signature-and-stamp.md`, `inspection-on-phone.md`, `participants.md`, `project-settings.md`) and the design review notes in `design/review/` |
 
+The ui-ux-tester pass is recorded in Part UX (section 5.13): one Test Case per built page or flow, so each page has a pass or fail in Jira like any other scenario. Cross-page UX (empty, loading and error states, feedback after an action, keyboard and screen reader basics with the accessibility-tester agent) has its own Test Cases there.
+
 ### 3.3 Automation (Playwright against the demo)
 
 Stable journeys and visibility checks are automated with Playwright against the lane 7 demo, so each round re-runs them with a video.
@@ -474,6 +476,39 @@ Rabaed Admin is at the address in section 2.1; sign-in is a password plus a code
 | ADM-08 | Publish is refused while Projects lack an outcome | Engineer (Rabaed Engineer) | 1) Add an outcome to a Type's set; publish a Rabaed Default Version that uses it while the seeded Project lacks it. | Refused with how many Projects and which outcomes or Stages, never which Projects or Companies; nothing publishes; the refusal is logged. | P2 | Manual | Now | Matrix: RP-566-1 |
 | ADM-09 | Admin is separate from the Company app | Engineer; Hafiz | 1) Open an Admin URL on the web port and a web URL on the Admin port. 2) Sign out of one. | Different addresses and cookies; the Company app never serves Admin pages. | P3 | Manual | Now | Rules: ADR 0010 |
 | ADM-10 | An Engineer fixes a stuck Step | Engineer (Rabaed Engineer) | 1) Open a MAR in Admin; reassign or reset the Step with a reason. | The read and the action are logged with the reason; the Engineer never takes a Transition or changes a Workflow version. | P1 | Manual | Not scheduled: no admin item commands are built (Admin has companies, numbering, option lists and Workflows only) | Matrix: 20; Rules: V9 |
+
+### 5.13 UI and UX against the design (Part UX, label `uat-part-ux`)
+
+One Test Case per built page or flow, run with the ui-ux-tester agent (report only, it changes no file) and a person. Reference order: the owner anatomy pages in `D:\Artifacts` (render them, never commit them), then the kit in `design/reference/claude-design/`, then the design prompt; GLOSSARY.md and visibility.md beat all three. Rule-forced deviations are correct (section 3.2). Result: Done when the page matches; **In Review** when it matches but has UX recommendations for the owner; **Failed** when it has UI issues (each a Bug, section 10.4). Shoot with `pnpm screens <route> --as <person>` at 1366 and 1920, EN and AR, plus 375 where the scenario says.
+
+| ID | Title | Who | Steps | Expected | Pri | Mode | Waits | Covers |
+|---|---|---|---|---|---|---|---|---|
+| UX-01 | App shell, sidebar and top bar match the design | Hafiz (TMC engineer); Saeed (Project Admin) | 1) Open Home at 1366 and 1920, EN and AR. 2) Open each sidebar entry and the member menu. 3) At 820 and 375 open the drawer. | Matches `saas-shell.html` (and `D:\Artifacts\Rabaed Responsive Anatomy.html` for the drawer): sidebar entries of RP-405 decision 5 only (no Overdue, Payments, Subscriptions, Roles, theme toggle), Company name not a switcher, Arabic mirrored. UI issues and UX recommendations reported apart. | P1 | Manual | Now | Design: saas-shell.html; RP-405 decisions 4, 5, 7 |
+| UX-02 | Home matches the design and reads at a glance | Ali (TMC PM) | 1) Open Home at 1366 and 1920, EN and AR, with items in every state. 2) Follow each number and row. | Matches the kit Home with RP-405 changes: Active Projects, Need My Action, 4+ weeks at their step (Step Age dots, never Overdue), Waiting with others, Recent activity. Every number opens the List with its filter. Empty state reads well for a new Member. | P1 | Manual | Now | Design: saas-shell.html (Home); visibility.md Home row |
+| UX-03 | Projects page and Project Dashboard | Ali; Mohammed | 1) Open Projects, then a Project Dashboard, EN and AR, 1366 and 1920. 2) Click each card figure. | Cards match the kit; the Dashboard Type cards, Revision line and Activity Feed are laid out as designed; no squashed card (the RP-405 audit fault); each figure opens the List with the same filter. | P2 | Manual | Now | Design: saas-shell.html; views-dashboard-notifications.md |
+| UX-04 | Submittals List matches the owner anatomy | Hafiz; Mohammed | 1) Open Submittals > List at 1366 and 1920, EN and AR. 2) Open the filter panel, choose several values, save columns, sort, page. 3) Scroll a long table. | Matches `D:\Artifacts\Rabaed Submittals List.html` first, then `submittals-list.html` with `list/filter-panel.js`: columns, chips, Step Age dots, Code labels ("Code A"), row menu; the table scrolls inside its own region, the page never scrolls sideways. | P1 | Manual | Now | Design: Rabaed Submittals List anatomy; submittals-list.html; RP-405 decision 7 |
+| UX-05 | Submittals Kanban matches the board and card anatomy | Hafiz; Mohammed | 1) Open Submittals > Kanban, EN and AR, 1366 and 1920. 2) Read a card in every Stage; change the Card view layout. 3) Scroll across and within columns. | Matches `D:\Artifacts\Rabaed Kanban Board Anatomy.html` and `Rabaed Kanban Card Anatomy.html`, then `submittals-kanban.html`: column headers and counts, card fields and order, With line, Step Age dots, closed-by line; columns scroll left and right, cards up and down. | P1 | Manual | Now | Design: Kanban Board and Card Anatomy; submittals-kanban.html |
+| UX-06 | Work Item page, Transition pop-ups and View workflow drawer | Hafiz; Ali; Mohammed | 1) Open a MAR in Draft, in internal review, Submitted and closed, EN and AR. 2) Open every Transition pop-up (Send for Review, Submit with Cover Note, Return, Code A to D). 3) Open View workflow (map and list). | Laid out as `design/prompts/work-item-page.md` and `workflow-view.html`: header (Document Number left to right, Stage, With, Step Age), Form, Attachments and Links, history; each pop-up asks for confirmation and shows its Action Form; required fields and errors are clear. | P1 | Manual | Now | Design: work-item-page.md; workflow-view.html; submittal-form-and-actions.md |
+| UX-07 | New work item and the Form while filling it | Hafiz (TMC engineer) | 1) New Submittal for each Type, EN and AR, 1366 and 375. 2) Fill, leave required fields empty, add Items rows, upload files and a photo, Save Draft. | Laid out as `new-work-item.md` and `form-template-brief.md`: sections, field help, the Items table on a phone, upload progress, "Saved" indicator, the list of fields needing attention; nothing overlaps at 375. | P1 | Manual | Now | Design: new-work-item.md; form-template-brief.md |
+| UX-08 | Activity page | Ali; Mohammed | 1) Open the Project Activity page, EN and AR. 2) Page back; open entries. | Laid out as `design/prompts/activity.md`: entries worded from what happened, another Company by name only, newest first, paging that keeps its place. | P3 | Manual | Now | Design: activity.md |
+| UX-09 | Notifications page and the bell | Ali | 1) Open the bell, then the Notifications page, EN and AR. 2) Open an entry; Mark all as read. | Laid out as `design/prompts/notifications.md`: unread state, grouping, the item it opens, empty state; the bell badge matches the unread count. | P2 | Manual | Now | Design: notifications.md |
+| UX-10 | Profile and notification settings | Ali | 1) Open Profile, EN and AR. 2) Change language, email per group, Pause all, a Project mute. | Laid out as `profile-notification-settings.md`: no In-app switch; each change confirms it saved; the language change keeps the page. | P3 | Manual | Now | Design: profile-notification-settings.md |
+| UX-11 | Sign-in, wrong password and accepting an invitation | A new invitee (fixture from PAR-02); Hafiz | 1) Open sign-in EN and AR at 1366 and 375. 2) Wrong password, then right. 3) Open an invitation link and accept. | Laid out as `design/prompts/sign-in.md`: one error for a wrong email or password, clear invitation steps, Arabic-first users land in Arabic. | P2 | Manual | Now | Design: sign-in.md |
+| UX-12 | Members, Participants and a Member Visibility page | Saeed (Authorized Person, Project Admin) | 1) Open My Company > Members and Participants. 2) Open a Participant and a Member Visibility page; narrow and save. | Laid out as `design/prompts/participants.md`: Trades and Locations pickers usable with many values, the Visibility Gap warning readable, counts only of the viewer own Company. | P2 | Manual | Now | Design: participants.md |
+| UX-13 | Project Settings pages | Saeed (Project Admin); Ali | 1) Open each Settings page: Trades and Locations, Visibility, Modules, Stages, Outcomes, Required links, Approved suppliers, Checklist Templates, Screens. 2) Do one change on each as Saeed; open them as Ali. | Every page uses the Settings template of the kit and `project-settings.md`: one layout, save and cancel in the same place, read-only state clear for Ali, Arabic mirrored. | P2 | Manual | Now | Design: project-settings.md; settings template |
+| UX-14 | Settings > Numbering | Saeed; Ali | 1) Open Numbering EN and AR. 2) Edit a pattern; read the preview and the shared-counter warning. | Matches `settings-numbering.html` and `D:\Artifacts\Rabaed Document Numbering.html`: pattern builder, preview left to right, warning wording; Ali sees examples only. | P2 | Manual | Now | Design: settings-numbering.html; Document Numbering anatomy |
+| UX-15 | Settings > Workflows, the builder and the Library | Saeed (Project Admin) | 1) Open Settings > Workflows, a Workflow, its Versions. 2) Open the builder: add a Step, connect, undo, auto-layout, Validate, Publish. 3) Open the Library. | Matches `settings-workflows.html` with `wf/`, `D:\Artifacts\Rabaed Settings Workflows.html` and `Rabaed Workflow Builder V2.html`: canvas, Step panel, problems list, Change Note; usable at 1366. | P2 | Manual | Now | Design: settings-workflows.html; Settings Workflows and Workflow Builder V2 anatomy; workflows.md |
+| UX-16 | Register Import wizard and Imports page | Ali (TMC PM) | 1) Run an import: upload, worksheet and header row, mapping, preview with bad rows, confirm. 2) Open the result page and the Imports page. EN and AR. | Laid out as `design/prompts/register-import.md`, except that no import time is shown (visibility.md wins): each step says where you are, bad rows show every reason, confirm says how many Drafts. | P2 | Manual | Now | Design: register-import.md; visibility.md Register Imports row |
+| UX-17 | Snag List on the desktop | Ahmed (DCL engineer); Hafiz | 1) Open the Snag List: List grouped by Stage, Kanban, type chips, filters, EN and AR. | Matches `snag-list.html`: groups, chips, Step Age dots, filters; Comments from Code B shown as designed. | P2 | Manual | Now | Design: snag-list.html; snag-list.md |
+| UX-18 | WIR request and on-site inspection on a phone | Hafiz; Ahmed | 1) At 375 (phone), raise a WIR and open it on site as Ahmed: checklist, photos, annotate, EN and AR. | Laid out as `inspection-on-phone.md`: phone-first, large touch targets, camera first, annotate tools reachable with a thumb, nothing cut off. | P1 | Manual | Now | Design: inspection-on-phone.md (INSP-9 RP-654) |
+| UX-19 | Phone width for every built page | Hafiz; Ali | 1) At 375 and 820 open Home, Projects, List, Kanban, item page, New item, Notifications, Profile, Settings. EN and AR. | Follows `D:\Artifacts\Rabaed Responsive Anatomy.html` and `responsive.md`: no page-level sideways scroll; tables and the Kanban scroll inside their region; the sidebar is a drawer; every action reachable. | P1 | Manual | Now | Design: Responsive Anatomy; responsive.md; RP-405 decision 7 |
+| UX-20 | Empty, loading and error states | Hafiz; a new Member with no Projects | 1) Visit each built page with no data, while loading (slow network), and with the api stopped for a moment. | Every page has a designed empty state with a next step, a loading state with no layout jump, and an error that says what to do; the not-found page says nothing about the request. | P2 | Manual | Now | Design: kit states; visibility.md Direct URL row |
+| UX-21 | Feedback after every action | Hafiz; Ali; Mohammed | 1) Save a Draft, take each Transition, upload, change a setting. 2) Watch for the confirmation, the disabled reason and the page update. | Each action gives visible feedback (toast or inline), disabled buttons say why, the page updates without a reload, nothing is done twice on a double click. | P2 | Manual | Now | UX heuristics: feedback, error prevention |
+| UX-22 | Keyboard and screen reader basics | Hafiz | 1) Use the List, Kanban, item page, a Transition pop-up and the Form with the keyboard only. 2) Run an accessibility scan (the accessibility-tester agent, report only) on the same pages, EN and AR. | Visible focus, logical focus order (mirrored in Arabic), pop-ups trap and return focus, every control has a label, text contrast at least WCAG AA. Findings reported as UI issues. | P2 | Manual | Now | Rules: RP-405 decision 1 (a11y) |
+| UX-23 | Packages view and Package page | Ali (TMC PM); Mohammed (DCL manager) | 1) Open the Packages view and a Package page, EN and AR, 1366 and 1920: cards, counts, item table, bulk bar, Comments section. | Matches `packages.html` where spec RP-616 does not differ (the table of known differences in `design/prompts/packages.md`). | P2 | Manual | RP-588: Packages UI (RP-659 to RP-662) | Design: packages.html; packages.md |
+| UX-24 | Snag List on a phone | Hafiz; Ahmed | 1) At 375 open the Snag List, filters and a Snag; create one camera first. | Matches `snag-list-mobile.html`: photo-first cards, bottom-sheet filters, camera-first create. | P2 | Manual | RP-28: SNAG-10 phone (RP-630) | Design: snag-list-mobile.html |
+| UX-25 | Add Signature, the no-Signature and no-Stamp pop-ups, Company logo and Stamp | Hafiz; Saeed (Authorized Person) | 1) Profile > Add Signature (draw, type, upload). 2) Take a Transition with no Signature; with a Company with no Stamp. 3) Company profile: logo and Stamp. | Laid out as `signature-and-stamp.md` and its Claude Design screens (RP-665): clear what is missing and how to add it, EN and AR. | P2 | Manual | RP-23: Add Signature UI (RP-665, RP-666) | Design: signature-and-stamp.md |
+| UX-26 | Documental Record and Working Copy read like the owner samples | Ali; Mohammed | 1) Download the Documental Record of a closed MAR and a Working Copy, EN and AR record language. 2) Compare with the owner samples of RP-151. | Page 1, the Form body, Signature cards and appendix follow the samples where they agree with visibility.md and GLOSSARY.md; Latin digits; Document Numbers left to right; readable when printed. | P2 | Manual | RP-23: page 1 and Form body (RP-151); Signature cards (RP-650) | Design: RP-151 samples; ADR 0023 |
 
 ## 6. Visibility block
 
@@ -884,7 +919,7 @@ Each scenario has a **Mode** (meaning in section 3.3): `Manual`, `Automate` or `
 
 - **Automate** (48): SUB-02, SUB-29, PAR-03, I18N-02, I18N-03, I18N-08, ADM-03, VIS-01, VIS-02, VIS-05, VIS-07, VIS-09, VIS-10, VIS-11, VIS-12, VIS-18, VIS-19, VIS-20, VIS-21, VIS-22, VIS-23, VIS-26, VIS-30, VIS-31, VIS-32, VIS-33, VIS-35, VIS-37, VIS-39, VIS-40, VIS-42, VIS-43, VIS-44, VIS-45, VIS-46, VIS-48, VIS-50, VIS-51, VIS-52, VIS-53, VIS-54, VIS-55, VIS-56, VIS-57, VIS-58, VIS-59, VIS-60, VIS-64
 - **Both** (139): SUB-01, SUB-04, SUB-05, SUB-07, SUB-08, SUB-09, SUB-10, SUB-11, SUB-12, SUB-13, SUB-14, SUB-15, SUB-16, SUB-17, SUB-20, SUB-21, SUB-23, SUB-25, SUB-26, SUB-27, WF-01, WF-02, WF-03, WF-05, WF-06, WF-07, WF-08, WF-10, WF-12, WF-13, WF-14, WF-16, WF-17, FRM-02, FRM-03, FRM-05, FRM-07, FRM-08, FRM-09, PAR-01, PAR-02, PAR-05, PAR-06, PAR-08, PAR-09, PAR-10, PAR-11, PAR-12, PAR-13, PKG-01, PKG-02, PKG-03, PKG-04, PKG-05, PKG-06, PKG-08, PKG-09, PKG-10, PKG-12, SIG-01, SIG-02, SIG-03, SIG-04, SIG-07, SIG-09, SIG-10, SIG-11, SIG-15, SIG-16, SIG-17, SNG-01, SNG-02, SNG-03, SNG-04, SNG-05, SNG-06, SNG-08, SNG-09, SNG-10, SNG-11, SNG-12, SNG-14, INS-01, INS-02, INS-03, INS-04, INS-05, INS-06, INS-07, INS-08, INS-09, INS-10, INS-11, INS-12, INS-13, INS-14, IMP-01, IMP-02, IMP-03, IMP-04, IMP-05, IMP-06, IMP-07, IMP-08, IMP-09, IMP-10, IMP-11, NOT-01, NOT-02, NOT-03, NOT-04, NOT-05, NOT-09, I18N-01, I18N-06, I18N-07, ADM-01, ADM-02, ADM-04, ADM-06, ADM-07, VIS-03, VIS-04, VIS-14, VIS-15, VIS-16, VIS-17, VIS-24, VIS-25, VIS-27, VIS-28, VIS-29, VIS-34, VIS-36, VIS-38, VIS-41, VIS-47, VIS-49, VIS-61
-- **Manual** (49): SUB-03, SUB-06, SUB-18, SUB-19, SUB-22, SUB-24, SUB-28, WF-04, WF-09, WF-11, WF-15, FRM-01, FRM-04, FRM-06, FRM-10, FRM-11, PAR-04, PAR-07, PAR-14, PAR-15, PAR-16, PKG-07, PKG-11, SIG-05, SIG-06, SIG-08, SIG-12, SIG-13, SIG-14, SNG-07, SNG-13, SNG-15, IMP-12, NOT-06, NOT-07, NOT-08, NOT-10, NOT-11, I18N-04, I18N-05, ADM-05, ADM-08, ADM-09, ADM-10, VIS-06, VIS-08, VIS-13, VIS-62, VIS-63
+- **Manual** (75): SUB-03, SUB-06, SUB-18, SUB-19, SUB-22, SUB-24, SUB-28, WF-04, WF-09, WF-11, WF-15, FRM-01, FRM-04, FRM-06, FRM-10, FRM-11, PAR-04, PAR-07, PAR-14, PAR-15, PAR-16, PKG-07, PKG-11, SIG-05, SIG-06, SIG-08, SIG-12, SIG-13, SIG-14, SNG-07, SNG-13, SNG-15, IMP-12, NOT-06, NOT-07, NOT-08, NOT-10, NOT-11, I18N-04, I18N-05, ADM-05, ADM-08, ADM-09, ADM-10, UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-20, UX-21, UX-22, UX-23, UX-24, UX-25, UX-26, VIS-06, VIS-08, VIS-13, VIS-62, VIS-63
 
 ## 9. Waits for epic
 
@@ -892,10 +927,10 @@ Each scenario has **Waits**: `Now` (runnable on lane 7 today) or `Waits: RP-xxx`
 
 | Waits for | Tickets | Count | Scenarios |
 |---|---|---|---|
-| Now | none: runnable on lane 7 today (some need a fixture, section 2.5) | 187 | SUB-01, SUB-02, SUB-03, SUB-04, SUB-05, SUB-06, SUB-07, SUB-08, SUB-09, SUB-10, SUB-11, SUB-12, SUB-13, SUB-14, SUB-15, SUB-16, SUB-17, SUB-18, SUB-19, SUB-20, SUB-21, SUB-22, SUB-23, SUB-24, SUB-25, SUB-26, SUB-27, SUB-28, SUB-29, WF-01, WF-02, WF-03, WF-04, WF-05, WF-06, WF-07, WF-08, WF-09, WF-10, WF-11, WF-12, WF-13, WF-14, WF-15, WF-16, WF-17, FRM-01, FRM-02, FRM-03, FRM-04, FRM-05, FRM-06, FRM-07, FRM-08, FRM-09, FRM-10, PAR-01, PAR-02, PAR-03, PAR-04, PAR-05, PAR-06, PAR-07, PAR-08, PAR-09, PAR-10, PAR-11, PAR-12, PAR-13, PAR-14, PAR-15, PAR-16, SIG-01, SIG-02, SIG-03, SIG-04, SIG-05, SIG-06, SNG-01, SNG-02, SNG-03, SNG-04, SNG-05, SNG-06, SNG-07, INS-01, INS-02, INS-03, INS-04, INS-05, INS-06, INS-07, INS-08, IMP-01, IMP-02, IMP-03, IMP-04, IMP-05, IMP-06, IMP-07, NOT-01, NOT-02, NOT-03, NOT-04, NOT-05, NOT-06, NOT-07, NOT-08, NOT-09, NOT-10, I18N-01, I18N-02, I18N-03, I18N-04, I18N-05, I18N-06, I18N-07, I18N-08, ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ADM-08, ADM-09, VIS-01, VIS-02, VIS-03, VIS-04, VIS-05, VIS-07, VIS-08, VIS-09, VIS-10, VIS-11, VIS-12, VIS-13, VIS-14, VIS-15, VIS-16, VIS-17, VIS-18, VIS-19, VIS-20, VIS-21, VIS-22, VIS-23, VIS-24, VIS-25, VIS-26, VIS-27, VIS-28, VIS-29, VIS-30, VIS-31, VIS-32, VIS-33, VIS-34, VIS-35, VIS-36, VIS-37, VIS-38, VIS-39, VIS-40, VIS-41, VIS-42, VIS-43, VIS-44, VIS-45, VIS-46, VIS-47, VIS-48, VIS-50, VIS-51, VIS-52, VIS-53, VIS-54, VIS-55, VIS-56, VIS-57, VIS-58, VIS-59, VIS-60, VIS-61, VIS-64 |
-| Packages (RP-588) | RP-588, RP-659 to RP-662 (UI) | 12 | PKG-01, PKG-02, PKG-03, PKG-04, PKG-05, PKG-06, PKG-07, PKG-08, PKG-09, PKG-10, PKG-11, PKG-12 |
-| Signing (RP-23) | RP-23, RP-31, RP-147, RP-151, RP-155, RP-157, RP-161, RP-614, RP-617, RP-621, RP-650, RP-665, RP-666 | 11 | SIG-07, SIG-08, SIG-09, SIG-10, SIG-11, SIG-12, SIG-13, SIG-14, SIG-15, SIG-16, SIG-17 |
-| Snag List (RP-28) | RP-28, RP-623, RP-625, RP-626, RP-627, RP-628, RP-629, RP-630, RP-658, RP-677 | 8 | SNG-08, SNG-09, SNG-10, SNG-11, SNG-12, SNG-13, SNG-14, SNG-15 |
+| Now | none: runnable on lane 7 today (some need a fixture, section 2.5) | 209 | SUB-01, SUB-02, SUB-03, SUB-04, SUB-05, SUB-06, SUB-07, SUB-08, SUB-09, SUB-10, SUB-11, SUB-12, SUB-13, SUB-14, SUB-15, SUB-16, SUB-17, SUB-18, SUB-19, SUB-20, SUB-21, SUB-22, SUB-23, SUB-24, SUB-25, SUB-26, SUB-27, SUB-28, SUB-29, WF-01, WF-02, WF-03, WF-04, WF-05, WF-06, WF-07, WF-08, WF-09, WF-10, WF-11, WF-12, WF-13, WF-14, WF-15, WF-16, WF-17, FRM-01, FRM-02, FRM-03, FRM-04, FRM-05, FRM-06, FRM-07, FRM-08, FRM-09, FRM-10, PAR-01, PAR-02, PAR-03, PAR-04, PAR-05, PAR-06, PAR-07, PAR-08, PAR-09, PAR-10, PAR-11, PAR-12, PAR-13, PAR-14, PAR-15, PAR-16, SIG-01, SIG-02, SIG-03, SIG-04, SIG-05, SIG-06, SNG-01, SNG-02, SNG-03, SNG-04, SNG-05, SNG-06, SNG-07, INS-01, INS-02, INS-03, INS-04, INS-05, INS-06, INS-07, INS-08, IMP-01, IMP-02, IMP-03, IMP-04, IMP-05, IMP-06, IMP-07, NOT-01, NOT-02, NOT-03, NOT-04, NOT-05, NOT-06, NOT-07, NOT-08, NOT-09, NOT-10, I18N-01, I18N-02, I18N-03, I18N-04, I18N-05, I18N-06, I18N-07, I18N-08, ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ADM-08, ADM-09, UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-20, UX-21, UX-22, VIS-01, VIS-02, VIS-03, VIS-04, VIS-05, VIS-07, VIS-08, VIS-09, VIS-10, VIS-11, VIS-12, VIS-13, VIS-14, VIS-15, VIS-16, VIS-17, VIS-18, VIS-19, VIS-20, VIS-21, VIS-22, VIS-23, VIS-24, VIS-25, VIS-26, VIS-27, VIS-28, VIS-29, VIS-30, VIS-31, VIS-32, VIS-33, VIS-34, VIS-35, VIS-36, VIS-37, VIS-38, VIS-39, VIS-40, VIS-41, VIS-42, VIS-43, VIS-44, VIS-45, VIS-46, VIS-47, VIS-48, VIS-50, VIS-51, VIS-52, VIS-53, VIS-54, VIS-55, VIS-56, VIS-57, VIS-58, VIS-59, VIS-60, VIS-61, VIS-64 |
+| Packages (RP-588) | RP-588, RP-659 to RP-662 (UI) | 13 | PKG-01, PKG-02, PKG-03, PKG-04, PKG-05, PKG-06, PKG-07, PKG-08, PKG-09, PKG-10, PKG-11, PKG-12, UX-23 |
+| Signing (RP-23) | RP-23, RP-31, RP-147, RP-151, RP-155, RP-157, RP-161, RP-614, RP-617, RP-621, RP-650, RP-665, RP-666 | 13 | SIG-07, SIG-08, SIG-09, SIG-10, SIG-11, SIG-12, SIG-13, SIG-14, SIG-15, SIG-16, SIG-17, UX-25, UX-26 |
+| Snag List (RP-28) | RP-28, RP-623, RP-625, RP-626, RP-627, RP-628, RP-629, RP-630, RP-658, RP-677 | 9 | SNG-08, SNG-09, SNG-10, SNG-11, SNG-12, SNG-13, SNG-14, SNG-15, UX-24 |
 | Inspections (RP-27) | RP-27, RP-86, RP-577, RP-653, RP-673, RP-674 | 7 | INS-09, INS-10, INS-11, INS-12, INS-13, INS-14, VIS-49 |
 | Register Import (RP-589) | RP-588, RP-589, RP-639, RP-640, RP-644, RP-645 | 5 | IMP-08, IMP-09, IMP-10, IMP-11, IMP-12 |
 | Not scheduled | Chat is not built (no ticket in the five epics); Files, Drawings and Plan View are not built (no ticket in the five epics); Participant withdrawal, Project close and Signatory Access (RP-614) are not built; Project close is not built (no ticket in the five epics); no Rabaed Default Form has a member or participant field; arrives with the Form builder; no admin item commands are built (Admin has companies, numbering, option lists and Workflows only) | 6 | FRM-11, NOT-11, ADM-10, VIS-06, VIS-62, VIS-63 |
@@ -906,7 +941,7 @@ Each scenario has **Waits**: `Now` (runnable on lane 7 today) or `Waits: RP-xxx`
 
 | Round | When | Runs | Regression included |
 |---|---|---|---|
-| **0 Baseline** | now, on lane 7 | every scenario that is `Now` (187), starting with the fixtures | none: it sets the baseline |
+| **0 Baseline** | now, on lane 7 | every scenario that is `Now` (209), starting with the fixtures | none: it sets the baseline |
 | **1 Packages** | when RP-588 is Done and merged | Part PKG, IMP-11 | List, Kanban and Dashboard (Package chip, filter, counts): SUB-23, SUB-25, SUB-26; VIS-18, VIS-19 |
 | **2 Signing** | when RP-23 is Done | Part SIG waits | Journey J1 in full (once Signature and Stamp are required to act, every Transition changes); the demo seed must then carry a Signature and Stamp for each person, or the seed breaks: raise it before the round; VIS-07, VIS-08, SUB-11 |
 | **3 Snag List** | when RP-28 is Done | Part SNG waits, SNG-08 to SNG-15 | SUB-12, SNG-06, VIS-05, VIS-50 to VIS-54, NOT-02 |
@@ -950,6 +985,7 @@ Rounds 1 to 5 run in the order the epics finish, not the order above. Scenarios 
 4. **Priority:** a visibility or security failure (any P1 V scenario, a hole in the 404, a leaked count, name, email or file) is **Highest** and is raised to the Main and the Orchestrator the same day. A broken money-path journey is High. A wrong behaviour with a work-around is Medium. Wording, layout and polish are Low. A page that differs from its reference screen without a rule forcing it is a Bug with the label `ui-design`; UX recommendations are not Bugs: they go in one Task per round for the Main to triage.
 5. **Fix and re-test:** when the Bug is fixed and merged, the Test Case moves to **In Review**; the tester re-runs it on a freshly seeded lane. Pass moves it to Done; fail back to Failed with a new comment. A fix to a visibility Bug also adds or updates the matching row of `docs/visibility.md` and its automated test, as `CODING_STANDARDS.md` requires.
 6. **Blocked:** a Test Case that cannot run because of another Bug or a missing fixture stays To Do with the label `blocked` and a comment naming the blocker.
+7. **UI issues and UX recommendations (Part UX):** a UI issue (the page differs from its reference with no rule forcing it) is a Bug under RP-405 (or the epic that built the page), label `uat` and `ui`, with the reference file, the element and both screenshots. A UX recommendation is not a Bug: the round collects them in one Task per page under RP-405, label `uat` and `ux-recommendation`, `ready-for-human`, for the owner to accept, design in Claude Design, or drop.
 
 ### 10.5 Result reporting
 
@@ -972,7 +1008,7 @@ At the end of every round the owner types `/mattpocock-skills:retro` in the sess
 
 ## 11. Counts
 
-**Total: 236 scenarios** in 13 Parts.
+**Total: 262 scenarios** in 14 Parts.
 
 ### 11.1 By Part
 
@@ -990,45 +1026,46 @@ At the end of every round the owner types `/mattpocock-skills:retro` in the sess
 | NOT Notifications | 11 | 0 | 4 | 5 | 2 | 5 | 0 | 6 | 10 | 0 | 1 |
 | I18N Arabic, RTL and phone width | 8 | 1 | 4 | 0 | 3 | 2 | 3 | 3 | 8 | 0 | 0 |
 | ADM Rabaed Admin | 10 | 0 | 4 | 3 | 3 | 4 | 1 | 5 | 9 | 0 | 1 |
+| UX UI and UX against the design | 26 | 0 | 8 | 16 | 2 | 26 | 0 | 0 | 22 | 4 | 0 |
 | VIS Visibility | 64 | 64 | 0 | 0 | 0 | 5 | 41 | 18 | 60 | 1 | 3 |
-| **Total** | **236** | **67** | **75** | **59** | **35** | **49** | **48** | **139** | **187** | **43** | **6** |
+| **Total** | **262** | **67** | **83** | **75** | **37** | **75** | **48** | **139** | **209** | **47** | **6** |
 
 ### 11.2 Priority, Mode and Waits
 
 | Priority | Jira | Count |
 |---|---|---|
 | P1 V | Highest | 67 |
-| P1 | High | 75 |
-| P2 | Medium | 59 |
-| P3 | Low | 35 |
+| P1 | High | 83 |
+| P2 | Medium | 75 |
+| P3 | Low | 37 |
 
 | Mode | Count |
 |---|---|
-| Manual | 49 |
+| Manual | 75 |
 | Automate | 48 |
 | Both | 139 |
 
 | Waits | Count |
 |---|---|
-| Now | 187 |
-| Packages (RP-588) | 12 |
-| Signing (RP-23) | 11 |
-| Snag List (RP-28) | 8 |
+| Now | 209 |
+| Packages (RP-588) | 13 |
+| Signing (RP-23) | 13 |
+| Snag List (RP-28) | 9 |
 | Inspections (RP-27) | 7 |
 | Register Import (RP-589) | 5 |
 | Not scheduled | 6 |
 
 ### 11.3 Waits by epic and Part
 
-| Epic | SUB | WF | FRM | PAR | PKG | SIG | SNG | INS | IMP | NOT | I18N | ADM | VIS | Total |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Now | 29 | 17 | 10 | 16 | 0 | 6 | 7 | 8 | 7 | 10 | 8 | 9 | 60 | 187 |
-| Packages (RP-588) | 0 | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 |
-| Signing (RP-23) | 0 | 0 | 0 | 0 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 11 |
-| Snag List (RP-28) | 0 | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 8 |
-| Inspections (RP-27) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 6 | 0 | 0 | 0 | 0 | 1 | 7 |
-| Register Import (RP-589) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 0 | 5 |
-| Not scheduled | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 1 | 3 | 6 |
+| Epic | SUB | WF | FRM | PAR | PKG | SIG | SNG | INS | IMP | NOT | I18N | ADM | UX | VIS | Total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Now | 29 | 17 | 10 | 16 | 0 | 6 | 7 | 8 | 7 | 10 | 8 | 9 | 22 | 60 | 209 |
+| Packages (RP-588) | 0 | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 13 |
+| Signing (RP-23) | 0 | 0 | 0 | 0 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 13 |
+| Snag List (RP-28) | 0 | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 9 |
+| Inspections (RP-27) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 6 | 0 | 0 | 0 | 0 | 0 | 1 | 7 |
+| Register Import (RP-589) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
+| Not scheduled | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 1 | 0 | 3 | 6 |
 
 ## 12. Open questions and document notes
 
