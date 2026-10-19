@@ -170,6 +170,8 @@ interface Made {
   readonly id: string;
   readonly bytes: Uint8Array;
   readonly text: string;
+  /** Page 1's text alone (RP-650: the issuing card later in the record prints the Remarks in full). */
+  readonly firstPage: string;
   readonly pages: number;
   readonly xml: string;
 }
@@ -183,9 +185,12 @@ async function fetchRecord(id: string): Promise<Made> {
   const task = getDocument({ data: bytes.slice(), useSystemFonts: false });
   const pdf = await task.promise;
   let text = "";
+  let firstPage = "";
   for (let n = 1; n <= pdf.numPages; n++) {
     const content = await (await pdf.getPage(n)).getTextContent();
-    text += content.items.map((item) => ("str" in item ? item.str : "")).join("");
+    const pageText = content.items.map((item) => ("str" in item ? item.str : "")).join("");
+    if (n === 1) firstPage = pageText;
+    text += pageText;
   }
   const pages = pdf.numPages;
   await task.destroy();
@@ -196,7 +201,7 @@ async function fetchRecord(id: string): Promise<Made> {
     writeFileSync(join(process.env.RECORD_PDF_DIR, `${rows[0]!.title.replace(/\W+/g, "-")}.pdf`), bytes);
   }
   const xml = new TextDecoder().decode((await attachedFiles(bytes))[0]!.bytes);
-  return { id, bytes, text: squeeze(text), pages, xml };
+  return { id, bytes, text: squeeze(text), firstPage: squeeze(firstPage), pages, xml };
 }
 
 /** A hand-written PDF of `n` pages (a Document whose page count the record lists). */
@@ -489,8 +494,9 @@ describe("page 1 of a Code B record with Comments, in both languages", () => {
   });
 
   it("shows the first lines of the issued Code's Remarks", () => {
-    for (const line of REMARKS.slice(0, 6)) expect(recordB.text, line).toContain(squeeze(line));
-    for (const line of REMARKS.slice(6)) expect(recordB.text, line).not.toContain(squeeze(line));
+    for (const line of REMARKS.slice(0, 6)) expect(recordB.firstPage, line).toContain(squeeze(line));
+    // Page 1's excerpt stops at six lines; the issuing card prints the rest further on (RP-650).
+    for (const line of REMARKS.slice(6)) expect(recordB.firstPage, line).not.toContain(squeeze(line));
     expect(recordB.xml).toContain("<reply>");
   });
 
@@ -674,7 +680,7 @@ describe("the Owner's review: Code D, and a Code the Owner sent back", () => {
   it("marks a Code D record's last step as rejected, with the Consultant PM who recommended it and the Owner who confirmed it", () => {
     const record = shared.rejected;
     const entries = record.xml.split("<transition ").slice(1);
-    expect(entries.map((e) => /<label lang="en">([^<]+)<\/label>/.exec(e)![1])).toEqual(["Prepared", "Submit", "Recommend D", "Confirm"]);
+    expect(entries.map((e) => /<label lang="en">([^<]+)<\/label>/.exec(e)![1])).toEqual(["Prepared", "Submit", "Code D", "Confirm"]);
     expect(entries.map((e) => /mark="([a-z]+)"/.exec(e)![1])).toEqual(["done", "done", "done", "rejected"]);
     expect(record.xml).toMatch(/<outcome code="D" at="[^"]+">/);
     expect(record.xml).toMatch(/<chip code="D" issued="true"\/>/);
