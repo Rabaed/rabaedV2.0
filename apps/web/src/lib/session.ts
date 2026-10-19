@@ -22,6 +22,8 @@ import type {
   LinkedFrom,
   MemberVisibility,
   MyProjects,
+  MyCompany,
+  MySignature,
   NotificationList,
   NotificationSettingsView,
   NumberingSettings,
@@ -383,6 +385,16 @@ export function getLibraryWorkflows(): Promise<LibraryWorkflows | null> {
 /** A Workflow to look at (RP-442), for whoever reads it; null for anyone else. */
 export function getWorkflowMap(workflowId: string): Promise<WorkflowMapRead | null> {
   return apiGet<WorkflowMapRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/map`);
+}
+
+/** The signed-in Member's own Signature (RP-85): `{ signature: null }` without one; null if signed out. */
+export function getMySignature(): Promise<MySignature | null> {
+  return apiGet<MySignature>("/v1/me/signature");
+}
+
+/** The signed-in Member's own Company profile (RP-617): its logo and Stamp, and whether they may upload them; null if signed out. */
+export function getMyCompany(): Promise<MyCompany | null> {
+  return apiGet<MyCompany>("/v1/me/company");
 }
 
 /** The signed-in Member's notification settings and Project mutes; null if signed out. */

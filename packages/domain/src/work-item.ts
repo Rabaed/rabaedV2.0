@@ -559,6 +559,18 @@ export const workItemActions = z.object({
   discardDraft: z.boolean(),
   /** Change the Paper ref (RP-639): the viewer may edit the Draft now, and it has no Document Number. */
   editPaperRef: z.boolean(),
+  /**
+   * The viewer may take the `transitions` below but has no Signature yet (RP-85, ADR 0023):
+   * opening one shows the pop-up that sends them to Profile → Add Signature, before its
+   * Action Form, since taking it is refused `no_signature`. False when there are none.
+   */
+  signatureRequired: z.boolean(),
+  /**
+   * The viewer may take the `transitions` below but their Company has no Stamp yet (RP-617,
+   * ADR 0023): opening one shows the message that its Authorized Person must add it, before
+   * its Action Form, since taking it is refused `no_stamp`. False when there are none.
+   */
+  stampRequired: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),

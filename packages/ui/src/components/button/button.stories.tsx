@@ -5,7 +5,6 @@ import { storyText } from "../../storybook/locale.ts";
 // Aliased: this file has a story named Icon.
 import { Icon as IconGlyph } from "../icon/icon.tsx";
 import { Button, IconButton } from "./button.tsx";
-import { SignButton } from "./sign-button.tsx";
 
 const meta = {
   title: "Components/Button",
@@ -92,16 +91,6 @@ export const Icon: Story = {
   play: (context) => expectKeyboardOperable(context, storyText(context, { en: "Add", ar: "إضافة" })),
 };
 
-/** The signing variant: its name is the action; the ✍ marker is visual only. */
-export const Sign: Story = {
-  render: (args, context) => <SignButton onClick={args.onClick}>{storyText(context, { en: "Acknowledge", ar: "إقرار" })}</SignButton>,
-  play: async (context) => {
-    const name = storyText(context, { en: "Acknowledge", ar: "إقرار" });
-    await expect(context.canvas.getByRole("button", { name })).toHaveTextContent("✍");
-    await expectKeyboardOperable(context, name);
-  },
-};
-
 /** Every variant side by side, for the visual baseline. */
 export const AllVariants: Story = {
   render: (args, context) => (
@@ -111,12 +100,11 @@ export const AllVariants: Story = {
       <Button {...args} variant="ghost">{storyText(context, { en: "Cancel", ar: "إلغاء" })}</Button>
       <Button {...args} variant="danger">{storyText(context, { en: "Remove", ar: "إزالة" })}</Button>
       <Button {...args} disabled>{storyText(context, { en: "Submit", ar: "إرسال" })}</Button>
-      <SignButton onClick={args.onClick}>{storyText(context, { en: "Acknowledge", ar: "إقرار" })}</SignButton>
     </div>
   ),
 };
 
-/** On a phone: every size of Button, IconButton and SignButton is at least 44 × 44px. */
+/** On a phone: every size of Button and IconButton is at least 44 × 44px. */
 export const Phone: Story = {
   parameters: phone,
   render: (args, context) => (
@@ -129,13 +117,11 @@ export const Phone: Story = {
       <IconButton {...args} variant="ghost" size="sm" label={storyText(context, { en: "Remove", ar: "إزالة" })}>
         <IconGlyph name="minus" />
       </IconButton>
-      <SignButton onClick={args.onClick}>{storyText(context, { en: "Acknowledge", ar: "إقرار" })}</SignButton>
-      <SignButton onClick={args.onClick} size="sm">{storyText(context, { en: "Sign", ar: "توقيع" })}</SignButton>
     </div>
   ),
   play: async ({ canvas }) => {
     const buttons = canvas.getAllByRole("button");
-    await expect(buttons).toHaveLength(6);
+    await expect(buttons).toHaveLength(4);
     for (const button of buttons) await expectTouchTarget(button);
   },
 };

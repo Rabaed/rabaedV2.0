@@ -12,8 +12,10 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `sign-in/page.tsx` | `/sign-in` | Sign-in form |
 | `accept-invitation/page.tsx` | `/accept-invitation` | Accept an invitation to a Company or Project |
 | `health/page.tsx` | `/health` | API health check |
-| `profile/page.tsx` | `/profile` | The Member's profile and notification settings |
+| `profile/page.tsx` | `/profile` | The Member's profile: their Signature and notification settings |
+| `profile/signature/page.tsx` | `/profile/signature` | Add Signature: draw, type or upload it; `?returnTo=` the item the pop-up came from (RP-85) |
 | `notifications/page.tsx` | `/notifications` | The Member's notifications, newest first, each linking to its item |
+| `company/page.tsx` | `/company` | The Company profile: its logo and Stamp, which its Authorized Person uploads (RP-617) |
 | `members/page.tsx` | `/members` | The Company's Members (the Authorized Person manages them) |
 | `participants/page.tsx` | `/participants` | Projects the Company takes part in, and invitations to accept |
 | `participants/[participantId]/page.tsx` | `/participants/:participantId` | One Participant and its Project Members |

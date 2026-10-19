@@ -16,8 +16,9 @@ import {
 } from "@rabaed/domain";
 import { useId, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { buttonVariants } from "../button/button.tsx";
+import { Button, buttonVariants } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
+import { Checkbox } from "../form/checkbox.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { EmptyState } from "../feedback/states.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
@@ -31,6 +32,9 @@ import { stageColour } from "../status/stage-colour.ts";
 import { StageDot, StagePill } from "../status/stage-pill.tsx";
 import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
+import { SnagBulkBar, type SnagBulkActions } from "./snag-bulk.tsx";
+import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
+import { saveFile } from "./work-item-export.ts";
 import { ownerOf, placesOf } from "./work-item-board.tsx";
 import { locationLevels, WorkItemPager } from "./work-item-list.tsx";
 
@@ -108,6 +112,17 @@ export type SnagListLabels = {
   pageOf: (page: string, last: string) => string;
 };
 
+/**
+ * The List's bulk actions and Excel export (RP-629): rows chosen with checkboxes, then Reassign, Move Stage
+ * or Export on the bar; and the toolbar's Export of every row the filters match. Without it the List has none.
+ */
+export type SnagBulk = {
+  actions: SnagBulkActions;
+  exportLabels: SnagExportLabels;
+  /** Every row the viewer reads with the List's filters (null when it couldn't be read). */
+  loadExportRows: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>;
+};
+
 /** A Type the viewer may raise, for "+ New". */
 export type SnagNewType = { code: string; name: BilingualText };
 
@@ -131,6 +146,8 @@ export type SnagListProps = {
   photoUrls?: Readonly<Record<string, string>>;
   /** At the toolbar's end: the List / Kanban switch. */
   viewSwitch?: ReactNode;
+  /** Bulk select and Excel export in the List; the Kanban has neither. */
+  bulk?: SnagBulk;
   /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
 };
@@ -159,9 +176,36 @@ function SnagTypeChip({ code, name, className }: { code: string; name: string; c
 const dash = <span className="text-faint">—</span>;
 
 /** The views of the Snag List: the toolbar and type chips over the List or the Kanban. */
-export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQueryChange, newTypes, newHref, photoUrls = {}, viewSwitch, linkAs: Link = "a" }: SnagListProps) {
+export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQueryChange, newTypes, newHref, photoUrls = {}, viewSwitch, bulk, linkAs: Link = "a" }: SnagListProps) {
   const list: SnagListData = data.view === "list" ? data.list : data.board;
   const n = (value: number) => formatNumber(value, locale);
+  // Rows chosen on this page: a new page, filter or sort starts with none.
+  const pageKey = data.view === "list" ? data.list.items.map((i) => i.id).join(",") : "";
+  const [selection, setSelection] = useState<{ page: string; ids: ReadonlySet<string> }>({ page: pageKey, ids: new Set() });
+  const selected = selection.page === pageKey ? selection.ids : new Set<string>();
+  const select = (ids: ReadonlySet<string>) => setSelection({ page: pageKey, ids });
+  // Excel: the chosen rows, or every row the filters match; a line says what was written.
+  const [exporting, setExporting] = useState(false);
+  const [exportNote, setExportNote] = useState<string | null>(null);
+  const exportRows = async (rows: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>) => {
+    if (!bulk) return;
+    setExporting(true);
+    setExportNote(null);
+    try {
+      const got = await rows();
+      if (got === null) {
+        setExportNote(bulk.actions.labels.exportFailed);
+        return;
+      }
+      saveFile(snagExcel(got.items, locale, bulk.exportLabels, list.filters.locations));
+      const count = got.items.length;
+      setExportNote(got.capped ? bulk.actions.labels.exportedCapped(n(count), count) : bulk.actions.labels.exported(n(count), count));
+    } catch {
+      setExportNote(bulk.actions.labels.exportFailed);
+    } finally {
+      setExporting(false);
+    }
+  };
   // A new filter starts again from the first page.
   const change = (next: Partial<WorkItemQuery>) => {
     const { cursor: _cursor, page: _page, ...rest } = query;
@@ -262,7 +306,21 @@ export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQue
       </EmptyState>
     );
   } else if (data.view === "list") {
-    body = <SnagTable list={data.list} query={query} locale={locale} labels={labels} places={places} itemHref={itemHref} hrefFor={hrefFor} photoUrls={photoUrls} linkAs={Link} onQueryChange={change} />;
+    body = (
+      <SnagTable
+        list={data.list}
+        query={query}
+        locale={locale}
+        labels={labels}
+        places={places}
+        itemHref={itemHref}
+        hrefFor={hrefFor}
+        photoUrls={photoUrls}
+        linkAs={Link}
+        onQueryChange={change}
+        bulk={bulk && { bulk, selected, onSelect: select, exporting, onExport: (rows) => void exportRows(async () => ({ items: rows, capped: false })) }}
+      />
+    );
   } else {
     body = <SnagBoard board={data.board} locale={locale} labels={labels} places={places} itemHref={itemHref} photoUrls={photoUrls} linkAs={Link} />;
   }
@@ -294,7 +352,18 @@ export function SnagList({ data, query, locale, labels, hrefFor, itemHref, onQue
             {labels.clear}
           </Link>
         )}
+        {bulk && data.view === "list" && total > 0 && (
+          <Button variant="secondary" size="sm" disabled={exporting} onClick={() => void exportRows(bulk.loadExportRows)} className="h-[34px]">
+            <Icon name="file-download" />
+            {bulk.actions.labels.exportAll}
+          </Button>
+        )}
       </ListToolbar>
+      {exportNote !== null && (
+        <p role="status" className="text-caption text-muted">
+          {exportNote}
+        </p>
+      )}
       <TypeChips list={list} query={query} locale={locale} labels={labels} hrefFor={hrefFor} linkAs={Link} />
       {body}
     </div>
@@ -478,7 +547,7 @@ function Thumbnail({ row, urls, labels }: { row: WorkItemRow; urls: Readonly<Rec
   );
 }
 
-const cell = "h-12 border-b border-border-subtle bg-surface px-2 align-middle whitespace-nowrap group-hover/row:bg-hover";
+const cell = "h-12 border-b border-border-subtle bg-surface px-2 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
 const head = "sticky top-0 z-[3] h-[42px] border-b border-border-subtle bg-surface-subtle px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 
 /** The List: the page's rows under a folding header per Stage, in the Project's Stage order, each with its count. */
@@ -493,6 +562,7 @@ function SnagTable({
   photoUrls,
   linkAs: Link,
   onQueryChange,
+  bulk,
 }: {
   list: WorkItemListData;
   query: WorkItemQuery;
@@ -504,22 +574,55 @@ function SnagTable({
   photoUrls: Readonly<Record<string, string>>;
   linkAs: ElementType;
   onQueryChange: (next: Partial<WorkItemQuery>) => void;
+  /** Bulk select: the rows chosen on this page, and what the bar does with them. */
+  bulk?: {
+    bulk: SnagBulk;
+    selected: ReadonlySet<string>;
+    onSelect: (ids: ReadonlySet<string>) => void;
+    exporting: boolean;
+    onExport: (rows: WorkItemRow[]) => void;
+  };
 }) {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const n = (value: number) => formatNumber(value, locale);
   const columns = labels.columns;
   const headers = [columns.documentNumber, columns.subject, columns.type, columns.trade, columns.location, columns.raisedFrom, columns.with, columns.stepAge, columns.photo];
+  const colSpan = headers.length + (bulk ? 1 : 0);
+  const chosen = bulk ? list.items.filter((r) => bulk.selected.has(r.id)).length : 0;
   const groups = list.stages
     .map((stage) => ({ stage, rows: list.items.filter((r) => r.stage.key === stage.key) }))
     .filter((g) => g.rows.length > 0);
   const pager = <WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} linkAs={Link} onQueryChange={onQueryChange} />;
   return (
     <TableCard footer={pager}>
+      {bulk && bulk.selected.size > 0 && (
+        <SnagBulkBar
+          ids={list.items.filter((r) => bulk.selected.has(r.id)).map((r) => r.id)}
+          stages={list.stages}
+          locale={locale}
+          actions={bulk.bulk.actions}
+          exporting={bulk.exporting}
+          onExport={() => bulk.onExport(list.items.filter((r) => bulk.selected.has(r.id)))}
+          onClear={() => bulk.onSelect(new Set())}
+        />
+      )}
       <div role="region" aria-label={labels.table} tabIndex={0} className={cn("relative overflow-x-auto", focusRing)}>
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text">
           <caption className="sr-only">{labels.table}</caption>
           <thead>
             <tr>
+              {bulk && (
+                <th scope="col" className={cn(head, "w-11 ps-3 pe-0")}>
+                  <Checkbox
+                    aria-label={bulk.bulk.actions.labels.selectAll}
+                    targetBox
+                    className="align-middle"
+                    disabled={list.items.length === 0}
+                    checked={chosen === 0 ? false : chosen === list.items.length ? true : "indeterminate"}
+                    onCheckedChange={() => bulk.onSelect(new Set(chosen === list.items.length ? [] : list.items.map((r) => r.id)))}
+                  />
+                </th>
+              )}
               {headers.map((h) => (
                 <th key={h} scope="col" className={head}>
                   {h}
@@ -533,7 +636,7 @@ function SnagTable({
             return (
               <tbody key={stage.key}>
                 <tr>
-                  <th scope="colgroup" colSpan={headers.length} className="h-11 border-b border-border-subtle bg-surface px-3 text-start font-normal">
+                  <th scope="colgroup" colSpan={colSpan} className="h-11 border-b border-border-subtle bg-surface px-3 text-start font-normal">
                     <button
                       type="button"
                       aria-expanded={open}
@@ -558,13 +661,29 @@ function SnagTable({
                   rows.map((row) => (
                     <tr
                       key={row.id}
+                      data-selected={bulk?.selected.has(row.id) || undefined}
                       className="group/row cursor-pointer"
                       onClick={(event) => {
                         // eslint-disable-next-line rabaed/no-avoid-terms -- CSS element names: a click on a control in the row is its own
-                        if ((event.target as Element).closest("a, button")) return;
+                        if ((event.target as Element).closest("a, button, input, label")) return;
                         event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
                       }}
                     >
+                      {bulk && (
+                        <td className={cn(cell, "w-11 ps-4 pe-0")}>
+                          <Checkbox
+                            aria-label={bulk.bulk.actions.labels.selectRow(row.title)}
+                            className="size-4 align-middle"
+                            checked={bulk.selected.has(row.id)}
+                            onCheckedChange={(on) => {
+                              const next = new Set(bulk.selected);
+                              if (on === true) next.add(row.id);
+                              else next.delete(row.id);
+                              bulk.onSelect(next);
+                            }}
+                          />
+                        </td>
+                      )}
                       <td className={cell}>
                         {row.documentNumber ? (
                           <DocNo value={row.documentNumber} locale={locale} className="font-ui text-[12.5px] font-semibold text-muted" />
