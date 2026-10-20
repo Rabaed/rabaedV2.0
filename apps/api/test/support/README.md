@@ -14,4 +14,5 @@ are listed at the top of `packages/db/test-support/index.ts`.
 | `send-back.ts` | `addSendBackType`: a Rabaed Type on the test Send Back Workflow (`addTestWorkflow` options pass through). |
 | `internal-steps-type.ts` | `addInternalConsultantStepsType`, `INTERNAL_STEPS_TYPE`, `MANAGER_STEP`: a Type with two Consultant Steps. |
 | `checklist-template.ts` | `checklistTemplate`: a Project's Checklist Template for a WIR to pick (RP-651); `passChecklists`: the Consultant Engineer answers the WIR's checklist all Pass before Send to Manager (RP-86). |
+| `copy-work-items.ts` | `copyWorkItems`, `WorkItemCopy`: many items cheaply (RP-978). Copies one Draft the api just created, as the migrator, with every row the create path wrote, under new ids, Subjects and (optionally) `created_at`, so a test that pages over dozens of items makes one through the api, not all of them. |
 | `seed-demo.ts` | The global setup that seeds the demo into the test database, once. |
