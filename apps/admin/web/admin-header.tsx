@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.ts";
 import { strings } from "./strings.ts";
 
-// Rabaed Admin's React pages (Workflows, RP-443; Imports, RP-645): one header and one session.
+// Rabaed Admin's React pages (Workflows, RP-443; Imports, RP-645; Records, RP-670): one header and one session.
 // The sign-in and the other screens are the page at `/`; the language is the one it keeps.
 
 const localeKey = "rabaed-admin-locale";
@@ -57,7 +57,7 @@ export function AdminHeader({
 }: {
   locale: Locale;
   signedIn: SignedIn;
-  current: "workflows" | "imports";
+  current: "workflows" | "imports" | "records";
   onToggleLanguage: () => void;
 }) {
   const s = strings(locale);
@@ -65,7 +65,7 @@ export function AdminHeader({
     await api("DELETE", "/v1/session").catch(() => undefined);
     window.location.assign("/");
   };
-  const page = (href: string, key: "workflows" | "imports") =>
+  const page = (href: string, key: "workflows" | "imports" | "records") =>
     key === current ? (
       <a href={href} aria-current="page" className="font-semibold text-text">
         {s[key]}
@@ -84,6 +84,7 @@ export function AdminHeader({
         </a>
         {page("/workflows", "workflows")}
         {page("/register-imports", "imports")}
+        {page("/records", "records")}
       </nav>
       <span className="flex-1" />
       {typeof signedIn === "object" && (

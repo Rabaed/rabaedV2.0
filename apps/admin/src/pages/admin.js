@@ -9,6 +9,7 @@ const text = {
     otherLanguage: "العربية",
     workflowsLink: "Workflows",
     importsLink: "Imports",
+    recordsLink: "Records",
     signOut: "Sign out",
     signInTitle: "Sign in",
     email: "Email",
@@ -155,6 +156,7 @@ const text = {
     otherLanguage: "English",
     workflowsLink: "سير العمل",
     importsLink: "عمليات الاستيراد",
+    recordsLink: "السجلات",
     signOut: "تسجيل الخروج",
     signInTitle: "تسجيل الدخول",
     email: "البريد الإلكتروني",
@@ -351,6 +353,7 @@ function show(view, who) {
   $("sign-out").hidden = view !== "home";
   $("workflows-link").hidden = view !== "home";
   $("imports-link").hidden = view !== "home";
+  $("records-link").hidden = view !== "home";
   $("who").textContent = view === "home" ? who : "";
   if (view === "sign-in") {
     $("password-form").hidden = false;
