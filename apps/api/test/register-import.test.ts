@@ -1094,16 +1094,39 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       }
     });
 
-    it("is the plain 404 to C2, K1 and the Owner, and for an Engineer's import, which keeps none", async () => {
+    it("is the plain 404 to C2, K1 and the Owner", async () => {
       for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${imported.id}/original`));
       await expectHidden(tower.c1Engineer.get(`/v1/register-imports/${randomUUID()}/original`));
+    });
+
+    // RP-959: Rabaed Admin hands its Engineer's original over through the database (it has no
+    // file store), and the api stores it at the first download, as a Member's import keeps it.
+    it("is kept for a Rabaed Engineer's import too: C1's Members download it as uploaded, with no time; C2, K1 and the Owner get the plain 404", async () => {
       const defaultMember = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"]);
       const done = await api.engineerImport({
         for: { projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: defaultMember.id, reason: "Onboarding C1, original" },
         ...register,
       });
-      expect((await ok(getImport(defaultMember.caller, done.importId), 200)).json().original).toBe(false);
-      await expectHidden(defaultMember.caller.get(`/v1/register-imports/${done.importId}/original`));
+      const handedOver = async () =>
+        (await sql<{ n: number }>`select count(*)::int as n from register_import_original_hand_over where import_id = ${done.importId}::uuid`.execute(migrator)).rows[0]!.n;
+      // Nobody else's request stores it, nor takes it off the hand-over.
+      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) {
+        await expectHidden(getImport(by, done.importId));
+        await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
+      }
+      expect(await handedOver()).toBe(1);
+      // The first download stores it and empties the hand-over; the rest read it from the store.
+      for (const by of [defaultMember.caller, tower.c1Pm, tower.c1Engineer]) {
+        expect((await ok(getImport(by, done.importId), 200)).json().original).toBe(true);
+        const res = await ok(by.get(`/v1/register-imports/${done.importId}/original`), 200);
+        expect(res.rawPayload.equals(Buffer.from(xlsx.content, "base64"))).toBe(true);
+        expect(res.headers["content-disposition"]).toBe(`attachment; filename="import-register.xlsx"; filename*=UTF-8''import-register.xlsx`);
+        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined();
+        const { date: _date, ...rest } = res.headers;
+        expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}|GMT|\d{2}:\d{2}/);
+        expect(await handedOver()).toBe(0);
+      }
+      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
     });
 
     it("keeps a preview's file to its importer", async () => {

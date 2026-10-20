@@ -66,6 +66,8 @@ const allow: GrantAllowList = {
   "app.confirm_register_import_by_engineer": ["rabaed_admin"],
   "app.register_import_results_by_engineer": ["rabaed_admin"],
   "app.register_import_raisers": ["rabaed_admin"],
+  // RP-959: the Engineer's original register, handed over for the api to store.
+  "app.hand_over_register_import_original_by_engineer": ["rabaed_admin"],
   "app.register_import_raisable_types": both,
   "app.current_participant_ids": both,
   "app.current_project_ids": both,

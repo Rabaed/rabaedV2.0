@@ -31,7 +31,8 @@ import {
 } from "../src/register-import.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
-const api = await createTestApi();
+// With the api's file store: C1's Members download an Engineer's original register through it (RP-959).
+const api = await createTestApi({ files: true });
 const admin = await createTestAdmin();
 // Reads the audit trail and the outbox directly.
 const adminDb = createDb(testDatabaseUrls().admin, { max: 1 });
@@ -228,7 +229,8 @@ describe("An Engineer's import for C1", () => {
           target_kind: "submittal_register_import",
           target_id: previewed.id,
           reason,
-          after: { participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, outcome: "previewed" },
+          // RP-959: the original register handed over to the api, which stores it.
+          after: { participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, outcome: "previewed", original: "handed_over" },
         },
         { action: "confirm_register_import", target_kind: "submittal_register_import", target_id: previewed.id, reason, after: { rowsCreated: 3 } },
       ]);
@@ -258,6 +260,48 @@ describe("An Engineer's import for C1", () => {
       await expectHidden(k1Person.caller.get(`/v1/register-imports/${previewed.id}`));
       expect((await ok(k1Person.caller.get(`/v1/projects/${tower.projectId}/register-imports`), 200)).json().imports).toEqual([]);
       for (const id of [draftOf("Panels"), draftOf("Fans")]) await expectHidden(k1Person.caller.get(`/v1/work-items/${id}`));
+    });
+
+    // RP-959: Rabaed Admin has no file store and no way to the api; it hands the original over
+    // through the database, and the api stores it, as it keeps a Member's.
+    it("RP-589-3: keeps the original register, which C1's Members download as uploaded with no time, and nobody else", async () => {
+      for (const by of [hafiz.caller, tower.c1Pm]) {
+        expect((await ok(by.get(`/v1/register-imports/${previewed.id}`), 200)).json().original).toBe(true);
+        const res = await ok(by.get(`/v1/register-imports/${previewed.id}/original`), 200);
+        expect(res.rawPayload.equals(Buffer.from(file().content, "base64"))).toBe(true);
+        expect(res.headers["content-type"]).toBe("text/csv; charset=utf-8");
+        expect(res.headers["content-disposition"]).toContain(`filename="TMC_Register_Rev4.csv"`);
+        for (const header of ["last-modified", "etag", "expires"]) expect(res.headers[header], header).toBeUndefined();
+      }
+      await expectHidden(k1Person.caller.get(`/v1/register-imports/${previewed.id}/original`));
+    });
+
+    it("takes the original only for the Engineer's own new preview, once, and only on Rabaed Admin's role", async () => {
+      const handOver = (db: typeof adminDb, engineerId: string, importId: string) =>
+        sql<{ outcome: string }>`select app.hand_over_register_import_original_by_engineer(${engineerId}::uuid, ${importId}::uuid, ${Buffer.from("x")}) as outcome`
+          .execute(db)
+          .then((r) => r.rows[0]!.outcome);
+      // Confirmed, and its original handed over already.
+      expect(await handOver(adminDb, engineer.id, previewed.id)).toBe("not_found");
+      const fresh: RegisterImport = (await ok(engineer.browser.post("/v1/register-imports", request()), 201)).json();
+      // Handed over by the preview itself: a second is refused.
+      expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("not_found");
+      // A preview keeping none yet (as the migrator leaves it): another Engineer's hand-over and the
+      // app role's are refused; the Engineer's own is taken, once.
+      const urls = testDatabaseUrls();
+      const migrator = createDb(urls.migrator, { max: 1 });
+      const appDb = createDb(urls.app, { max: 1 });
+      try {
+        await sql`delete from register_import_original_hand_over where import_id = ${fresh.id}::uuid`.execute(migrator);
+        await sql`update submittal_register_import set source_file_id = null where id = ${fresh.id}::uuid`.execute(migrator);
+        const other = await admin.signedInEngineer();
+        expect(await handOver(adminDb, other.id, fresh.id)).toBe("not_found");
+        await expect(handOver(appDb, engineer.id, fresh.id)).rejects.toThrow(/permission denied/);
+        expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("handed_over");
+        expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("not_found");
+      } finally {
+        await Promise.all([migrator.destroy(), appDb.destroy()]);
+      }
     });
 
     it("tells nobody: the confirm writes no outbox row", async () => {
