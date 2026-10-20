@@ -22,7 +22,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `notifications/` | `NotificationSettings` |
 | `numbering/` | Document Numbering settings: `DocumentNumbering`, `NumberingCounters`, `NumberingVersions`, `ParticipantCodes`, pattern editor |
 | `overlay/` | `Dialog`, `Sheet`, `Popover`, `Tooltip`, `ToastProvider`, `useToast` |
-| `packages/` | Packages (spec RP-616): `PackageChip`, `PackagePage` and its dialogs (rename, delete, Add items, Submit Package) |
+| `packages/` | Packages (spec RP-616): `PackagesBoard`, `PackageChip`, `PackagePage` and its dialogs (rename, delete, Add items, Submit Package), its bulk Transitions (`usePackageBulk`, `sharedBulkTransitions`) and `PackageComments` |
 | `photo/` | The one photo tool (RP-656): `PhotoTool` (Take photo / Upload, thumbnails), `PhotoViewer` (Annotated / Original), `PhotoAnnotator` (the annotate view); `annotate-marks.ts` |
 | `register-import/` | The Submittal Register Import wizard (RP-637, RP-645), one for the customer app and Rabaed Admin: `RegisterImportWizard` (each app gives its calls, `registerImport` messages and links), `ErrorRows`, `ImportRows`, `RowReasons` |
 | `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
