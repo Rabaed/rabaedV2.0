@@ -472,7 +472,7 @@ describe("An Engineer's import and another Project's Types and Workflows (RP-657
     expect(fields.formFields.flatMap((f) => f.types)).not.toContain(formed);
     expect(fields.types.map((t) => t.code)).not.toContain(theirs);
     const seen = JSON.stringify(fields);
-    for (const id of [theirs, foreign.projectId, foreign.electrical, foreign.buildingA, foreign.workflowId, foreign.formId]) expect(seen).not.toContain(id);
+    for (const id of [theirs, ...foreign.ids]) expect(seen).not.toContain(id);
     expect(fields).toEqual(theirFields);
   });
 
@@ -489,7 +489,7 @@ describe("An Engineer's import and another Project's Types and Workflows (RP-657
     // "Electrical" and "Building A" are the foreign Project's codes and names too: only C1's Project's match.
     expect(previewed.rows.map((r) => [r.trade.match?.id, r.location.match?.id])).toEqual(previewed.rows.map(() => [tower.electrical, tower.buildingA]));
     const seen = JSON.stringify([values, previewed]);
-    for (const id of [foreign.projectId, foreign.electrical, foreign.buildingA, foreign.workflowId, foreign.formId]) expect(seen).not.toContain(id);
+    for (const id of foreign.ids) expect(seen).not.toContain(id);
   });
 });
 

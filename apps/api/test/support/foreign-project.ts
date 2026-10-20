@@ -11,8 +11,11 @@ import { sql } from "kysely";
 import type { TestApi } from "./harness.ts";
 import { bilingual, type Company } from "./tower.ts";
 
-/** `prefix` and three random capital letters: a Type code that is new on every call. */
-const typeCode = (prefix: string) => `${prefix}${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
+/**
+ * `prefix` and four random capital letters (a Type code is at most six): new on every call. A Rabaed Type's
+ * code is unique across the whole test database, and every test file shares it.
+ */
+const typeCode = (prefix: string) => `${prefix}${Array.from({ length: 4 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
 
 /**
  * A copy of the MAR's latest published Workflow Version, as Version 1 of `projectId`'s own Workflow,
@@ -105,6 +108,8 @@ export type ForeignProject = {
   lentType: string;
   /** With `host`: the code of a Rabaed Type on the host Project's own Workflow whose Form is the foreign Project's. */
   formedType: string | undefined;
+  /** The ids a response to the host Project's Members never holds: the Project, its Trade, Location, Workflow and Form. */
+  ids: string[];
 };
 
 /**
@@ -144,5 +149,5 @@ export async function buildForeignProject(api: TestApi, migrator: Db, { code = "
       from work_item_type mar where mar.code = 'MAR' and mar.owner_kind = 'rabaed'
     `.execute(migrator);
   }
-  return { company, projectId, electrical, buildingA, workflowId, formId, ownType, lentType, formedType };
+  return { company, projectId, electrical, buildingA, workflowId, formId, ownType, lentType, formedType, ids: [projectId, electrical, buildingA, workflowId, formId] };
 }

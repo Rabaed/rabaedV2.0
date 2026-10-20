@@ -1245,7 +1245,7 @@ describe("The Types a register may name are the ones \"+ New\" offers (RP-960)",
     expect(fields.types.map((t) => t.code)).not.toContain(lent);
     expect(fields.types.map((t) => t.code).sort()).toEqual([...raisable].sort());
     const seen = JSON.stringify(fields);
-    for (const id of [foreign.ownType, foreign.projectId, foreign.electrical, foreign.buildingA, foreign.workflowId, foreign.formId]) expect(seen).not.toContain(id);
+    for (const id of [foreign.ownType, ...foreign.ids]) expect(seen).not.toContain(id);
   });
 
   it("refuses a row naming it as a Type the importer may not raise, and the other Project's own as unknown; its Trade and Location match nothing", async () => {
