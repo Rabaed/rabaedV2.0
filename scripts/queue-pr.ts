@@ -2,7 +2,8 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { REVIEWED_LABEL } from "./reviewed-label.ts";
-import { DOCS_ONLY_LABEL, isDoc, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { sharedFilesMix } from "./shared-files.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -91,33 +92,6 @@ export function conflictedFiles(output: string): string[] {
     if (match?.[1]) paths.add(match[1]);
   }
   return [...paths];
-}
-
-/** Root shared files (rule 3): exact paths, then path prefixes. */
-const ROOT_SHARED = { files: ["package.json", "pnpm-lock.yaml"], prefixes: [".github/workflows/"] };
-const isRootShared = (file: string) => ROOT_SHARED.files.includes(file) || ROOT_SHARED.prefixes.some((prefix) => file.startsWith(prefix));
-const rootSharedList = [...ROOT_SHARED.files, ...ROOT_SHARED.prefixes.map((prefix) => `${prefix}*`)].join(", ");
-const isWorkspacePackageJson = (file: string) => file.endsWith("/package.json");
-
-/** Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR, with at most docs. */
-export function rootSharedFilesBreach(files: string[], isDependencyOnlyChange: (file: string) => boolean = () => false): { root: string[]; others: number; example: string } | undefined {
-  const root = files.filter(isRootShared);
-  const others = files.filter((file) => !isRootShared(file) && !isDoc(file) && !isDependencyOnlyChange(file));
-  const [example] = others;
-  return root.length > 0 && example !== undefined ? { root, others: others.length, example } : undefined;
-}
-
-const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
-
-/** RP-573: true when two versions of a workspace package.json differ only in the dependency fields (both must exist and parse). */
-export function onlyDependencyFieldsChanged(before: string | undefined, after: string | undefined): boolean {
-  if (before === undefined || after === undefined) return false;
-  try {
-    const strip = (text: string) => JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(text) as Record<string, unknown>).filter(([key]) => !DEPENDENCY_FIELDS.includes(key))));
-    return strip(before) === strip(after);
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -239,22 +213,10 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
     warnings.push(`Warning: HEAD (${checkout}) is behind PR #${pr}'s head (${head}); checked and queued the PR's head. Pull to catch up.`);
   }
 
-  // A workspace package.json that changes only dependency fields belongs to a dependencies-only PR beside the lockfile (RP-573).
-  const shared = rootSharedFilesBreach(changed, (file) => {
-    if (!isWorkspacePackageJson(file)) return false;
-    const { before, after } = seam.packageJsonVersions(head, file);
-    return onlyDependencyFieldsChanged(before, after);
-  });
+  // The same rule as `pnpm verify` and the pre-push hook (RP-993), so a mix shows before the push.
+  const shared = sharedFilesMix(changed, (file) => seam.packageJsonVersions(head, file));
   if (shared) {
-    return fail(
-      `PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`,
-      ...shared.root.map((file) => `  shared: ${file}`),
-      `  and ${shared.others} other file(s), e.g. ${shared.example}`,
-      ...(changed.some(isWorkspacePackageJson)
-        ? ["Note: a workspace package.json beside the lockfile is allowed when only its dependency fields (dependencies/devDependencies/peerDependencies/optionalDependencies) change."]
-        : []),
-      `Fix: a change to root ${rootSharedList} is its own PR (only those and docs). Split it out, then run \`pnpm queue\` again.`,
-    );
+    return fail(`PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`, ...shared, "Split it out, then run `pnpm queue` again.");
   }
 
   const merge = seam.mergeTree(head);

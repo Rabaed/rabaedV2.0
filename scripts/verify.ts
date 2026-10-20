@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
 import { failureEnd, finalLine, isSeamStep, runStep, selectSteps, tail } from "./verify-steps.ts";
@@ -12,7 +13,8 @@ import { isRunning } from "./worktrees-stale.ts";
 // those files, RP-979); a failing step prints the tail of its output, so a setup
 // failure shows. Needs the lane's .env (`pnpm lane:env`), and stops before the
 // first step when its Postgres doesn't answer; a seam step whose Postgres was
-// terminated mid-run ends on one line saying so (RP-994).
+// terminated mid-run ends on one line saying so (RP-994). A branch that mixes root
+// shared files with code gets a warning first and again above the last line (RP-993).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -30,6 +32,25 @@ if (taken.tookOver) console.log(`verify ${taken.tookOver}`);
 process.on("exit", () => releaseLock(lock, process.pid));
 process.on("SIGINT", () => process.exit(130));
 process.on("SIGTERM", () => process.exit(143));
+
+// Rule 3 before anything runs (RP-993): root shared files (the lockfile, say) beside code
+// showed only at `pnpm queue`, by the same rule, after the whole branch was built. A warning,
+// said again above the last line, not a stop: a feature branch may build on a dependencies-only
+// PR that has not merged yet.
+let mix: string[] | undefined;
+try {
+  mix = branchMix(root);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+const mixWarning = mix && [
+  // eslint-disable-next-line rabaed/no-avoid-terms -- git's changed files and `pnpm queue` (GitHub's merge queue), by their own names.
+  "Warning: this branch changes root shared file(s) together with other files against origin/main, so `pnpm queue` will refuse it (planning/parallel-sessions.md rule 3):",
+  ...mix,
+  "(Against an old origin/main, main's own changes count too: `git fetch origin main` first.)",
+].join("\n");
+if (mixWarning) console.error(`${mixWarning}\n`);
 
 // The lane's Postgres first (RP-575): a stopped container otherwise showed only at
 // test:seam1, after every step before it had run.
@@ -89,4 +110,5 @@ for (const { name, script } of steps) {
 }
 const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
+if (mixWarning) console.error(`\n${mixWarning}`);
 console.log(`\n${finalLine({ sha, dirty: status !== "", steps: passed })}`);

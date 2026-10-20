@@ -10,10 +10,11 @@ const zero = "0000000000000000000000000000000000000000";
 const branchPush = `refs/heads/RP-989-pre-push-hook ${"a".repeat(40)} refs/heads/RP-989-pre-push-hook ${"b".repeat(40)}\n`;
 
 /** A seam whose checks exit with the given codes, and that records which ran. */
-function seam(codes: { lint?: number; typecheck?: number } = {}, files: string[] | undefined = ["apps/api/src/a.ts"], tree = { head: "a".repeat(40), dirty: false }) {
+function seam(codes: { lint?: number; typecheck?: number } = {}, files: string[] | undefined = ["apps/api/src/a.ts"], tree = { head: "a".repeat(40), dirty: false }, mix?: string[]) {
   const ran: string[] = [];
   const fake: PrePushSeam = {
     changedFiles: () => files,
+    branchMix: () => mix,
     workingTree: () => tree,
     run: async (script) => {
       ran.push(script);
@@ -67,6 +68,18 @@ describe("prePush", () => {
     const { fake, ran } = seam({ lint: 1 }, ["docs/visibility.md", "planning/notes.md", "docs/adr/0030.md"]);
     expect((await prePush(branchPush, fake)).ok).toBe(true);
     expect(ran).toEqual([]);
+  });
+
+  it("names a branch that mixes the lockfile with code, which pnpm queue will refuse, and still lets the push go (RP-993)", async () => {
+    const mix = ["  shared: pnpm-lock.yaml", "  and 1 other file(s), e.g. apps/admin/src/a.ts", "For dependencies: put … in a dependencies-only PR first"];
+    const passing = await prePush(branchPush, seam({}, undefined, undefined, mix).fake);
+    expect(passing.ok).toBe(true);
+    expect(passing.message).toContain("Warning: RP-989-pre-push-hook changes root shared file(s) together with other files, so `pnpm queue` will refuse it (rule 3):");
+    expect(passing.message).toContain(mix.join("\n"));
+    const docsOnly = await prePush(branchPush, seam({}, ["docs/a.md"], undefined, mix).fake);
+    expect(docsOnly.message).toContain("  shared: pnpm-lock.yaml");
+    expect((await prePush(branchPush, seam({ lint: 1 }, undefined, undefined, mix).fake)).message).toContain("  shared: pnpm-lock.yaml");
+    expect((await prePush(branchPush, seam().fake)).message).not.toContain("shared:");
   });
 
   it("runs the checks when the push changes a doc and code, or its files can't be told", async () => {
