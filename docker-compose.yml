@@ -4,9 +4,12 @@
 # container, volume and port (see "Several worktrees at once" in README.md).
 name: ${COMPOSE_PROJECT_NAME:-rabaed}
 
+# Every service runs under an init (`init: true`): a server as PID 1 never reaps exited children,
+# and rustfs turned zombie that way, so Docker could neither kill nor remove the lane (RP-983).
 services:
   db:
     image: postgres:16
+    init: true
     # Per-function timing for plpgsql (pg_stat_user_functions); see "Tests" in README.md.
     command: postgres -c track_functions=pl
     environment:
@@ -27,6 +30,7 @@ services:
   # mailer posts to the same port's API. No volume: the mail is throwaway.
   mailpit:
     image: axllent/mailpit:v1.31.3
+    init: true
     ports:
       - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
     healthcheck:
@@ -40,6 +44,7 @@ services:
   # The api creates the bucket on start. Keys are local-only placeholders (.env.example).
   files:
     image: rustfs/rustfs:1.0.0
+    init: true
     environment:
       RUSTFS_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY_ID:-rabaed-local}
       RUSTFS_SECRET_KEY: ${FILE_STORE_SECRET_ACCESS_KEY:-local-dev-only}
