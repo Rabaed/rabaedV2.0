@@ -265,10 +265,10 @@ describe("notification emails", () => {
 
   it("Record ready (RP-950): the Document Number, Subject and what happened; it links to the item and names no Company and no person", () => {
     const en = renderEmail("notification-record-ready", "en", examples["notification-record-ready"]);
-    expect(en.subject).toBe(`⁦${DOC}⁩ · Cable trays <Level 2> · Record ready to download`);
+    expect(en.subject).toBe(`\u2066${DOC}\u2069 · Cable trays <Level 2> · Record ready to download`);
     expect(en.text).toContain(item.link);
     const ar = renderEmail("notification-record-ready", "ar", examples["notification-record-ready"]);
-    expect(ar.subject).toBe(`⁦${DOC}⁩ · Cable trays <Level 2> · السجل جاهز للتنزيل`);
+    expect(ar.subject).toBe(`\u2066${DOC}\u2069 · Cable trays <Level 2> · السجل جاهز للتنزيل`);
     expect(ar.text).toContain(item.link);
     for (const { text } of [en, ar]) {
       expect(text).not.toContain(k1.en);
