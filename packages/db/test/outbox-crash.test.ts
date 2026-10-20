@@ -5,11 +5,12 @@
 // dead-lettered instead of being retried forever. While a handler runs, no other
 // worker takes its row.
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { sql } from "kysely";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { createDb, processOutbox } from "../src/index.ts";
-import { rolledBack, testDatabaseUrls } from "../test-support/index.ts";
+import { createDb, processOutbox, withMember } from "../src/index.ts";
+import { digits, rolledBack, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
@@ -22,11 +23,33 @@ const headOfLine = sql<Date>`(
   from outbox where processed_at is null and dead_at is null
 )`;
 
+let project: Promise<string> | undefined;
+/** This file's own Project (RP-995: no seed row is assumed), made once by a Member of a Company of its own. */
+function ownProject(): Promise<string> {
+  project ??= (async () => {
+    const tag = randomUUID().slice(0, 8);
+    const { rows } = await sql<{ id: string }>`
+      with e as (insert into rabaed_engineer (email, full_name) values (${`eng-${tag}@rabaed.test`}, 'Outbox') returning id),
+        c as (
+          insert into company (legal_name, cr_number, vat_number, onboarded_by)
+          select '{"en": "Outbox", "ar": "Outbox"}'::jsonb, ${digits(10)}, ${`3${digits(13)}3`}, e.id from e returning id
+        )
+      insert into member (company_id, email, full_name, status, can_create_projects)
+      select c.id, ${`creator-${tag}@rabaed.test`}, '{"en": "Outbox", "ar": "Outbox"}'::jsonb, 'active', true from c returning id
+    `.execute(migrator);
+    const created = await withMember(worker, rows[0]!.id, (trx) =>
+      sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Outbox", "ar": "Outbox"}'::jsonb, 'ROC', 'contractor')`.execute(trx),
+    );
+    return created.rows[0]!.project_id;
+  })();
+  return project;
+}
+
 /** A notification row due before every other row; returns its id. */
 async function firstInLine(): Promise<string> {
   const { rows } = await sql<{ id: string }>`
     insert into outbox (kind, project_id, payload, available_at)
-    select 'notification', id, '{"test": "RP-958"}', ${headOfLine} from project limit 1
+    values ('notification', ${await ownProject()}::uuid, '{"test": "RP-958"}', ${headOfLine})
     returning id
   `.execute(migrator);
   return rows[0]!.id;

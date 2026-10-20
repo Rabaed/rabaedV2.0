@@ -140,3 +140,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271006 | RP-670 | 23 | record_job_monitor (moved from 20271002: main's RP-973 took 20271003) |
 | 20271003 | RP-973 | 52 | package_write_lock_order |
 | 20271004 | RP-973 | 52 | discard_package_locks_unseen_items |
+| 20271008 | RP-653 | 43 | previous_item_raised_counts |

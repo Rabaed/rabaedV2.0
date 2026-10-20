@@ -25,6 +25,8 @@
  *                                   Template; with call/outcome/take/pickUp as a Member. The options are `SeamTwoOptions`.
  *   wirAtConsultant(tower, options) seam-two-tower.ts: a WIR on `options.type` with the Template copied, Submitted and held
  *                                   by K1's Engineer; returns its id.
+ *   c2Draft(tower, options)         seam-two-tower.ts: a Draft C2's Engineer raises in Building B; the positive control
+ *                                   beside a refusal to C2 (RP-995). Returns its id.
  *   bilingual(en), digits(n)        seam-two-tower.ts: a name with the same text in both languages; n random digits for a unique code.
  *   joinProject(app, projectId, invite, authorizedPersonId)   join-project.ts: invites a Company and accepts as its Authorized Person.
  * Every Member of the test database has a Signature, and every Company a Stamp, by default (RP-85,
@@ -55,8 +57,10 @@ export { joinProject } from "./join-project.ts";
 export {
   bilingual,
   buildSeamTwoTower,
+  c2Draft,
   digits,
   wirAtConsultant,
+  type C2DraftOptions,
   type SeamTwoCompany,
   type SeamTwoOptions,
   type SeamTwoTower,
