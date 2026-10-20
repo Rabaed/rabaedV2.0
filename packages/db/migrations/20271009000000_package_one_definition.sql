@@ -2,11 +2,11 @@
 --
 -- * "The latest Revision of each chain": app.latest_revisions(items), of the given items not
 --   discarded, the latest Revision of each chain (`root_id`, highest `revision_no`) leaving out
---   cancelled ones; a chain of only cancelled ones gives its latest, `counted` false. Both readers
---   pass their own items: app.package_latest_items those the caller sees (per viewer, as before),
---   app.recompute_package_status every item in the Package (never per viewer, as before). Done now
---   reads the Package's own items, as its counts do; a Revision joins its item's Package by itself
---   (app.revision_joins_package), so a chain's latest is in the Package.
+--   cancelled ones; a chain of only cancelled ones gives its latest, `counted` false. Each reader
+--   passes its own items, as before: app.package_latest_items the Package's items the caller sees
+--   (per viewer); app.recompute_package_status every item of the chains of the Package's items not
+--   cancelled nor discarded, wherever each is (over the whole chain, never per viewer: a Code C
+--   added to a Package after its Revision closed at Code A outside it is Done).
 -- * "Still to Submit": app.package_unsubmitted(package), every item in the Package not Submitted,
 --   not closed, not discarded. app.package_hides_unsubmitted asks it for one the caller doesn't
 --   see; app.package_items_to_submit gives the api those the caller sees (Submit Package and its
@@ -53,7 +53,10 @@ create or replace function app.recompute_package_status(p_package_id uuid) retur
         return;
       end if;
       with latest as (
-        select w.* from app.latest_revisions(array(select w.id from work_item w where w.package_id = p_package_id)) l
+        select w.* from app.latest_revisions(array(
+          select c.id from work_item k join work_item c on c.root_id = k.root_id
+          where k.package_id = p_package_id and k.discarded_at is null and k.outcome is distinct from 'cancelled'
+        )) l
         join work_item w on w.id = l.work_item_id
         where l.counted
       )

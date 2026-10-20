@@ -500,9 +500,12 @@ describe("RP-642: Done follows the closures, in the same transaction, and a Revi
       expect(withMember(app, c1Pm, (trx) => query.execute(trx))).rejects.toThrow(/permission denied/);
     await refused(sql`select * from app.latest_revisions(array[${item}::uuid])`);
     await refused(sql`select * from app.package_unsubmitted(${packageId}::uuid)`);
-    // The positive control: the same Member reads the per-viewer ones.
-    expect(await call(c1Pm, sql<{ work_item_id: string }>`select work_item_id from app.package_latest_items(${packageId}::uuid)`)).not.toEqual([]);
-    expect(await call(c1Pm, sql<{ id: string }>`select i as id from app.package_items_to_submit(${packageId}::uuid) i`)).toEqual([]);
+    // The positive control: the same Member reads the per-viewer ones, of an Open Package holding their own Draft.
+    const open = (await createPackage(c1Pm, "Still to Submit")).package_id;
+    const own = await draft(c1Pm, "C1 PM's own Draft");
+    expect(await addItem(c1Pm, open, own)).toBe("added");
+    expect(await call(c1Pm, sql<{ work_item_id: string }>`select work_item_id from app.package_latest_items(${open}::uuid)`)).toEqual([{ work_item_id: own }]);
+    expect(await call(c1Pm, sql<{ id: string }>`select i as id from app.package_items_to_submit(${open}::uuid) i`)).toEqual([{ id: own }]);
   });
 });
 

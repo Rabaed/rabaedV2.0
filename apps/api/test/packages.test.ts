@@ -895,6 +895,17 @@ describe("RP-642: a Code C keeps the Package In Progress until its Revision clos
     await codeAs(revision, "approve_a");
     expect(await statusOf(pkg.id)).toBe("done");
   });
+
+  it("RP-976: over the whole chain, a Code C whose Revision closed at Code A outside the Package makes it Done", async () => {
+    const revised = await submitted(at, at.c1Engineer, at.c1Pm, "Coded C before the Package");
+    await codeAs(revised, "revise_c");
+    const revision = await revisionOf(revised);
+    await submitAlone(revision);
+    await codeAs(revision, "approve_a");
+    const pkg = await createPackage(at.c1Pm, "Joined after its Revision");
+    await ok(addItem(at.c1Pm, pkg.id, revised));
+    expect(await statusOf(pkg.id)).toBe("done");
+  });
 });
 
 // Story 30, as the product owner settled it on 2026-10-19: the counts are of the latest
