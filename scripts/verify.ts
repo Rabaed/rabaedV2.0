@@ -2,18 +2,34 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
-import { finalLine, loadFailure, runStep, selectSteps, tail } from "./verify-steps.ts";
+import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
+import { failureEnd, finalLine, isSeamStep, runStep, selectSteps, tail } from "./verify-steps.ts";
+import { isRunning } from "./worktrees-stale.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
 // its exit code (a seam step that failed only on timeouts gets one re-run of just
 // those files, RP-979); a failing step prints the tail of its output, so a setup
 // failure shows. Needs the lane's .env (`pnpm lane:env`), and stops before the
-// first step when its Postgres doesn't answer.
+// first step when its Postgres doesn't answer; a seam step whose Postgres was
+// terminated mid-run ends on one line saying so (RP-994).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
 const tailLines = 40;
+
+// One verify per worktree, before any other check (RP-996): a second run would share the
+// lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
+const lock = lockFile(root);
+const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, isRunning);
+if (!taken.acquired) {
+  console.error(`${taken.message} Let it finish; if that pid is not a verify run, delete ${lock}.`);
+  process.exit(1);
+}
+if (taken.tookOver) console.log(`verify ${taken.tookOver}`);
+process.on("exit", () => releaseLock(lock, process.pid));
+process.on("SIGINT", () => process.exit(130));
+process.on("SIGTERM", () => process.exit(143));
 
 // The lane's Postgres first (RP-575): a stopped container otherwise showed only at
 // test:seam1, after every step before it had run.
@@ -23,7 +39,8 @@ if (!postgres) {
   console.error("No Postgres in this worktree's .env: run `pnpm lane:env <n>` first.");
   process.exit(1);
 }
-if (!(await tcpReachable(postgres.host, postgres.port))) {
+const postgresAnswers = () => tcpReachable(postgres.host, postgres.port);
+if (!(await postgresAnswers())) {
   console.error(postgresDown(postgres));
   process.exit(1);
 }
@@ -45,12 +62,17 @@ for (const { name, script } of steps) {
   console.log(`run  ${name} ...`);
   let exit = "";
   // A step's name is its pnpm script. runStep calls this with that script, then the test files of a
-  // re-run (RP-979: a seam step that failed only on timeouts is re-run once, on just those files).
-  const outcome = runStep(script, (args) => {
-    const result = spawnSync(process.execPath, [pnpm, ...args], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-    exit = String(result.status ?? result.error?.message);
-    return { status: result.error ? 1 : (result.status ?? 1), output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
-  });
+  // re-run (RP-979: a seam step that failed only on timeouts is re-run once, on just those files,
+  // unless its Postgres was terminated or no longer answers, RP-994).
+  const outcome = await runStep(
+    script,
+    (args) => {
+      const result = spawnSync(process.execPath, [pnpm, ...args], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+      exit = String(result.status ?? result.error?.message);
+      return { status: result.error ? 1 : (result.status ?? 1), output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+    },
+    postgresAnswers,
+  );
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   if (outcome.passed) {
     console.log(`ok   ${outcome.label} (${seconds}s)`);
@@ -59,10 +81,10 @@ for (const { name, script } of steps) {
   }
   console.error(`FAIL ${name} (${seconds}s, exit ${exit}${outcome.reran ? ", after one re-run" : ""}). Tail of its output:`);
   console.error(tail(outcome.output, tailLines));
-  // Only timeouts or workers that never started (RP-607): say so, still stop.
-  const load = loadFailure(name, outcome.output);
-  if (load) console.error(`\n${load}`);
-  console.error(`\npnpm verify stopped at ${name}.`);
+  // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
+  // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).
+  const answers = isSeamStep(name) ? await postgresAnswers() : true;
+  for (const line of failureEnd(name, outcome.output, answers)) console.error(`\n${line}`);
   process.exit(outcome.status);
 }
 const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
