@@ -44,8 +44,16 @@ const ansi = /\x1b\[[0-9;]*m/g;
 // Postgres's code for a connection it terminated (RP-994), as when Docker stops in the middle of a
 // seam run: the tests then fail on that, never on the diff. node-postgres prints it as a lower-case
 // "error:", which errorLine does not count, so timeouts beside it would otherwise read as load.
-const terminatedPattern = /\b57P01\b|terminating connection due to administrator command/;
-const postgresTerminated = (output: string) => terminatedPattern.test(output.replace(ansi, ""));
+// Only a line the termination itself raised counts: the error's own line, Postgres's FATAL line, or
+// the `code: '57P01'` of an error object Vitest prints. A failing test's assertion diff (`"code":
+// "57P01"`), code frame (`63| …`) or comment that names it is not a termination (pool-error.test.ts
+// terminates a backend on purpose).
+const terminatedLines = [/^(?:\w*error|FATAL):?\s+terminating connection due to administrator command/i, /^FATAL:?\s+57P01\b/, /^code: '57P01',?$/];
+const postgresTerminated = (output: string) =>
+  output
+    .replace(ansi, "")
+    .split("\n")
+    .some((line) => terminatedLines.some((pattern) => pattern.test(line.trim())));
 
 /** What a seam step's output shows when it failed only on timeouts or worker start-up: the test files and tests named. Undefined for any other failure, a terminated Postgres too. */
 function readLoadFailure(step: string, output: string): { files: Set<string>; timedOut: Set<string> } | undefined {
@@ -93,7 +101,7 @@ export function loadFailure(step: string, output: string): string | undefined {
 
 /**
  * What `pnpm verify` prints after a failed step's tail, ending with the line naming where it stopped.
- * For a seam step whose output holds 57P01, or whose Postgres no longer answers (`postgresAnswers`
+ * For a seam step whose output holds a 57P01 error line, or whose Postgres no longer answers (`postgresAnswers`
  * false), that last line says Postgres was terminated (RP-994), and no load note comes before it:
  * timeouts against a terminated Postgres are not machine load.
  */
@@ -117,7 +125,7 @@ export type StepOutcome = { passed: true; label: string } | { passed: false; sta
  * (RP-979), is re-run once: only those files, same script (so the same Vitest project). If they pass
  * the step passes, its label saying so; if they fail again, or anything failed other than a timeout,
  * the step has failed, and a real failure is never re-run. Nor is a step whose Postgres was
- * terminated (57P01 in its output) or no longer answers (`postgresAnswers`, RP-994): the first
+ * terminated (a 57P01 error line in its output) or no longer answers (`postgresAnswers`, RP-994): the first
  * output, which names it, is kept.
  */
 export async function runStep(step: string, run: (args: string[]) => StepRun, postgresAnswers: () => Promise<boolean> = async () => true): Promise<StepOutcome> {

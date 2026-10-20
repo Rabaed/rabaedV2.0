@@ -138,6 +138,32 @@ error: terminating connection due to administrator command
 }
 `;
 const codeOnly = `Error: Connection terminated unexpectedly\n  code: '57P01',\n`;
+// What packages/db/test/pool-error.test.ts prints when it fails for real: it terminates a backend on
+// purpose, so its assertion diff and code frame name 57P01 and the server's text, yet Postgres is fine.
+const poolErrorFailed = ` FAIL  |seam2| packages/db/test/pool-error.test.ts > pool error > logs an idle connection's error and keeps serving
+AssertionError: expected { level: 'warn', …(2) } to deeply equal { level: 'warn', …(2) }
+
+- Expected
++ Received
+
+  {
+    "err": {
+-     "code": "57P01",
++     "code": "XX000",
+      "type": "DatabaseError",
+    },
+    "level": "warn",
+    "msg": "idle database connection failed",
+  }
+
+ ❯ packages/db/test/pool-error.test.ts:63:31
+     61|
+     62|     expect(unhandled).toEqual([]);
+     63|     expect(JSON.parse(line!)).toEqual({ level: "warn", msg: "idle database connection failed", err: { type: "DatabaseError", code: "57P01" } });
+       |                               ^
+     64|     // The server's own text ("terminating connection due to administrator command") is not logged.
+     65|     expect(line).not.toContain("terminating");
+${summary(1)}`;
 
 describe("failureEnd", () => {
   const terminationLine = /^pnpm verify stopped at test:seam1: Postgres was terminated \(.+\), Docker may have stopped\. Restart it \(.+\) and run pnpm verify again\.$/;
@@ -156,7 +182,12 @@ describe("failureEnd", () => {
 
   it("finds 57P01 on its own line and in colour", () => {
     expect(failureEnd("test:seam1", codeOnly, true)).toEqual([expect.stringMatching(terminationLine)]);
+    expect(failureEnd("test:seam1", "FATAL:  terminating connection due to administrator command\n", true)).toEqual([expect.stringMatching(terminationLine)]);
     expect(failureEnd("test:seam1", `\x1b[31m${terminated}\x1b[39m`, true)).toEqual([expect.stringMatching(terminationLine)]);
+  });
+
+  it("does not read a failing test's assertion diff or code frame that names 57P01 as a terminated Postgres", () => {
+    expect(failureEnd("test:seam2", poolErrorFailed, true)).toEqual(["pnpm verify stopped at test:seam2."]);
   });
 
   it("gives the load note, then the plain stop line, for timeouts while Postgres answers", () => {
