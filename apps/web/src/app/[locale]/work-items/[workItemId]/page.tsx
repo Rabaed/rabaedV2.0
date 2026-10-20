@@ -334,8 +334,9 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                 <PackageChip
                   number={item.package.number}
                   name={item.package.name[locale]}
+                  companyName={item.package.companyName[locale]}
                   href={`/packages/${item.package.id}`}
-                  label={tViews("board.openPackage", { number: item.package.number, name: item.package.name[locale] })}
+                  label={tViews("board.openPackage", { number: item.package.number, name: item.package.name[locale], company: item.package.companyName[locale] })}
                   linkAs={Link}
                 />
               </dd>

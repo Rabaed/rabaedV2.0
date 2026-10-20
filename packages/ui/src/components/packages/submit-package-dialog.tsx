@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, type Locale, type PackageNotReadyItem, type PackageNotReadyReason, type WorkItemRow } from "@rabaed/domain";
-import { useState, type ComponentType, type ElementType, type ReactNode } from "react";
+import { useId, useState, type ComponentType, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { sayRefusal } from "../../lib/refusal.ts";
 import { Button } from "../button/button.tsx";
@@ -37,6 +37,8 @@ export type SubmitPackageLabels = {
   numberOnSubmit: string;
   notReadyTitle: string;
   notReadyIntro: string;
+  /** On the Package page, before any attempt (RP-974): Submit Package is offered once nothing stops it. */
+  notReadyOnPage: string;
   reasons: Record<PackageNotReadyReason, string>;
   /** One the viewer doesn't see stops it too. */
   othersNotReady: string;
@@ -92,27 +94,7 @@ export function SubmitPackageDialog({
   const content = (
     <DialogContent title={labels.title(number)} description={labels.description} closeLabel={close} className="w-[min(36rem,calc(100%-2rem))]">
       {notReady ? (
-        <section aria-labelledby="package-not-ready" role="alert" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-tint p-3">
-          <h3 id="package-not-ready" className="flex items-center gap-2 text-sm font-bold text-danger-fg">
-            <Icon name="alert-triangle" size={16} />
-            {labels.notReadyTitle}
-          </h3>
-          <p className="text-sm text-text">{labels.notReadyIntro}</p>
-          <ul className="flex flex-col gap-1.5">
-            {notReady.items.map((i) => (
-              <li key={i.id} data-not-ready={i.reason} className="flex flex-col rounded-sm bg-surface px-3 py-2 text-sm">
-                <Link href={itemHref(i.id)} className={cn("flex min-w-0 items-center gap-2 font-semibold text-text hover:text-brand-fg", focusRing)}>
-                  {i.documentNumber ? <DocNo value={i.documentNumber} className="font-ui font-normal text-muted" /> : <span className="text-muted">{labels.numberOnSubmit}</span>}
-                  <span dir="auto" className="truncate">
-                    {i.title}
-                  </span>
-                </Link>
-                <span className="text-muted">{labels.reasons[i.reason]}</span>
-              </li>
-            ))}
-          </ul>
-          {notReady.others && <p className="text-sm text-text">{labels.othersNotReady}</p>}
-        </section>
+        <PackageNotReadyList items={notReady.items} others={notReady.others} intro={labels.notReadyIntro} labels={labels} itemHref={itemHref} linkAs={Link} alert />
       ) : (
         <section aria-labelledby="package-to-submit" className="flex flex-col gap-2">
           <h3 id="package-to-submit" className="text-sm font-semibold text-text-secondary">
@@ -167,5 +149,57 @@ export function SubmitPackageDialog({
       </DialogTrigger>
       {open && Gate ? <Gate onClose={() => setOpen(false)}>{content}</Gate> : content}
     </Dialog>
+  );
+}
+
+/**
+ * The submittals the viewer sees that stop Submit Package, each with why and a link to it, and
+ * whether one they don't see stops it too (never which). In the pop-up after an attempt (`alert`),
+ * and on the Package page before one (RP-974), where Submit Package isn't offered meanwhile.
+ */
+export function PackageNotReadyList({
+  items,
+  others,
+  intro,
+  labels,
+  itemHref,
+  linkAs: Link = "a",
+  alert = false,
+}: {
+  items: PackageNotReadyItem[];
+  others: boolean;
+  /** Read under the title: nothing was Submitted (the pop-up), or what it waits for (the page). */
+  intro: string;
+  labels: Pick<SubmitPackageLabels, "notReadyTitle" | "numberOnSubmit" | "reasons" | "othersNotReady">;
+  itemHref: (id: string) => string;
+  linkAs?: ElementType;
+  /** Announced as it appears: the answer to an attempt. */
+  alert?: boolean;
+}) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} role={alert ? "alert" : undefined} data-package-not-ready="" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-tint p-3">
+      <h3 id={id} className="flex items-center gap-2 text-sm font-bold text-danger-fg">
+        <Icon name="alert-triangle" size={16} />
+        {labels.notReadyTitle}
+      </h3>
+      <p className="text-sm text-text">{intro}</p>
+      {items.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {items.map((i) => (
+            <li key={i.id} data-not-ready={i.reason} className="flex flex-col rounded-sm bg-surface px-3 py-2 text-sm">
+              <Link href={itemHref(i.id)} className={cn("flex min-w-0 items-center gap-2 font-semibold text-text hover:text-brand-fg", focusRing)}>
+                {i.documentNumber ? <DocNo value={i.documentNumber} className="font-ui font-normal text-muted" /> : <span className="text-muted">{labels.numberOnSubmit}</span>}
+                <span dir="auto" className="truncate">
+                  {i.title}
+                </span>
+              </Link>
+              <span className="text-muted">{labels.reasons[i.reason]}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {others && <p className="text-sm text-text">{labels.othersNotReady}</p>}
+    </section>
   );
 }

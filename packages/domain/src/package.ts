@@ -77,8 +77,12 @@ export const packageItem = z.object({
 });
 export type PackageItem = z.infer<typeof packageItem>;
 
-/** The Package of a Work Item, where the viewer sees the Package: the chip on its row. */
-export const workItemPackage = z.object({ id: z.uuid(), number: z.string(), name: bilingualText });
+/**
+ * The Package of a Work Item, where the viewer sees the Package: the chip on its row. With
+ * its owning Participant's Company by name only (V14, RP-974): numbers count per owning
+ * Participant, so two Companies' Packages can both be PKG-001.
+ */
+export const workItemPackage = z.object({ id: z.uuid(), number: z.string(), name: bilingualText, companyName: bilingualText });
 export type WorkItemPackage = z.infer<typeof workItemPackage>;
 
 /** Create a Package, or rename one: its name in English and Arabic. */

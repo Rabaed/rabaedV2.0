@@ -145,9 +145,11 @@ describe("building an Open Package", () => {
     const p = await getPackage(at.c1Pm, pkg.id);
     expect(p.items.map((i) => i.id).sort()).toEqual([ownDraft, inReview, sent].sort());
     expect(p.items.find((i) => i.id === ownDraft)).toMatchObject({ id: ownDraft, documentNumber: null, title: "PM's own Draft" });
-    // The work item query gives each its Package, by number and name.
+    // The work item query gives each its Package, by number, name and owning Company (RP-974).
     const mine = await rows(at.c1Pm);
-    for (const id of [ownDraft, inReview, sent]) expect(mine.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Lighting") });
+    for (const id of [ownDraft, inReview, sent]) {
+      expect(mine.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Lighting"), companyName: p.owner.companyName });
+    }
   });
 });
 
@@ -380,7 +382,11 @@ describe("Submit Package", () => {
     // K1 reads it as a viewer: not theirs, nothing to Submit.
     const k1Reads = await getPackage(at.k1Manager, pkg.id);
     expect(k1Reads.owned).toBe(false);
-    expect(k1Reads.items.map((i) => [i.id, i.toSubmit])).toEqual([[sent, false]]);
+    expect(k1Reads.items.map((i) => [i.id, i.toSubmit, i.notReady])).toEqual([[sent, false, null]]);
+    // RP-974: nothing of what stops the owner's Submit Package reaches a viewer.
+    expect(k1Reads.othersNotReady).toBe(false);
+    // The owner's item still to Submit, held by the engineer's PM where they can Submit it: nothing stops it.
+    expect(owner.items.find((i) => i.id === left)?.notReady).toBeNull();
   });
 
   it("is all or nothing: one item not ready and nothing is Submitted; the answer lists the ones not ready, and why", async () => {
@@ -393,7 +399,17 @@ describe("Submit Package", () => {
     // The engineer's Draft: C1's PM can't Submit it from where it is.
     const engineersDraft = await draft(at, at.c1Engineer, "Still a Draft");
     await ok(addItem(at.c1Engineer, pkg.id, engineersDraft));
-    expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(false);
+    const before = await getPackage(at.c1Pm, pkg.id);
+    expect(before.actions.submit).toBe(false);
+    // RP-974: the read already says which stop it, and why, with the 409's codes, before any attempt.
+    expect(new Map(before.items.map((i) => [i.id, i.notReady]))).toEqual(
+      new Map([
+        [ready, null],
+        [pooled, "pick_up_first"],
+        [engineersDraft, "cannot_submit"],
+      ]),
+    );
+    expect(before.othersNotReady).toBe(false);
 
     const refused = await refusal(submitPackage(at.c1Pm, pkg.id));
     expect(refused.status).toBe(409);
@@ -416,7 +432,9 @@ describe("Submit Package", () => {
     await ok(at.c1Pm.post(`/v1/work-items/${pooled}/pick-up`));
     await take(at.c1Engineer, engineersDraft, "send_for_review");
     await ok(at.c1Pm.post(`/v1/work-items/${engineersDraft}/pick-up`));
-    expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(true);
+    const readyNow = await getPackage(at.c1Pm, pkg.id);
+    expect(readyNow.actions.submit).toBe(true);
+    expect(readyNow.items.map((i) => i.notReady)).toEqual([null, null, null]);
     expect((await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(3);
   });
 
@@ -617,6 +635,10 @@ describe("an item still to Submit that the Member doesn't see", () => {
     const p = await getPackage(narrowedPm, pkg.id);
     expect(p.items.map((i) => i.id)).toEqual([mechanical]);
     expect(p.actions.submit).toBe(false);
+    // RP-974: the read says so before any attempt, without naming it; theirs stops nothing.
+    expect(p.othersNotReady).toBe(true);
+    expect(p.items.map((i) => i.notReady)).toEqual([null]);
+    expect((await narrowedPm.get(`/v1/packages/${pkg.id}`)).body).not.toContain(electrical);
     const res = await submitPackage(narrowedPm, pkg.id);
     expect({ status: res.statusCode, body: res.json() }).toEqual({
       status: 409,
@@ -749,7 +771,9 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     }
     // Each Electrical item's row names its Package for them too.
     const rowsSeen = await listed(k1Electrical);
-    for (const id of electricalItems) expect(rowsSeen.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Plant room – Tower 1") });
+    for (const id of electricalItems) {
+      expect(rowsSeen.get(id)?.package).toEqual({ id: pkg.id, number: pkg.number, name: name("Plant room – Tower 1"), companyName: c1Name });
+    }
   });
 
   it("RP-953-1: an engineer narrowed to Electrical gets no Mechanical-only Trade choice, and no Package or owning Company they can't see", async () => {
@@ -790,7 +814,10 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       const rowsSeen = await listed(by);
       for (const item of (await getPackage(by, pkg.id)).items) {
         const r = rowsSeen.get(item.id)!;
-        expect(item).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean) });
+        const { notReady, ...row } = item;
+        expect(row).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean) });
+        // What stops a Submit Package is the owner's to read only (RP-974).
+        if (by !== at.c1Pm) expect(notReady).toBeNull();
       }
     }
     const items = new Map((await getPackage(at.c1Pm, pkg.id)).items.map((i) => [i.id, i]));
@@ -1168,7 +1195,9 @@ describe("RP-659: the item page's Package chip", () => {
     const d = await draft(at, at.c1Engineer, "Chip Draft");
     const outside = await draft(at, at.c1Engineer, "Chip Draft in no Package");
     await ok(addItem(at.c1Engineer, pkg.id, d));
-    expect((await itemPage(at.c1Engineer, d)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – Open") });
+    // With its owning Company beside the number (RP-974): two Participants' Packages can both be PKG-001.
+    const companyName = (await getPackage(at.c1Engineer, pkg.id)).owner.companyName;
+    expect((await itemPage(at.c1Engineer, d)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – Open"), companyName });
     expect((await itemPage(at.c1Engineer, outside)).package).toBeUndefined();
     // Removed, or its Package deleted: the item has none again.
     await ok(removeItem(at.c1Engineer, pkg.id, d));
@@ -1182,8 +1211,10 @@ describe("RP-659: the item page's Package chip", () => {
     const pkg = await createPackage(at.c1Pm, "Chip – In Progress");
     const sent = await submitted(at, at.c1Engineer, at.c1Pm, "Chip Submitted");
     await ok(addItem(at.c1Pm, pkg.id, sent));
+    // K1 reads the owner by its Company's name only (V14), as on the Package itself.
+    const companyName = (await getPackage(at.c1Pm, pkg.id)).owner.companyName;
     for (const by of [at.c1Pm, at.k1Manager]) {
-      expect((await itemPage(by, sent)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – In Progress") });
+      expect((await itemPage(by, sent)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – In Progress"), companyName });
     }
     await expectHidden(c2Engineer.get(`/v1/work-items/${sent}`));
   });

@@ -124,6 +124,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
       numberOnSubmit: "Number on submit",
       notReadyTitle: "Not ready",
       notReadyIntro: "Nothing was Submitted. These stop it:",
+      notReadyOnPage: "Submit Package is offered once nothing stops it. These stop it now:",
       reasons: {
         pick_up_first: "Pick it up first: it waits in your Step Pool.",
         cannot_submit: "It waits at a Step where you can't Submit it.",
@@ -198,6 +199,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
       numberOnSubmit: "الرقم عند التقديم",
       notReadyTitle: "غير جاهزة",
       notReadyIntro: "لم يُقدَّم شيء. هذه تمنع التقديم:",
+      notReadyOnPage: "يُتاح «تقديم الحزمة» حين لا يمنعه شيء. هذه تمنعه الآن:",
       reasons: {
         pick_up_first: "استلمه أولًا: إنه ينتظر في مجموعة خطوتك.",
         cannot_submit: "إنه في خطوة لا يمكنك تقديمه منها.",

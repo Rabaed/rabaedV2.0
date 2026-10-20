@@ -27,7 +27,7 @@ import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
 import { usePackageBulk, type PackageBulkProps } from "./package-bulk.tsx";
 import { DeletePackageDialog, RenamePackageDialog, type DeletePackageLabels, type RenamePackageLabels } from "./package-dialogs.tsx";
-import { SubmitPackageDialog, type SubmitPackageCall, type SubmitPackageLabels } from "./submit-package-dialog.tsx";
+import { PackageNotReadyList, SubmitPackageDialog, type SubmitPackageCall, type SubmitPackageLabels } from "./submit-package-dialog.tsx";
 
 // The Package page (RP-659, spec RP-616; reference: the RP-633 prototype's page header, counts
 // panel and item table, as corrected by design/prompts/packages.md "Reference (RP-633)"): the
@@ -133,10 +133,12 @@ export function PackagePage({
   const n = (value: number) => formatNumber(value, locale);
   const name = pkg.name[locale];
   const { items: rows, filters } = pkg;
-  // The API says which are still to Submit, and whether the viewer owns the Package.
+  // The API says which are still to Submit, which of them stop it and why, and whether the viewer owns the Package.
   const toSubmit = rows.filter((r) => r.toSubmit);
-  // Submit Package: for the owner, while anything is left to Submit; disabled in its dialog until nothing stops it.
-  const submittable = onSubmit !== undefined && (pkg.actions.submit || (pkg.owned && toSubmit.length > 0));
+  // Submit Package only when nothing stops it (spec RP-616 story 11, RP-974); otherwise the owner reads what does.
+  const submittable = onSubmit !== undefined && pkg.actions.submit;
+  const notReady = rows.flatMap((r) => (r.notReady ? [{ id: r.id, documentNumber: r.documentNumber, title: r.title, reason: r.notReady }] : []));
+  const blocked = onSubmit !== undefined && pkg.owned && !pkg.actions.submit && (notReady.length > 0 || pkg.othersNotReady);
   const tableLabels: WorkItemTableLabels = { ...labels.table, columns: { ...labels.table.columns, owner: labels.with }, empty: labels.empty };
   const sorted = sortRows(rows, sort, locale, tableLabels, filters);
 
@@ -226,6 +228,17 @@ export function PackagePage({
         <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
+      )}
+
+      {blocked && (
+        <PackageNotReadyList
+          items={notReady}
+          others={pkg.othersNotReady}
+          intro={labels.submit.notReadyOnPage}
+          labels={labels.submit}
+          itemHref={itemHref}
+          linkAs={Link}
+        />
       )}
 
       <Counts pkg={pkg} locale={locale} labels={labels} />

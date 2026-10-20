@@ -144,7 +144,7 @@ type Row = {
   closer_name: BilingualText | null;
   closer_company_name: BilingualText | null;
   /** Its Package (RP-636), only where the viewer sees the Package (app.work_item_package); else null. */
-  package: { id: string; seq: number; name: BilingualText } | null;
+  package: { id: string; seq: number; name: BilingualText; company_name: BilingualText } | null;
 } & Partial<SnagRow>;
 
 /** What a Snag List row adds (RP-94, `snagColumns`): its source and its first photo. */
@@ -577,7 +577,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,
     ...(r.raiser_name ? { raiserCompanyName: r.raiser_name } : {}),
-    ...(r.package ? { package: { id: r.package.id, number: packageNumber(r.package.seq), name: r.package.name } } : {}),
+    ...(r.package ? { package: { id: r.package.id, number: packageNumber(r.package.seq), name: r.package.name, companyName: r.package.company_name } } : {}),
     // Who closed it (RP-410): my own Company's person, or the Company only (V14).
     closedBy: open
       ? null
@@ -694,7 +694,9 @@ const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name
   hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role,
   -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package. A column of
   -- the rows read, not of visibleRows, so the counts never ask for it and a page asks for its own rows only.
-  (select jsonb_build_object('id', pk.package_id, 'seq', pk.seq, 'name', pk.name) from app.work_item_package(r.id) pk) as package`;
+  -- With its owning Company by name only (V14, RP-974), which every viewer of the Package reads.
+  (select jsonb_build_object('id', pk.package_id, 'seq', pk.seq, 'name', pk.name, 'company_name', app.package_owner_name(pk.package_id))
+    from app.work_item_package(r.id) pk) as package`;
 // RP-410:
 // - The closing move of a closed item: the latest event, as RLS lets the viewer read it (the
 //   closing Transition is shared), that brought it to the Step it is at. Its actor is named only

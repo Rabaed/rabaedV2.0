@@ -3,8 +3,10 @@ import { cn } from "../../lib/cn.ts";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 
-// The Package chip (RP-659, spec RP-616 story 36): `PKG-004 · Bathrooms – Tower 1` on a
-// submittal's card and on its page, opening the Package. Presentational: the caller shows it
+// The Package chip (RP-659, spec RP-616 story 36): `PKG-004 · Gulf Builders · Bathrooms – Tower 1`
+// on a submittal's card and on its page, opening the Package. The owning Company always shows next to
+// the number (owner's decision on RP-616, RP-974): numbers count per owning Participant, so two
+// Companies' Packages can both be PKG-001. The Company by its name only (V14). Presentational: the caller shows it
 // only where the API gives the item's Package, which it does only where the viewer sees the
 // Package (visibility.md "Packages"), so an Open Package never shows on another Company's item.
 
@@ -13,16 +15,18 @@ export type PackageChipProps = {
   number: string;
   /** The Package's name in the viewer's language. */
   name: string;
+  /** The owning Company's name in the viewer's language. */
+  companyName: string;
   /** The Package's page. */
   href: string;
-  /** The link's accessible name, e.g. "Open Package PKG-004 Bathrooms – Tower 1". */
+  /** The link's accessible name, e.g. "Open Package PKG-004 Bathrooms – Tower 1, Gulf Builders". */
   label: string;
   /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
   className?: string;
 };
 
-export function PackageChip({ number, name, href, label, linkAs: Link = "a", className }: PackageChipProps) {
+export function PackageChip({ number, name, companyName, href, label, linkAs: Link = "a", className }: PackageChipProps) {
   return (
     <Link
       href={href}
@@ -41,7 +45,13 @@ export function PackageChip({ number, name, href, label, linkAs: Link = "a", cla
         {number}
       </bdi>
       <span aria-hidden="true">·</span>
-      <span className="truncate">{name}</span>
+      <span dir="auto" data-package-company="" className="max-w-[45%] min-w-0 truncate">
+        {companyName}
+      </span>
+      <span aria-hidden="true">·</span>
+      <span dir="auto" className="truncate">
+        {name}
+      </span>
     </Link>
   );
 }

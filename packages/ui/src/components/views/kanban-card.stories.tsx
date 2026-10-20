@@ -36,7 +36,9 @@ const text = {
   // Cards write dates in English, Arabic too (the anatomy's "8 Sep").
   date: b("Sep 8", "Sep 8"),
   bathrooms: b("Bathrooms – Tower 1", "الحمامات – البرج 1"),
-  openPackage: b("Open Package PKG-004 Bathrooms – Tower 1", "فتح الحزمة PKG-004 الحمامات – البرج 1"),
+  // The owning Company, next to the number (RP-974).
+  builders: b("Gulf Builders", "بناة الخليج"),
+  openPackage: b("Open Package PKG-004 Bathrooms – Tower 1, Gulf Builders", "فتح الحزمة PKG-004 الحمامات – البرج 1، بناة الخليج"),
 };
 
 const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardProps => ({
@@ -114,7 +116,9 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
     case "noNumber":
       return { number: null, place: [], date: undefined, stepAgeWeeks: null };
     case "package":
-      return { package: { number: "PKG-004", name: text.bathrooms[locale], href: "#package", label: text.openPackage[locale] } };
+      return {
+        package: { number: "PKG-004", name: text.bathrooms[locale], companyName: text.builders[locale], href: "#package", label: text.openPackage[locale] },
+      };
     default:
       return shared;
   }
@@ -223,8 +227,8 @@ export const WithContractorName: Story = {
 export const NoNumberYet: Story = { args: { variant: "noNumber" } };
 
 /**
- * In a Package the viewer sees (RP-659): its chip under the tags, `PKG-004 · name`, the number left
- * to right in Arabic too. The chip opens the Package, above the card's own link to the item.
+ * In a Package the viewer sees (RP-659): its chip under the tags, `PKG-004 · Company · name`, the number
+ * left to right in Arabic too, the owning Company next to it (RP-974). The chip opens the Package, above the card's own link to the item.
  */
 export const InAPackage: Story = {
   args: { variant: "package" },
@@ -233,7 +237,7 @@ export const InAPackage: Story = {
     const locale = storyLocale(context);
     const chip = within(c).getByRole("link", { name: text.openPackage[locale] });
     await expect(chip).toHaveAttribute("href", "#package");
-    await expect(chip.textContent).toMatch(new RegExp(`^PKG-004\\s*·\\s*${text.bathrooms[locale]}$`));
+    await expect(chip.textContent).toMatch(new RegExp(`^PKG-004\\s*·\\s*${text.builders[locale]}\\s*·\\s*${text.bathrooms[locale]}$`));
     await expect(within(chip).getByText("PKG-004")).toHaveAttribute("dir", "ltr");
     // A click on the chip reaches the chip, not the card's link to the item.
     const box = chip.getBoundingClientRect();
