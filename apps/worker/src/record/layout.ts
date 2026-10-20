@@ -158,6 +158,8 @@ export function recordHtml(
           .map(
             (item) =>
               `<tr><td>${txt(item.text)}${item.comment ? `<div class="muted"><bdi>${html(item.comment)}</bdi></div>` : ""}${
+                item.snag ? `<div class="muted">${txt(item.snag)}</div>` : ""
+              }${
                 item.photos.length > 0 ? `<div class="photos">${item.photos.map(photo).join("")}</div>` : ""
               }</td><td class="answer">${txt(item.answer)}</td></tr>`,
           )
