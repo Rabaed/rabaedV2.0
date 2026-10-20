@@ -120,7 +120,7 @@ export function readClaims(comments: Comment[], filesWidth = 70): Claim[] {
 }
 
 /** A glob (`scripts/lane*.ts`) as a regex; `*` stays inside a path segment unless doubled. */
-const globRegex = (glob: string): RegExp => new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*|\*/g, (stars) => (stars === "**" ? ".*" : "[^/]*"))}$`);
+export const globRegex = (glob: string): RegExp => new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*|\*/g, (stars) => (stars === "**" ? ".*" : "[^/]*"))}$`);
 
 /** Whether the claim's text covers `path`: named in it, under a named directory, or matched by a named glob. */
 export function claimCovers(claim: Pick<Claim, "text">, path: string): boolean {
