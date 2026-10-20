@@ -388,6 +388,22 @@ describe("RP-641: who sees a Submitted Package, and each viewer's counts (scenar
     electricalItems.sort();
   });
 
+  it("RP-953-1: the Package's Trades as the board reads them are those of the items the caller sees: Electrical alone for the narrowed engineer", async () => {
+    const trades = async (as: string) =>
+      (
+        await call<{ id: string }>(
+          as,
+          sql`select distinct tdv.dimension_value_id as id
+            from app.package_latest_items(${packageId}::uuid) l
+            join work_item_dimension_value_seen tdv on tdv.work_item_id = l.work_item_id
+            join visibility_dimension d on d.id = tdv.dimension_id and d.kind = 'trade'
+            order by 1`,
+        )
+      ).map((r) => r.id);
+    expect(await trades(k1.ap)).toEqual([electrical, mechanical].sort());
+    expect(await trades(k1Narrowed)).toEqual([electrical]);
+  });
+
   it("RP-588-2: K1's manager and the Owner (Visibility all) count 8; K1's engineer narrowed to Electrical counts 6, never the Mechanical items", async () => {
     for (const who of [c1Pm, k1.ap, k1.member, ow.member]) {
       expect(await summary(who), who).toEqual([{ total: 8, open: 6, codes: { A: 1, C: 1 } }]);
