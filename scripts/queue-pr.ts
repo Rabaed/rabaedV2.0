@@ -14,9 +14,12 @@ import { isAncestor } from "./worktrees.ts";
 // The checks and the queue entry use the PR's own head (refs/pull/<n>/head), not
 // HEAD. --wait first waits for the main ruleset's required checks on that head to
 // finish (RP-967: right after `gh pr create` GitHub refuses the enqueue with
-// "1 expected"), failing only when one fails or never reports; then it polls every
-// 60 s until the PR merges (exit 0) or leaves the queue or closes (exit 1, with the
-// reason). GitHub's "already in the queue" (an earlier call queued it) counts as queued.
+// "1 expected"), check runs and commit statuses alike, and for the head's reviewed-label
+// run when it is still going. It fails when one fails, when one never reports (15 min),
+// after 60 min in all (a run stuck queued), when the head moves (a push), or when a gh
+// call fails three times in a row, each naming why. Then it polls every 60 s until the
+// PR merges (exit 0) or leaves the queue or closes (exit 1, with the reason). GitHub's
+// "already in the queue" or "already queued" (an earlier call queued it) counts as queued.
 // The PR needs the `reviewed` label (a finished /code-review, RP-584), or the `docs-only` label when
 // every file it changes is a doc: the rule of the main ruleset's reviewed-required check (RP-606).
 // --no-review only names the docs-only label when it is missing; it no longer skips the rule.
@@ -64,14 +67,21 @@ export interface QueueSeam {
   requiredChecks(): string[];
   /** The latest check run of each name on `commit` (`gh api repos/{owner}/{repo}/commits/<commit>/check-runs`). */
   checkRuns(commit: string): CheckRun[];
+  /** The latest commit status of each context on `commit` (`gh api repos/{owner}/{repo}/commits/<commit>/status`): a required check can be one. */
+  commitStatuses(commit: string): CommitStatus[];
 }
+
+/** Why a `--wait` ended without queueing, when it is not one of the refusals. */
+export type WaitFailure = "checks_timeout" | "gh_failed" | "head_moved";
 
 export interface QueueResult {
   ok: boolean;
   lines: string[];
+  reason?: WaitFailure;
 }
 
 const fail = (...lines: string[]): QueueResult => ({ ok: false, lines });
+const failFor = (reason: WaitFailure, ...lines: string[]): QueueResult => ({ ok: false, lines, reason });
 
 /** Paths in `git merge-tree` output's conflicted-file list ("<mode> <oid> <stage>\t<path>"). */
 export function conflictedFiles(output: string): string[] {
@@ -110,29 +120,71 @@ export function onlyDependencyFieldsChanged(before: string | undefined, after: s
   }
 }
 
-/** What the refusals hand the enqueue: the PR's node id, the head to pin, and the warnings so far. */
-type Prepared = { ok: true; id: string; head: string; warnings: string[] };
+/**
+ * What `prepare` decides: `refused` with the refusal to print, or `ready` with the PR's node id,
+ * the head to pin, the warnings so far, and whether the head's reviewed-label run is still to
+ * finish (only `--wait` lets that through, and waits for it).
+ */
+type Prepared = { kind: "refused"; result: QueueResult } | { kind: "ready"; id: string; head: string; warnings: string[]; labelRunPending: boolean };
+
+const refused = (result: QueueResult): Prepared => ({ kind: "refused", result });
 
 export function queuePr(pr: number, seam: QueueSeam, options: { noReview?: boolean } = {}): QueueResult {
   const prepared = prepare(pr, seam, options);
-  return prepared.ok ? enqueueAt(pr, seam, prepared) : prepared;
+  return prepared.kind === "ready" ? enqueueAt(pr, seam, prepared) : prepared.result;
 }
 
-/** RP-967: GitHub's answer when the PR is in the queue already (an earlier call queued it). */
-const ALREADY_QUEUED = /already in the (merge )?queue/i;
+/**
+ * RP-967: GitHub's answers when the PR is in the queue already (an earlier call queued it): the
+ * GraphQL "already in the (merge) queue" / "in a merge queue", and gh's "is already queued to merge".
+ */
+const ALREADY_QUEUED = /already (queued|in (a|the) (merge )?queue)/i;
 
-function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: Prepared): QueueResult {
+/** GitHub's refusal of `expectedHeadOid`: the branch was pushed to after the head was pinned. */
+const HEAD_REFUSED = /expected ?head ?oid|head (oid|sha|ref) (has )?(changed|moved|does not match)/i;
+
+const headMoved = (pr: number, pinned: string, now: string | undefined) =>
+  failFor(
+    "head_moved",
+    `PR #${pr}'s head moved while waiting: the checks were for ${pinned}${now ? `, the PR is now at ${now}` : ", and GitHub refused to queue it"}.`,
+    `Fix: wait for the new head's checks, then run \`pnpm queue ${pr} --wait\` again.`,
+  );
+
+function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: { id: string; head: string; warnings: string[] }): QueueResult {
   try {
     const entry = seam.enqueue(id, head);
     return { ok: true, lines: [...warnings, `Queued PR #${pr} at ${head}: position ${entry.position}, state ${entry.state}.`] };
   } catch (error) {
+    if (error instanceof Error && HEAD_REFUSED.test(error.message)) return headMoved(pr, head, undefined);
     if (!(error instanceof Error && ALREADY_QUEUED.test(error.message))) throw error;
     return { ok: true, lines: [...warnings, `PR #${pr} is already in the merge queue (an earlier call queued it); treating it as queued.`] };
   }
 }
 
-/** The refusals, in order; on success, what to enqueue. */
-function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean }): Prepared | QueueResult {
+/** The reviewed-label runs on `head`, read as the queue reads them: still to finish, failed (with the refusal), or passed. */
+function labelRunState(pr: number, head: string, runs: { status: string; conclusion: string }[]): { state: "pending"; none: boolean } | { state: "failed"; result: QueueResult } | { state: "passed" } {
+  if (runs.length === 0 || runs.some((run) => run.status !== "completed")) return { state: "pending", none: runs.length === 0 };
+  const [latest] = runs;
+  if (latest?.conclusion === "success" || latest?.conclusion === "skipped") return { state: "passed" };
+  return {
+    state: "failed",
+    result: fail(
+      `PR #${pr}: the reviewed-label run on ${head} failed (${latest?.conclusion}), so the '${REVIEWED_LABEL}' label cannot be trusted.`,
+      "Fix: open the run in the Actions tab, re-run it, then run `pnpm queue " + pr + "` again.",
+    ),
+  };
+}
+
+/** Since RP-604 a PR's opening makes a run too; a PR opened before that and not pushed to since has none. */
+const NO_LABEL_RUN = " A PR opened before RP-604 and not pushed to since never gets one: merge origin/main in cleanly and push (the label stays).";
+
+/** The refusals, in order; on success, what to enqueue. `waitForLabelRun` (--wait) lets a reviewed-label run still going through. */
+function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): Prepared {
+  const prepared = refusals(pr, seam, options);
+  return "lines" in prepared ? refused(prepared) : prepared;
+}
+
+function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): QueueResult | Prepared {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
@@ -145,6 +197,7 @@ function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean }): 
     );
   }
   const warnings: string[] = [];
+  let labelRunPending = false;
   const changed = seam.changedFiles(head);
   // The same rule as the main ruleset's reviewed-required check (RP-606), so what this queues the queue keeps.
   const gate = reviewGate(seam.labels(pr), changed);
@@ -165,16 +218,17 @@ function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean }): 
     warnings.push(`Warning: queued under the '${DOCS_ONLY_LABEL}' label (every changed file is a doc); nothing checked that a /code-review finished.`);
   } else if (seam.labelWorkflowOnMain()) {
     // The label alone is not tied to a head: a push whose workflow run has not finished (or never ran, as with a merge conflict) still shows the old label.
-    const runs = seam.labelRuns(head);
-    const wait = `Fix: wait for the reviewed-label run on ${head}, then run \`pnpm queue ${pr}\` again.`;
-    if (runs.length === 0 || runs.some((run) => run.status !== "completed")) {
-      // Since RP-604 a PR's opening makes a run too; a PR opened before that and not pushed to since has none.
-      const none = runs.length === 0 ? " A PR opened before RP-604 and not pushed to since never gets one: merge origin/main in cleanly and push (the label stays)." : "";
-      return fail(`PR #${pr}: the reviewed-label workflow has not finished for the head ${head}, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.`, wait + none);
-    }
-    const [latest] = runs;
-    if (latest?.conclusion !== "success" && latest?.conclusion !== "skipped") {
-      return fail(`PR #${pr}: the reviewed-label run on ${head} failed (${latest?.conclusion}), so the '${REVIEWED_LABEL}' label cannot be trusted.`, "Fix: open the run in the Actions tab, re-run it, then run `pnpm queue " + pr + "` again.");
+    const label = labelRunState(pr, head, seam.labelRuns(head));
+    if (label.state === "failed") return label.result;
+    if (label.state === "pending") {
+      // --wait waits for it with the required checks (right after `gh pr create` it is still going).
+      if (options.waitForLabelRun) labelRunPending = true;
+      else {
+        return fail(
+          `PR #${pr}: the reviewed-label workflow has not finished for the head ${head}, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.`,
+          `Fix: wait for the reviewed-label run on ${head}, then run \`pnpm queue ${pr}\` again.${label.none ? NO_LABEL_RUN : ""}`,
+        );
+      }
     }
   } else {
     warnings.push("Warning: .github/workflows/reviewed-label.yml is not on origin/main yet, so the label could not be tied to the head; not checked.");
@@ -229,13 +283,20 @@ function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean }): 
     return fail(immutable.output.trimEnd(), "Fix: merge main, rename the migration so it sorts after main's latest (an existing migration is never edited), push, wait for CI, then run `pnpm queue` again.");
   }
 
-  return { ok: true, id: pull.id, head, warnings };
+  return { kind: "ready", id: pull.id, head, warnings, labelRunPending };
 }
 
 const POLL_MS = 60_000;
 
 /** How long a required check may stay unreported on the head (a workflow that never starts) before the wait gives up. */
 const UNREPORTED_MS = 15 * 60_000;
+
+/** How long the whole check wait may take: a run stuck queued or in progress ends it, named, rather than looping forever. */
+const TOTAL_WAIT_MS = 60 * 60_000;
+
+/** A gh call that fails mid-wait is tried this many times in all, RETRY_MS apart, before the wait fails naming it. */
+const TRIES = 3;
+const RETRY_MS = 10_000;
 
 /** Conclusions the ruleset counts as passing; a skipped required check passes (see merge-queue.test.ts). */
 const PASSING = ["success", "skipped", "neutral"];
@@ -246,7 +307,21 @@ export interface CheckRun {
   conclusion: string;
 }
 
-/** Sorts the ruleset's required checks by the head's check runs: failed (with the conclusion), pending (running, or not reported yet: "1 expected"). */
+export interface CommitStatus {
+  context: string;
+  /** error, failure, pending or success. */
+  state: string;
+}
+
+/** A commit status as a check run, so the ruleset's required checks are read one way whichever kind reports them. */
+export const statusAsRun = ({ context, state }: CommitStatus): CheckRun =>
+  state === "pending" ? { name: context, status: "in_progress", conclusion: "" } : { name: context, status: "completed", conclusion: state };
+
+/**
+ * Sorts the ruleset's required checks by the head's check runs (and commit statuses, as runs):
+ * `failed` names each failed one with its conclusion; `pending` names each not finished, whether
+ * running or not reported at all ("1 expected"); `unreported` is the part of `pending` with no run yet.
+ */
 export function requiredCheckState(required: string[], runs: CheckRun[]): { failed: string[]; pending: string[]; unreported: string[] } {
   const failed: string[] = [];
   const pending: string[] = [];
@@ -260,6 +335,24 @@ export function requiredCheckState(required: string[], runs: CheckRun[]): { fail
     else if (!PASSING.includes(run.conclusion)) failed.push(`${name} (${run.conclusion})`);
   }
   return { failed, pending, unreported };
+}
+
+/** `call` tried up to TRIES times, RETRY_MS apart: its answer, or the gh_failed result naming `what`. */
+async function retried<T>(pr: number, what: string, call: () => T, sleep: (ms: number) => Promise<void>): Promise<{ ok: true; value: T } | { ok: false; result: QueueResult }> {
+  for (let tries = 1; ; tries++) {
+    try {
+      return { ok: true, value: call() };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (tries >= TRIES) {
+        return {
+          ok: false,
+          result: failFor("gh_failed", `PR #${pr}: reading ${what} failed ${TRIES} times while waiting: ${message.trim()}`, "Fix: check `gh auth status` and GitHub's status page, then run `pnpm queue " + pr + " --wait` again."),
+        };
+      }
+      await sleep(RETRY_MS);
+    }
+  }
 }
 
 export interface WaitOptions {
@@ -281,25 +374,58 @@ const realSleep = (ms: number) => new Promise<void>((resolveSleep) => setTimeout
  */
 export async function queuePrWhenChecksPass(pr: number, seam: QueueSeam, options: WaitOptions = {}): Promise<QueueResult> {
   const { sleep = realSleep, now = Date.now, log = () => {} } = options;
-  const prepared = prepare(pr, seam, options);
-  if (!prepared.ok) return prepared;
+  const prepared = prepare(pr, seam, { ...options, waitForLabelRun: true });
+  if (prepared.kind === "refused") return prepared.result;
   const { head } = prepared;
   const required = seam.requiredChecks();
   const started = now();
+  let labelPending = prepared.labelRunPending;
   let last = "";
   for (;;) {
-    const { failed, pending, unreported } = requiredCheckState(required, seam.checkRuns(head));
+    // A push while waiting: these checks are no longer about what would be queued.
+    const pull = await retried(pr, "the PR's head", () => seam.pullRequest(pr), sleep);
+    if (!pull.ok) return pull.result;
+    if (pull.value.headRefOid !== head) return headMoved(pr, head, pull.value.headRefOid);
+
+    let labelNone = false;
+    if (labelPending) {
+      const runs = await retried(pr, "the head's reviewed-label runs", () => seam.labelRuns(head), sleep);
+      if (!runs.ok) return runs.result;
+      const label = labelRunState(pr, head, runs.value);
+      if (label.state === "failed") return label.result;
+      labelPending = label.state === "pending";
+      labelNone = label.state === "pending" && label.none;
+    }
+    const runs = await retried(pr, "the head's check runs", () => seam.checkRuns(head), sleep);
+    if (!runs.ok) return runs.result;
+    const statuses = await retried(pr, "the head's commit statuses", () => seam.commitStatuses(head), sleep);
+    if (!statuses.ok) return statuses.result;
+    const { failed, pending, unreported } = requiredCheckState(required, [...runs.value, ...statuses.value.map(statusAsRun)]);
     if (failed.length > 0) {
       return fail(`PR #${pr}: required check(s) failed on ${head}: ${failed.join(", ")}.`, `Fix: open the failing run from the PR's Checks tab, fix it and push (or re-run a flaky job), then run \`pnpm queue ${pr} --wait\` again.`);
     }
-    if (pending.length === 0) break;
-    if (unreported.length > 0 && now() - started >= UNREPORTED_MS) {
+    if (pending.length === 0 && !labelPending) break;
+    const waited = now() - started;
+    if (labelNone && waited >= UNREPORTED_MS) {
+      return fail(`PR #${pr}: no reviewed-label run reported on ${head} in ${UNREPORTED_MS / 60_000} min, so the '${REVIEWED_LABEL}' label may be left over from an earlier head.${NO_LABEL_RUN}`);
+    }
+    if (unreported.length > 0 && waited >= UNREPORTED_MS) {
       return fail(
         `PR #${pr}: required check(s) never reported on ${head} in ${UNREPORTED_MS / 60_000} min: ${unreported.join(", ")}.`,
         "Fix: check that the workflow runs on this PR (its Checks tab, a path filter, a merge conflict that stops pull_request runs), then run `pnpm queue " + pr + " --wait` again.",
       );
     }
-    const line = `Waiting for required checks on ${head}: ${pending.join(", ")}.`;
+    if (waited >= TOTAL_WAIT_MS) {
+      const all = [...runs.value, ...statuses.value.map(statusAsRun)];
+      const stuck = pending.map((name) => `${name} (${all.find((run) => run.name === name)?.status ?? "not reported"})`);
+      if (labelPending) stuck.push("the reviewed-label run");
+      return failFor(
+        "checks_timeout",
+        `PR #${pr}: still waiting on ${head} after ${TOTAL_WAIT_MS / 60_000} min: ${stuck.join(", ")}.`,
+        "Fix: open the PR's Checks tab; re-run or cancel a stuck run, then run `pnpm queue " + pr + " --wait` again.",
+      );
+    }
+    const line = `Waiting for required checks on ${head}: ${[...pending, ...(labelPending ? ["the reviewed-label run"] : [])].join(", ")}.`;
     if (line !== last) log(line);
     last = line;
     await sleep(POLL_MS);
@@ -320,7 +446,9 @@ export async function waitForMerge(pr: number, seam: QueueSeam, since: Date, sle
   const { id } = seam.pullRequest(pr);
   let outside = 0;
   for (;;) {
-    const { state, isInMergeQueue } = seam.status(id);
+    const read = await retried(pr, "the PR's queue state", () => seam.status(id), sleep);
+    if (!read.ok) return read.result;
+    const { state, isInMergeQueue } = read.value;
     if (state === "MERGED") return { ok: true, lines: [`PR #${pr} merged.`] };
     if (state === "CLOSED") return fail(`PR #${pr} was closed without merging.`);
     // One poll outside the queue can be the merge landing; two in a row is a removal.
@@ -399,6 +527,12 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
         .split("\n")
         .filter((line) => line.trim() !== "")
         .map((line) => JSON.parse(line) as CheckRun),
+    // The combined status: the latest state of each context.
+    commitStatuses: (commit) =>
+      must("gh", ["api", "--paginate", `repos/{owner}/{repo}/commits/${commit}/status?per_page=100`, "--jq", ".statuses[] | {context, state}"])
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => JSON.parse(line) as CommitStatus),
     enqueue: (id, head) => {
       const answer = graphql(mutation, { id, head }).data as unknown as { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };
       return answer.enqueuePullRequest.mergeQueueEntry;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { kindCheck, takeTransition } from "./check-migration-drift.fixtures.ts";
-import { branchOrderDrift, definedObjects, driftMessage, duplicateTimestamps, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
+import { branchOrderDrift, definedObjects, driftMessage, duplicateTimestamps, orderMessage, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
 
 describe("duplicateTimestamps", () => {
   const files = [
@@ -69,6 +69,41 @@ describe("definedObjects", () => {
 
   it("ignores constraints declared inside create table: a new table is no rebuild", () => {
     expect(definedObjects("create table package (id uuid, constraint package_kind_check check (kind in ('a')));")).toEqual([]);
+  });
+
+  // Review fix 8: one table, however it is written.
+  it("names a constraint's table the same, quoted, schema-qualified or bare", () => {
+    for (const table of ['"public"."notification"', "public.notification", "notification", '"notification"', 'public."notification"']) {
+      expect(definedObjects(`alter table ${table} drop constraint notification_kind_check;`), table).toEqual(["constraint notification_kind_check on notification"]);
+    }
+  });
+
+  // Review fix 9: a `--` in a string is not a comment, and one statement never reaches into the next.
+  it("does not cut a statement at a -- or ; inside a string literal", () => {
+    const sql = `
+      alter table note add constraint note_body_check check (body <> '--' and body <> ';'), add constraint note_title_check check (title <> 'it''s -- not');
+    `;
+    expect(definedObjects(sql)).toEqual(["constraint note_body_check on note", "constraint note_title_check on note"]);
+  });
+
+  it("does not let an alter table without its ; take the next one's constraints", () => {
+    const sql = `
+      alter table note add column x int
+      alter table notification drop constraint notification_kind_check;
+    `;
+    expect(definedObjects(sql)).toEqual(["constraint notification_kind_check on notification"]);
+  });
+
+  // Review fix 10: a function body runs when called, not when the migration runs.
+  it("ignores an alter table inside a function body, but not inside a do block", () => {
+    const sql = `
+      create or replace function app.fix_later() returns void language plpgsql as $body$
+      begin
+        alter table notification drop constraint notification_kind_check;
+      end $body$;
+      do $$ begin alter table note drop constraint note_body_check; end $$;
+    `;
+    expect(definedObjects(sql)).toEqual(["function app.fix_later", "constraint note_body_check on note"]);
   });
 
   it("ignores commented-out SQL and functions outside app", () => {
@@ -205,6 +240,18 @@ describe("branchOrderDrift", () => {
 
   it("passes migrations that define different objects, however unseen", () => {
     expect(branchOrderDrift([wf7, unrelated])).toEqual([]);
+  });
+
+  // Review fix 11: a constraint has no body to start from.
+  it("words the fix for a constraint as a rebuild with both migrations' values, and for a function as before", () => {
+    const [problem, fix] = orderMessage({ object: "constraint notification_kind_check on notification", earlier: "a.sql", later: "b.sql" });
+    expect(problem).toBe("constraint notification_kind_check on notification is redefined by b.sql without its seeing a.sql, the previous migration on this branch that defines it; the later one replaces the earlier one's change.");
+    expect(fix).toBe(
+      "  Add a new migration that sorts after both, written with both in the tree, that rebuilds it with both migrations' change: for a check constraint, every value either allows.",
+    );
+    expect(orderMessage({ object: "function app.take_transition", earlier: "a.sql", later: "b.sql" })[1]).toBe(
+      "  Add a new migration that sorts after both, written with both in the tree: start from b.sql's body and re-apply a.sql's change.",
+    );
   });
 });
 

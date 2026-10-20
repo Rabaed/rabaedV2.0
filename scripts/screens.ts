@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+﻿import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 
-// pnpm screens <route>... --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
+// pnpm screens [<route>...] --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
 //
 // Full-page screenshots of the running app for a PR (CODING_STANDARDS.md › UI): every
 // route at 1366 and 1920 wide, in English and Arabic, signed in as a demo person.
@@ -28,6 +28,34 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 //     await api.transition(body.id, "send_for_review"); // adds idempotencyKey and confirmed: true
 //     return { id: body.id };                          // fills {id} in the routes
 //   };
+//
+// Besides `request` and `transition`, the setup gets `api.upload(id, fieldKey, { fileName,
+// contentType, body })` (a file field, as the browser uploads it) and `api.as("hafiz")`: the same
+// API signed in as another demo person, for states only someone else can reach (RP-968).
+//
+// Screens (RP-968): the same module may `export const screens = [...]`, each a route shot in one
+// state, with the actions that bring the page there, run in order after it loads and before the
+// shot, in both languages and at both widths. Its routes take the setup's {name}s too, and
+// command-line routes become optional. A shot is saved as `<screen name>-<width>-<locale>.png`.
+//
+//   export const screens = [
+//     { name: "submit-dialog", route: "/packages/{packageId}", actions: [
+//       { click: "button", name: { en: "Submit Package", ar: "تقديم الحزمة" } }, // role + exact accessible name
+//       { waitFor: "dialog" },                                                  // role, and a name if you like
+//     ] },
+//     { name: "bulk", route: "/packages/{packageId}", actions: [
+//       { check: "Corridor luminaires – Tower 1" },  // the checkbox of the one row with this text
+//     ] },
+//   ];
+//
+// Names are locale-safe by naming both: `{ en, ar }` as each page's screen reader hears it, or one
+// string when it reads the same in both (a Document Number, a Subject someone typed). Not message
+// keys: a Transition's or Code's name comes from its Workflow, not the app's messages. A row is
+// found by its text, which is user data and the same in both languages. Every locator is strict
+// (exactly one element, 10 s); a failed action stops the run naming the screen, its language and
+// width, the action and its Playwright locator. After the last action the shot waits for the
+// requests it started (10 s, then a warning) and its finite animations (2 s). Examples:
+// scripts/screens-examples/.
 //
 // --phone: a phone instead (RP-630): 375 × 812, touch, as a phone's browser says it is.
 //
@@ -77,7 +105,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
       routes.push(arg);
     }
   }
-  if (routes.length === 0) throw new Error("Give at least one route, such as /work-items/<id>.");
+  if (routes.length === 0 && !values.setup) throw new Error("Give at least one route, such as /work-items/<id>, or a --setup that exports screens.");
   if (!values.as) throw new Error("Name the demo person with --as: an email or a short name such as hafiz.");
   const { email, short } = resolvePerson(values.as);
   const folder = values.folder ?? (/^RP-\d+/.exec(at.branch)?.[0] ?? at.branch.replace(/[^A-Za-z0-9._-]/g, "-"));
@@ -94,26 +122,308 @@ export function fillRoute(route: string, values: Record<string, string>): string
   });
 }
 
-/** The file a route's shot is saved as: its path as a name, then width and locale. */
+/** The file a shot is saved as: a route's path or a screen's name as a name, then width and locale. */
 export function shotName(route: string, width: number, locale: string): string {
   const name = route.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "home";
   return `${name}-${width}-${locale}.png`;
 }
 
-export type Shot = { route: string; width: number; locale: (typeof LOCALES)[number]; file: string };
+type Locale = (typeof LOCALES)[number];
+
+/**
+ * An accessible name: one string when it reads the same in both languages (a Document Number, a
+ * Subject the user typed), else `{ en, ar }`, each as that page's screen reader hears it.
+ */
+export type AccessibleName = string | Record<Locale, string>;
+
+/** A step run on a screen after it loads and before its shot. */
+export type ScreenAction =
+  /** Clicks the one element with this ARIA role and exact accessible name. */
+  | { click: string; name: AccessibleName }
+  /** Checks the checkbox in the one table row whose text has `check` (a Document Number or Subject: the same in both languages). */
+  | { check: string }
+  /** Waits until the element with this role (and name, when given) shows. */
+  | { waitFor: string; name?: AccessibleName };
+
+/** A route shot in one state: `name` is its file's name, `actions` bring the page to that state. */
+export type Screen = { name: string; route: string; actions: ScreenAction[] };
+
+const plainName = /^[A-Za-z0-9._-]+$/;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Checks a route as given on the command line or in a screen; returns the refusal, or null. */
+function routeProblem(route: string): string | null {
+  if (!route.startsWith("/")) return `must start with /: got "${route}"`;
+  if (/^\/(en|ar)(\/|$)/.test(route)) return `is given without the locale (each is shot in both): got "${route}"`;
+  return null;
+}
+
+function parseName(value: unknown, verb: string): AccessibleName {
+  if (typeof value === "string" && value.trim()) return value;
+  if (isRecord(value) && typeof value.en === "string" && value.en.trim() && typeof value.ar === "string" && value.ar.trim()) return { en: value.en, ar: value.ar };
+  if (value === undefined) throw new Error(`${verb} needs a name`);
+  throw new Error(`${verb}'s name is a string, or both en and ar: got ${JSON.stringify(value)}`);
+}
+
+function parseRole(value: unknown): string {
+  if (typeof value !== "string" || !/^[a-z]+$/.test(value)) throw new Error(`${JSON.stringify(value)} is not an ARIA role (such as button, dialog, row)`);
+  return value;
+}
+
+const nameIn = (name: AccessibleName, locale: Locale) => (typeof name === "string" ? name : name[locale]);
+
+/** What an action acts on: the one element with a role (and exact name), or the checkbox of the one row with a text. */
+export type Target = { role: string; name?: string } | { row: string };
+
+type Verb = "click" | "check" | "waitFor";
+
+/**
+ * Each kind of action, by its key: how it is read from a setup module, what it acts on in a
+ * page's language, and how it is said in a failure. The one place a new kind is added.
+ */
+const ACTIONS: { [V in Verb]: { parse(value: Record<string, unknown>): ScreenAction; target(action: ScreenAction, locale: Locale): Target; say(target: Target): string } } = {
+  click: {
+    parse: (value) => ({ click: parseRole(value.click), name: parseName(value.name, "click") }),
+    target: (action, locale) => {
+      const { click, name } = action as Extract<ScreenAction, { click: string }>;
+      return { role: click, name: nameIn(name, locale) };
+    },
+    say: (target) => `click ${"role" in target ? `${target.role} "${target.name}"` : ""}`,
+  },
+  check: {
+    parse: (value) => {
+      if (typeof value.check !== "string" || !value.check.trim()) throw new Error("check needs the text of its row (a Document Number or Subject)");
+      return { check: value.check };
+    },
+    target: (action) => ({ row: (action as Extract<ScreenAction, { check: string }>).check }),
+    say: (target) => `check the row "${"row" in target ? target.row : ""}"`,
+  },
+  waitFor: {
+    parse: (value) => ({ waitFor: parseRole(value.waitFor), ...(value.name === undefined ? {} : { name: parseName(value.name, "waitFor") }) }),
+    target: (action, locale) => {
+      const { waitFor, name } = action as Extract<ScreenAction, { waitFor: string }>;
+      return name === undefined ? { role: waitFor } : { role: waitFor, name: nameIn(name, locale) };
+    },
+    say: (target) => `wait for ${"role" in target ? `${target.role}${target.name === undefined ? "" : ` "${target.name}"`}` : ""}`,
+  },
+};
+
+const VERBS = Object.keys(ACTIONS) as Verb[];
+/** An action's kind: the one key of ACTIONS it has. */
+const verbOf = (action: ScreenAction): Verb => VERBS.find((verb) => verb in action)!;
+
+function parseAction(value: unknown): ScreenAction {
+  if (!isRecord(value)) throw new Error(`an action is an object: got ${JSON.stringify(value)}`);
+  const verb = VERBS.find((key) => key in value);
+  if (!verb) throw new Error(`an action is ${VERBS.slice(0, -1).join(", ")} or ${VERBS.at(-1)}: got ${JSON.stringify(value)}`);
+  return ACTIONS[verb].parse(value);
+}
+
+/** A setup module's `screens` export, checked; `source` (its file) starts every refusal. */
+export function parseScreens(value: unknown, source: string): Screen[] {
+  if (!Array.isArray(value)) throw new Error(`${source}: screens must be a list of { name, route, actions }.`);
+  const names = new Set<string>();
+  return value.map((item, i) => {
+    if (!isRecord(item) || typeof item.name !== "string" || !item.name) throw new Error(`${source}: screen ${i + 1} needs a name.`);
+    const { name } = item;
+    if (!plainName.test(name) || name.startsWith(".")) throw new Error(`${source}: screen ${i + 1} ("${name}") must have a plain name (letters, digits, . _ -): it names the file.`);
+    if (names.has(name)) throw new Error(`${source}: two screens named "${name}".`);
+    names.add(name);
+    const problem = typeof item.route === "string" ? routeProblem(item.route) : "is missing";
+    if (problem) throw new Error(`${source}: screen "${name}": its route ${problem}.`);
+    const actions = item.actions ?? [];
+    if (!Array.isArray(actions)) throw new Error(`${source}: screen "${name}": actions must be a list.`);
+    return {
+      name,
+      route: item.route as string,
+      actions: actions.map((action, j) => {
+        try {
+          return parseAction(action);
+        } catch (error) {
+          throw new Error(`${source}: screen "${name}", action ${j + 1}: ${(error as Error).message}.`, { cause: error });
+        }
+      }),
+    };
+  });
+}
+
+/** The Playwright locator a target is found by, as code, so a failure says where to look. The one place it is spelled. */
+const targetCode = (target: Target) =>
+  "row" in target
+    ? `getByRole("row").filter({ hasText: ${JSON.stringify(target.row)} }).getByRole("checkbox")`
+    : target.name === undefined
+      ? `getByRole(${JSON.stringify(target.role)})`
+      : `getByRole(${JSON.stringify(target.role)}, { name: ${JSON.stringify(target.name)}, exact: true })`;
+
+/** The Playwright locator an action uses in a page of `locale`, as code. */
+export const locatorOf = (action: ScreenAction, locale: Locale): string => targetCode(ACTIONS[verbOf(action)].target(action, locale));
+
+/** What runActions needs from a page: to act on a target, so a test can stand in for the browser. */
+export type ActionDriver = { run(verb: Verb, target: Target): Promise<void> };
+
+/** Runs `screen`'s actions in order on a page in `locale`; the first that fails stops it, named with its screen, number and locator. */
+export async function runActions(driver: ActionDriver, screen: Screen, at: { locale: Locale; width: number }): Promise<void> {
+  for (const [i, action] of screen.actions.entries()) {
+    const verb = verbOf(action);
+    const target = ACTIONS[verb].target(action, at.locale);
+    try {
+      await driver.run(verb, target);
+    } catch (error) {
+      const cause = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+      throw new Error(`Screen "${screen.name}" (${at.locale}, ${at.width}): action ${i + 1} of ${screen.actions.length}, ${ACTIONS[verb].say(target)}, failed at ${targetCode(target)}: ${cause}`, {
+        cause: error,
+      });
+    }
+  }
+}
+
+/** How long one action may wait for its element, and the requests after the last one may take to settle. */
+const ACTION_TIMEOUT = 10_000;
+/** How long the animations after the last action may take before the shot is taken anyway. */
+const ANIMATION_TIMEOUT = 2_000;
+
+/** runActions' driver on a Playwright page: every locator strict (exactly one element), the one targetCode prints. */
+function playwrightDriver(page: import("playwright").Page): ActionDriver {
+  type Role = Parameters<import("playwright").Page["getByRole"]>[0];
+  const locate = (target: Target) =>
+    "row" in target
+      ? page.getByRole("row").filter({ hasText: target.row }).getByRole("checkbox")
+      : page.getByRole(target.role as Role, target.name === undefined ? {} : { name: target.name, exact: true });
+  return {
+    run: (verb, target) => {
+      const locator = locate(target);
+      if (verb === "click") return locator.click({ timeout: ACTION_TIMEOUT });
+      if (verb === "check") return locator.check({ timeout: ACTION_TIMEOUT });
+      return locator.waitFor({ state: "visible", timeout: ACTION_TIMEOUT });
+    },
+  };
+}
+
+/** How many times a page that answered 404 or 5xx is loaded, LOAD_RETRY_MS apart, before the run stops. */
+const LOAD_TRIES = 3;
+const LOAD_RETRY_MS = 2_000;
+
+/**
+ * Loads a page through `goto` (its HTTP status, or undefined for no answer) until it answers
+ * below 400. The web app answers 404 when its API read takes over 3 s (apps/web/src/lib/session.ts),
+ * as under load, so a 404 or 5xx is tried again, with a warning, and the run stops after LOAD_TRIES.
+ */
+export async function loadPage(
+  goto: () => Promise<number | undefined>,
+  page: string,
+  { sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms)), warn = console.warn }: { sleep?: (ms: number) => Promise<void>; warn?: (line: string) => void } = {},
+): Promise<void> {
+  for (let tries = 1; ; tries++) {
+    const status = await goto();
+    if (status !== undefined && status < 400) return;
+    const answer = status ?? "nothing";
+    if (tries >= LOAD_TRIES) throw new Error(`${page} answered ${answer}, ${LOAD_TRIES} times.`);
+    warn(`Warning: ${page} answered ${answer} (try ${tries} of ${LOAD_TRIES}); trying again: the web server answers 404 when its API read takes over 3 s.`);
+    await sleep(LOAD_RETRY_MS);
+  }
+}
+
+/** The page events trackRequests listens to. */
+type RequestEvents = { on(event: string, listener: () => void): unknown; off(event: string, listener: () => void): unknown };
+const REQUEST_EVENTS = { request: 1, requestfinished: -1, requestfailed: -1 } as const;
+
+/**
+ * Counts `page`'s requests from now. `settle()` waits until none has been in flight for half a
+ * second, true, or gives up after ACTION_TIMEOUT, false; `networkidle` covers only the page's load,
+ * not the fetches a click starts. Both it and `stop()` remove the listeners (stop: an action threw).
+ */
+export function trackRequests(
+  page: RequestEvents,
+  { now = Date.now, sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) }: { now?: () => number; sleep?: (ms: number) => Promise<void> } = {},
+): { settle(): Promise<boolean>; stop(): void } {
+  let inFlight = 0;
+  let last = now();
+  const listeners = Object.entries(REQUEST_EVENTS).map(([event, step]) => {
+    const listener = () => {
+      inFlight = Math.max(0, inFlight + step);
+      last = now();
+    };
+    page.on(event, listener);
+    return [event, listener] as const;
+  });
+  const stop = () => {
+    for (const [event, listener] of listeners) page.off(event, listener);
+  };
+  return {
+    stop,
+    settle: async () => {
+      const giveUpAt = now() + ACTION_TIMEOUT;
+      let quiet = false;
+      while (!quiet && now() < giveUpAt) {
+        quiet = inFlight === 0 && now() - last >= 500;
+        if (!quiet) await sleep(50);
+      }
+      stop();
+      return quiet;
+    },
+  };
+}
+
+/** What shoot() prints when a screen's requests had not settled: the shot may show a loading state. */
+export const unsettledWarning = (screen: Screen, at: { locale: Locale; width: number }) =>
+  // eslint-disable-next-line rabaed/no-avoid-terms -- HTTP requests and this script's own screen actions, not Rabaed terms
+  `Warning: screen "${screen.name}" (${at.locale}, ${at.width}): requests were still in flight ${ACTION_TIMEOUT / 1000} s after its last action; shot anyway.`;
+
+/**
+ * Waits for the page's finite animations (a dialog fading in) to finish, at most `timeoutMs`;
+ * an infinite one (a spinner) never does, so it is skipped. Self-contained: it runs in the page
+ * through page.evaluate, where `animations` defaults to the document's.
+ */
+export async function finishAnimations(timeoutMs: number, animations: Animation[] = document.getAnimations()): Promise<"done" | "timed out"> {
+  const finite = animations.filter((animation) => Number.isFinite(Number(animation.effect?.getComputedTiming().endTime ?? 0)));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<"timed out">((done) => {
+    timer = setTimeout(() => done("timed out"), timeoutMs);
+  });
+  const finished = Promise.all(finite.map((animation) => animation.finished.catch(() => undefined))).then(() => "done" as const);
+  const result = await Promise.race([finished, timedOut]);
+  clearTimeout(timer);
+  return result;
+}
+
+export type Shot = { route: string; screen?: Screen; width: number; locale: Locale; file: string };
 
 const widthsOf = (phone: boolean): readonly number[] => (phone ? [PHONE.width] : WIDTHS);
 
-/** Every shot to take, locale by locale, then width (the phone's one with `phone`). Refuses two routes that would be saved as the same file. */
-export function plannedShots(routes: string[], { phone = false }: { phone?: boolean } = {}): Shot[] {
-  const byName = new Map<string, string>();
-  for (const route of routes) {
-    const name = shotName(route, 0, "");
-    const other = byName.get(name);
-    if (other !== undefined && other !== route) throw new Error(`Routes ${other} and ${route} would be saved as the same file: shoot them in separate runs.`);
-    byName.set(name, route);
+/**
+ * Every shot to take, locale by locale, then width: a route from the command line as it loads, a
+ * Screen after its actions, saved under its name; at the phone's one width with `phone`. Refuses two
+ * that would be saved as the same file, case aside (Windows file names ignore it).
+ */
+export function plannedShots(items: readonly (string | Screen)[], { phone = false }: { phone?: boolean } = {}): Shot[] {
+  const seen = new Map<string, string | Screen>();
+  const unique: (string | Screen)[] = [];
+  const said = (item: string | Screen) => (typeof item === "string" ? item : `"${item.name}"`);
+  for (const item of items) {
+    const key = shotName(typeof item === "string" ? item : item.name, 0, "").toLowerCase();
+    const other = seen.get(key);
+    if (other === undefined) {
+      seen.set(key, item);
+      unique.push(item);
+      continue;
+    }
+    // The same route twice is shot once.
+    if (other === item) continue;
+    const both =
+      typeof other === typeof item
+        ? `${typeof item === "string" ? "Routes" : "Screens"} ${said(other)} and ${said(item)}`
+        : `${typeof other === "string" ? "Route" : "Screen"} ${said(other)} and ${typeof item === "string" ? "route" : "screen"} ${said(item)}`;
+    throw new Error(`${both} would be saved as the same file: rename one, or shoot them in separate runs.`);
   }
-  return [...new Set(routes)].flatMap((route) => LOCALES.flatMap((locale) => widthsOf(phone).map((width) => ({ route, width, locale, file: shotName(route, width, locale) }))));
+  return unique.flatMap((item) =>
+    LOCALES.flatMap((locale) =>
+      widthsOf(phone).map((width) =>
+        typeof item === "string"
+          ? { route: item, width, locale, file: shotName(item, width, locale) }
+          : { route: item.route, screen: item, width, locale, file: shotName(item.name, width, locale) },
+      ),
+    ),
+  );
 }
 
 /** The branch the shots are published to: one level, so its raw URLs never mistake a part of it for the path. */
@@ -134,15 +444,16 @@ export const rawUrl = (repo: string, ref: string, path: string) => `https://raw.
 export function markdownTable(shots: Shot[], urlOf: (file: string) => string): string {
   const widths = [...new Set(shots.map((shot) => shot.width))];
   const columns = LOCALES.flatMap((locale) => widths.map((width) => ({ locale, width })));
-  const routes = [...new Set(shots.map((shot) => shot.route))];
-  const cell = (route: string, locale: string, width: number) => {
-    const shot = shots.find((s) => s.route === route && s.locale === locale && s.width === width);
+  const label = (shot: Shot) => (shot.screen ? `${shot.screen.name}: \`${shot.route}\`` : `\`${shot.route}\``);
+  const rows = [...new Set(shots.map(label))];
+  const cell = (row: string, locale: string, width: number) => {
+    const shot = shots.find((s) => label(s) === row && s.locale === locale && s.width === width);
     return shot ? `![](${urlOf(shot.file)})` : "";
   };
   return [
     `| Page | ${columns.map((c) => `${LOCALE_NAMES[c.locale]} ${c.width}`).join(" | ")} |`,
     `|---|${columns.map(() => "---").join("|")}|`,
-    ...routes.map((route) => `| \`${route}\` | ${columns.map((c) => cell(route, c.locale, c.width)).join(" | ")} |`),
+    ...rows.map((row) => `| ${row} | ${columns.map((c) => cell(row, c.locale, c.width)).join(" | ")} |`),
   ].join("\n");
 }
 
@@ -155,12 +466,18 @@ export type SetupApi = {
   request(method: string, path: string, body?: unknown): Promise<{ status: number; body: unknown }>;
   /** Takes a Transition, confirmed and with a fresh idempotencyKey, as every Transition must be (ADR 0017). */
   transition(id: string, transition: string, extra?: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
+  /** Uploads a file to an item's file field as the browser does: a signed URL from the API, the file, then the API told it is there. */
+  upload(id: string, fieldKey: string, file: { fileName: string; contentType: string; body: Uint8Array }): Promise<void>;
+  /** The same API, signed in as another demo person (short name or email), for the states only someone else can reach. */
+  as(person: string): Promise<SetupApi>;
 };
 
 /** The one Playwright Page method setupApi uses, so a test can stand in for the page. */
 export type EvaluatingPage = Pick<import("playwright").Page, "evaluate">;
 
-export function setupApi(page: EvaluatingPage): SetupApi {
+type StartedUpload = { id: string; upload: { url: string; method: string; headers: Record<string, string> } };
+
+export function setupApi(page: EvaluatingPage, signInAs?: (person: string) => Promise<SetupApi>): SetupApi {
   const request: SetupApi["request"] = async (method, path, body) => {
     const result = await page.evaluate(
       async ({ method, path, body }) => {
@@ -185,6 +502,26 @@ export function setupApi(page: EvaluatingPage): SetupApi {
     request,
     transition: (id, transition, extra = {}) =>
       request("POST", `/work-items/${id}/transitions`, { transition, confirmed: true, idempotencyKey: crypto.randomUUID(), ...extra }),
+    upload: async (id, fieldKey, file) => {
+      const documents = `/work-items/${id}/documents`;
+      const { body: started } = (await request("POST", documents, { fieldKey, fileName: file.fileName, contentType: file.contentType, sizeBytes: file.body.byteLength })) as {
+        body: StartedUpload;
+      };
+      // From inside the page too: the file store answers the web app's origin, as it does the browser's.
+      const put = await page.evaluate(
+        async ({ url, method, headers, base64 }) => {
+          const res = await fetch(url, { method, headers, body: Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)) });
+          return { status: res.status, text: await res.text() };
+        },
+        { ...started.upload, base64: Buffer.from(file.body).toString("base64") },
+      );
+      if (put.status >= 400) throw new Error(`Setup: the file store answered ${put.status} to ${file.fileName}: ${put.text}`);
+      await request("POST", `${documents}/${started.id}/confirm`);
+    },
+    as: (person) => {
+      if (!signInAs) return Promise.reject(new Error(`Setup: as("${person}") has no sign-in here.`));
+      return signInAs(person);
+    },
   };
 }
 
@@ -199,16 +536,33 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
   const browser = await chromium.launch();
   try {
     let placeholders: Record<string, string> = {};
+    let screens: Screen[] = [];
     if (args.setup) {
-      const context = await browser.newContext({ storageState });
-      const page = await context.newPage();
-      await page.goto(`${webUrl}/en`);
-      const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as { default: (api: SetupApi) => Promise<Record<string, string> | void> };
-      placeholders = (await setup.default(setupApi(page))) ?? {};
-      await context.close();
+      const contexts: import("playwright").BrowserContext[] = [];
+      /** A SetupApi from a page signed in with `state`; `as()` signs in someone else the same way. */
+      const apiFor = async (state: Awaited<ReturnType<typeof signIn>>): Promise<SetupApi> => {
+        const context = await browser.newContext({ storageState: state });
+        contexts.push(context);
+        const page = await context.newPage();
+        await page.goto(`${webUrl}/en`);
+        return setupApi(page, async (person) => apiFor(await signIn(resolvePerson(person).email, webUrl)));
+      };
+      try {
+        const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as {
+          default?: (api: SetupApi) => Promise<Record<string, string> | void>;
+          screens?: unknown;
+        };
+        if (setup.screens !== undefined) screens = parseScreens(setup.screens, args.setup);
+        if (setup.default) placeholders = (await setup.default(await apiFor(storageState))) ?? {};
+      } finally {
+        for (const context of contexts) await context.close();
+      }
     }
-    const routes = args.routes.map((route) => fillRoute(route, placeholders));
-    const shots = plannedShots(routes, { phone: args.phone });
+    if (args.routes.length === 0 && screens.length === 0) throw new Error(`Give at least one route, or export screens from ${args.setup}.`);
+    const shots = plannedShots([
+      ...args.routes.map((route) => fillRoute(route, placeholders)),
+      ...screens.map((screen) => ({ ...screen, route: fillRoute(screen.route, placeholders) })),
+    ], { phone: args.phone });
     mkdirSync(args.out, { recursive: true });
     for (const width of widthsOf(args.phone)) {
       const context = await browser.newContext({
@@ -217,12 +571,22 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
       });
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {
-        const response = await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" });
-        if (!response || response.status() >= 400) throw new Error(`${shot.locale}${shot.route} answered ${response?.status() ?? "nothing"}.`);
+        await loadPage(async () => (await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" }))?.status(), `${shot.locale}${shot.route}`);
         // A lost session redirects to the sign-in page with a 200: that is not the page asked for.
         if (new URL(page.url()).pathname.includes("/sign-in")) throw new Error(`${shot.locale}${shot.route} sent ${args.email} to the sign-in page: the session did not hold.`);
         // Next's dev-mode indicator ("N" in a corner) is not part of the page.
         await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+        if (shot.screen) {
+          const requests = trackRequests(page);
+          try {
+            await runActions(playwrightDriver(page), shot.screen, shot);
+            // What the last action opened finishes loading (a dialog reads its form) and animating in.
+            if (!(await requests.settle())) console.warn(unsettledWarning(shot.screen, shot));
+          } finally {
+            requests.stop();
+          }
+          await page.evaluate(finishAnimations, ANIMATION_TIMEOUT);
+        }
         await page.screenshot({ path: join(args.out, shot.file), fullPage: true });
         console.log(join(args.out, shot.file));
       }

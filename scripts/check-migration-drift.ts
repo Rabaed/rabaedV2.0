@@ -14,8 +14,11 @@ import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migr
 //   Fix: merge main, then add a new migration, later than every one named,
 //   that starts from the newest definition and re-applies the branch's change.
 //   A table constraint dropped or added in an `alter table` counts as an object
-//   too (RP-963: RP-643 and RP-155 each rebuilt notification_kind_check from the
-//   kinds they knew); its fix rebuilds it with both sides' change.
+//   too (RP-963: RP-643 and RP-155 each rebuilt notification_kind_check from only
+//   the kinds they knew, and the later-sorting one dropped the other's kind); its
+//   fix rebuilds it with both sides' change. Its table may be quoted or
+//   schema-qualified; an `alter table` inside a function body doesn't count (it
+//   runs when called), one inside a `do` block does.
 // - Branch order (RP-457). Two migrations on one branch that redefine the same
 //   object (two implementers building in parallel, merged onto an integration
 //   branch) can each start from the same old body; the one that sorts later
@@ -64,27 +67,68 @@ export interface Drift {
   main: string[];
 }
 
+// A table, bare, quoted or schema-qualified (`"public"."notification"`, `public.notification`): `table` is its name.
+const tableName = String.raw`(?:"?\w+"?\.)?"?(?<table>\w+)"?`;
 // Creating, replacing or dropping an `app` function or view, or a policy.
-const definition =
-  /\b(?:create(?:\s+or\s+replace)?|drop)\s+(?:(?<kind>function|view)\s+(?:if\s+exists\s+)?app\."?(?<name>\w+)"?|policy\s+(?:if\s+exists\s+)?"?(?<policy>\w+)"?\s+on\s+(?:\w+\.)?"?(?<table>\w+)"?)/gi;
-const comments = /--[^\n]*|\/\*[\s\S]*?\*\//g;
-// An `alter table` statement, to its `;`, and the constraints its clauses drop or add (RP-963).
-const alterTable = /\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:\w+\.)?"?(?<table>\w+)"?(?<clauses>[^;]*)/gi;
+const definition = new RegExp(
+  String.raw`\b(?:create(?:\s+or\s+replace)?|drop)\s+(?:(?<kind>function|view)\s+(?:if\s+exists\s+)?app\."?(?<name>\w+)"?|policy\s+(?:if\s+exists\s+)?"?(?<policy>\w+)"?\s+on\s+${tableName})`,
+  "gi",
+);
+// An `alter table` statement, to its `;` or (one missing its `;`) the next `alter table`, and the constraints its clauses drop or add.
+const alterTable = new RegExp(String.raw`\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${tableName}(?<clauses>(?:(?!\balter\s+table\b)[^;])*)`, "gi");
 const constraintClause = /\b(?:drop|add)\s+constraint\s+(?:if\s+exists\s+)?"?(?<constraint>\w+)"?/gi;
 
 /**
+ * `sql` without its comments: `--` to the end of the line and `/* … *\/`, but
+ * never inside a string literal (`'--'`) or a quoted identifier.
+ */
+export function withoutComments(sql: string): string {
+  let out = "";
+  for (let i = 0; i < sql.length; ) {
+    const two = sql.slice(i, i + 2);
+    if (two === "--") {
+      const end = sql.indexOf("\n", i);
+      i = end === -1 ? sql.length : end;
+    } else if (two === "/*") {
+      const end = sql.indexOf("*/", i + 2);
+      i = end === -1 ? sql.length : end + 2;
+    } else if (sql[i] === "'" || sql[i] === '"') {
+      // To the closing quote; a doubled quote ('it''s') is part of the literal.
+      const quote = sql[i]!;
+      let end = i + 1;
+      while (end < sql.length && !(sql[end] === quote && sql[end + 1] !== quote)) end += sql[end] === quote ? 2 : 1;
+      out += sql.slice(i, end + 1);
+      i = end + 1;
+    } else out += sql[i++];
+  }
+  return out;
+}
+
+/**
+ * The statements a migration runs as it runs: function bodies (`as $tag$ … $tag$`)
+ * emptied, since they run when called, not now (a `do $$ … $$` block runs now, so
+ * it stays), and string literals emptied, so a `;` in one ends no statement.
+ * Blanked, not cut: every index still points where it did in `code`.
+ */
+function runNow(code: string): string {
+  const blank = (text: string) => text.replace(/[^\n]/g, " ");
+  return code
+    .replace(/(\bdo\s*)?(\$\w*\$)([\s\S]*?)\2/gi, (whole, isDo: string | undefined, tag: string, body: string) => (isDo ? whole : `${tag}${blank(body)}${tag}`))
+    .replace(/'((?:[^']|'')*)'/g, (_, body: string) => `'${blank(body)}'`);
+}
+
+/**
  * The objects a migration (re)defines, by kind and name, in the order it first
- * does so. A table constraint dropped or added in an `alter table` counts too
- * (RP-963): RP-643 and RP-155 each rebuilt notification_kind_check from only
- * the kinds they knew, and the later-sorting one dropped the other's kind.
+ * does so; a table constraint dropped or added in an `alter table` counts too
+ * (RP-963, why: the header's redefinition drift).
  */
 export function definedObjects(sql: string): string[] {
-  const code = sql.replace(comments, "");
+  const code = withoutComments(sql);
   const routines = [...code.matchAll(definition)].map(({ index, groups = {} }) => ({
     index,
     object: groups.kind ? `${groups.kind} app.${groups.name}` : `policy ${groups.policy} on ${groups.table}`,
   }));
-  const constraints = [...code.matchAll(alterTable)].flatMap(({ index, groups = {} }) =>
+  const constraints = [...runNow(code).matchAll(alterTable)].flatMap(({ index, groups = {} }) =>
     [...(groups.clauses ?? "").matchAll(constraintClause)].map((clause) => ({ index: index + clause.index, object: `constraint ${clause.groups?.constraint} on ${groups.table}` })),
   );
   const objects = [...routines, ...constraints].toSorted((a, b) => a.index - b.index).map(({ object }) => object.toLowerCase());
@@ -153,6 +197,20 @@ export function branchOrderDrift(branch: BranchMigration[]): OrderDrift[] {
   return drifts;
 }
 
+/** The drift check's report of one OrderDrift: the problem, then the fix; a constraint has no body to start from, so it is rebuilt. */
+export function orderMessage({ object, earlier, later }: OrderDrift): [string, string] {
+  const how = object.startsWith("constraint ")
+    ? // eslint-disable-next-line rabaed/no-avoid-terms -- a Postgres check constraint, not a Rabaed term
+      ", that rebuilds it with both migrations' change: for a check constraint, every value either allows."
+    : `: start from ${later}'s body and re-apply ${earlier}'s change.`;
+  return [
+    // eslint-disable-next-line rabaed/no-avoid-terms -- a database migration, not a data import
+    `${object} is redefined by ${later} without its seeing ${earlier}, the previous migration on this branch that defines it; the later one replaces the earlier one's change.`,
+    // eslint-disable-next-line rabaed/no-avoid-terms -- a database migration, not a data import
+    `  Add a new migration that sorts after both, written with both in the tree${how}`,
+  ];
+}
+
 export interface StaleOverload {
   /** The function and its argument types, e.g. `app.take_transition(uuid, text)`. */
   signature: string;
@@ -219,7 +277,7 @@ function argumentList(sql: string, start: number): string[] {
 
 /** The `app` functions a migration creates or drops, by name and argument types, in order. */
 export function functionChanges(sql: string): FunctionChange[] {
-  const code = sql.replace(comments, "");
+  const code = withoutComments(sql);
   return [...code.matchAll(functionHead)].map((match) => {
     const { op = "", name = "", paren } = match.groups ?? {};
     const args = paren
@@ -415,10 +473,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   const problems = migrationProblems(process.cwd(), base, head);
   const { drift, ordering, overloads, duplicates } = problems;
   for (const found of drift) for (const line of driftMessage(found)) console.error(line);
-  for (const { object, earlier, later } of ordering) {
-    console.error(`${object} is redefined by ${later} without its seeing ${earlier}, the previous migration on this branch that defines it; the later one replaces the earlier one's change.`);
-    console.error(`  Add a new migration that sorts after both, written with both in the tree: start from ${later}'s body and re-apply ${earlier}'s change.`);
-  }
+  for (const found of ordering) for (const line of orderMessage(found)) console.error(line);
   for (const { signature, branch, main } of overloads) {
     console.error(`${signature} is created on this branch (${branch.join(", ")}) beside another overload; main dropped that signature, or redefined the function out of this branch's sight (${main.join(", ")}).`);
     console.error("  A different argument list makes a second function, so the stale one stays with its old body and grants. Make this branch's change on main's signature instead: rewrite the branch's migration (it isn't on main yet), or drop the stale signature in a new, later migration.");
