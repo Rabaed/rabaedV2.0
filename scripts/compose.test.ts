@@ -11,3 +11,14 @@ describe("docker-compose.yml db service", () => {
     expect(db).toMatch(/^ {4}command:.*postgres\b.*-c track_functions=pl\b/m);
   });
 });
+
+// A service whose server is PID 1 never reaps exited children; rustfs turned zombie that way and
+// Docker could then neither kill nor remove it, so `lanes:prune` failed on the lane (RP-983).
+describe("docker-compose.yml init", () => {
+  const compose = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+
+  it.each(["db", "mailpit", "files"])("runs an init process in the %s service", (service) => {
+    const block = new RegExp(`^ {2}${service}:\\n((?: {4}.*\\n|\\n)+)`, "m").exec(compose)?.[1] ?? "";
+    expect(block).toMatch(/^ {4}init: true$/m);
+  });
+});

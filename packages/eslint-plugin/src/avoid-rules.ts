@@ -48,6 +48,7 @@ const allowedInText: string[] = [
   "legal name", // a Company's legal name (`company.legal_name`).
   "full name", // a Member's full name (`member.full_name`).
   "project name", // a Project's name, which no Subject replaces.
+  "pkg number or name", // the Packages view's search: a Package's own name (GLOSSARY.md Package), which no Subject replaces.
   "name english", // "Name (English)": the English half of a bilingual name field.
   "name arabic", // "Name (Arabic)": the Arabic half.
   "name company com", // the example address name@company.com.
