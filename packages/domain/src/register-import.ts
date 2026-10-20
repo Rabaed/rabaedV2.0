@@ -2,6 +2,7 @@ import { z } from "zod";
 import { bilingualText, engineerReason } from "./company.ts";
 import { formKey } from "./form.ts";
 import { packageStatus } from "./package.ts";
+import { registerMatchKey, splitRegisterValues } from "./register-import-match.ts";
 import { workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -89,6 +90,8 @@ export type RegisterFormFieldType = (typeof registerFormFieldTypes)[number];
 /** Values matched by hand once, by the cell's registerMatchKey, applying to every row with it (story 10). */
 const matchesOf = <T extends z.ZodType<string>>(value: T) =>
   z.record(z.string().max(500), value).refine((matches) => Object.keys(matches).length <= 2000, "At most 2,000 matches");
+/** A value field's keys whose match is still the suggestion (RP-961). */
+const suggestedKeys = z.array(z.string().max(500)).max(2000);
 
 /**
  * Who raises a row's Draft (RP-640, story 24), besides its email in the "Assign to"
@@ -152,6 +155,21 @@ export const registerImportMapping = z.object({
       scopes: matchesOf(z.uuid()),
       fields: z.record(formKey, matchesOf(z.string().max(64))),
       package: matchesOf(z.union([z.uuid(), z.literal("new")])),
+    })
+    .partial()
+    .optional(),
+  /**
+   * The keys of `values` whose match is a suggestion the importer hasn't confirmed or
+   * changed (RP-961): imported as matched, but counted on Validate ("12 rows use suggested
+   * matches") and still marked Suggested on Map values. Never a Package's.
+   */
+  suggested: z
+    .object({
+      type: suggestedKeys,
+      trade: suggestedKeys,
+      location: suggestedKeys,
+      scopes: suggestedKeys,
+      fields: z.record(formKey, suggestedKeys),
     })
     .partial()
     .optional(),
@@ -284,6 +302,11 @@ export const registerImport = registerImportSummary.extend({
   mapping: registerImportMapping,
   rows: z.array(registerImportRow),
   /**
+   * How many of its good rows hold a value matched by a suggestion the importer didn't
+   * confirm (RP-961, the mapping's `suggested`): good rows all the same, never a warning.
+   */
+  rowsSuggested: z.int().min(0),
+  /**
    * The Packages it creates and adds to (RP-644, story 16): of a preview, its good rows'; of
    * a confirmed import, its created rows'. A new one has no number until confirm.
    */
@@ -300,6 +323,28 @@ export const registerImport = registerImportSummary.extend({
   original: z.boolean(),
 });
 export type RegisterImport = z.infer<typeof registerImport>;
+
+/**
+ * Whether a row holds a value matched by a suggestion the importer didn't confirm (RP-961):
+ * its Type, Trade or Location cell, one of its Scopes, or a choice field's value (one of
+ * its values), by registerMatchKey, among the mapping's `suggested` keys.
+ */
+export function rowUsesSuggestion(mapping: RegisterImportMapping, row: Pick<RegisterImportRow, "type" | "trade" | "location" | "scopes" | "fields">): boolean {
+  const suggested = mapping.suggested;
+  if (!suggested) return false;
+  const holds = (keys: readonly string[] | undefined, text: string, split: boolean) => {
+    if (!keys || keys.length === 0 || text.trim() === "") return false;
+    const pieces = split ? [text, ...splitRegisterValues(text)] : [text];
+    return pieces.some((piece) => keys.includes(registerMatchKey(piece)));
+  };
+  return (
+    holds(suggested.type, row.type.text, false) ||
+    holds(suggested.trade, row.trade.text, false) ||
+    holds(suggested.location, row.location.text, false) ||
+    holds(suggested.scopes, row.scopes.text, true) ||
+    row.fields.some((f) => holds(suggested.fields?.[f.key], f.text, true))
+  );
+}
 
 /** A mapping saved under a name for the importer's Participant (RP-644, story 11). No time, nor who saved it. */
 export const registerImportSavedMapping = z.object({ id: z.uuid(), name: z.string(), mapping: registerImportMapping });

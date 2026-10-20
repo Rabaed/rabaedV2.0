@@ -4,6 +4,7 @@ import {
   packageNumber,
   registerImportMapping,
   registerTopRows,
+  rowUsesSuggestion,
   suggestRegisterFields,
   xlsxContentType,
   type BilingualText,
@@ -511,6 +512,7 @@ export function getRegisterImport(importer: RegisterImporter, importId: string):
       headers: r.headers,
       mapping,
       rows: imported,
+      rowsSuggested: imported.filter((row) => row.reasons.length === 0 && rowUsesSuggestion(mapping, row)).length,
       // What confirm does with Packages: a preview's good rows, a confirmed import's created ones.
       packages: packagesOfRows(imported.filter((row) => (r.status === "created" ? row.created : row.reasons.length === 0))),
       original: r.source_file_id !== null && !engineer && importer.files !== undefined,

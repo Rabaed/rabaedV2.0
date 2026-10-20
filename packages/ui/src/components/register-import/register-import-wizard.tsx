@@ -31,6 +31,7 @@ import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
 import { logDownload, rejectedRowsDownload, saveDownload } from "./register-import-downloads.ts";
 import { PackagesCard, type PackagesChoice } from "./register-import-packages.tsx";
 import { ErrorRows, ImportRows, PackageCell, within } from "./register-import-rows.tsx";
+import { confirmSuggestion, suggestedFromMapping, suggestedMapping, suggestedOnLoad, type Suggested } from "./register-import-suggested.ts";
 
 // The Submittal Register Import wizard (RP-637, RP-639; the owner's design RP-634):
 // Upload → Sheet & header row → Map fields (a field suggested for each column from its
@@ -204,6 +205,8 @@ export function RegisterImportWizard({
   const [values, setValues] = useState<RegisterValues | null>(null);
   const [valueTab, setValueTab] = useState(0);
   const [matches, setMatches] = useState<Matches>({});
+  /** The suggestions pre-chosen on Map values and not yet confirmed or changed (RP-961). */
+  const [suggested, setSuggested] = useState<Suggested>({});
   /** Every mapped value column's values, the "Assign to" column's too: the Assign step's counts. */
   const [allValues, setAllValues] = useState<RegisterValues | null>(null);
   /** The default assignee (a Member's id); null: the importer. */
@@ -264,6 +267,7 @@ export function RegisterImportWizard({
     setOthers(rest);
     setTicked(ticks);
     setMatches({});
+    setSuggested({});
     setValues(null);
     setPackagesChoice(Object.values(rest).includes("package") ? { mode: "column" } : { mode: "none" });
     setAppliedMapping(null);
@@ -305,6 +309,7 @@ export function RegisterImportWizard({
       ...(mappedValues.package ? { package: mappedValues.package } : {}),
       ...Object.fromEntries(Object.entries(mappedValues.fields ?? {}).map(([key, byHand]) => [registerFormFieldId(key), byHand])),
     });
+    setSuggested(suggestedFromMapping(m.suggested));
     setDefaultAssignee(m.assign?.default ?? null);
     setRules(m.assign?.rules ?? []);
     setPackagesChoice(
@@ -403,6 +408,7 @@ export function RegisterImportWizard({
       ...(Object.keys(fieldMatches).length > 0 ? { fields: fieldMatches } : {}),
       ...(packagesChoice.mode === "column" && byHand("package") ? { package: byHand("package") } : {}),
     };
+    const unconfirmed = suggestedMapping(suggested, matches);
     const byColumn = (allColumns || packagesChoice.mode === "column") && columnOf("package");
     const forFile =
       !allColumns && packagesChoice.mode === "file"
@@ -422,6 +428,7 @@ export function RegisterImportWizard({
       ...(columnOf("assignTo") ? { assignTo: columnOf("assignTo") } : {}),
       ...(formFields.length > 0 ? { fields: formFields } : {}),
       ...(withMatches && Object.keys(valueMatches).length > 0 ? { values: valueMatches } : {}),
+      ...(withMatches && unconfirmed ? { suggested: unconfirmed } : {}),
       ...(defaultAssignee || rules.length > 0
         ? { assign: { ...(defaultAssignee ? { default: defaultAssignee } : {}), ...(rules.length > 0 ? { rules } : {}) } }
         : {}),
@@ -471,6 +478,7 @@ export function RegisterImportWizard({
       }
       return next;
     });
+    setSuggested((was) => suggestedOnLoad(was, shown));
     setStep("values");
   }
 
@@ -536,6 +544,7 @@ export function RegisterImportWizard({
     setOthers({});
     setTicked({});
     setMatches({});
+    setSuggested({});
     setValues(null);
     setAllValues(null);
     setDefaultAssignee(null);
@@ -613,6 +622,9 @@ export function RegisterImportWizard({
   /** A value's match now: the one chosen by hand, else the API's exact one. */
   const matchOf = (field: string, value: RegisterValues["fields"][number]["values"][number]) =>
     matches[field]?.[value.key] ?? (value.how === "exact" ? value.match : null);
+  /** Whether a value is still matched by the suggestion pre-chosen for it: marked Suggested until confirmed or changed (RP-961). */
+  const stillSuggested = (field: string, value: RegisterValues["fields"][number]["values"][number]) =>
+    matchOf(field, value) !== null && (suggested[field]?.includes(value.key) ?? false);
 
   const fileCard = (detail: ReactNode, action?: ReactNode) =>
     file && (
@@ -1059,6 +1071,17 @@ export function RegisterImportWizard({
                       </p>
                     </div>
                     {(() => {
+                      const toConfirm = currentValues.values.filter((v) => stillSuggested(currentValues.field, v)).length;
+                      return (
+                        toConfirm > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-sm bg-success-tint px-2 py-1 text-[12.5px] font-bold text-success-fg">
+                            <Icon name="star" size={14} />
+                            {t("values.toConfirm", { count: toConfirm, n: n(toConfirm) })}
+                          </span>
+                        )
+                      );
+                    })()}
+                    {(() => {
                       const unmatched = currentValues.values.filter((v) => matchOf(currentValues.field, v) === null).length;
                       return unmatched === 0 ? (
                         <span className="inline-flex items-center gap-1 rounded-sm bg-success-tint px-2 py-1 text-[12.5px] font-bold text-success-fg">
@@ -1074,7 +1097,7 @@ export function RegisterImportWizard({
                     })()}
                   </div>
                   <div role="region" aria-label={t("values.caption")} tabIndex={0} className="overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-[14px]">
+                    <table className="w-full min-w-[640px] text-[14px]">
                       <caption className="sr-only">{t("values.caption")}</caption>
                       <thead>
                         <tr className="bg-surface-subtle text-[12.5px] font-bold text-text-secondary">
@@ -1085,15 +1108,15 @@ export function RegisterImportWizard({
                           <th scope="col" className="px-3 py-3 text-start">
                             {t("values.rabaedValue")}
                           </th>
-                          <th scope="col" className="w-24 px-3 py-3" />
+                          <th scope="col" className="w-52 px-3 py-3" />
                         </tr>
                       </thead>
                       <tbody>
                         {currentValues.values.map((v) => {
                           const chosen = matchOf(currentValues.field, v);
-                          const suggested = v.how === "suggested" && chosen === v.match;
+                          const isSuggested = stillSuggested(currentValues.field, v);
                           return (
-                            <tr key={v.key} className={cn("border-t border-border-subtle", suggested && "bg-success-tint/50", chosen === null && "bg-danger-tint/40")}>
+                            <tr key={v.key} className={cn("border-t border-border-subtle", isSuggested && "bg-success-tint/50", chosen === null && "bg-danger-tint/40")}>
                               <th scope="row" className="px-3 py-2.5 text-start font-semibold">
                                 <bdi>{v.text}</bdi>
                                 <span className="block text-[12.5px] font-normal text-muted">{t("values.rows", { count: v.rows, n: n(v.rows) })}</span>
@@ -1105,14 +1128,15 @@ export function RegisterImportWizard({
                                 <Select
                                   aria-label={t("values.matchFor", { value: v.text })}
                                   value={chosen ?? "none"}
-                                  onValueChange={(value) =>
+                                  onValueChange={(value) => {
                                     setMatches((was) => {
                                       const field = { ...was[currentValues.field] };
                                       if (value === "none") delete field[v.key];
                                       else field[v.key] = value;
                                       return { ...was, [currentValues.field]: field };
-                                    })
-                                  }
+                                    });
+                                    setSuggested((was) => confirmSuggestion(was, currentValues.field, v.key));
+                                  }}
                                   options={[{ value: "none", label: t("values.notMatched") }, ...valueOptions(currentValues.field)]}
                                 />
                               </td>
@@ -1121,11 +1145,22 @@ export function RegisterImportWizard({
                                   <span className="font-semibold text-danger-fg">{t("values.none")}</span>
                                 ) : v.how === "exact" && !matches[currentValues.field]?.[v.key] ? (
                                   <span className="text-muted">{t("values.exact")}</span>
-                                ) : suggested ? (
-                                  <span className="inline-flex items-center gap-1 font-bold text-success-fg">
-                                    <Icon name="star" size={13} />
-                                    <span className="sr-only">{t("map.suggested")}</span>
-                                    {t("map.score", { score: n(v.score ?? 0) })}
+                                ) : isSuggested ? (
+                                  <span className="flex items-center justify-end gap-2">
+                                    <span className="inline-flex items-center gap-1 font-bold text-success-fg">
+                                      <Icon name="star" size={13} />
+                                      {t("values.suggested")}
+                                      {v.score !== null && <span>{t("map.score", { score: n(v.score) })}</span>}
+                                    </span>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      aria-label={t("values.confirmFor", { value: v.text })}
+                                      onClick={() => setSuggested((was) => confirmSuggestion(was, currentValues.field, v.key))}
+                                    >
+                                      <Icon name="check" />
+                                      {t("values.confirm")}
+                                    </Button>
                                   </span>
                                 ) : (
                                   <span className="text-muted">{t("values.byHand")}</span>
@@ -1222,6 +1257,27 @@ export function RegisterImportWizard({
             <Count value={n(preview.rowsTotal - preview.rowsRejected)} label={t("validate.ready")} tone="success" />
             <Count value={n(preview.rowsRejected)} label={t("validate.leftOut")} tone="danger" />
           </div>
+          {preview.rowsSuggested > 0 && (
+            // RP-961: good rows all the same, never a warning; a way back to confirm them.
+            <p className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-4 py-3 text-[14px]">
+              <Icon name="star" size={18} className="text-success-fg" />
+              <span className="flex-1">{t("validate.suggested", { count: preview.rowsSuggested, n: n(preview.rowsSuggested) })}</span>
+              {file && values && values.fields.length > 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const first = values.fields.findIndex((f) => f.values.some((v) => stillSuggested(f.field, v)));
+                    setValueTab(Math.max(0, first));
+                    setStep("values");
+                  }}
+                >
+                  {t("validate.reviewSuggested")}
+                  <Icon name="arrow-right" />
+                </Button>
+              )}
+            </p>
+          )}
           {preview.rowsRejected > 0 && (
             <p className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-4 py-3 text-[14px]">
               <Icon name="alert-triangle" size={18} className="text-danger-fg" />
