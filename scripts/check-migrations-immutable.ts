@@ -28,13 +28,19 @@ export function alteredMigrations(repo: string, base: string, head: string = "HE
     .map(({ status, path }) => `${path} (${status === "D" ? "deleted or renamed" : "edited"})`);
 }
 
+/** A migration the change adds that sorts before `latest`, the base branch's latest. */
+export interface Misordered {
+  path: string;
+  latest: string;
+}
+
 /**
  * The migrations the change adds that sort before the base branch's latest
  * migration, each with that latest one. Migrations run in name order, so such a
  * file runs before migrations it was never written against, and a function it
  * re-defines can bring back an outdated copy (RP-311's take_transition, RP-342).
  */
-export function misorderedMigrations(repo: string, base: string, head: string = "HEAD"): { path: string; latest: string }[] {
+export function misorderedMigrations(repo: string, base: string, head: string = "HEAD"): Misordered[] {
   const latest = migrationNames(repo, base).reduce((a, b) => (a > b ? a : b), "");
   return changedMigrations(repo, base, head)
     .filter(({ status, path }) => status === "A" && path.slice(path.lastIndexOf("/") + 1) < latest)
@@ -42,7 +48,7 @@ export function misorderedMigrations(repo: string, base: string, head: string = 
 }
 
 /** Prints each migration altered or misordered, with its fix, or the passing line, and returns them (RP-990: `check:migrations` counts them). */
-export function reportImmutable(repo: string, base: string, head: string = "HEAD"): { altered: string[]; misordered: { path: string; latest: string }[] } {
+export function reportChangedOrMisordered(repo: string, base: string, head: string = "HEAD"): { altered: string[]; misordered: Misordered[] } {
   const altered = alteredMigrations(repo, base, head);
   const misordered = misorderedMigrations(repo, base, head);
   if (altered.length > 0) {
@@ -63,6 +69,6 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error("Usage: node scripts/check-migrations-immutable.ts <base-ref> [head-ref]");
     process.exit(2);
   }
-  const { altered, misordered } = reportImmutable(process.cwd(), base, process.argv[3] ?? "HEAD");
+  const { altered, misordered } = reportChangedOrMisordered(process.cwd(), base, process.argv[3] ?? "HEAD");
   if (altered.length > 0 || misordered.length > 0) process.exit(1);
 }

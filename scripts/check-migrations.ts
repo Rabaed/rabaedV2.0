@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { reportMigrationProblems } from "./check-migration-drift.ts";
 import { branchIssue, formatReservation, migrationDays, reservationsFile } from "./check-migrations-days.ts";
-import { reportImmutable } from "./check-migrations-immutable.ts";
-import { verdictLine } from "./check-migrations-verdict.ts";
+import { reportChangedOrMisordered } from "./check-migrations-immutable.ts";
+import { noRefusals, verdictLine } from "./check-migrations-verdict.ts";
 import { git } from "./migrations.ts";
 
 // `pnpm check:migrations` (RP-384): the CI drift check, run before a push or
@@ -22,15 +22,27 @@ const repo = process.cwd();
 const fetched = spawnSync("git", ["fetch", "origin", "main"], { cwd: repo, stdio: "inherit" });
 if (fetched.status !== 0) {
   console.error("git fetch origin main failed; the migration check needs a current origin/main.");
-  console.log("check:migrations: FAILED (git fetch origin main failed)");
+  console.log(verdictLine(noRefusals, 0, ["git fetch origin main failed"]));
   process.exit(fetched.status ?? 1);
 }
-const { drift, ordering, overloads, duplicates, hiddenSorts } = reportMigrationProblems(repo, "origin/main", "HEAD");
 
-const { altered, misordered } = reportImmutable(repo, "origin/main", "HEAD");
+// A check that throws (a git error) is named in the verdict, and the later checks still run.
+const stopped: string[] = [];
+function run<T>(name: string, nothing: T, report: () => T): T {
+  try {
+    return report();
+  } catch (error) {
+    console.error(`The ${name} step stopped with an error:`, error);
+    stopped.push(`the ${name} step stopped with an error`);
+    return nothing;
+  }
+}
 
-const branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
-const { refused, unreserved } = migrationDays(repo, "origin/main", "HEAD", branchIssue(branch));
+const { drift, ordering, overloads, duplicates, hiddenSorts } = run("drift", { drift: [], ordering: [], overloads: [], duplicates: [], hiddenSorts: [] }, () => reportMigrationProblems(repo, "origin/main", "HEAD"));
+
+const { altered, misordered } = run("immutable", { altered: [], misordered: [] }, () => reportChangedOrMisordered(repo, "origin/main", "HEAD"));
+
+const { refused, unreserved } = run("days", { refused: [], unreserved: [] }, () => migrationDays(repo, "origin/main", "HEAD", branchIssue(git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim())));
 for (const { name, reservation } of refused) {
   console.error(`${name} is on a day ${reservationsFile} reserves for another issue: ${formatReservation(reservation)}`);
   console.error("  Move it to a day reserved for this issue (its branch name or its header names the issue), or ask the planning session for one.");
@@ -48,5 +60,5 @@ const refusals = {
   sortBeforeMain: misordered.length,
   otherIssueDays: refused.length,
 };
-console.log(verdictLine(refusals, unreserved.length));
-if (Object.values(refusals).some((count) => count > 0)) process.exit(1);
+console.log(verdictLine(refusals, unreserved.length, stopped));
+if (stopped.length > 0 || Object.values(refusals).some((count) => count > 0)) process.exit(1);

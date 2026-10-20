@@ -112,6 +112,23 @@ describe("check-migrations", () => {
     expect(lastLine(result.stdout)).toBe("check:migrations: passed (warning: 1 on a day nobody reserved)");
   });
 
+  it("counts a branch redefinition written without seeing the previous one as unseen on this branch, not as on main", () => {
+    // Two bodies: a file whose content the other's tree held counts as seen (a rename).
+    const fn = "create or replace function app.pick() returns int language sql as $$ select 1 $$;\n";
+    commit(clone, { [`${dir}/20261212000000_later.sql`]: fn.replace("select 1", "select 2") }, "first");
+    commit(clone, { [`${dir}/20261211000000_earlier.sql`]: fn }, "second");
+    const result = check();
+    expect(result.status).toBe(1);
+    expect(lastLine(result.stdout)).toBe("check:migrations: FAILED (1 redefined unseen on this branch; warning: 2 on a day nobody reserved)");
+  });
+
+  it("ends with a FAILED verdict when the fetch fails", () => {
+    git(clone, "remote", "set-url", "origin", join(root, "gone"));
+    const result = check();
+    expect(result.status).not.toBe(0);
+    expect(lastLine(result.stdout)).toBe("check:migrations: FAILED (git fetch origin main failed)");
+  });
+
   it("passes on main itself", () => {
     git(clone, "switch", "-q", "main");
     expect(check().status).toBe(0);

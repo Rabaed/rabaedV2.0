@@ -18,6 +18,11 @@ describe("verdictLine", () => {
     );
   });
 
+  it("names a check that could not run before the counts", () => {
+    expect(verdictLine(noRefusals, 0, ["git fetch origin main failed"])).toBe("check:migrations: FAILED (git fetch origin main failed)");
+    expect(verdictLine({ ...noRefusals, sharedTimestamps: 1 }, 0, ["the days step stopped with an error"])).toBe("check:migrations: FAILED (the days step stopped with an error, 1 shared timestamp)");
+  });
+
   it("adds the unreserved-day warning without failing", () => {
     expect(verdictLine(noRefusals, 2)).toBe("check:migrations: passed (warning: 2 on a day nobody reserved)");
     expect(verdictLine({ ...noRefusals, otherIssueDays: 1 }, 1)).toBe("check:migrations: FAILED (1 on another issue's day; warning: 1 on a day nobody reserved)");
