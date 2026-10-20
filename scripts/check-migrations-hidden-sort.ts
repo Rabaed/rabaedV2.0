@@ -177,15 +177,15 @@ export function branchHiddenSortKeys(repo: string, base: string, head: string): 
     .flatMap((name) => hiddenSortKeys(name, migrationSql(repo, head, name)));
 }
 
-/** Prints each hidden sort key the branch adds and returns whether there were any. */
-export function reportHiddenSortKeys(repo: string, base: string, head: string): boolean {
+/** Prints each hidden sort key the branch adds and returns them (RP-990: `check:migrations` counts them). */
+export function reportHiddenSortKeys(repo: string, base: string, head: string): HiddenSortKey[] {
   const found = branchHiddenSortKeys(repo, base, head);
   for (const { file, line, column, rule } of found) {
     console.error(`${file}:${line} sorts by ${column}, which docs/visibility.md hides (${rule}).`);
     console.error("  A hidden value stays out of sort keys: sort by a value the viewer may see (e.g. the Submission Date, the Document Number, then the id). If nobody can learn the hidden value from this order, say why in a `-- hidden-sort-key: <reason>` comment on that line or the line above.");
   }
   if (found.length === 0) console.log("No new migration sorts by a hidden column (scripts/hidden-columns.ts).");
-  return found.length > 0;
+  return found;
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
@@ -194,5 +194,5 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error("Usage: node scripts/check-migrations-hidden-sort.ts <base> <head>");
     process.exit(2);
   }
-  if (reportHiddenSortKeys(process.cwd(), base, head)) process.exit(1);
+  if (reportHiddenSortKeys(process.cwd(), base, head).length > 0) process.exit(1);
 }

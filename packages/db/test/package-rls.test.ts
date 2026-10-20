@@ -8,8 +8,8 @@ import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, drainOutbox, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { createDb, withMember, type Db, type OutboxHandler } from "../src/index.ts";
+import { addTestWorkflow, approveBActionForm, drainOutbox, expectedContentSha256, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -56,13 +56,13 @@ const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
   withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-/** A Draft of the test submittal Type raised by `as`. */
-async function draft(as: string, title: string): Promise<string> {
+/** A Draft of the test submittal Type (or of `type`) raised by `as`, in Electrical (or in `trade`). */
+async function draft(as: string, title: string, type = TYPE, trade = electrical): Promise<string> {
   const [created] = await call<{ outcome: string; work_item_id: string }>(
     as,
     sql`select outcome, work_item_id from app.create_work_item(
-      ${projectId}::uuid, ${TYPE}, ${title}, app.latest_form_version(${TYPE}), ${JSON.stringify({ model: title })}::jsonb,
-      ${electrical}::uuid, ${buildingA}::uuid, now())`,
+      ${projectId}::uuid, ${type}, ${title}, app.latest_form_version(${type}), ${JSON.stringify({ model: title })}::jsonb,
+      ${trade}::uuid, ${buildingA}::uuid, now())`,
   );
   expect(created!.outcome).toBe("created");
   return created!.work_item_id;
@@ -92,6 +92,15 @@ async function readsOf(as: string, id: string, items: string[]) {
     ),
   };
 }
+
+const take = (as: string, id: string, transition: string) =>
+  outcome(
+    as,
+    sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+  );
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
+const statusOf = async (as: string, id: string) =>
+  (await call<{ status: string }>(as, sql`select status from package where id = ${id}::uuid`))[0]?.status;
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -169,6 +178,8 @@ afterAll(async () => {
 describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () => {
   let packageId = "";
   let items: string[] = [];
+  let cablesId = ""; // C1's PM's Open Package of a MAR at C1's internal review.
+  let cable = "";
 
   beforeAll(async () => {
     items = [await draft(c1.member, "Tiles"), await draft(c1.member, "Sanitary ware")];
@@ -176,6 +187,10 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
     expect(created.outcome).toBe("created");
     packageId = created.package_id;
     for (const item of items) expect(await addItem(c1.member, packageId, item)).toBe("added");
+    cable = await draft(c1.member, "Cable trays");
+    expect(await take(c1.member, cable, "send_for_review")).toBe("applied");
+    cablesId = (await createPackage(c1Pm, "Cables")).package_id;
+    expect(await addItem(c1Pm, cablesId, cable)).toBe("added");
   });
 
   it("C1's Members read it, its two Drafts and each Draft's Package", async () => {
@@ -186,6 +201,13 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
       expect(reads.items).toEqual([...items].sort());
       expect(reads.itemPackages).toEqual([{ package_id: packageId }, { package_id: packageId }]);
     }
+  });
+
+  it("RP-588-1: C1's Members read the Open Package \"Cables\", its MAR at C1's internal review and that item's Package", async () => {
+    for (const who of [c1.member, c1Pm]) {
+      expect(await readsOf(who, cablesId, [cable])).toEqual({ rows: [{ id: cablesId }], sees: true, items: [cable], itemPackages: [{ package_id: cablesId }] });
+    }
+    expect(await statusOf(c1Pm, cablesId)).toBe("open");
   });
 
   it("is changed only through the functions: no write of a Package, its trail or an item's Package, even by its owner", async () => {
@@ -208,19 +230,53 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
   it("K1, C2 and the Owner read nothing of it: no row, no name, no items, no item's Package", async () => {
     for (const who of [k1.member, k1.ap, c2.member, ow.member]) {
       expect(await readsOf(who, packageId, items)).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
+      expect(await readsOf(who, cablesId, [cable])).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
       expect(await call(who, sql<{ id: string }>`select id from package where project_id = ${projectId}::uuid`)).toEqual([]);
     }
   });
-});
 
-const take = (as: string, id: string, transition: string) =>
-  outcome(
-    as,
-    sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
-  );
-const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
-const statusOf = async (as: string, id: string) =>
-  (await call<{ status: string }>(as, sql`select status from package where id = ${id}::uuid`))[0]?.status;
+  it("RP-588-1: K1, C2 and the Owner change nothing of either Open Package: rename, add, remove, delete and Submit are all 'not_found'", async () => {
+    for (const who of [k1.member, k1.ap, c2.member, ow.member]) {
+      for (const [id, item] of [
+        [packageId, items[0]!],
+        [cablesId, cable],
+      ] as const) {
+        expect(await outcome(who, sql`select app.rename_package(${id}::uuid, ${JSON.stringify(name("Mine now"))}::jsonb, now()) as outcome`), who).toBe(
+          "not_found",
+        );
+        expect(await addItem(who, id, item), who).toBe("not_found");
+        expect(await outcome(who, sql`select app.remove_package_item(${id}::uuid, ${item}::uuid, now()) as outcome`), who).toBe("not_found");
+        expect(await outcome(who, sql`select app.discard_package(${id}::uuid, now()) as outcome`), who).toBe("not_found");
+        const [begun] = await call<{ outcome: string }>(who, sql`select outcome from app.begin_package_submit(${id}::uuid, ${randomUUID()}::uuid)`);
+        expect(begun!.outcome, who).toBe("not_found");
+      }
+    }
+    // Nothing moved: C1 still reads both as they were.
+    expect(await readsOf(c1Pm, packageId, items)).toMatchObject({ rows: [{ id: packageId }], items: [...items].sort() });
+    expect(await readsOf(c1Pm, cablesId, [cable])).toMatchObject({ rows: [{ id: cablesId }], items: [cable] });
+    expect(await call(c1Pm, sql<{ name: unknown }>`select name from package where id = ${cablesId}::uuid`)).toEqual([{ name: name("Cables") }]);
+  });
+
+  it("RP-588-1: C2's own Packages are numbered from PKG-001, never counting C1's", async () => {
+    const own = await createPackage(c2.member, "C2's own");
+    expect(own).toMatchObject({ outcome: "created", seq: 1 });
+    // C1's next one counts on from C1's own.
+    const [c1Last] = await call<{ seq: number }>(c1Pm, sql`select max(seq) as seq from package where project_id = ${projectId}::uuid`);
+    expect(c1Last!.seq).toBeGreaterThanOrEqual(2);
+    const next = await createPackage(c1Pm, "C1's next");
+    expect(next).toMatchObject({ outcome: "created", seq: c1Last!.seq + 1 });
+    // Each reads only its own: C2 never C1's, C1 never C2's.
+    expect(await call(c2.member, sql<{ id: string }>`select id from package where project_id = ${projectId}::uuid`)).toEqual([{ id: own.package_id }]);
+    expect(await readsOf(c1Pm, own.package_id, [])).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
+    // Deleted, so the later scenarios' "C2 reads no Package" stays about C1's.
+    for (const [by, id] of [
+      [c2.member, own.package_id],
+      [c1Pm, next.package_id],
+    ]) {
+      expect(await outcome(by!, sql`select app.discard_package(${id}::uuid, now()) as outcome`)).toBe("discarded");
+    }
+  });
+});
 
 describe("Submit Package (RP-638): the status follows the items", () => {
   let packageId = "";
@@ -352,10 +408,11 @@ describe("RP-641: who sees a Submitted Package, and each viewer's counts (scenar
     expect(await trades(k1Narrowed)).toEqual([electrical]);
   });
 
-  it("RP-588-2: K1's manager (Visibility all) counts 8; its engineer narrowed to Electrical counts 6, never the Mechanical items", async () => {
-    for (const who of [c1Pm, k1.ap, k1.member]) {
-      expect(await summary(who)).toEqual([{ total: 8, open: 6, codes: { A: 1, C: 1 } }]);
+  it("RP-588-2: K1's manager and the Owner (Visibility all) count 8; K1's engineer narrowed to Electrical counts 6, never the Mechanical items", async () => {
+    for (const who of [c1Pm, k1.ap, k1.member, ow.member]) {
+      expect(await summary(who), who).toEqual([{ total: 8, open: 6, codes: { A: 1, C: 1 } }]);
     }
+    expect((await readsOf(ow.member, packageId, [])).items).toEqual([...electricalItems, ...mechanicalItems].sort());
     expect(await summary(k1Narrowed)).toEqual([{ total: 6, open: 5, codes: { A: 1 } }]);
     const reads = await readsOf(k1Narrowed, packageId, mechanicalItems);
     expect(reads).toEqual({ rows: [{ id: packageId }], sees: true, items: electricalItems, itemPackages: [] });
@@ -439,18 +496,98 @@ describe("RP-642: Done follows the closures, in the same transaction, and a Revi
   });
 });
 
+describe("scenario RP-588-2 (story 30): each chain counts once, by the latest Revision its viewer sees", () => {
+  let packageId = "";
+  let coded = ""; // Closed at Code C by K1.
+  let revision = ""; // Its Revision R1: a Draft of C1's, which K1 doesn't see.
+
+  const latest = (as: string) =>
+    call<{ work_item_id: string; counted: boolean }>(as, sql`select work_item_id, counted from app.package_latest_items(${packageId}::uuid)`);
+  const summary = (as: string) =>
+    call<{ total: number; open: number; codes: Record<string, number> }>(as, sql`select total, open, codes from app.package_summary(${packageId}::uuid)`);
+
+  beforeAll(async () => {
+    packageId = (await createPackage(c1Pm, "Revised once")).package_id;
+    coded = await draft(c1.member, "Coded C");
+    expect(await addItem(c1.member, packageId, coded)).toBe("added");
+    expect(await take(c1.member, coded, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, coded)).toBe("picked_up");
+    expect(await take(c1Pm, coded, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, coded)).toBe("picked_up");
+    expect(await take(k1.member, coded, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.ap, coded)).toBe("picked_up");
+    expect(await take(k1.ap, coded, "revise_c")).toBe("applied");
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_revision(${coded}::uuid, ${randomUUID()}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    revision = created!.work_item_id;
+  });
+
+  it("RP-588-2: C1 counts the Code C item and its open Revision once, by the Revision", async () => {
+    for (const who of [c1Pm, c1.member]) {
+      expect((await readsOf(who, packageId, [])).items, who).toEqual([coded, revision].sort());
+      expect(await latest(who), who).toEqual([{ work_item_id: revision, counted: true }]);
+      expect(await summary(who), who).toEqual([{ total: 1, open: 1, codes: {} }]);
+    }
+  });
+
+  it("RP-588-2: K1 and the Owner, who don't see the Draft R1, count the Code C item: R1 is neither listed nor counted for them", async () => {
+    for (const who of [k1.ap, k1.member, ow.member]) {
+      expect((await readsOf(who, packageId, [revision])).items, who).toEqual([coded]);
+      expect((await readsOf(who, packageId, [revision])).itemPackages, who).toEqual([]);
+      expect(await latest(who), who).toEqual([{ work_item_id: coded, counted: true }]);
+      expect(await summary(who), who).toEqual([{ total: 1, open: 0, codes: { C: 1 } }]);
+    }
+    // C2 sees neither: nothing at all.
+    expect(await latest(c2.member)).toEqual([]);
+    expect(await summary(c2.member)).toEqual([]);
+  });
+});
+
 describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", () => {
-  type Event = { type: string; audience: string; company_name: { en: string } | null; member_name: { en: string } | null; outcome: string | null };
+  // The test Workflow with Remarks on Code A's Action Form, as the MAR Workflow has.
+  const WITH_REMARKS = "PKGRM";
+  const REMARKS = "Approved as submitted";
+  const INTERNAL_NOTE = "K1 only: checked the datasheets";
+  type Event = {
+    type: string;
+    audience: string;
+    company_name: { en: string } | null;
+    member_name: { en: string } | null;
+    outcome: string | null;
+    remarks: string | null;
+  };
   const items: string[] = [];
   let single = "";
 
   /** Item `id`'s history as `as` reads it (app.work_item_history), without times. */
   const historyOf = (as: string, id: string) =>
-    call<Event>(as, sql`select type, audience, company_name, member_name, outcome from app.work_item_history(${id}::uuid) order by seq`);
+    call<Event>(as, sql`select type, audience, company_name, member_name, outcome, remarks from app.work_item_history(${id}::uuid) order by seq`);
+  /** K1's manager's Code A on `id`, with the Remarks and an Internal Note. */
+  const codeA = (id: string) =>
+    sql<{ outcome: string }>`
+      select app.take_transition(${id}::uuid, 'approve_a', ${JSON.stringify({ remarks: REMARKS })}::jsonb, ${INTERNAL_NOTE}, app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
+    `;
 
   beforeAll(async () => {
+    const workflowId = await addTestWorkflow((text) => migrator.query(text), { publish: false });
+    const remarksForm = { sections: [{ key: "code_a", title: name("Approve"), fields: [approveBActionForm.sections[0]!.fields[0]!] }] };
+    await migrator.query(
+      `update workflow_transition t set action_form = $1::jsonb from workflow_version v
+       where v.id = t.workflow_version_id and v.workflow_definition_id = $2 and t.key = 'approve_a'`,
+      [JSON.stringify(remarksForm), workflowId],
+    );
+    await migrator.query("update workflow_version set status = 'published', published_at = now() where workflow_definition_id = $1", [workflowId]);
+    await migrator.query(
+      `insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+       select 'rabaed', 'submittals', $1, '{"en": "Package Remarks (test)", "ar": "ملاحظات الحزمة"}', $2, 'review_code', form_definition_id
+       from work_item_type where code = $3`,
+      [WITH_REMARKS, workflowId, TYPE],
+    );
     for (const title of ["Bulk 1", "Bulk 2", "Bulk 3", "Single"]) {
-      const id = await draft(c1.member, title);
+      const id = await draft(c1.member, title, WITH_REMARKS);
       expect(await take(c1.member, id, "send_for_review")).toBe("applied");
       expect(await pickUp(c1Pm, id)).toBe("picked_up");
       expect(await take(c1Pm, id, "submit")).toBe("applied");
@@ -463,30 +600,109 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
     // A bulk Code takes each item's own Code through app.take_transition, all in one transaction (as the api does).
     const outcomes = await withMember(app, k1.ap, async (trx) => {
       const taken: string[] = [];
-      for (const id of items) {
-        const { rows } = await sql<{ outcome: string }>`
-          select app.take_transition(${id}::uuid, 'approve_a', '{}'::jsonb, 'K1 only', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
-        `.execute(trx);
-        taken.push(rows[0]!.outcome);
-      }
+      for (const id of items) taken.push((await codeA(id).execute(trx)).rows[0]!.outcome);
       return taken;
     });
     expect(outcomes).toEqual(["applied", "applied", "applied"]);
-    expect(await take(k1.ap, single, "approve_a")).toBe("applied");
+    expect(await outcome(k1.ap, codeA(single))).toBe("applied");
   });
 
-  it("C1 reads three separate Code events naming K1's Company and the signer, as for a single Code, never K1's internal Steps or Notes", async () => {
+  it("RP-588-4: C1 reads three separate Code events naming K1's Company and the signer, with the Remarks, as for a single Code, never K1's internal Steps or Notes", async () => {
     const control = await historyOf(c1Pm, single);
     const code = control.filter((e) => e.outcome === "A");
     expect(code).toHaveLength(1);
-    expect(code[0]).toMatchObject({ audience: "shared", company_name: { en: "K1" }, member_name: { en: "ap" } });
+    expect(code[0]).toMatchObject({ audience: "shared", company_name: { en: "K1" }, member_name: { en: "ap" }, remarks: REMARKS });
     for (const id of items) {
       const reads = await historyOf(c1Pm, id);
       expect(reads).toEqual(control);
       // K1's own move to its manager and its Internal Note stay with K1 (V5).
       expect(reads.some((e) => e.type === "internal_note" || (e.audience === "internal" && e.company_name?.en === "K1"))).toBe(false);
-      expect((await historyOf(k1.ap, id)).filter((e) => e.type === "internal_note")).toHaveLength(1);
+      const k1Notes = await call<{ internal_note: string }>(
+        k1.ap,
+        sql`select internal_note from app.work_item_history(${id}::uuid) where type = 'internal_note'`,
+      );
+      expect(k1Notes).toEqual([{ internal_note: INTERNAL_NOTE }]);
+      expect(await call(c1Pm, sql<{ internal_note: string }>`select internal_note from app.work_item_history(${id}::uuid) where internal_note is not null`)).toEqual([]);
     }
+  });
+
+  it("RP-588-4: each bulk-coded item carries its own Issued Code, which C1 reads", async () => {
+    for (const id of items) {
+      expect(await call(c1Pm, sql<{ outcome: string }>`select outcome from work_item where id = ${id}::uuid and closed_at is not null`)).toEqual([
+        { outcome: "A" },
+      ]);
+    }
+  });
+
+  it("RP-588-4: each item's Code is signed over that item's own content (content_sha256, one per item, story 44)", async () => {
+    const { rows } = await migrator.query<{ work_item_id: string; title: string; hash: string }>(
+      `select e.work_item_id, w.title, encode(e.content_sha256, 'hex') as hash
+       from work_item_event e join work_item w on w.id = e.work_item_id
+       where e.work_item_id = any($1::uuid[]) and e.type = 'issue_code' and e.audience = 'shared'`,
+      [items],
+    );
+    expect(rows.map((r) => r.work_item_id).sort()).toEqual([...items].sort());
+    for (const r of rows) {
+      expect(r.hash).toBe(expectedContentSha256({ title: r.title, data: { model: r.title }, outcome: "A", documents: [] }));
+    }
+    expect(new Set(rows.map((r) => r.hash)).size).toBe(3);
+  });
+
+  it("RP-588-4: one Documental Record per bulk-coded item (RP-23), naming K1 by Company and the Code's signer, with the Remarks; never K1's Internal Note or its internal answers", async () => {
+    type Fact = { companyName: { en: string }; memberName: { en: string }; remarks: string | null; answers: unknown; contentSha256: string };
+    for (const id of items) {
+      const { rows: jobs } = await migrator.query<{ id: string }>(
+        "select id from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = $1",
+        [id],
+      );
+      expect(jobs, id).toHaveLength(1);
+      // The record job reads its facts as the worker, with no Member set.
+      const { rows } = await sql<{ facts: { workItemId: string; outcome: string; transitions: Fact[] } }>`
+        select app.documental_record_facts(${jobs[0]!.id}::uuid) as facts
+      `.execute(app);
+      const facts = rows[0]!.facts;
+      expect(facts).toMatchObject({ workItemId: id, outcome: "A" });
+      const coded = facts.transitions.filter((t) => t.remarks !== null);
+      expect(coded).toEqual([expect.objectContaining({ companyName: expect.objectContaining({ en: "K1" }), memberName: expect.objectContaining({ en: "ap" }), remarks: REMARKS })]);
+      // A move inside K1 (its engineer's Send to Manager) prints who took it (by design, RP-650), never answers (V5),
+      // and the Internal Note is in no fact.
+      const insideK1 = facts.transitions.filter((x) => x.companyName.en === "K1" && x.remarks === null);
+      expect(insideK1.length).toBeGreaterThan(0);
+      for (const t of insideK1) expect(t.answers).toBeNull();
+      expect(JSON.stringify(facts)).not.toContain(INTERNAL_NOTE);
+    }
+  });
+
+  it("RP-588-4: app.lock_work_items holds only the items its caller sees, so a bulk command never waits on one it can't name", async () => {
+    const hidden = await draft(c1.member, "C1's own Draft", WITH_REMARKS);
+    const fresh = await draft(c1.member, "Seen by K1", WITH_REMARKS);
+    expect(await take(c1.member, fresh, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, fresh)).toBe("picked_up");
+    expect(await take(c1Pm, fresh, "submit")).toBe("applied");
+    /** Whether another session finds item `id` locked (asking without waiting). */
+    const locked = async (id: string) => {
+      await migrator.query("begin");
+      try {
+        await migrator.query("select 1 from work_item where id = $1 for update nowait", [id]);
+        return false;
+      } catch (e) {
+        if ((e as { code?: string }).code === "55P03") return true;
+        throw e;
+      } finally {
+        await migrator.query("rollback");
+      }
+    };
+    const held = await withMember(app, k1.ap, async (trx) => {
+      await sql`select app.lock_work_items(${[fresh, hidden]}::uuid[])`.execute(trx);
+      return { fresh: await locked(fresh), hidden: await locked(hidden) };
+    });
+    expect(held).toEqual({ fresh: true, hidden: false });
+    // C1, who sees both, holds both.
+    const byC1 = await withMember(app, c1Pm, async (trx) => {
+      await sql`select app.lock_work_items(${[fresh, hidden]}::uuid[])`.execute(trx);
+      return { fresh: await locked(fresh), hidden: await locked(hidden) };
+    });
+    expect(byC1).toEqual({ fresh: true, hidden: true });
   });
 });
 
@@ -699,5 +915,117 @@ describe("scenario RP-588-2 (RP-643: notification): a Package Submit's one notif
     expect(await notificationOf(k1Electrical)).toEqual([]);
     expect(await setTrade([electrical])).toBe("set");
     expect(await notificationOf(k1Electrical)).toHaveLength(1);
+  });
+});
+
+describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's email says is checked again at send time, as its recipient", () => {
+  type Sent = { to_address: string; kind: string; work_item_id: string | null; document_number: string | null; package_id: string | null; package_company_name: unknown; item_count: number };
+  let packageId = "";
+  let k1Participant = "";
+  let plumbing = "";
+  const eng = { seesAll: "", narrowedLater: "", narrowedOffAll: "", digest: "" }; // K1 engineers; the last narrowed to Electrical, by daily digest.
+  const emails: Sent[] = [];
+  const digests: Sent[] = [];
+
+  const addressOf = async (id: string) => (await migrator.query("select email from member where id = $1", [id])).rows[0].email as string;
+  const setTrade = (who: string, isAll: boolean, values: string[]) =>
+    outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${who}::uuid, 'trade', ${isAll}, ${values}::uuid[], now()) as outcome`);
+  const takeDigest: OutboxHandler = async (trx, row) => {
+    const { rows } = await sql<Sent>`select * from app.take_notification_digest(${row.id}::uuid)`.execute(trx);
+    digests.push(...rows);
+  };
+
+  beforeAll(async () => {
+    k1Participant = (await migrator.query("select id from participant where project_id = $1 and company_id = $2", [projectId, k1.id])).rows[0].id;
+    plumbing = (
+      await migrator.query(
+        "select v.id from dimension_value v join visibility_dimension d on d.id = v.dimension_id where d.project_id = $1 and d.kind = 'trade' and v.code = 'PL'",
+        [projectId],
+      )
+    ).rows[0].id;
+    for (const key of Object.keys(eng) as (keyof typeof eng)[]) {
+      const id = await member(k1.id, `k1-${key.toLowerCase()}`);
+      eng[key] = id;
+      await call(k1.ap, sql<{ outcome: string }>`select app.add_project_member(${k1Participant}::uuid, ${id}::uuid, now())`);
+      expect(await outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${id}::uuid, 'location', true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+      expect(await setTrade(id, key !== "digest", key === "digest" ? [electrical] : [])).toBe("set");
+      expect(await outcome(k1.ap, sql`select app.set_project_member_positions(${k1Participant}::uuid, ${id}::uuid, ${["engineer"]}::text[]) as outcome`)).toBe("set");
+    }
+    // The digest engineer takes "Step reached" (the group a Package Submit follows) by daily digest; the others email at once (the default).
+    await withMember(app, eng.digest, (trx) =>
+      sql`insert into notification_setting (member_id, notification_group, email, outcomes, updated_at) values (${eng.digest}::uuid, 'step_reached', 'digest', null, now())`.execute(
+        trx,
+      ),
+    );
+
+    packageId = (await createPackage(c1Pm, "Switchgear, seam 2")).package_id;
+    const items: string[] = [];
+    for (const [title, trade] of [["S1", electrical], ["S2", electrical], ["S3", electrical], ["SP", plumbing]] as const) {
+      const id = await draft(c1.member, title, TYPE, trade);
+      expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+      expect(await pickUp(c1Pm, id)).toBe("picked_up");
+      expect(await addItem(c1Pm, packageId, id)).toBe("added");
+      items.push(id);
+    }
+    await drainOutbox(app);
+    await withMember(app, c1Pm, async (trx) => {
+      for (const id of items) {
+        const r = await sql<{ outcome: string }>`
+          select app.take_transition(${id}::uuid, 'submit', '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
+        `.execute(trx);
+        expect(r.rows[0]!.outcome).toBe("applied");
+      }
+      const r = await sql<{ outcome: string }>`
+        select app.record_package_submit(${packageId}::uuid, ${items}::uuid[], ${randomUUID()}::uuid, now()) as outcome
+      `.execute(trx);
+      expect(r.rows[0]!.outcome).toBe("recorded");
+    });
+    // Delivered to all four as each sees the items now; then, before any email is sent, one is narrowed to
+    // Electrical and one off every item: the worker's send (app.take_notification_email) checks again.
+    let narrowed = false;
+    await drainOutbox(app, {
+      email: async (trx, row) => {
+        if (!narrowed) {
+          narrowed = true;
+          expect(await setTrade(eng.narrowedLater, false, [electrical])).toBe("set");
+          expect(await setTrade(eng.narrowedOffAll, false, [])).toBe("set");
+        }
+        const { rows } = await sql<Sent>`select * from app.take_notification_email(${row.id}::uuid)`.execute(trx);
+        emails.push(...rows);
+      },
+      digest: takeDigest,
+    });
+    expect(narrowed).toBe(true);
+    await sql`select app.enqueue_notification_digests()`.execute(app);
+    await drainOutbox(app, { digest: takeDigest });
+  });
+
+  const ofPackage = async (sent: Sent[], who: string) => {
+    const to = await addressOf(who);
+    return sent.filter((s) => s.to_address === to && s.package_id === packageId);
+  };
+
+  it("RP-588-2: the immediate email names the Package, no item, C1 by Company name only, and the count its recipient sees: 4", async () => {
+    expect(await ofPackage(emails, eng.seesAll)).toEqual([
+      expect.objectContaining({
+        kind: "package_submitted",
+        work_item_id: null,
+        document_number: null,
+        package_company_name: { en: "C1", ar: "C1" },
+        item_count: 4,
+      }),
+    ]);
+  });
+
+  it("RP-588-2: narrowed between delivery and the send, the email counts what its recipient sees at send time: 3, and none once they see no item", async () => {
+    expect(await ofPackage(emails, eng.narrowedLater)).toEqual([expect.objectContaining({ item_count: 3, package_company_name: { en: "C1", ar: "C1" } })]);
+    expect(await ofPackage(emails, eng.narrowedOffAll)).toEqual([]);
+  });
+
+  it("RP-588-2: the daily digest carries the Package with the count its recipient sees, 3, naming C1 by Company name only; never an email of its own", async () => {
+    expect(await ofPackage(digests, eng.digest)).toEqual([
+      expect.objectContaining({ kind: "package_submitted", work_item_id: null, document_number: null, package_company_name: { en: "C1", ar: "C1" }, item_count: 3 }),
+    ]);
+    expect(await ofPackage(emails, eng.digest)).toEqual([]);
   });
 });
