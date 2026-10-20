@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { branchClaims } from "./check-claims.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
@@ -15,6 +16,7 @@ import { isRunning } from "./worktrees-stale.ts";
 // first step when its Postgres doesn't answer; a seam step whose Postgres was
 // terminated mid-run ends on one line saying so (RP-994). A branch that mixes root
 // shared files with code gets a warning first and again above the last line (RP-993).
+// A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -51,6 +53,22 @@ const mixWarning = mix && [
   "(Against an old origin/main, main's own changes count too: `git fetch origin main` first.)",
 ].join("\n");
 if (mixWarning) console.error(`${mixWarning}\n`);
+
+// Rule 12 (RP-1008): a shared module changed with no open RP-603 claim for the branch's key
+// stops here, before the build; with no Jira credentials or network it is a warning.
+let claimsWarning = "";
+try {
+  const claims = await branchClaims(root);
+  if (!claims.ok) {
+    console.error(claims.message);
+    process.exit(1);
+  }
+  claimsWarning = claims.message;
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+if (claimsWarning) console.error(`${claimsWarning}\n`);
 
 // The lane's Postgres first (RP-575): a stopped container otherwise showed only at
 // test:seam1, after every step before it had run.
@@ -111,4 +129,5 @@ for (const { name, script } of steps) {
 const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) console.error(`\n${mixWarning}`);
+if (claimsWarning) console.error(`\n${claimsWarning}`);
 console.log(`\n${finalLine({ sha, dirty: status !== "", steps: passed })}`);

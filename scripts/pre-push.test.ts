@@ -10,11 +10,18 @@ const zero = "0000000000000000000000000000000000000000";
 const branchPush = `refs/heads/RP-989-pre-push-hook ${"a".repeat(40)} refs/heads/RP-989-pre-push-hook ${"b".repeat(40)}\n`;
 
 /** A seam whose checks exit with the given codes, and that records which ran. */
-function seam(codes: { lint?: number; typecheck?: number } = {}, files: string[] | undefined = ["apps/api/src/a.ts"], tree = { head: "a".repeat(40), dirty: false }, mix?: string[]) {
+function seam(
+  codes: { lint?: number; typecheck?: number } = {},
+  files: string[] | undefined = ["apps/api/src/a.ts"],
+  tree = { head: "a".repeat(40), dirty: false },
+  mix?: string[],
+  claims: { ok: boolean; message: string } = { ok: true, message: "" },
+) {
   const ran: string[] = [];
   const fake: PrePushSeam = {
     changedFiles: () => files,
     branchMix: () => mix,
+    claims: async () => claims,
     workingTree: () => tree,
     run: async (script) => {
       ran.push(script);
@@ -80,6 +87,25 @@ describe("prePush", () => {
     expect(docsOnly.message).toContain("  shared: pnpm-lock.yaml");
     expect((await prePush(branchPush, seam({ lint: 1 }, undefined, undefined, mix).fake)).message).toContain("  shared: pnpm-lock.yaml");
     expect((await prePush(branchPush, seam().fake)).message).not.toContain("shared:");
+  });
+
+  it("refuses a push whose branch changes a shared module with no open claim, docs-only too, before lint and typecheck (RP-1008)", async () => {
+    const refused = { ok: false, message: "check:claims (rule 12): RP-989 has no open CLAIM on RP-603 for:\n  docs/agents/issue-tracker.md" };
+    for (const files of [["apps/api/src/a.ts"], ["docs/agents/issue-tracker.md"]]) {
+      const { fake, ran } = seam({}, files, undefined, undefined, refused);
+      const result = await prePush(branchPush, fake);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("  docs/agents/issue-tracker.md");
+      expect(result.message).toContain("Push refused (pre-push, RP-1008)");
+      expect(ran).toEqual([]);
+    }
+  });
+
+  it("passes on the claims check's warning when RP-603 can't be read, and shows it", async () => {
+    const warned = { ok: true, message: "Warning: check:claims could not read RP-603 (fetch failed)" };
+    const result = await prePush(branchPush, seam({}, undefined, undefined, undefined, warned).fake);
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Warning: check:claims could not read RP-603 (fetch failed)");
   });
 
   it("runs the checks when the push changes a doc and code, or its files can't be told", async () => {
