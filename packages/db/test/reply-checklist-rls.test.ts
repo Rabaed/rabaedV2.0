@@ -11,25 +11,20 @@
 // discards them.
 //
 // RP-577-1: the Snag a code raises from a failed item is seen where the Inspection is, never by C2.
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { createDb, type Db } from "../src/index.ts";
+import { addTestScreen, addTestWorkflow, buildSeamTwoTower, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
-const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
 const TYPE = `WC${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
 const FIELD = "inspection_checklist";
 const wirForm = readFileSync(new URL("../../../apps/admin/forms/WIR.json", import.meta.url), "utf8");
 const label = (en: string) => ({ en, ar: en });
-const items = [
-  { key: "formwork", text: label("Formwork tight"), answers: "pass_fail_na", comment: "required_on_negative", photo: "required_on_negative", on_negative: "create_snag" },
-  { key: "cover", text: label("Rebar cover"), answers: "pass_fail_na", comment: "optional", photo: "optional", on_negative: "none" },
-];
 const ANSWERS = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" } };
 /** The codes' Screen: the copied checklist and Remarks. */
 const codeScreen = {
@@ -48,52 +43,25 @@ const codeScreen = {
 let migrator: pg.Client;
 let app: Db;
 
-type Company = { id: string; cr: string; ap: string; member: string };
-let c1: Company; // Contractor: raises the Inspection.
-let k1: Company; // Consultant: inspects; its `member` is the Engineer.
-let ow: Company; // Owner: oversight of everything (V2).
-let c2: Company; // Another Contractor of the same Trade, covering Building B only (V3).
-let other: Company; // Another Project's Project Admin.
+// The Tower: C1 raises the Inspection; K1 inspects (its Engineer and Manager); OW is the Owner with oversight of
+// everything (V2); C2 is another Contractor of the same Trade, covering Building B only (V3); `other` is
+// another Project's Project Admin.
+const towerOptions = { projectCode: "RCK", tradeCode: "CV", otherProject: true, k1Manager: true } as const;
+type Tower = SeamTwoTower<typeof towerOptions>;
+let tower: Tower;
+let c1: Tower["c1"];
+let k1: Tower["k1"];
+let ow: Tower["ow"];
+let c2: Tower["c2"];
+let other: Tower["other"];
 let c1Pm = "";
-let k1Manager = "";
-let participant: Record<"c1" | "k1" | "ow" | "c2", string>;
-let projectId = "";
-let civil = "";
-let buildingA = "";
-let templateVersion = "";
-
-async function one(text: string, values: unknown[]): Promise<string> {
-  return (await migrator.query(text, values)).rows[0].id as string;
-}
-
-async function member(companyId: string, who: string, creator = false): Promise<string> {
-  return one(
-    "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', $4) returning id",
-    [companyId, email(who), JSON.stringify({ en: who, ar: who }), creator],
-  );
-}
-
-async function company(engineer: string, name: string): Promise<Company> {
-  const cr = digits(10);
-  const id = await one(
-    "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
-    [JSON.stringify({ en: name, ar: name }), cr, `3${digits(13)}3`, engineer],
-  );
-  const ap = await member(id, "ap", true);
-  await migrator.query("update company set authorized_person_id = $1 where id = $2", [ap, id]);
-  return { id, cr, ap, member: await member(id, "engineer") };
-}
+let call: Tower["call"];
+let outcome: Tower["outcome"];
+let take: Tower["take"];
+let pickUp: Tower["pickUp"];
 
 const run = (text: string) => migrator.query(text);
-const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
-  withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
-const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
-const take = (as: string, id: string, transition: string, answers: object = {}) =>
-  outcome(
-    as,
-    sql`select app.take_transition(${id}::uuid, ${transition}, ${JSON.stringify(answers)}::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
-  );
-const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
+const one = async (text: string, values: unknown[]): Promise<string> => (await migrator.query(text, values)).rows[0].id as string;
 const save = (as: string, id: string, answers: object = ANSWERS) =>
   outcome(as, sql`select app.save_reply_checklist(${id}::uuid, ${FIELD}, ${JSON.stringify(answers)}::jsonb, now()) as outcome`);
 const startPhoto = (as: string, id: string, item: string) =>
@@ -150,30 +118,15 @@ const codeAnswersAs = async (as: string, id: string) =>
   ).map((r) => r.checklist);
 
 /** C1's Inspection, Submitted to K1 and picked up by K1's Engineer at Consultant review, its checklist copied. */
-async function atConsultantReview(title: string): Promise<string> {
-  const [created] = await call<{ outcome: string; work_item_id: string }>(
-    c1.member,
-    sql`select outcome, work_item_id from app.create_work_item(
-      ${projectId}::uuid, ${TYPE}, ${title}, app.latest_form_version(${TYPE}), ${JSON.stringify({ checklist_template: templateVersion })}::jsonb,
-      ${civil}::uuid, ${buildingA}::uuid, now())`,
-  );
-  expect(created!.outcome).toBe("created");
-  const id = created!.work_item_id;
-  expect(await outcome(c1.member, sql`select app.sync_work_item_checklists(${id}::uuid, now()) as outcome`)).toBe("synced");
-  expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-  expect(await pickUp(c1Pm, id)).toBe("picked_up");
-  expect(await take(c1Pm, id, "submit")).toBe("applied");
-  expect(await pickUp(k1.member, id)).toBe("picked_up");
-  return id;
-}
+const atConsultantReview = (title: string) => wirAtConsultant(tower, { type: TYPE, title });
 
 /** At Consultant approval: K1's Engineer answered and photographed the checklist, and Sent it to the Manager, who picked it up. */
 async function atManager(title: string): Promise<{ id: string; photo: string }> {
   const id = await atConsultantReview(title);
-  expect(await save(k1.member, id)).toBe("saved");
-  const photo = await addPhoto(k1.member, id);
-  expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
-  expect(await pickUp(k1Manager, id)).toBe("picked_up");
+  expect(await save(k1.members.engineer, id)).toBe("saved");
+  const photo = await addPhoto(k1.members.engineer, id);
+  expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
+  expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
   return { id, photo };
 }
 
@@ -201,67 +154,9 @@ beforeAll(async () => {
     [TYPE, JSON.stringify(label("Inspection (RP-86)")), workflowId, formId],
   );
 
-  const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
-  c1 = await company(engineer, "C1");
-  k1 = await company(engineer, "K1");
-  ow = await company(engineer, "OW");
-  c2 = await company(engineer, "C2");
-  other = await company(engineer, "OT");
-  await call(other.ap, sql<object>`select app.create_project('{"en": "Elsewhere", "ar": "مكان آخر"}'::jsonb, 'RCO', 'contractor')`);
-  c1Pm = await member(c1.id, "pm");
-  k1Manager = await member(k1.id, "manager");
-
-  const [created] = await call<{ project_id: string }>(
-    c1.ap,
-    sql`select project_id from app.create_project('{"en": "Tower", "ar": "برج"}'::jsonb, 'RCK', 'contractor')`,
-  );
-  projectId = created!.project_id;
-  participant = {
-    c1: (await migrator.query("select id from participant where project_id = $1", [projectId])).rows[0].id as string,
-    k1: await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap),
-    ow: await joinProject(app, projectId, { adminId: c1.ap, crNumber: ow.cr, role: "owner" }, ow.ap),
-    c2: await joinProject(app, projectId, { adminId: c1.ap, crNumber: c2.cr, role: "contractor" }, c2.ap),
-  };
-  const value = async (kind: string, code: string) =>
-    (
-      await call<{ value_id: string }>(
-        c1.ap,
-        sql`select value_id from app.add_dimension_value(${projectId}::uuid, ${kind}, null, ${code}, ${JSON.stringify({ en: code, ar: code })}::jsonb)`,
-      )
-    )[0]!.value_id;
-  civil = await value("trade", "CV");
-  buildingA = await value("location", "BA");
-  const buildingB = await value("location", "BB");
-  for (const p of Object.values(participant)) {
-    for (const kind of ["trade", "location"]) {
-      const onlyB = p === participant.c2 && kind === "location";
-      expect(
-        await outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, ${!onlyB}, ${onlyB ? [buildingB] : []}::uuid[], now()) as outcome`),
-      ).toBe("set");
-    }
-  }
-  const people: [Company, string, string, string[]][] = [
-    [c1, participant.c1, c1.member, ["engineer"]],
-    [c1, participant.c1, c1Pm, ["project_manager"]],
-    [k1, participant.k1, k1.member, ["engineer"]],
-    [k1, participant.k1, k1Manager, ["manager"]],
-    [ow, participant.ow, ow.member, ["representative"]],
-    [c2, participant.c2, c2.member, ["engineer"]],
-  ];
-  for (const [co, p, m, positions] of people) {
-    await call(co.ap, sql<{ outcome: string }>`select app.add_project_member(${p}::uuid, ${m}::uuid, now())`);
-    for (const kind of ["trade", "location"]) {
-      expect(await outcome(co.ap, sql`select app.set_member_visibility(${p}::uuid, ${m}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
-    }
-    expect(await outcome(co.ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${positions}::text[]) as outcome`)).toBe("set");
-  }
-
-  const [template] = await call<{ outcome: string; template_id: string }>(
-    c1.ap,
-    sql`select outcome, template_id from app.create_checklist_template(${projectId}::uuid, ${JSON.stringify(label("Concrete pour"))}::jsonb, ${civil}::uuid, ${JSON.stringify(items)}::jsonb, now())`,
-  );
-  expect(template!.outcome).toBe("created");
-  templateVersion = await one("select id from checklist_template_version where checklist_template_id = $1 and version_no = 1", [template!.template_id]);
+  tower = await buildSeamTwoTower(app, migrator, towerOptions);
+  ({ c1, k1, ow, c2, other, call, outcome, take, pickUp } = tower);
+  c1Pm = c1.members.project_manager;
 });
 
 afterAll(async () => {
@@ -273,12 +168,12 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
   it("before the code, C1 and the Owner read none of the answers or photos, by list or by id; both K1 Members do", async () => {
     const { id, photo } = await atManager("Slab pour, Level 2");
 
-    for (const reader of [k1.member, k1Manager]) {
+    for (const reader of [k1.members.engineer, k1.members.manager]) {
       expect(await answersAs(reader, id), reader).toEqual([{ field_key: FIELD, answers: ANSWERS }]);
       expect(await photosAs(reader, id), reader).toEqual([photo]);
       expect(await byId(reader, photo), reader).toEqual([photo]);
     }
-    for (const outsider of [c1.member, c1Pm, ow.member]) {
+    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative]) {
       // Each sees the Inspection itself (raised, oversight), never the checklist in progress.
       expect((await call<{ id: string }>(outsider, sql`select id from work_item where id = ${id}::uuid`)).length, outsider).toBe(1);
       expect(await answersAs(outsider, id), outsider).toEqual([]);
@@ -300,37 +195,37 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
 
   it("only the Engineer's Step writes them: not the Manager reading them at the code, and nobody outside K1", async () => {
     const { id } = await atManager("Slab pour, Level 3");
-    expect(await save(k1Manager, id, { cover: { answer: "fail" } })).toBe("field_not_found");
-    expect((await startPhoto(k1Manager, id, "cover")).outcome).toBe("field_not_found");
-    for (const outsider of [c1.member, c1Pm, ow.member]) {
+    expect(await save(k1.members.manager, id, { cover: { answer: "fail" } })).toBe("field_not_found");
+    expect((await startPhoto(k1.members.manager, id, "cover")).outcome).toBe("field_not_found");
+    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative]) {
       expect(await save(outsider, id), outsider).toBe("not_editable");
       expect((await startPhoto(outsider, id, "cover")).outcome, outsider).toBe("not_editable");
     }
-    expect(await save(c2.member, id)).toBe("not_found");
-    expect((await startPhoto(c2.member, id, "cover")).outcome).toBe("not_found");
-    expect(await answersAs(k1.member, id)).toEqual([{ field_key: FIELD, answers: ANSWERS }]);
+    expect(await save(c2.members.engineer, id)).toBe("not_found");
+    expect((await startPhoto(c2.members.engineer, id, "cover")).outcome).toBe("not_found");
+    expect(await answersAs(k1.members.engineer, id)).toEqual([{ field_key: FIELD, answers: ANSWERS }]);
 
     // Returned to the Engineer, it keeps them, and the Engineer changes one.
-    expect(await take(k1Manager, id, "return_to_engineer")).toBe("applied");
-    expect(await pickUp(k1.member, id)).toBe("picked_up");
-    expect(await answersAs(k1.member, id)).toEqual([{ field_key: FIELD, answers: ANSWERS }]);
+    expect(await take(k1.members.manager, id, "return_to_engineer")).toBe("applied");
+    expect(await pickUp(k1.members.engineer, id)).toBe("picked_up");
+    expect(await answersAs(k1.members.engineer, id)).toEqual([{ field_key: FIELD, answers: ANSWERS }]);
     const changed = { ...ANSWERS, cover: { answer: "na" } };
-    expect(await save(k1.member, id, changed)).toBe("saved");
-    expect(await answersAs(k1Manager, id)).toEqual([{ field_key: FIELD, answers: changed }]);
+    expect(await save(k1.members.engineer, id, changed)).toBe("saved");
+    expect(await answersAs(k1.members.manager, id)).toEqual([{ field_key: FIELD, answers: changed }]);
   });
 
   it("an item that is no check item, or one taking no photos, is refused a photo", async () => {
     const id = await atConsultantReview("Slab pour, Level 4");
-    expect((await startPhoto(k1.member, id, "made_up")).outcome).toBe("field_not_found");
-    expect((await startPhoto(k1.member, id, "formwork")).outcome).toBe("started");
+    expect((await startPhoto(k1.members.engineer, id, "made_up")).outcome).toBe("field_not_found");
+    expect((await startPhoto(k1.members.engineer, id, "formwork")).outcome).toBe("started");
   });
 
   it("the code freezes and shares them: C1 and the Owner read them in its event, and the photo by id; C2 never", async () => {
     const { id, photo } = await atManager("Slab pour, Level 5");
-    expect(await answersAs(c2.member, id)).toEqual([]);
-    expect(await take(k1Manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    expect(await answersAs(c2.members.engineer, id)).toEqual([]);
+    expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
 
-    for (const reader of [c1.member, c1Pm, ow.member, k1.member, k1Manager]) {
+    for (const reader of [c1.members.engineer, c1Pm, ow.members.representative, k1.members.engineer, k1.members.manager]) {
       expect(await codeAnswersAs(reader, id), reader).toEqual([ANSWERS]);
       expect(await photosAs(reader, id), reader).toEqual([photo]);
       expect(await byId(reader, photo), reader).toEqual([photo]);
@@ -338,13 +233,13 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
       expect(await answersAs(reader, id), reader).toEqual([]);
     }
     const [frozen] = await call<{ frozen: boolean; taken: boolean }>(
-      c1.member,
+      c1.members.engineer,
       sql`select frozen_at is not null as frozen, reply_event_id is not null as taken from document where id = ${photo}::uuid`,
     );
     expect(frozen).toEqual({ frozen: true, taken: true });
-    expect(await codeAnswersAs(c2.member, id)).toEqual([]);
-    expect(await photosAs(c2.member, id)).toEqual([]);
-    expect(await byId(c2.member, photo)).toEqual([]);
+    expect(await codeAnswersAs(c2.members.engineer, id)).toEqual([]);
+    expect(await photosAs(c2.members.engineer, id)).toEqual([]);
+    expect(await byId(c2.members.engineer, photo)).toEqual([]);
   });
 });
 
@@ -353,10 +248,10 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
 describe("leaving K1 any other way discards them", () => {
   it("a Send Back: the answers and photos are gone, for K1 too, and the item comes back to K1 with an empty checklist", async () => {
     const id = await atConsultantReview("Slab pour, sent back");
-    expect(await save(k1.member, id)).toBe("saved");
-    const photo = await addPhoto(k1.member, id);
-    expect(await take(k1.member, id, "send_back")).toBe("applied");
-    for (const reader of [k1.member, c1.member, c1Pm]) {
+    expect(await save(k1.members.engineer, id)).toBe("saved");
+    const photo = await addPhoto(k1.members.engineer, id);
+    expect(await take(k1.members.engineer, id, "send_back")).toBe("applied");
+    for (const reader of [k1.members.engineer, c1.members.engineer, c1Pm]) {
       expect(await answersAs(reader, id), reader).toEqual([]);
       expect(await photosAs(reader, id), reader).toEqual([]);
       expect(await codeAnswersAs(reader, id), reader).toEqual([]);
@@ -367,9 +262,9 @@ describe("leaving K1 any other way discards them", () => {
     expect(removed.rows[0].removed).toBe(true);
     expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await take(c1Pm, id, "submit")).toBe("applied");
-    expect(await pickUp(k1.member, id)).toBe("picked_up");
-    expect(await answersAs(k1.member, id)).toEqual([]);
-    expect(await photosAs(k1.member, id)).toEqual([]);
+    expect(await pickUp(k1.members.engineer, id)).toBe("picked_up");
+    expect(await answersAs(k1.members.engineer, id)).toEqual([]);
+    expect(await photosAs(k1.members.engineer, id)).toEqual([]);
   });
 });
 
@@ -384,7 +279,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
 
   beforeAll(async () => {
     ({ id } = await atManager("Slab pour, Level 7"));
-    expect(await take(k1Manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
     const raised = await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from'", [id]);
     expect(raised.rows).toHaveLength(1);
     snag = raised.rows[0].from_id as string;
@@ -398,7 +293,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     (await call<{ item: unknown }>(as, sql`select app.raised_from_check_item(${snag}::uuid) as item`))[0]!.item;
 
   it("C1, K1 and the Owner read the Snag, its photo, its check item and its count", async () => {
-    for (const reader of [c1.member, c1Pm, k1.member, k1Manager, ow.member]) {
+    for (const reader of [c1.members.engineer, c1Pm, k1.members.engineer, k1.members.manager, ow.members.representative]) {
       expect(await seesSnag(reader), reader).toBe(true);
       expect(await snagPhotos(reader), reader).toBe(1);
       expect(await checkItem(reader), reader).toEqual({ key: "formwork", text: label("Formwork tight") });
@@ -407,7 +302,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
   });
 
   it("C2 and another Project's Member read none of it", async () => {
-    for (const outsider of [c2.member, other.ap]) {
+    for (const outsider of [c2.members.engineer, other.ap]) {
       expect(await seesSnag(outsider), outsider).toBe(false);
       expect(await snagPhotos(outsider), outsider).toBe(0);
       expect(await checkItem(outsider), outsider).toBeNull();
@@ -419,37 +314,37 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
   it("the tick, taken off before the code, is K1's alone like the answers (V19), and the code shares it", async () => {
     const unticked = { ...ANSWERS, formwork: { ...ANSWERS.formwork, snag: false } };
     const held = await atConsultantReview("Slab pour, unticked");
-    expect(await save(k1.member, held, unticked)).toBe("saved");
-    expect(await answersAs(k1Manager, held)).toEqual([{ field_key: FIELD, answers: unticked }]);
-    for (const outsider of [c1.member, c1Pm, ow.member, c2.member, other.ap]) {
+    expect(await save(k1.members.engineer, held, unticked)).toBe("saved");
+    expect(await answersAs(k1.members.manager, held)).toEqual([{ field_key: FIELD, answers: unticked }]);
+    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative, c2.members.engineer, other.ap]) {
       expect(await answersAs(outsider, held), outsider).toEqual([]);
     }
-    await addPhoto(k1.member, held);
-    expect(await take(k1.member, held, "send_to_manager")).toBe("applied");
-    expect(await pickUp(k1Manager, held)).toBe("picked_up");
-    expect(await take(k1Manager, held, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
-    expect(await codeAnswersAs(c1.member, held)).toEqual([unticked]);
+    await addPhoto(k1.members.engineer, held);
+    expect(await take(k1.members.engineer, held, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.members.manager, held)).toBe("picked_up");
+    expect(await take(k1.members.manager, held, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    expect(await codeAnswersAs(c1.members.engineer, held)).toEqual([unticked]);
     const raised = await migrator.query("select 1 from work_item_link where to_id = $1 and kind = 'raised_from'", [held]);
     expect(raised.rows).toEqual([]);
   });
 
   it("the files to copy are only the code's own transaction's: once it committed, none, for K1 that raised them too", async () => {
     // The photo was copied (a Document of the Snag) ...
-    expect(await snagPhotos(k1Manager)).toBe(1);
+    expect(await snagPhotos(k1.members.manager)).toBe(1);
     // ... but a later transaction (a replayed code) is given nothing to copy again.
-    for (const reader of [k1Manager, c1.member]) {
+    for (const reader of [k1.members.manager, c1.members.engineer]) {
       expect(await call(reader, sql<object>`select * from app.raised_document_copies(${id}::uuid)`), reader).toEqual([]);
     }
   });
 
   it("its history starts with the Raise, shared, by K1; it is held by C1", async () => {
     const [raise] = await call<{ type: string; audience: string; company_name: unknown }>(
-      c1.member,
+      c1.members.engineer,
       sql`select type, audience, company_name from app.work_item_history(${snag}::uuid) order by seq limit 1`,
     );
     expect(raise).toEqual({ type: "transition", audience: "shared", company_name: label("K1") });
     const held = await migrator.query("select participant_id from step_assignment where work_item_id = $1 and status in ('pooled', 'picked_up')", [snag]);
-    expect(held.rows.map((r) => r.participant_id)).toEqual([participant.c1]);
+    expect(held.rows.map((r) => r.participant_id)).toEqual([c1.participantId]);
   });
 });
 
@@ -459,35 +354,35 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
 describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until the code", () => {
   it("the Engineer annotates the photo before Send to Manager: a reply Document in the photo's field and item, which the Manager reads beside it", async () => {
     const id = await atConsultantReview("Slab pour, annotated");
-    expect(await save(k1.member, id)).toBe("saved");
-    const photo = await addPhoto(k1.member, id);
-    const copy = await annotate(k1.member, id, photo);
+    expect(await save(k1.members.engineer, id)).toBe("saved");
+    const photo = await addPhoto(k1.members.engineer, id);
+    const copy = await annotate(k1.members.engineer, id, photo);
 
     const rows = await migrator.query("select id, reply, field_key, item_key, annotated_from_id from document where id = $1", [copy]);
     expect(rows.rows).toEqual([{ id: copy, reply: true, field_key: FIELD, item_key: "formwork", annotated_from_id: photo }]);
-    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
-    expect(await pickUp(k1Manager, id)).toBe("picked_up");
-    expect(await photosAs(k1Manager, id)).toEqual([photo, copy].sort());
+    expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
+    expect(await photosAs(k1.members.manager, id)).toEqual([photo, copy].sort());
   });
 
   it("before the code, C1, the Owner and C2 read neither the original nor the copy; the code freezes and shares both, never to C2", async () => {
     const id = await atConsultantReview("Slab pour, annotated and coded");
-    expect(await save(k1.member, id)).toBe("saved");
-    const photo = await addPhoto(k1.member, id);
-    const copy = await annotate(k1.member, id, photo);
-    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
-    expect(await pickUp(k1Manager, id)).toBe("picked_up");
+    expect(await save(k1.members.engineer, id)).toBe("saved");
+    const photo = await addPhoto(k1.members.engineer, id);
+    const copy = await annotate(k1.members.engineer, id, photo);
+    expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
 
-    for (const outsider of [c1.member, c1Pm, ow.member, c2.member, other.ap]) {
+    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative, c2.members.engineer, other.ap]) {
       expect(await photosAs(outsider, id), outsider).toEqual([]);
       for (const document of [photo, copy]) expect(await byId(outsider, document), outsider).toEqual([]);
     }
-    for (const outsider of [c1.member, c1Pm, ow.member]) {
+    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative]) {
       expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`), outsider).toEqual([]);
     }
 
-    expect(await take(k1Manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
-    for (const reader of [c1.member, c1Pm, ow.member, k1.member, k1Manager]) {
+    expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    for (const reader of [c1.members.engineer, c1Pm, ow.members.representative, k1.members.engineer, k1.members.manager]) {
       expect(await photosAs(reader, id), reader).toEqual([photo, copy].sort());
       expect(await byId(reader, copy), reader).toEqual([copy]);
     }
@@ -496,49 +391,49 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
       [id],
     );
     expect(taken.rows).toEqual([photo, copy].sort().map((d) => ({ id: d, frozen: true, taken: true })));
-    for (const outsider of [c2.member, other.ap]) {
+    for (const outsider of [c2.members.engineer, other.ap]) {
       expect(await photosAs(outsider, id), outsider).toEqual([]);
       expect(await byId(outsider, copy), outsider).toEqual([]);
     }
     // Shared: K1 holds the WIR no more, so it is never annotated again.
-    expect((await startCopy(k1Manager, id, photo)).outcome).toBe("not_editable");
+    expect((await startCopy(k1.members.manager, id, photo)).outcome).toBe("not_editable");
   });
 
   it("only who may add to the field now annotates: not the Manager at the code, and nobody outside K1, who doesn't even read the photo", async () => {
     const id = await atConsultantReview("Slab pour, who annotates");
-    expect(await save(k1.member, id)).toBe("saved");
-    const photo = await addPhoto(k1.member, id);
+    expect(await save(k1.members.engineer, id)).toBe("saved");
+    const photo = await addPhoto(k1.members.engineer, id);
     // K1's Manager may too: any Member of the Participant holding the Step (ADR 0024).
-    await annotate(k1Manager, id, photo);
-    for (const outsider of [c1.member, c1Pm, ow.member, c2.member, other.ap]) {
+    await annotate(k1.members.manager, id, photo);
+    for (const outsider of [c1.members.engineer, c1Pm, ow.members.representative, c2.members.engineer, other.ap]) {
       expect((await startCopy(outsider, id, photo)).outcome, outsider).toBe("not_found");
     }
-    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
-    expect(await pickUp(k1Manager, id)).toBe("picked_up");
-    expect((await startCopy(k1Manager, id, photo)).outcome).toBe("field_not_found");
+    expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
+    expect((await startCopy(k1.members.manager, id, photo)).outcome).toBe("field_not_found");
   });
 
   it("a Send Back before the code removes the copy with its original, for K1 too", async () => {
     const id = await atConsultantReview("Slab pour, annotated and sent back");
-    expect(await save(k1.member, id)).toBe("saved");
-    const photo = await addPhoto(k1.member, id);
-    const copy = await annotate(k1.member, id, photo);
-    expect(await take(k1.member, id, "send_back")).toBe("applied");
-    for (const reader of [k1.member, c1.member, c1Pm]) expect(await photosAs(reader, id), reader).toEqual([]);
+    expect(await save(k1.members.engineer, id)).toBe("saved");
+    const photo = await addPhoto(k1.members.engineer, id);
+    const copy = await annotate(k1.members.engineer, id, photo);
+    expect(await take(k1.members.engineer, id, "send_back")).toBe("applied");
+    for (const reader of [k1.members.engineer, c1.members.engineer, c1Pm]) expect(await photosAs(reader, id), reader).toEqual([]);
     const removed = await migrator.query("select removed_at is not null as removed from document where id = $1", [copy]);
     expect(removed.rows[0].removed).toBe(true);
   });
 
   it("a copy started before a Transition took its original is never confirmed", async () => {
     const id = await atConsultantReview("Slab pour, original taken first");
-    const photo = await addPhoto(k1.member, id);
-    const started = await startCopy(k1.member, id, photo);
+    const photo = await addPhoto(k1.members.engineer, id);
+    const started = await startCopy(k1.members.engineer, id, photo);
     expect(started.outcome).toBe("started");
     // As a Transition that leaves the item with K1 and its field open would leave it (none of the Rabaed Defaults does).
     await migrator.query("update document set frozen_at = now() where id = $1", [photo]);
     expect(
       await outcome(
-        k1.member,
+        k1.members.engineer,
         sql`select app.confirm_document_upload(${id}::uuid, ${started.document_id}::uuid, 2048, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
       ),
     ).toBe("not_editable");
@@ -547,15 +442,15 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
   it("a copy doesn't count toward the check item's 10 photos", async () => {
     const id = await atConsultantReview("Slab pour, ten photos");
     const photos = [];
-    for (let n = 0; n < 10; n++) photos.push(await addPhoto(k1.member, id));
-    expect((await startPhoto(k1.member, id, "formwork")).outcome).toBe("too_many_files");
-    await annotate(k1.member, id, photos[0]!);
+    for (let n = 0; n < 10; n++) photos.push(await addPhoto(k1.members.engineer, id));
+    expect((await startPhoto(k1.members.engineer, id, "formwork")).outcome).toBe("too_many_files");
+    await annotate(k1.members.engineer, id, photos[0]!);
   });
 
   it("is never written as a Form Document, nor anywhere but its original's field and check item", async () => {
     const id = await atConsultantReview("Slab pour, never a Form Document");
-    const photo = await addPhoto(k1.member, id);
-    const copy = await annotate(k1.member, id, photo);
+    const photo = await addPhoto(k1.members.engineer, id);
+    const copy = await annotate(k1.members.engineer, id, photo);
     for (const [column, value] of [
       ["reply", false],
       ["field_key", "remarks"],

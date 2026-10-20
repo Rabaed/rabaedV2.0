@@ -13,6 +13,7 @@ import { createDb, rabaedDefaultWorkflowId, readLatestPublishedDefinition } from
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, parseWorkflowDefinition, sameJson, type DocumentList, type WorkItemBoard, type WorkItemHistory, type WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
@@ -30,6 +31,7 @@ let k1: Company;
 let at: Tower;
 let buildingB = "";
 let c2Engineer: Caller; // Another Contractor of the same Trade, covering Building B only (V3).
+let c2Participant = "";
 
 const snags = async (by: Caller): Promise<WorkItemList> => (await ok(by.get(`/v1/projects/${at.projectId}/modules/snag_list/work-items`), 200)).json();
 const board = async (by: Caller): Promise<WorkItemBoard> =>
@@ -76,7 +78,7 @@ beforeAll(async () => {
   at = await buildTower(api, { c1, k1 }, "SNT");
   buildingB = (await ok(c1.caller.post(`/v1/projects/${at.projectId}/locations`, { code: "BB", name: bilingual("Building B"), parentId: null }), 201)).json().id;
   const c2 = await api.authorizedPerson();
-  const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
+  c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: only(buildingB) }));
   c2Engineer = await projectMember(api, c2, c2Participant, ["engineer"]);
 });
@@ -183,19 +185,87 @@ describe("a Snag where two Contractors cover its Trade and Location (a Visibilit
     c3Engineer = await projectMember(api, c3, c3Participant, ["engineer"]);
   });
 
-  // The Consultant picking the Contractor in the Raise's Action Form is RP-658 (SNAG-12).
-  it("is not raised: the Raise is refused with the Visibility Overlap's answer, and nothing reaches either Contractor", async () => {
+  // RP-658 (SNAG-12): the Consultant picks the Contractor in the Raise's Action Form.
+  it("RP-658: offers the Raise with a Participant field listing C1 and C3 by Company name only; one Contractor, no field", async () => {
+    const single = (await detail(at.k1Manager, await draftSnag("One Contractor"))).actions.transitions.find((t) => t.key === "raise")!;
+    expect(single.participants).toBeUndefined();
     await c3Covers(all);
     try {
-      const id = await draftSnag("Two Contractors");
-      expect((await detail(at.k1Manager, id)).actions.transitions.map((t) => t.key)).not.toContain("raise");
-      const refused = await tryTake(at.k1Manager, id, "raise");
-      expect({ status: refused.statusCode, body: refused.json() }).toEqual({ status: 409, body: { error: "next_step_unavailable" } });
+      const raise = (await detail(at.k1Manager, await draftSnag("Two Contractors, the field"))).actions.transitions.find((t) => t.key === "raise")!;
+      expect(raise.participants!.map((p) => p.participantId).sort()).toEqual([at.c1ParticipantId, c3Participant].sort());
+      for (const p of raise.participants!) expect(Object.keys(p).sort()).toEqual(["companyName", "participantId"]);
+    } finally {
+      await c3Covers(only(buildingB));
+    }
+  });
+
+  it("RP-658: refuses the Raise without a pick, and a pick that isn't one of the covering Contractors, alike whoever it names; nothing reaches anyone", async () => {
+    await c3Covers(all);
+    try {
+      const id = await draftSnag("Two Contractors, no pick");
+      const unpicked = await tryTake(at.k1Manager, id, "raise");
+      expect({ status: unpicked.statusCode, body: unpicked.json() }).toEqual({ status: 422, body: { error: "participant_not_picked" } });
+      // C2 covers Building B only; K1 is the raiser itself; and an id that names nothing.
+      for (const participant of [c2Participant, at.k1ParticipantId!, randomUUID()]) {
+        const refused = await tryTake(at.k1Manager, id, "raise", { participant });
+        expect({ status: refused.statusCode, body: refused.json() }, participant).toEqual({ status: 422, body: { error: "participant_not_offered" } });
+      }
+      expect((await detail(at.k1Manager, id)).stage.category).toBe("draft");
       await expectHidden(at.c1Pm.get(`/v1/work-items/${id}`));
       await expectHidden(c3Engineer.get(`/v1/work-items/${id}`));
     } finally {
       await c3Covers(only(buildingB));
     }
+  });
+
+  it("RP-658-1: raised with a pick of C1, goes to C1 only: C3, covering it too, sees nothing of it", async () => {
+    await c3Covers(all);
+    try {
+      const id = await draftSnag("Two Contractors, C1 picked", { photos: 1 });
+      await take(at.k1Manager, id, "raise", { participant: at.c1ParticipantId });
+      expect((await detail(at.c1Pm, id)).stage.key).toBe("open");
+      expect((await detail(at.c1Pm, id)).actions.pickUp).toBe(true);
+      await expectHidden(c3Engineer.get(`/v1/work-items/${id}`));
+      await expectHidden(c3Engineer.get(`/v1/work-items/${id}/history`));
+      await expectHidden(c3Engineer.get(`/v1/work-items/${id}/documents`));
+      expect((await snags(c3Engineer)).items.map((i) => i.id)).not.toContain(id);
+    } finally {
+      await c3Covers(only(buildingB));
+    }
+  });
+
+  it("RP-658: a covering Contractor with nobody to hold Open is never told apart (V16): beside C1 alone no field, beside C1 and C3 not listed", async () => {
+    // C4 covers the Snag too, but none of its Members is on the Project: nobody there can hold Open.
+    const c4 = await api.authorizedPerson();
+    const c4Participant = await api.addParticipant(c1.caller, at.projectId, c4.company, "contractor");
+    const c4Covers = (location: typeof all) => ok(c1.caller.request("PUT", `/v1/participants/${c4Participant}/visibility`, { trade: all, location }));
+    await c4Covers(all);
+    try {
+      const alone = await draftSnag("C1 and an empty C4");
+      expect((await detail(at.k1Manager, alone)).actions.transitions.find((t) => t.key === "raise")!.participants).toBeUndefined();
+      const refused = await tryTake(at.k1Manager, alone, "raise", { participant: c4Participant });
+      expect({ status: refused.statusCode, body: refused.json() }).toEqual({ status: 422, body: { error: "participant_not_offered" } });
+      await take(at.k1Manager, alone, "raise");
+      expect((await detail(at.c1Pm, alone)).stage.key).toBe("open");
+
+      await c3Covers(all);
+      const id = await draftSnag("C1, C3 and an empty C4");
+      const raise = (await detail(at.k1Manager, id)).actions.transitions.find((t) => t.key === "raise")!;
+      expect(raise.participants!.map((p) => p.participantId).sort()).toEqual([at.c1ParticipantId, c3Participant].sort());
+      const unstaffed = await tryTake(at.k1Manager, id, "raise", { participant: c4Participant });
+      expect({ status: unstaffed.statusCode, body: unstaffed.json() }).toEqual({ status: 422, body: { error: "participant_not_offered" } });
+    } finally {
+      await c3Covers(only(buildingB));
+      await c4Covers(only(buildingB));
+    }
+  });
+
+  it("RP-658: a pick where the Raise offers none (one Contractor covers it) is refused unless it names that Contractor", async () => {
+    const id = await draftSnag("One Contractor, a pick anyway");
+    const refused = await tryTake(at.k1Manager, id, "raise", { participant: c2Participant });
+    expect({ status: refused.statusCode, body: refused.json() }).toEqual({ status: 422, body: { error: "participant_not_offered" } });
+    await take(at.k1Manager, id, "raise", { participant: at.c1ParticipantId });
+    expect((await detail(at.c1Pm, id)).stage.key).toBe("open");
   });
 
   it("RP-90-4: once raised on C1, stays with C1 at every move, Resolve and Return, though C3 covers it too; C3 never sees it", async () => {

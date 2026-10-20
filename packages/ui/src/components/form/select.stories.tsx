@@ -1,4 +1,5 @@
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
+import { useEffect, useRef, type ReactNode } from "react";
 import { expect, screen, userEvent, waitFor } from "storybook/test";
 import { expectTabFocusRing, expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
@@ -142,5 +143,42 @@ export const Phone: Story = {
     for (const option of screen.getAllByRole("option")) await expectTouchTarget(option);
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+  },
+};
+
+/** A modal `<dialog>` (the Transition pop-up's) holding a Select, open when mounted. */
+function InDialog({ children }: { children: ReactNode }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => dialog.current?.showModal(), []);
+  return (
+    <dialog ref={dialog} aria-label="Dialog" className="m-auto w-full max-w-md rounded-md border border-border bg-surface p-6 text-text">
+      {children}
+    </dialog>
+  );
+}
+
+/**
+ * Inside a modal `<dialog>` (RP-658): the list opens inside the dialog, so it shows above the
+ * dialog's top layer and its options are picked with the pointer, not hidden behind it.
+ */
+export const InModalDialog: Story = {
+  parameters: { overlay: true },
+  render: (args, context) => (
+    <InDialog>
+      <Field {...args} label={storyText(context, copy.label)} help={storyText(context, copy.help)}>
+        <Select options={options(context)} placeholder={storyText(context, copy.placeholder)} />
+      </Field>
+    </InDialog>
+  ),
+  play: async (context) => {
+    const trigger = await screen.findByRole("combobox", { name: storyText(context, copy.label) });
+    await userEvent.click(trigger);
+    const list = await listbox();
+    // The open list hides everything else from assistive tech, the dialog included: found by tag.
+    await expect(document.querySelector("dialog")).toContainElement(list);
+    await listSettled();
+    await userEvent.click(screen.getByRole("option", { name: options(context)[2]!.label }));
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    await expect(trigger).toHaveTextContent(options(context)[2]!.label);
   },
 };

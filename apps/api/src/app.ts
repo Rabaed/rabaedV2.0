@@ -15,6 +15,7 @@ import { resolveSession, type Principal, type Session } from "./identity/session
 import { loggerOptions } from "./logging.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { documentalRecordRoutes } from "./routes/documental-record.ts";
+import { workingCopyRoutes } from "./routes/working-copy.ts";
 import { documentRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { homeRoutes } from "./routes/home.ts";
@@ -43,6 +44,7 @@ import { verificationRoutes } from "./routes/verification.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
 import { snagBulkRoutes } from "./routes/snag-bulk.ts";
+import { snagReportRoutes } from "./routes/snag-report.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
 import { workflowSettingsRoutes } from "./routes/workflow-settings.ts";
@@ -173,10 +175,12 @@ export async function buildApp({
   await app.register(workItemRoutes(context));
   await app.register(packageRoutes(context));
   await app.register(snagBulkRoutes(context));
+  await app.register(snagReportRoutes(context));
   await app.register(workflowRoutes(context));
   await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(documentalRecordRoutes(context));
+  await app.register(workingCopyRoutes(context));
   await app.register(verificationRoutes(context));
   await app.register(notificationRoutes(context));
   await app.register(notificationSettingsRoutes(context));

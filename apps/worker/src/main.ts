@@ -3,7 +3,8 @@ import { createDbFromEnv, pingDatabase, processOutbox, runScheduledJobs } from "
 import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import { z } from "zod";
 import { outboxHandlers, scheduledJobs } from "./jobs.ts";
-import { documentalRecordHandler, recordJobFromEnv, reproduceHandler } from "./record/index.ts";
+import { documentalRecordHandler, recordJobFromEnv, reproduceHandler, workingCopyHandler } from "./record/index.ts";
+import { snagReportHandler } from "./snag-report/index.ts";
 import { createLogger } from "./log.ts";
 
 // The outbox processor: each poll runs the scheduled jobs that are due (the
@@ -32,6 +33,10 @@ const handlers = {
   documental_record: documentalRecordHandler(record),
   // A Rabaed Engineer's Re-produce of a record (RP-155).
   documental_record_reproduce: reproduceHandler(record),
+  // A Working Copy a Member asked for (RP-621): printed with the record's layout, unsealed.
+  working_copy: workingCopyHandler(record),
+  // A Snag report (RP-677): a plain PDF of what a Member saw in the Snag List, with the record's renderer.
+  snag_report: snagReportHandler(record),
 };
 
 let lastOk: boolean | undefined;

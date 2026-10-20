@@ -412,6 +412,63 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
   });
 });
 
+describe("a Snag two Contractors cover: the raiser picks one (RP-658)", () => {
+  /** K1's engineer takes the Raise of `id`, picking `pick` (none when null). */
+  const raise = (id: string, pick: string | null) =>
+    outcome(
+      k1.member,
+      sql`select app.take_transition(${id}::uuid, 'raise', '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now(),
+        p_participant => ${pick}::uuid) as outcome`,
+    );
+  const offered = (as: string, id: string) =>
+    call<{ participant_id: string; company_name: { en: string } }>(
+      as,
+      sql`select o.participant_id, o.company_name from app.participants_offered(${id}::uuid,
+        (select tr.id from work_item w join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = 'raise'
+         where w.id = ${id}::uuid)) o order by o.company_name ->> 'en'`,
+    );
+  async function drafted(title: string): Promise<string> {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      k1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', ${title}, app.latest_form_version('SNG'), ${JSON.stringify({ description: title })}::jsonb,
+        ${electrical}::uuid, ${buildingB}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    return created!.work_item_id;
+  }
+
+  it("offers the raiser C1 and C2 by Company name only, and nobody else any", async () => {
+    const id = await drafted("Two Contractors on B");
+    expect(await offered(k1.member, id)).toEqual([
+      { participant_id: participant.c1, company_name: { en: "C1", ar: "C1" } },
+      { participant_id: participant.c2, company_name: { en: "C2", ar: "C2" } },
+    ]);
+    for (const other of [c1.member, c2.member, k2.member]) expect(await offered(other, id), other).toEqual([]);
+  });
+
+  it("refuses a Raise without a pick, and one picking K2 or a made-up id alike", async () => {
+    const id = await drafted("No pick on B");
+    expect(await raise(id, null)).toBe("participant_not_picked");
+    for (const pick of [participant.k2, participant.k1, randomUUID()]) expect(await raise(id, pick), pick).toBe("participant_not_offered");
+    expect(await seen(c1.member, id)).toEqual([]);
+    expect(await seen(c2.member, id)).toEqual([]);
+  });
+
+  it("RP-658-1: raised with a pick of C1, C2, covering it too, reads no item, event, Document, Step or Link of it", async () => {
+    const id = await drafted("C1 picked on B");
+    expect(await raise(id, participant.c1)).toBe("applied");
+    expect(await seen(c1.member, id)).toEqual([id]);
+    expect(await seen(c2.member, id)).toEqual([]);
+    expect(await events(c2.member, id)).toEqual([]);
+    expect(await call(c2.member, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`)).toEqual([]);
+    expect(await call(c2.member, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`)).toEqual([]);
+    expect(await call(c2.member, sql<{ to_id: string }>`select * from app.work_item_links(${id}::uuid)`)).toEqual([]);
+    expect(await stepAsSeen(c2.member, id)).toBeUndefined();
+    expect(await offered(c2.member, id)).toEqual([]);
+  });
+});
+
 /** K1's engineer's Snag on `location`, raised on the one Contractor covering it. */
 async function raisedOn(title: string, location: string): Promise<string> {
   const [created] = await call<{ outcome: string; work_item_id: string }>(

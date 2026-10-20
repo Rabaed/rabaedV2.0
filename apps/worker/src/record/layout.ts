@@ -5,6 +5,7 @@ import { isShortCode, NO_IMAGES, REPLACED, type Chip, type CompanyLine, type Flo
 import { APPENDIX_CSS, appendixHtml } from "./appendix-layout.ts";
 import { qrSvg } from "./qr.ts";
 import { headingHtml, html, ltr, texts, WORDS, type RecordLanguage, type RecordText, type Word } from "./record-text.ts";
+import type { WorkingCopyData } from "./working-copy.ts";
 
 // The one Rabaed layout (form-engine.md §6; ADR 0023), printed from the Record
 // Data only. Page 1 is the Companies, the title block, the Parties and
@@ -17,6 +18,13 @@ import { headingHtml, html, ltr, texts, WORDS, type RecordLanguage, type RecordT
 // electronically through Rabaed", the Verification Code and page X of Y.
 // RP-650 adds the cards, Stamps and Comments, RP-147 the appendix; they change
 // this file and LAYOUT_VERSION.
+//
+// A Working Copy (RP-621, working-copy.ts) prints the same page from the item as
+// shared: the Stage instead of the outcome, the shared moves by Company only, no
+// person, no reply, no QR or Verification Code, none of what follows the Form on
+// the record (Comments, Signature cards, Stamps, Disclaimer, appendix), its free
+// Links after its Documents, and the Project's watermark across every page and in
+// the footer.
 
 /** Text in the record's languages: Arabic, then English on its own line when it differs, so a wrapped line never mixes the two. */
 function txt(t: RecordText): string {
@@ -46,15 +54,19 @@ export type RecordCut = { readonly beforeComments: true } | { readonly replyCard
 /**
  * The record's HTML. `images` are the data URLs of the images it prints by storage key, and
  * `marks` says which of them each logo, Signature, Stamp and appendix image is (RecordImages: never in the Record Data).
+ * A Working Copy (WorkingCopyData) prints the same page without the sealed record's own parts.
  */
 export function recordHtml(
-  data: RecordData,
+  data: RecordData | WorkingCopyData,
   fonts: RecordFonts,
   images: ReadonlyMap<string, string> = new Map(),
   marks: RecordImages = NO_IMAGES,
   cut?: RecordCut,
 ): string {
   const language: RecordLanguage = data.language;
+  /** The sealed record's own parts; null on a Working Copy. */
+  const record = "verification" in data ? data : null;
+  const copy = "verification" in data ? null : data;
   const locales: Locale[] = language === "bilingual" ? ["ar", "en"] : [language];
 
   /** An Arabic heading with its English label beside it (bilingual), or one language. */
@@ -83,15 +95,23 @@ export function recordHtml(
   const RLI = "\u2067";
   const PDI = "\u2069";
   type FooterPart = string | "page" | "pages";
-  const english: FooterPart[] = [`${LRI}${WORDS.footer.en} · ${data.verification.code} · ${WORDS.page.en} `, "page", ` ${WORDS.of.en} `, "pages", PDI];
+  // A Working Copy's footer is its watermark text instead: it is not issued, and has no code.
+  const footerWords = { en: copy ? (copy.watermark.en ?? "") : WORDS.footer.en, ar: copy ? (copy.watermark.ar ?? "") : WORDS.footer.ar };
+  const english: FooterPart[] = [
+    `${LRI}${footerWords.en}${record ? ` · ${record.verification.code}` : ""} · ${WORDS.page.en} `,
+    "page",
+    ` ${WORDS.of.en} `,
+    "pages",
+    PDI,
+  ];
   const arabicWithCode: FooterPart[] = [
-    `${RLI}${WORDS.footer.ar} · ${LRI}${data.verification.code}${PDI} · ${WORDS.page.ar} `,
+    `${RLI}${footerWords.ar}${record ? ` · ${LRI}${record.verification.code}${PDI}` : ""} · ${WORDS.page.ar} `,
     "page",
     ` ${WORDS.of.ar} `,
     "pages",
     PDI,
   ];
-  const arabicPage: FooterPart[] = [`${RLI}${WORDS.footer.ar} · ${WORDS.page.ar} `, "page", ` ${WORDS.of.ar} `, "pages", PDI];
+  const arabicPage: FooterPart[] = [`${RLI}${footerWords.ar} · ${WORDS.page.ar} `, "page", ` ${WORDS.of.ar} `, "pages", PDI];
   const footerParts: FooterPart[] =
     language === "en" ? english : language === "ar" ? arabicWithCode : [...english, ` · `, ...arabicPage];
   const footerContent = footerParts.map((p) => (p === "page" ? "counter(page)" : p === "pages" ? "counter(pages)" : cssString(p))).join(" ");
@@ -115,7 +135,6 @@ export function recordHtml(
   const check = '<svg class="mark" viewBox="0 0 16 16" width="11" height="11" role="img"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="#111" stroke-width="2.4"/></svg>';
 
   const chipText = (c: Chip) => (isShortCode(c.code) ? ltr(c.code) : txt(c.name));
-  const outcomeLarge = isShortCode(data.outcome.code) ? ltr(data.outcome.code) : txt(data.outcome.name);
 
   const photo = (p: RecordPhoto) => {
     const image = images.get(p.storageKey);
@@ -165,7 +184,23 @@ export function recordHtml(
     return out.join("");
   }
 
-  const flow = data.transitions
+  // A Working Copy's moves are by Company only: no Member column and no content hash.
+  const flowHead = copy
+    ? `<th>#</th><th>${heading("step")}</th><th>${heading("company")}</th><th>${heading("date")}</th><th></th>`
+    : `<th>#</th><th>${heading("step")}</th><th>${heading("member")}</th><th>${heading("company")}</th><th>${heading("date")}</th><th></th><th>${heading("hash")}</th>`;
+  const moves = (copy?.moves ?? [])
+    .map(
+      (m, i) => `
+        <tr>
+          <td class="n">${i + 1}</td>
+          <td>${txt(m.label)}</td>
+          <td>${txt(m.company)}<div class="muted">${txt(m.role)}</div></td>
+          <td>${when(m.at)}</td>
+          <td class="markcell">${mark(m.mark)}</td>
+        </tr>`,
+    )
+    .join("");
+  const flow = (record?.transitions ?? [])
     .map(
       (t, i) => `
         <tr>
@@ -193,7 +228,13 @@ export function recordHtml(
   // The running header on every page after the first: the Type badge, the Subject, the Document
   // Number and Revision, the outcome badge. Each part bidi-isolated, as in the footer.
   const FSI = "\u2068";
-  const outcomeBadge = isShortCode(data.outcome.code) ? `${LRI}${data.outcome.code}${PDI}` : texts(data.outcome.name).map((n) => `${FSI}${n}${PDI}`).join(" / ");
+  const outcomeBadge = record
+    ? isShortCode(record.outcome.code)
+      ? `${LRI}${record.outcome.code}${PDI}`
+      : texts(record.outcome.name).map((n) => `${FSI}${n}${PDI}`).join(" / ")
+    : copy?.stage
+      ? texts(copy.stage).map((n) => `${FSI}${n}${PDI}`).join(" / ")
+      : "";
   const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${LRI}${numberLine}${PDI}  ·  ${outcomeBadge}`);
 
   const image = (key: string | null | undefined, cls: string) => {
@@ -203,6 +244,8 @@ export function recordHtml(
   /** A sentence in each of the record's languages, each on its own line. */
   const sentence = (fn: (l: Locale) => string) => locales.map((l) => `<div class="line" lang="${l}" dir="${dirOf(l)}">${fn(l)}</div>`).join("");
 
+  /** The sealed record's own parts after the Form: Review Comments, Signature cards, Next step, Stamps, Disclaimer, appendix. */
+  function recordParts(data: RecordData) {
   const cancellation = data.cancellation
     ? data.cancellation.companyLeft
       ? `<dt></dt><dd>${sentence((l) => `${WORDS.byRabaed[l]} ${html(data.cancellation!.companyLeft![l] ?? "")} ${WORDS.leftProject[l]}`)}</dd>`
@@ -273,7 +316,53 @@ export function recordHtml(
   const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
   // The appendix (element 15, RP-147) comes after the Disclaimer.
   const appendixPart = ended ? appendixHtml(data, images, marks.appendix ?? [], !appendixList) : "";
-  const after = `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}`;
+  return { cancellation, after: `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}` };
+  }
+  const parts = record ? recordParts(record) : null;
+  // A Working Copy's free Links follow its Documents.
+  const after = parts
+    ? parts.after
+    : copy && copy.links.length > 0
+      ? `<section class="form"><h2>${heading("links")}</h2><table><tbody>${copy.links
+          .map((l) => `<tr><td class="linkno">${ltr(l.documentNumber)}</td><td><bdi>${html(l.subject)}</bdi></td></tr>`)
+          .join("")}</tbody></table></section>`
+      : "";
+
+  /** The sealed record's Final decision box: the outcome, who issued it, the dates, Review Comments, and the QR with the Verification Code. */
+  const decisionBox = (r: RecordData) => `<section class="box">
+  <h2>${heading("decision")}</h2>
+  <div class="decision">
+    <div>
+      <div class="outcome">${isShortCode(r.outcome.code) ? ltr(r.outcome.code) : txt(r.outcome.name)}</div>
+      ${isShortCode(r.outcome.code) ? `<div>${txt(r.outcome.name)}</div>` : ""}
+      <div class="chips">${r.chips.map((c) => `<span class="chip${c.issued ? " issued" : ""}">${chipText(c)}</span>`).join("")}</div>
+      <dl>
+        ${r.issuedBy ? `<dt>${heading("issuedBy")}</dt><dd>${person(r.issuedBy)}</dd>` : ""}
+        ${r.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(r.confirmedBy)}</dd>` : ""}
+        ${r.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(r.submittedAt)}</dd>` : ""}
+        <dt>${heading("replied")}</dt><dd>${day(r.closedAt)}</dd>
+        ${r.reviewDays !== null ? `<dt>${heading("reviewDuration")}</dt><dd>${ltr(String(r.reviewDays))}</dd>` : ""}
+        <dt>${heading("comments")}</dt><dd>${ltr(String(r.reviewComments))}${
+          r.pages.comments !== null && r.comments.length > 0 ? ` <span class="muted">· ${heading("page")} ${ltr(String(r.pages.comments))}</span>` : ""
+        }</dd>
+        ${parts!.cancellation}
+      </dl>
+    </div>
+    <div class="qr">
+      ${qrSvg(r.verification.link, 110)}
+      <div class="muted">${heading("code")}</div>
+      <div class="code">${ltr(r.verification.code)}</div>
+      <div class="link">${ltr(r.verification.link)}</div>
+    </div>
+  </div>
+</section>`;
+  /** A Working Copy's box in its place: the Stage the item is at, the outcomes it may close with, none issued. */
+  const stageBox = (c: WorkingCopyData) => `<section class="box">
+  <h2>${heading("stage")}</h2>
+  ${c.stage ? `<div class="stage">${txt(c.stage)}</div>` : ""}
+  <div class="chips">${c.chips.map((chip) => `<span class="chip">${chipText(chip)}</span>`).join("")}</div>
+  ${c.submittedAt ? `<dl><dt>${heading("submitted")}</dt><dd>${day(c.submittedAt)}</dd></dl>` : ""}
+</section>`;
 
   const dir = language === "en" ? "ltr" : "rtl";
   return `<!doctype html>
@@ -386,10 +475,16 @@ li > .n { font-weight: 700; min-width: 6mm; }
 .stampimg { max-width: 32mm; max-height: 32mm; display: block; margin: 0 auto 1.5mm; }
 .nostamp { height: 32mm; }
 .disclaimer .pre { font-size: 8pt; color: #333; }
+.stage { font-size: 16pt; font-weight: 700; line-height: 1.2; margin-bottom: 1mm; }
+td.linkno { width: 45mm; }
+/* A Working Copy's watermark: fixed, so Chromium prints it on every page, over the content. */
+.watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); z-index: 10; text-align: center; white-space: nowrap; font-size: 54pt; font-weight: 700; line-height: 1.15; color: rgba(160, 30, 30, 0.16); }
+.watermark .en { color: inherit; }
 ${APPENDIX_CSS}
 </style>
 </head>
 <body>
+${copy ? `<div class="watermark">${txt(copy.watermark)}</div>` : ""}
 <div class="companies">${data.companies.map(companyBox).join("")}</div>
 <section class="title-block">
   <h1>${txt(data.type.name)} <span class="badge">${ltr(data.type.code)}</span></h1>
@@ -417,37 +512,11 @@ ${APPENDIX_CSS}
     ${data.classification.length > 0 ? blocks(data.classification) : ""}
   </section>
 </div>
-<section class="box">
-  <h2>${heading("decision")}</h2>
-  <div class="decision">
-    <div>
-      <div class="outcome">${outcomeLarge}</div>
-      ${isShortCode(data.outcome.code) ? `<div>${txt(data.outcome.name)}</div>` : ""}
-      <div class="chips">${data.chips.map((c) => `<span class="chip${c.issued ? " issued" : ""}">${chipText(c)}</span>`).join("")}</div>
-      <dl>
-        ${data.issuedBy ? `<dt>${heading("issuedBy")}</dt><dd>${person(data.issuedBy)}</dd>` : ""}
-        ${data.confirmedBy ? `<dt>${heading("confirmedBy")}</dt><dd>${person(data.confirmedBy)}</dd>` : ""}
-        ${data.submittedAt ? `<dt>${heading("submitted")}</dt><dd>${day(data.submittedAt)}</dd>` : ""}
-        <dt>${heading("replied")}</dt><dd>${day(data.closedAt)}</dd>
-        ${data.reviewDays !== null ? `<dt>${heading("reviewDuration")}</dt><dd>${ltr(String(data.reviewDays))}</dd>` : ""}
-        <dt>${heading("comments")}</dt><dd>${ltr(String(data.reviewComments))}${
-          data.pages.comments !== null && data.comments.length > 0 ? ` <span class="muted">· ${heading("page")} ${ltr(String(data.pages.comments))}</span>` : ""
-        }</dd>
-        ${cancellation}
-      </dl>
-    </div>
-    <div class="qr">
-      ${qrSvg(data.verification.link, 110)}
-      <div class="muted">${heading("code")}</div>
-      <div class="code">${ltr(data.verification.code)}</div>
-      <div class="link">${ltr(data.verification.link)}</div>
-    </div>
-  </div>
-</section>
+${record ? decisionBox(record) : stageBox(copy!)}
 ${
-  data.reply
-    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(data.reply.text)}</bdi></div>${
-        data.pages.reply !== null ? `<div class="pointer muted">${heading("fullText")} ${ltr(String(data.pages.reply))}</div>` : ""
+  record?.reply
+    ? `<section class="box"><h2>${heading("reply")}</h2><div class="reply"><bdi>${html(record.reply.text)}</bdi></div>${
+        record.pages.reply !== null ? `<div class="pointer muted">${heading("fullText")} ${ltr(String(record.pages.reply))}</div>` : ""
       }</section>`
     : ""
 }
@@ -455,17 +524,9 @@ ${
   <h2>${heading("flow")}</h2>
   <table>
     <thead>
-      <tr>
-        <th>#</th>
-        <th>${heading("step")}</th>
-        <th>${heading("member")}</th>
-        <th>${heading("company")}</th>
-        <th>${heading("date")}</th>
-        <th></th>
-        <th>${heading("hash")}</th>
-      </tr>
+      <tr>${flowHead}</tr>
     </thead>
-    <tbody>${flow}
+    <tbody>${record ? flow : moves}
     </tbody>
   </table>
 </section>

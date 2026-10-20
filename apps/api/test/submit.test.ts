@@ -430,8 +430,9 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
   });
 });
 
-// Scenario 37: whether no Consultant covers the item, two do, or the one that does has
-// nobody who can issue its Code (transitions.test.ts), the PM gets one answer (V14, V16).
+// Scenario 37: whether no Consultant covers the item, or the one that does has nobody who
+// can issue its Code (transitions.test.ts), the PM gets one answer (V14, V16). Two covering
+// it is a pick in the Submit's Action Form (RP-658).
 describe("Submit with no single Consultant to take it (scenario 37)", () => {
   const SECOND_CONSULTANT = "Second Consultants";
   /** The one answer, byte for byte, whichever case it is. */
@@ -466,14 +467,27 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
     }
   });
 
-  it("is not offered, and refused with the same answer, when two Consultants cover the item (a Visibility Overlap)", async () => {
+  // RP-658: two Consultants covering the item is no longer refused: the PM picks one.
+  it("is offered with the Participant field when two Consultants cover the item (a Visibility Overlap), and goes to the one picked only", async () => {
     const k2 = await participant("consultant", { trade: only(electrical), location: all }, SECOND_CONSULTANT);
-    await memberWithEmail(k2.company, k2.participantId, ["manager"]);
-    const id = await readyToSubmit("Switchgear");
-    await expectRefused(id);
-    // Narrow the second Consultant away: Submit comes back.
-    await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));
-    expect(buttons(await detail(pm, id))).toEqual(["return", "submit"]);
+    const k2Manager = await memberWithEmail(k2.company, k2.participantId, ["manager"]);
+    try {
+      const id = await readyToSubmit("Switchgear");
+      expect(buttons(await detail(pm, id))).toEqual(["return", "submit"]);
+      const submit = (await detail(pm, id)).actions.transitions.find((t) => t.key === "submit")!;
+      expect(submit.participants!.map((p) => [p.participantId, p.companyName.en]).sort()).toEqual(
+        [[k1ParticipantId, CONSULTANT], [k2.participantId, SECOND_CONSULTANT]].sort(),
+      );
+      const unpicked = await tryTake(pm, id, "submit");
+      expect({ status: unpicked.statusCode, body: unpicked.json() }).toEqual({ status: 422, body: { error: "participant_not_picked" } });
+      await ok(tryTake(pm, id, "submit", { participant: k1ParticipantId }));
+      expect((await detail(signer, id)).actions.pickUp).toBe(true);
+      // K2, covering it too, sees nothing of it (V3).
+      await expectHidden(k2Manager.get(`/v1/work-items/${id}`));
+    } finally {
+      // Narrow the second Consultant away: every other test has one Consultant.
+      await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));
+    }
   });
 });
 
