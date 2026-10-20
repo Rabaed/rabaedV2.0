@@ -73,6 +73,7 @@ const pkg: PackageDetail = {
   name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"),
   status: "in_progress",
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: contractor },
+  trades: [],
   counts: { total: 5, open: 4, codes: { A: 1 } },
   items: [itemOf(tiles, codes), itemOf(ware, codes), itemOf(lights, codes), itemOf(fans, otherScreen), itemOf(basins, [])],
   owned: false,
