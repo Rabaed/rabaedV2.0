@@ -312,7 +312,7 @@ export async function documentSecurityStore(pdf: Uint8Array): Promise<{ store: D
   return { store: dssOf(await PDFDocument.load(pdf, { updateMetadata: false })), signedLength: Number(m[1]) + Number(m[2]) };
 }
 
-const sameList =(a: readonly Uint8Array[], b: readonly Uint8Array[]) =>
+const sameList = (a: readonly Uint8Array[], b: readonly Uint8Array[]) =>
   a.length === b.length && a.every((x, i) => Buffer.compare(Buffer.from(x), Buffer.from(b[i]!)) === 0);
 
 /** Checks the PDF's seal: what a reader such as Adobe Reader checks, but trusting the certificate it carries. */

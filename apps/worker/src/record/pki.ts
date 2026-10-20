@@ -39,6 +39,9 @@ export const OID = {
   ocsp: "1.3.6.1.5.5.7.48.1",
   caIssuers: "1.3.6.1.5.5.7.48.2",
   ocspBasic: "1.3.6.1.5.5.7.48.1.1",
+  ocspNoCheck: "1.3.6.1.5.5.7.48.1.5",
+  deltaCrlIndicator: "2.5.29.27",
+  issuingDistributionPoint: "2.5.29.28",
 } as const;
 
 export const toBytes = (buffer: ArrayBuffer | ArrayBufferView): Uint8Array =>

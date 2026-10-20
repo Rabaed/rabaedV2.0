@@ -32,6 +32,16 @@ export interface LocalCertificateAuthority {
   readonly fetch: typeof fetch;
 }
 
+export interface AuthorityOptions {
+  /** Its clock: its CRLs' and OCSP answers' times. */
+  readonly now?: () => Date;
+  /**
+   * Who signs its OCSP answers: itself (the default), or a responder it delegates to (RFC 6960
+   * §4.2.2.2), whose certificate the answer carries, marked id-pkix-ocsp-nocheck or not.
+   */
+  readonly responder?: "itself" | "delegated" | "delegated-nocheck";
+}
+
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
@@ -64,8 +74,11 @@ async function newKeys(): Promise<webcrypto.CryptoKeyPair> {
   return (await subtle.generateKey(RSA_SHA256, false, ["sign", "verify"])) as webcrypto.CryptoKeyPair;
 }
 
-/** A local certificate authority named `commonName`, its clock `now` (its CRLs' and OCSP answers' times). */
-export async function localCertificateAuthority(commonName: string, now: () => Date = () => new Date()): Promise<LocalCertificateAuthority> {
+/** A local certificate authority named `commonName`. */
+export async function localCertificateAuthority(
+  commonName: string,
+  { now = () => new Date(), responder = "itself" }: AuthorityOptions = {},
+): Promise<LocalCertificateAuthority> {
   const base = `http://${Buffer.from(webcrypto.getRandomValues(new Uint8Array(6))).toString("hex")}.local-ca.invalid`;
   const keys = await newKeys();
   const created = Date.now();
@@ -88,6 +101,48 @@ export async function localCertificateAuthority(commonName: string, now: () => D
   const issued = new Set<string>();
   const revoked = new Map<string, Date>();
   const numberHex = (n: asn1js.Integer) => Buffer.from(n.valueBlock.valueHexView).toString("hex");
+
+  async function issueKey(subjectName: string, { timeStamping = false, ocsp: withOcsp = false }: IssueOptions, extra: pkijs.Extension[] = []): Promise<LocalKey> {
+    const leafKeys = await newKeys();
+    const certificate = new pkijs.Certificate();
+    certificate.version = 2;
+    certificate.serialNumber = randomCertificateNumber();
+    certificate.issuer.typesAndValues.push(...name(commonName));
+    certificate.subject.typesAndValues.push(...name(subjectName));
+    const issuedAt = Date.now();
+    certificate.notBefore.value = new Date(issuedAt - HOUR);
+    certificate.notAfter.value = new Date(issuedAt + 365 * DAY);
+    const access = [
+      ...(withOcsp ? [new pkijs.AccessDescription({ accessMethod: OID.ocsp, accessLocation: uri(`${base}/ocsp`) })] : []),
+      new pkijs.AccessDescription({ accessMethod: OID.caIssuers, accessLocation: uri(`${base}/ca.cer`) }),
+    ];
+    certificate.extensions = [
+      extension(OID.basicConstraints, true, new pkijs.BasicConstraints({ cA: false })),
+      // digitalSignature and nonRepudiation (contentCommitment).
+      extension(OID.keyUsage, true, keyUsage([0, 1])),
+      ...(timeStamping ? [extension(OID.extendedKeyUsage, true, new pkijs.ExtKeyUsage({ keyPurposes: [OID.timeStamping] }))] : []),
+      extension(OID.authorityInfoAccess, false, new pkijs.InfoAccess({ accessDescriptions: access })),
+      extension(
+        OID.crlDistributionPoints,
+        false,
+        new pkijs.CRLDistributionPoints({ distributionPoints: [new pkijs.DistributionPoint({ distributionPoint: [uri(`${base}/crl`)] })] }),
+      ),
+      ...extra,
+    ];
+    await certificate.subjectPublicKeyInfo.importKey(leafKeys.publicKey);
+    await certificate.sign(keys.privateKey, "SHA-256");
+    issued.add(numberHex(certificate.serialNumber));
+    return { privateKey: leafKeys.privateKey, certificate: certificateDer(certificate) };
+  }
+
+  const responderName = `${commonName} OCSP responder`;
+  const delegate =
+    responder === "itself"
+      ? null
+      : await issueKey(responderName, {}, [
+          extension(OID.extendedKeyUsage, false, new pkijs.ExtKeyUsage({ keyPurposes: [OID.ocspSigning] })),
+          ...(responder === "delegated-nocheck" ? [extension(OID.ocspNoCheck, false, new asn1js.Null())] : []),
+        ]);
 
   async function crl(): Promise<Uint8Array> {
     const at = now();
@@ -122,9 +177,12 @@ export async function localCertificateAuthority(commonName: string, now: () => D
         : new asn1js.Primitive({ idBlock: { tagClass: 3, tagNumber: issued.has(number) ? 0 : 2 } });
       return new pkijs.SingleResponse({ certID: r.reqCert, certStatus, thisUpdate: at, nextUpdate: new Date(at.getTime() + 7 * DAY) });
     });
-    const responderID = new pkijs.RelativeDistinguishedNames({ typesAndValues: name(commonName) });
-    const basic = new pkijs.BasicOCSPResponse({ tbsResponseData: new pkijs.ResponseData({ responderID, producedAt: at, responses }) });
-    await basic.sign(keys.privateKey, "SHA-256");
+    const responderID = new pkijs.RelativeDistinguishedNames({ typesAndValues: name(delegate ? responderName : commonName) });
+    const basic = new pkijs.BasicOCSPResponse({
+      tbsResponseData: new pkijs.ResponseData({ responderID, producedAt: at, responses }),
+      ...(delegate ? { certs: [parseCertificate(delegate.certificate)] } : {}),
+    });
+    await basic.sign(delegate?.privateKey ?? keys.privateKey, "SHA-256");
     return toBytes(
       new pkijs.OCSPResponse({
         responseStatus: new asn1js.Enumerated({ value: 0 }),
@@ -151,37 +209,7 @@ export async function localCertificateAuthority(commonName: string, now: () => D
 
   return {
     certificate: rootDer,
-    async issue(subjectName, { timeStamping = false, ocsp: withOcsp = false } = {}) {
-      const leafKeys = await newKeys();
-      const certificate = new pkijs.Certificate();
-      certificate.version = 2;
-      certificate.serialNumber = randomCertificateNumber();
-      certificate.issuer.typesAndValues.push(...name(commonName));
-      certificate.subject.typesAndValues.push(...name(subjectName));
-      const issuedAt = Date.now();
-      certificate.notBefore.value = new Date(issuedAt - HOUR);
-      certificate.notAfter.value = new Date(issuedAt + 365 * DAY);
-      const access = [
-        ...(withOcsp ? [new pkijs.AccessDescription({ accessMethod: OID.ocsp, accessLocation: uri(`${base}/ocsp`) })] : []),
-        new pkijs.AccessDescription({ accessMethod: OID.caIssuers, accessLocation: uri(`${base}/ca.cer`) }),
-      ];
-      certificate.extensions = [
-        extension(OID.basicConstraints, true, new pkijs.BasicConstraints({ cA: false })),
-        // digitalSignature and nonRepudiation (contentCommitment).
-        extension(OID.keyUsage, true, keyUsage([0, 1])),
-        ...(timeStamping ? [extension(OID.extendedKeyUsage, true, new pkijs.ExtKeyUsage({ keyPurposes: [OID.timeStamping] }))] : []),
-        extension(OID.authorityInfoAccess, false, new pkijs.InfoAccess({ accessDescriptions: access })),
-        extension(
-          OID.crlDistributionPoints,
-          false,
-          new pkijs.CRLDistributionPoints({ distributionPoints: [new pkijs.DistributionPoint({ distributionPoint: [uri(`${base}/crl`)] })] }),
-        ),
-      ];
-      await certificate.subjectPublicKeyInfo.importKey(leafKeys.publicKey);
-      await certificate.sign(keys.privateKey, "SHA-256");
-      issued.add(numberHex(certificate.serialNumber));
-      return { privateKey: leafKeys.privateKey, certificate: certificateDer(certificate) };
-    },
+    issue: (subjectName, options = {}) => issueKey(subjectName, options),
     revoke(certificate) {
       revoked.set(numberHex(parseCertificate(certificate).serialNumber), now());
     },

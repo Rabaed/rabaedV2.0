@@ -52,6 +52,40 @@ describe("fetching the revocation data", () => {
     await expect(fetchRevocationData([key.certificate, ca.certificate], down)).rejects.toThrow(/no revocation data for Unreachable/);
   });
 
+  it("keeps a delegated OCSP responder's certificate and, unless it is marked nocheck, its own revocation data", async () => {
+    const delegating = await localCertificateAuthority("Delegating root", { responder: "delegated" });
+    const key = await delegating.issue("Sealing", { ocsp: true });
+    const chain = [key.certificate, delegating.certificate];
+    const data = await fetchRevocationData(chain, delegating.fetch);
+    // The responder's certificate names no OCSP responder, so its own status comes from the CRL.
+    expect({ ocsp: data.ocspResponses.length, crls: data.crls.length, certificates: data.certificates.length }).toEqual({ ocsp: 1, crls: 1, certificates: 1 });
+    expect(await longTermProblems(chain, { ...data, crls: [] })).toEqual(["no revocation data for Delegating root OCSP responder"]);
+
+    const nocheck = await localCertificateAuthority("Nocheck root", { responder: "delegated-nocheck" });
+    const other = await nocheck.issue("Sealing", { ocsp: true });
+    expect(await fetchRevocationData([other.certificate, nocheck.certificate], nocheck.fetch)).toMatchObject({ crls: [], certificates: [expect.any(Uint8Array)] });
+  });
+
+  it("refuses an answer or a CRL that is no longer current", async () => {
+    const stale = await localCertificateAuthority("Stale root", { now: () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) });
+    const key = await stale.issue("Sealing", { ocsp: true });
+    await expect(fetchRevocationData([key.certificate, stale.certificate], stale.fetch)).rejects.toThrow(/no revocation data for Sealing/);
+  });
+
+  it("never fetches a local, link-local or non-http address a certificate names", async () => {
+    const asked: string[] = [];
+    const spy = (async (input: string | URL | Request) => {
+      asked.push(String(input));
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+    const key = await ca.issue("Sealing", { ocsp: true });
+    // A certificate whose issuer is missing and whose caIssuers address is the task's metadata endpoint.
+    const metadata = Buffer.from(key.certificate).toString("latin1").match(/http:\/\/[0-9a-f]+\.local-ca\.invalid\/ca\.cer/)![0];
+    const forged = Buffer.from(Buffer.from(key.certificate).toString("latin1").replace(metadata, "http://169.254.170.2/v4/ca".padEnd(metadata.length, "x")), "latin1");
+    await expect(fetchRevocationData([new Uint8Array(forged)], spy)).rejects.toThrow(/a local address/);
+    expect(asked).toEqual([]);
+  });
+
   it("the local authority answers only its own addresses: local mode has no internet", async () => {
     await expect(ca.fetch("https://example.com/crl")).rejects.toThrow("local mode has no internet");
   });
