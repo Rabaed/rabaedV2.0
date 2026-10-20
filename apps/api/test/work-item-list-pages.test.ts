@@ -36,18 +36,25 @@ async function list(by: Caller, query: WorkItemQueryInput): Promise<WorkItemList
 const ids = (l: WorkItemList) => l.items.map((i) => i.id);
 const total = (l: WorkItemList) => l.stages.reduce((sum, s) => sum + s.count, 0);
 
-/** Every row of `query` as `by` reads it, page by page, and the pages' sizes. */
+/** Every row of `query` as `by` reads it, page by page, the pages' sizes, and the total each page's Stage counts gave. */
 async function allPages(by: Caller, query: WorkItemQueryInput) {
   const rows: string[] = [];
   const sizes: number[] = [];
+  const totals: number[] = [];
   for (let page = 1; ; page++) {
     const l = await list(by, { ...query, page });
     rows.push(...ids(l));
     sizes.push(l.items.length);
+    totals.push(total(l));
     expect(l.nextCursor).toBeNull();
     if (!l.page?.hasNext) break;
   }
-  return { rows, sizes };
+  return { rows, sizes, totals };
+}
+
+/** What a failed page-size check prints: the sizes it got, the rows read, and the totals the pages reported (RP-611). */
+function readout({ rows, sizes, totals }: Awaited<ReturnType<typeof allPages>>) {
+  return `page sizes ${JSON.stringify(sizes)}, ${rows.length} rows read, Stage-count totals per page ${JSON.stringify(totals)}`;
 }
 
 /** K1 closes a submitted item with `transition`. */
@@ -117,8 +124,9 @@ describe("the Member's own columns (Save as my default)", () => {
 
 describe("numbered pages", () => {
   it("pages 10 rows at a time, each row once, and says when there is a next page", async () => {
-    const { rows, sizes } = await allPages(at.c1Engineer, { pageSize: 10 });
-    expect(sizes).toEqual([10, 10, 5]);
+    const pages = await allPages(at.c1Engineer, { pageSize: 10 });
+    const { rows, sizes } = pages;
+    expect(sizes, readout(pages)).toEqual([10, 10, 5]);
     expect([...rows].sort()).toEqual([...created].sort());
     const first = await list(at.c1Engineer, { page: 1, pageSize: 10 });
     expect(first.page).toEqual({ number: 1, size: 10, hasNext: true });
@@ -239,9 +247,10 @@ describe("every column's sort", () => {
   for (const sort of workItemSorts) {
     for (const dir of ["asc", "desc"] as const) {
       it(`lists each row once across the pages (${sort}, ${dir})`, async () => {
-        const { rows } = await allPages(at.c1Engineer, { sort, dir, pageSize: 10 });
-        expect(rows).toHaveLength(created.length);
-        expect(new Set(rows).size).toBe(created.length);
+        const pages = await allPages(at.c1Engineer, { sort, dir, pageSize: 10 });
+        const { rows } = pages;
+        expect(rows, readout(pages)).toHaveLength(created.length);
+        expect(new Set(rows).size, readout(pages)).toBe(created.length);
       });
     }
   }
