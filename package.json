@@ -6,6 +6,7 @@
     "node": ">=24.7"
   },
   "scripts": {
+    "prepare": "node scripts/hooks-install.ts",
     "dev": "docker compose up -d --wait db mailpit files && node scripts/pnpm.ts db:setup && node scripts/pnpm.ts dev:apps",
     "dev:apps": "node scripts/pnpm.ts --parallel --filter @rabaed/api --filter @rabaed/web --filter @rabaed/worker --filter @rabaed/admin run dev",
     "lane:env": "node scripts/lane-env.ts",
@@ -27,6 +28,7 @@
     "migration-days": "node scripts/migration-days.ts",
     "db:fn": "node scripts/db-fn.ts",
     "queue": "node scripts/queue-pr.ts",
+    "claims": "node scripts/claims.ts",
     "verify": "node scripts/verify.ts",
     "lint": "eslint .",
     "typecheck": "node scripts/pnpm.ts -r run typecheck",
