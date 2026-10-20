@@ -556,8 +556,8 @@ describe("scenarios RP-147-1 and RP-147-2: only the Documents the other Particip
 describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps, a logo and an appendix", () => {
   const REASON = "The PDF maker had a layout bug";
   const shifted: PdfRenderer = {
-    // A layout that pushes everything down a page: where things land changes, no fact does.
-    render: (html) => renderer.render(html.replace(/<body[^>]*>/, (body) => `${body}<div style="height:150mm"></div>`)),
+    // A layout that pushes everything down a whole page: where things land changes, no fact does.
+    render: (html) => renderer.render(html.replace(/<body[^>]*>/, (body) => `${body}<div style="break-after:page"></div>`)),
     close: async () => undefined,
   };
   const recordRow = async (id: string) =>

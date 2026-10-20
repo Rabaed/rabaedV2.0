@@ -49,10 +49,10 @@ beforeAll(async () => {
   )) as string;
   png = Buffer.from(pngUrl.slice(pngUrl.indexOf(",") + 1), "base64");
   renderer = chromiumRenderer();
-});
+}, 60_000);
 afterAll(async () => {
-  await renderer.close();
-  await browser.close();
+  await renderer?.close();
+  await browser?.close();
 });
 
 /** A store holding `files` by name; `swap` changes a file's bytes after it has been read once. */
@@ -129,7 +129,8 @@ function lastDrawn(doc: PDFDocument, index: number): { matrix: number[]; object:
 
 const isImage = (s: PDFStream) => s.dict.lookup(PDFName.of("Subtype")) === PDFName.of("Image");
 
-describe("the appendix's image pages (RP-957)", () => {
+// Each test renders the record two or three times with Chromium: slower on CI than locally.
+describe("the appendix's image pages (RP-957)", { timeout: 60_000 }, () => {
   it("draws a JPEG with pdf-lib, its bytes as uploaded, and never gives it to Chromium", async () => {
     const made = await drawn({ "photo.jpg": { bytes: jpeg, contentType: "image/jpeg" } });
     const base64 = jpeg.toString("base64");
