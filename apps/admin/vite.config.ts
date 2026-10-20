@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Rabaed Admin's Workflows page (RP-443) and Imports page (RP-645, the Register Import wizard):
+// Rabaed Admin's Workflows page (RP-443) and Imports page (RP-645, the Register Import wizard) and Records page (RP-670, the Record Job Monitor):
 // the builder and the wizard from @rabaed/ui, built to dist/ and
 // served by Rabaed Admin itself from /assets (src/routes/pages.ts), on its own origin and
 // under its Content-Security-Policy: one script, one stylesheet, self-hosted fonts.
@@ -22,11 +22,12 @@ export default defineConfig({
     // Fonts stay files (the policy allows no data: fonts).
     assetsInlineLimit: 0,
     cssCodeSplit: false,
-    // Two pages: Workflows (RP-443) and Imports (RP-645), sharing their code in chunks/ and one stylesheet.
+    // Three pages: Workflows (RP-443), Imports (RP-645) and Records (RP-670), sharing their code in chunks/ and one stylesheet.
     rollupOptions: {
       input: {
         workflows: fileURLToPath(new URL("./web/main.tsx", import.meta.url)),
         imports: fileURLToPath(new URL("./web/imports-main.tsx", import.meta.url)),
+        records: fileURLToPath(new URL("./web/records-main.tsx", import.meta.url)),
       },
       output: {
         entryFileNames: "[name].js",

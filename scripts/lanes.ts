@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { connect, createServer } from "node:net";
+import { openSessionReason, type DesktopSessions } from "./desktop-sessions.ts";
 import { samePath } from "./paths.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
@@ -217,25 +218,31 @@ type MergedInput = {
   worktrees: WorktreeLane[];
   cwd: string;
   currentProject: string | undefined;
+  /** The Claude desktop session holding a worktree (desktop-sessions.ts readDesktopSessions, RP-612; default: none does). */
+  openSession?: DesktopSessions;
   platform?: NodeJS.Platform;
 };
 
-/**
- * The rabaed-* compose projects (lanes:prune --merged) whose containers all come from
- * worktrees whose branch is merged into origin/main. A project stays while any worktree
- * that is not merged names it in its .env (it shares the lane, e.g. lane:env --db), and the
- * current worktree's project always stays. Projects whose worktree is gone are staleProjects'.
- */
-export function mergedProjects({ containers, volumes, worktrees, cwd, currentProject, platform }: MergedInput): StaleProject[] {
+/** mergedProjects' answer, with a line for each project kept only because a holder's Claude desktop session is open (RP-612). */
+export function chooseMerged({ containers, volumes, worktrees, cwd, currentProject, openSession = () => undefined, platform }: MergedInput): {
+  merged: StaleProject[];
+  kept: string[];
+} {
   const worktreeAt = (dir: string) => worktrees.find((w) => samePath(w.path, dir, platform));
   const projects = [...new Set(containers.map((c) => c.project).filter((p) => p.startsWith("rabaed-")))].sort();
   const merged: StaleProject[] = [];
+  const kept: string[] = [];
   for (const project of projects) {
     const mine = containers.filter((c) => c.project === project);
     if (project === currentProject || mine.some((c) => samePath(c.workingDir, cwd, platform))) continue;
     if (worktrees.some((w) => !w.merged && w.project === project)) continue;
     const holders = [...new Set(mine.map((c) => c.workingDir))].map(worktreeAt);
     if (holders.some((w) => !w?.merged)) continue;
+    const held = holders.map((w) => ({ path: w!.path, session: openSession(w!.path) })).find((h) => h.session !== undefined);
+    if (held) {
+      kept.push(`Not pruned as merged: ${project} of ${held.path}: ${openSessionReason(held.session!)}.`);
+      continue;
+    }
     const named = holders.map((w) => `${w!.branch ?? "a detached HEAD"} at ${w!.path}`).join(", ");
     merged.push({
       project,
@@ -244,8 +251,17 @@ export function mergedProjects({ containers, volumes, worktrees, cwd, currentPro
       volumes: volumes.filter((v) => v.project === project).map((v) => v.name),
     });
   }
-  return merged;
+  return { merged, kept };
 }
+
+/**
+ * The rabaed-* compose projects (lanes:prune --merged) whose containers all come from
+ * worktrees whose branch is merged into origin/main. A project stays while any worktree
+ * that is not merged names it in its .env (it shares the lane, e.g. lane:env --db), and the
+ * current worktree's project always stays. So does one a holder of which has an open Claude
+ * desktop session, or one that cannot be checked (RP-612). Projects whose worktree is gone are staleProjects'.
+ */
+export const mergedProjects = (input: MergedInput): StaleProject[] => chooseMerged(input).merged;
 
 /** lanes:prune --lane N: only lane N's compose project among the candidates (all of them without --lane). */
 export const onlyLane = (projects: StaleProject[], lane: number | undefined): StaleProject[] =>
@@ -324,6 +340,8 @@ export type TakeoverWorktree = {
   locked?: string | undefined;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project?: string | undefined;
+  /** Why a running Claude session holds it (worktrees.ts WorktreeFacts.heldBySession, RP-956); it is never taken over. */
+  heldBySession?: string | undefined;
 };
 
 type TakeoverInput = {
@@ -334,6 +352,8 @@ type TakeoverInput = {
   exists?: (dir: string) => boolean;
   /** Whether the pid is another session that still runs (lane:env: worktrees.ts systemLiveness().pidLive, RP-585; default: none is). */
   pidRunning?: (pid: number) => boolean;
+  /** The Claude desktop session holding a worktree (desktop-sessions.ts readDesktopSessions, RP-612; default: none does). */
+  openSession?: DesktopSessions;
   platform?: NodeJS.Platform;
 };
 
@@ -343,7 +363,8 @@ type TakeoverInput = {
  * volumes stay: once these containers are removed the new worktree's `docker compose up`
  * recreates them under its own folder in the same project and reuses the database.
  * All or nothing: a holder that is not merged, has uncommitted changes (or whose status
- * cannot be read), is locked by a process that still runs, or is a folder git does not
+ * cannot be read), is locked by a process that still runs, has a running Claude session in it (RP-956), has an
+ * open Claude desktop session (or one that cannot be checked, RP-612), or is a folder git does not
  * list refuses the whole takeover (refused names each, with why). So does a worktree that
  * is not merged (other than cwd) naming the lane's project in its .env: it shares the lane.
  * The twin lane's project (legacy m for m0, or m0 for m) counts as the lane's, as it holds the
@@ -351,7 +372,7 @@ type TakeoverInput = {
  */
 export function chooseTakeover(
   n: number,
-  { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, platform }: TakeoverInput,
+  { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, openSession = () => undefined, platform }: TakeoverInput,
 ): { takeOver: Container[]; from: string[]; refused: string[] } {
   const projects = laneProjects(n);
   const mine = containers.filter((c) => projects.includes(c.project) && !samePath(c.workingDir, cwd, platform));
@@ -361,11 +382,14 @@ export function chooseTakeover(
     const w = worktrees.find((x) => samePath(x.path, dir, platform));
     const on = w?.branch ?? "a detached HEAD";
     const pid = lockPid(w?.locked);
+    const session = w?.exists ? openSession(w.path) : undefined;
     if (!w) {
       if (exists(dir)) refused.push(`${dir} is not a worktree of this clone.`);
       else from.push(`${dir} (gone)`);
     } else if (!w.exists) from.push(`${dir} (gone)`);
     else if (pid !== undefined && pidRunning(pid)) refused.push(`${dir} is locked by a session that is still running (pid ${pid}).`);
+    else if (w.heldBySession !== undefined) refused.push(`${dir} is on ${on} and ${w.heldBySession}.`);
+    else if (session !== undefined) refused.push(`${dir} is on ${on} and ${openSessionReason(session)}.`);
     else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
     else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
     else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);

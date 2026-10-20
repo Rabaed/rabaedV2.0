@@ -26,7 +26,9 @@
 // With --force, a lane whose compose project belongs only to worktrees that are gone, or merged into origin/main
 // and clean, is taken over instead of refused: their containers are removed, the volumes (the database) kept,
 // and the output says which worktree it came from. A worktree with uncommitted changes, not merged, locked by a
-// session that still runs, or sharing the lane through its .env still refuses; so does any --db run (RP-500).
+// session that still runs, with a running Claude session in its folder (named; RP-956), whose Claude desktop
+// session is open (named; RP-612), or sharing the lane
+// through its .env still refuses; so does any --db run (RP-500).
 // "Merged" is the finished rule lanes:prune, worktrees:clean and worktrees:prune share (worktrees.ts isFinished,
 // RP-585): a branch never committed to whose tip is in origin/main counts once it is clean, carries no live lock and
 // no running process holds its folder, and the takeover line says so.
@@ -34,6 +36,7 @@
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readDesktopSessions } from "./desktop-sessions.ts";
 import { claimWarnings, currentBranch, realClaimGit } from "./lane-claims.ts";
 import {
   chooseTakeover,
@@ -191,9 +194,12 @@ function takeOverLane(lane: number): boolean {
       ...(statusError === undefined ? {} : { statusError }),
       locked: w.locked,
       project,
+      // RP-956: a running Claude session in a holder's folder refuses the takeover, and is named.
+      heldBySession: exists && holds ? live.heldBySession?.(w.path) : undefined,
     };
   });
-  const choice = chooseTakeover(lane, { containers: check.containers, worktrees: facts, cwd: check.cwd, exists: existsSync, pidRunning: live.pidLive });
+  // RP-612: an open Claude desktop session in a holder refuses the takeover, and is named.
+  const choice = chooseTakeover(lane, { containers: check.containers, worktrees: facts, cwd: check.cwd, exists: existsSync, pidRunning: live.pidLive, openSession: readDesktopSessions() });
   if (choice.refused.length > 0) {
     for (const line of choice.refused) console.error(`  ${line}`);
     return false;
