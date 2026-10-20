@@ -181,8 +181,6 @@ export interface RecordImages {
   readonly logos: readonly (string | null)[];
   readonly signatures: readonly (string | null)[];
   readonly stamps: readonly (string | null)[];
-  /** The image each appendix entry draws on its page, in the order of `appendix` (RP-147); null for any other entry. */
-  readonly appendix?: readonly (string | null)[];
 }
 
 export const NO_IMAGES: RecordImages = { logos: [], signatures: [], stamps: [] };

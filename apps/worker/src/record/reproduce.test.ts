@@ -130,7 +130,7 @@ describe("appendixFrom", () => {
     const { appendix, problems } = await appendixFrom(listed, documents, store({ "k-png": png, "k-dwg": dwg }));
     expect(problems).toEqual([]);
     expect(appendix.entries).toEqual(listed);
-    expect(appendix.imageKeys).toEqual(["k-png", null, null]);
+    expect([...appendix.drawn].map(([index, source]) => [index, source.kind])).toEqual([[0, "image"]]);
     expect(appendix.attachments.map((a) => [a.name, a.mimeType, a.description])).toEqual([["Model.dwg", "application/acad", "Appendix 2: Model.dwg"]]);
   });
 
