@@ -8,6 +8,7 @@
 // apps/api/test/record-checks.test.ts does. Each run is held to the one job under test (it is put
 // first in line, and `limit: 1`), so no other test file's outbox rows are touched. The PDF itself is
 // that file's business: here the job's handler is a stand-in.
+import { createHash } from "node:crypto";
 import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
@@ -303,7 +304,7 @@ describe("a record's history", { timeout: SLOW_MS }, () => {
     await runOnly(job!.id, succeeds);
     pdf = key("pdf");
     const file = async (storageKey: string, mime: string) =>
-      (await sql<{ id: string }>`insert into stored_file (storage_key, sha256, size, mime) values (${storageKey}, ${key(storageKey)}, 10, ${mime}) returning id`.execute(migrator)).rows[0]!.id;
+      (await sql<{ id: string }>`insert into stored_file (storage_key, sha256, size, mime) values (${storageKey}, ${createHash("sha256").update(storageKey).digest()}, 10, ${mime}) returning id`.execute(migrator)).rows[0]!.id;
     const base = `projects/${at.projectId}/work-items/${id}/documental-record`;
     const pdfFile = await file(`${base}/record.pdf`, "application/pdf");
     const dataFile = await file(`${base}/record-data.xml`, "application/xml");

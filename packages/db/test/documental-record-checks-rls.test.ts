@@ -167,22 +167,19 @@ describe("the Record Job Monitor", () => {
 
   it("shows no Member a failed job's error text: the outbox has no read for the app role", async () => {
     const secret = "the secret renderer failure RP-670-1";
-    await migrator.query("begin");
+    // A dead job of no item (so it shows in no list), for the time of the reads; removed after.
+    const { rows } = await migrator.query<{ project_id: string; id: string }>(
+      "insert into outbox (kind, project_id, payload, attempts, last_error, last_failed_at, dead_at) select 'documental_record', project_id, $2, 8, $3, now(), now() from work_item where id = $1 returning project_id, id",
+      [itemId, JSON.stringify({ closed_work_item_id: randomUUID() }), secret],
+    );
     try {
-      const { rows } = await migrator.query<{ project_id: string }>("select project_id from work_item where id = $1", [itemId]);
-      await migrator.query(
-        "insert into outbox (kind, project_id, payload, attempts, last_error, last_failed_at, dead_at) values ('documental_record', $1, $2, 8, $3, now(), now())",
-        [rows[0]!.project_id, JSON.stringify({ closed_work_item_id: itemId }), secret],
-      );
-      await migrator.query("set local role rabaed_app");
-      await migrator.query("select set_config('app.member_id', $1, true)", [seer]);
-      expect((await migrator.query("select last_error, last_failed_at from outbox where last_error = $1", [secret])).rows).toEqual([]);
-      expect((await migrator.query("select count(*)::int as n from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = $1", [itemId])).rows[0].n).toBe(0);
+      const read = (query: string) => withMember(app, seer, (trx) => sql.raw(query).execute(trx)).then((r) => r.rows);
+      expect(await read("select last_error, last_failed_at from outbox where last_error like '%RP-670-1'")).toEqual([]);
+      expect(await read("select count(*)::int as n from outbox where kind = 'documental_record'")).toEqual([{ n: 0 }]);
       // What the Member does read of the record is its state: 'preparing' while the record waits for its checks, never the error.
-      const state = (await migrator.query<{ state: string | null }>("select app.documental_record_state($1) as state", [itemId])).rows[0]!.state;
-      expect(state).toBe("preparing");
+      expect(await stateOf(seer)).toBe("preparing");
     } finally {
-      await migrator.query("rollback");
+      await migrator.query("delete from outbox where id = $1", [rows[0]!.id]);
     }
   });
 });
