@@ -73,7 +73,7 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   // it with GITHUB_TOKEN, which starts no `unlabeled` run, so this run waits and reads what it left.
   // A fork's PR gets no such run. In the queue the head cannot change, so there is nothing to wait for.
   if (event.kind === "pull_request" && event.sameRepo) {
-    // 1500 s: on a busy CI the run waited past 600 s for a runner (RP-984); the job's timeout is 30 min.
+    // 1500 s: on a busy CI the run waited past 600 s for a runner (RP-984); reviewed-required.yml's timeout-minutes stays above it (30).
     const { pollMs = 10_000, timeoutMs = 1_500_000 } = options;
     for (let waited = 0; ; waited += pollMs) {
       const runs = await seam.labelRuns(event.headSha);

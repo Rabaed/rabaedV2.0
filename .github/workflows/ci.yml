@@ -22,45 +22,6 @@ env:
   DATABASE_ADMIN_URL: postgres://rabaed_admin:ci-only@localhost:5432/rabaed
 
 jobs:
-  # Whether the change is docs-only (RP-984): every file under docs/ or a .md file, the same rule
-  # as the `docs-only` label (scripts/docs-only.ts). The heavy jobs below skip on a docs-only
-  # change through their own `if:`, so their required checks still report success; never use
-  # `paths`/`paths-ignore`, which leaves a required check unreported and blocks the merge. They
-  # skip only on 'true', so a failed decision runs everything. In the merge queue the base is
-  # main's tip (`base_ref`), not `base_sha` (main plus the entries ahead): a green entry merges
-  # the entries ahead of it too, so a docs-only PR behind a code PR runs everything.
-  changes:
-    name: docs-only decision
-    runs-on: ubuntu-latest
-    outputs:
-      docs_only: ${{ steps.decide.outputs.docs_only }}
-    steps:
-      - uses: actions/checkout@v7
-        with: { persist-credentials: false }
-      - uses: actions/setup-node@v7
-        with: { node-version: 24 }
-      - id: decide
-        run: node scripts/docs-only.ts
-        env:
-          BASE: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.sha }}
-
-  # The docs checks the skipped unit job would have run on a docs-only change: every unit test
-  # under scripts/, which holds each test that reads the docs (docs-unique, check-doc-skills,
-  # scenario IDs and leak channels in docs/visibility.md, doc indexes, route maps).
-  docs:
-    name: docs checks (scripts unit tests)
-    needs: changes
-    if: ${{ needs.changes.outputs.docs_only == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with: { persist-credentials: false }
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@v7
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run --project unit scripts/
-
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -73,8 +34,6 @@ jobs:
       - run: pnpm lint
 
   typecheck:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -86,8 +45,6 @@ jobs:
       - run: pnpm typecheck
 
   unit:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -99,8 +56,6 @@ jobs:
       - run: pnpm test:unit
 
   web-build:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -122,8 +77,6 @@ jobs:
   # breaker, so build the image and start it as ECS does.
   web-image:
     name: web image starts
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -142,8 +95,6 @@ jobs:
 
   stories:
     name: story tests (behaviour, axe, screenshots)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     # Pinned so fonts and rendering match the committed screenshot baselines.
     runs-on: ubuntu-24.04
     steps:
@@ -213,8 +164,6 @@ jobs:
   # store, run a quarter of the files each, side by side (RP-557).
   seam1:
     name: seam 1 (shard ${{ matrix.shard }}/4)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false # every shard reports its own failures
@@ -265,10 +214,9 @@ jobs:
   # reports; a seam 1 failure is in a shard's log (RP-557).
   seam1-result:
     name: seam 1 (API as a Member)
-    needs: [changes, seam1]
-    # Not always(): a superseded, cancelled run reports nothing, not a shard failure. Skipped
-    # with the shards on a docs-only change, so the required check reports success.
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    needs: seam1
+    # Not always(): a superseded, cancelled run reports nothing, not a shard failure.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
     steps:
@@ -305,8 +253,6 @@ jobs:
 
   seam2:
     name: seam 2 (database RLS)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
     services:
@@ -345,8 +291,6 @@ jobs:
 
   mail:
     name: mail (mailer against the catcher)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     # The same catcher as docker-compose.yml: CI never sends real email.
     services:
@@ -368,8 +312,6 @@ jobs:
 
   infra:
     name: infra (template assertions)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

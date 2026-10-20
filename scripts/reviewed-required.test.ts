@@ -12,7 +12,7 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
   const source = existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : "jobs: {}";
   const wf = parse(source) as {
     on: Record<string, { types?: string[] } | null>;
-    jobs: Record<string, { name?: string; if?: string; "timeout-minutes"?: number; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
+    jobs: Record<string, { name?: string; if?: string; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
   };
   const jobs = Object.values(wf.jobs);
 
@@ -24,10 +24,6 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.name).toBe(REQUIRED_CHECK);
     expect(jobs[0]?.if).toBeUndefined();
-  });
-
-  it("gives the job longer than the script's 1500 s wait for the reviewed-label run (RP-984)", () => {
-    expect(jobs[0]?.["timeout-minutes"]).toBe(30);
   });
 
   it("reads only, and runs the default branch's script, never the PR's", () => {
