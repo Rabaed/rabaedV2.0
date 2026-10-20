@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { inflateSync } from "node:zlib";
 import type { RecordFacts } from "@rabaed/db";
 import { decodePDFRawStream, degrees, PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream, type PDFPage } from "pdf-lib";
+import { drawImage, MAX_RENDERED_IMAGE_BYTES, pdfLibImageOf } from "./appendix-images.ts";
 import { APPENDIX_FRAME_MM } from "./appendix-layout.ts";
 import type { RecordFiles } from "./files.ts";
 import type { RecordFonts } from "./fonts.ts";
@@ -19,11 +20,12 @@ import type { PdfRenderer } from "./render.ts";
 // the order they were added, then the Attachments System Field's. Each one is, in that order:
 //
 // - given as pages: a PDF's own pages, each drawn into a page of the record, or an image on a
-//   page of its own;
+//   page of its own (appendix-images.ts: never through Chromium with the record, RP-957);
 // - carried inside the PDF/A-3 as its source file (AFRelationship Source), opened from the
-//   reader's paperclip: any other file, and, the one exception to "as pages", a PDF the record
+//   reader's paperclip: any other file, and, the exceptions to "as pages", a PDF the record
 //   can't give as pages (a font not embedded, LZW, CMYK, encrypted, unreadable, a content stream
-//   past MAX_DECODED_STREAM_BYTES, or more than MAX_APPENDIX_PDF_PAGES pages), byte for byte;
+//   past MAX_DECODED_STREAM_BYTES, or more than MAX_APPENDIX_PDF_PAGES pages), and an image only
+//   Chromium can draw past MAX_RENDERED_IMAGE_BYTES, byte for byte;
 // - or only listed, held in Rabaed, when carrying it would take the appendix past the size limit
 //   (100 MB in production). Everything carried counts: pages, images and attached files alike,
 //   by their stored size, so the record still opens on a phone. The walk is greedy, in the fixed
@@ -34,7 +36,9 @@ import type { PdfRenderer } from "./render.ts";
 // memory). Which Documents are shared is the facts' to say (app.documents_shared_before_close);
 // a file whose bytes don't match its fingerprint, or that is missing from the store, fails the job
 // (retried, then dead-lettered) rather than a record holding something other than what was
-// submitted.
+// submitted. The appendix holds none of the files it gives as pages: each is read once to be
+// checked, and again when its pages are drawn (one file at a time), so at the 100 MB limit the
+// worker holds each file's bytes only while it draws it (RP-957).
 //
 // The record job makes it with `appendixOf(facts, files, limit)`; Re-produce (RP-155) makes it
 // again from the stored Record Data's list with `appendixFrom(...)`. Either goes to make-pdf.ts,
@@ -54,14 +58,18 @@ export const MAX_DECODED_STREAM_BYTES = 50 * 1024 * 1024;
 /** The image types Chromium draws on a page; any other image (HEIC, DWG's `image/vnd.dwg`) travels as a file. */
 const PAGE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
+/** What an entry given as pages draws: a PDF's pages, or an image. */
+interface PagesSource {
+  readonly kind: "pdf" | "image";
+  readonly contentType: string;
+  /** Its bytes, read again from the store when they are drawn (and checked against its fingerprint), so none is held until then. */
+  readonly read: () => Promise<Uint8Array>;
+}
+
 export interface Appendix {
   readonly entries: readonly AppendixEntry[];
-  /** The PDF of each entry given as PDF pages, by its index in `entries`: opened once, embedded once (renderWithAppendix). */
-  readonly pdfs: ReadonlyMap<number, PDFDocument>;
-  /** The data URL of each image given a page, by its storage key. */
-  readonly images: ReadonlyMap<string, string>;
-  /** The storage key of the image each entry draws on its page, in the entries' order (RecordImages.appendix): never in the Record Data. */
-  readonly imageKeys: readonly (string | null)[];
+  /** What each entry given as pages draws, by its index in `entries`, in order: drawn one at a time (renderWithAppendix). */
+  readonly toDraw: ReadonlyMap<number, PagesSource>;
   /** The files carried inside the PDF, in the list's order. */
   readonly attachments: readonly PdfA3Attachment[];
 }
@@ -77,39 +85,43 @@ export async function appendixOf(facts: RecordFacts, files: RecordFiles, limitBy
     .map(({ d }) => d);
 
   const entries: AppendixEntry[] = [];
-  const pdfs = new Map<number, PDFDocument>();
-  const images = new Map<string, string>();
-  const imageKeys: (string | null)[] = [];
+  const toDraw = new Map<number, PagesSource>();
   const attachments: PdfA3Attachment[] = [];
   const names = new Set<string>();
-  const parts: AppendixParts = { entries, pdfs, images, imageKeys, attachments, names };
-  const missing = (d: { fileName: string }) => new Error(`the shared Document ${d.fileName} is missing from the file store`);
+  const parts: AppendixParts = { entries, toDraw, attachments, names, files };
   let carried = 0;
   for (const d of listed) {
-    imageKeys.push(null);
     if (carried + d.size > limitBytes) {
       const sha256 = d.sha256 ?? (await files.sha256(d.storageKey));
       if (sha256 === null) throw missing(d);
       entries.push({ way: "held", fileName: d.fileName, sha256 });
       continue;
     }
-    const bytes = await files.get(d.storageKey);
-    if (!bytes) throw missing(d);
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
-    if (d.sha256 !== null && sha256 !== d.sha256) throw new Error(`the shared Document ${d.fileName} does not match its fingerprint`);
+    const { bytes, sha256 } = await readChecked(files, d, d.sha256);
     carried += bytes.length;
     entries.push(await carry(parts, d, bytes, sha256));
   }
-  return { entries, pdfs, images, imageKeys, attachments };
+  return { entries, toDraw, attachments };
+}
+
+const missing = (d: { fileName: string }) => new Error(`the shared Document ${d.fileName} is missing from the file store`);
+const unmatched = (d: { fileName: string }) => new Error(`the shared Document ${d.fileName} does not match its fingerprint`);
+
+/** A shared Document's bytes and fingerprint, read from the store and checked against `sha256` (none for a Document from before RP-618). */
+async function readChecked(files: RecordFiles, d: { readonly fileName: string; readonly storageKey: string }, sha256: string | null): Promise<{ bytes: Uint8Array; sha256: string }> {
+  const bytes = await files.get(d.storageKey);
+  if (!bytes) throw missing(d);
+  const read = createHash("sha256").update(bytes).digest("hex");
+  if (sha256 !== null && read !== sha256) throw unmatched(d);
+  return { bytes, sha256: read };
 }
 
 interface AppendixParts {
   readonly entries: readonly AppendixEntry[];
-  readonly pdfs: Map<number, PDFDocument>;
-  readonly images: Map<string, string>;
-  readonly imageKeys: (string | null)[];
+  readonly toDraw: Map<number, PagesSource>;
   readonly attachments: PdfA3Attachment[];
   readonly names: Set<string>;
+  readonly files: RecordFiles;
 }
 
 /** A carried file, at the next index of `parts`: given as pages (a PDF's, or an image's one) or attached. Returns its entry. */
@@ -118,17 +130,21 @@ async function carry(
   d: { readonly fileName: string; readonly contentType: string; readonly storageKey: string },
   bytes: Uint8Array,
   sha256: string,
+  /** How a record made before RP-957 carried it (a Re-produce): an image it gave as pages stays pages, whatever its size. */
+  carriedAs?: AppendixEntry["way"],
 ): Promise<AppendixEntry> {
   const index = parts.entries.length;
   const file = { fileName: d.fileName, sha256 };
+  // Read again when drawn: the bytes in hand are let go once their way is known.
+  const read = async () => (await readChecked(parts.files, d, sha256)).bytes;
   const pdf = d.contentType === "application/pdf" ? await pageable(bytes) : null;
   if (pdf instanceof PDFDocument) {
-    parts.pdfs.set(index, pdf);
+    parts.toDraw.set(index, { kind: "pdf", contentType: d.contentType, read });
     return { ...file, way: "pages", pageCount: pdf.getPageCount(), pages: null };
   }
-  if (PAGE_IMAGE_TYPES.has(d.contentType)) {
-    parts.images.set(d.storageKey, `data:${d.contentType};base64,${Buffer.from(bytes).toString("base64")}`);
-    parts.imageKeys[index] = d.storageKey;
+  // An image only Chromium can draw goes to it as a data URL, which has to fit through its pipe.
+  if (PAGE_IMAGE_TYPES.has(d.contentType) && (pdfLibImageOf(bytes) !== null || bytes.length <= MAX_RENDERED_IMAGE_BYTES || carriedAs === "pages")) {
+    parts.toDraw.set(index, { kind: "image", contentType: d.contentType, read });
     return { ...file, way: "pages", pageCount: 1, pages: null };
   }
   parts.attachments.push({
@@ -162,7 +178,7 @@ export async function appendixFrom(
   documents: readonly AppendixCandidate[],
   files: RecordFiles,
 ): Promise<{ appendix: Appendix; problems: string[] }> {
-  const parts: AppendixParts & { entries: AppendixEntry[] } = { entries: [], pdfs: new Map(), images: new Map(), imageKeys: [], attachments: [], names: new Set() };
+  const parts: AppendixParts & { entries: AppendixEntry[] } = { entries: [], toDraw: new Map(), attachments: [], names: new Set(), files };
   const problems: string[] = [];
   const unhashed = new Map<string, string | null>();
   const fingerprintOf = async (d: AppendixCandidate) => {
@@ -171,7 +187,6 @@ export async function appendixFrom(
     return unhashed.get(d.storageKey)!;
   };
   for (const entry of listed) {
-    parts.imageKeys.push(null);
     if (entry.way === "held") {
       parts.entries.push(entry);
       continue;
@@ -188,14 +203,14 @@ export async function appendixFrom(
       parts.entries.push(entry);
       continue;
     }
-    const made = await carry(parts, { ...found, fileName: entry.fileName }, bytes, entry.sha256);
+    const made = await carry(parts, { ...found, fileName: entry.fileName }, bytes, entry.sha256, entry.way);
     if (made.way !== entry.way || (made.way === "pages" && entry.way === "pages" && made.pageCount !== entry.pageCount)) {
       problems.push(`the appendix's Document ${entry.fileName} is no longer carried as the record carried it`);
     }
     parts.entries.push(entry);
   }
-  const { entries, pdfs, images, imageKeys, attachments } = parts;
-  return { appendix: { entries, pdfs, images, imageKeys, attachments }, problems };
+  const { entries, toDraw, attachments } = parts;
+  return { appendix: { entries, toDraw, attachments }, problems };
 }
 
 /** `name`, or `name (2)`… when an earlier file took it: the PDF's attachments are named uniquely. */
@@ -301,24 +316,26 @@ const PROBE_PAGE = 888;
  * names. The record is rendered as pages.ts renders it (with the pages page 1 points to); when
  * the appendix gives pages, it is drawn once more up to the end of its list (the `appendixList`
  * cut), to count where they start, then once with those numbers, and each appended PDF's pages
- * are embedded and drawn into their frames. `layoutPages` is how many pages come before the
- * appendix's own (the record's checks add those to it).
+ * and each image are drawn into their frames, one file at a time, each read again from the store
+ * as it is drawn (RP-957). `doc` is the PDF, not yet saved: make-pdf.ts makes it the PDF/A-3.
+ * `layoutPages` is how many pages come before the appendix's own (the record's checks add those to it).
  */
 export async function renderWithAppendix(
   renderer: PdfRenderer,
   record: RecordData,
   fonts: RecordFonts,
-  recordImages: ReadonlyMap<string, string>,
-  recordMarks: RecordImages,
-  { entries, pdfs, images: appendixImages, imageKeys }: Appendix,
-): Promise<{ data: RecordData; pdf: Uint8Array; layoutPages: number }> {
+  images: ReadonlyMap<string, string>,
+  marks: RecordImages,
+  { entries, toDraw }: Appendix,
+): Promise<{ data: RecordData; doc: PDFDocument; layoutPages: number }> {
   const data = { ...record, appendix: entries };
-  const images = new Map([...recordImages, ...appendixImages]);
-  const marks: RecordImages = { ...recordMarks, appendix: imageKeys };
   const givesPages = entries.some((f) => f.way === "pages");
   const probe = { ...data, appendix: entries.map((f) => (f.way === "pages" ? { ...f, pages: { first: PROBE_PAGE, last: PROBE_PAGE } } : f)) };
   const rendered = await renderRecord(renderer, givesPages ? probe : data, fonts, images, marks);
-  if (!givesPages) return { ...rendered, layoutPages: (await PDFDocument.load(rendered.pdf, { updateMetadata: false })).getPageCount() };
+  if (!givesPages) {
+    const doc = await PDFDocument.load(rendered.pdf, { updateMetadata: false });
+    return { data: rendered.data, doc, layoutPages: doc.getPageCount() };
+  }
 
   const listEnds = (await PDFDocument.load(await renderer.render(recordHtml(rendered.data, fonts, images, marks, { appendixList: true })), { updateMetadata: false })).getPageCount();
   let next = listEnds + 1;
@@ -332,9 +349,15 @@ export async function renderWithAppendix(
   const out = await PDFDocument.load(await renderer.render(recordHtml(placed, fonts, images, marks)), { updateMetadata: false });
   if (out.getPageCount() !== next - 1) throw new Error(`the appendix's pages did not land where its list says (${out.getPageCount()} pages, ${next - 1} expected)`);
 
-  for (const [index, source] of pdfs) {
+  for (const [index, { kind, contentType, read }] of toDraw) {
     const entry = appendix[index]!;
     if (entry.way !== "pages" || !entry.pages) continue;
+    if (kind === "image") {
+      const target = out.getPage(entry.pages.first - 1);
+      await drawImage(out, target, frameOf(target), await read(), contentType, renderer);
+      continue;
+    }
+    const source = await PDFDocument.load(await read(), { updateMetadata: false });
     const drawn = drawnPages(source);
     const embedded = await out.embedPdf(source, drawn);
     embedded.forEach((page, j) => {
@@ -354,6 +377,8 @@ export async function renderWithAppendix(
       const origin = turn === 90 ? { x: x0, y: y0 + w } : turn === 180 ? { x: x0 + w, y: y0 + h } : turn === 270 ? { x: x0 + h, y: y0 } : { x: x0, y: y0 };
       target.drawPage(page, { ...origin, xScale: scale, yScale: scale, rotate: degrees(-turn) });
     });
+    // Its pages' forms built now, while this PDF is in hand, rather than all at the save.
+    for (const page of embedded) await page.embed();
   }
-  return { data: placed, pdf: await out.save({ useObjectStreams: false }), layoutPages: listEnds };
+  return { data: placed, doc: out, layoutPages: listEnds };
 }

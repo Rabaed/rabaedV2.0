@@ -133,6 +133,21 @@ function png(width: number, height: number, [r, g, b]: readonly [number, number,
   return encodePng(width, height, pixels);
 }
 
+/** A 48 × 32 JPEG (a magenta band across the top of green), as Chromium's canvas encodes it. */
+const JPEG = Buffer.from(
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAgADADASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAQG/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABcBAQEBAQAAAAAAAAAAAAAAAAAFAgf/xAAbEQEAAAcAAAAAAAAAAAAAAAAAFBdiZKGi4v/aAAwDAQACEQMRAD8AxwsG46nKhMK235RiwI6nJMK235RiwI6nJMK235AE9zYAAAB//9k=",
+  "base64",
+);
+
+/** `jpeg` with an EXIF block saying it is turned by `orientation` (6: a quarter clockwise, as a phone held upright writes it). */
+function turnedJpeg(jpeg: Buffer, orientation: number): Buffer {
+  const tiff = Buffer.from([0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation, 0, 0, 0, 0, 0, 0]);
+  const payload = Buffer.concat([Buffer.from("Exif\0\0", "latin1"), tiff]);
+  const length = Buffer.alloc(2);
+  length.writeUInt16BE(payload.length + 2);
+  return Buffer.concat([jpeg.subarray(0, 2), Buffer.from([0xff, 0xe1]), length, payload, jpeg.subarray(2)]);
+}
+
 /** Bytes that are no particular format, as a DWG or a spreadsheet is to the record. */
 const opaque = (size: number, seed: number) => Buffer.from(Array.from({ length: size }, (_, i) => (i * 31 + seed) % 251));
 
@@ -155,6 +170,8 @@ const files = {
   schedule: { fileName: "schedule.txt", contentType: "text/plain", body: opaque(900, 1) },
   plan: { fieldKey: "drawings", fileName: "plan.pdf", contentType: "application/pdf", body: drawnPdf(PLAN_COLOURS) },
   sample: { fieldKey: "drawings", fileName: "sample.png", contentType: "image/png", body: png(60, 40, SAMPLE_PIXEL) },
+  // A phone photo, turned by its EXIF orientation: drawn by pdf-lib with its bytes as uploaded (RP-957).
+  turned: { fieldKey: "drawings", fileName: "turned.jpg", contentType: "image/jpeg", body: turnedJpeg(JPEG, 6) },
   letter: { fieldKey: "drawings", fileName: "letter.pdf", contentType: "application/pdf", body: unembeddedFontPdf() },
   // Past the limit with the rest: listed only, held in Rabaed.
   model: { fileName: "model-export.txt", contentType: "text/plain", body: opaque(LIMIT_BYTES, 2) },
@@ -345,7 +362,7 @@ beforeAll(async () => {
 
   // The item that closes at Code A, with every kind of file.
   fullId = await draft("Appendix trays");
-  for (const key of ["schedule", "plan", "sample", "letter", "model", "notes", "photo"] as const) await uploadDocument(c1Engineer, fullId, files[key]);
+  for (const key of ["schedule", "plan", "sample", "turned", "letter", "model", "notes", "photo"] as const) await uploadDocument(c1Engineer, fullId, files[key]);
   const withdrawn = await uploadDocument(c1Engineer, fullId, files.withdrawn);
   await ok(c1Engineer.delete(`/v1/work-items/${fullId}/documents/${withdrawn}`));
   await submit(fullId);
@@ -386,6 +403,7 @@ describe("scenario RP-147-1: the appendix holds the shared Documents, after the 
     expect(listed.map((f) => [f.name, f.way])).toEqual([
       ["plan.pdf", "pages"],
       ["sample.png", "pages"],
+      ["turned.jpg", "pages"],
       ["letter.pdf", "attached"],
       ["after-send-back.pdf", "pages"],
       ["schedule.txt", "attached"],
@@ -405,14 +423,17 @@ describe("scenario RP-147-1: the appendix holds the shared Documents, after the 
     const listed = appendixOf(made.full!.xml);
     const plan = listed.find((f) => f.name === "plan.pdf")!;
     const sample = listed.find((f) => f.name === "sample.png")!;
+    const turned = listed.find((f) => f.name === "turned.jpg")!;
     const resubmitted = listed.find((f) => f.name === "after-send-back.pdf")!;
-    expect([plan.first, plan.last, sample.first, sample.last, resubmitted.first, resubmitted.last]).toEqual([
+    expect([plan.first, plan.last, sample.first, sample.last, turned.first, turned.last, resubmitted.first, resubmitted.last]).toEqual([
       plan.first,
       plan.first! + 1,
       plan.first! + 2,
       plan.first! + 2,
       plan.first! + 3,
       plan.first! + 3,
+      plan.first! + 4,
+      plan.first! + 4,
     ]);
     // The appendix's pages are the record's last.
     expect(resubmitted.last).toBe(made.full!.pages.length);
@@ -427,6 +448,11 @@ describe("scenario RP-147-1: the appendix holds the shared Documents, after the 
     // The image, on its own page.
     expect(pages[sample.first! - 1]!.images).toBe(1);
     expect((await pdfImages(made.full!.bytes)).some((i) => i.width === 60 && i.height === 40 && i.firstPixel?.join(",") === SAMPLE_PIXEL.join(","))).toBe(true);
+    // The JPEG on its own page too, its bytes inside the record as uploaded (never decoded and encoded again).
+    expect(pages[turned.first! - 1]!.images).toBe(1);
+    expect((await pdfImages(made.full!.bytes)).some((i) => i.width === 48 && i.height === 32)).toBe(true);
+    expect(Buffer.from(made.full!.bytes).includes(files.turned.body)).toBe(true);
+    expect(made.full!.pages[turned.first! - 1]).toContain("turned.jpg");
     // Each appended page names its file and its page, and has the footer every page has.
     expect(made.full!.pages[plan.first! - 1]).toContain("plan.pdf");
     expect(made.full!.pages[plan.first! - 1]).toContain("page1of2");
@@ -530,8 +556,8 @@ describe("scenarios RP-147-1 and RP-147-2: only the Documents the other Particip
 describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps, a logo and an appendix", () => {
   const REASON = "The PDF maker had a layout bug";
   const shifted: PdfRenderer = {
-    // A layout that pushes everything down a page: where things land changes, no fact does.
-    render: (html) => renderer.render(html.replace(/<body[^>]*>/, (body) => `${body}<div style="height:150mm"></div>`)),
+    // A layout that pushes everything down a whole page: where things land changes, no fact does.
+    render: (html) => renderer.render(html.replace(/<body[^>]*>/, (body) => `${body}<div style="break-after:page"></div>`)),
     close: async () => undefined,
   };
   const recordRow = async (id: string) =>

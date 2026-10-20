@@ -153,10 +153,11 @@ function makeAnnotationsPrintable(doc: PDFDocument) {
   }
 }
 
-/** `pdf` (Chromium's) as a PDF/A-3b with `attachments` inside it. */
-export async function toPdfA3(pdf: Uint8Array, info: PdfA3Info, attachments: readonly PdfA3Attachment[]): Promise<Uint8Array> {
+/** `pdf` (Chromium's, or the record's document as drawn, which it changes in place) as a PDF/A-3b with `attachments` inside it. */
+export async function toPdfA3(pdf: Uint8Array | PDFDocument, info: PdfA3Info, attachments: readonly PdfA3Attachment[]): Promise<Uint8Array> {
   const at = new Date(Math.floor(info.at.getTime() / 1000) * 1000);
-  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+  // A document already open (the record's, as drawn: make-pdf.ts) is changed in place, not copied.
+  const doc = pdf instanceof PDFDocument ? pdf : await PDFDocument.load(pdf, { updateMetadata: false });
   const ctx = doc.context;
   doc.setTitle(info.title, { showInWindowTitleBar: true });
   doc.setCreator(CREATOR);
