@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  chooseMerged,
   composeProjectOfEnv,
   databaseOfUrl,
   databasesInUse,
@@ -503,6 +504,28 @@ describe("mergedProjects (lanes:prune --merged)", () => {
     expect(picked).toEqual(["rabaed-lane3", "rabaed-lane4", "rabaed-lane5"]);
   });
 
+  it("keeps a merged project whose holder's Claude desktop session is open, and says why (RP-612)", () => {
+    const held = "G:/rabaed-wt/RP-362";
+    const openSession = (path: string) => (path === held ? { kind: "open" as const, session: 'session "RP-628 snag detail"' } : undefined);
+    const merged = worktrees.map((w) => ({ ...w, merged: true }));
+    const { merged: picked, kept } = chooseMerged({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", openSession, platform: "win32" });
+    expect(picked.map((p) => p.project)).toEqual(["rabaed-lane4", "rabaed-lane5"]);
+    expect(kept).toEqual([`Not pruned as merged: rabaed-lane3 of ${held}: its Claude desktop session is open (session "RP-628 snag detail"); archive it first.`]);
+    expect(mergedProjects({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", openSession, platform: "win32" }).map((p) => p.project)).toEqual([
+      "rabaed-lane4",
+      "rabaed-lane5",
+    ]);
+  });
+
+  it("keeps every merged project when the desktop sessions cannot be checked (RP-612)", () => {
+    const unknown = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list could not be read" });
+    const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", openSession: unknown, platform: "win32" });
+    expect(merged).toEqual([]);
+    expect(kept).toEqual([
+      "Not pruned as merged: rabaed-lane3 of G:/rabaed-wt/RP-362: a Claude desktop session may hold it: Claude desktop's worktree list could not be read.",
+    ]);
+  });
+
   it("keeps a project with a container from a folder that is not a worktree of this clone", () => {
     const other = [container({ name: "rabaed-lane6-db-1", project: "rabaed-lane6", workingDir: "D:\\other-clone\\wt" })];
     expect(mergedProjects({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, platform: "win32" })).toEqual([]);
@@ -624,6 +647,21 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     const p = choice([wt({ merged: false, heldBySession })]);
     expect(p.takeOver).toEqual([]);
     expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and ${heldBySession}.`]);
+  });
+
+  it("refuses a merged, clean worktree whose Claude desktop session is open, naming the session (RP-612)", () => {
+    const openSession = (path: string) => (path === old ? { kind: "open" as const, session: 'session "RP-628 snag detail"' } : undefined);
+    const p = chooseTakeover(3, { containers, worktrees: [wt({})], cwd, openSession, platform: "win32" });
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and its Claude desktop session is open (session "RP-628 snag detail"); archive it first.`]);
+  });
+
+  it("refuses when the desktop sessions cannot be checked, and takes over when no session holds the worktree (RP-612)", () => {
+    const unknown = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list could not be read" });
+    expect(chooseTakeover(3, { containers, worktrees: [wt({})], cwd, openSession: unknown, platform: "win32" }).refused).toEqual([
+      `${old} is on RP-448-workflow-core and a Claude desktop session may hold it: Claude desktop's worktree list could not be read.`,
+    ]);
+    expect(chooseTakeover(3, { containers, worktrees: [wt({})], cwd, openSession: () => undefined, platform: "win32" }).takeOver).toHaveLength(2);
   });
 
   it("refuses a worktree that is not merged", () => {
