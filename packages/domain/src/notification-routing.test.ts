@@ -46,6 +46,8 @@ describe("the defaults", () => {
       ["sent_back", { inApp: true, email: "immediate" }],
       // A Package Submit follows "Step reached" (RP-643).
       ["package_submitted", { inApp: true, email: "immediate" }],
+      // A Record ready follows "Items I watch" (RP-950): the daily digest by default.
+      ["record_ready", { inApp: true, email: "digest" }],
       ["weekly_report", { inApp: false, email: "immediate" }],
     ]);
   });
@@ -152,7 +154,7 @@ describe("every combination", () => {
   );
 
   it("covers every kind, outcome, email choice, tick set, mute and pause", () => {
-    expect(cases).toHaveLength(5 * 12 * 3 * 3 * 2 * 2);
+    expect(cases).toHaveLength(6 * 12 * 3 * 3 * 2 * 2);
   });
 
   it.each(cases)("$kind $outcome email=$email ticks=$ticks muted=$muted paused=$emailPaused", (c) => {
