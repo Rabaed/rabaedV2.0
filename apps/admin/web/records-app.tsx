@@ -83,12 +83,14 @@ export function RecordsApp() {
 const failure = (error: unknown, known: Record<string, string>, fallback: string) =>
   (error instanceof ApiError && typeof error.body.error === "string" ? known[error.body.error] : undefined) ?? fallback;
 
-/** A date and time in Saudi time and Latin digits (the repo's `formatDate`), left to right; `none` for no time. */
+/** A date and time in Saudi time and Latin digits (the repo's `formatDate`), in the page's own direction; `none` for no time. */
 function Time({ iso, none, locale }: { iso: string | null; none: string; locale: Locale }) {
-  return (
-    <span dir="ltr" className="whitespace-nowrap">
-      {iso ? formatDate(new Date(iso), locale, { dateStyle: "medium", timeStyle: "short" }) : none}
-    </span>
+  return iso ? (
+    <time dateTime={iso} className="whitespace-nowrap">
+      {formatDate(new Date(iso), locale, { dateStyle: "medium", timeStyle: "short" })}
+    </time>
+  ) : (
+    <span className="text-muted">{none}</span>
   );
 }
 
@@ -266,12 +268,12 @@ function Records({ locale }: { locale: Locale }) {
                       <Time iso={job.nextTryAt} none={w.noTime} locale={locale} />
                     </TableCell>
                     <TableCell>
-                      <code dir="ltr" className="block max-w-[420px] font-mono text-[12.5px] [overflow-wrap:anywhere]">
+                      <code dir="ltr" className="block max-w-[360px] font-mono text-[12.5px] [overflow-wrap:anywhere]">
                         {job.error}
                       </code>
                     </TableCell>
                     <TableCell>
-                      <span className="flex flex-wrap gap-2">
+                      <span className="flex gap-2 whitespace-nowrap">
                         {job.state === "dead" && (
                           <Button variant="secondary" size="sm" onClick={() => setRetrying(job)}>
                             {w.retry}
@@ -340,7 +342,7 @@ function Records({ locale }: { locale: Locale }) {
                         </ul>
                       </TableCell>
                       <TableCell>
-                        <span className="flex flex-wrap gap-2">
+                        <span className="flex gap-2 whitespace-nowrap">
                           <Button variant="secondary" size="sm" onClick={() => setReproducing(alert)}>
                             {w.reproduce}
                           </Button>
