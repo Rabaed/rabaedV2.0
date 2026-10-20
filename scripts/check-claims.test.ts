@@ -39,6 +39,10 @@ describe("checkClaims", () => {
     expect((await checkClaims(input({ files, comments: async () => released }))).ok).toBe(false);
     const another = [comment(1, "CLAIM `apps/api/src/work-items/query.ts` — Main 4, lane-4a, RP-577; RP-1100 merges after")];
     expect((await checkClaims(input({ files, comments: async () => another }))).ok).toBe(false);
+    for (const near of ["RP-110", "RP-11000", "RP-1100-2"]) {
+      const header = [comment(1, `CLAIM for ${near}: \`apps/api/src/work-items/query.ts\` — Main 4, lane-4a`)];
+      expect((await checkClaims(input({ files, comments: async () => header }))).ok, near).toBe(false);
+    }
   });
 
   it("passes silently a branch touching no shared module, without reading RP-603", async () => {
@@ -118,6 +122,11 @@ describe("branchChanges", () => {
     write("apps/api/src/work-items/query.ts", "export {};\n");
     const pushed = commit();
     expect(branchChanges(repo, pushed)).toEqual({ files: ["apps/api/src/work-items/query.ts", "packages/db/migrations/20271101000000_x.sql"], redefined: ["app.sync_work_item_checklists"] });
+  });
+
+  it("reads a quoted name and a head across lines as the same function", () => {
+    write("packages/db/migrations/20271101000000_x.sql", 'create or replace function "app"."take_transition"(p uuid) returns void as $$ $$;\ncreate or replace\n  function app."sync_work_item_checklists"() returns void as $$ $$;\n');
+    expect(branchChanges(repo, commit()).redefined).toEqual(["app.sync_work_item_checklists", "app.take_transition"]);
   });
 
   it("without a commit, reads the working tree, untracked files included", () => {

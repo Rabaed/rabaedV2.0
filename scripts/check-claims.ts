@@ -1,7 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { claimCovers, fetchComments, readClaims, type Claim, type Comment } from "./claims.ts";
+import { claimCovers, fetchComments, globRegex, readClaims, type Claim, type Comment } from "./claims.ts";
+
+/** What a check says: refused (`ok` false), a warning, or "" when there is nothing to say. */
+export interface ClaimsVerdict {
+  ok: boolean;
+  message: string;
+}
 
 // `pnpm check:claims` (RP-1008): rule 12 checked, not remembered. A branch that changes a shared
 // module (docs/agents/issue-tracker.md › "Ticket: shared files"), or whose migration redefines an
@@ -39,8 +45,11 @@ export function branchKey(branch: string): string | undefined {
 }
 
 const MIGRATIONS = "packages/db/migrations/";
-const DEFINED = /\bcreate\s+(?:or\s+replace\s+)?function\s+app\.(\w+)/gi;
-const definedIn = (sql: string): string[] => [...sql.matchAll(DEFINED)].map((m) => `app.${m[1]!.toLowerCase()}`);
+// `app.name`, `app."name"` or `"app"."name"`, the head across lines too.
+const DEFINED = /\bcreate\s+(?:or\s+replace\s+)?function\s+"?app"?\."?(\w+)"?/gi;
+// On origin/main any line naming the function is enough to say it exists there (git grep is per line).
+const NAMED = /\bfunction\s+"?app"?\."?(\w+)"?/gi;
+const namesIn = (sql: string, pattern: RegExp): string[] => [...sql.matchAll(pattern)].map((m) => `app.${m[1]!.toLowerCase()}`);
 
 /**
  * What the branch changes against where it left origin/main: at `commit` (the pre-push hook), or, without
@@ -52,20 +61,22 @@ export function branchChanges(repo: string, commit?: string): { files: string[];
   const git = (...args: string[]) => spawnSync("git", ["-c", "core.quotePath=false", ...args], { cwd: repo, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   const must = (...args: string[]) => {
     const done = git(...args);
-    if (done.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${done.stderr.trim()}. Run \`git fetch origin main\` and try again.`);
+    if (done.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${done.stderr.trim()}`);
     return done.stdout;
   };
   const lines = (text: string) => text.split("\n").filter(Boolean);
-  const base = must("merge-base", "origin/main", commit ?? "HEAD").trim();
+  const mergeBase = git("merge-base", "origin/main", commit ?? "HEAD");
+  if (mergeBase.status !== 0) throw new Error(`git merge-base origin/main failed: ${mergeBase.stderr.trim()}. Run \`git fetch origin main\` and try again.`);
+  const base = mergeBase.stdout.trim();
   const files = [...new Set([...lines(must("diff", "--name-only", "--no-renames", "--diff-filter=d", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))])].sort();
   const migrations = files.filter((file) => file.startsWith(MIGRATIONS) && file.endsWith(".sql"));
   if (migrations.length === 0) return { files, redefined: [] };
   const text = (file: string) => (commit ? must("show", `${commit}:${file}`) : existsSync(join(repo, file)) ? readFileSync(join(repo, file), "utf8") : "");
   // One git grep over origin/main's migrations (exit 1: no match), not a `git show` per migration.
-  const grep = git("grep", "-h", "-i", "-o", "-E", "create[[:space:]]+(or[[:space:]]+replace[[:space:]]+)?function[[:space:]]+app\\.[a-z0-9_]+", base, "--", MIGRATIONS);
+  const grep = git("grep", "-h", "-i", "-E", 'function[[:space:]]+"?app"?\\.', base, "--", MIGRATIONS);
   if (grep.status !== 0 && grep.status !== 1) throw new Error(`git grep on origin/main's migrations failed: ${grep.stderr.trim()}`);
-  const onMain = new Set(definedIn(grep.stdout));
-  const redefined = [...new Set(migrations.flatMap((file) => definedIn(text(file))))].filter((fn) => onMain.has(fn)).sort();
+  const onMain = new Set(namesIn(grep.stdout, NAMED));
+  const redefined = [...new Set(migrations.flatMap((file) => namesIn(text(file), DEFINED)))].filter((fn) => onMain.has(fn)).sort();
   return { files, redefined };
 }
 
@@ -89,8 +100,6 @@ export function sharedPatterns(issueTracker: string): string[] {
   return [...new Set(patterns)];
 }
 
-const globRegex = (glob: string): RegExp => new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")}$`);
-
 /** Whether `file` is the shared module `pattern` names: the file, under the directory, or matched by the glob. */
 function isShared(file: string, pattern: string): boolean {
   if (pattern.endsWith("/")) return file.startsWith(pattern);
@@ -109,7 +118,7 @@ function namesKey(claim: Claim, key: string): boolean {
 }
 
 /** Whether the push may go: every shared module the branch changes has an open CLAIM naming its key. */
-export async function checkClaims(input: ClaimsInput): Promise<{ ok: boolean; message: string }> {
+export async function checkClaims(input: ClaimsInput): Promise<ClaimsVerdict> {
   const patterns = sharedPatterns(input.sharedList);
   const shared = [...input.files.filter((file) => patterns.some((pattern) => isShared(file, pattern))), ...input.redefined];
   if (shared.length === 0) return { ok: true, message: "" };
@@ -143,14 +152,17 @@ async function rp603Comments(): Promise<Comment[]> {
   const email = process.env.JIRA_EMAIL;
   const token = process.env.JIRA_API_TOKEN;
   if (!email || !token) throw new Error("JIRA_EMAIL and JIRA_API_TOKEN are not set; see .env.example");
-  return fetchComments(email, token);
+  // A stalled network warns after this, rather than holding up every push.
+  return fetchComments(email, token, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(JIRA_TIMEOUT_MS) }));
 }
+
+const JIRA_TIMEOUT_MS = 20_000;
 
 /**
  * `checkClaims` for this branch: at `commit` pushed to `branch` (the pre-push hook), or the working tree on
  * the checked-out branch (`pnpm verify`, `pnpm check:claims`). Throws when git fails.
  */
-export async function branchClaims(repo: string, push?: { commit: string; branch: string }): Promise<{ ok: boolean; message: string }> {
+export async function branchClaims(repo: string, push?: { commit: string; branch: string }): Promise<ClaimsVerdict> {
   const { files, redefined } = branchChanges(repo, push?.commit);
   const branch = push?.branch ?? spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
   const envFile = join(repo, ".env");
@@ -168,7 +180,6 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   try {
     const result = await branchClaims(process.cwd());
     if (result.message) (result.ok ? console.log : console.error)(result.message);
-    else console.log("check:claims: every shared module this branch changes has an open claim, or it changes none.");
     process.exitCode = result.ok ? 0 : 1;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

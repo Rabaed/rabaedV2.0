@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { branchClaims } from "./check-claims.ts";
+import { branchClaims, type ClaimsVerdict } from "./check-claims.ts";
 import { isDoc } from "./reviewed-required.ts";
 import { branchMix } from "./shared-files.ts";
 
@@ -41,7 +41,7 @@ export interface PrePushSeam {
   /** The lines naming a rule-3 mix on the pushed ref against origin/main (scripts/shared-files.ts); undefined when there is none or it can't be told. */
   branchMix(ref: PushedRef): string[] | undefined;
   /** Rule 12's claims for the pushed ref (scripts/check-claims.ts): refused, a warning, or "" when nothing to say. */
-  claims(ref: PushedRef): Promise<{ ok: boolean; message: string }>;
+  claims(ref: PushedRef): Promise<ClaimsVerdict>;
   /** Runs `pnpm <check>`, its stdout and stderr together. */
   run(check: Check): Promise<{ status: number; output: string }>;
   /** The checked-out commit, and whether tracked files have uncommitted changes. */
@@ -68,17 +68,17 @@ export async function prePush(stdin: string, seam: PrePushSeam): Promise<{ ok: b
   if (refused.length > 0) {
     return { ok: false, message: `${refused.map((result) => result.message).join("\n\n")}\n\nPush refused (pre-push, RP-1008): post the CLAIM on RP-603, then push again.${claimWarnings}${mix}` };
   }
-  const extras = `${claimWarnings}${mix}`;
+  const trailingWarnings = `${claimWarnings}${mix}`;
   const changed = branches.map((ref) => seam.changedFiles(ref));
-  if (changed.every((files) => files !== undefined && files.every(isDoc))) return { ok: true, message: `pre-push: only docs changed, lint and typecheck skipped.${extras}` };
+  if (changed.every((files) => files !== undefined && files.every(isDoc))) return { ok: true, message: `pre-push: only docs changed, lint and typecheck skipped.${trailingWarnings}` };
 
-  console.log("pre-push: running pnpm lint and pnpm typecheckâ€¦");
+  console.log("pre-push: running pnpm lint and pnpm typecheck…");
   const results = await Promise.all(CHECKS.map(async (check) => ({ check, ...(await seam.run(check)) })));
   const failed = results.filter((result) => result.status !== 0);
   const warning = treeWarning(branches, seam.workingTree());
-  if (failed.length === 0) return { ok: true, message: `pre-push: pnpm lint and pnpm typecheck pass.${warning}${extras}` };
+  if (failed.length === 0) return { ok: true, message: `pre-push: pnpm lint and pnpm typecheck pass.${warning}${trailingWarnings}` };
   const report = failed.map(({ check, status, output }) => `pnpm ${check} failed (exit ${status}):\n${output.trimEnd()}`).join("\n\n");
-  return { ok: false, message: `${report}\n\nPush refused (pre-push, RP-989): fix ${failed.map((f) => `pnpm ${f.check}`).join(" and ")}, commit, and push again.${warning}${extras}` };
+  return { ok: false, message: `${report}\n\nPush refused (pre-push, RP-989): fix ${failed.map((f) => `pnpm ${f.check}`).join(" and ")}, commit, and push again.${warning}${trailingWarnings}` };
 }
 
 /** A warning for each pushed branch that `pnpm queue` will refuse under rule 3 (RP-993). */
