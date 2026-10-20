@@ -32,6 +32,8 @@ packages/ui/src/styles/arabic-font.css
 .demo-sessions/
 # pnpm screens's PR screenshots (RP-531): published to screens-<branch>, never committed here.
 .screens/
+# pnpm verify's per-worktree lock (RP-996): the running verify's pid, start time and command.
+.verify.lock
 
 # --- Tooling ---
 node_modules/

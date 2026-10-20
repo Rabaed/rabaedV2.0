@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
+import { acquireLock, lockFile, pidAlive, releaseLock } from "./verify-lock.ts";
 import { finalLine, loadFailure, runStep, selectSteps, tail } from "./verify-steps.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
@@ -14,6 +15,19 @@ import { finalLine, loadFailure, runStep, selectSteps, tail } from "./verify-ste
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
 const tailLines = 40;
+
+// One verify per worktree, before any other check (RP-996): a second run would share the
+// lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
+const lock = lockFile(root);
+const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, pidAlive);
+if (!taken.acquired) {
+  console.error(`${taken.message} Let it finish; if that pid is not a verify run, delete ${lock}.`);
+  process.exit(1);
+}
+if (taken.tookOver) console.log(`verify ${taken.tookOver}`);
+process.on("exit", () => releaseLock(lock, process.pid));
+process.on("SIGINT", () => process.exit(130));
+process.on("SIGTERM", () => process.exit(143));
 
 // The lane's Postgres first (RP-575): a stopped container otherwise showed only at
 // test:seam1, after every step before it had run.
