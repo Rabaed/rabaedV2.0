@@ -1,12 +1,13 @@
 ﻿import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 
-// pnpm screens [<route>...] --as <person> [--setup <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
+// pnpm screens [<route>...] --as <person> [--setup <file>] [--steps <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
+// pnpm screens --publish-dir <dir> [--folder <name>]                                                                     (RP-991)
 //
 // Full-page screenshots of the running app for a PR (CODING_STANDARDS.md › UI): every
 // route at 1366 and 1920 wide, in English and Arabic, signed in as a demo person.
@@ -57,11 +58,37 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 // requests it started (10 s, then a warning) and its finite animations (2 s). Examples:
 // scripts/screens-examples/.
 //
+// --steps <file> (RP-991): a flow the actions above cannot reach (a wizard, an upload, a step whose
+// page needs what the last step made). Its default export drives the signed-in Playwright page and
+// names each shot; it runs once per language at each width (and at 375 with --phone), after the
+// routes and screens, with the setup's values:
+//
+//   export default async ({ page, goto, shot, inLocale, values }) => {
+//     await goto(`/projects/${values.projectId}/registers/import`);    // as a route: no locale
+//     await shot("choose-file");                                       // choose-file-<width>-<locale>.png
+//     await page.getByLabel(inLocale({ en: "File", ar: "الملف" })).setInputFiles(values.registerFile);
+//     await page.getByRole("button", { name: inLocale({ en: "Next", ar: "التالي" }) }).click();
+//     await shot("map-columns");
+//   };
+//
+// `shot(name)` waits, as a screen does, for the requests since the last goto or shot (10 s, then a
+// warning) and the finite animations (2 s), and saves the full page. A name is a plain file name,
+// used once per run; a second "map-columns", or one that a route or screen already saves, stops the
+// run. The table's row is the name with the path it was taken on. The flow also gets `api`, the
+// setup's API from its page (with `as()`): it runs once per language and width, so a flow that
+// changes data makes its own each time. Example: scripts/screens-examples/packages-submit-flow.ts.
+//
 // --phone: a phone instead (RP-630): 375 × 812, touch, as a phone's browser says it is.
 //
 // --publish: commits the PNGs under <folder>/ to `screens-<branch>` on origin (an orphan
 // branch the first time, "not for merging"; later runs add to it), without touching this
 // checkout, and prints a markdown table of their raw URLs for the PR body.
+//
+// --publish-dir <dir> (RP-991): publishes PNGs already on disk the same way, shooting nothing (no
+// --as, no app running): every `<page>-<width>-<locale>.png` in <dir>, one row per page in the
+// order they were saved (oldest first, so a flow's steps keep theirs), under
+// <folder>/ (the branch's issue key unless --folder names another). Other files are skipped; a PNG
+// named otherwise stops the run, naming it.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -73,12 +100,31 @@ const HEIGHT = 900;
 /** `--phone`'s one size (RP-630): the design's phone frame. */
 export const PHONE = { width: 375, height: 812 } as const;
 
-export type ScreensArgs = { routes: string[]; email: string; short: string; setup?: string; folder: string; out: string; publish: boolean; phone: boolean };
+export type ScreensArgs = {
+  routes: string[];
+  email: string;
+  short: string;
+  setup?: string;
+  steps?: string;
+  /** --publish-dir: publish the PNGs already in this folder; nothing is shot. */
+  publishDir?: string;
+  folder: string;
+  out: string;
+  publish: boolean;
+  phone: boolean;
+};
 
 /** Reads the command line. `at` gives the repository root and current branch for the defaults. Throws a plain message on bad input. */
 export function parseArgs(argv: string[], at: { root: string; branch: string }): ScreensArgs {
   const routes: string[] = [];
-  const values: Record<"as" | "setup" | "folder" | "out", string | undefined> = { as: undefined, setup: undefined, folder: undefined, out: undefined };
+  const values: Record<"as" | "setup" | "steps" | "publish-dir" | "folder" | "out", string | undefined> = {
+    as: undefined,
+    setup: undefined,
+    steps: undefined,
+    "publish-dir": undefined,
+    folder: undefined,
+    out: undefined,
+  };
   let publish = false;
   let phone = false;
   for (let i = 0; i < argv.length; i++) {
@@ -91,7 +137,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
       phone = true;
       continue;
     }
-    const option = /^--(as|setup|folder|out)(?:=(.*))?$/.exec(arg);
+    const option = /^--(as|setup|steps|publish-dir|folder|out)(?:=(.*))?$/.exec(arg);
     if (option) {
       const name = option[1] as keyof typeof values;
       const value = option[2] ?? argv[++i];
@@ -105,12 +151,20 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
       routes.push(arg);
     }
   }
-  if (routes.length === 0 && !values.setup) throw new Error("Give at least one route, such as /work-items/<id>, or a --setup that exports screens.");
-  if (!values.as) throw new Error("Name the demo person with --as: an email or a short name such as hafiz.");
-  const { email, short } = resolvePerson(values.as);
   const folder = values.folder ?? (/^RP-\d+/.exec(at.branch)?.[0] ?? at.branch.replace(/[^A-Za-z0-9._-]/g, "-"));
   if (!/^[A-Za-z0-9._-]+$/.test(folder) || folder.startsWith(".")) throw new Error(`--folder must be a plain name (letters, digits, . _ -): got "${folder}".`);
-  return { routes, email, short, setup: values.setup, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish, phone };
+  const publishDir = values["publish-dir"];
+  if (publishDir !== undefined) {
+    const shooting = [routes.length > 0 && "routes", values.as && "--as", values.setup && "--setup", values.steps && "--steps", phone && "--phone", values.out && "--out"].filter(Boolean);
+    if (shooting.length > 0) throw new Error(`--publish-dir publishes PNGs already on disk and shoots nothing: drop ${shooting.join(", ")}.`);
+    const dir = resolve(publishDir);
+    return { routes, email: "", short: "", publishDir: dir, folder, out: dir, publish: true, phone };
+  }
+  if (routes.length === 0 && !values.setup && !values.steps)
+    throw new Error("Give at least one route, such as /work-items/<id>, a --setup that exports screens, or --steps.");
+  if (!values.as) throw new Error("Name the demo person with --as: an email or a short name such as hafiz.");
+  const { email, short } = resolvePerson(values.as);
+  return { routes, email, short, setup: values.setup, steps: values.steps, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish, phone };
 }
 
 /** `route` with each `{name}` replaced by the setup's value for it. */
@@ -170,7 +224,9 @@ function parseRole(value: unknown): string {
   return value;
 }
 
-const nameIn = (name: AccessibleName, locale: Locale) => (typeof name === "string" ? name : name[locale]);
+/** The name in the page's language: `name[locale]`, or the one name both share. A --steps module uses it for its locators. */
+export const inLocale = (name: AccessibleName, locale: Locale) => (typeof name === "string" ? name : name[locale]);
+const nameIn = inLocale;
 
 /** What an action acts on: the one element with a role (and exact name), or the checkbox of the one row with a text. */
 export type Target = { role: string; name?: string } | { row: string };
@@ -365,7 +421,7 @@ export function trackRequests(
 }
 
 /** What shoot() prints when a screen's requests had not settled: the shot may show a loading state. */
-export const unsettledWarning = (screen: Screen, at: { locale: Locale; width: number }) =>
+export const unsettledWarning = (screen: Pick<Screen, "name">, at: { locale: Locale; width: number }) =>
   // eslint-disable-next-line rabaed/no-avoid-terms -- HTTP requests and this script's own screen actions, not Rabaed terms
   `Warning: screen "${screen.name}" (${at.locale}, ${at.width}): requests were still in flight ${ACTION_TIMEOUT / 1000} s after its last action; shot anyway.`;
 
@@ -386,7 +442,11 @@ export async function finishAnimations(timeoutMs: number, animations: Animation[
   return result;
 }
 
-export type Shot = { route: string; screen?: Screen; width: number; locale: Locale; file: string };
+/**
+ * One PNG: a route as it loads, a Screen after its actions (`screen`), or a named shot of a --steps
+ * flow or a --publish-dir file (`page`; a --publish-dir file has no route, "").
+ */
+export type Shot = { route: string; screen?: Screen; page?: string; width: number; locale: Locale; file: string };
 
 const widthsOf = (phone: boolean): readonly number[] => (phone ? [PHONE.width] : WIDTHS);
 
@@ -426,6 +486,44 @@ export function plannedShots(items: readonly (string | Screen)[], { phone = fals
   );
 }
 
+const shotFile = /^(?<page>.+)-(?<width>\d+)-(?<locale>en|ar)\.png$/i;
+
+/**
+ * The PNGs of a folder for --publish-dir, page by page in the order of `files` (main() passes them
+ * oldest first, so a flow's steps keep their order), then locale and width: each named
+ * `<page>-<width>-<locale>.png`, as `pnpm screens` and a --steps flow save them. Other files are
+ * skipped; a PNG named otherwise is refused, since its row and column would be a guess.
+ */
+export function shotsOnDisk(files: readonly string[]): Shot[] {
+  const shots = files
+    .filter((file) => /\.png$/i.test(file))
+    .map((file): Shot => {
+      const match = shotFile.exec(file);
+      if (!match?.groups) throw new Error(`${file} is not named <page>-<width>-<locale>.png (locale en or ar), so it has no row or column in the table: rename it.`);
+      const { page, width, locale } = match.groups as { page: string; width: string; locale: string };
+      return { route: "", page, width: Number(width), locale: locale.toLowerCase() as Locale, file };
+    });
+  if (shots.length === 0) throw new Error("The folder has no PNGs to publish.");
+  const pages = [...new Set(shots.map((shot) => shot.page!))];
+  return shots.sort((a, b) => pages.indexOf(a.page!) - pages.indexOf(b.page!) || LOCALES.indexOf(a.locale) - LOCALES.indexOf(b.locale) || a.width - b.width);
+}
+
+/**
+ * The `shot(name)` of a --steps flow at one locale and width: the Shot for a step named `name`,
+ * taken on `route`, saved as `<name>-<width>-<locale>.png`. `taken` is every file the run saves
+ * (lower-cased: Windows file names ignore case), shared across the run, so two steps, or a step and
+ * a route or Screen, never overwrite each other.
+ */
+export function stepRecorder(at: { locale: Locale; width: number }, taken: Set<string>): (name: string, route: string) => Shot {
+  return (name, route) => {
+    if (!plainName.test(name)) throw new Error(`Step shot "${name}": a name is letters, digits, . _ - (it becomes the file name).`);
+    const file = shotName(name, at.width, at.locale);
+    if (taken.has(file.toLowerCase())) throw new Error(`Step shot "${name}" (${at.locale}, ${at.width}) would be saved as ${file.toLowerCase()}, which this run already shot: name each shot once.`);
+    taken.add(file.toLowerCase());
+    return { route, page: name, width: at.width, locale: at.locale, file };
+  };
+}
+
 /** The branch the shots are published to: one level, so its raw URLs never mistake a part of it for the path. */
 export const screensBranch = (branch: string) => `screens-${branch.replace(/\//g, "-")}`;
 
@@ -444,7 +542,11 @@ export const rawUrl = (repo: string, ref: string, path: string) => `https://raw.
 export function markdownTable(shots: Shot[], urlOf: (file: string) => string): string {
   const widths = [...new Set(shots.map((shot) => shot.width))];
   const columns = LOCALES.flatMap((locale) => widths.map((width) => ({ locale, width })));
-  const label = (shot: Shot) => (shot.screen ? `${shot.screen.name}: \`${shot.route}\`` : `\`${shot.route}\``);
+  const label = (shot: Shot) => {
+    const name = shot.screen?.name ?? shot.page;
+    if (name === undefined) return `\`${shot.route}\``;
+    return shot.route ? `${name}: \`${shot.route}\`` : name;
+  };
   const rows = [...new Set(shots.map(label))];
   const cell = (row: string, locale: string, width: number) => {
     const shot = shots.find((s) => label(s) === row && s.locale === locale && s.width === width);
@@ -530,6 +632,81 @@ function loadPlaywright(): typeof import("playwright") {
   return createRequire(resolve(root, "packages/ui/package.json"))("playwright") as typeof import("playwright");
 }
 
+/**
+ * What a --steps module's default export gets, once per locale at each width: the signed-in page,
+ * the setup's API and values, and three helpers. `goto(route)` opens a route without the locale as
+ * the routes are opened; `shot(name)` waits for the requests since the last goto or shot and the
+ * finite animations, then saves the full page as `<name>-<width>-<locale>.png`. The flow runs once
+ * per locale and width, so one that changes data (Submits a Package) makes its own with `api`.
+ */
+export type StepContext = {
+  page: import("playwright").Page;
+  api: SetupApi;
+  locale: Locale;
+  width: number;
+  values: Record<string, string>;
+  inLocale(name: AccessibleName): string;
+  goto(route: string): Promise<void>;
+  shot(name: string): Promise<void>;
+};
+
+/** Opens `route` in `locale` and checks it is the page asked for, not the sign-in page; hides Next's dev indicator. */
+async function openPage(page: import("playwright").Page, url: string, label: string, email: string): Promise<void> {
+  await loadPage(async () => (await page.goto(url, { waitUntil: "networkidle" }))?.status(), label);
+  // A lost session redirects to the sign-in page with a 200: that is not the page asked for.
+  if (new URL(page.url()).pathname.includes("/sign-in")) throw new Error(`${label} sent ${email} to the sign-in page: the session did not hold.`);
+  // Next's dev-mode indicator ("N" in a corner) is not part of the page.
+  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+}
+
+/** Runs a --steps module's flow on `page` at one locale and width, and returns the shots it named. */
+async function runSteps(
+  flow: (step: StepContext) => Promise<void>,
+  page: import("playwright").Page,
+  at: {
+    locale: Locale;
+    width: number;
+    webUrl: string;
+    email: string;
+    out: string;
+    values: Record<string, string>;
+    taken: Set<string>;
+    signInAs: (person: string) => Promise<SetupApi>;
+  },
+): Promise<Shot[]> {
+  const record = stepRecorder(at, at.taken);
+  const shots: Shot[] = [];
+  let requests = trackRequests(page);
+  try {
+    await flow({
+      page,
+      api: setupApi(page, at.signInAs),
+      locale: at.locale,
+      width: at.width,
+      values: at.values,
+      inLocale: (name) => inLocale(name, at.locale),
+      goto: async (route) => {
+        requests.stop();
+        await openPage(page, `${at.webUrl}/${at.locale}${route}`, `${at.locale}${route}`, at.email);
+        requests = trackRequests(page);
+      },
+      shot: async (name) => {
+        const path = new URL(page.url()).pathname.replace(new RegExp(`^/${at.locale}(?=/|$)`), "") || "/";
+        const shot = record(name, path);
+        if (!(await requests.settle())) console.warn(unsettledWarning({ name }, at));
+        await page.evaluate(finishAnimations, ANIMATION_TIMEOUT);
+        await page.screenshot({ path: join(at.out, shot.file), fullPage: true });
+        console.log(join(at.out, shot.file));
+        shots.push(shot);
+        requests = trackRequests(page);
+      },
+    });
+  } finally {
+    requests.stop();
+  }
+  return shots;
+}
+
 async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
   const storageState = await signIn(args.email, webUrl);
   const { chromium } = loadPlaywright();
@@ -537,32 +714,37 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
   try {
     let placeholders: Record<string, string> = {};
     let screens: Screen[] = [];
+    /** Pages signed in for the setup's and the steps' `as()`; closed with the browser. */
+    const apiContexts: import("playwright").BrowserContext[] = [];
+    /** A SetupApi from a page signed in with `state`; `as()` signs in someone else the same way. */
+    const apiFor = async (state: Awaited<ReturnType<typeof signIn>>): Promise<SetupApi> => {
+      const context = await browser.newContext({ storageState: state });
+      apiContexts.push(context);
+      const page = await context.newPage();
+      await page.goto(`${webUrl}/en`);
+      return setupApi(page, signInAs);
+    };
+    const signInAs = async (person: string) => apiFor(await signIn(resolvePerson(person).email, webUrl));
     if (args.setup) {
-      const contexts: import("playwright").BrowserContext[] = [];
-      /** A SetupApi from a page signed in with `state`; `as()` signs in someone else the same way. */
-      const apiFor = async (state: Awaited<ReturnType<typeof signIn>>): Promise<SetupApi> => {
-        const context = await browser.newContext({ storageState: state });
-        contexts.push(context);
-        const page = await context.newPage();
-        await page.goto(`${webUrl}/en`);
-        return setupApi(page, async (person) => apiFor(await signIn(resolvePerson(person).email, webUrl)));
+      const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as {
+        default?: (api: SetupApi) => Promise<Record<string, string> | void>;
+        screens?: unknown;
       };
-      try {
-        const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as {
-          default?: (api: SetupApi) => Promise<Record<string, string> | void>;
-          screens?: unknown;
-        };
-        if (setup.screens !== undefined) screens = parseScreens(setup.screens, args.setup);
-        if (setup.default) placeholders = (await setup.default(await apiFor(storageState))) ?? {};
-      } finally {
-        for (const context of contexts) await context.close();
-      }
+      if (setup.screens !== undefined) screens = parseScreens(setup.screens, args.setup);
+      if (setup.default) placeholders = (await setup.default(await apiFor(storageState))) ?? {};
     }
-    if (args.routes.length === 0 && screens.length === 0) throw new Error(`Give at least one route, or export screens from ${args.setup}.`);
+    let flow: ((step: StepContext) => Promise<void>) | undefined;
+    if (args.steps) {
+      const module = (await import(pathToFileURL(resolve(process.cwd(), args.steps)).href)) as { default?: unknown };
+      if (typeof module.default !== "function") throw new Error(`${args.steps} has no default export: a --steps module exports default async ({ page, goto, shot }) => { … }.`);
+      flow = module.default as (step: StepContext) => Promise<void>;
+    }
+    if (args.routes.length === 0 && screens.length === 0 && !flow) throw new Error(`Give at least one route, or export screens from ${args.setup}.`);
     const shots = plannedShots([
       ...args.routes.map((route) => fillRoute(route, placeholders)),
       ...screens.map((screen) => ({ ...screen, route: fillRoute(screen.route, placeholders) })),
     ], { phone: args.phone });
+    const taken = new Set(shots.map((shot) => shot.file.toLowerCase()));
     mkdirSync(args.out, { recursive: true });
     for (const width of widthsOf(args.phone)) {
       const context = await browser.newContext({
@@ -571,11 +753,7 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
       });
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {
-        await loadPage(async () => (await page.goto(`${webUrl}/${shot.locale}${shot.route}`, { waitUntil: "networkidle" }))?.status(), `${shot.locale}${shot.route}`);
-        // A lost session redirects to the sign-in page with a 200: that is not the page asked for.
-        if (new URL(page.url()).pathname.includes("/sign-in")) throw new Error(`${shot.locale}${shot.route} sent ${args.email} to the sign-in page: the session did not hold.`);
-        // Next's dev-mode indicator ("N" in a corner) is not part of the page.
-        await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+        await openPage(page, `${webUrl}/${shot.locale}${shot.route}`, `${shot.locale}${shot.route}`, args.email);
         if (shot.screen) {
           const requests = trackRequests(page);
           try {
@@ -589,6 +767,11 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
         }
         await page.screenshot({ path: join(args.out, shot.file), fullPage: true });
         console.log(join(args.out, shot.file));
+      }
+      if (flow) {
+        for (const locale of LOCALES) {
+          shots.push(...(await runSteps(flow, page, { locale, width, webUrl, email: args.email, out: args.out, values: placeholders, taken, signInAs })));
+        }
       }
       await context.close();
     }
@@ -636,6 +819,15 @@ async function main() {
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   if (branch === "HEAD") throw new Error("This checkout is on no branch: check out the PR's branch first.");
   const args = parseArgs(process.argv.slice(2), { root, branch });
+  if (args.publishDir) {
+    if (!existsSync(args.publishDir)) throw new Error(`--publish-dir: there is no folder ${args.publishDir}.`);
+    const oldestFirst = readdirSync(args.publishDir)
+      .map((file) => ({ file, at: statSync(join(args.publishDir!, file)).mtimeMs }))
+      .sort((a, b) => a.at - b.at)
+      .map(({ file }) => file);
+    console.log(publish(args, shotsOnDisk(oldestFirst), branch));
+    return;
+  }
   const shots = await shoot(args, webUrlFromEnv());
   if (args.publish) console.log(`\n${publish(args, shots, branch)}`);
 }
