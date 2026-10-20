@@ -537,12 +537,12 @@ export function laneEnv(example: string, lane: number, db?: string): string {
   return db === undefined ? env : env.replace(/^(DATABASE_(?:MIGRATOR|APP|ADMIN)_URL=.*\/)rabaed$/gm, `$1rabaed_${db}`);
 }
 
-const SUFFIXED_DB = /^rabaed_([a-z][a-z0-9]*)(_test)?$/;
+const SUFFIXED_DB = /^rabaed_([a-z][a-z0-9]*)(_test(_reset)?)?$/;
 
 /**
- * The per-worktree databases (rabaed_<suffix> and rabaed_<suffix>_test, as lane:env --db
- * makes them) that no existing worktree names in its .env. Never rabaed, rabaed_test or any
- * other name. inUse: the database names from the .env files of the worktrees that still exist.
+ * The per-worktree databases (rabaed_<suffix>, rabaed_<suffix>_test and the reset test's
+ * rabaed_<suffix>_test_reset, RP-949, as lane:env --db makes them) that no existing worktree
+ * names in its .env. Never rabaed, rabaed_test or any other name. inUse: the database names from the .env files of the worktrees that still exist.
  */
 export function orphanDatabases(names: string[], inUse: ReadonlySet<string>): string[] {
   return names
