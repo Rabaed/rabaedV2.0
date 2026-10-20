@@ -511,6 +511,18 @@ describe("an Open Package's own writes lock the item(s) before the Package", () 
     expect(result.statusCode, result.body).toBeLessThan(300);
   });
 
+  it("deleting it holds the items in it the Member doesn't see too, since it takes them all out", async () => {
+    const narrowedPm = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"], { trade: only(at.mechanical) });
+    const pkg = await createPackage(at.c1Pm, "Lock order, delete unseen");
+    const items = [await readyForPm("Electrical, unseen while deleted"), await readyForPm("Electrical two, unseen")];
+    for (const id of items) await ok(addItem(at.c1Pm, pkg.id, id));
+    const { held, result } = await lockedWhileWaitingOnPackage(pkg.id, items, () =>
+      narrowedPm.request("DELETE", `/v1/packages/${pkg.id}`),
+    );
+    expect(held).toEqual(Object.fromEntries(items.map((id) => [id, true])));
+    expect(result.statusCode, result.body).toBeLessThan(300);
+  });
+
   it("adding an item holds it while waiting on the Package", async () => {
     const pkg = await createPackage(at.c1Pm, "Lock order, add");
     const id = await readyForPm("Added while locked");
