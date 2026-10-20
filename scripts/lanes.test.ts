@@ -426,6 +426,11 @@ describe("orphanDatabases", () => {
     expect(orphanDatabases(names, new Set(["rabaed_rp322", "rabaed"]))).toEqual(["rabaed_rp323", "rabaed_rp323_test", "rabaed_rp324_test"]);
   });
 
+  it("lists the reset test's scratch database of a gone worktree, not a live one's, and never rabaed_test_reset", () => {
+    const names = ["rabaed_rp1", "rabaed_rp1_test_reset", "rabaed_rp9_test_reset", "rabaed_test_reset"];
+    expect(orphanDatabases(names, new Set(["rabaed_rp1"]))).toEqual(["rabaed_rp9_test_reset"]);
+  });
+
   it("finds nothing when every worktree still exists", () => {
     expect(orphanDatabases(["rabaed_rp1", "rabaed_rp1_test"], new Set(["rabaed_rp1"]))).toEqual([]);
   });
