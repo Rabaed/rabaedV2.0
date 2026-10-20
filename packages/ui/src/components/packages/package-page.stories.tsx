@@ -88,6 +88,7 @@ const openPkg: PackageDetail = {
   name,
   status: "open",
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: ownCompany },
+  trades: [],
   counts: { total: 3, open: 3, codes: {} },
   items: [],
   owned: true,
