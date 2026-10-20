@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { buildSeamTwoTower, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -17,6 +17,8 @@ let projectId = "";
 let asker = "";
 let colleague = "";
 let outsider = "";
+/** The outsider's own Project: the positive control beside each refusal to them. */
+let outsidersProjectId = "";
 
 const content = { projectName: { en: "P", ar: "م" }, items: [], capped: false };
 const sha = (s: string) => createHash("sha256").update(s).digest();
@@ -45,21 +47,14 @@ beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
-  // A Project with two active Members, and an active Member who is on none of its Participants.
-  const { rows } = await migrator.query<{ project_id: string; members: string[] }>(
-    `select pm.project_id, array_agg(distinct pm.member_id order by pm.member_id) as members
-     from project_member pm join member m on m.id = pm.member_id and m.status = 'active'
-     where pm.status = 'active' group by pm.project_id having count(distinct pm.member_id) >= 2 limit 1`,
-  );
-  projectId = rows[0]!.project_id;
-  [asker, colleague] = rows[0]!.members as [string, string];
-  const { rows: others } = await migrator.query<{ id: string }>(
-    `select m.id from member m where m.status = 'active'
-     and not exists (select 1 from project_member pm where pm.member_id = m.id and pm.project_id = $1 and pm.status = 'active') limit 1`,
-    [projectId],
-  );
-  outsider = others[0]!.id;
-  expect(asker && colleague && outsider).toBeTruthy();
+  // This file's own Tower (RP-995): its Project, C1's Project Manager who asks, C1's Engineer, a colleague on it, and
+  // an outsider, the Authorized Person of another Project, who is on none of its Participants.
+  const tower = await buildSeamTwoTower(app, migrator, { projectCode: "RSN", otherProject: true, checklistTemplate: false });
+  projectId = tower.projectId;
+  asker = tower.c1.members.project_manager;
+  colleague = tower.c1.members.engineer;
+  outsider = tower.other.ap;
+  outsidersProjectId = tower.other.projectId;
 });
 
 afterAll(async () => {
@@ -77,11 +72,19 @@ describe("the snag_report table", () => {
 describe("a report, from request to PDF", () => {
   let id = "";
   let outbox = "";
+  /** Reports the colleague and the outsider ask for themselves: the positive controls beside each refusal to them. */
+  let colleaguesId = "";
+  let outsidersId = "";
 
   it("is asked for by a Member of the Project only", async () => {
     expect(await request(outsider, projectId)).toBeNull();
+    // Positive control: the outsider asks for one of their own Project.
+    outsidersId = (await request(outsider, outsidersProjectId))!;
+    expect(outsidersId).toBeTruthy();
     id = (await request(asker, projectId))!;
     expect(id).toBeTruthy();
+    colleaguesId = (await request(colleague, projectId))!;
+    expect(colleaguesId).toBeTruthy();
     const { rows } = await migrator.query<{ id: string }>("select outbox_id as id from snag_report where id = $1", [id]);
     outbox = rows[0]!.id;
     // The job row holds ids only, never an item's text.
@@ -102,6 +105,11 @@ describe("a report, from request to PDF", () => {
     expect(await state(colleague, id)).toEqual([]);
     expect(await state(outsider, id)).toEqual([]);
     expect(await state(asker, randomUUID())).toEqual([]);
+    // Positive controls: the colleague and the outsider each read their own report, and the asker reads neither.
+    expect(await state(colleague, colleaguesId)).toEqual([{ status: "preparing", storage_key: null }]);
+    expect(await state(outsider, outsidersId)).toEqual([{ status: "preparing", storage_key: null }]);
+    expect(await state(asker, colleaguesId)).toEqual([]);
+    expect(await state(asker, outsidersId)).toEqual([]);
   });
 
   it("is printed from the snapshot by the worker alone", async () => {
@@ -119,6 +127,8 @@ describe("a report, from request to PDF", () => {
     expect(await state(asker, id)).toEqual([{ status: "ready", storage_key: key }]);
     expect(await state(colleague, id)).toEqual([]);
     expect(await state(outsider, id)).toEqual([]);
+    expect(await state(colleague, colleaguesId)).toEqual([{ status: "preparing", storage_key: null }]);
+    expect(await state(outsider, outsidersId)).toEqual([{ status: "preparing", storage_key: null }]);
     const job = await sql`select * from app.snag_report_job(${outbox}::uuid)`.execute(app);
     expect(job.rows).toEqual([]);
   });

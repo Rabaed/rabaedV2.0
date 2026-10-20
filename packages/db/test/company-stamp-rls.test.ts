@@ -203,8 +203,10 @@ describe("company.logo_file_id and stamp_file_id", () => {
 describe("the test database's defaults (test-defaults.ts)", () => {
   it("give a Company inserted by any route a Stamp and no logo, which a test of the gate takes away", async () => {
     const companyId = await one(
-      "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, (select id from rabaed_engineer limit 1)) returning id",
-      [JSON.stringify({ en: "Defaults", ar: "Defaults" }), digits(10), `3${digits(13)}3`],
+      // Onboarded by a Rabaed Engineer of its own (RP-995: no seed row is assumed).
+      `with e as (insert into rabaed_engineer (email, full_name) values ($4, 'Defaults') returning id)
+       insert into company (legal_name, cr_number, vat_number, onboarded_by) select $1, $2, $3, e.id from e returning id`,
+      [JSON.stringify({ en: "Defaults", ar: "Defaults" }), digits(10), `3${digits(13)}3`, email("eng")],
     );
     const files = await filesOf(companyId);
     expect(files).toEqual({ logo: null, stamp: expect.any(String) });

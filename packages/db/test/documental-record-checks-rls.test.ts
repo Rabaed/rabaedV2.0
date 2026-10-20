@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -18,8 +18,27 @@ let itemId = "";
 let recordId = "";
 let seer = "";
 let other = "";
+/** An item `other` sees, with its own record: the positive control beside each refusal to `other`. */
+let othersItemId = "";
 
 const sha = (s: string) => createHash("sha256").update(s).digest();
+
+/** Gives item `id` of Project `projectId` a record still preparing, as the worker saves one (the migrator stands in for it); returns its id. */
+async function preparingRecord(projectId: string, id: string, code: string): Promise<string> {
+  const key = `projects/${projectId}/work-items/${id}/documental-record/record.pdf`;
+  const file = async (k: string, mime: string) =>
+    (await migrator.query<{ id: string }>("insert into stored_file (storage_key, sha256, size, mime) values ($1, $2, 10, $3) returning id", [k, sha(k), mime])).rows[0]!.id;
+  const pdf = await file(key, "application/pdf");
+  const data = await file(key.replace("record.pdf", "record-data.xml"), "application/xml");
+  return (
+    await migrator.query<{ id: string }>(
+      `insert into documental_record (project_id, work_item_id, pdf_file_id, record_data_file_id, layout_version, language, outcome,
+         pdf_sha256, sealed_at, verification_token_hash, verification_code, status)
+       values ($1, $2, $3, $4, '1', 'bilingual', 'A', $5, now(), $6, $7, 'preparing') returning id`,
+      [projectId, id, pdf, data, sha("pdf"), sha(randomUUID()), code],
+    )
+  ).rows[0]!.id;
+}
 
 /** The error code `query` fails with as Member `memberId` (or as the worker, with none), or null. */
 async function failure(memberId: string | null, query: ReturnType<typeof sql>): Promise<string | null> {
@@ -32,10 +51,10 @@ async function failure(memberId: string | null, query: ReturnType<typeof sql>): 
   }
 }
 
-const stateOf = (memberId: string | null) =>
+const stateOf = (memberId: string | null, id = itemId) =>
   (memberId
-    ? withMember(app, memberId, (trx) => sql<{ state: string | null }>`select app.documental_record_state(${itemId}::uuid) as state`.execute(trx))
-    : sql<{ state: string | null }>`select app.documental_record_state(${itemId}::uuid) as state`.execute(app)
+    ? withMember(app, memberId, (trx) => sql<{ state: string | null }>`select app.documental_record_state(${id}::uuid) as state`.execute(trx))
+    : sql<{ state: string | null }>`select app.documental_record_state(${id}::uuid) as state`.execute(app)
   ).then((r) => r.rows[0]!.state);
 
 beforeAll(async () => {
@@ -44,32 +63,15 @@ beforeAll(async () => {
   admin = new pg.Client({ connectionString: urls.admin });
   await admin.connect();
   app = createDb(urls.app, { max: 2 });
-  // A Submitted demo item no other test of the record takes (the last by id), one Member who sees it and one who doesn't.
-  const { rows: items } = await migrator.query<{ id: string; project_id: string }>(
-    "select id, project_id from work_item where submitted_at is not null and discarded_at is null and id not in (select work_item_id from documental_record) order by id desc limit 1",
-  );
-  itemId = items[0]!.id;
-  const { rows: members } = await migrator.query<{ id: string }>("select id from member where status = 'active' order by id");
-  for (const { id } of members) {
-    const sees = await withMember(app, id, (trx) => sql<{ sees: boolean }>`select app.sees_work_item(${itemId}::uuid) as sees`.execute(trx)).then((r) => r.rows[0]!.sees);
-    if (sees && !seer) seer = id;
-    if (!sees && !other) other = id;
-    if (seer && other) break;
-  }
-  expect(seer && other).toBeTruthy();
-  const key = `projects/${items[0]!.project_id}/work-items/${itemId}/documental-record/record.pdf`;
-  const file = async (k: string, mime: string) =>
-    (await migrator.query<{ id: string }>("insert into stored_file (storage_key, sha256, size, mime) values ($1, $2, 10, $3) returning id", [k, sha(k), mime])).rows[0]!.id;
-  const pdf = await file(key, "application/pdf");
-  const data = await file(key.replace("record.pdf", "record-data.xml"), "application/xml");
-  recordId = (
-    await migrator.query<{ id: string }>(
-      `insert into documental_record (project_id, work_item_id, pdf_file_id, record_data_file_id, layout_version, language, outcome,
-         pdf_sha256, sealed_at, verification_token_hash, verification_code, status)
-       values ($1, $2, $3, $4, '1', 'bilingual', 'A', $5, now(), $6, 'ABCD-EF56', 'preparing') returning id`,
-      [items[0]!.project_id, itemId, pdf, data, sha("pdf"), sha(randomUUID())],
-    )
-  ).rows[0]!.id;
+  // This file's own Tower (RP-995): C1's Submitted WIR, which K1's Engineer holds and sees, and C2's Engineer,
+  // another Contractor of the same Trade, doesn't (V3). C2's own Draft is the positive control beside that refusal.
+  const tower = await buildSeamTwoTower(app, migrator, { projectCode: "RDC" });
+  itemId = await wirAtConsultant(tower, { type: "WIR", title: "Slab pour" });
+  seer = tower.k1.members.engineer;
+  other = tower.c2.members.engineer;
+  othersItemId = await c2Draft(tower, { type: "WIR", title: "Column pour" });
+  recordId = await preparingRecord(tower.projectId, itemId, "ABCD-EF56");
+  await preparingRecord(tower.projectId, othersItemId, "ABCD-EF57");
 });
 
 afterAll(async () => {
@@ -189,6 +191,9 @@ describe("app.documental_record_state", () => {
     expect(await stateOf(seer)).toBe("preparing");
     expect(await stateOf(other)).toBeNull();
     expect(await stateOf(null)).toBeNull();
+    // Positive controls: the refused Member reads the state of a record on an item they see; the seer doesn't, of C2's Draft.
+    expect(await stateOf(other, othersItemId)).toBe("preparing");
+    expect(await stateOf(seer, othersItemId)).toBeNull();
   });
 });
 

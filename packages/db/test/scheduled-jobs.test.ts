@@ -7,7 +7,7 @@ import type { WeeklySchedule } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, describe, expect, it } from "vitest";
 import { createDb, runScheduledJobs, withMember, type ScheduledJob } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { digits, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
@@ -79,7 +79,17 @@ describe("runScheduledJobs", () => {
   });
 
   it("is the worker's only: a signed-in Member's session can't take a run", async () => {
-    const { rows } = await sql<{ id: string }>`select id from member limit 1`.execute(migrator);
+    // A Member of its own (RP-995: no seed row is assumed), onboarded by a Rabaed Engineer of its own.
+    const tag = randomUUID().slice(0, 8);
+    const { rows } = await sql<{ id: string }>`
+      with e as (insert into rabaed_engineer (email, full_name) values (${`eng-${tag}@rabaed.test`}, 'Jobs') returning id),
+        c as (
+          insert into company (legal_name, cr_number, vat_number, onboarded_by)
+          select '{"en": "Jobs", "ar": "Jobs"}'::jsonb, ${digits(10)}, ${`3${digits(13)}3`}, e.id from e returning id
+        )
+      insert into member (company_id, email, full_name, status)
+      select c.id, ${`member-${tag}@rabaed.test`}, '{"en": "Jobs", "ar": "Jobs"}'::jsonb, 'active' from c returning id
+    `.execute(migrator);
     await expect(
       withMember(worker, rows[0]!.id, (trx) => sql`select app.claim_scheduled_run(${`test_${randomUUID()}`}, now())`.execute(trx)),
     ).rejects.toThrow(/only the worker/);
