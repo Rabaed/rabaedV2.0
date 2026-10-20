@@ -3,18 +3,19 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { queuePr, queuePrWhenChecksPass, realSeam, verifiedCommits, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { finalLine } from "./verify-steps.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
   const enqueued: [string, string][] = [];
   const seam: QueueSeam = {
     fetchMain: () => true,
-    fetchPull: () => "abc123",
-    head: () => "abc123",
+    fetchPull: () => "abc1234",
+    head: () => "abc1234",
     branch: () => "feature",
     isAncestor: () => false,
-    pullRequest: () => ({ id: "PR_node", headRefOid: "abc123", headRefName: "feature" }),
+    pullRequest: () => ({ id: "PR_node", headRefOid: "abc1234", headRefName: "feature" }),
     mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
     changedFiles: () => ["apps/api/src/a.ts"],
     packageJsonVersions: () => ({ before: undefined, after: undefined }),
@@ -47,7 +48,7 @@ describe("queuePr", () => {
     const { seam, enqueued } = fakeSeam();
     const result = queuePr(149, seam);
     expect(result.ok).toBe(true);
-    expect(enqueued).toEqual([["PR_node", "abc123"]]);
+    expect(enqueued).toEqual([["PR_node", "abc1234"]]);
     expect(result.lines.join("\n")).toContain("position 3");
     expect(result.lines.join("\n")).toContain("QUEUED");
   });
@@ -128,7 +129,7 @@ describe("queuePr", () => {
     const { seam, enqueued } = fakeSeam({ labelRuns: () => [{ status: "in_progress", conclusion: "" }] });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(false);
-    expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc123, then run `pnpm queue 149` again");
+    expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc1234, then run `pnpm queue 149` again");
     expect(enqueued).toEqual([]);
   });
 
@@ -136,7 +137,7 @@ describe("queuePr", () => {
     const { seam, enqueued } = fakeSeam({ labelRuns: () => [] });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(false);
-    expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc123");
+    expect(result.lines.join("\n")).toContain("wait for the reviewed-label run on abc1234");
     // RP-604: a PR from before opened-runs never gets one by waiting, so the fix says how to make one.
     expect(result.lines.join("\n")).toContain("merge origin/main in cleanly and push");
     expect(enqueued).toEqual([]);
@@ -173,7 +174,7 @@ describe("queuePr", () => {
   // RP-1017: PR #288's old head was labelled and green, but `pnpm verify` had found a visibility leak on it.
   describe("verify line (RP-1017)", () => {
     const verifiedOn = (sha: string) => () => `Closes RP-1\n\npnpm verify passed on ${sha}: lint, typecheck, unit.`;
-    const fix = "Fix: run `pnpm verify` on abc123";
+    const fix = "Fix: run `pnpm verify` on abc1234";
 
     it("refuses a PR whose body has no verify line, naming the head that needs a run", () => {
       const { seam, enqueued } = fakeSeam({ body: () => "## Summary\n\nNo verify run yet." });
@@ -197,21 +198,36 @@ describe("queuePr", () => {
     });
 
     it("refuses a dirty verify run on the head", () => {
-      const { seam } = fakeSeam({ body: () => "pnpm verify passed on abc123 (dirty: uncommitted changes): lint." });
+      const { seam, enqueued } = fakeSeam({ body: () => "pnpm verify passed on abc1234 (dirty: uncommitted changes): lint." });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain(fix);
+      expect(enqueued).toEqual([]);
+    });
+
+    it("refuses a sha shorter than git's short form, even when it is a prefix of the head", () => {
+      const { seam } = fakeSeam({ body: () => "pnpm verify passed on abc123: lint." });
       expect(queuePr(149, seam).ok).toBe(false);
     });
 
+    it("reads back exactly what pnpm verify prints: a clean run counts, a dirty or unknown one does not", () => {
+      const steps = ["lint", "typecheck"];
+      expect(verifiedCommits(finalLine({ sha: "abc1234", dirty: false, steps }))).toEqual(["abc1234"]);
+      expect(verifiedCommits(finalLine({ sha: "abc1234", dirty: true, steps }))).toEqual([]);
+      expect(verifiedCommits(finalLine({ sha: "", dirty: false, steps }))).toEqual([]);
+    });
+
     it("queues when the verified commit is followed only by clean merges of main", () => {
-      // abc123 merges main's m2 into n1, which merged main's m1 into the verified beef99.
-      const graph: Record<string, string[]> = { abc123: ["n1", "m2"], n1: ["beef99", "m1"] };
-      const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef99"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
+      // abc1234 merges main's m2 into n1, which merged main's m1 into the verified beef999.
+      const graph: Record<string, string[]> = { abc1234: ["n1", "m2"], n1: ["beef999", "m1"] };
+      const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef999"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
       expect(queuePr(149, seam).ok).toBe(true);
-      expect(enqueued).toEqual([["PR_node", "abc123"]]);
+      expect(enqueued).toEqual([["PR_node", "abc1234"]]);
     });
 
     it("refuses when a commit after the verified one is not a clean merge of main", () => {
-      const graph: Record<string, string[]> = { abc123: ["n1", "m2"], n1: ["beef99"] };
-      const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef99"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
+      const graph: Record<string, string[]> = { abc1234: ["n1", "m2"], n1: ["beef999"] };
+      const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef999"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
       const result = queuePr(149, seam);
       expect(result.ok).toBe(false);
       expect(result.lines.join("\n")).toContain(fix);
@@ -219,14 +235,21 @@ describe("queuePr", () => {
     });
 
     it("queues when any of several verify lines names the head (a later run after fixes)", () => {
-      const { seam } = fakeSeam({ body: () => "pnpm verify passed on 5356b95: lint.\n\n`pnpm verify passed on abc123: lint, typecheck.`" });
+      const { seam } = fakeSeam({ body: () => "pnpm verify passed on 5356b95: lint.\n\n`pnpm verify passed on abc1234: lint, typecheck.`" });
       expect(queuePr(149, seam).ok).toBe(true);
     });
 
-    it("queues a docs-only PR without a verify line", () => {
-      const { seam, enqueued } = fakeSeam({ labels: () => ["docs-only"], changedFiles: () => ["docs/a.md"], body: () => "" });
-      expect(queuePr(149, seam, { noReview: true }).ok).toBe(true);
-      expect(enqueued).toHaveLength(1);
+    it("queues a docs-only PR without a verify line, with or without the reviewed label too", () => {
+      for (const labels of [["docs-only"], ["docs-only", "reviewed"]]) {
+        const { seam, enqueued } = fakeSeam({ labels: () => labels, changedFiles: () => ["docs/a.md"], body: () => "" });
+        expect(queuePr(149, seam, { noReview: true }).ok).toBe(true);
+        expect(enqueued).toHaveLength(1);
+      }
+    });
+
+    it("still needs the line on a reviewed PR that changes code, even with the docs-only label", () => {
+      const { seam } = fakeSeam({ labels: () => ["docs-only", "reviewed"], changedFiles: () => ["docs/a.md", "scripts/x.ts"], body: () => "" });
+      expect(queuePr(149, seam).ok).toBe(false);
     });
 
     it("--wait refuses before waiting when the verify line is missing", async () => {
@@ -293,8 +316,8 @@ describe("queuePr", () => {
     const checked: string[] = [];
     const { seam, enqueued } = fakeSeam({
       head: () => "unrelated9",
-      fetchPull: () => "fed777",
-      pullRequest: () => ({ id: "PR_node", headRefOid: "fed777", headRefName: "feature" }),
+      fetchPull: () => "fed7777",
+      pullRequest: () => ({ id: "PR_node", headRefOid: "fed7777", headRefName: "feature" }),
       mergeTree: (sha) => {
         checked.push(`merge-tree ${sha}`);
         return { status: 0, output: "", stderr: "" };
@@ -306,25 +329,25 @@ describe("queuePr", () => {
     });
     const result = queuePr(157, seam);
     expect(result.ok).toBe(true);
-    expect(checked).toEqual(["merge-tree fed777", "drift fed777", "immutable fed777"]);
-    expect(enqueued).toEqual([["PR_node", "fed777"]]);
+    expect(checked).toEqual(["merge-tree fed7777", "drift fed7777", "immutable fed7777"]);
+    expect(enqueued).toEqual([["PR_node", "fed7777"]]);
     expect(result.lines.join("\n")).not.toContain("behind");
   });
 
   it("warns, and still queues the PR's head, when HEAD is on the PR's branch but behind it", () => {
-    const { seam, enqueued } = fakeSeam({ head: () => "old1", fetchPull: () => "ace222", pullRequest: () => ({ id: "PR_node", headRefOid: "ace222", headRefName: "feature" }), isAncestor: () => true });
+    const { seam, enqueued } = fakeSeam({ head: () => "old1", fetchPull: () => "ace2222", pullRequest: () => ({ id: "PR_node", headRefOid: "ace2222", headRefName: "feature" }), isAncestor: () => true });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).toContain("behind");
-    expect(enqueued).toEqual([["PR_node", "ace222"]]);
+    expect(enqueued).toEqual([["PR_node", "ace2222"]]);
   });
 
   it("does not warn when an old main (another branch) is checked out and is an ancestor of the PR's head", () => {
-    const { seam, enqueued } = fakeSeam({ head: () => "oldmain", branch: () => "main", fetchPull: () => "ace222", pullRequest: () => ({ id: "PR_node", headRefOid: "ace222", headRefName: "feature" }), isAncestor: () => true });
+    const { seam, enqueued } = fakeSeam({ head: () => "oldmain", branch: () => "main", fetchPull: () => "ace2222", pullRequest: () => ({ id: "PR_node", headRefOid: "ace2222", headRefName: "feature" }), isAncestor: () => true });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).not.toContain("behind");
-    expect(enqueued).toEqual([["PR_node", "ace222"]]);
+    expect(enqueued).toEqual([["PR_node", "ace2222"]]);
   });
 
   it("refuses when the PR's head moved between the API answer and the fetch", () => {
@@ -468,8 +491,8 @@ describe("queuePrWhenChecksPass", () => {
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
     expect(result.ok).toBe(true);
     expect(c.sleeps).toEqual([60_000, 60_000, 60_000]);
-    expect(c.order).toEqual(["checks abc123", "checks abc123", "checks abc123", "checks abc123", "enqueue"]);
-    expect(c.enqueued).toEqual([["PR_node", "abc123"]]);
+    expect(c.order).toEqual(["checks abc1234", "checks abc1234", "checks abc1234", "checks abc1234", "enqueue"]);
+    expect(c.enqueued).toEqual([["PR_node", "abc1234"]]);
   });
 
   it("fails without queueing when a required check fails, naming it and its conclusion", async () => {
@@ -586,7 +609,7 @@ describe("queuePrWhenChecksPass", () => {
     });
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
     expect(result.ok).toBe(true);
-    expect(c.enqueued).toEqual([["PR_node", "abc123"]]);
+    expect(c.enqueued).toEqual([["PR_node", "abc1234"]]);
     expect(c.sleeps.length).toBe(1);
   });
 
@@ -597,7 +620,7 @@ describe("queuePrWhenChecksPass", () => {
     });
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
     expect(result.ok).toBe(false);
-    expect(result.lines.join("\n")).toContain("reviewed-label run on abc123 failed (failure)");
+    expect(result.lines.join("\n")).toContain("reviewed-label run on abc1234 failed (failure)");
     expect(c.enqueued).toEqual([]);
   });
 
@@ -605,11 +628,11 @@ describe("queuePrWhenChecksPass", () => {
   it("ends with head_moved when the PR's head moves during the wait", async () => {
     let poll = 0;
     const c = checking([[going("ci")]], {
-      pullRequest: () => ({ id: "PR_node", headRefOid: poll++ < 2 ? "abc123" : "def456", headRefName: "feature" }),
+      pullRequest: () => ({ id: "PR_node", headRefOid: poll++ < 2 ? "abc1234" : "def456", headRefName: "feature" }),
     });
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
     expect(result).toMatchObject({ ok: false, reason: "head_moved" });
-    expect(result.lines.join("\n")).toContain("abc123");
+    expect(result.lines.join("\n")).toContain("abc1234");
     expect(result.lines.join("\n")).toContain("def456");
     expect(c.enqueued).toEqual([]);
   });
@@ -617,7 +640,7 @@ describe("queuePrWhenChecksPass", () => {
   it("ends with head_moved when GitHub refuses the pinned head at enqueue", async () => {
     const c = checking([[done("ci"), done("reviewed-required")]], {
       enqueue: () => {
-        throw new Error("GraphQL: Expected head OID abc123 does not match the pull request's head (enqueuePullRequest)");
+        throw new Error("GraphQL: Expected head OID abc1234 does not match the pull request's head (enqueuePullRequest)");
       },
     });
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
@@ -628,7 +651,7 @@ describe("queuePrWhenChecksPass", () => {
     const logged: string[] = [];
     const c = checking([[going("ci")], [going("ci")], [done("ci"), going("reviewed-required")], [done("ci"), done("reviewed-required")]]);
     await queuePrWhenChecksPass(149, c.seam, { ...c.options, log: (line) => logged.push(line) });
-    expect(logged).toEqual(["Waiting for required checks on abc123: ci, reviewed-required.", "Waiting for required checks on abc123: reviewed-required."]);
+    expect(logged).toEqual(["Waiting for required checks on abc1234: ci, reviewed-required.", "Waiting for required checks on abc1234: reviewed-required."]);
   });
 });
 
@@ -706,26 +729,26 @@ describe("realSeam", () => {
 
   it("fetches main and the PR's own head ref, reads HEAD and the PR, and merge-trees origin/main with the PR's commit, all in the given directory", () => {
     const { calls, seam } = recorded((command, args) => {
-      if (args[0] === "rev-parse") return { status: 0, stdout: "abc123\n" };
-      if (command === "gh") return { status: 0, stdout: '{"id":"PR_node","headRefOid":"abc123","headRefName":"feature"}' };
+      if (args[0] === "rev-parse") return { status: 0, stdout: "abc1234\n" };
+      if (command === "gh") return { status: 0, stdout: '{"id":"PR_node","headRefOid":"abc1234","headRefName":"feature"}' };
       if (args[0] === "fetch") return { status: 0 };
       if (args[0] === "merge-base") return { status: 0 };
       return { status: 1, stdout: "treeoid\n", stderr: "warn" };
     });
     expect(seam.fetchMain()).toBe(true);
-    expect(seam.fetchPull(157)).toBe("abc123");
-    expect(seam.head()).toBe("abc123");
-    expect(seam.isAncestor("old1", "abc123")).toBe(true);
-    expect(seam.pullRequest(149)).toEqual({ id: "PR_node", headRefOid: "abc123", headRefName: "feature" });
-    expect(seam.mergeTree("abc123")).toMatchObject({ status: 1, output: "treeoid\nwarn", stderr: "warn" });
+    expect(seam.fetchPull(157)).toBe("abc1234");
+    expect(seam.head()).toBe("abc1234");
+    expect(seam.isAncestor("old1", "abc1234")).toBe(true);
+    expect(seam.pullRequest(149)).toEqual({ id: "PR_node", headRefOid: "abc1234", headRefName: "feature" });
+    expect(seam.mergeTree("abc1234")).toMatchObject({ status: 1, output: "treeoid\nwarn", stderr: "warn" });
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
       ["git", "fetch", "origin", "main"],
       ["git", "fetch", "origin", "refs/pull/157/head"],
       ["git", "rev-parse", "FETCH_HEAD"],
       ["git", "rev-parse", "HEAD"],
-      ["git", "merge-base", "--is-ancestor", "old1", "abc123"],
+      ["git", "merge-base", "--is-ancestor", "old1", "abc1234"],
       ["gh", "pr", "view", "149", "--json", "id,headRefOid,headRefName"],
-      ["git", "merge-tree", "--write-tree", "origin/main", "abc123"],
+      ["git", "merge-tree", "--write-tree", "origin/main", "abc1234"],
     ]);
     expect(calls.every((call) => call.cwd === "/work")).toBe(true);
   });
@@ -748,23 +771,23 @@ describe("realSeam", () => {
       if (args[1] === "base777:apps/admin/package.json") return { status: 0, stdout: "OLD" };
       return { status: 128, stderr: "fatal: path does not exist" };
     });
-    expect(seam.packageJsonVersions("abc123", "apps/admin/package.json")).toEqual({ before: "OLD", after: undefined });
+    expect(seam.packageJsonVersions("abc1234", "apps/admin/package.json")).toEqual({ before: "OLD", after: undefined });
     expect(calls.map((call) => [call.command, ...call.args])).toEqual([
-      ["git", "merge-base", "origin/main", "abc123"],
+      ["git", "merge-base", "origin/main", "abc1234"],
       ["git", "show", "base777:apps/admin/package.json"],
-      ["git", "show", "abc123:apps/admin/package.json"],
+      ["git", "show", "abc1234:apps/admin/package.json"],
     ]);
   });
 
   it("runs the migration checks for the PR's commit against origin/main with node", () => {
     const { calls, seam } = recorded(() => ({ status: 0, stdout: "ok" }));
-    seam.check("drift", "abc123");
-    seam.check("immutable", "abc123");
+    seam.check("drift", "abc1234");
+    seam.check("immutable", "abc1234");
     expect(calls.map((call) => call.command)).toEqual([process.execPath, process.execPath]);
     expect(calls[0]?.args[0]).toMatch(/check-migration-drift\.ts$/);
-    expect(calls[0]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
+    expect(calls[0]?.args.slice(1)).toEqual(["origin/main", "abc1234"]);
     expect(calls[1]?.args[0]).toMatch(/check-migrations-immutable\.ts$/);
-    expect(calls[1]?.args.slice(1)).toEqual(["origin/main", "abc123"]);
+    expect(calls[1]?.args.slice(1)).toEqual(["origin/main", "abc1234"]);
   });
 
   it("lists both paths of a renamed file, so x.ts renamed to x.md is not a docs-only change (RP-606)", () => {
@@ -791,8 +814,8 @@ describe("realSeam", () => {
   });
 
   it("reads the PR's body through gh pr view, empty when it has none", () => {
-    const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"body":"pnpm verify passed on abc123: lint."}' }));
-    expect(seam.body(149)).toBe("pnpm verify passed on abc123: lint.");
+    const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"body":"pnpm verify passed on abc1234: lint."}' }));
+    expect(seam.body(149)).toBe("pnpm verify passed on abc1234: lint.");
     expect([calls[0]?.command, ...(calls[0]?.args ?? [])]).toEqual(["gh", "pr", "view", "149", "--json", "body"]);
     expect(recorded(() => ({ status: 0, stdout: '{"body":null}' })).seam.body(149)).toBe("");
   });
@@ -811,23 +834,23 @@ describe("realSeam", () => {
 
   it("lists the reviewed-label runs for a commit through gh run list, and checks the workflow file on origin/main", () => {
     const { calls, seam } = recorded((command) => (command === "gh" ? { status: 0, stdout: '[{"status":"completed","conclusion":"success"}]' } : { status: 0 }));
-    expect(seam.labelRuns("abc123")).toEqual([{ status: "completed", conclusion: "success" }]);
+    expect(seam.labelRuns("abc1234")).toEqual([{ status: "completed", conclusion: "success" }]);
     expect(seam.labelWorkflowOnMain()).toBe(true);
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
-      ["gh", "run", "list", "--workflow", "reviewed-label.yml", "--commit", "abc123", "--json", "status,conclusion"],
+      ["gh", "run", "list", "--workflow", "reviewed-label.yml", "--commit", "abc1234", "--json", "status,conclusion"],
       ["git", "cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"],
     ]);
   });
 
   it("enqueues through gh api graphql, passing the PR id and the head to pin", () => {
     const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"data":{"enqueuePullRequest":{"mergeQueueEntry":{"position":2,"state":"QUEUED"}}}}' }));
-    expect(seam.enqueue("PR_node", "abc123")).toEqual({ position: 2, state: "QUEUED" });
+    expect(seam.enqueue("PR_node", "abc1234")).toEqual({ position: 2, state: "QUEUED" });
     const args = calls[0]?.args ?? [];
     expect(calls[0]?.command).toBe("gh");
     expect(args.slice(0, 2)).toEqual(["api", "graphql"]);
     expect(args.find((arg) => arg.startsWith("query="))).toContain("enqueuePullRequest");
     expect(args).toContain("id=PR_node");
-    expect(args).toContain("head=abc123");
+    expect(args).toContain("head=abc1234");
   });
 
   it("reads the main ruleset's required checks and the head's check runs through gh api, one JSON line per item", () => {
@@ -837,20 +860,20 @@ describe("realSeam", () => {
         : { status: 0, stdout: "lint\nseam 1 (API as a Member)\n" },
     );
     expect(seam.requiredChecks()).toEqual(["lint", "seam 1 (API as a Member)"]);
-    expect(seam.checkRuns("abc123")).toEqual([
+    expect(seam.checkRuns("abc1234")).toEqual([
       { name: "lint", status: "completed", conclusion: "success" },
       { name: "unit", status: "in_progress", conclusion: "" },
     ]);
     const [rules, runs] = calls.map(({ command, args }) => [command, ...args]);
     expect(rules?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/rules/branches/main"]);
     expect(rules?.join(" ")).toContain("required_status_checks");
-    expect(runs?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/commits/abc123/check-runs?per_page=100"]);
+    expect(runs?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/commits/abc1234/check-runs?per_page=100"]);
   });
 
   it("reads the head's commit statuses through gh api, one JSON line per context", () => {
     const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"context":"legacy/status","state":"pending"}\n' }));
-    expect(seam.commitStatuses("abc123")).toEqual([{ context: "legacy/status", state: "pending" }]);
-    expect(calls[0]?.args.slice(0, 3)).toEqual(["api", "--paginate", "repos/{owner}/{repo}/commits/abc123/status?per_page=100"]);
+    expect(seam.commitStatuses("abc1234")).toEqual([{ context: "legacy/status", state: "pending" }]);
+    expect(calls[0]?.args.slice(0, 3)).toEqual(["api", "--paginate", "repos/{owner}/{repo}/commits/abc1234/status?per_page=100"]);
   });
 
   it("throws with the command's output when a required call fails", () => {

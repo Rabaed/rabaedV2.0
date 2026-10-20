@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { onlyMainMergedSince, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
-import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { DOCS_ONLY_LABEL, isDoc, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { isAncestor } from "./worktrees.ts";
 
@@ -158,9 +158,12 @@ function labelRunState(pr: number, head: string, runs: { status: string; conclus
 /** Since RP-604 a PR's opening makes a run too; a PR opened before that and not pushed to since has none. */
 const NO_LABEL_RUN = " A PR opened before RP-604 and not pushed to since never gets one: merge origin/main in cleanly and push (the label stays).";
 
-/** The commits the body's `pnpm verify passed on <sha>:` lines name (scripts/verify-steps.ts `finalLine`); a dirty run has more before the colon and does not count. */
+/**
+ * The commits the body's `pnpm verify passed on <sha>:` lines name (scripts/verify-steps.ts `finalLine`, with
+ * `git rev-parse --short`: 7 characters or more). A dirty run has more before the colon and does not count.
+ */
 export function verifiedCommits(body: string): string[] {
-  return [...body.matchAll(/pnpm verify passed on ([0-9a-f]{4,40}):/g)].map((match) => match[1] ?? "");
+  return [...body.matchAll(/pnpm verify passed on ([0-9a-f]{7,40}):/g)].map((match) => match[1] ?? "");
 }
 
 /** RP-1017: the refusal when no verify line names `head` or a commit only clean merges of main followed. */
@@ -170,7 +173,7 @@ function verifyRefusal(pr: number, head: string, seam: QueueSeam): QueueResult |
   return fail(
     verified.length === 0
       ? `PR #${pr}: its body has no \`pnpm verify passed on <sha>:\` line, so nothing shows \`pnpm verify\` passed on its head ${head}.`
-      : `PR #${pr}: its body's verify line names ${verified.join(", ")}, not the head ${head}, and more than clean merges of main came after it.`,
+      : `PR #${pr}: its body's verify line names ${verified.join(", ")}, which is neither the head ${head} nor a commit only clean merges of main led to it from.`,
     `Fix: run \`pnpm verify\` on ${head} (a clean checkout of it), put its last line in the PR body (\`gh pr edit ${pr} --body-file <file>\`), then run \`pnpm queue ${pr}\` again.`,
   );
 }
@@ -196,8 +199,9 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   const warnings: string[] = [];
   let labelRunPending = false;
   const changed = seam.changedFiles(head);
+  const labels = seam.labels(pr);
   // The same rule as the main ruleset's reviewed-required check (RP-606), so what this queues the queue keeps.
-  const gate = reviewGate(seam.labels(pr), changed);
+  const gate = reviewGate(labels, changed);
   if (!gate.ok) {
     const docsOnlyFix = `For a PR that changes only docs: \`gh pr edit ${pr} --add-label ${DOCS_ONLY_LABEL}\`, wait for the ${REQUIRED_CHECK} check, then \`pnpm queue ${pr}\` again.`;
     if (options.noReview) {
@@ -230,7 +234,8 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   } else {
     warnings.push("Warning: .github/workflows/reviewed-label.yml is not on origin/main yet, so the label could not be tied to the head; not checked.");
   }
-  if (gate.via !== DOCS_ONLY_LABEL) {
+  // A docs-only PR needs no verify run, whether or not it also carries `reviewed` (reviewGate then answers via reviewed).
+  if (!(labels.includes(DOCS_ONLY_LABEL) && changed.every(isDoc))) {
     const unverified = verifyRefusal(pr, head, seam);
     if (unverified) return unverified;
   }

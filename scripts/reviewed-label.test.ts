@@ -87,6 +87,8 @@ describe("onlyMainMergedSince", () => {
 
   it("refuses a commit the head does not descend from, and a newer head than the one verified", () => {
     expect(onlyMainMergedSince("X", "N2", chain())).toBe(false);
+    // M1 is an ancestor too, but on main's side: a run there never saw the branch's own commits.
+    expect(onlyMainMergedSince("M1", "N2", chain())).toBe(false);
     expect(onlyMainMergedSince("N2", "V", chain())).toBe(false);
   });
 
