@@ -36,8 +36,9 @@ import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Avatar } from "../data/avatar.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
-import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { HeaderBadge, poolIcon } from "./kanban-card.tsx";
 import { outcomeBadge } from "./work-item-board.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
 import { NumberedPager } from "../list/numbered-pager.tsx";
@@ -427,15 +428,7 @@ function WorkItemListBody({
       t("trade"),
       hints?.trade,
       "workflow",
-      list.filters.trades.map((v) => ({
-        value: v.id,
-        text: `${v.name[locale]} ${v.code}`,
-        label: (
-          <span className={cn("inline-flex h-5 items-center rounded-[6px] px-1.5 text-notes font-semibold", tradeChipClass(v.code))}>
-            {v.name[locale]} (<bdi translate="no">{v.code}</bdi>)
-          </span>
-        ),
-      })),
+      list.filters.trades.map((v) => tradeFilterChoice(v, locale)),
     ),
     // One Package of those the viewer sees (RP-662): its number left to right, beside its owning Company by name only (V14).
     ...(packages
@@ -670,10 +663,7 @@ function WorkItemListBody({
             href={hrefFor(withoutFilters(query))}
             aria-label={t("clear")}
             title={t("clear")}
-            className={cn(
-              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-control-border bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
-              focusRing,
-            )}
+            className={filterClearClass}
           >
             <Icon name="x" size={16} />
           </Link>

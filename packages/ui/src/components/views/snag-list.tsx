@@ -24,6 +24,7 @@ import { DocNo } from "../doc-no/doc-no.tsx";
 import { EmptyState } from "../feedback/states.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
+import { companyFilterChoice, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
 import { TableCard } from "../list/table-card.tsx";
@@ -285,15 +286,7 @@ export function SnagList({
     many(
       "trade",
       labels.trade,
-      list.filters.trades.map((v) => ({
-        value: v.id,
-        text: `${v.name[locale]} ${v.code}`,
-        label: (
-          <span className={cn("inline-flex h-5 items-center rounded-[6px] px-1.5 text-notes font-semibold", tradeChipClass(v.code))}>
-            {v.name[locale]} (<bdi translate="no">{v.code}</bdi>)
-          </span>
-        ),
-      })),
+      list.filters.trades.map((v) => tradeFilterChoice(v, locale)),
     ),
     ...locationLevels(list.filters.locations, locale, labels).map(
       (level): FilterMenuField => ({
@@ -317,11 +310,7 @@ export function SnagList({
     many(
       "company",
       labels.company,
-      (list.filters.companies ?? []).map((c) => ({
-        value: c.participantId,
-        label: c.name[locale],
-        mark: <Avatar name={c.name[locale]} initialsFrom={c.name.en} kind="company" size="sm" decorative className="size-5" />,
-      })),
+      (list.filters.companies ?? []).map((c) => companyFilterChoice(c.participantId, c.name, locale)),
     ),
     // A source by its Document Number and Subject only (E1).
     many("raisedFrom", labels.raisedFrom, [

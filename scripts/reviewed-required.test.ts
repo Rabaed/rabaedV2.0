@@ -184,6 +184,21 @@ describe("requireReviewed on pull_request", () => {
     expect(result.summary).toContain("reviewed-label");
   });
 
+  it("passes when the reviewed-label run finishes after 12 minutes (a busy CI waits that long for a runner, RP-984)", async () => {
+    let polls = 0;
+    const { seam, slept } = fakeSeam({ labelRuns: async () => (polls++ * 10 < 12 * 60 ? [{ status: "queued" }] : [{ status: "completed" }]) });
+    expect((await requireReviewed(event, seam)).ok).toBe(true);
+    expect(slept.reduce((a, b) => a + b, 0)).toBe(12 * 60_000);
+  });
+
+  it("gives up after 1500 s by default, naming the wait", async () => {
+    const { seam, slept } = fakeSeam({ labelRuns: async () => [{ status: "in_progress" }] });
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("within 1500 s");
+    expect(slept.reduce((a, b) => a + b, 0)).toBe(1_500_000);
+  });
+
   it("does not wait on a fork's PR (it never gets a reviewed-label run) or before the workflow exists", async () => {
     for (const [sameRepo, runs] of [[false, [] as { status: string }[]], [true, undefined]] as const) {
       const { seam, slept } = fakeSeam({ labelRuns: async () => runs });
