@@ -38,8 +38,11 @@ describe("keysToClose", () => {
     expect(keysToClose({ branch: "claude/rp-627-site-observation-5b2be5", body: "" })).toEqual(["RP-627"]);
   });
 
-  it("keeps the boundaries on a lower-case branch key", () => {
+  it("does not run a lower-case branch key into the next digit", () => {
     expect(keysToClose({ branch: "claude/rp-12-x", body: "" })).toEqual(["RP-12"]);
+  });
+
+  it("does not take a lower-case key from inside another word", () => {
     expect(keysToClose({ branch: "crp-5", body: "" })).toEqual([]);
   });
 

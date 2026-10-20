@@ -9,7 +9,7 @@
 // branches in lower case (`claude/rp-627-site-observation-5b2be5`, RP-986).
 
 const key = String.raw`(?<![A-Za-z0-9])RP-\d+(?!\d)`;
-const branchKeys = new RegExp(key, "gi");
+const keyPattern = new RegExp(key, "gi");
 // Keyword, optional colon, then a list of keys separated by commas, "and", "&" or spaces.
 const closingList = new RegExp(
   String.raw`(?<![A-Za-z0-9])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)(?![A-Za-z0-9]):?[ \t]+((?:${key}(?:[ \t]*(?:,|&|\band\b)[ \t]*|[ \t]+)?)+)`,
@@ -24,9 +24,9 @@ export interface MergedPullRequest {
 
 /** Keys to close, each once, in the order they appear (branch first). */
 export function keysToClose({ branch, body }: MergedPullRequest): string[] {
-  const found = new Set<string>((branch.match(branchKeys) ?? []).map((k) => k.toUpperCase()));
+  const found = new Set<string>((branch.match(keyPattern) ?? []).map((k) => k.toUpperCase()));
   for (const list of (body ?? "").matchAll(closingList)) {
-    for (const match of (list[1] ?? "").matchAll(branchKeys)) found.add(match[0].toUpperCase());
+    for (const match of (list[1] ?? "").matchAll(keyPattern)) found.add(match[0].toUpperCase());
   }
   return [...found];
 }
