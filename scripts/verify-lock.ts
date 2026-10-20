@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // One `pnpm verify` per worktree (RP-996): two runs in one worktree share the lane's
@@ -9,31 +9,54 @@ import { join } from "node:path";
 export type LockHolder = { pid: number; started: Date; command: string };
 
 /** Taken (`tookOver` says whose stale lock it replaced), or refused with a message naming the holder. */
-export type Acquired = { acquired: true; tookOver?: string } | { acquired: false; message: string };
+export type LockResult = { acquired: true; tookOver?: string } | { acquired: false; message: string };
 
-/** The worktree's lock file; `.gitignore` names it, so it never counts as a changed file. */
+/** The worktree's lock file; `.gitignore` names it (and its `.verify.lock.*` temp files), so it never counts as a changed file. */
 export function lockFile(worktree: string): string {
   return join(worktree, ".verify.lock");
 }
 
 const hhmm = (date: Date) => `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 const describeHolder = ({ pid, started, command }: LockHolder) => `pid ${pid}, started ${hhmm(started)}, \`${command}\``;
+const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
-/** Creates the lock file for `self`; false when one is already there. */
-function create(file: string, self: LockHolder): boolean {
+/** Links `from` to `file`; false when `file` is already there. */
+function link(from: string, file: string): boolean {
   try {
-    writeFileSync(file, JSON.stringify({ ...self, started: self.started.toISOString() }), { flag: "wx" });
+    linkSync(from, file);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    if (errorCode(error) === "EEXIST") return false;
     throw error;
   }
 }
 
-/** The run named in the lock file; undefined when it is gone or unreadable (a run killed mid-write). */
-function readHolder(file: string): LockHolder | undefined {
+/**
+ * Creates the lock file for `self`, false when one is already there. It is written to a temp file
+ * beside it and linked into place, so a reader never sees a live run's lock empty.
+ */
+function create(file: string, self: LockHolder): boolean {
+  const temp = `${file}.${self.pid}`;
+  writeFileSync(temp, JSON.stringify({ ...self, started: self.started.toISOString() }));
   try {
-    const stored = JSON.parse(readFileSync(file, "utf8")) as { pid: number; started: string; command: string };
+    return link(temp, file);
+  } finally {
+    rmSync(temp, { force: true });
+  }
+}
+
+const readText = (file: string): string | undefined => {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+};
+
+/** The run named in a lock's text; undefined when it is gone or unreadable. */
+function parseHolder(text: string | undefined): LockHolder | undefined {
+  try {
+    const stored = JSON.parse(text ?? "") as { pid: number; started: string; command: string };
     return Number.isInteger(stored.pid) ? { ...stored, started: new Date(stored.started) } : undefined;
   } catch {
     return undefined;
@@ -41,37 +64,47 @@ function readHolder(file: string): LockHolder | undefined {
 }
 
 /**
- * Takes the lock for `self`, or refuses with a message naming the live run that holds it. A lock
- * whose pid `isAlive` denies (or that cannot be read) is stale: it is removed and taken over once;
- * if another run took it over first, that run is the holder.
+ * Removes the stale lock whose text was `staleText`, unless another run replaced it since: it is
+ * moved aside first, and a lock that turns out not to be the stale one is linked back. False then.
  */
-export function acquireLock(file: string, self: LockHolder, isAlive: (pid: number) => boolean): Acquired {
-  if (create(file, self)) return { acquired: true };
-  const stale = readHolder(file);
-  if (stale && isAlive(stale.pid)) return { acquired: false, message: refusal(stale) };
-  rmSync(file, { force: true });
-  const tookOver = stale ? `took over a stale lock (${describeHolder(stale)}): that process is gone.` : "took over an unreadable lock.";
-  if (create(file, self)) return { acquired: true, tookOver };
-  const holder = readHolder(file);
-  return { acquired: false, message: holder ? refusal(holder) : `verify could not take ${file}; run it again.` };
+function removeStale(file: string, staleText: string | undefined, pid: number): boolean {
+  const aside = `${file}.${pid}.stale`;
+  try {
+    renameSync(file, aside);
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return true;
+    throw error;
+  }
+  try {
+    if (readText(aside) === staleText) return true;
+    link(aside, file); // when a lock is there again, that run holds it now
+    return false;
+  } finally {
+    rmSync(aside, { force: true });
+  }
 }
 
 const refusal = (holder: LockHolder) => `verify already running (${describeHolder(holder)}).`;
+const refuseCurrent = (file: string): LockResult => {
+  const holder = parseHolder(readText(file));
+  return { acquired: false, message: holder ? refusal(holder) : `verify could not take ${file}; run it again.` };
+};
 
 /**
- * Whether a process with `pid` runs: signal 0 only checks. ESRCH means no such process; EPERM (a
- * live process this user may not signal, which Windows also reports) counts as alive.
+ * Takes the lock for `self`, or refuses with a message naming the live run that holds it. A lock
+ * whose pid `isAlive` denies (or that cannot be read) is stale and taken over once; if another run
+ * took it over first, even between the read and the takeover, that run is the holder.
  */
-export function pidAlive(pid: number, kill: (pid: number, signal: number) => unknown = process.kill): boolean {
-  try {
-    kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
+export function acquireLock(file: string, self: LockHolder, isAlive: (pid: number) => boolean): LockResult {
+  if (create(file, self)) return { acquired: true };
+  const staleText = readText(file);
+  const stale = parseHolder(staleText);
+  if (stale && isAlive(stale.pid)) return { acquired: false, message: refusal(stale) };
+  if (!removeStale(file, staleText, self.pid) || !create(file, self)) return refuseCurrent(file);
+  return { acquired: true, tookOver: stale ? `took over a stale lock (${describeHolder(stale)}): that process is gone.` : "took over an unreadable lock." };
 }
 
 /** Removes the lock if `pid` holds it; a lock another run took (over) is left alone. */
 export function releaseLock(file: string, pid: number): void {
-  if (readHolder(file)?.pid === pid) rmSync(file, { force: true });
+  if (parseHolder(readText(file))?.pid === pid) rmSync(file, { force: true });
 }

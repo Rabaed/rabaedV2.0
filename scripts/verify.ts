@@ -2,8 +2,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
-import { acquireLock, lockFile, pidAlive, releaseLock } from "./verify-lock.ts";
+import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
 import { failureEnd, finalLine, isSeamStep, runStep, selectSteps, tail } from "./verify-steps.ts";
+import { isRunning } from "./worktrees-stale.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
@@ -20,7 +21,7 @@ const tailLines = 40;
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
 const lock = lockFile(root);
-const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, pidAlive);
+const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, isRunning);
 if (!taken.acquired) {
   console.error(`${taken.message} Let it finish; if that pid is not a verify run, delete ${lock}.`);
   process.exit(1);
