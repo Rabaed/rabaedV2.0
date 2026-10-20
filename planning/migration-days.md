@@ -141,5 +141,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271003 | RP-973 | 52 | package_write_lock_order |
 | 20271004 | RP-973 | 52 | discard_package_locks_unseen_items |
 | 20271008 | RP-653 | 43 | previous_item_raised_counts |
-| 20271009 | RP-959 | 51 | register_import_original_hand_over |
 | 20271009 | RP-976 | 1d | package_one_definition |
+| 20271013 | RP-959 | 51 | register_import_original_hand_over (moved from 20271009: main's RP-976 took it) |
