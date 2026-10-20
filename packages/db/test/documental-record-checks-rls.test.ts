@@ -138,6 +138,55 @@ describe("Rabaed Admin's functions", () => {
   });
 });
 
+// RP-670 (visibility.md RP-670-1): the Record Job Monitor is Rabaed's alone. A record job's error
+// text is read by a Rabaed Engineer; no Member's session reaches it, nor the retries.
+describe("the Record Job Monitor", () => {
+  it("keeps the retries admin-only: no grant to the app role, a read for Rabaed Admin's role, no write", async () => {
+    expect(await failure(seer, sql.raw("select * from record_job_retry"))).toBe("42501");
+    expect(await failure(null, sql.raw("select id from record_job_retry"))).toBe("42501");
+    expect(await failure(seer, sql.raw("insert into record_job_retry (id) values (gen_random_uuid())"))).toBe("42501");
+    await expect(admin.query("select count(*) from record_job_retry")).resolves.toBeTruthy();
+    await expect(admin.query("insert into record_job_retry (dead_outbox_id, outbox_id, admin_action_id) values ($1, $1, $1)", [randomUUID()])).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("gives its functions to Rabaed Admin's role only, whoever is set", async () => {
+    const id = randomUUID();
+    for (const call of [
+      sql`select * from app.record_jobs()`,
+      sql`select app.retry_record_job(${id}::uuid, ${id}::uuid)`,
+      sql`select * from app.documental_record_history(${itemId}::uuid)`,
+      sql`select * from app.documental_record_check_runs(${itemId}::uuid)`,
+    ]) {
+      expect(await failure(seer, call)).toBe("42501");
+      expect(await failure(null, call)).toBe("42501");
+    }
+    await expect(admin.query("select * from app.record_jobs()")).resolves.toBeTruthy();
+    // Nothing to retry for a row that isn't a dead record job.
+    expect((await admin.query<{ result: string }>("select app.retry_record_job($1, $1) as result", [id])).rows[0]!.result).toBe("not_found");
+  });
+
+  it("shows no Member a failed job's error text: the outbox has no read for the app role", async () => {
+    const secret = "the secret renderer failure RP-670-1";
+    await migrator.query("begin");
+    try {
+      const { rows } = await migrator.query<{ project_id: string }>("select project_id from work_item where id = $1", [itemId]);
+      await migrator.query(
+        "insert into outbox (kind, project_id, payload, attempts, last_error, last_failed_at, dead_at) values ('documental_record', $1, $2, 8, $3, now(), now())",
+        [rows[0]!.project_id, JSON.stringify({ closed_work_item_id: itemId }), secret],
+      );
+      await migrator.query("set local role rabaed_app");
+      await migrator.query("select set_config('app.member_id', $1, true)", [seer]);
+      expect((await migrator.query("select last_error, last_failed_at from outbox where last_error = $1", [secret])).rows).toEqual([]);
+      expect((await migrator.query("select count(*)::int as n from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = $1", [itemId])).rows[0].n).toBe(0);
+      // What the Member does read of the record is its state: 'preparing' while the record waits for its checks, never the error.
+      const state = (await migrator.query<{ state: string | null }>("select app.documental_record_state($1) as state", [itemId])).rows[0]!.state;
+      expect(state).toBe("preparing");
+    } finally {
+      await migrator.query("rollback");
+    }
+  });
+});
+
 describe("app.documental_record_state", () => {
   it("shows 'preparing' to a Member who sees the item and nothing to anyone else, the worker included", async () => {
     expect(await stateOf(seer)).toBe("preparing");

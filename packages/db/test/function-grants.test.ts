@@ -36,6 +36,11 @@ const allow: GrantAllowList = {
   // Rabaed Admin lists the Documental Record alerts and asks for a Re-produce (RP-155).
   "app.documental_record_alerts": ["rabaed_admin"],
   "app.request_documental_record_reproduction": ["rabaed_admin"],
+  // The Record Job Monitor: failing and dead record jobs, their retry, and a record's Re-produce history (RP-670).
+  "app.record_jobs": ["rabaed_admin"],
+  "app.retry_record_job": ["rabaed_admin"],
+  "app.documental_record_history": ["rabaed_admin"],
+  "app.documental_record_check_runs": ["rabaed_admin"],
   // Security invoker reads both roles' Workflow checks and reads share (RP-427 review).
   "app.workflow_type": both,
   "app.workflow_version_rows": both,
