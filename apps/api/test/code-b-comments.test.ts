@@ -188,8 +188,8 @@ describe("Comments are seen where their reviewed item is (scenarios RP-434-1 to 
     const source = await closedAtB("Busbars", [{ comment: "Check the rating" }]);
     const [comment] = await raisedFrom(at.c1Pm, source);
     expect(await comments(c2Engineer)).toEqual([]);
-    expectHidden(await c2Engineer.get(`/v1/work-items/${comment!.id}`));
-    expectHidden(await c2Engineer.get(`/v1/work-items/${source}`));
+    await expectHidden(await c2Engineer.get(`/v1/work-items/${comment!.id}`));
+    await expectHidden(await c2Engineer.get(`/v1/work-items/${source}`));
   });
 
   it("RP-434-2: the reviewing Consultant sees the Comments it raised; the Owner Representative sees them as it sees the item", async () => {
@@ -204,7 +204,7 @@ describe("Comments are seen where their reviewed item is (scenarios RP-434-1 to 
     const source = await closedAtB("Panels", [{ comment: "Add the schedule" }]);
     const participants = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
     const c1Mechanical = await projectMember(api, c1, participants.find((p) => p.isOwnCompany)!.id, ["engineer"], { trade: { isAll: false, valueIds: [at.mechanical] } });
-    expectHidden(await c1Mechanical.get(`/v1/work-items/${source}`));
+    await expectHidden(await c1Mechanical.get(`/v1/work-items/${source}`));
     expect(await comments(c1Mechanical)).toEqual([]);
     expect(await counts(at.c1Pm, source)).toEqual({ open: 1, closed: 0 });
   });

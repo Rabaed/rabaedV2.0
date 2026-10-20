@@ -1,4 +1,4 @@
-import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, OutcomesAndStages, ScreenProblem, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, BulkStop, DefinitionIssue, FieldError, HandoverStep, OutcomesAndStages, PackageNotReadyItem, ScreenProblem, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -171,9 +171,12 @@ const answers = {
   in_another_package: () => new HttpError(409, "in_another_package"),
   package_not_open: () => new HttpError(409, "package_not_open"),
   item_not_in_package: () => new HttpError(422, "item_not_in_package"),
-  // Submit Package (RP-638): no item in it is left to Submit. Not ready, it is the route's
-  // own 409 `package_not_ready`, listing what stops it.
+  // Submit Package (RP-638): no item in it is left to Submit; not ready, the body lists the items
+  // the Member sees that stop it, and whether one they don't see does too (`notReady`, `othersNotReady`).
   nothing_to_submit: () => new HttpError(409, "nothing_to_submit"),
+  package_not_ready: () => new HttpError(409, "package_not_ready"),
+  // A bulk Transition (RP-646) refused all or nothing: the body names the item that stopped it and why (`stoppedBy`).
+  bulk_refused: () => new HttpError(409, "bulk_refused"),
   // The Submittal Register Import (RP-637): a register the reader can't read, or a sheet or
   // header row it doesn't have (the body may add the reader's numbers, never a cell); a
   // mapped column past the header row's; a preview with no good row to create; a preview a
@@ -204,7 +207,8 @@ export type RefusalReason = keyof typeof answers;
  * A refused result as the HTTP error to throw, with what the body says of it: the
  * per-field errors of refused answers, else the message of a refused Validate rule;
  * where a Workflow document doesn't fit the format (`issues`) or every publish
- * problem of a Workflow draft, or each Stage a Workflow copied into a Project lacks (`problems`).
+ * problem of a Workflow draft, or each Stage a Workflow copied into a Project lacks (`problems`);
+ * the items that stop a Submit Package (`notReady`, `othersNotReady`) or a bulk Transition (`stoppedBy`).
  */
 export function refusal(result: {
   reason: RefusalReason;
@@ -219,6 +223,9 @@ export function refusal(result: {
   company?: BilingualText;
   lacking?: OutcomesAndStages;
   details?: Record<string, number>;
+  notReady?: PackageNotReadyItem[];
+  othersNotReady?: boolean;
+  stoppedBy?: BulkStop;
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
@@ -230,6 +237,8 @@ export function refusal(result: {
     ...(result.step && result.project ? { step: result.step, project: result.project } : {}),
     ...(result.steps !== undefined && result.company ? { steps: result.steps, company: result.company } : {}),
     ...(result.lacking ? { outcomes: result.lacking.outcomes, stages: result.lacking.stages } : {}),
+    ...(result.notReady ? { notReady: result.notReady, othersNotReady: result.othersNotReady ?? false } : {}),
+    ...(result.stoppedBy ? { stoppedBy: result.stoppedBy } : {}),
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

@@ -142,3 +142,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271004 | RP-973 | 52 | discard_package_locks_unseen_items |
 | 20271008 | RP-653 | 43 | previous_item_raised_counts |
 | 20271010 | RP-982 | 43 | record_reply_checklist |
+| 20271009 | RP-976 | 1d | package_one_definition |

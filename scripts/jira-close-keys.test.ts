@@ -34,6 +34,26 @@ describe("keysToClose", () => {
     expect(keysToClose({ branch: "x", body: "Encloses RP-4" })).toEqual([]);
   });
 
+  it("takes a lower-case key from an app-made branch, upper-cased (RP-986)", () => {
+    expect(keysToClose({ branch: "claude/rp-627-site-observation-5b2be5", body: "" })).toEqual(["RP-627"]);
+  });
+
+  it("does not run a lower-case branch key into the next digit", () => {
+    expect(keysToClose({ branch: "claude/rp-12-x", body: "" })).toEqual(["RP-12"]);
+  });
+
+  it("does not take a lower-case key from inside another word", () => {
+    expect(keysToClose({ branch: "crp-5", body: "" })).toEqual([]);
+  });
+
+  it("closes a lower-case key on a Closes line, upper-cased", () => {
+    expect(keysToClose({ branch: "x", body: "Closes rp-9" })).toEqual(["RP-9"]);
+  });
+
+  it("keeps a key once when the branch and the body differ in case", () => {
+    expect(keysToClose({ branch: "claude/rp-14-x", body: "Closes RP-14, rp-15" })).toEqual(["RP-14", "RP-15"]);
+  });
+
   it("copes with a missing body", () => {
     expect(keysToClose({ branch: "RP-8-x", body: null })).toEqual(["RP-8"]);
   });
