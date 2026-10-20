@@ -8,7 +8,9 @@ import { git } from "./migrations.ts";
 // migration that shares a timestamp with one on main (RP-363's rename, PR #126)
 // shows up locally (the drift check also reports a new migration that sorts by
 // a hidden column, RP-534). Offline, the fetch fails: say so and stop.
-// Then scripts/check-migrations-immutable.ts (RP-977), the same check CI runs.
+// Then scripts/check-migrations-immutable.ts (RP-977), the same check CI runs: an
+// existing migration edited or deleted, or a new one that sorts before main's newest,
+// fails here with its own message, not only in CI after the push.
 // Then the migration days (RP-560): a migration on a day planning/migration-days.md
 // reserves for another issue is refused; one on a day nobody reserved is named.
 
@@ -21,9 +23,6 @@ if (fetched.status !== 0) {
 }
 const checked = spawnSync(process.execPath, [join(import.meta.dirname, "check-migration-drift.ts"), "origin/main", "HEAD"], options);
 
-// Then CI's immutable check (RP-977): a migration that sorts before main's newest
-// (or an existing one edited or deleted) fails here with its own message, not
-// only in CI after the push.
 const ordered = spawnSync(process.execPath, [join(import.meta.dirname, "check-migrations-immutable.ts"), "origin/main"], options);
 
 const branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();

@@ -14,14 +14,16 @@ import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import type pg from "pg";
 import { withMember, type Db } from "../src/client.ts";
-import { joinProject } from "./index.ts";
+import { joinProject } from "./join-project.ts";
 
-const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
+/** `n` random digits, for a code that is new on every call. */
+export const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
 const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
-const bilingual = (en: string) => ({ en, ar: en });
+/** A name with the same text in both languages. */
+export const bilingual = (en: string) => ({ en, ar: en });
 
-/** The Checklist Template a Tower carries unless told otherwise: two check items. */
-export const SEAM_TWO_CHECKLIST_ITEMS = [
+/** The Tower's Checklist Template: two check items. */
+const CHECKLIST_ITEMS = [
   { key: "formwork", text: bilingual("Formwork tight"), answers: "pass_fail_na", comment: "required_on_negative", photo: "required_on_negative", on_negative: "create_snag" },
   { key: "cover", text: bilingual("Rebar cover"), answers: "pass_fail_na", comment: "optional", photo: "optional", on_negative: "none" },
 ];
@@ -48,17 +50,15 @@ export type SeamTwoOptions = {
   ownerOversight?: boolean;
   /** Adds `other`: the Authorized Person of a Company that has its own Project, which the Tower's Members are not on. Default false. */
   otherProject?: boolean;
-  /** K1 has a Manager besides its Engineer, so its Steps wait to be picked up. Default false: the Engineer is K1's only Member. */
+  /** K1 has a Manager besides its Engineer, so its Steps wait to be picked up. Default false: the Engineer is K1's only Member and holds each Step as it arrives. */
   k1Manager?: boolean;
-  /** The Project's Checklist Template (a Version of it, `checklist`): `false` for none. Default: SEAM_TWO_CHECKLIST_ITEMS under "Concrete pour". */
-  checklistTemplate?: false | { name?: string; items?: unknown[] };
+  /** `false`: the Project has no Checklist Template. Default: one ("Concrete pour") with two check items. */
+  checklistTemplate?: false;
 };
 
 type Other = { id: string; cr: string; ap: string; projectId: string };
 
 export type SeamTwoTower<O extends SeamTwoOptions = SeamTwoOptions> = {
-  app: Db;
-  migrator: pg.Client;
   projectId: string;
   tradeId: string;
   /** Where the work is. */
@@ -68,8 +68,8 @@ export type SeamTwoTower<O extends SeamTwoOptions = SeamTwoOptions> = {
   k1: SeamTwoCompany<O["k1Manager"] extends true ? "engineer" | "manager" : "engineer">;
   ow: SeamTwoCompany<"representative">;
   c2: SeamTwoCompany<"engineer">;
-  /** The Checklist Template and its Version 1, unless `checklistTemplate` is false. */
-  checklist: { templateId: string; versionId: string } | undefined;
+  /** Version 1 of the Project's Checklist Template; undefined when `checklistTemplate` is false. */
+  checklistVersionId: string | undefined;
   /** Runs `query` in a transaction as Member `as`, the app role, and returns its rows. */
   call: <T extends object>(as: string, query: ReturnType<typeof sql<T>>) => Promise<T[]>;
   /** `call` for a query selecting one `outcome`. */
@@ -80,16 +80,18 @@ export type SeamTwoTower<O extends SeamTwoOptions = SeamTwoOptions> = {
   pickUp: (as: string, id: string) => Promise<string>;
 } & (O["otherProject"] extends true ? { other: Other } : { other?: undefined });
 
+/** Waits for `result` and throws, naming `what`, unless it is the `wanted` outcome. */
+async function expectOutcome(what: string, result: Promise<string>, wanted = "set"): Promise<void> {
+  const got = await result;
+  if (got !== wanted) throw new Error(`${what}: ${got}`);
+}
+
 /** Builds a Tower with the `migrator` (a connected client of the test database) and the `app` role's `Db`. */
 export async function buildSeamTwoTower<const O extends SeamTwoOptions = SeamTwoOptions>(app: Db, migrator: pg.Client, options?: O): Promise<SeamTwoTower<O>> {
   const { projectCode = "RST", tradeCode = "EL", c2OtherLocation = true, ownerOversight = true, otherProject = false, k1Manager = false, checklistTemplate } = options ?? {};
   const one = async (text: string, values: unknown[]): Promise<string> => (await migrator.query(text, values)).rows[0].id as string;
   const call: SeamTwoTower["call"] = (as, query) => withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
   const outcome: SeamTwoTower["outcome"] = (as, query) => call(as, query).then((rows) => rows[0]!.outcome);
-  const expectSet = async (what: string, result: Promise<string>) => {
-    const got = await result;
-    if (got !== "set") throw new Error(`${what}: ${got}`);
-  };
 
   const member = (companyId: string, who: string, creator = false) =>
     one("insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', $4) returning id", [
@@ -161,7 +163,7 @@ export async function buildSeamTwoTower<const O extends SeamTwoOptions = SeamTwo
     for (const kind of ["trade", "location"]) {
       const onlyB = side === "c2" && kind === "location" && c2OtherLocation;
       const none = side === "ow" && !ownerOversight;
-      await expectSet(
+      await expectOutcome(
         `visibility of ${side}`,
         outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, ${!onlyB && !none}, ${onlyB ? [buildingB] : []}::uuid[], now()) as outcome`),
       );
@@ -178,24 +180,20 @@ export async function buildSeamTwoTower<const O extends SeamTwoOptions = SeamTwo
     for (const [position, m] of Object.entries(members)) {
       await call(admin, sql<{ outcome: string }>`select app.add_project_member(${p}::uuid, ${m}::uuid, now())`);
       for (const kind of ["trade", "location"]) {
-        await expectSet(`visibility of ${position}`, outcome(admin, sql`select app.set_member_visibility(${p}::uuid, ${m}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`));
+        await expectOutcome(`visibility of ${position}`, outcome(admin, sql`select app.set_member_visibility(${p}::uuid, ${m}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`));
       }
-      await expectSet(`position ${position}`, outcome(admin, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${[position]}::text[]) as outcome`));
+      await expectOutcome(`position ${position}`, outcome(admin, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${[position]}::text[]) as outcome`));
     }
   }
 
-  let checklist: { templateId: string; versionId: string } | undefined;
+  let checklistVersionId: string | undefined;
   if (checklistTemplate !== false) {
-    const { name = "Concrete pour", items = SEAM_TWO_CHECKLIST_ITEMS } = checklistTemplate ?? {};
     const [template] = await call<{ outcome: string; template_id: string }>(
       c1.ap,
-      sql`select outcome, template_id from app.create_checklist_template(${projectId}::uuid, ${JSON.stringify(bilingual(name))}::jsonb, ${tradeId}::uuid, ${JSON.stringify(items)}::jsonb, now())`,
+      sql`select outcome, template_id from app.create_checklist_template(${projectId}::uuid, ${JSON.stringify(bilingual("Concrete pour"))}::jsonb, ${tradeId}::uuid, ${JSON.stringify(CHECKLIST_ITEMS)}::jsonb, now())`,
     );
     if (template!.outcome !== "created") throw new Error(`checklist template: ${template!.outcome}`);
-    checklist = {
-      templateId: template!.template_id,
-      versionId: await one("select id from checklist_template_version where checklist_template_id = $1 and version_no = 1", [template!.template_id]),
-    };
+    checklistVersionId = await one("select id from checklist_template_version where checklist_template_id = $1 and version_no = 1", [template!.template_id]);
   }
 
   const take: SeamTwoTower["take"] = (as, id, transition, answers = {}) =>
@@ -206,17 +204,15 @@ export async function buildSeamTwoTower<const O extends SeamTwoOptions = SeamTwo
   const pickUp: SeamTwoTower["pickUp"] = (as, id) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 
   const tower = {
-    app,
-    migrator,
     projectId,
     tradeId,
     buildingA,
     buildingB,
-    c1: { id: c1.id, cr: c1.cr, ap: c1.ap, participantId: participantId.c1, members: c1.members },
-    k1: { id: k1.id, cr: k1.cr, ap: k1.ap, participantId: participantId.k1, members: k1.members },
-    ow: { id: ow.id, cr: ow.cr, ap: ow.ap, participantId: participantId.ow, members: ow.members },
-    c2: { id: c2.id, cr: c2.cr, ap: c2.ap, participantId: participantId.c2, members: c2.members },
-    checklist,
+    c1: { ...c1, participantId: participantId.c1 },
+    k1: { ...k1, participantId: participantId.k1 },
+    ow: { ...ow, participantId: participantId.ow },
+    c2: { ...c2, participantId: participantId.c2 },
+    checklistVersionId,
     call,
     outcome,
     take,
@@ -231,41 +227,34 @@ export type WirAtConsultantOptions = {
   /** The Work Item Type: its Form is the WIR Form document, with a `checklist_template` field. */
   type: string;
   title: string;
-  /** Default: the Tower's Trade and Building A. */
-  trade?: string;
-  location?: string;
-  /** The Checklist Template Version it copies. Default: the Tower's. */
-  templateVersion?: string;
 };
 
 /**
- * C1's Engineer raises a WIR on `options.type` with the Checklist Template picked and its checklist copied, Sends it
- * for review; C1's Project Manager picks it up and Submits it; K1's Engineer picks it up at the Consultant Step.
+ * C1's Engineer raises a WIR on `options.type` (the Tower's Trade and Building A) with the Tower's Checklist Template
+ * picked and its checklist copied, Sends it for review; C1's Project Manager picks it up and Submits it. K1's Engineer
+ * then holds it at the Consultant Step: with a K1 `manager` (option `k1Manager`) the Step waits and the Engineer
+ * picks it up; as K1's only Member the Engineer holds it as it arrives, so there is nothing to pick up.
  * Returns the item's id.
  */
 export async function wirAtConsultant(
-  tower: Pick<SeamTwoTower, "projectId" | "tradeId" | "buildingA" | "checklist" | "c1" | "k1" | "call" | "outcome" | "take" | "pickUp">,
+  tower: Pick<SeamTwoTower, "projectId" | "tradeId" | "buildingA" | "checklistVersionId" | "c1" | "k1" | "call" | "outcome" | "take" | "pickUp">,
   options: WirAtConsultantOptions,
 ): Promise<string> {
-  const { type, title, trade = tower.tradeId, location = tower.buildingA, templateVersion = tower.checklist?.versionId } = options;
-  if (!templateVersion) throw new Error("wirAtConsultant: the Tower has no Checklist Template; pass templateVersion");
-  const { c1, k1, call, outcome, take, pickUp, projectId } = tower;
+  const { type, title } = options;
+  const { c1, k1, call, outcome, take, pickUp, projectId, checklistVersionId } = tower;
+  if (!checklistVersionId) throw new Error("wirAtConsultant: the Tower has no Checklist Template");
   const [created] = await call<{ outcome: string; work_item_id: string }>(
     c1.members.engineer,
     sql`select outcome, work_item_id from app.create_work_item(
-      ${projectId}::uuid, ${type}, ${title}, app.latest_form_version(${type}), ${JSON.stringify({ checklist_template: templateVersion })}::jsonb,
-      ${trade}::uuid, ${location}::uuid, now())`,
+      ${projectId}::uuid, ${type}, ${title}, app.latest_form_version(${type}), ${JSON.stringify({ checklist_template: checklistVersionId })}::jsonb,
+      ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
   );
-  const step = async (what: string, got: Promise<string>, wanted: string) => {
-    const result = await got;
-    if (result !== wanted) throw new Error(`wirAtConsultant ${what}: ${result}`);
-  };
   if (created!.outcome !== "created") throw new Error(`wirAtConsultant create: ${created!.outcome}`);
   const id = created!.work_item_id;
-  await step("sync", outcome(c1.members.engineer, sql`select app.sync_work_item_checklists(${id}::uuid, now()) as outcome`), "synced");
-  await step("send_for_review", take(c1.members.engineer, id, "send_for_review"), "applied");
-  await step("pick up (C1 PM)", pickUp(c1.members.project_manager, id), "picked_up");
-  await step("submit", take(c1.members.project_manager, id, "submit"), "applied");
-  await step("pick up (K1 Engineer)", pickUp(k1.members.engineer, id), "picked_up");
+  await expectOutcome("wirAtConsultant sync", outcome(c1.members.engineer, sql`select app.sync_work_item_checklists(${id}::uuid, now()) as outcome`), "synced");
+  await expectOutcome("wirAtConsultant send_for_review", take(c1.members.engineer, id, "send_for_review"), "applied");
+  await expectOutcome("wirAtConsultant pick up (C1 PM)", pickUp(c1.members.project_manager, id), "picked_up");
+  await expectOutcome("wirAtConsultant submit", take(c1.members.project_manager, id, "submit"), "applied");
+  if ("manager" in k1.members) await expectOutcome("wirAtConsultant pick up (K1 Engineer)", pickUp(k1.members.engineer, id), "picked_up");
   return id;
 }
