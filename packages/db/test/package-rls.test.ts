@@ -494,6 +494,16 @@ describe("RP-642: Done follows the closures, in the same transaction, and a Revi
     await refused(sql`update package set status = 'in_progress' where id = ${packageId}::uuid`);
     await refused(sql`select package_id from work_item where id = ${item}::uuid`);
   });
+
+  it("RP-976: the rules' helpers that read items whatever the caller sees are not the app role's; the per-viewer readers are", async () => {
+    const refused = async (query: ReturnType<typeof sql>) =>
+      expect(withMember(app, c1Pm, (trx) => query.execute(trx))).rejects.toThrow(/permission denied/);
+    await refused(sql`select * from app.latest_revisions(array[${item}::uuid])`);
+    await refused(sql`select * from app.package_unsubmitted(${packageId}::uuid)`);
+    // The positive control: the same Member reads the per-viewer ones.
+    expect(await call(c1Pm, sql<{ work_item_id: string }>`select work_item_id from app.package_latest_items(${packageId}::uuid)`)).not.toEqual([]);
+    expect(await call(c1Pm, sql<{ id: string }>`select i as id from app.package_items_to_submit(${packageId}::uuid) i`)).toEqual([]);
+  });
 });
 
 describe("scenario RP-588-2 (story 30): each chain counts once, by the latest Revision its viewer sees", () => {

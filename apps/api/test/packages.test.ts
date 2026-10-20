@@ -383,6 +383,17 @@ describe("Submit Package", () => {
     expect(k1Reads.items.map((i) => [i.id, i.toSubmit])).toEqual([[sent, false]]);
   });
 
+  it("RP-976: a discarded Draft in it is not still to Submit, the rule app.package_hides_unsubmitted keeps", async () => {
+    const pkg = await createPackage(at.c1Pm, "Discarded left out");
+    const ready = await readyForPm("Ready beside a discarded one");
+    const discarded = await draft(at, at.c1Pm, "Discarded, never sent");
+    for (const id of [ready, discarded]) await ok(addItem(at.c1Pm, pkg.id, id));
+    await ok(at.c1Pm.post(`/v1/work-items/${discarded}/discard-draft`));
+    expect((await getPackage(at.c1Pm, pkg.id)).actions.submit).toBe(true);
+    const res = await ok(submitPackage(at.c1Pm, pkg.id), 200);
+    expect((res.json() as { submitted: { id: string }[] }).submitted.map((i) => i.id)).toEqual([ready]);
+  });
+
   it("is all or nothing: one item not ready and nothing is Submitted; the answer lists the ones not ready, and why", async () => {
     // A second PM: C1's review is a Step Pool of two, picked up rather than held by its only Member.
     await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
