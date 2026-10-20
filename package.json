@@ -31,7 +31,7 @@
     "claims": "node scripts/claims.ts",
     "verify": "node scripts/verify.ts",
     "lint": "eslint .",
-    "typecheck": "node scripts/pnpm.ts -r run typecheck",
+    "typecheck": "node scripts/typecheck.ts",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:seam1": "vitest run --project seam1",

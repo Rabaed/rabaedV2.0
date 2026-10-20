@@ -7,7 +7,7 @@ import { workItemOutcome } from "./work-item.ts";
  * What an in-app notification is about: a Step reached the Member or their
  * pool, something happened on an item they watch, an item was Sent Back to
  * their Participant, or a closed item's Documental Record is ready (RP-155: in
- * the bell only; it names no Company and no person).
+ * the bell, and by email under "Items I watch", RP-950; it names no Company and no person).
  */
 export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back", "record_ready"] as const;
 
@@ -79,10 +79,10 @@ export type Notification = z.infer<typeof notification>;
 
 /**
  * The kinds of notification that can be emailed one by one ("immediately"):
- * the in-app kinds, Sent Back included (RP-356). The weekly report is an email
+ * the in-app kinds, Sent Back included (RP-356) and Record ready (RP-950). The weekly report is an email
  * of its own, never a notification row.
  */
-export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back", "package_submitted"] as const;
+export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back", "package_submitted", "record_ready"] as const;
 export type NotificationEmailKind = (typeof notificationEmailKinds)[number];
 
 /** A Package Submit's email (RP-643): the Package, its owner's Company by name, and how many of its submittals the recipient sees. */

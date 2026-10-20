@@ -1,7 +1,7 @@
 // Seam 1: the checks before a Documental Record is published, "record being prepared", the
 // "record ready" notification and Re-produce (RP-155, spec RP-632; ADR 0023;
 // workflow-engine.md §7; visibility.md V7, V14, the Documental Record and Notifications rows;
-// scenarios RP-155-1, RP-155-2 and RP-155-3). The record job runs in-process as in
+// scenarios RP-155-1, RP-155-2, RP-155-3 and RP-950-1). The record job runs in-process as in
 // documental-record.test.ts (the harness); what is asserted is read through the seams: the Members'
 // bell and item read, the download, and Rabaed Admin's HTTP routes as a signed-in Rabaed Engineer.
 // The PDF/A-3 check is veraPDF itself (Docker image). Where no seam shows a fact (the checks' history,
@@ -9,9 +9,10 @@
 // table as the migrator, and says so.
 import { createHash } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
-import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
+import { createDb, dailyDigestJob, notificationDigestHandler, notificationEmailHandler, processOutbox, runScheduledJobs, type OutboxHandler } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { NotificationList, SignedUrl } from "@rabaed/domain";
+import type { NotificationDigest, NotificationList, NotificationSettingsView, SignedUrl } from "@rabaed/domain";
+import { notificationDigestMessage, notificationMessage, renderEmail, type MailMessage } from "@rabaed/mailer";
 import {
   attachedFiles,
   chromiumRenderer,
@@ -118,6 +119,8 @@ let k1Pm: Caller;
 let k1Engineer: Caller;
 let orEngineer: Caller;
 let c2Engineer: Caller;
+/** The Members' email addresses, for the Record ready emails (RP-950). */
+const emails = {} as Record<"c1Engineer" | "c1Pm" | "k1Pm" | "orEngineer" | "c2Engineer", string>;
 let real: Record<string, OutboxHandler>;
 let quick: Record<string, OutboxHandler>;
 
@@ -154,14 +157,22 @@ beforeAll(async () => {
   at = await buildTower(api, { c1, k1 }, "RCK");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
   k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
-  c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
-  c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" })).caller;
-  k1Pm = (await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" })).caller;
+  const c1EngineerMember = await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" });
+  const c1PmMember = await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Sara Qahtani" });
+  const k1PmMember = await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Huda Harbi" });
+  c1Engineer = c1EngineerMember.caller;
+  c1Pm = c1PmMember.caller;
+  k1Pm = k1PmMember.caller;
+  Object.assign(emails, { c1Engineer: c1EngineerMember.email, c1Pm: c1PmMember.email, k1Pm: k1PmMember.email });
   k1Engineer = (await memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Faisal Otaibi" })).caller;
   const or = await onboard("Checks Owner Representative");
-  orEngineer = (await memberOnProject(api, or, await participant(or, "owner_representative"), ["engineer"])).caller;
+  const orMember = await memberOnProject(api, or, await participant(or, "owner_representative"), ["engineer"]);
+  orEngineer = orMember.caller;
+  emails.orEngineer = orMember.email;
   const c2 = await onboard("Checks Second Contractor");
-  c2Engineer = (await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"])).caller;
+  const c2Member = await memberOnProject(api, c2, await participant(c2, "contractor"), ["engineer"]);
+  c2Engineer = c2Member.caller;
+  emails.c2Engineer = c2Member.email;
   engineer = await admin.signedInEngineer();
   real = await handlers(veraPdf);
   quick = await handlers(compliant);
@@ -271,10 +282,11 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
       expect(got[0]).toMatchObject({ kind: "record_ready", workItemId: id, step: null, event: null, readAt: null });
       expect(JSON.stringify(got[0])).not.toContain("Checks Consultants");
     }
-    // Whether it is emailed is read from the table: no read exposes a notification's email route.
+    // Routed by each Member's "Items I watch" email choice (RP-950), none of them changed here: the daily digest.
+    // Read from the table: no read exposes a notification's email route.
     const routes = await sql<{ in_app: boolean; email: string }>`select in_app, email from notification where work_item_id = ${id} and kind = 'record_ready'`.execute(migrator);
-    expect(routes.rows.length).toBeGreaterThan(0);
-    expect(routes.rows.every((r) => r.in_app && r.email === "none")).toBe(true);
+    expect(routes.rows.length).toBeGreaterThanOrEqual(4);
+    expect(routes.rows.filter((r) => !(r.in_app && r.email === "digest"))).toEqual([]);
     // Delivered once: another pass delivers nothing more.
     await drainOutbox(worker, quick);
     expect(await bell(c1Pm, id)).toHaveLength(1);
@@ -283,6 +295,113 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
   it("tells nobody who can't see the item, and nobody who muted the Project (RP-155-1)", async () => {
     expect(await bell(c2Engineer, id)).toEqual([]);
     expect(await bell(k1Engineer, id)).toEqual([]);
+  });
+});
+
+// Record ready by email and in the daily digest (RP-950). Each immediate email is the message the worker hands the mailer,
+// rendered as the mailer sends it (as notification-email.test.ts does; seam 1 runs without Mailpit, and the mailer's own
+// delivery of this email to Mailpit is packages/mailer/test/catcher.test.ts). The digest is run as the worker runs it.
+const WEB_URL = "https://rabaed.test";
+const sentMessages: MailMessage[] = [];
+/** The emails sent to `to`, rendered. */
+const caught = async (to: string) =>
+  sentMessages.filter((m) => m.to === to).map((m) => {
+    const rendered = renderEmail(m.template, m.locale, m.values as never);
+    return { Subject: rendered.subject, Text: rendered.text };
+  });
+const emailHandler = notificationEmailHandler(async (email) => void sentMessages.push(notificationMessage(email, WEB_URL)));
+const saveWatched = async (by: Caller, email: "off" | "immediate" | "digest", preferredLanguage?: "en" | "ar") => {
+  const now: NotificationSettingsView = (await ok(by.get("/v1/notification-settings"), 200)).json();
+  await ok(
+    by.request("PUT", "/v1/notification-settings", {
+      settings: { ...now.settings, watched: { ...now.settings.watched, email } },
+      emailPaused: now.emailPaused,
+      preferredLanguage: preferredLanguage ?? now.preferredLanguage,
+    }),
+  );
+};
+
+describe("scenario RP-950-1: record ready by email and in the digest", { timeout: SETUP_MS }, () => {
+  let id = "";
+  let documentNumber = "";
+  const digests: NotificationDigest[] = [];
+  const readyEmails = async (to: string) => (await caught(to)).filter((m) => m.Subject.includes("Record ready to download") || m.Subject.includes("السجل جاهز للتنزيل"));
+
+  beforeAll(async () => {
+    // "Items I watch" is the setting this notification follows: C1's PM and engineer want it at once (the engineer in Arabic),
+    // K1's PM keeps the default (the daily digest), the Owner Representative's engineer turns the email off, and C2's can't see the item.
+    await saveWatched(c1Pm, "immediate", "en");
+    await saveWatched(c1Engineer, "immediate", "ar");
+    await saveWatched(orEngineer, "off");
+    await saveWatched(c2Engineer, "immediate");
+    id = await closed("Chillers for Building A");
+    documentNumber = (await detail(c1Pm, id)).documentNumber!;
+    await drainOutbox(worker, { ...quick, email: emailHandler });
+  }, SETUP_MS);
+
+  it("emails a Member who sees the item and chose immediately, once, with a link to the item and never to the file", async () => {
+    const got = await readyEmails(emails.c1Pm);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.Subject).toContain(documentNumber);
+    expect(got[0]!.Subject).toContain("Chillers for Building A");
+    expect(got[0]!.Subject).toContain("Record ready to download");
+    expect(got[0]!.Text).toContain(`https://rabaed.test/en/work-items/${id}`);
+    expect(got[0]!.Text).not.toContain("documental-record");
+  });
+
+  it("names no Company and no person in it (V14)", async () => {
+    for (const to of [emails.c1Pm, emails.c1Engineer]) {
+      const [email] = await readyEmails(to);
+      for (const text of [email!.Subject, email!.Text]) {
+        for (const name of ["Checks Consultants", "Test Constructions", "إنشاءات الاختبار", "Checks Owner Representative", "Checks Second Contractor", "Omar Haddad", "Sara Qahtani", "Huda Harbi", "Faisal Otaibi"]) {
+          expect(text, name).not.toContain(name);
+        }
+      }
+    }
+  });
+
+  it("emails it in Arabic to a Member whose preferred language is Arabic", async () => {
+    const got = await readyEmails(emails.c1Engineer);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.Subject).toContain("السجل جاهز للتنزيل");
+    expect(got[0]!.Text).toContain(`https://rabaed.test/ar/work-items/${id}`);
+    expect(got[0]!.Text).not.toContain("documental-record");
+  });
+
+  it("emails no one at once who chose the digest or turned the email off, and nothing to a Member who can't see the item", async () => {
+    expect(await readyEmails(emails.k1Pm)).toEqual([]);
+    expect(await readyEmails(emails.orEngineer)).toEqual([]);
+    expect((await caught(emails.c2Engineer)).filter((m) => m.Subject.includes(documentNumber))).toEqual([]);
+    expect(await bell(c2Engineer, id)).toEqual([]);
+    // No row at all, so no email and no digest entry whatever C2 chooses: read as the migrator, since no read shows a
+    // notification the Member can't see.
+    const c2Rows = await sql`
+      select n.id from notification n join member m on m.id = n.member_id where n.work_item_id = ${id} and m.email = ${emails.c2Engineer}
+    `.execute(migrator);
+    expect(c2Rows.rows).toEqual([]);
+    // The bell is unchanged by the email choice.
+    for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
+  });
+
+  it("lists it in the daily digest of a Member who kept the default, with a link to the item", async () => {
+    await sql`delete from scheduled_job_run where job = ${dailyDigestJob.name}`.execute(migrator);
+    // Monday 12 October 2026, 07:00 Riyadh.
+    await runScheduledJobs(worker, [dailyDigestJob], new Date("2026-10-12T07:00:00+03:00"));
+    await drainOutbox(worker, { ...quick, digest: notificationDigestHandler(async (digest) => void digests.push(digest)) });
+    const entriesFor = (to: string) =>
+      digests
+        .filter((d) => d.to === to)
+        .flatMap((d) => d.projects.flatMap((p) => p.items))
+        .filter((i) => i.workItemId === id)
+        .flatMap((i) => i.entries.map((e) => e.kind));
+    expect(entriesFor(emails.k1Pm)).toEqual(["record_ready"]);
+    for (const to of [emails.c1Pm, emails.c1Engineer, emails.orEngineer, emails.c2Engineer]) expect(entriesFor(to), to).toEqual([]);
+    const digest = digests.find((d) => d.to === emails.k1Pm && d.projects.some((p) => p.items.some((i) => i.workItemId === id)))!;
+    const message = notificationDigestMessage(digest, WEB_URL);
+    const { text } = renderEmail(message.template, message.locale, message.values);
+    expect(text).toContain("Record ready to download");
+    expect(text).toContain(`https://rabaed.test/${digest.language}/work-items/${id}`);
+    expect(text).not.toContain("documental-record");
   });
 });
 
