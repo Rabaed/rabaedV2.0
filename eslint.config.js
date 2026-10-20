@@ -158,6 +158,18 @@ export default tseslint.config(
     rules: { "rabaed/no-ui-translations": "error" },
   },
   {
+    // A native <dialog> opened with showModal() hides every kit floating part behind it (RP-658, RP-999): use the kit's Modal.
+    files: uiCode,
+    plugins: { rabaed },
+    rules: { "rabaed/no-native-dialog": "error" },
+  },
+  {
+    // The one allowed native <dialog>: the Transition pop-up (RP-658 made the Select open inside it), and the Select
+    // story that reproduces it.
+    files: ["apps/web/src/components/transition-dialog.tsx", "packages/ui/src/components/form/select.stories.tsx"],
+    rules: { "rabaed/no-native-dialog": "off" },
+  },
+  {
     files: ["packages/ui/**/*.css", "apps/web/**/*.css"],
     // The generated token file is where the palette's raw colours live.
     ignores: ["packages/ui/src/styles/tokens.css"],

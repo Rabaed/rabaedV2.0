@@ -448,3 +448,20 @@ tsx.run("no-ui-translations", rules["no-ui-translations"], {
     },
   ],
 });
+
+tsx.run("no-native-dialog", rules["no-native-dialog"], {
+  valid: [
+    `export function A() { return <Dialog><DialogContent title="x" closeLabel="y" /></Dialog>; }`,
+    `export function A() { return <div role="dialog" />; }`,
+    `export function A() { return <Dialog.dialog />; }`,
+    `const dialog = ref.current; dialog.close();`,
+    `popover.show();`,
+  ],
+  invalid: [
+    { code: `export function A() { return <dialog ref={r}>x</dialog>; }`, errors: [{ messageId: "element" }] },
+    { code: `export function A() { return <dialog />; }`, errors: [{ messageId: "element" }] },
+    { code: `function open() { dialog.current?.showModal(); }`, errors: [{ messageId: "showModal" }] },
+    { code: `function open(el) { el.showModal(); }`, errors: [{ messageId: "showModal" }] },
+    { code: `function open(el) { el["showModal"](); }`, errors: [{ messageId: "showModal" }] },
+  ],
+});
