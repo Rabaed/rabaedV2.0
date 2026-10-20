@@ -1,3 +1,4 @@
+/* eslint-disable rabaed/no-avoid-terms -- package.json dependency fields, git's changed files and GitHub's merge queue, by their own names */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,17 +58,17 @@ export function sharedFilesMix(files: string[], versions: PackageJsonVersions): 
     return onlyDependencyFieldsChanged(before, after);
   });
   if (!breach) return undefined;
-  const dependencies = files.includes("pnpm-lock.yaml") || files.some(isWorkspacePackageJson);
+  const workspacePackageJson = files.some(isWorkspacePackageJson);
   return [
     ...breach.root.map((file) => `  shared: ${file}`),
     `  and ${breach.others} other file(s), e.g. ${breach.example}`,
-    ...(files.some(isWorkspacePackageJson)
+    ...(workspacePackageJson
       ? ["Note: a workspace package.json beside the lockfile is allowed when only its dependency fields (dependencies/devDependencies/peerDependencies/optionalDependencies) change."]
       : []),
     `Fix: a change to root ${rootSharedList} is its own PR (only those and docs).`,
-    ...(dependencies
+    ...(workspacePackageJson || files.includes("pnpm-lock.yaml")
       ? [
-          'For dependencies: put the lockfile and the workspace package.json dependency fields in a dependencies-only PR first, and build on it once it merges (docs/agents/issue-tracker.md › "Ticket: workspace dependencies").',
+          'For dependencies: open a dependencies-only PR first (the lockfile and the workspace package.json dependency fields), then build the feature PR on it (docs/agents/issue-tracker.md › "Ticket: workspace dependencies").',
         ]
       : []),
   ];

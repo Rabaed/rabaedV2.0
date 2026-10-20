@@ -36,7 +36,7 @@ export interface PrePushSeam {
   /** The files a pushed ref changes against what the remote has; undefined when that can't be told. */
   changedFiles(ref: PushedRef): string[] | undefined;
   /** The lines naming a rule-3 mix on the pushed ref against origin/main (scripts/shared-files.ts); undefined when there is none or it can't be told. */
-  sharedFilesMix(ref: PushedRef): string[] | undefined;
+  branchMix(ref: PushedRef): string[] | undefined;
   /** Runs `pnpm <check>`, its stdout and stderr together. */
   run(check: Check): Promise<{ status: number; output: string }>;
   /** The checked-out commit, and whether tracked files have uncommitted changes. */
@@ -72,8 +72,9 @@ export async function prePush(stdin: string, seam: PrePushSeam): Promise<{ ok: b
 function mixWarning(branches: PushedRef[], seam: PrePushSeam): string {
   return branches
     .map((ref) => {
-      const lines = seam.sharedFilesMix(ref);
+      const lines = seam.branchMix(ref);
       const branch = ref.remoteRef.replace("refs/heads/", "");
+      // eslint-disable-next-line rabaed/no-avoid-terms -- `pnpm queue`, GitHub's merge queue, by its own name.
       return lines ? `\nWarning: ${branch} changes root shared file(s) together with other files, so \`pnpm queue\` will refuse it (rule 3):\n${lines.join("\n")}` : "";
     })
     .join("");
@@ -129,11 +130,11 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   let pnpm: string[] | undefined;
   const result = await prePush(readFileSync(0, "utf8"), {
     changedFiles: (ref) => changedFiles(repo, ref),
-    sharedFilesMix: (ref) => {
+    branchMix: (ref) => {
       try {
         return branchMix(repo, ref.localSha);
       } catch {
-        return undefined; // no origin/main to compare with: `pnpm queue` still checks it
+        return undefined; // git could not tell (no origin/main, say): a warning only, and `pnpm queue` still checks it
       }
     },
     run: (check) => runPnpm(repo, (pnpm ??= pnpmCommand(repo)), check),

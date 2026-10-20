@@ -14,7 +14,7 @@ function seam(codes: { lint?: number; typecheck?: number } = {}, files: string[]
   const ran: string[] = [];
   const fake: PrePushSeam = {
     changedFiles: () => files,
-    sharedFilesMix: () => mix,
+    branchMix: () => mix,
     workingTree: () => tree,
     run: async (script) => {
       ran.push(script);

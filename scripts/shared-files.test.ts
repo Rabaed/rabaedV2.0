@@ -44,7 +44,7 @@ describe("branchMix", () => {
     const text = branchMix(repo, head)?.join("\n") ?? "";
     expect(text).toContain("shared: pnpm-lock.yaml");
     expect(text).toContain("apps/admin/src/a.ts");
-    expect(text).toContain("dependencies-only PR first");
+    expect(text).toContain("open a dependencies-only PR first");
     expect(text).toContain('docs/agents/issue-tracker.md › "Ticket: workspace dependencies"');
   });
 
@@ -63,6 +63,16 @@ describe("branchMix", () => {
     const text = branchMix(repo, head)?.join("\n") ?? "";
     expect(text).toContain("apps/admin/package.json");
     expect(text).toContain("only its dependency fields");
+  });
+
+  it("names a deleted workspace package.json beside the lockfile, and a code file renamed to Markdown beside it", () => {
+    git("rm", "-q", "apps/admin/package.json");
+    const deleted = commit({ "pnpm-lock.yaml": "lock: 2\n" });
+    expect(branchMix(repo, deleted)?.join("\n")).toContain("e.g. apps/admin/package.json");
+    git("reset", "-q", "--hard", "origin/main");
+    git("mv", "apps/admin/src/a.ts", "apps/admin/src/a.md");
+    const renamed = commit({ "pnpm-lock.yaml": "lock: 2\n" });
+    expect(branchMix(repo, renamed)?.join("\n")).toContain("e.g. apps/admin/src/a.ts");
   });
 
   it("judges the branch against where it left origin/main, not main's tip: a lockfile change on main is not the branch's", () => {
