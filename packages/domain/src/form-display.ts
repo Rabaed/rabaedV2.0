@@ -109,8 +109,9 @@ export const checklistAnswerLabels = {
 } satisfies Record<Locale, Record<ChecklistAnswer, string>>;
 
 /**
- * What a failed check item's "Raise a Snag" tick (snagTick, RP-577) says once read: the web's read
- * mode and the Documental Record (RP-982) in the same words.
+ * What a failed check item's "Raise a Snag" tick (snagTick, RP-577) says once read, on the
+ * Documental Record (RP-982): the words the web's read mode shows from its own messages
+ * (`checklist.snagRaised`, `noSnagRaised` in apps/web/messages).
  */
 export const snagTickLabels = {
   en: { ticked: "A Snag is raised with the code", unticked: "No Snag is raised" },

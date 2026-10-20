@@ -69,23 +69,30 @@ async function findAmong(wanted: ReadonlySet<string>, candidates: readonly Candi
   if (wanted.size === 0) return { keys, images: new Map() };
   for (const d of candidates) if (d.sha256 && wanted.has(d.sha256) && !keys.has(d.sha256)) keys.set(d.sha256, d.storageKey);
   const missing = () => [...wanted].some((sha) => !keys.has(sha));
+  /** The fingerprints of the stored bytes streamed so far, by storage key: each file is streamed once. */
+  const streamed = new Map<string, string | null>();
+  const stream = async (storageKey: string) => {
+    if (!streamed.has(storageKey)) streamed.set(storageKey, await files.sha256(storageKey));
+    return streamed.get(storageKey)!;
+  };
   if (missing()) {
-    const unhashed = candidates.filter((d) => d.sha256 === null);
-    const hashed = (await inlinePhotos(unhashed.filter((d) => IMAGE_TYPES.has(d.contentType)), files)).fingerprints;
+    const unhashed = candidates.filter((d) => d.sha256 === null && IMAGE_TYPES.has(d.contentType));
+    const hashed = (await inlinePhotos(unhashed, files)).fingerprints;
     for (const [storageKey, sha] of hashed) if (wanted.has(sha) && !keys.has(sha)) keys.set(sha, storageKey);
     // One past the inline limits (RP-982): its bytes streamed, as the record job fingerprinted it.
     for (const d of unhashed) {
       if (!missing()) break;
       if (hashed.has(d.storageKey)) continue;
-      const sha = await files.sha256(d.storageKey);
+      const sha = await stream(d.storageKey);
       if (sha && wanted.has(sha) && !keys.has(sha)) keys.set(sha, d.storageKey);
     }
   }
-  const byKey = new Map(candidates.map((d) => [d.storageKey, d]));
-  const { images, fingerprints } = await inlinePhotos([...keys.values()].flatMap((k) => byKey.get(k) ?? []), files);
+  // Inlined in the Documents' order within the budget, as the record job inlined them, however each was found.
+  const found = new Set(keys.values());
+  const { images, fingerprints } = await inlinePhotos(candidates.filter((d) => found.has(d.storageKey)), files);
   // What is in storage now must be what the record printed: an inlined image's bytes, and one past the
   // inline limits streamed (it printed its fingerprint, no image).
-  for (const [sha, storageKey] of keys) if ((fingerprints.get(storageKey) ?? (await files.sha256(storageKey))) !== sha) keys.delete(sha);
+  for (const [sha, storageKey] of keys) if ((fingerprints.get(storageKey) ?? (await stream(storageKey))) !== sha) keys.delete(sha);
   return { keys, images };
 }
 

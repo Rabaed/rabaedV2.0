@@ -225,7 +225,7 @@ describe("RP-982-1: a reply Document no shared event of the item took stays out"
     for (const event of [internal, elsewhere]) {
       await migrator.query("begin");
       try {
-        // The owner, bypassing the frozen-document trigger for this rolled-back setup only.
+        // The migrator role, bypassing the frozen-document trigger for this rolled-back setup only.
         await migrator.query("alter table document disable trigger document_frozen");
         await migrator.query("update document set reply_event_id = $1 where id = $2", [event, photos.cover]);
         expect(await recordDocuments(id), event).toEqual(["formwork.jpg", "formwork-annotated.jpg"]);

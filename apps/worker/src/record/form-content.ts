@@ -101,10 +101,23 @@ export function isListedDocument(document: DocumentFact, attachmentFieldKeys: Re
   return document.itemKey === null && (document.fieldKey === null || attachmentFieldKeys.has(document.fieldKey));
 }
 
-/** The keys of the Form's `attachments` fields: their files are listed with the shared Documents. */
-export function attachmentFieldKeysOf(facts: Pick<RecordFacts, "form">): Set<string> {
+/** The keys of the Form's fields of `type`. */
+function fieldKeysOf(facts: Pick<RecordFacts, "form">, type: FormField["type"]): Set<string> {
   const schema = formSchema.parse({ sections: facts.form.sections });
-  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === "attachments").map((f) => f.key)));
+  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === type).map((f) => f.key)));
+}
+
+/** The keys of the Form's `attachments` fields: their files are listed with the shared Documents. */
+export const attachmentFieldKeysOf = (facts: Pick<RecordFacts, "form">): Set<string> => fieldKeysOf(facts, "attachments");
+
+/**
+ * The Documents the record prints as photos, in the order they were added: a check item's (a Form
+ * checklist's or a reply checklist's, RP-982) and a Form `photos` field's. Never a reply Screen's
+ * own file field's, which no block prints.
+ */
+export function printedPhotosOf(facts: Pick<RecordFacts, "form" | "documents">): DocumentFact[] {
+  const photoFields = fieldKeysOf(facts, "photos");
+  return facts.documents.filter((d) => d.itemKey !== null || (d.fieldKey !== null && photoFields.has(d.fieldKey)));
 }
 
 /** A link question's items as the database gives them (`document_number`) in the shape the display takes (`documentNumber`). */
@@ -208,7 +221,6 @@ export function formContent(
   const templates: ChecklistTemplateChoice[] = copies.map((c) => ({ id: c.versionId, tradeId: "", offered: false, name: c.name }));
   const attachmentFieldKeys = attachmentFieldKeysOf(facts);
   const replies = replyChecklists(path, copies, facts.documents, language);
-
 
   function blockOf(field: FormField): RecordBlock | null {
     if (!isAnswerField(field) || !shown.fields.has(field.key)) return null;
