@@ -461,6 +461,33 @@ describe("Values, optional fields and Paper ref (RP-639)", () => {
     expect(after.fields.map((f) => f.field)).toEqual(["type", "trade", "location", "scopes", "field:document_type"]);
   });
 
+  describe("a suggestion pre-chosen and not yet confirmed (RP-961)", () => {
+    /** "Elec" is still Electrical as suggested; "Document" was confirmed as the DAR. */
+    const unconfirmed = () => ({ ...byHand, suggested: { trade: ["elec"] } });
+
+    it("stays suggested, with its score, until confirmed; an exact match never is", async () => {
+      const result: RegisterValues = (await ok(at.c1Engineer.post(projectUrl("register-imports/values"), ofValues(unconfirmed())), 200)).json();
+      const of = (field: string) => Object.fromEntries(result.fields.find((f) => f.field === field)!.values.map((v) => [v.text, [v.match, v.how]]));
+      expect(of("trade")).toEqual({ electrical: [at.electrical, "exact"], Elec: [at.electrical, "suggested"], Mechanical: [at.mechanical, "exact"] });
+      expect(result.fields.find((f) => f.field === "trade")!.values.find((v) => v.text === "Elec")!.score).toBeGreaterThanOrEqual(60);
+      expect(of("type")).toEqual({ dar: ["DAR", "exact"], Document: ["DAR", "manual"], mar: ["MAR", "exact"] });
+      // Changed to another value: matched by hand, whatever the mapping says.
+      const changed = { ...unconfirmed(), values: { ...byHand.values, trade: { elec: at.mechanical } } };
+      const after: RegisterValues = (await ok(at.c1Engineer.post(projectUrl("register-imports/values"), ofValues(changed)), 200)).json();
+      expect(after.fields.find((f) => f.field === "trade")!.values.find((v) => v.text === "Elec")).toMatchObject({ match: at.mechanical, how: "manual", score: null });
+    });
+
+    it("counts the good rows using one on the preview, which imports them as matched", async () => {
+      const previewed: RegisterImport = (await ok(tryPreview(at.c1Engineer, ofValues(unconfirmed()), at.projectId), 201)).json();
+      expect(previewed.mapping.suggested).toEqual({ trade: ["elec"] });
+      // Rows 3 ("Elec") and 4 ("ELEC"), of the good rows 2, 3, 4 and 8.
+      expect(previewed.rowsSuggested).toBe(2);
+      expect(previewed.rows.find((r) => r.rowNo === 4)!.trade.match?.id).toBe(at.electrical);
+      const confirmed: RegisterImport = (await ok(tryPreview(at.c1Engineer, ofValues(byHand), at.projectId), 201)).json();
+      expect(confirmed.rowsSuggested).toBe(0);
+    });
+  });
+
   describe("previewed and confirmed", () => {
     let previewed: RegisterImport;
     let record: RegisterImport;

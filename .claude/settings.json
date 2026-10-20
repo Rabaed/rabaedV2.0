@@ -19,6 +19,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/main-folder-guard.ts\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/main-folder-guard.ts\""
+          }
+        ]
       }
     ]
   }

@@ -8,6 +8,11 @@ import { screens as submitScreens } from "./screens-examples/packages-submit.ts"
 import {
   fillRoute,
   finishAnimations,
+  flowShotRecorder,
+  inLocale,
+  oldestFirst,
+  pathInLocale,
+  shotsOnDisk,
   loadPage,
   trackRequests,
   unsettledWarning,
@@ -70,6 +75,26 @@ describe("parseArgs", () => {
 
   it("does not take the next option as a value", () => {
     expect(() => parseArgs(["/home", "--as", "ali", "--setup", "--publish"], at)).toThrow(/--setup needs/);
+  });
+
+  it("takes --steps with no route, and with routes and --setup", () => {
+    expect(parseArgs(["--as", "ali", "--steps", "flow.ts"], at)).toMatchObject({ steps: "flow.ts", routes: [] });
+    expect(parseArgs(["/home", "--as", "ali", "--setup", "s.ts", "--steps=flow.ts"], at)).toMatchObject({ steps: "flow.ts", setup: "s.ts", routes: ["/home"] });
+    expect(() => parseArgs(["--steps", "flow.ts"], at)).toThrow(/--as/);
+  });
+
+  it("takes --publish-dir alone: no person, it publishes that folder's PNGs under the branch's folder", () => {
+    const args = parseArgs(["--publish-dir", "shots/wizard"], at);
+    expect(args).toMatchObject({ publishDir: resolve("shots/wizard"), out: resolve("shots/wizard"), folder: "RP-531", publish: true, routes: [] });
+    expect(parseArgs(["--publish-dir", "shots", "--folder", "wizard"], at).folder).toBe("wizard");
+    // --publish says what --publish-dir already does.
+    expect(parseArgs(["--publish-dir", "shots", "--publish"], at).publish).toBe(true);
+  });
+
+  it("refuses --publish-dir with anything that shoots", () => {
+    for (const extra of [["/home"], ["--as", "ali"], ["--setup", "s.ts"], ["--steps", "f.ts"], ["--phone"], ["--out", "x"]]) {
+      expect(() => parseArgs(["--publish-dir", "shots", ...extra], at)).toThrow(/--publish-dir publishes PNGs already on disk/);
+    }
   });
 });
 
@@ -393,6 +418,89 @@ describe("plannedShots", () => {
   it("refuses two names that differ only in case", () => {
     expect(() => plannedShots(["/Packages", "/packages"])).toThrow("Routes /Packages and /packages would be saved as the same file");
     expect(() => plannedShots([{ name: "Bulk", route: "/a", actions: [] }, { name: "bulk", route: "/b", actions: [] }])).toThrow('Screens "Bulk" and "bulk"');
+  });
+});
+
+describe("shotsOnDisk", () => {
+  it("reads <page>-<width>-<locale>.png names, page by page in the order given (oldest first: the flow's), skipping files that are not PNGs", () => {
+    const shots = shotsOnDisk(["upload-1366-ar.png", "choose-1366-en.png", "notes.txt", "choose-1920-ar.png", "upload-1366-en.PNG"]);
+    expect(shots.map((s) => [s.page, s.width, s.locale, s.file])).toEqual([
+      ["upload", 1366, "en", "upload-1366-en.PNG"],
+      ["upload", 1366, "ar", "upload-1366-ar.png"],
+      ["choose", 1366, "en", "choose-1366-en.png"],
+      ["choose", 1920, "ar", "choose-1920-ar.png"],
+    ]);
+  });
+
+  it("refuses a PNG not named <page>-<width>-<locale>.png, and a folder with none", () => {
+    expect(() => shotsOnDisk(["wizard.png"])).toThrow(/wizard\.png is not named <page>-<width>-<locale>\.png/);
+    expect(() => shotsOnDisk(["upload-1366-fr.png"])).toThrow(/upload-1366-fr\.png/);
+    expect(() => shotsOnDisk(["-1366-en.png"])).toThrow(/-1366-en\.png is not named/);
+    expect(() => shotsOnDisk(["notes.txt"])).toThrow(/no PNGs/);
+  });
+
+  it("refuses two files for one cell, and two pages that differ only in case", () => {
+    expect(() => shotsOnDisk(["a-1366-en.png", "a-1366-en.PNG"])).toThrow(/a-1366-en\.png and a-1366-en\.PNG are the same page, width and locale/);
+    expect(() => shotsOnDisk(["Upload-1366-en.png", "upload-1366-ar.png"])).toThrow(/Pages "Upload" and "upload" differ only in case/);
+  });
+
+  it("keeps a page name that has dashes and digits of its own", () => {
+    expect(shotsOnDisk(["step-2-of-3-1920-ar.png"])[0]).toMatchObject({ page: "step-2-of-3", width: 1920, locale: "ar" });
+  });
+});
+
+describe("oldestFirst", () => {
+  it("orders files by when they were saved, then by name when two were saved at once (as a copy makes them)", () => {
+    expect(oldestFirst([{ file: "b.png", at: 2 }, { file: "z.png", at: 1 }, { file: "a.png", at: 2 }])).toEqual(["z.png", "a.png", "b.png"]);
+  });
+});
+
+describe("pathInLocale", () => {
+  it("is the page's path without its locale, as a route is given", () => {
+    expect(pathInLocale("http://lane12.localhost:3120/ar/packages/p1?tab=x", "ar")).toBe("/packages/p1");
+    expect(pathInLocale("http://x/en", "en")).toBe("/");
+    expect(pathInLocale("http://x/english/a", "en")).toBe("/english/a");
+  });
+
+  it("puts each page in one row, by its name alone", () => {
+    const table = markdownTable(shotsOnDisk(["upload-1366-en.png", "upload-1366-ar.png"]), (file) => file).split("\n");
+    expect(table[0]).toBe("| Page | English 1366 | Arabic 1366 |");
+    expect(table[2]).toBe("| upload | ![](upload-1366-en.png) | ![](upload-1366-ar.png) |");
+  });
+});
+
+describe("flowShotRecorder", () => {
+  it("names each flow shot <name>-<width>-<locale>.png, at the path it was taken on", () => {
+    const record = flowShotRecorder({ locale: "ar", width: 1920 }, new Set());
+    expect(record("choose-file", "/projects/p1/work-items/import")).toEqual({
+      route: "/projects/p1/work-items/import",
+      page: "choose-file",
+      width: 1920,
+      locale: "ar",
+      file: "choose-file-1920-ar.png",
+    });
+  });
+
+  it("refuses a name that is not plain or starts with a dot, and a file already taken in the run, case aside", () => {
+    const taken = new Set(["home-1366-en.png"]);
+    const record = flowShotRecorder({ locale: "en", width: 1366 }, taken);
+    expect(() => record("../x", "/a")).toThrow(/Flow shot "\.\.\/x": a name is letters, digits, \. _ -/);
+    expect(() => record(".x", "/a")).toThrow(/Flow shot "\.x"/);
+    record("map-columns", "/a");
+    expect(() => record("Map-Columns", "/a")).toThrow(/Flow shot "Map-Columns" \(en, 1366\) would be saved as map-columns-1366-en\.png, which this run already shot/);
+    expect(() => record("home", "/a")).toThrow(/already shot/);
+  });
+
+  it("puts a flow shot's row by its name and path, like a screen's", () => {
+    const record = flowShotRecorder({ locale: "en", width: 1366 }, new Set());
+    expect(markdownTable([record("review", "/import/1")], (file) => file).split("\n")[2]).toBe("| review: `/import/1` | ![](review-1366-en.png) |  |");
+  });
+});
+
+describe("inLocale", () => {
+  it("is the page's language's name, or the one name both share", () => {
+    expect(inLocale({ en: "Next", ar: "التالي" }, "ar")).toBe("التالي");
+    expect(inLocale("TWR-MAR-01-0008", "en")).toBe("TWR-MAR-01-0008");
   });
 });
 

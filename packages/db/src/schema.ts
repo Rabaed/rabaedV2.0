@@ -146,7 +146,10 @@ export interface AdminActionTable {
     | "read_documental_record_alerts"
     | "read_register_import"
     | "preview_register_import"
-    | "confirm_register_import";
+    | "confirm_register_import"
+    | "read_record_jobs"
+    | "retry_record_job"
+    | "read_documental_record_history";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;

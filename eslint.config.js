@@ -41,6 +41,17 @@ export default tseslint.config(
     rules: { "rabaed/no-raw-error-logging": "error" },
   },
   {
+    // Rabaed Admin connects as rabaed_admin (bypassrls): it calls the api's code only with an importer, declared in
+    // `module`, whose steps run as the app role (RP-960, RP-987). Add an importer here only with a seam test that its
+    // statements ran as rabaed_app, as apps/admin/test/register-import.test.ts has for these two.
+    files: ["apps/admin/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"],
+    ignores: ["apps/admin/test/**", "apps/admin/**/*.test.{ts,tsx}"],
+    plugins: { rabaed },
+    rules: {
+      "rabaed/admin-api-as-app-role": ["error", { module: "apps/admin/src/register-import.ts", importers: ["engineerImporter", "ownImporter"] }],
+    },
+  },
+  {
     // Bidi isolates and marks are invisible in review: write them as \u escapes (RP-329). Autofixable.
     files: jsTsFiles,
     plugins: { rabaed },

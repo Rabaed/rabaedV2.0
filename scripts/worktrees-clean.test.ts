@@ -14,6 +14,12 @@ describe("openedSinceListed", () => {
     expect(openedSinceListed("G:/Rabaed Contech/.claude/worktrees/agent-b2", openSession)).toBeUndefined();
   });
 
+  it("keeps and names one a running Claude session moved into after the prompt (RP-956)", () => {
+    const heldBySession = (path: string) => (path === agent ? 'a running Claude session is in it: session "Main 9" (pid 9)' : undefined);
+    expect(openedSinceListed(agent, () => undefined, heldBySession)).toBe('a running Claude session is in it: session "Main 9" (pid 9)');
+    expect(openedSinceListed("G:/Rabaed Contech/.claude/worktrees/agent-b2", () => undefined, heldBySession)).toBeUndefined();
+  });
+
   it("keeps one when the app's records can no longer be read", () => {
     expect(openedSinceListed(agent, () => ({ kind: "unknown", reason: "list unreadable" }))).toBe("a Claude desktop session may hold it: list unreadable");
   });
