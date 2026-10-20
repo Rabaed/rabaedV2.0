@@ -64,7 +64,7 @@ export function ownServerHint(
 }
 
 /** pid, then its parent, grandparent and so on, stopping at a pid that is not running or one already seen. */
-export function* ancestors(pid: number, processes: ProcessList): Generator<number> {
+function* ancestors(pid: number, processes: ProcessList): Generator<number> {
   const seen = new Set<number>();
   for (let p: number | undefined = pid; p !== undefined && !seen.has(p); p = processes.parentOf(p)) {
     seen.add(p);
@@ -72,7 +72,7 @@ export function* ancestors(pid: number, processes: ProcessList): Generator<numbe
   }
 }
 
-export function isClaude(pid: number, processes: ProcessList): boolean {
+function isClaude(pid: number, processes: ProcessList): boolean {
   return /^claude(\.exe)?$/i.test(processes.nameOf(pid) ?? "");
 }
 

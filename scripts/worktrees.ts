@@ -1,8 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
-import { heldReason, readTimedProcessList, systemSessionCheck, type SessionCheck, type TimedProcessList } from "./claude-sessions.ts";
-import { openSessionReason, type DesktopSessions } from "./desktop-sessions.ts";
+import { holdReason, systemHolders, tryReadTimedProcessList, type Holders, type TimedProcessList } from "./claude-sessions.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
@@ -42,12 +41,6 @@ export type WorktreeFacts = Worktree & {
   lockLive: boolean;
   /** A running process holds its folder, such as its dev server (Liveness.heldByProcess). Looked up as lockLive is. */
   heldByProcess: boolean;
-  /**
-   * Why a running Claude session holds it (Liveness.heldBySession, RP-956): one works in its folder,
-   * or, for a main-* or orchestrator-* worktree, the sessions could not be checked. Looked up for
-   * every worktree, whatever its commits; undefined when none does.
-   */
-  heldBySession?: string | undefined;
 };
 
 /** The running sessions and processes a worktree with no commits yet is checked against (RP-585); injected so tests need none. */
@@ -56,8 +49,6 @@ export type Liveness = {
   lockLive: (locked: string | undefined) => boolean;
   /** Whether a running process's command line names a file in the folder. */
   heldByProcess: (path: string) => boolean;
-  /** Why a running Claude session other than this command's holds the folder (claude-sessions.ts heldReason), or undefined. */
-  heldBySession?: (path: string) => string | undefined;
 };
 
 /**
@@ -85,11 +76,12 @@ type StartingFacts = Pick<WorktreeFacts, "branch" | "locked" | "noCommitsYet" | 
  * commit of its own, or it has none and nothing holds it (stillStarting): clean, no running
  * process in its folder, and either a lock naming a session that has stopped (or this session:
  * its own paused subagent) or a detached HEAD (RP-601). An unlocked branch never committed to
- * may be a session that just started, so it is never finished (RP-610). Nor is one a running
- * Claude session holds (heldBySession, RP-956), whatever its commits.
+ * may be a session that just started, so it is never finished (RP-610). It judges git and the
+ * disk only: whether a running or desktop Claude session holds the worktree is each command's
+ * first check (claude-sessions.ts holdReason, RP-956/RP-612), as lanes:prune --merged names a
+ * finished worktree's kept project.
  */
-export const isFinished = (f: StartingFacts & Pick<WorktreeFacts, "ahead" | "heldBySession">): boolean =>
-  f.ahead === 0 && f.heldBySession === undefined && stillStarting(f) === undefined;
+export const isFinished = (f: StartingFacts & Pick<WorktreeFacts, "ahead">): boolean => f.ahead === 0 && stillStarting(f) === undefined;
 
 /**
  * Whether a reflog (its entries' subjects, `git reflog --format=%gs`) shows a commit
@@ -141,8 +133,8 @@ type ChooseInput = {
   includeEmpty?: boolean;
   /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
   only?: string[];
-  /** The open Claude desktop session holding the worktree at a path, if any (desktop-sessions.ts, RP-608); it is never removed. */
-  openSession?: DesktopSessions;
+  /** The running and desktop Claude sessions (RP-956, RP-608): a worktree one holds is never removed, even with only. */
+  holders: Holders;
   platform?: NodeJS.Platform;
 };
 
@@ -161,35 +153,29 @@ export const isNamed = (path: string, names: string[], platform?: NodeJS.Platfor
  * have uncommitted changes. Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, openSession, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, holders, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
   for (const facts of worktrees) {
-    const { ahead, dirty } = facts;
     const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
     if (only && !isNamed(w.path, only, platform)) continue;
-    const starting = stillStarting(facts);
-    const session = openSession?.(w.path);
-    const reason = samePath(w.path, currentPath, platform)
-      ? CURRENT_WORKTREE
-      : session !== undefined
-        ? openSessionReason(session)
-        : facts.heldBySession !== undefined
-        ? facts.heldBySession
-        : dirty
-        ? "uncommitted changes"
-        : ahead > 0
-          ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
-          : starting && !keepEmpty
-            ? `no commits yet, may still be running (${starting}; --include-empty removes it)`
-            : w.locked !== undefined && !lockedByApp(w.locked)
-              ? `locked by hand (${w.locked || "no reason"})`
-              : undefined;
+    const reason = samePath(w.path, currentPath, platform) ? CURRENT_WORKTREE : (holdReason(w.path, holders) ?? cleanSkipReason(facts, keepEmpty));
     if (reason) skipped.push({ worktree: w, reason });
     else remove.push(w);
   }
   return { remove, skipped };
+}
+
+/** Why worktrees:clean keeps a worktree nothing holds, by git and the disk; undefined when it goes. */
+function cleanSkipReason(facts: WorktreeFacts, keepEmpty: boolean): string | undefined {
+  const { ahead, branch, locked } = facts;
+  if (facts.dirty) return "uncommitted changes";
+  if (ahead > 0) return `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${branch ? ` on ${branch}` : " (detached HEAD)"}`;
+  const starting = stillStarting(facts);
+  if (starting && !keepEmpty) return `no commits yet, may still be running (${starting}; --include-empty removes it)`;
+  if (locked !== undefined && !lockedByApp(locked)) return `locked by hand (${locked || "no reason"})`;
+  return undefined;
 }
 
 const git = (args: string[], cwd?: string) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -251,16 +237,7 @@ function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Live
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
   const mayBeStarting = ahead === 0 && noCommitsYet;
-  const heldBySession = exists ? live.heldBySession?.(w.path) : undefined;
-  return {
-    ...w,
-    ahead,
-    dirty,
-    noCommitsYet,
-    lockLive: mayBeStarting && live.lockLive(w.locked),
-    heldByProcess: mayBeStarting && live.heldByProcess(w.path),
-    heldBySession,
-  };
+  return { ...w, ahead, dirty, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
 }
 
 /** judgeWorktree's answer. neverCommitted: finished although its branch has had no commit of its own. */
@@ -293,14 +270,13 @@ export function judgeWorktree(w: Worktree, target: string, mainRoot: string, liv
  * another running Claude session (session-lock.ts otherLiveSession): the app locks a subagent's
  * worktree with its parent's pid, so this session's own paused subagents do not count. When the
  * processes cannot be read, every lock with a pid and every folder counts as held, so nothing with
- * no commits yet is finished. A running Claude session's working directory holds its worktree
- * (claude-sessions.ts, RP-956); when the sessions cannot be checked, main-* and orchestrator-*
- * worktrees count as held. The sessions are read once too: a fresh systemLiveness re-reads them.
+ * no commits yet is finished. holders are the running Claude sessions (read with the same process
+ * list, once) and the desktop sessions (claude-sessions.ts systemHolders, RP-956/RP-612); when the
+ * running sessions cannot be checked, every worktree is held. A fresh systemLiveness re-reads them.
  */
-export function systemLiveness(platform: NodeJS.Platform = process.platform): Liveness & { pidLive: (pid: number) => boolean } {
+export function systemLiveness(platform: NodeJS.Platform = process.platform): Liveness & { pidLive: (pid: number) => boolean; holders: Holders } {
   let processes: TimedProcessList | null | undefined;
   let commandLines: string[] | null | undefined;
-  let sessions: SessionCheck | undefined;
   const read = <T>(f: () => T): T | null => {
     try {
       return f();
@@ -309,7 +285,7 @@ export function systemLiveness(platform: NodeJS.Platform = process.platform): Li
     }
   };
   const processList = (): TimedProcessList | null => {
-    if (processes === undefined) processes = read(readTimedProcessList);
+    if (processes === undefined) processes = tryReadTimedProcessList() ?? null;
     return processes;
   };
   /** Whether the pid is another live Claude session (true when the processes cannot be read). */
@@ -318,14 +294,7 @@ export function systemLiveness(platform: NodeJS.Platform = process.platform): Li
     return list === null || otherLiveSession(pid, process.pid, list, sessionPidOf(process.env));
   };
   return {
-    heldBySession: (path) => {
-      sessions ??= systemSessionCheck(() => {
-        const list = processList();
-        if (list === null) throw new Error("the process list could not be read");
-        return list;
-      });
-      return heldReason(path, sessions, platform);
-    },
+    holders: systemHolders(() => processList() ?? undefined, platform),
     pidLive,
     lockLive: (locked) => {
       if (locked === undefined) return false;
