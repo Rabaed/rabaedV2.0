@@ -43,7 +43,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { HttpError, idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
+import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getActivityFeed } from "../work-items/activity-feed.ts";
 import { takeBulkTransition } from "../work-items/bulk-transitions.ts";
@@ -380,7 +380,6 @@ export const workItemRoutes =
         const memberId = ctx.requireMember(request);
         const result = await takeBulkTransition(ctx.db, ctx.files, memberId, request.body, ctx.now());
         if (result.ok) return { taken: result.taken };
-        if (result.reason === "bulk_refused") throw new HttpError(409, "bulk_refused", { stoppedBy: result.stoppedBy });
         throw refusal(result);
       },
     );
