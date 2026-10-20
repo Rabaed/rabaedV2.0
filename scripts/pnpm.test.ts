@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { workspacePackages } from "./typecheck.ts";
 
 // scripts/pnpm.ts reruns the pnpm that started the current package.json script,
 // so root scripts work where only `corepack pnpm` exists (agent shells, RP-298).
@@ -52,14 +53,11 @@ describe("root package.json scripts", () => {
     expect(direct).toEqual([]);
   });
 
-  it("typecheck every workspace package: `pnpm typecheck` (scripts/typecheck.ts) skips a package without the script", () => {
-    const packages = ["apps", "packages"].flatMap((group) =>
-      readdirSync(join(root, group))
-        .map((name) => join(group, name, "package.json"))
-        .filter((file) => existsSync(join(root, file))),
-    );
-    const unchecked = packages.filter((file) => !(JSON.parse(readFileSync(join(root, file), "utf8")) as { scripts?: Record<string, string> }).scripts?.typecheck);
+  // `pnpm typecheck` skips a package without the script (scripts/typecheck.test.ts),
+  // so a package that left it out would never be type-checked.
+  it("typecheck every workspace package: each package scripts/typecheck.ts finds has a typecheck script", () => {
+    const packages = workspacePackages(root);
     expect(packages.length).toBeGreaterThan(0);
-    expect(unchecked).toEqual([]);
+    expect(packages.filter(({ scripts }) => !scripts.typecheck).map(({ dir }) => dir)).toEqual([]);
   });
 });
