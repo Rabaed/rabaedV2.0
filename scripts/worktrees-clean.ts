@@ -78,11 +78,12 @@ export function resolveTarget(target: string, git: TargetGit): { ref: string | u
 /**
  * Why a worktree chosen for removal stays after all: a desktop session holds it now, by
  * the app's records read again just before removing it (a session may open one after the
- * prompt, as in worktrees:prune's changedSinceListed); undefined when it still goes.
+ * prompt, as in worktrees:prune's changedSinceListed), or a running Claude session is in it now
+ * (heldBySession, read again too; RP-956); undefined when it still goes.
  */
-export function openedSinceListed(path: string, openSession: DesktopSessions): string | undefined {
+export function openedSinceListed(path: string, openSession: DesktopSessions, heldBySession?: (path: string) => string | undefined): string | undefined {
   const session = openSession(path);
-  return session === undefined ? undefined : openSessionReason(session, { sinceListed: true });
+  return session === undefined ? heldBySession?.(path) : openSessionReason(session, { sinceListed: true });
 }
 
 const gitTarget = (cwd: string): TargetGit => ({
@@ -168,8 +169,8 @@ async function main(): Promise<void> {
 
   let failed = 0;
   for (const w of remove) {
-    // Read again just before each removal: a session may have opened it since the prompt (RP-608).
-    const opened = openedSinceListed(w.path, readDesktopSessions());
+    // Read again just before each removal: a session may have opened it, or moved into it, since the prompt (RP-608, RP-956).
+    const opened = openedSinceListed(w.path, readDesktopSessions(), systemLiveness().heldBySession);
     if (opened) {
       console.log(`Kept ${name(w)}: ${opened}.`);
       continue;

@@ -11,7 +11,9 @@
 // It never touches the main checkout or the current worktree, nor one whose Claude
 // session is open: a "claude session" lock, or the desktop app's own record of the
 // worktree's path (desktop-sessions.ts, RP-608: the app does not lock its worktrees,
-// and a session may have renamed the app's branch). It skips, and lists,
+// and a session may have renamed the app's branch), nor one a running Claude session works
+// in (claude-sessions.ts, RP-956: a session that moved in with EnterWorktree leaves neither;
+// a main-* or orchestrator-* worktree is also kept when the sessions cannot be checked). It skips, and lists,
 // worktrees with uncommitted changes (untracked files outside ignored paths included),
 // commits on no origin branch, or nothing merged; it checks the first two again just
 // before removing each worktree. A squash-merged worktree whose remote branch was
@@ -89,8 +91,8 @@ const here = currentRoot();
 const branches = localBranches(TARGET, mainRoot);
 const gone = new Set(branches.filter((b) => b.upstreamGone).map((b) => b.branch));
 const live = systemLiveness();
-const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
-  gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
+const pruneFacts = (list: Worktree[], liveness = live): PruneWorktree[] =>
+  gatherFacts(list, TARGET, mainRoot, liveness).map((w) => ({
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
     unpushed: unpushedCount(w.head, mainRoot),
@@ -143,8 +145,9 @@ for (const w of chosen.remove) {
   // Checked again just before: never the main checkout or the current worktree.
   if (samePath(w.path, mainRoot) || samePath(w.path, here)) continue;
   // Its uncommitted changes, unpushed commits and desktop session too, which may have changed
-  // since the prompt: the sessions are read again each time, as one may open meanwhile (RP-608).
-  const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)))[0], readDesktopSessions());
+  // since the prompt: the sessions are read again each time, as one may open meanwhile (RP-608),
+  // and so are the running Claude sessions, with a fresh liveness (RP-956).
+  const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)), systemLiveness())[0], readDesktopSessions());
   if (changed) {
     console.log(`Kept ${name(w)}: ${changed}.`);
     continue;

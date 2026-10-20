@@ -1,9 +1,10 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
+import { heldReason, readTimedProcessList, systemSessionCheck, type SessionCheck, type TimedProcessList } from "./claude-sessions.ts";
 import { openSessionReason, type DesktopSessions } from "./desktop-sessions.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { otherLiveSession, readCommandLines, readProcessList, sessionPidOf, type ProcessList } from "./session-lock.ts";
+import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
 // Cleaning up the app-made agent worktrees `/implement-spec` leaves under
@@ -41,6 +42,12 @@ export type WorktreeFacts = Worktree & {
   lockLive: boolean;
   /** A running process holds its folder, such as its dev server (Liveness.heldByProcess). Looked up as lockLive is. */
   heldByProcess: boolean;
+  /**
+   * Why a running Claude session holds it (Liveness.heldBySession, RP-956): one works in its folder,
+   * or, for a main-* or orchestrator-* worktree, the sessions could not be checked. Looked up for
+   * every worktree, whatever its commits; undefined when none does.
+   */
+  heldBySession?: string | undefined;
 };
 
 /** The running sessions and processes a worktree with no commits yet is checked against (RP-585); injected so tests need none. */
@@ -49,6 +56,8 @@ export type Liveness = {
   lockLive: (locked: string | undefined) => boolean;
   /** Whether a running process's command line names a file in the folder. */
   heldByProcess: (path: string) => boolean;
+  /** Why a running Claude session other than this command's holds the folder (claude-sessions.ts heldReason), or undefined. */
+  heldBySession?: (path: string) => string | undefined;
 };
 
 /**
@@ -76,9 +85,11 @@ type StartingFacts = Pick<WorktreeFacts, "branch" | "locked" | "noCommitsYet" | 
  * commit of its own, or it has none and nothing holds it (stillStarting): clean, no running
  * process in its folder, and either a lock naming a session that has stopped (or this session:
  * its own paused subagent) or a detached HEAD (RP-601). An unlocked branch never committed to
- * may be a session that just started, so it is never finished (RP-610).
+ * may be a session that just started, so it is never finished (RP-610). Nor is one a running
+ * Claude session holds (heldBySession, RP-956), whatever its commits.
  */
-export const isFinished = (f: StartingFacts & Pick<WorktreeFacts, "ahead">): boolean => f.ahead === 0 && stillStarting(f) === undefined;
+export const isFinished = (f: StartingFacts & Pick<WorktreeFacts, "ahead" | "heldBySession">): boolean =>
+  f.ahead === 0 && f.heldBySession === undefined && stillStarting(f) === undefined;
 
 /**
  * Whether a reflog (its entries' subjects, `git reflog --format=%gs`) shows a commit
@@ -164,6 +175,8 @@ export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, 
       ? CURRENT_WORKTREE
       : session !== undefined
         ? openSessionReason(session)
+        : facts.heldBySession !== undefined
+        ? facts.heldBySession
         : dirty
         ? "uncommitted changes"
         : ahead > 0
@@ -238,7 +251,16 @@ function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Live
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
   const mayBeStarting = ahead === 0 && noCommitsYet;
-  return { ...w, ahead, dirty, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
+  const heldBySession = exists ? live.heldBySession?.(w.path) : undefined;
+  return {
+    ...w,
+    ahead,
+    dirty,
+    noCommitsYet,
+    lockLive: mayBeStarting && live.lockLive(w.locked),
+    heldByProcess: mayBeStarting && live.heldByProcess(w.path),
+    heldBySession,
+  };
 }
 
 /** judgeWorktree's answer. neverCommitted: finished although its branch has had no commit of its own. */
@@ -271,11 +293,14 @@ export function judgeWorktree(w: Worktree, target: string, mainRoot: string, liv
  * another running Claude session (session-lock.ts otherLiveSession): the app locks a subagent's
  * worktree with its parent's pid, so this session's own paused subagents do not count. When the
  * processes cannot be read, every lock with a pid and every folder counts as held, so nothing with
- * no commits yet is finished.
+ * no commits yet is finished. A running Claude session's working directory holds its worktree
+ * (claude-sessions.ts, RP-956); when the sessions cannot be checked, main-* and orchestrator-*
+ * worktrees count as held. The sessions are read once too: a fresh systemLiveness re-reads them.
  */
 export function systemLiveness(platform: NodeJS.Platform = process.platform): Liveness & { pidLive: (pid: number) => boolean } {
-  let processes: ProcessList | null | undefined;
+  let processes: TimedProcessList | null | undefined;
   let commandLines: string[] | null | undefined;
+  let sessions: SessionCheck | undefined;
   const read = <T>(f: () => T): T | null => {
     try {
       return f();
@@ -283,12 +308,24 @@ export function systemLiveness(platform: NodeJS.Platform = process.platform): Li
       return null;
     }
   };
+  const processList = (): TimedProcessList | null => {
+    if (processes === undefined) processes = read(readTimedProcessList);
+    return processes;
+  };
   /** Whether the pid is another live Claude session (true when the processes cannot be read). */
   const pidLive = (pid: number): boolean => {
-    if (processes === undefined) processes = read(readProcessList);
-    return processes === null || otherLiveSession(pid, process.pid, processes, sessionPidOf(process.env));
+    const list = processList();
+    return list === null || otherLiveSession(pid, process.pid, list, sessionPidOf(process.env));
   };
   return {
+    heldBySession: (path) => {
+      sessions ??= systemSessionCheck(() => {
+        const list = processList();
+        if (list === null) throw new Error("the process list could not be read");
+        return list;
+      });
+      return heldReason(path, sessions, platform);
+    },
     pidLive,
     lockLive: (locked) => {
       if (locked === undefined) return false;
