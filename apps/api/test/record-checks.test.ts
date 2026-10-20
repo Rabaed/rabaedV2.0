@@ -385,6 +385,12 @@ describe("scenario RP-950-1: record ready by email and in the digest", { timeout
     expect(await readyEmails(emails.orEngineer)).toEqual([]);
     expect((await caught(emails.c2Engineer)).filter((m) => m.Subject.includes(documentNumber))).toEqual([]);
     expect(await bell(c2Engineer, id)).toEqual([]);
+    // No row at all, so no email and no digest entry whatever C2 chooses: read as the migrator, since no read shows a
+    // notification the Member can't see.
+    const c2Rows = await sql`
+      select n.id from notification n join member m on m.id = n.member_id where n.work_item_id = ${id} and m.email = ${emails.c2Engineer}
+    `.execute(migrator);
+    expect(c2Rows.rows).toEqual([]);
     // The bell is unchanged by the email choice.
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
   });
