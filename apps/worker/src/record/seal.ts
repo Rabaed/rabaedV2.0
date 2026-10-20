@@ -369,13 +369,13 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
       if (!dss || !expectedFile || Buffer.compare(Buffer.from(expectedFile), Buffer.from(pdf)) !== 0) {
         return invalid("the file was changed after it was sealed", counts);
       }
-      // Not B-LT only when sealed before RP-669: the seal's certificates alone. Otherwise the
-      // revocation data must hold, so a byte changed inside it breaks the seal too.
-      if (!(dssRevocation === 0 && sameList(dss.certificates, chains))) {
-        const problems = await longTermProblems(chains, dss);
-        if (problems.length > 0) return invalid(`the seal's revocation data does not hold: ${problems.join("; ")}`, counts);
-        longTerm = true;
-      }
+      // The revocation data must hold, so a byte changed inside it breaks the seal too. Chains of
+      // self-signed certificates alone need none (a trust anchor has no revocation data), and are B-LT.
+      // Short of it only when sealed before RP-669: the seal's certificates alone, still valid.
+      const problems = await longTermProblems(chains, dss);
+      const beforeRp669 = dssRevocation === 0 && sameList(dss.certificates, chains);
+      if (problems.length > 0 && !beforeRp669) return invalid(`the seal's revocation data does not hold: ${problems.join("; ")}`, counts);
+      longTerm = problems.length === 0;
     }
     return { valid: true, problem: null, signer: name, timestampedAt: info.genTime, subFilter, dssCertificates, dssRevocation, longTerm };
   } catch (error) {
