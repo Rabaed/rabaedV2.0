@@ -258,3 +258,20 @@ export async function wirAtConsultant(
   if ("manager" in k1.members) await expectOutcome("wirAtConsultant pick up (K1 Engineer)", pickUp(k1.members.engineer, id), "picked_up");
   return id;
 }
+
+/**
+ * C2's Engineer raises a Draft on `options.type` (the Tower's Trade and Building B, which C2 covers) and holds it.
+ * The positive control beside a refusal to C2 (RP-995): C2 sees its own item, so a refusal of C1's is V3, not a
+ * C2 Member who reaches nothing at all. Returns the item's id.
+ */
+export async function c2Draft(tower: Pick<SeamTwoTower, "projectId" | "tradeId" | "buildingB" | "c2" | "call">, options: WirAtConsultantOptions): Promise<string> {
+  const { type, title } = options;
+  const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+    tower.c2.members.engineer,
+    sql`select outcome, work_item_id from app.create_work_item(
+      ${tower.projectId}::uuid, ${type}, ${title}, app.latest_form_version(${type}), '{}'::jsonb,
+      ${tower.tradeId}::uuid, ${tower.buildingB}::uuid, now())`,
+  );
+  if (created!.outcome !== "created") throw new Error(`c2Draft create: ${created!.outcome}`);
+  return created!.work_item_id;
+}

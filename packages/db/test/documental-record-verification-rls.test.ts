@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { buildSeamTwoTower, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -50,15 +50,20 @@ beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
-  member = (await migrator.query<{ id: string }>("select id from member where status = 'active' order by id limit 1")).rows[0]!.id;
-  // Three numbered demo items without a record (the last ones, so another file's first one is left alone), each
-  // given a record as the worker saves one (the migrator stands in for it), in each status.
-  const { rows: items } = await migrator.query<{ id: string; project_id: string; document_number: string }>(
-    `select w.id, w.project_id, w.document_number from work_item w
-     where w.document_number is not null and w.discarded_at is null and not exists (select 1 from documental_record r where r.work_item_id = w.id)
-     order by w.id desc limit 3`,
-  );
-  expect(items).toHaveLength(3);
+  // This file's own Tower (RP-995): four numbered WIRs, three given a record as the worker saves one (the migrator
+  // stands in for it), one in each status, and one a record made before RP-157.
+  const tower = await buildSeamTwoTower(app, migrator, { projectCode: "RVR" });
+  member = tower.c1.members.engineer;
+  const numbered = async (title: string) => {
+    const id = await wirAtConsultant(tower, { type: "WIR", title });
+    const { rows } = await migrator.query<{ id: string; project_id: string; document_number: string }>(
+      "select id, project_id, document_number from work_item where id = $1 and document_number is not null",
+      [id],
+    );
+    expect(rows).toHaveLength(1);
+    return rows[0]!;
+  };
+  const items = [await numbered("Slab pour 1"), await numbered("Slab pour 2"), await numbered("Slab pour 3")];
   const statuses = ["published", "preparing", "failed_checks"] as const;
   for (const [i, item] of items.entries()) {
     const key = `projects/${item.project_id}/work-items/${item.id}/documental-record/rp157`;
@@ -85,12 +90,7 @@ beforeAll(async () => {
   }
   // A published record made before RP-157, with no face: answered as one that doesn't exist (no backfill).
   {
-    const { rows } = await migrator.query<{ id: string; project_id: string; document_number: string }>(
-      `select w.id, w.project_id, w.document_number from work_item w
-       where w.document_number is not null and w.discarded_at is null and not exists (select 1 from documental_record r where r.work_item_id = w.id)
-       order by w.id desc limit 1`,
-    );
-    const item = rows[0]!;
+    const item = await numbered("Slab pour 4");
     const key = `projects/${item.project_id}/work-items/${item.id}/documental-record/rp157`;
     const file = async (name: string) =>
       (await migrator.query<{ id: string }>("insert into stored_file (storage_key, sha256, size, mime) values ($1, $2, 10, 'application/pdf') returning id", [`${key}/${name}`, sha(name)]))

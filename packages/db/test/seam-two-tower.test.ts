@@ -1,9 +1,11 @@
 // Seam 2 for the Tower fixture itself (RP-980): `wirAtConsultant` leaves the WIR with K1's Engineer whether K1 has a
-// Manager (the Step waits, the Engineer picks it up) or only that Engineer (it holds the Step as it arrives).
+// Manager (the Step waits, the Engineer picks it up) or only that Engineer (it holds the Step as it arrives);
+// `c2Draft` (RP-995) leaves a Draft only C2 sees, the positive control beside a refusal to C2.
+import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { buildSeamTwoTower, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 
@@ -41,5 +43,16 @@ describe("wirAtConsultant", () => {
     const tower = await buildSeamTwoTower(app, migrator, { projectCode: "RTB", k1Manager: true });
     const id = await wirAtConsultant(tower, { type: "WIR", title: "Slab pour" });
     expect(await holder(id)).toEqual([{ assignee_member_id: tower.k1.members.engineer, status: "picked_up" }]);
+  });
+});
+
+describe("c2Draft", () => {
+  it("leaves a Draft that C2's Engineer holds and sees, and C1, K1 and the Owner don't (V1)", async () => {
+    const tower = await buildSeamTwoTower(app, migrator, { projectCode: "RTC" });
+    const id = await c2Draft(tower, { type: "WIR", title: "Slab pour" });
+    const sees = (as: string) => tower.call<{ sees: boolean }>(as, sql`select app.sees_work_item(${id}::uuid) as sees`).then((r) => r[0]!.sees);
+    expect(await holder(id)).toEqual([{ assignee_member_id: tower.c2.members.engineer, status: "picked_up" }]);
+    expect(await sees(tower.c2.members.engineer)).toBe(true);
+    for (const outsider of [tower.c1.members.engineer, tower.k1.members.engineer, tower.ow.members.representative]) expect(await sees(outsider)).toBe(false);
   });
 });
