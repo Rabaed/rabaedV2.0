@@ -231,10 +231,10 @@ export function awsIdentifierIn(text: string): string | null {
 const argumentHead = /[^,{}]*(?:,\s*(\w+)\s*,?)?/y;
 
 /**
- * Whether an ICU message prints a `#` inside a plural or selectordinal, at any depth (a select inside
- * a plural branch too). The `#` prints the count in the locale's own digits, Arabic-Indic in Arabic,
- * so the count goes in as an argument formatted with formatNumber instead (RP-1022). A quoted `'#'`
- * is literal text.
+ * Whether an ICU message prints a `#` in a plural or selectordinal branch: the `#` prints the count in
+ * the locale's own digits, Arabic-Indic in Arabic on some runtimes, so the count goes in as an argument
+ * formatted with formatNumber instead (RP-1022). Read as intl-messageformat (next-intl's) reads it: in a
+ * select's branch, even inside a plural, `#` is plain text, and so is a quoted `'#'`.
  */
 export function hasPluralPound(message: string): boolean {
   let i = 0;
@@ -243,14 +243,22 @@ export function hasPluralPound(message: string): boolean {
   const text = (inPlural: boolean): boolean => {
     while (i < message.length && message[i] !== "}") {
       const c = message[i]!;
-      if (c === "'" && /[{}#|']/.test(message[i + 1] ?? "")) {
-        const end = message[i + 1] === "'" ? i + 1 : message.indexOf("'", i + 1);
-        i = end < 0 ? message.length : end + 1;
+      const next = message[i + 1] ?? "";
+      if (c === "'" && next === "'") {
+        i += 2;
+      } else if (c === "'" && ("{}<>".includes(next) || (next === "#" && inPlural))) {
+        // Quoted text runs to the next lone apostrophe; `''` inside it is an apostrophe.
+        for (i += 2; i < message.length; i++) {
+          if (message[i] !== "'") continue;
+          if (message[i + 1] !== "'") break;
+          i++;
+        }
+        i++;
       } else if (c === "#" && inPlural) {
         return true;
       } else if (c === "{") {
         i++;
-        if (argument(inPlural)) return true;
+        if (argument()) return true;
       } else {
         i++;
       }
@@ -259,12 +267,12 @@ export function hasPluralPound(message: string): boolean {
   };
 
   // An argument after its `{`, through its closing `}`.
-  const argument = (inPlural: boolean): boolean => {
+  const argument = (): boolean => {
     argumentHead.lastIndex = i;
     const type = argumentHead.exec(message)![1];
     i = argumentHead.lastIndex;
     if (type === "plural" || type === "selectordinal" || type === "select") {
-      const branchesInPlural = inPlural || type !== "select";
+      const branchesInPlural = type !== "select";
       // Selectors (one, =0, offset:1) and spaces are skipped; each `{…}` is a branch.
       while (i < message.length && message[i] !== "}") {
         if (message[i] === "{") {

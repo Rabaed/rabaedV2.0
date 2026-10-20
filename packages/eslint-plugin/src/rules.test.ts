@@ -157,14 +157,23 @@ jsonTester.run("json-no-plural-pound", rules["json-no-plural-pound"], {
     `{ "a": "{count, plural, one {'#' tag} other {'#' tags}}" }`,
     `{ "a": "{count, plural, one {Can't add {n}} other {Can't add {n}}}" }`,
     `{ "a": "{count, plural, offset:1 =0 {none} other {{n} more}}" }`,
+    // As intl-messageformat reads them: `#` in a select's branch is plain text, even inside a plural,
+    // and `'<#>'` is quoted.
+    `{ "a": "{n, plural, other {{g, select, f {# of hers} other {# of his}}}}" }`,
+    `{ "a": "{n, plural, other {'<#>' {n}}}" }`,
   ],
   invalid: [
     { code: `{ "a": "{n, plural, one {# file} other {# files}}" }`, errors: [{ messageId: "pound" }] },
     { code: `{ "a": "{n, selectordinal, one {#st} other {#th}}" }`, errors: [{ messageId: "pound" }] },
     { code: `{ "a": { "b": "{more, plural, =0 {} other { +#}}" } }`, errors: [{ messageId: "pound", data: { key: "a.b" } }] },
-    // `#` in a select inside a plural branch is still the plural's count.
-    { code: `{ "a": "{n, plural, other {{g, select, f {# of hers} other {# of his}}}}" }`, errors: [{ messageId: "pound" }] },
     { code: `{ "a": "{n, plural, other {{d, date, short} and #}}" }`, errors: [{ messageId: "pound" }] },
+    // A plural inside a select's branch prints its own `#`.
+    { code: `{ "a": "{g, select, other {{n, plural, other {# x}}}}" }`, errors: [{ messageId: "pound" }] },
+    // Quoting as intl-messageformat reads it: `|` quotes nothing, `'#` outside a plural is plain text,
+    // and `''` inside quoted text is an apostrophe, not its end.
+    { code: `{ "a": "{n, plural, other {'| # it's}}" }`, errors: [{ messageId: "pound" }] },
+    { code: `{ "a": "'#1 {n, plural, other {# x}} don't" }`, errors: [{ messageId: "pound" }] },
+    { code: `{ "a": "{n, plural, other {'{it''s}' # x}}" }`, errors: [{ messageId: "pound" }] },
   ],
 });
 
