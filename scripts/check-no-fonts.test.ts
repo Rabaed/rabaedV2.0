@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,6 +46,37 @@ describe("committedFontFiles", () => {
     commit({ "public/arabic.WOFF2": "wOF2\u0000", "a/b.otf": "OTTO\u0000", "c.ttf": "\u0000\u0001", "d.woff": "wOFF", "e.eot": "x" });
     git("checkout", "-q", "main");
     expect(committedFontFiles(repo).sort()).toEqual(["a/b.otf", "c.ttf", "d.woff", "e.eot", "public/arabic.WOFF2"]);
+  });
+
+  it("checks only a range's commits when given one: a font on another branch is not this range's", () => {
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.woff2": "wOF2\u0000" });
+    git("checkout", "-q", "-b", "pr", "main");
+    commit({ "pr.txt": "clean\n" });
+    expect(committedFontFiles(repo, "main..pr")).toEqual([]);
+    commit({ "design/fonts/added-then-removed.ttf": "\u0000\u0001" });
+    git("rm", "-q", "design/fonts/added-then-removed.ttf");
+    git("commit", "-q", "-m", "remove");
+    expect(committedFontFiles(repo, "main..pr")).toEqual(["design/fonts/added-then-removed.ttf"]);
+  });
+
+  it("finds a font that a pull request's merge of another branch brings into its range", () => {
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.woff2": "wOF2\u0000" });
+    git("checkout", "-q", "-b", "pr", "main");
+    commit({ "pr.txt": "clean\n" });
+    git("merge", "-q", "--no-edit", "other");
+    expect(committedFontFiles(repo, "main..pr")).toEqual(["other.woff2"]);
+  });
+
+  it("checks one branch's whole history when given a single revision", () => {
+    commit({ "old.otf": "OTTO\u0000" });
+    git("rm", "-q", "old.otf");
+    git("commit", "-q", "-m", "remove");
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.woff2": "wOF2\u0000" });
+    git("checkout", "-q", "main");
+    expect(committedFontFiles(repo, "HEAD")).toEqual(["old.otf"]);
   });
 
   it("ignores names that only look like fonts", () => {
@@ -132,6 +163,17 @@ describe("filesWithEmbeddedFonts", () => {
     expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["new.css"]);
   });
 
+  it("checks only a range's commits when given one: a font on another branch is not this range's", () => {
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.css": `src: url(data:${font("woff")};base64,${fakeBase64})` });
+    git("checkout", "-q", "-b", "pr", "main");
+    commit({ "pr.txt": "clean\n" });
+    expect(filesWithEmbeddedFonts(repo, "main..pr")).toEqual([]);
+    commit({ "design/export.html": claudeDesignExport({ a1: { mime: font("woff2"), data: fakeBase64 } }) });
+    commit({ "design/export.html": claudeDesignExport({}) }, "strip");
+    expect(filesWithEmbeddedFonts(repo, "main..pr")).toEqual(["design/export.html"]);
+  });
+
   it("ignores code that builds a font data URL at run time, and font names in prose", () => {
     commit({
       "fonts.ts": "const src = `url(data:" + font("woff2") + ";base64,${data})`;\n",
@@ -139,5 +181,23 @@ describe("filesWithEmbeddedFonts", () => {
       "manifest.html": claudeDesignExport({ a1: { mime: "image/svg+xml", data: fakeBase64 } }),
     });
     expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+});
+
+describe("node scripts/check-no-fonts.ts --range", () => {
+  const check = (range: string) => spawnSync("node", [join(import.meta.dirname, "check-no-fonts.ts"), "--range", range], { cwd: repo, encoding: "utf8" });
+
+  it("passes a pull request's own clean commits while another branch holds a font, and fails one that adds a font", () => {
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.woff2": "wOF2\u0000" });
+    git("checkout", "-q", "-b", "pr", "main");
+    commit({ "pr.txt": "clean\n" });
+    expect(check("main..pr")).toMatchObject({ status: 0, stdout: expect.stringContaining("No fonts in main..pr") });
+    commit({ "a.css": `src: url(data:${font("woff")};base64,${fakeBase64})`, "b.ttf": "\u0000\u0001" });
+    const failed = check("main..pr");
+    expect(failed.status).toBe(1);
+    expect(failed.stderr).toContain("b.ttf");
+    expect(failed.stderr).toContain("a.css");
+    expect(failed.stderr).not.toContain("other.woff2");
   });
 });
