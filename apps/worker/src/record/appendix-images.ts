@@ -30,26 +30,26 @@ export function drawable(bytes: Uint8Array): Drawable | null {
   let at = 2;
   while (at + 4 <= bytes.length) {
     if (bytes[at] !== 0xff) return null;
-    const marker = bytes[at + 1]!;
-    if (marker === 0xff) {
+    const code = bytes[at + 1]!;
+    if (code === 0xff) {
       at++;
       continue;
     }
-    // Markers that stand alone, with no length.
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+    // Codes that stand alone, with no length.
+    if (code === 0x01 || (code >= 0xd0 && code <= 0xd7)) {
       at += 2;
       continue;
     }
     const length = (bytes[at + 2]! << 8) | bytes[at + 3]!;
     const body = at + 4;
-    if (marker === 0xe1 && Buffer.from(bytes.subarray(body, body + 6)).toString("latin1") === "Exif\0\0") orientation = exifOrientation(bytes.subarray(body + 6, at + 2 + length));
+    if (code === 0xe1 && Buffer.from(bytes.subarray(body, body + 6)).toString("latin1") === "Exif\0\0") orientation = exifOrientation(bytes.subarray(body + 6, at + 2 + length));
     // A frame header: DCT, its precision and its components.
-    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+    if (code >= 0xc0 && code <= 0xcf && code !== 0xc4 && code !== 0xc8 && code !== 0xcc) {
       const precision = bytes[body];
       const components = bytes[body + 5];
-      return DRAWABLE_SOF.has(marker) && precision === 8 && (components === 1 || components === 3) ? { type: "jpeg", orientation } : null;
+      return DRAWABLE_SOF.has(code) && precision === 8 && (components === 1 || components === 3) ? { type: "jpeg", orientation } : null;
     }
-    if (marker === 0xda || marker === 0xd9) return null;
+    if (code === 0xda || code === 0xd9) return null;
     at += 2 + length;
   }
   return null;
