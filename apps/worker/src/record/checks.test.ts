@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
 import { checkRecord, expectationOf, recordProblems, type RecordExpectation } from "./checks.ts";
 import type { RecordData } from "./record-data.ts";
-import { sealPdf } from "./seal.ts";
+import { documentSecurityStore, sealPdf, withDss } from "./seal.ts";
 import { localSealSigner } from "./signer.ts";
 import { localTimestampAuthority } from "./timestamp.ts";
 import type { PdfAValidator } from "./verapdf.ts";
@@ -50,6 +50,16 @@ describe("recordProblems", () => {
     expect(await recordProblems(await sealed(await pdfOf(1, 2)), expectation({ signatures: 2 }), compliant)).toEqual([]);
     expect(await recordProblems(await sealed(await pdfOf(1, 1)), expectation({ signatures: 2 }), compliant)).toEqual(["the PDF shows 1 Signature images, not 2"]);
     expect(await recordProblems(await sealed(await pdfOf(1)), expectation({ signatures: 1 }), compliant)).toHaveLength(1);
+  });
+
+  it("fails a PDF whose seal is not long-term: its store without the revocation data (PAdES B-LT, RP-669)", async () => {
+    const pdf = await sealed(await pdfOf(1));
+    const { store, signedLength } = await documentSecurityStore(pdf);
+    // The seal's own certificates only, as a record sealed before RP-669 holds them.
+    const shortOfLt = await withDss(pdf.slice(0, signedLength), { certificates: store!.certificates.slice(0, 3), ocspResponses: [], crls: [] });
+    expect(await recordProblems(shortOfLt, expectation(), compliant)).toEqual([
+      "the seal is not long-term (PAdES B-LT): its Document Security Store holds no revocation data",
+    ]);
   });
 
   it("fails a PDF that is not sealed, or whose seal was broken", async () => {

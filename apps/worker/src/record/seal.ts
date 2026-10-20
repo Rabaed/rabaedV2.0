@@ -1,14 +1,30 @@
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRef, PDFString } from "pdf-lib";
-import { asn1js, commonNameOf, OID, parseCertificate, pkijs, sha256, signedAttributesDer, signingCertificateV2, toArrayBuffer, toBytes } from "./pki.ts";
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFString } from "pdf-lib";
+import {
+  asn1js,
+  commonNameOf,
+  distinct,
+  OID,
+  parseCertificate,
+  pkijs,
+  sha256,
+  signedAttributesDer,
+  signedDataCertificates,
+  signingCertificateV2,
+  toArrayBuffer,
+  toBytes,
+} from "./pki.ts";
+import { longTermProblems, mergeRevocationData, type RevocationData } from "./revocation.ts";
 import type { SealSigner } from "./signer.ts";
-import type { TimestampAuthority } from "./timestamp.ts";
+import { tokenCertificates, type TimestampAuthority } from "./timestamp.ts";
 
 // The seal (ADR 0023): PAdES B-LT over the whole PDF/A-3. An invisible
 // signature field holds a detached CAdES signature (ETSI.CAdES.detached) by the
 // sealing signer, with the ESS signing-certificate-v2 PAdES asks for and an
 // RFC 3161 timestamp over the signature value; an incremental update then adds
 // the Document Security Store with every certificate needed to validate it
-// later (B-LT). Any byte changed in what was signed breaks the seal.
+// later and, for each but a root, an OCSP answer or CRL fetched just after the
+// timestamp saying it was not revoked (B-LT, RP-669; revocation.ts). Any byte
+// changed in what was signed, or in that update, breaks the seal.
 
 /** Room for the CMS: the signer's and the authority's certificates and the token. */
 const CONTENTS_BYTES = 24 * 1024;
@@ -94,8 +110,8 @@ function findPlaceholder(pdf: Uint8Array): Placeholder {
 
 const digestAlgorithm = () => new pkijs.AlgorithmIdentifier({ algorithmId: OID.sha256, algorithmParams: new asn1js.Null() });
 
-/** The detached CMS for `digest`, signed by `signer`, with the timestamp over its signature value. */
-async function cadesSignature(digest: Uint8Array, signer: SealSigner, timestamps: TimestampAuthority): Promise<Uint8Array> {
+/** The detached CMS for `digest`, signed by `signer`, with the timestamp `token` over its signature value. */
+async function cadesSignature(digest: Uint8Array, signer: SealSigner, timestamps: TimestampAuthority): Promise<{ cms: Uint8Array; token: Uint8Array }> {
   const [first, ...issuers] = signer.certificates;
   if (!first) throw new Error("the sealing signer has no certificate");
   const certificate = parseCertificate(first);
@@ -126,29 +142,23 @@ async function cadesSignature(digest: Uint8Array, signer: SealSigner, timestamps
       }),
     ],
   });
-  return toBytes(new pkijs.ContentInfo({ contentType: OID.signedData, content: signedData.toSchema(true) }).toSchema().toBER(false));
+  const cms = toBytes(new pkijs.ContentInfo({ contentType: OID.signedData, content: signedData.toSchema(true) }).toSchema().toBER(false));
+  return { cms, token };
 }
 
-/** The certificates in the CMS and in its timestamp token: what a validator needs years later. */
+/** The certificates in the CMS and in its timestamp token: the seal's chain and the timestamp authority's. */
 function certificatesOf(cms: Uint8Array): Uint8Array[] {
   const signed = new pkijs.SignedData({ schema: pkijs.ContentInfo.fromBER(toArrayBuffer(cms)).content });
-  const own = (signed.certificates ?? []).filter((c): c is pkijs.Certificate => c instanceof pkijs.Certificate);
   const tokenAttr = signed.signerInfos[0]?.unsignedAttrs?.attributes.find((a) => a.type === OID.signatureTimeStampToken);
-  const token = tokenAttr ? new pkijs.SignedData({ schema: new pkijs.ContentInfo({ schema: tokenAttr.values[0] }).content }) : null;
-  const tsa = (token?.certificates ?? []).filter((c): c is pkijs.Certificate => c instanceof pkijs.Certificate);
-  const seen = new Set<string>();
-  return [...own, ...tsa]
-    .map((c) => toBytes(c.toSchema(true).toBER(false)))
-    .filter((der) => {
-      const key = Buffer.from(der).toString("base64");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+  const token = tokenAttr ? toBytes(tokenAttr.values[0]!.toBER(false)) : null;
+  return distinct([...signedDataCertificates(signed), ...(token ? tokenCertificates(token) : [])]);
 }
 
-/** Appends an incremental update adding the Document Security Store (B-LT): the certificates, as streams. */
-async function withDss(pdf: Uint8Array, certificates: Uint8Array[]): Promise<Uint8Array> {
+/** What the Document Security Store holds: certificates, CRLs and OCSP answers (DER), each written as a stream. */
+type Dss = RevocationData;
+
+/** Appends an incremental update adding the Document Security Store (B-LT): the certificates, OCSP answers and CRLs, as streams. */
+export async function withDss(pdf: Uint8Array, dss: Dss): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdf, { updateMetadata: false });
   const ctx = doc.context;
   const text = latin1.decode(pdf);
@@ -166,16 +176,22 @@ async function withDss(pdf: Uint8Array, certificates: Uint8Array[]): Promise<Uin
     parts.push(head, body, tail);
     offset += head.length + body.length + tail.length;
   };
-  const certRefs: string[] = [];
-  for (const der of certificates) {
-    const n = next++;
-    certRefs.push(`${n} 0 R`);
-    write(n, 0, concat(ascii(`<< /Length ${der.length} >>\nstream\n`), der, ascii("\nendstream")));
-  }
-  const dss = next++;
-  write(dss, 0, ascii(`<< /Type /DSS /Certs [${certRefs.join(" ")}] >>`));
+  const streams = (items: readonly Uint8Array[]) =>
+    items.map((der) => {
+      const n = next++;
+      write(n, 0, concat(ascii(`<< /Length ${der.length} >>\nstream\n`), der, ascii("\nendstream")));
+      return `${n} 0 R`;
+    });
+  const entries = [
+    ["Certs", streams(dss.certificates)],
+    ["OCSPs", streams(dss.ocspResponses)],
+    ["CRLs", streams(dss.crls)],
+  ] as const;
+  const dssRef = next++;
+  const body = entries.filter(([, refs]) => refs.length > 0).map(([key, refs]) => ` /${key} [${refs.join(" ")}]`);
+  write(dssRef, 0, ascii(`<< /Type /DSS${body.join("")} >>`));
   const catalog = ctx.lookup(rootRef, PDFDict).clone(ctx);
-  catalog.set(PDFName.of("DSS"), PDFRef.of(dss));
+  catalog.set(PDFName.of("DSS"), PDFRef.of(dssRef));
   write(rootRef.objectNumber, rootRef.generationNumber, ascii(catalog.toString()));
 
   const xrefAt = offset;
@@ -203,11 +219,13 @@ export async function sealPdf(pdf: Uint8Array, { signer, timestamps, at }: { sig
   if (rangeText.length !== p.byteRangeLength) throw new Error("the seal's byte range does not fit");
   const ranged = concat(prepared.subarray(0, p.byteRangeAt), ascii(rangeText), prepared.subarray(p.byteRangeAt + p.byteRangeLength));
   const digest = await sha256(concat(ranged.subarray(0, p.contentsStart), ranged.subarray(p.contentsEnd)));
-  const cms = await cadesSignature(digest, signer, timestamps);
+  const { cms, token } = await cadesSignature(digest, signer, timestamps);
   if (cms.length > CONTENTS_BYTES) throw new Error("the seal's signature is larger than its room");
   const hex = Buffer.from(cms).toString("hex").padEnd(CONTENTS_BYTES * 2, "0");
   const signed = concat(ranged.subarray(0, p.contentsStart + 1), ascii(hex), ranged.subarray(p.contentsEnd - 1));
-  return withDss(signed, certificatesOf(cms));
+  // Fetched after the timestamp, so a validator finds it fresher than the time it trusts.
+  const [sealing, timestamping] = await Promise.all([signer.revocation(), timestamps.revocation(token)]);
+  return withDss(signed, mergeRevocationData({ certificates: certificatesOf(cms), crls: [], ocspResponses: [] }, sealing, timestamping));
 }
 
 /**
@@ -252,8 +270,16 @@ export interface SealCheck {
   /** When the timestamp authority says it was sealed. */
   readonly timestampedAt: Date | null;
   readonly subFilter: string | null;
-  /** The Document Security Store's certificates (B-LT). */
+  /** The Document Security Store's certificates. */
   readonly dssCertificates: number;
+  /** Its OCSP answers and CRLs. */
+  readonly dssRevocation: number;
+  /**
+   * PAdES B-LT: for every certificate of the seal's and the timestamp's chains but a root, the
+   * store holds signed revocation data saying it was not revoked. False only for a record sealed
+   * before RP-669, whose store holds the certificates alone; any other store that falls short is invalid.
+   */
+  readonly longTerm: boolean;
 }
 
 const invalid = (problem: string, rest: Partial<SealCheck> = {}): SealCheck => ({
@@ -263,8 +289,31 @@ const invalid = (problem: string, rest: Partial<SealCheck> = {}): SealCheck => (
   timestampedAt: null,
   subFilter: null,
   dssCertificates: 0,
+  dssRevocation: 0,
+  longTerm: false,
   ...rest,
 });
+
+/** The Document Security Store's streams, in its order, or null when the PDF has none. */
+function dssOf(doc: PDFDocument): Dss | null {
+  const dss = doc.catalog.lookupMaybe(PDFName.of("DSS"), PDFDict);
+  if (!dss) return null;
+  const streams = (key: string) => {
+    const array = dss.lookupMaybe(PDFName.of(key), PDFArray);
+    return array ? array.asArray().map((_, i) => array.lookup(i, PDFRawStream).contents) : [];
+  };
+  return { certificates: streams("Certs"), ocspResponses: streams("OCSPs"), crls: streams("CRLs") };
+}
+
+/** The sealed PDF's Document Security Store, and the length of the revision it was signed in (before the store's update). */
+export async function documentSecurityStore(pdf: Uint8Array): Promise<{ store: Dss | null; signedLength: number }> {
+  const m = /\/ByteRange\s*\[\s*0\s+\d+\s+(\d+)\s+(\d+)/.exec(latin1.decode(pdf));
+  if (!m) throw new Error("no seal");
+  return { store: dssOf(await PDFDocument.load(pdf, { updateMetadata: false })), signedLength: Number(m[1]) + Number(m[2]) };
+}
+
+const sameList = (a: readonly Uint8Array[], b: readonly Uint8Array[]) =>
+  a.length === b.length && a.every((x, i) => Buffer.compare(Buffer.from(x), Buffer.from(b[i]!)) === 0);
 
 /** Checks the PDF's seal: what a reader such as Adobe Reader checks, but trusting the certificate it carries. */
 export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
@@ -282,14 +331,14 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
   if (read.offset === -1) return invalid("the seal does not read", { subFilter });
   if (contents.subarray(read.offset).some((x) => x !== 0)) return invalid("the seal's signature has bytes after it", { subFilter });
   const cms = contents.slice(0, read.offset);
-  let dssCertificates: number;
+  let dss: Dss | null;
   try {
-    const doc = await PDFDocument.load(pdf, { updateMetadata: false });
-    const dss = doc.catalog.lookupMaybe(PDFName.of("DSS"), PDFDict);
-    dssCertificates = dss?.lookupMaybe(PDFName.of("Certs"), PDFArray)?.size() ?? 0;
+    dss = dssOf(await PDFDocument.load(pdf, { updateMetadata: false }));
   } catch {
     return invalid("the PDF does not open", { subFilter });
   }
+  const dssCertificates = dss?.certificates.length ?? 0;
+  const dssRevocation = (dss?.crls.length ?? 0) + (dss?.ocspResponses.length ?? 0);
   try {
     const signed = new pkijs.SignedData({ schema: pkijs.ContentInfo.fromBER(toArrayBuffer(cms)).content });
     const data = concat(pdf.subarray(0, b), pdf.subarray(c, c + d));
@@ -310,16 +359,26 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
     if (!tokenOk.signatureVerified || Buffer.compare(Buffer.from(imprint), Buffer.from(expected)) !== 0) {
       return invalid("the timestamp does not match the signature", { signer: name, subFilter, dssCertificates });
     }
-    // After what was signed comes only the Document Security Store update the seal wrote, byte for byte:
-    // any other change, or another revision, breaks the seal.
+    // After what was signed comes only a Document Security Store update as the seal writes it, byte
+    // for byte, holding the seal's certificates: any other change, or another revision, breaks the seal.
+    const counts = { signer: name, subFilter, dssCertificates, dssRevocation };
+    const chains = certificatesOf(cms);
+    let longTerm = false;
     if (c + d < pdf.length) {
-      const expectedFile = await withDss(pdf.slice(0, c + d), certificatesOf(cms));
-      if (Buffer.compare(Buffer.from(expectedFile), Buffer.from(pdf)) !== 0) {
-        return invalid("the file was changed after it was sealed", { signer: name, subFilter, dssCertificates });
+      const expectedFile = dss ? await withDss(pdf.slice(0, c + d), dss) : null;
+      if (!dss || !expectedFile || Buffer.compare(Buffer.from(expectedFile), Buffer.from(pdf)) !== 0) {
+        return invalid("the file was changed after it was sealed", counts);
       }
+      // The revocation data must hold, so a byte changed inside it breaks the seal too. Chains of
+      // self-signed certificates alone need none (a trust anchor has no revocation data), and are B-LT.
+      // Short of it only when sealed before RP-669: the seal's certificates alone, still valid.
+      const problems = await longTermProblems(chains, dss);
+      const beforeRp669 = dssRevocation === 0 && sameList(dss.certificates, chains);
+      if (problems.length > 0 && !beforeRp669) return invalid(`the seal's revocation data does not hold: ${problems.join("; ")}`, counts);
+      longTerm = problems.length === 0;
     }
-    return { valid: true, problem: null, signer: name, timestampedAt: info.genTime, subFilter, dssCertificates };
+    return { valid: true, problem: null, signer: name, timestampedAt: info.genTime, subFilter, dssCertificates, dssRevocation, longTerm };
   } catch (error) {
-    return invalid(`the seal does not read: ${error instanceof Error ? error.message : String(error)}`, { subFilter, dssCertificates });
+    return invalid(`the seal does not read: ${error instanceof Error ? error.message : String(error)}`, { subFilter, dssCertificates, dssRevocation });
   }
 }

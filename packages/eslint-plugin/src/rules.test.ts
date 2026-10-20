@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import css from "@eslint/css";
 import json from "@eslint/json";
 import { RuleTester } from "eslint";
@@ -369,6 +370,66 @@ tsx.run("use-client-directive", rules["use-client-directive"], {
   ],
 });
 
+// RP-987: Rabaed Admin calls the api's code only with an importer whose steps run as the app role (RP-960).
+const appRole = [{ module: "apps/admin/src/register-import.ts", importers: ["engineerImporter", "ownImporter"] }];
+const importersModule = join(process.cwd(), "apps/admin/src/register-import.ts");
+const otherModule = join(process.cwd(), "apps/admin/src/packages.ts");
+/** The importers as register-import.ts declares them. */
+const declared = `function engineerImporter(db) { return db; } const ownImporter = (db) => db;`;
+const callOf = (name: string) => ({ messageId: "call", data: { name, importers: "engineerImporter() or ownImporter()", module: "apps/admin/src/register-import.ts" } });
+tsx.run("admin-api-as-app-role", rules["admin-api-as-app-role"], {
+  valid: [
+    ...[
+      `${declared} import { readRegister } from "@rabaed/api/register-import"; readRegister(engineerImporter(db, id, imported, "read_register_import"), projectId, read);`,
+      `${declared} import { previewRegisterImport } from "@rabaed/api/register-import"; const importer = engineerImporter(db, id, imported, "preview"); previewRegisterImport(importer, projectId, preview, now);`,
+      `${declared} import { confirmRegisterImport } from "@rabaed/api/register-import"; function f() { const importer = ownImporter(db); return confirmRegisterImport(importer, importId, now); }`,
+      `${declared} import { getRegisterImport } from "@rabaed/api/register-import"; function f() { return getRegisterImport(ownImporter(db, id, importId, reason, "read"), importId); }`,
+    ].map((code) => ({ code, filename: importersModule })),
+    // Another Admin module, with the importers from theirs.
+    `import { engineerImporter } from "./register-import.ts"; import { readRegister } from "@rabaed/api/register-import"; readRegister(engineerImporter(db), projectId, read);`,
+    `import type { RegisterImporter } from "@rabaed/api/register-import"; let r: RegisterImporter<number>;`,
+    `import { type ImportingEngineer, type RegisterImporter } from "@rabaed/api/register-import"; let r: RegisterImporter<ImportingEngineer>;`,
+    `import { readRegister } from "@rabaed/api/register-import"; type Read = typeof readRegister;`,
+    `export type { RegisterImport } from "@rabaed/api/register-import";`,
+    `import { createDb } from "@rabaed/db"; createDb(url);`,
+    `import { apiThing } from "@rabaed/apis"; apiThing(trx);`,
+    `import { asEngineer } from "./admin-action.ts"; asEngineer(adminDb, context, step);`,
+  ].map((test) => ({ filename: otherModule, ...(typeof test === "string" ? { code: test } : test), options: appRole })),
+  invalid: [
+    // A new Admin feature passing its own (rabaed_admin) transaction or db to the api's code.
+    { code: `import { getPackage } from "@rabaed/api/packages"; getPackage(trx, packageId);`, errors: [callOf("getPackage")] },
+    { code: `import { getWorkItem } from "@rabaed/api/work-items/work-items"; await getWorkItem(adminDb, memberId, id);`, errors: [callOf("getWorkItem")] },
+    { code: `import { readRegister } from "@rabaed/api"; readRegister(trx);`, errors: [callOf("readRegister")] },
+    // The api's source reached by path, not through its package exports.
+    { code: `import { getPackage } from "../../api/src/packages/packages.ts"; getPackage(trx, packageId);`, errors: [callOf("getPackage")] },
+    { code: `import { getPackage } from "../../api/src/packages/packages"; getPackage(trx, packageId);`, errors: [callOf("getPackage")] },
+    // An importer built some other way: its steps would run on rabaed_admin.
+    {
+      code: `import { readRegister } from "@rabaed/api/register-import"; readRegister({ engineer, run: (fn) => db.transaction().execute(fn) }, projectId, read);`,
+      errors: [callOf("readRegister")],
+    },
+    { code: `import { readRegister } from "@rabaed/api/register-import"; readRegister(myImporter(db), p, r);`, errors: [{ messageId: "call" }] },
+    { code: `import { readRegister } from "@rabaed/api/register-import"; readRegister();`, errors: [{ messageId: "call" }] },
+    // A look-alike: an importer of the same name declared in, or imported from, another module.
+    { code: `const engineerImporter = (db) => ({ run: (fn) => db.transaction().execute(fn) }); import { readRegister } from "@rabaed/api/register-import"; readRegister(engineerImporter(db), p, r);`, errors: [{ messageId: "call" }] },
+    { code: `import { engineerImporter } from "./import-steps.ts"; import { readRegister } from "@rabaed/api/register-import"; readRegister(engineerImporter(db), p, r);`, errors: [{ messageId: "call" }] },
+    { code: `import { other as engineerImporter } from "./register-import.ts"; import { readRegister } from "@rabaed/api/register-import"; readRegister(engineerImporter(db), p, r);`, errors: [{ messageId: "call" }] },
+    // Declared inside a function of the importers' own module, not at its top.
+    { code: `import { readRegister } from "@rabaed/api/register-import"; function f() { const engineerImporter = (db) => db; return readRegister(engineerImporter(db)); }`, filename: importersModule, errors: [{ messageId: "call" }] },
+    // An importer's const reassigned, changed or taken apart before the call.
+    { code: `${declared} import { readRegister } from "@rabaed/api/register-import"; let importer = engineerImporter(db); importer = other; readRegister(importer, p, r);`, filename: importersModule, errors: [{ messageId: "call" }] },
+    { code: `${declared} import { readRegister } from "@rabaed/api/register-import"; const importer = engineerImporter(db); importer.run = (fn) => db.transaction().execute(fn); readRegister(importer, p, r);`, filename: importersModule, errors: [{ messageId: "call" }] },
+    { code: `${declared} import { readRegister } from "@rabaed/api/register-import"; const { run } = engineerImporter(db); readRegister(run, p, r);`, filename: importersModule, errors: [{ messageId: "call" }] },
+    // The function escaping the check: handed on, renamed, or called through a namespace.
+    { code: `import { readRegister } from "@rabaed/api/register-import"; const steps = [readRegister];`, errors: [{ messageId: "call" }] },
+    { code: `import { readRegister as read } from "@rabaed/api/register-import"; read(trx);`, errors: [callOf("read")] },
+    { code: `import * as api from "@rabaed/api/register-import"; api.readRegister(trx);`, errors: [{ messageId: "namespace" }] },
+    { code: `export { readRegister } from "@rabaed/api/register-import";`, errors: [{ messageId: "reexport" }] },
+    { code: `export * from "../../api/src/register-import/register-import.ts";`, errors: [{ messageId: "reexport" }] },
+    { code: `const api = await import("@rabaed/api/register-import");`, errors: [{ messageId: "dynamic" }] },
+  ].map((test) => ({ filename: otherModule, ...test, options: appRole })),
+});
+
 tsx.run("no-ui-translations", rules["no-ui-translations"], {
   valid: [
     `export function Close({ closeLabel }: { closeLabel: string }) { return <button aria-label={closeLabel} />; }`,
@@ -385,5 +446,22 @@ tsx.run("no-ui-translations", rules["no-ui-translations"], {
       code: `const meanings = { a: { en: "Approved", ar: "معتمد" }, d: { en: "Rejected", ar: "مرفوض" } };`,
       errors: [{ messageId: "translation" }, { messageId: "translation" }],
     },
+  ],
+});
+
+tsx.run("no-native-dialog", rules["no-native-dialog"], {
+  valid: [
+    `export function A() { return <Dialog><DialogContent title="x" closeLabel="y" /></Dialog>; }`,
+    `export function A() { return <div role="dialog" />; }`,
+    `export function A() { return <Dialog.dialog />; }`,
+    `const dialog = ref.current; dialog.close();`,
+    `popover.show();`,
+  ],
+  invalid: [
+    { code: `export function A() { return <dialog ref={r}>x</dialog>; }`, errors: [{ messageId: "element" }] },
+    { code: `export function A() { return <dialog />; }`, errors: [{ messageId: "element" }] },
+    { code: `function open() { dialog.current?.showModal(); }`, errors: [{ messageId: "showModal" }] },
+    { code: `function open(el) { el.showModal(); }`, errors: [{ messageId: "showModal" }] },
+    { code: `function open(el) { el["showModal"](); }`, errors: [{ messageId: "showModal" }] },
   ],
 });

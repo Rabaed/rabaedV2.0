@@ -94,6 +94,41 @@ describe("check-migrations", () => {
     expect(result.stdout).toContain("every new migration sorts after the base's latest");
   });
 
+  // RP-990: whatever prints above it, the last line of stdout is the verdict, with the counts.
+  const lastLine = (output: string) => output.trimEnd().split("\n").at(-1);
+
+  it("ends with a FAILED verdict counting each kind of refusal, keeping exit code 1", () => {
+    commit(clone, { [`${dir}/20261210000000_other.sql`]: "select 3;\n", [`${dir}/20261205000000_early.sql`]: "select 4;\n", [`${dir}/20261201000000_start.sql`]: "select 99;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(1);
+    // _other shares _watch's timestamp and sorts before it by name, as _early does by day.
+    expect(lastLine(result.stdout)).toBe("check:migrations: FAILED (1 shared timestamp, 1 already on main and changed, 2 sort before main; warning: 2 on a day nobody reserved)");
+  });
+
+  it("ends with a passed verdict, with the unreserved-day warning", () => {
+    commit(clone, { [`${dir}/20261211000000_other.sql`]: "select 3;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(0);
+    expect(lastLine(result.stdout)).toBe("check:migrations: passed (warning: 1 on a day nobody reserved)");
+  });
+
+  it("counts a branch redefinition written without seeing the previous one as unseen on this branch, not as on main", () => {
+    // Two bodies: a file whose content the other's tree held counts as seen (a rename).
+    const fn = "create or replace function app.pick() returns int language sql as $$ select 1 $$;\n";
+    commit(clone, { [`${dir}/20261212000000_later.sql`]: fn.replace("select 1", "select 2") }, "first");
+    commit(clone, { [`${dir}/20261211000000_earlier.sql`]: fn }, "second");
+    const result = check();
+    expect(result.status).toBe(1);
+    expect(lastLine(result.stdout)).toBe("check:migrations: FAILED (1 redefined unseen on this branch; warning: 2 on a day nobody reserved)");
+  });
+
+  it("ends with a FAILED verdict when the fetch fails", () => {
+    git(clone, "remote", "set-url", "origin", join(root, "gone"));
+    const result = check();
+    expect(result.status).not.toBe(0);
+    expect(lastLine(result.stdout)).toBe("check:migrations: FAILED (git fetch origin main failed)");
+  });
+
   it("passes on main itself", () => {
     git(clone, "switch", "-q", "main");
     expect(check().status).toBe(0);

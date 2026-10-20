@@ -22,6 +22,7 @@ const PUBLIC: Record<string, string> = {
   "GET /": "the home page: static, the same for everyone; its script asks the API, which checks",
   "GET /workflows": "the Workflows page: static, the same for everyone; its script asks the API, which checks",
   "GET /register-imports": "the Imports page (RP-645): static, the same for everyone; its script asks the API, which checks",
+  "GET /records": "the Records page (RP-670): static, the same for everyone; its script asks the API, which checks",
   "POST /v1/sign-in": "sign-in, step one (the password): the caller has no session yet",
   "POST /v1/sign-in/code": "sign-in, step two (the emailed code): the challenge cookie is the credential",
   "DELETE /v1/session": "sign-out: ends whatever session the browser has, and is a no-op without one",

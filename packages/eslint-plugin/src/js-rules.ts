@@ -362,6 +362,36 @@ export const noUiTranslations: Rule.RuleModule = {
   }),
 };
 
+const nativeDialogReason =
+  "sits in the top layer, and the kit's floating parts (Select, Popover, Tooltip) open hidden behind it. Use the kit's Modal (packages/ui/src/components/overlay: Dialog, ModalContent).";
+
+export const noNativeDialog: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "A native <dialog> opened with showModal() sits in the browser's top layer, above every kit floating part (Select list, Popover, Tooltip), which then open hidden behind it (RP-658). Use the kit's Modal.",
+    },
+    messages: {
+      element: `A native <dialog> ${nativeDialogReason}`,
+      showModal: `showModal() puts a native <dialog> in the top layer, and ${nativeDialogReason.replace(/^sits in the top layer, and /, "")}`,
+    },
+    schema: [],
+  },
+  create: (context) => ({
+    "JSXOpeningElement[name.type='JSXIdentifier'][name.name='dialog']"(node: Rule.Node) {
+      context.report({ node, messageId: "element" });
+    },
+    CallExpression(node) {
+      const { callee } = node;
+      if (callee.type !== "MemberExpression") return;
+      const { property } = callee;
+      const name = callee.computed ? (property.type === "Literal" ? property.value : null) : property.type === "Identifier" ? property.name : null;
+      if (name === "showModal") context.report({ node, messageId: "showModal" });
+    },
+  }),
+};
+
 // Hooks React also runs in Server Components, so calling one doesn't make a file client-only.
 const serverSafeHooks = new Set(["useId"]);
 const hookName = /^use[A-Z]/;

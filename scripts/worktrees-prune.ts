@@ -11,7 +11,9 @@
 // It never touches the main checkout or the current worktree, nor one whose Claude
 // session is open: a "claude session" lock, or the desktop app's own record of the
 // worktree's path (desktop-sessions.ts, RP-608: the app does not lock its worktrees,
-// and a session may have renamed the app's branch). It skips, and lists,
+// and a session may have renamed the app's branch), nor one a running Claude session works
+// in (claude-sessions.ts, RP-956: a session that moved in with EnterWorktree leaves neither;
+// when the running sessions cannot be checked, every worktree is kept). It skips, and lists,
 // worktrees with uncommitted changes (untracked files outside ignored paths included),
 // commits on no origin branch, or nothing merged; it checks the first two again just
 // before removing each worktree. A squash-merged worktree whose remote branch was
@@ -27,7 +29,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { readDesktopSessions } from "./desktop-sessions.ts";
+import { systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
@@ -99,7 +101,7 @@ const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
 const worktrees = pruneFacts(listWorktrees(mainRoot));
 const containers = listContainers();
 const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readEnv(here) ?? "") };
-const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync, openSession: readDesktopSessions() });
+const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync, holders: live.holders });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
 const goesWithoutSaying = (reason: string) => reason === "the main checkout" || reason === CURRENT_WORKTREE;
@@ -142,9 +144,9 @@ const removedPaths: string[] = [];
 for (const w of chosen.remove) {
   // Checked again just before: never the main checkout or the current worktree.
   if (samePath(w.path, mainRoot) || samePath(w.path, here)) continue;
-  // Its uncommitted changes, unpushed commits and desktop session too, which may have changed
-  // since the prompt: the sessions are read again each time, as one may open meanwhile (RP-608).
-  const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)))[0], readDesktopSessions());
+  // Its uncommitted changes, unpushed commits and sessions too, which may have changed since the
+  // prompt: the running and desktop sessions are read again each time (RP-956, RP-608).
+  const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)))[0], systemHolders());
   if (changed) {
     console.log(`Kept ${name(w)}: ${changed}.`);
     continue;

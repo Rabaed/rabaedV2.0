@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { mailerFromEnv, notificationDigestMessage, renderEmail, stepAgeReportMessage } from "../src/index.ts";
+import { mailerFromEnv, notificationDigestMessage, notificationMessage, renderEmail, stepAgeReportMessage } from "../src/index.ts";
 
 // Sends through the real mailer, as the services will, to the local Mailpit
 // (docker-compose.yml; a service in CI), and reads it back through
@@ -95,6 +95,25 @@ describe("the mailer, against the local catcher", () => {
       expect(caughtMessage!.Text).toContain(`\u2066${number}\u2069`);
     }
     expect(caughtMessage!.Text).toContain(language === "ar" ? "الخطيب" : "Khatib");
+  });
+
+  it.each(["en", "ar"] as const)("delivers a record ready email in %s intact: its Document Number left to right, the link to the item and not the file (RP-950)", async (language) => {
+    const to = recipient();
+    const workItemId = randomUUID();
+    const message = notificationMessage(
+      { to, language, kind: "record_ready", content: { workItemId, documentNumber: "TWR-MAR-01-0003", subject: "Chillers", step: null, event: null } },
+      "http://127.0.0.1:3000",
+    );
+    await mailer.send(message);
+
+    const [caughtMessage, ...more] = await caught(to);
+    const expected = renderEmail("notification-record-ready", language, message.values as never);
+    expect(more).toEqual([]);
+    expect(caughtMessage).toMatchObject({ Subject: expected.subject, Tags: ["notification-record-ready"] });
+    expect(caughtMessage!.HTML).toContain(`<html lang="${language}" dir="${language === "ar" ? "rtl" : "ltr"}">`);
+    expect(caughtMessage!.HTML).toContain(`<bdi dir="ltr">TWR-MAR-01-0003</bdi>`);
+    expect(caughtMessage!.Text).toContain(`http://127.0.0.1:3000/${language}/work-items/${workItemId}`);
+    expect(caughtMessage!.Text).not.toContain("documental-record");
   });
 
   it("delivers an Arabic invitation intact: Arabic subject, right-to-left body, the link", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalLine, loadFailure, runStep, selectSteps, tail, type StepRun } from "./verify-steps.ts";
+import { failureEnd, finalLine, isSeamStep, loadFailure, runStep, selectSteps, tail, type StepRun } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
 
@@ -36,6 +36,13 @@ describe("tail", () => {
   it("keeps the last lines only", () => {
     expect(tail("a\nb\nc\nd\n", 2)).toBe("c\nd");
     expect(tail("a\nb", 5)).toBe("a\nb");
+  });
+});
+
+describe("isSeamStep", () => {
+  it("names the seam suites, and no other step", () => {
+    expect(["test:seam1", "test:seam2"].every(isSeamStep)).toBe(true);
+    expect(["lint", "typecheck", "test:unit", "test:stories", "check:migrations"].some(isSeamStep)).toBe(false);
   });
 });
 
@@ -124,6 +131,90 @@ describe("loadFailure", () => {
   });
 });
 
+// What a seam run prints when Docker stops under it (RP-994): node-postgres's error for the
+// terminated connection (lower-case "error:", its code on a later line), among failed tests.
+const terminated = `⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+Vitest caught 1 unhandled error during the test run.
+error: terminating connection due to administrator command
+ ❯ Parser.parseErrorMessage node_modules/pg-protocol/dist/parser.js:285:98
+{
+  length: 116,
+  severity: 'FATAL',
+  code: '57P01',
+  routine: 'ProcessInterrupts'
+}
+`;
+const codeOnly = `Error: Connection terminated unexpectedly\n  code: '57P01',\n`;
+// What packages/db/test/pool-error.test.ts prints when it fails for real: it terminates a backend on
+// purpose, so its assertion diff and code frame name 57P01 and the server's text, yet Postgres is fine.
+const poolErrorFailed = ` FAIL  |seam2| packages/db/test/pool-error.test.ts > pool error > logs an idle connection's error and keeps serving
+AssertionError: expected { level: 'warn', …(2) } to deeply equal { level: 'warn', …(2) }
+
+- Expected
++ Received
+
+  {
+    "err": {
+-     "code": "57P01",
++     "code": "XX000",
+      "type": "DatabaseError",
+    },
+    "level": "warn",
+    "msg": "idle database connection failed",
+  }
+
+ ❯ packages/db/test/pool-error.test.ts:63:31
+     61|
+     62|     expect(unhandled).toEqual([]);
+     63|     expect(JSON.parse(line!)).toEqual({ level: "warn", msg: "idle database connection failed", err: { type: "DatabaseError", code: "57P01" } });
+       |                               ^
+     64|     // The server's own text ("terminating connection due to administrator command") is not logged.
+     65|     expect(line).not.toContain("terminating");
+${summary(1)}`;
+
+describe("failureEnd", () => {
+  const terminationLine = /^pnpm verify stopped at test:seam1: Postgres was terminated \(.+\), Docker may have stopped\. Restart it \(.+\) and run pnpm verify again\.$/;
+
+  it("ends with one line saying Postgres was terminated when a seam step's output holds 57P01", () => {
+    const lines = failureEnd("test:seam1", `${assertionFailed}${terminated}${summary(38)}`, true);
+    expect(lines).toEqual([expect.stringMatching(terminationLine)]);
+    expect(lines[0]).toContain("Postgres was terminated (57P01)");
+  });
+
+  it("says the same when the step's Postgres no longer answers, though its output holds no 57P01", () => {
+    const lines = failureEnd("test:seam1", `Error: connect ECONNREFUSED 127.0.0.1:5842\n${summary(38)}`, false);
+    expect(lines).toEqual([expect.stringMatching(terminationLine)]);
+    expect(lines[0]).toContain("it no longer answers");
+  });
+
+  it("finds 57P01 on its own line and in colour", () => {
+    expect(failureEnd("test:seam1", codeOnly, true)).toEqual([expect.stringMatching(terminationLine)]);
+    expect(failureEnd("test:seam1", "FATAL:  terminating connection due to administrator command\n", true)).toEqual([expect.stringMatching(terminationLine)]);
+    expect(failureEnd("test:seam1", `\x1b[31m${terminated}\x1b[39m`, true)).toEqual([expect.stringMatching(terminationLine)]);
+  });
+
+  it("does not read a failing test's assertion diff or code frame that names 57P01 as a terminated Postgres", () => {
+    expect(failureEnd("test:seam2", poolErrorFailed, true)).toEqual(["pnpm verify stopped at test:seam2."]);
+  });
+
+  it("gives the load note, then the plain stop line, for timeouts while Postgres answers", () => {
+    const output = `${testTimedOut}${summary(1)}`;
+    expect(failureEnd("test:seam1", output, true)).toEqual([loadFailure("test:seam1", output), "pnpm verify stopped at test:seam1."]);
+  });
+
+  it("does not blame machine load for timeouts when Postgres was terminated or no longer answers", () => {
+    for (const [output, answers] of [[`${testTimedOut}${terminated}`, true], [testTimedOut, false]] as const) {
+      expect(failureEnd("test:seam1", output, answers)).toEqual([expect.stringMatching(terminationLine)]);
+    }
+    expect(loadFailure("test:seam1", `${testTimedOut}${terminated}`)).toBeUndefined();
+  });
+
+  it("gives only the plain stop line for a real failure while Postgres answers, or for a step that is not a seam suite", () => {
+    expect(failureEnd("test:seam1", `${assertionFailed}${summary(1)}`, true)).toEqual(["pnpm verify stopped at test:seam1."]);
+    expect(failureEnd("lint", terminated, false)).toEqual(["pnpm verify stopped at lint."]);
+  });
+});
+
 // A scripted runner: each call to `run` takes the next result and records the arguments it got.
 function scripted(...results: StepRun[]) {
   const calls: string[][] = [];
@@ -135,45 +226,58 @@ function scripted(...results: StepRun[]) {
 }
 
 describe("runStep", () => {
-  it("carries on when a seam step fails only on timeouts and a re-run of just those files passes, and says so in the step's label", () => {
+  it("carries on when a seam step fails only on timeouts and a re-run of just those files passes, and says so in the step's label", async () => {
     const { run, calls } = scripted({ status: 1, output: `${testTimedOut}${summary(1)}` }, { status: 0, output: "" });
-    expect(runStep("test:seam1", run)).toEqual({ passed: true, label: "test:seam1 (re-ran 1 timed-out file)" });
+    expect(await runStep("test:seam1", run)).toEqual({ passed: true, label: "test:seam1 (re-ran 1 timed-out file)" });
     expect(calls).toEqual([["test:seam1"], ["test:seam1", datesTest]]);
   });
 
-  it("re-runs each timed-out file, in the same step's project, and counts them in the label", () => {
+  it("re-runs each timed-out file, in the same step's project, and counts them in the label", async () => {
     const otherTest = "apps/api/test/other.test.ts";
     const otherTimedOut = testTimedOut.replaceAll(datesTest, otherTest);
     const { run, calls } = scripted({ status: 1, output: `${testTimedOut}${otherTimedOut}` }, { status: 0, output: "" });
-    expect(runStep("test:seam2", run)).toEqual({ passed: true, label: "test:seam2 (re-ran 2 timed-out files)" });
+    expect(await runStep("test:seam2", run)).toEqual({ passed: true, label: "test:seam2 (re-ran 2 timed-out files)" });
     expect(calls).toEqual([["test:seam2"], ["test:seam2", datesTest, otherTest]]);
   });
 
-  it("stops, with the re-run's output, when the re-run fails too", () => {
+  it("stops, with the re-run's output, when the re-run fails too", async () => {
     const { run, calls } = scripted({ status: 1, output: testTimedOut }, { status: 1, output: hookTimedOut });
-    expect(runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output: hookTimedOut, reran: true });
+    expect(await runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output: hookTimedOut, reran: true });
     expect(calls).toHaveLength(2);
   });
 
-  it("stops at once, without a re-run, when a real failure sits next to a timeout", () => {
+  it("stops at once, without a re-run, when a real failure sits next to a timeout", async () => {
     const output = `${testTimedOut}${assertionFailed}${summary(2)}`;
     const { run, calls } = scripted({ status: 1, output });
-    expect(runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output, reran: false });
+    expect(await runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output, reran: false });
     expect(calls).toEqual([["test:seam1"]]);
   });
 
-  it("passes a step that passed, without a re-run, and stops a step that is not a seam suite on its first failure", () => {
+  it("passes a step that passed, without a re-run, and stops a step that is not a seam suite on its first failure", async () => {
     const first = scripted({ status: 0, output: "" });
-    expect(runStep("test:seam1", first.run)).toEqual({ passed: true, label: "test:seam1" });
+    expect(await runStep("test:seam1", first.run)).toEqual({ passed: true, label: "test:seam1" });
     expect(first.calls).toHaveLength(1);
     const lint = scripted({ status: 1, output: testTimedOut });
-    expect(runStep("lint", lint.run)).toEqual({ passed: false, status: 1, output: testTimedOut, reran: false });
+    expect(await runStep("lint", lint.run)).toEqual({ passed: false, status: 1, output: testTimedOut, reran: false });
     expect(lint.calls).toHaveLength(1);
   });
 
-  it("stops without a re-run when no test file is named (workers that never started), as the whole suite is not worth running twice", () => {
+  it("stops without a re-run, keeping the output that names it, when Postgres was terminated beside the timeouts", async () => {
+    const output = `${testTimedOut}${terminated}`;
+    const { run, calls } = scripted({ status: 1, output });
+    expect(await runStep("test:seam1", run)).toEqual({ passed: false, status: 1, output, reran: false });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("stops without a re-run when the timeouts came with a Postgres that no longer answers", async () => {
+    const { run, calls } = scripted({ status: 1, output: testTimedOut });
+    expect(await runStep("test:seam1", run, async () => false)).toEqual({ passed: false, status: 1, output: testTimedOut, reran: false });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("stops without a re-run when no test file is named (workers that never started), as the whole suite is not worth running twice", async () => {
     const { run, calls } = scripted({ status: 1, output: workerCrashed });
-    expect(runStep("test:seam1", run)).toMatchObject({ passed: false, reran: false });
+    expect(await runStep("test:seam1", run)).toMatchObject({ passed: false, reran: false });
     expect(calls).toHaveLength(1);
   });
 });

@@ -17,7 +17,9 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 // With other lanes' runs on the machine (RP-607) a test that makes 50 items took over 20 s, and
 // the afterAll that closes its pools then waited past the 10 s hook default on the requests
 // still in flight: one budget for both, with room for load, that still stops a hung test.
-const seamTimeout = 60_000;
+// Under several lanes' verify, 60 s was too tight too: work-item-list-dates.test.ts timed
+// out at 60 s and passed 10/10 alone (RP-949).
+const seamTimeout = 180_000;
 
 // Vitest's default is a fork per CPU but one, for every run: with several lanes testing at once
 // (5 Mains x 4 lanes, RP-602) that is dozens of forks contending for one machine (RP-607). A

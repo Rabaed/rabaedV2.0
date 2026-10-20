@@ -1,5 +1,6 @@
-import { openSessionReason, type DesktopSession, type DesktopSessions } from "./desktop-sessions.ts";
-import { mergedProjects, staleProjects, type Container, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
+import { holdReason, type Holders } from "./claude-sessions.ts";
+import { openSessionReason } from "./desktop-sessions.ts";
+import { chooseMerged, staleProjects, type Container, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
@@ -38,10 +39,11 @@ type PruneInput = {
   /** Undefined when Docker is not running: no compose project is chosen. */
   docker: DockerState | undefined;
   /**
-   * The Claude desktop session holding the worktree at a path, found in the app's own
-   * records (desktop-sessions.ts, RP-608): the app does not lock its worktrees with git.
+   * The running Claude sessions (claude-sessions.ts, RP-956: a session that moved in with
+   * EnterWorktree leaves no lock) and the desktop sessions, found in the app's own records
+   * (desktop-sessions.ts, RP-608): the app does not lock its worktrees with git.
    */
-  openSession?: DesktopSessions;
+  holders: Holders;
   platform?: NodeJS.Platform;
 };
 
@@ -78,12 +80,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  * changes or commits on no origin branch (so a squash-merged worktree whose remote
  * branch was deleted stays); those are skipped with their reason.
  */
-export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker, exists, openSession, platform }: PruneInput): PruneChoice {
+export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker, exists, holders, platform }: PruneInput): PruneChoice {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   for (const facts of worktrees) {
     const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
-    const reason = skipReason(facts, openSession?.(facts.path), mainRoot, currentPath, platform);
+    const reason = skipReason(facts, holders, mainRoot, currentPath, platform);
     if (reason) skipped.push({ worktree: w, reason });
     else remove.push(w);
   }
@@ -94,30 +96,36 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
     .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && b.inTarget &&(b.ownCommit || b.upstreamGone))
     .map((b) => b.branch);
 
-  return { remove, skipped, branches: branchesToDelete, projects: docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, platform }) : [] };
+  return {
+    remove,
+    skipped,
+    branches: branchesToDelete,
+    projects: docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, holders, platform }) : [],
+  };
 }
 
 /**
  * Why a worktree chosen for removal stays after all, judged on its facts gathered
  * again just before removing it (undefined when no longer listed by git) with the
- * desktop sessions read again too, or undefined when it still goes.
+ * running and desktop sessions read again too (holders, fresh), or undefined when it still goes.
  */
-export function changedSinceListed(now: PruneWorktree | undefined, openSession?: DesktopSessions): string | undefined {
+export function changedSinceListed(now: PruneWorktree | undefined, holders: Holders): string | undefined {
   if (!now) return "no longer a worktree";
-  const session = openSession?.(now.path);
-  if (session !== undefined) return openSessionReason(session, { sinceListed: true });
+  const held = holdReason(now.path, holders, { sinceListed: true });
+  if (held !== undefined) return held;
   if (now.dirty) return "uncommitted changes since it was listed";
   if (now.unpushed > 0) return `${plural(now.unpushed, "commit")} on no origin branch since it was listed`;
   return undefined;
 }
 
 /** Why a worktree stays, or undefined when it goes. */
-function skipReason(w: PruneWorktree, session: DesktopSession | undefined, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
+function skipReason(w: PruneWorktree, holders: Holders, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
   if (samePath(w.path, mainRoot, platform)) return "the main checkout";
   if (samePath(w.path, currentPath, platform)) return CURRENT_WORKTREE;
   if (w.branch === "main") return "on main";
   if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return openSessionReason({ kind: "open", session: w.locked });
-  if (session !== undefined) return openSessionReason(session);
+  const held = holdReason(w.path, holders);
+  if (held !== undefined) return held;
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
   if (w.dirty) return "uncommitted changes";
   if (w.unpushed > 0) return `${plural(w.unpushed, "commit")} on no origin branch`;
@@ -133,19 +141,21 @@ type ProjectsInput = {
   folderExists: (dir: string) => boolean;
   cwd: string;
   docker: DockerState;
+  holders: Holders;
   platform: NodeJS.Platform | undefined;
 };
 
 /**
- * lanes:prune's two rules (mergedProjects, staleProjects) with the removed worktrees
+ * lanes:prune's two rules (chooseMerged, staleProjects) with the removed worktrees
  * counted as merged and gone. A project a kept worktree names in its .env always stays:
  * it may share that lane's database (lane:env --db) without containers of its own.
  * A project lanes:prune alone would not remove waits for the removed worktrees it
  * belongs to (by their .env or its containers' folder).
  */
-function projectsToRemove({ worktrees, removed, folderExists, cwd, docker, platform }: ProjectsInput): PruneProject[] {
-  const orphans = new Set(chosenProjects({ worktrees, removed: () => false, folderExists, cwd, docker, platform }).map((p) => p.project));
-  return chosenProjects({ worktrees, removed, folderExists, cwd, docker, platform }).map((p) => {
+function projectsToRemove(input: ProjectsInput): PruneProject[] {
+  const { worktrees, removed, docker, platform } = input;
+  const orphans = new Set(chosenProjects({ ...input, removed: () => false }).map((p) => p.project));
+  return chosenProjects(input).map((p) => {
     const dirs = docker.containers.filter((c) => c.project === p.project).map((c) => c.workingDir);
     const waitsFor = orphans.has(p.project)
       ? []
@@ -154,12 +164,12 @@ function projectsToRemove({ worktrees, removed, folderExists, cwd, docker, platf
   });
 }
 
-function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { containers, volumes, currentProject }, platform }: ProjectsInput): StaleProject[] {
+function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { containers, volumes, currentProject }, holders, platform }: ProjectsInput): StaleProject[] {
   const lanes: WorktreeLane[] = worktrees.map((w) => ({ path: w.path, branch: w.branch, merged: removed(w.path), project: w.project }));
   const kept = new Set(worktrees.filter((w) => !removed(w.path)).map((w) => w.project));
   const exists = (dir: string) => !removed(dir) && folderExists(dir);
   const all = [
-    ...mergedProjects({ containers, volumes, worktrees: lanes, cwd, currentProject, platform }),
+    ...chooseMerged({ containers, volumes, worktrees: lanes, cwd, currentProject, holders, platform }).merged,
     ...staleProjects({ containers, volumes, cwd, currentProject, exists, platform }),
   ];
   return all.filter((p, i) => !kept.has(p.project) && all.findIndex((q) => q.project === p.project) === i).sort((a, b) => a.project.localeCompare(b.project));

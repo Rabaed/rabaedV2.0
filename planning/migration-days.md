@@ -136,4 +136,7 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270930 | RP-677 | 34 | snag_report |
 | 20271001 | RP-677 | 34 | snag_report_outbox_kind |
 | 20270929 | RP-658 | 3A | Snag List: pick one of several covering Participants at a Submit (`app.next_step_holder`, `app.take_transition`, `app.work_item_actions`) |
+| 20271007 | RP-950 | 24 | record_ready_email (moved from 20271004: #353 has it) |
+| 20271006 | RP-670 | 23 | record_job_monitor (moved from 20271002: main's RP-973 took 20271003) |
 | 20271003 | RP-973 | 52 | package_write_lock_order |
+| 20271004 | RP-973 | 52 | discard_package_locks_unseen_items |
