@@ -19,6 +19,8 @@ import { resolve } from "node:path";
 //      (a conflict resolution, an "evil merge", or extra changes fail this).
 // Anything else, including any error while checking, removes the label: a missing
 // label costs one `gh pr edit`, a stale one lets unreviewed code into main.
+// `pnpm queue` follows the same rule back from the head to the commit `pnpm verify`
+// passed on (`onlyMainMergedSince`, RP-1017), so there is one definition of it.
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH. Runs the default
 // branch's copy of this file in a checkout that has main's history and the PR head;
@@ -48,6 +50,29 @@ export function keepsLabel(before: string, after: string, git: ReviewedGit): boo
   } catch {
     return false;
   }
+}
+
+/** How many clean merges of main the walk follows before it gives up; a branch merges main about once a day. */
+const MAX_MAIN_MERGES = 50;
+
+/**
+ * True when `head` is `base`, or follows it by clean merges of main only, each one a push `keepsLabel` would keep
+ * the label on (RP-1017: `pnpm queue` takes a `pnpm verify` run on such an older head). `base` may be abbreviated.
+ */
+export function onlyMainMergedSince(base: string, head: string, git: ReviewedGit): boolean {
+  let current = head;
+  for (let merges = 0; merges <= MAX_MAIN_MERGES; merges++) {
+    if (current.startsWith(base)) return true;
+    let first: string | undefined;
+    try {
+      first = git.parents(current)[0];
+    } catch {
+      return false;
+    }
+    if (first === undefined || !keepsLabel(first, current, git)) return false;
+    current = first;
+  }
+  return false;
 }
 
 export interface ReviewedGitHub {
