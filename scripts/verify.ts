@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
+import { branchMix } from "./shared-files.ts";
 import { failureEnd, finalLine, isSeamStep, runStep, selectSteps, tail } from "./verify-steps.ts";
 import { isRunning } from "./worktrees-stale.ts";
 
@@ -12,7 +13,8 @@ import { isRunning } from "./worktrees-stale.ts";
 // those files, RP-979); a failing step prints the tail of its output, so a setup
 // failure shows. Needs the lane's .env (`pnpm lane:env`), and stops before the
 // first step when its Postgres doesn't answer; a seam step whose Postgres was
-// terminated mid-run ends on one line saying so (RP-994).
+// terminated mid-run ends on one line saying so (RP-994). A branch that mixes root
+// shared files with code stops it before the first step too (RP-993).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -30,6 +32,21 @@ if (taken.tookOver) console.log(`verify ${taken.tookOver}`);
 process.on("exit", () => releaseLock(lock, process.pid));
 process.on("SIGINT", () => process.exit(130));
 process.on("SIGTERM", () => process.exit(143));
+
+// Rule 3 before anything runs (RP-993): root shared files (the lockfile, say) beside code
+// showed only at `pnpm queue`, by the same rule, after the whole branch was built.
+let mix: string[] | undefined;
+try {
+  mix = branchMix(root);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+if (mix) {
+  console.error(["FAIL rule 3: this branch changes root shared file(s) together with other files, so `pnpm queue` will refuse it.", ...mix].join("\n"));
+  console.error("\npnpm verify stopped at rule 3 (planning/parallel-sessions.md).");
+  process.exit(1);
+}
 
 // The lane's Postgres first (RP-575): a stopped container otherwise showed only at
 // test:seam1, after every step before it had run.
