@@ -26,8 +26,9 @@ jobs:
   # as the `docs-only` label (scripts/docs-only.ts). The heavy jobs below skip on a docs-only
   # change through their own `if:`, so their required checks still report success; never use
   # `paths`/`paths-ignore`, which leaves a required check unreported and blocks the merge. They
-  # skip only on 'true', so a failed decision runs everything. In the merge queue the base is the
-  # merge group's: a docs-only PR behind a code PR runs everything.
+  # skip only on 'true', so a failed decision runs everything. In the merge queue the base is
+  # main's tip (`base_ref`), not `base_sha` (main plus the entries ahead): a green entry merges
+  # the entries ahead of it too, so a docs-only PR behind a code PR runs everything.
   changes:
     name: docs-only decision
     runs-on: ubuntu-latest
@@ -41,12 +42,13 @@ jobs:
       - id: decide
         run: node scripts/docs-only.ts
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.sha }}
 
-  # The docs checks the skipped unit job would have run on a docs-only change: two ADRs with one
-  # number, a glossary term defined twice, a slash command naming no skill.
+  # The docs checks the skipped unit job would have run on a docs-only change: every unit test
+  # under scripts/, which holds each test that reads the docs (docs-unique, check-doc-skills,
+  # scenario IDs and leak channels in docs/visibility.md, doc indexes, route maps).
   docs:
-    name: docs checks
+    name: docs checks (scripts unit tests)
     needs: changes
     if: ${{ needs.changes.outputs.docs_only == 'true' }}
     runs-on: ubuntu-latest
@@ -57,7 +59,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run --project unit scripts/docs-unique.test.ts scripts/check-doc-skills.test.ts
+      - run: pnpm exec vitest run --project unit scripts/
 
   lint:
     runs-on: ubuntu-latest

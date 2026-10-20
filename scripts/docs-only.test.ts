@@ -34,9 +34,9 @@ describe("decideDocsOnly", () => {
     expect(git.asked).toEqual(["base1"]);
   });
 
-  it("is not docs-only when the code PR ahead of a docs PR in the merge group is in the diff", () => {
+  it("is not docs-only when the code PR ahead of a docs PR in the merge group is in the diff from main", () => {
     const git = listing(["docs/a.md", "apps/api/src/a.ts"]);
-    expect(decideDocsOnly("queue-base", git.changedSince)).toMatchObject({ docsOnly: false, base: "queue-base" });
+    expect(decideDocsOnly("refs/heads/main", git.changedSince)).toMatchObject({ docsOnly: false, base: "refs/heads/main" });
   });
 
   it.each([undefined, ""])("never skips without a base (push, workflow_dispatch: main's push run feeds the deploy): %j", (base) => {
@@ -61,6 +61,8 @@ const ci = parse(readFileSync(join(dirname(import.meta.filename), "..", ".github
 };
 const needs = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
 const heavy = ["typecheck", "unit", "web-build", "web-image", "stories", "seam1", "seam1-result", "seam2", "mail", "infra"];
+/** The jobs that run on a docs-only change: the decision, the docs checks, lint and the checks that read only the repository. */
+const light = ["changes", "docs", "lint", "workflows-hardened", "migrations-immutable", "migration-drift"];
 const gate = "${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}";
 
 describe("ci.yml's docs-only gate", () => {
@@ -71,11 +73,12 @@ describe("ci.yml's docs-only gate", () => {
     }
   });
 
-  it("decides with scripts/docs-only.ts against the queue's base in merge_group and the PR's base otherwise", () => {
+  it("decides with scripts/docs-only.ts against main's tip in merge_group, never the group's base_sha, and the PR's base otherwise", () => {
     const changes = ci.jobs.changes;
-    expect(changes?.outputs?.docs_only).toBeDefined();
+    expect(changes?.outputs?.docs_only).toBe("${{ steps.decide.outputs.docs_only }}");
     const decide = changes?.steps.find((s) => s.run === "node scripts/docs-only.ts");
-    expect(decide?.env?.BASE).toBe("${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}");
+    // base_sha is main plus the entries ahead: against it, a docs PR behind a code PR would skip.
+    expect(decide?.env?.BASE).toBe("${{ github.event.merge_group.base_ref || github.event.pull_request.base.sha }}");
   });
 
   it.each(heavy)("runs %s unless the change is docs-only, and also when the decision itself failed", (id) => {
@@ -85,23 +88,19 @@ describe("ci.yml's docs-only gate", () => {
     expect(job?.if).toBe(gate);
   });
 
-  it("gates every job that needs a database, a browser or a build: a new heavy job joins the list above", () => {
-    const gated = Object.entries(ci.jobs).filter(([, job]) => job.if === gate).map(([id]) => id);
-    expect(gated.sort()).toEqual([...heavy].sort());
+  it("gates every job but the light ones: a new job skips on docs-only unless it joins the light list on purpose", () => {
+    const ungated = Object.entries(ci.jobs).filter(([, job]) => job.if !== gate).map(([id]) => id);
+    expect(ungated.sort()).toEqual([...light].sort());
   });
 
-  it("still runs lint and the light checks on a docs-only change", () => {
-    for (const id of ["lint", "workflows-hardened", "migrations-immutable", "migration-drift"]) {
-      expect(ci.jobs[id]?.if ?? "", id).not.toContain("docs_only");
-      expect(needs(ci.jobs[id] as Job), id).not.toContain("changes");
-    }
+  it.each(light.filter((id) => id !== "docs"))("still runs %s on a docs-only change", (id) => {
+    expect(ci.jobs[id]?.if ?? "", id).not.toContain("docs_only");
+    expect(needs(ci.jobs[id] as Job), id).not.toContain("changes");
   });
 
-  it("runs the docs checks on a docs-only change, which the skipped unit job would have run", () => {
+  it("runs every scripts/ unit test on a docs-only change: they hold each test that reads the docs, which the skipped unit job would have run", () => {
     const docs = ci.jobs.docs;
     expect(docs?.if).toBe("${{ needs.changes.outputs.docs_only == 'true' }}");
-    const run = docs?.steps.map((s) => s.run ?? "").join("\n") ?? "";
-    expect(run).toContain("scripts/docs-unique.test.ts");
-    expect(run).toContain("scripts/check-doc-skills.test.ts");
+    expect(docs?.steps.map((s) => s.run)).toContain("pnpm exec vitest run --project unit scripts/");
   });
 });
