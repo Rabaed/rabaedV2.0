@@ -71,7 +71,7 @@ const asC1Reads = async (id: string) =>
   (await history(at.c1Pm, id)).events.map(({ seq: _seq, at: _at, documentNumber, ...e }) => ({ ...e, numbered: documentNumber !== null }));
 
 describe("scenario RP-588-4: K1's manager codes three items in bulk", () => {
-  it("each gets its own Code event and Issued Code, which C1 reads exactly as a single Code: K1's Company and the signer, never K1's internal events", async () => {
+  it("RP-588-4: each gets its own Code event and Issued Code, which C1 reads exactly as a single Code: K1's Company name, the signer and the Remarks, never K1's internal events", async () => {
     const items = [await atK1("Bulk one"), await atK1("Bulk two"), await atK1("Bulk three")];
     const single = await atK1("Coded alone");
     const code = { transition: "approve_a", answers: { remarks: "Approved as submitted" }, internalNote: "K1 only: checked the datasheets" };
@@ -83,8 +83,12 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk", () => {
     const control = await asC1Reads(single);
     const issued = control.filter((e) => e.type === "issue_code" || e.outcome === "A");
     expect(issued).toHaveLength(1);
-    expect(issued[0]!.by.companyName).not.toBeNull();
-    expect(issued[0]!.by.memberName).not.toBeNull();
+    // K1 by its Company's name, and the Code's signer by name (V14), as K1 reads its own manager; with the Remarks.
+    const k1Name = (await sql<{ legal_name: unknown }>`select legal_name from company where id = ${k1.company.companyId}::uuid`.execute(migrator)).rows[0]!
+      .legal_name;
+    const signer = (await history(at.k1Manager, single)).events.find((e) => e.outcome === "A")!.by.memberName;
+    expect(signer).not.toBeNull();
+    expect(issued[0]).toMatchObject({ audience: "shared", by: { companyName: k1Name, memberName: signer }, remarks: code.answers.remarks });
     for (const id of items) {
       expect(await asC1Reads(id)).toEqual(control);
       expect(await detail(at.c1Pm, id)).toMatchObject({ outcome: "A" });

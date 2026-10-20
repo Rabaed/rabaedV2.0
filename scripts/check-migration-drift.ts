@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { reportHiddenSortKeys } from "./check-migrations-hidden-sort.ts";
+import { type HiddenSortKey, reportHiddenSortKeys } from "./check-migrations-hidden-sort.ts";
 import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migrationsDir } from "./migrations.ts";
 
 // Five checks on the migrations a pull request adds (RP-337, from the RP-311 retro;
@@ -446,6 +446,26 @@ export function migrationProblems(repo: string, base: string, head: string): Mig
 }
 
 /**
+ * Prints the five checks' findings for `base` and `head`, each with its fix, or
+ * the passing line, and returns them (RP-990: `check:migrations` counts them).
+ */
+export function reportMigrationProblems(repo: string, base: string, head: string): MigrationProblems & { hiddenSorts: HiddenSortKey[] } {
+  const problems = migrationProblems(repo, base, head);
+  const { drift, ordering, overloads, duplicates } = problems;
+  for (const found of drift) for (const line of driftMessage(found)) console.error(line);
+  for (const found of ordering) for (const line of orderMessage(found)) console.error(line);
+  for (const { signature, branch, main } of overloads) {
+    console.error(`${signature} is created on this branch (${branch.join(", ")}) beside another overload; main dropped that signature, or redefined the function out of this branch's sight (${main.join(", ")}).`);
+    console.error("  A different argument list makes a second function, so the stale one stays with its old body and grants. Make this branch's change on main's signature instead: rewrite the branch's migration (it isn't on main yet), or drop the stale signature in a new, later migration.");
+  }
+  for (const group of duplicates) console.error(`These migrations share a timestamp; rename this branch's (it isn't on main yet) to a new, later one: ${group.join(", ")}`);
+  // RP-534: run here so CI's "migration drift and timestamps" job and `pnpm check:migrations` both check it.
+  const hiddenSorts = reportHiddenSortKeys(repo, base, head);
+  if (!hasProblems(problems) && hiddenSorts.length === 0) console.log("No migration redefined on both sides of a merge, none on the branch redefining another's object unseen, no stale overloads, and no shared timestamps.");
+  return { ...problems, hiddenSorts };
+}
+
+/**
  * The base and head to check for a merge queue entry (GitHub's merge_group
  * event). The merge group's head is a merge commit (merge method: merge
  * commit) whose first parent is the group's base (main plus the entries ahead)
@@ -470,17 +490,6 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     process.exit(2);
   }
   const { base, head } = mergeGroup ? mergeGroupSides(process.cwd(), first, second) : { base: first, head: second };
-  const problems = migrationProblems(process.cwd(), base, head);
-  const { drift, ordering, overloads, duplicates } = problems;
-  for (const found of drift) for (const line of driftMessage(found)) console.error(line);
-  for (const found of ordering) for (const line of orderMessage(found)) console.error(line);
-  for (const { signature, branch, main } of overloads) {
-    console.error(`${signature} is created on this branch (${branch.join(", ")}) beside another overload; main dropped that signature, or redefined the function out of this branch's sight (${main.join(", ")}).`);
-    console.error("  A different argument list makes a second function, so the stale one stays with its old body and grants. Make this branch's change on main's signature instead: rewrite the branch's migration (it isn't on main yet), or drop the stale signature in a new, later migration.");
-  }
-  for (const group of duplicates) console.error(`These migrations share a timestamp; rename this branch's (it isn't on main yet) to a new, later one: ${group.join(", ")}`);
-  // RP-534: run here so CI's "migration drift and timestamps" job and `pnpm check:migrations` both check it.
-  const hiddenSorts = reportHiddenSortKeys(process.cwd(), base, head);
-  if (hasProblems(problems) || hiddenSorts) process.exit(1);
-  console.log("No migration redefined on both sides of a merge, none on the branch redefining another's object unseen, no stale overloads, and no shared timestamps.");
+  const { hiddenSorts, ...problems } = reportMigrationProblems(process.cwd(), base, head);
+  if (hasProblems(problems) || hiddenSorts.length > 0) process.exit(1);
 }
