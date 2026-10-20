@@ -169,6 +169,7 @@ describe("An Engineer's import for C1", () => {
         "rows",
         "rowsCreated",
         "rowsRejected",
+        "rowsSuggested",
         "rowsTotal",
         "runBy",
         "sheet",

@@ -484,38 +484,43 @@ function valueCandidates(field: string, context: RegisterContext): RegisterCandi
  */
 export function registerValues(table: SheetTable, mapping: RegisterImportMapping, context: RegisterContext): RegisterValues {
   const manual = mapping.values ?? {};
-  const columns: { field: string; column: number; manual: Readonly<Record<string, string>>; split: boolean; suggest?: false }[] = [];
-  if ("column" in mapping.type) columns.push({ field: "type", column: mapping.type.column, manual: manual.type ?? {}, split: false });
-  if ("column" in mapping.trade) columns.push({ field: "trade", column: mapping.trade.column, manual: manual.trade ?? {}, split: false });
-  if (mapping.location) columns.push({ field: "location", column: mapping.location.column, manual: manual.location ?? {}, split: false });
-  if (mapping.scopes) columns.push({ field: "scopes", column: mapping.scopes.column, manual: manual.scopes ?? {}, split: true });
+  const suggestedKeys = mapping.suggested ?? {};
+  type Column = { field: string; column: number; manual: Readonly<Record<string, string>>; suggested: readonly string[]; split: boolean; suggest?: false };
+  const columns: Column[] = [];
+  if ("column" in mapping.type) columns.push({ field: "type", column: mapping.type.column, manual: manual.type ?? {}, suggested: suggestedKeys.type ?? [], split: false });
+  if ("column" in mapping.trade) columns.push({ field: "trade", column: mapping.trade.column, manual: manual.trade ?? {}, suggested: suggestedKeys.trade ?? [], split: false });
+  if (mapping.location) columns.push({ field: "location", column: mapping.location.column, manual: manual.location ?? {}, suggested: suggestedKeys.location ?? [], split: false });
+  if (mapping.scopes) columns.push({ field: "scopes", column: mapping.scopes.column, manual: manual.scopes ?? {}, suggested: suggestedKeys.scopes ?? [], split: true });
   // The "Assign to" column's emails (RP-640): each matched to a Member exactly, never suggested.
-  if (mapping.assignTo) columns.push({ field: "assignTo", column: mapping.assignTo.column, manual: {}, split: false, suggest: false });
+  if (mapping.assignTo) columns.push({ field: "assignTo", column: mapping.assignTo.column, manual: {}, suggested: [], split: false, suggest: false });
   for (const mapped of mapping.fields ?? []) {
     const type = context.fillable.get(mapped.key)?.field.type;
     if (type === "select" || type === "multi_select" || type === "option_list") {
-      columns.push({ field: registerFormFieldId(mapped.key), column: mapped.column, manual: manual.fields?.[mapped.key] ?? {}, split: type !== "select" });
+      columns.push({
+        field: registerFormFieldId(mapped.key),
+        column: mapped.column,
+        manual: manual.fields?.[mapped.key] ?? {},
+        suggested: suggestedKeys.fields?.[mapped.key] ?? [],
+        split: type !== "select",
+      });
     }
   }
   return {
     fields: [
-      ...columns.map(({ field, column, manual: byHand, split, suggest }) => {
+      ...columns.map(({ field, column, manual: byHand, suggested: stillSuggestedKeys, split, suggest }) => {
         const candidates = valueCandidates(field, context);
         return {
           field,
           column,
           values: distinctValues(table, column, split).map(({ key, text, rows }) => {
             const manualMatch = byHand[key] !== undefined ? matchRegisterValue(text, candidates, byHand) : null;
-            const exact = manualMatch ?? matchRegisterValue(text, candidates);
-            const suggested = exact === null && suggest !== false ? suggestRegisterValue(text, candidates) : null;
-            return {
-              key,
-              text,
-              rows,
-              match: exact ?? suggested?.id ?? null,
-              how: manualMatch !== null ? ("manual" as const) : exact !== null ? ("exact" as const) : suggested ? ("suggested" as const) : null,
-              score: suggested?.score ?? null,
-            };
+            const exactMatch = matchRegisterValue(text, candidates);
+            const suggestion = exactMatch === null && suggest !== false ? suggestRegisterValue(text, candidates) : null;
+            // RP-961: a suggestion pre-chosen on Map values stays suggested, with its score,
+            // until the importer confirms it or picks another value.
+            const stillSuggested = manualMatch !== null && stillSuggestedKeys.includes(key) && suggestion?.id === manualMatch;
+            const how = howMatched({ stillSuggested, manualMatch, exactMatch, suggestion });
+            return { key, text, rows, match: manualMatch ?? exactMatch ?? suggestion?.id ?? null, how, score: how === "suggested" ? suggestion!.score : null };
           }),
         };
       }),
@@ -537,6 +542,18 @@ export function registerValues(table: SheetTable, mapping: RegisterImportMapping
         : []),
     ],
   };
+}
+
+/**
+ * How Map values says a value is matched: `suggested` while its match is a suggestion (one
+ * pre-chosen and not yet confirmed, RP-961, or none chosen yet), `manual` when matched by
+ * hand, `exact` by code or name; null when nothing.
+ */
+function howMatched(m: { stillSuggested: boolean; manualMatch: string | null; exactMatch: string | null; suggestion: { id: string } | null }): RegisterValues["fields"][number]["values"][number]["how"] {
+  if (m.stillSuggested) return "suggested";
+  if (m.manualMatch !== null) return "manual";
+  if (m.exactMatch !== null) return "exact";
+  return m.suggestion ? "suggested" : null;
 }
 
 /** Every different value of a column once (each of a Scopes cell's, with `split`) by registerMatchKey, as it first reads, with how many rows hold it. */
