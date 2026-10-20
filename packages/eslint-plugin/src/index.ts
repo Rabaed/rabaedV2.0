@@ -1,3 +1,4 @@
+import { adminApiAsAppRole } from "./admin-rules.ts";
 import { cssNoHardcodedColour, cssNoPhysicalDirection } from "./css-rules.ts";
 import { jsonNoAvoidTerms, noAvoidTerms } from "./avoid-rules.ts";
 import { jsonNoRawBidi, noRawBidi } from "./bidi-rules.ts";
@@ -16,7 +17,8 @@ import { jsonNoDeadlineWords } from "./json-rules.ts";
 /**
  * Rabaed design guard rails (RP-199): design tokens only, logical (RTL-safe)
  * CSS only, and Step Age only (no deadline words), and no raw error messages in logs (RP-287).
- * Also "use client" on every component file that needs it, and no translations in @rabaed/ui (RP-362). Wired up in eslint.config.js.
+ * Also "use client" on every component file that needs it, and no translations in @rabaed/ui (RP-362), and
+ * Rabaed Admin runs the api's code only as the app role (RP-987). Wired up in eslint.config.js.
  */
 const plugin = {
   meta: { name: "@rabaed/eslint-plugin" },
@@ -31,6 +33,7 @@ const plugin = {
     "no-aws-ids-in-errors": noAwsIdsInErrors,
     "use-client-directive": useClientDirective,
     "no-ui-translations": noUiTranslations,
+    "admin-api-as-app-role": adminApiAsAppRole,
     "css-no-hardcoded-colour": cssNoHardcodedColour,
     "css-no-physical-direction": cssNoPhysicalDirection,
     "json-no-deadline-words": jsonNoDeadlineWords,
