@@ -53,7 +53,8 @@ export type RecordCut = { readonly beforeComments: true } | { readonly replyCard
 
 /**
  * The record's HTML. `images` are the data URLs of the images it prints by storage key, and
- * `marks` says which of them each logo, Signature, Stamp and appendix image is (RecordImages: never in the Record Data).
+ * `marks` says which of them each logo, Signature and Stamp is (RecordImages: never in the Record Data). The appendix's
+ * images are not among them: they are drawn into their frames afterwards (appendix.ts).
  * A Working Copy (WorkingCopyData) prints the same page without the sealed record's own parts.
  */
 export function recordHtml(
@@ -315,7 +316,7 @@ export function recordHtml(
       : "";
   const disclaimerPart = ended && data.disclaimer ? `<section class="box disclaimer"><h2>${heading("disclaimer")}</h2><div class="pre">${txt(data.disclaimer)}</div></section>` : "";
   // The appendix (element 15, RP-147) comes after the Disclaimer.
-  const appendixPart = ended ? appendixHtml(data, images, marks.appendix ?? [], !appendixList) : "";
+  const appendixPart = ended ? appendixHtml(data, !appendixList) : "";
   return { cancellation, after: `${commentsPart}${signaturesPart}${nextStepPart}${stampsPart}${disclaimerPart}${appendixPart}` };
   }
   const parts = record ? recordParts(record) : null;

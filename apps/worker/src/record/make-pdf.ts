@@ -29,13 +29,27 @@ export async function makeRecordPdf(
   source: RecordSource,
   at: Date,
 ): Promise<{ pdf: Uint8Array; data: RecordData; xml: Uint8Array; layoutPages: number }> {
-  const { data, pdf: rendered, layoutPages } = await renderWithAppendix(deps.renderer, source.data, await deps.fonts(), source.images, source.marks, source.appendix);
+  const { archival, data, xml, layoutPages } = await archivalPdf(deps, source, at);
+  const pdf = await sealPdf(archival, { signer: await deps.signer(), timestamps: await deps.timestamps(), at });
+  return { pdf, data, xml, layoutPages };
+}
+
+/**
+ * The record's PDF/A-3, before its seal. Its own function so that the drawn document is let go
+ * before the seal makes its copies (RP-957: at the 100 MB limit each copy is about 100 MB).
+ */
+async function archivalPdf(
+  deps: Pick<RecordJobDeps, "renderer" | "fonts">,
+  source: RecordSource,
+  at: Date,
+): Promise<{ archival: Uint8Array; data: RecordData; xml: Uint8Array; layoutPages: number }> {
+  const { data, doc, layoutPages } = await renderWithAppendix(deps.renderer, source.data, await deps.fonts(), source.images, source.marks, source.appendix);
   const xml = new TextEncoder().encode(recordDataXml(data));
   const title = [data.type.code, data.documentNumber ?? data.subject].join(" ");
-  const archival = await toPdfA3(rendered, { title, at }, [
+  // The drawn document itself, never saved and opened again: one copy fewer of every page.
+  const archival = await toPdfA3(doc, { title, at }, [
     { name: "record-data.xml", mimeType: "application/xml", description: "Record Data", bytes: xml },
     ...source.appendix.attachments,
   ]);
-  const pdf = await sealPdf(archival, { signer: await deps.signer(), timestamps: await deps.timestamps(), at });
-  return { pdf, data, xml, layoutPages };
+  return { archival, data, xml, layoutPages };
 }
