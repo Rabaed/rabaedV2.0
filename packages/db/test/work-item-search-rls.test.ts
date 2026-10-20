@@ -14,8 +14,8 @@ import { buildSeamTwoTower, c2Draft, testDatabaseUrls, wirAtConsultant } from ".
 const urls = testDatabaseUrls();
 const migrator = createDb(urls.migrator, { max: 1 });
 const app = createDb(urls.app, { max: 1 });
-const client = new pg.Client({ connectionString: urls.migrator });
-afterAll(() => Promise.all([migrator.destroy(), app.destroy(), client.end()]));
+const migratorClient = new pg.Client({ connectionString: urls.migrator });
+afterAll(() => Promise.all([migrator.destroy(), app.destroy(), migratorClient.end()]));
 
 let projectId = "";
 let members: string[] = [];
@@ -27,8 +27,8 @@ let k1Engineer = "";
 
 beforeAll(async () => {
   // Every Member of the Tower's Project, and two items whose titles share "slab".
-  await client.connect();
-  const tower = await buildSeamTwoTower(app, client, { projectCode: "RSR" });
+  await migratorClient.connect();
+  const tower = await buildSeamTwoTower(app, migratorClient, { projectCode: "RSR" });
   projectId = tower.projectId;
   c1Item = await wirAtConsultant(tower, { type: "WIR", title: "Slab pour A" });
   c2Item = await c2Draft(tower, { type: "WIR", title: "Slab pour B" });

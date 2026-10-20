@@ -128,6 +128,7 @@ describe("a report, from request to PDF", () => {
     expect(await state(colleague, id)).toEqual([]);
     expect(await state(outsider, id)).toEqual([]);
     expect(await state(colleague, colleaguesId)).toEqual([{ status: "preparing", storage_key: null }]);
+    expect(await state(outsider, outsidersId)).toEqual([{ status: "preparing", storage_key: null }]);
     const job = await sql`select * from app.snag_report_job(${outbox}::uuid)`.execute(app);
     expect(job.rows).toEqual([]);
   });

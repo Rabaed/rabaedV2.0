@@ -259,12 +259,22 @@ export async function wirAtConsultant(
   return id;
 }
 
+/** What `c2Draft` takes. */
+export type C2DraftOptions = {
+  /** The Work Item Type. */
+  type: string;
+  title: string;
+};
+
 /**
  * C2's Engineer raises a Draft on `options.type` (the Tower's Trade and Building B, which C2 covers) and holds it.
  * The positive control beside a refusal to C2 (RP-995): C2 sees its own item, so a refusal of C1's is V3, not a
  * C2 Member who reaches nothing at all. Returns the item's id.
  */
-export async function c2Draft(tower: Pick<SeamTwoTower, "projectId" | "tradeId" | "buildingB" | "c2" | "call">, options: WirAtConsultantOptions): Promise<string> {
+export async function c2Draft(
+  tower: Pick<SeamTwoTower, "projectId" | "tradeId" | "buildingB" | "c2" | "call">,
+  options: C2DraftOptions,
+): Promise<string> {
   const { type, title } = options;
   const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
     tower.c2.members.engineer,

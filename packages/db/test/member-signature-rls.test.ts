@@ -192,8 +192,10 @@ describe("app.active_signature_id, as the app role", () => {
 describe("the test database's defaults (test-defaults.ts)", () => {
   it("give a Member inserted by any route a Signature in force, which a test of the gate ends", async () => {
     const companyId = await one(
-      "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, (select id from rabaed_engineer limit 1)) returning id",
-      [JSON.stringify({ en: "Defaults", ar: "Defaults" }), digits(10), `3${digits(13)}3`],
+      // Onboarded by a Rabaed Engineer of its own (RP-995: no seed row is assumed).
+      `with e as (insert into rabaed_engineer (email, full_name) values ($4, 'Defaults') returning id)
+       insert into company (legal_name, cr_number, vat_number, onboarded_by) select $1, $2, $3, e.id from e returning id`,
+      [JSON.stringify({ en: "Defaults", ar: "Defaults" }), digits(10), `3${digits(13)}3`, email("eng")],
     );
     const id = await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
       companyId,

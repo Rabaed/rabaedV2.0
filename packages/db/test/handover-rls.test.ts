@@ -224,7 +224,8 @@ describe("scenario RP-108-1: a Handover reads and moves only the Authorized Pers
 describe("RP-552: the refusal of a non-Authorized-Person never depends on the plan", () => {
   it("refuses a Member of a Company with no Steps at all, for any Member, Participant or none", async () => {
     // A Company that holds no Participant and no assignment: nothing for the planner to evaluate.
-    const engineer = await one("select id from rabaed_engineer limit 1", []);
+    // Onboarded by a Rabaed Engineer of its own (RP-995: no seed row is assumed).
+    const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Empty') returning id", [email("eng")]);
     const empty = await company(engineer, "Empty");
     for (const who of [empty.member, ali]) {
       for (const p of [null, participant.c1]) {

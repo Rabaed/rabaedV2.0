@@ -60,6 +60,7 @@ export {
   c2Draft,
   digits,
   wirAtConsultant,
+  type C2DraftOptions,
   type SeamTwoCompany,
   type SeamTwoOptions,
   type SeamTwoTower,
