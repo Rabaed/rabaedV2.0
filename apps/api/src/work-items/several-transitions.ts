@@ -56,8 +56,8 @@ export type ItemRefusal = { workItemId: string; refused: Exclude<TakeTransitionR
 
 /**
  * Takes each of `takes` in turn, confirmed (the command's pop-up confirmed them all, ADR 0017),
- * each under its own key from command `command`'s `key`. Stops at the first refusal when `stop`
- * says so, else goes on through all; answers the refusals. The caller locks the items first
+ * each under its own key from command `command`'s `key`. Stops at the first refusal when
+ * `stopAtFirst`, else goes on through all; answers the refusals. The caller locks the items first
  * (lockWorkItems) and throws a Rollback when any is refused.
  */
 export async function takeEach(
