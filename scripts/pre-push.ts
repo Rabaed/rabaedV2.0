@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { branchClaims, type ClaimsVerdict } from "./check-claims.ts";
 import { isDoc } from "./reviewed-required.ts";
 import { branchMix } from "./shared-files.ts";
 
@@ -14,6 +15,8 @@ import { branchMix } from "./shared-files.ts";
 // Markdown) runs neither. Deleting a branch or pushing a tag runs nothing.
 // A branch that changes root shared files (the lockfile, say) beside code gets a
 // warning, not a refusal (RP-993): `pnpm queue` refuses it later, by the same rule.
+// A branch that changes a shared module with no open RP-603 claim for its key is
+// refused before either check runs, docs-only pushes too (rule 12, RP-1008).
 // The checks read the working tree, which is the pushed commit when you push
 // the branch you have checked out with nothing uncommitted.
 //
@@ -37,6 +40,8 @@ export interface PrePushSeam {
   changedFiles(ref: PushedRef): string[] | undefined;
   /** The lines naming a rule-3 mix on the pushed ref against origin/main (scripts/shared-files.ts); undefined when there is none or it can't be told. */
   branchMix(ref: PushedRef): string[] | undefined;
+  /** Rule 12's claims for the pushed ref (scripts/check-claims.ts): refused, a warning, or "" when nothing to say. */
+  claims(ref: PushedRef): Promise<ClaimsVerdict>;
   /** Runs `pnpm <check>`, its stdout and stderr together. */
   run(check: Check): Promise<{ status: number; output: string }>;
   /** The checked-out commit, and whether tracked files have uncommitted changes. */
@@ -56,16 +61,24 @@ export async function prePush(stdin: string, seam: PrePushSeam): Promise<{ ok: b
   const branches = parsePushedRefs(stdin).filter((ref) => ref.remoteRef.startsWith("refs/heads/") && !ZERO.test(ref.localSha));
   if (branches.length === 0) return { ok: true, message: "pre-push: no branch pushed, lint and typecheck skipped." };
   const mix = mixWarning(branches, seam);
+  // Rule 12 first, docs-only pushes too (the rule files are shared modules): a refusal needs a claim, not a fix (RP-1008).
+  const claims = await Promise.all(branches.map((ref) => seam.claims(ref)));
+  const refused = claims.filter((result) => !result.ok);
+  const claimWarnings = claims.filter((result) => result.ok && result.message).map((result) => `\n${result.message}`).join("");
+  if (refused.length > 0) {
+    return { ok: false, message: `${refused.map((result) => result.message).join("\n\n")}\n\nPush refused (pre-push, RP-1008): post the CLAIM on RP-603, then push again.${claimWarnings}${mix}` };
+  }
+  const trailingWarnings = `${claimWarnings}${mix}`;
   const changed = branches.map((ref) => seam.changedFiles(ref));
-  if (changed.every((files) => files !== undefined && files.every(isDoc))) return { ok: true, message: `pre-push: only docs changed, lint and typecheck skipped.${mix}` };
+  if (changed.every((files) => files !== undefined && files.every(isDoc))) return { ok: true, message: `pre-push: only docs changed, lint and typecheck skipped.${trailingWarnings}` };
 
   console.log("pre-push: running pnpm lint and pnpm typecheck…");
   const results = await Promise.all(CHECKS.map(async (check) => ({ check, ...(await seam.run(check)) })));
   const failed = results.filter((result) => result.status !== 0);
   const warning = treeWarning(branches, seam.workingTree());
-  if (failed.length === 0) return { ok: true, message: `pre-push: pnpm lint and pnpm typecheck pass.${warning}${mix}` };
+  if (failed.length === 0) return { ok: true, message: `pre-push: pnpm lint and pnpm typecheck pass.${warning}${trailingWarnings}` };
   const report = failed.map(({ check, status, output }) => `pnpm ${check} failed (exit ${status}):\n${output.trimEnd()}`).join("\n\n");
-  return { ok: false, message: `${report}\n\nPush refused (pre-push, RP-989): fix ${failed.map((f) => `pnpm ${f.check}`).join(" and ")}, commit, and push again.${warning}${mix}` };
+  return { ok: false, message: `${report}\n\nPush refused (pre-push, RP-989): fix ${failed.map((f) => `pnpm ${f.check}`).join(" and ")}, commit, and push again.${warning}${trailingWarnings}` };
 }
 
 /** A warning for each pushed branch that `pnpm queue` will refuse under rule 3 (RP-993). */
@@ -135,6 +148,14 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
         return branchMix(repo, ref.localSha);
       } catch {
         return undefined; // git could not tell (no origin/main, say): a warning only, and `pnpm queue` still checks it
+      }
+    },
+    claims: async (ref) => {
+      try {
+        return await branchClaims(repo, { commit: ref.localSha, branch: ref.remoteRef });
+      } catch (error) {
+        // git could not tell (no origin/main, say): a warning, as for the rule-3 mix
+        return { ok: true, message: `Warning: check:claims could not run (${error instanceof Error ? error.message : String(error)}).` };
       }
     },
     run: (check) => runPnpm(repo, (pnpm ??= pnpmCommand(repo)), check),
