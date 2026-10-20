@@ -6,7 +6,7 @@ import type { Database } from "./schema.ts";
 // asks for a report and later for its state as the Member who asked (withMember); the worker's job
 // reads what to print and saves the PDF as the app role with no Member set.
 
-/** Asks for a report of `content` (read as the calling Member); its id, or null for a Project the Member is not on. */
+/** Asks for a report of `content` (read as the calling Member); its id, or null for a Project the Member is not on or a photo they may not read as a Document. */
 export async function requestSnagReport(
   trx: Transaction<Database>,
   projectId: string,
@@ -25,10 +25,10 @@ export interface SnagReportStateRow {
   readonly fileName: string | null;
 }
 
-/** Where a report is, for the Member who asked for it; null for anyone else and a made-up id. */
-export async function snagReportState(trx: Transaction<Database>, reportId: string): Promise<SnagReportStateRow | null> {
+/** Where a report of Project `projectId` is, for the Member who asked for it; null for anyone else, another Project's id and a made-up id. */
+export async function snagReportState(trx: Transaction<Database>, projectId: string, reportId: string): Promise<SnagReportStateRow | null> {
   const { rows } = await sql<{ status: SnagReportStateRow["status"]; storage_key: string | null; file_name: string | null }>`
-    select * from app.snag_report_state(${reportId}::uuid)
+    select * from app.snag_report_state(${projectId}::uuid, ${reportId}::uuid)
   `.execute(trx);
   const row = rows[0];
   return row ? { status: row.status, storageKey: row.storage_key, fileName: row.file_name } : null;
