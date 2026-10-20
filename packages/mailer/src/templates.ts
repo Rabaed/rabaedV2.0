@@ -42,6 +42,8 @@ export interface EmailTemplateValues {
   "notification-sent-back": NotificationEmailValues;
   /** A Package's submittals reached the Member with one Submit Package (RP-643). */
   "notification-package-submitted": NotificationEmailValues;
+  /** A closed item's Documental Record is ready (RP-950): it links to the item, never to the file, and names no Company and no person. */
+  "notification-record-ready": NotificationEmailValues;
   /** The daily digest of the notifications routed to it (RP-358). */
   "daily-digest": DailyDigestValues;
   /** The weekly Step Age report (RP-359). */
@@ -173,6 +175,7 @@ const notificationCopy = {
   en: {
     reached: (step: string) => `Reached you at ${step}`,
     sentBack: "Sent Back to you",
+    recordReady: "Record ready to download",
     revision: "New Revision",
     code: (code: string) => `Code ${code}`,
     closed: "Closed",
@@ -189,6 +192,7 @@ const notificationCopy = {
   ar: {
     reached: (step: string) => `وصلك في ${step}`,
     sentBack: "أُرجع إليكم",
+    recordReady: "السجل جاهز للتنزيل",
     revision: "مراجعة جديدة",
     code: (code: string) => `الرمز ${code}`,
     closed: "مغلق",
@@ -275,6 +279,11 @@ const notificationKinds = {
   package_submitted: {
     template: "notification-package-submitted",
     happened: packageHappened,
+    details: (): Paragraph[] => [],
+  },
+  record_ready: {
+    template: "notification-record-ready",
+    happened: (locale: Locale) => notificationCopy[locale].recordReady,
     details: (): Paragraph[] => [],
   },
 } as const satisfies Record<

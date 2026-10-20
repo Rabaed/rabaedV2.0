@@ -66,6 +66,7 @@ const examples: EmailTemplateValues = {
   },
   // The every-notification checks below read its number (the Package's, never a Document Number), Subject and link as an item's.
   "notification-package-submitted": { ...item, workItemId: null, documentNumber: null, package: { ...bathrooms, number: DOC } },
+  "notification-record-ready": item,
   "daily-digest": {
     projects: [
       {
@@ -262,6 +263,19 @@ describe("notification emails", () => {
     expect(renderEmail("notification-sent-back", "en", examples["notification-sent-back"]).subject.split(" · ")[2]).toBe("Sent Back to you");
   });
 
+  it("Record ready (RP-950): the Document Number, Subject and what happened; it links to the item and names no Company and no person", () => {
+    const en = renderEmail("notification-record-ready", "en", examples["notification-record-ready"]);
+    expect(en.subject).toBe(`⁦${DOC}⁩ · Cable trays <Level 2> · Record ready to download`);
+    expect(en.text).toContain(item.link);
+    const ar = renderEmail("notification-record-ready", "ar", examples["notification-record-ready"]);
+    expect(ar.subject).toBe(`⁦${DOC}⁩ · Cable trays <Level 2> · السجل جاهز للتنزيل`);
+    expect(ar.text).toContain(item.link);
+    for (const { text } of [en, ar]) {
+      expect(text).not.toContain(k1.en);
+      expect(text).not.toContain(k1.ar);
+    }
+  });
+
   it("a Package Submit (RP-643): the Package's number and name, who Submitted it and how many submittals the recipient sees", () => {
     const values = {
       link: "https://rabaed.test/en/packages/0190a1b2-0000-7000-8000-0000000000b1",
@@ -356,6 +370,19 @@ describe("the daily digest (RP-358)", () => {
     expect(text).toContain("\u2066PKG-007\u2069 · Bathrooms – Tower 1");
     expect(text).toContain("– Al Bina Contracting Submitted 6 submittals");
     expect(text).toContain(link);
+  });
+
+  it("lists a Record ready (RP-950) with what happened, linking to the item", () => {
+    const { text } = renderEmail("daily-digest", "en", {
+      projects: [
+        {
+          name: { en: "Tower", ar: "البرج" },
+          items: [{ workItemId: item.workItemId, documentNumber: DOC, subject: "Cable trays", link: item.link, entries: [{ kind: "record_ready", step: null, event: null }] }],
+        },
+      ],
+    });
+    expect(text).toContain("– Record ready to download");
+    expect(text).toContain(item.link);
   });
 
   it("escapes values in the HTML body", () => {
