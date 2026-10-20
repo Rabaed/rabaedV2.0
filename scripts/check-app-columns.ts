@@ -13,12 +13,19 @@ import { join } from "node:path";
 export type PositionalRead = { line: number; fn: string };
 export type FilePositionalRead = PositionalRead & { file: string };
 
-/** Words that may follow a call and then a parenthesis without being an alias. */
-const notAliases = new Set(["and", "or", "not", "in", "any", "all", "some", "exists", "on", "using", "where", "when", "then", "else", "filter", "over", "within", "values", "select", "returning", "is", "like", "ilike", "between", "union", "except", "intersect"]);
+/** Words that may follow a FROM item and then a parenthesis without being its alias. */
+const notAliases = new Set([
+  ...["and", "or", "not", "in", "any", "all", "some", "exists", "is", "like", "ilike", "between"],
+  ...["join", "cross", "left", "right", "inner", "full", "natural", "lateral", "on", "using"],
+  ...["where", "group", "having", "window", "order", "limit", "offset", "fetch", "for", "union", "except", "intersect", "returning"],
+]);
 
-const call = /\bapp\.(\w+)\s*\(/g;
+/** An app.* call as a FROM item: after `from`, `join`, `lateral` or the comma between FROM items. */
+const call = /(?:\bfrom|\bjoin|\blateral|,)\s+(app\.(\w+))\s*\(/gi;
+/** Space, and any `--` comment in it, to the end of its line. */
+const gap = String.raw`(?:\s|--[^\n]*(?:\n|$))*`;
 /** After the call: `with ordinality`, `as`, an alias and its column list, each optional but the list. */
-const aliasList = /^\s*(?:with\s+ordinality\s*)?(?:as\s*)?(?:([a-z_]\w*)\s*)?\(/i;
+const aliasList = new RegExp(String.raw`^${gap}(?:with\s+ordinality\b${gap})?(as\b${gap})?(?:([a-z_]\w*|"[^"]+")${gap})?\(`, "i");
 
 /** The index just past the parenthesis that closes the one at `open`; the text's length when none does. */
 function closing(text: string, open: number): number {
@@ -34,14 +41,14 @@ function closing(text: string, open: number): number {
 export function positionalReads(text: string): PositionalRead[] {
   const found: PositionalRead[] = [];
   for (const m of text.matchAll(call)) {
-    const after = text.slice(closing(text, m.index + m[0].length - 1));
-    const list = after.match(aliasList);
+    const list = text.slice(closing(text, m.index + m[0].length - 1)).match(aliasList);
     if (!list) continue;
-    const alias = list[1];
+    const [, as, alias] = list;
     if (alias !== undefined && notAliases.has(alias.toLowerCase())) continue;
-    // `app.f(x) (` with neither alias nor `as` is not a FROM item.
-    if (alias === undefined && !/^\s*(?:with\s+ordinality\s*)?as\b/i.test(after)) continue;
-    found.push({ line: text.slice(0, m.index).split("\n").length, fn: `app.${m[1]}` });
+    // `app.f(x) (` with neither alias nor `as` lists no columns.
+    if (alias === undefined && as === undefined) continue;
+    const at = m.index + m[0].indexOf(m[1]!);
+    found.push({ line: text.slice(0, at).split("\n").length, fn: `app.${m[2]}` });
   }
   return found;
 }
@@ -49,7 +56,7 @@ export function positionalReads(text: string): PositionalRead[] {
 /** The roots whose TypeScript is checked. */
 const roots = ["apps", "packages"];
 
-/** Every positional read in the TypeScript under `apps/*\/src` and `packages/*\/src` of `repo`. */
+/** Every positional read in the TypeScript under each app's and package's `src` folder in `repo`. */
 export function repoPositionalReads(repo: string = process.cwd()): FilePositionalRead[] {
   const found: FilePositionalRead[] = [];
   for (const root of roots) {

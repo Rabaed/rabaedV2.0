@@ -34,7 +34,12 @@ async function restore() {
   `.execute(migrator);
 }
 
-/** app.work_item_actions with a column, `inserted`, in the middle of its result: after `action`, before `transition_key`. */
+/**
+ * app.work_item_actions with a column, `inserted`, in the middle of its result: after `action`, before
+ * `transition_key`. A stand-in only: an invoker SQL function over the real one, which keeps its definer
+ * rights. It lists the real function's columns; one the real function gains later and the api reads makes
+ * this test fail loudly ("column does not exist") until it is added here.
+ */
 async function insertColumnMidList() {
   await sql`
     do $$
@@ -52,9 +57,12 @@ async function insertColumnMidList() {
 }
 
 afterAll(async () => {
-  await restore();
-  await api.close();
-  await migrator.destroy();
+  try {
+    await restore();
+  } finally {
+    await api.close();
+    await migrator.destroy();
+  }
 });
 
 let at: Tower;

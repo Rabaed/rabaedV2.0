@@ -30,6 +30,35 @@ describe("positionalReads", () => {
     expect(positionalReads(text)).toEqual([{ line: 1, fn: "app.work_item_actions" }]);
   });
 
+  it("refuses a quoted alias, a comment before the list, and a second FROM item after a comma", () => {
+    const text = [
+      'from app.a(x) "q" (one, two)',
+      "from app.b(x) -- why\n  b (one, two)",
+      "from work_item w, app.c(w.id) c (one)",
+    ].join("\n");
+    expect(positionalReads(text)).toEqual([
+      { line: 1, fn: "app.a" },
+      { line: 2, fn: "app.b" },
+      { line: 4, fn: "app.c" },
+    ]);
+  });
+
+  it("passes what follows a FROM item without an alias list: a join, a limit, a subquery", () => {
+    const text = [
+      "from app.f(x) join (select 1) q on true",
+      "from app.f(x) a left join (select 1) q on true",
+      "from app.f(x) a limit (1)",
+      "from app.f(x) a order by (a.ordinality)",
+      "from app.f(x) as s\n  where (s.n > 1)",
+      "cross join lateral app.f(w.id) seen\n  -- a comment (with parentheses)\n  cross join lateral (select 1) e",
+    ].join("\n");
+    expect(positionalReads(text)).toEqual([]);
+  });
+
+  it("passes TypeScript that is not SQL: a Fastify app's route and a cast", () => {
+    expect(positionalReads("const r = app.get(url, handler) as (Route | null);\napp.post(\"/x\", h);")).toEqual([]);
+  });
+
   it("passes reads by name: a bare alias, the ordinality column, a scalar call", () => {
     const text = [
       "from app.work_item_actions(w.id) with ordinality a",
