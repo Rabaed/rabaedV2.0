@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, pidAlive, releaseLock } from "./verify-lock.ts";
-import { failureEnd, finalLine, runStep, selectSteps, tail } from "./verify-steps.ts";
+import { failureEnd, finalLine, isSeamStep, runStep, selectSteps, tail } from "./verify-steps.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
@@ -82,7 +82,7 @@ for (const { name, script } of steps) {
   console.error(tail(outcome.output, tailLines));
   // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
   // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).
-  const answers = name.startsWith("test:seam") ? await postgresAnswers() : true;
+  const answers = isSeamStep(name) ? await postgresAnswers() : true;
   for (const line of failureEnd(name, outcome.output, answers)) console.error(`\n${line}`);
   process.exit(outcome.status);
 }

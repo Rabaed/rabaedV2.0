@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { failureEnd, finalLine, loadFailure, runStep, selectSteps, tail, type StepRun } from "./verify-steps.ts";
+import { failureEnd, finalLine, isSeamStep, loadFailure, runStep, selectSteps, tail, type StepRun } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
 
@@ -36,6 +36,13 @@ describe("tail", () => {
   it("keeps the last lines only", () => {
     expect(tail("a\nb\nc\nd\n", 2)).toBe("c\nd");
     expect(tail("a\nb", 5)).toBe("a\nb");
+  });
+});
+
+describe("isSeamStep", () => {
+  it("names the seam suites, and no other step", () => {
+    expect(["test:seam1", "test:seam2"].every(isSeamStep)).toBe(true);
+    expect(["lint", "typecheck", "test:unit", "test:stories", "check:migrations"].some(isSeamStep)).toBe(false);
   });
 });
 

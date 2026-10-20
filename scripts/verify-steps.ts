@@ -27,6 +27,9 @@ export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skippe
   return { steps, skipped };
 }
 
+/** Whether `step` is a seam suite: the steps that run against the lane's Postgres, get a re-run of timed-out files (RP-979) and can see it terminated (RP-994). */
+export const isSeamStep = (step: string): boolean => step.startsWith("test:seam");
+
 /** The line `pnpm verify` ends with when every step passed: the verified commit, "dirty" if the tree has uncommitted changes (RP-563). */
 export function finalLine({ sha, dirty, steps }: { sha: string; dirty: boolean; steps: string[] }): string {
   return `pnpm verify passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.`;
@@ -57,7 +60,7 @@ const postgresTerminated = (output: string) =>
 
 /** What a seam step's output shows when it failed only on timeouts or worker start-up: the test files and tests named. Undefined for any other failure, a terminated Postgres too. */
 function readLoadFailure(step: string, output: string): { files: Set<string>; timedOut: Set<string> } | undefined {
-  if (!step.startsWith("test:seam") || postgresTerminated(output)) return undefined;
+  if (!isSeamStep(step) || postgresTerminated(output)) return undefined;
   const timedOut = new Set<string>();
   const files = new Set<string>();
   let headers: { file: string; name: string }[] = [];
@@ -107,7 +110,7 @@ export function loadFailure(step: string, output: string): string | undefined {
  */
 export function failureEnd(step: string, output: string, postgresAnswers: boolean): string[] {
   const stopped = `pnpm verify stopped at ${step}`;
-  if (!step.startsWith("test:seam")) return [`${stopped}.`];
+  if (!isSeamStep(step)) return [`${stopped}.`];
   const evidence = postgresTerminated(output) ? "57P01" : postgresAnswers ? undefined : "it no longer answers";
   if (evidence) return [`${stopped}: Postgres was terminated (${evidence}), Docker may have stopped. Restart it (${startServices}) and run pnpm verify again.`];
   const load = loadFailure(step, output);
