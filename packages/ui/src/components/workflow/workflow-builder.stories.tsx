@@ -333,11 +333,15 @@ export const EndSelected: Story = {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
     await shown(canvas, step("consultant_qa").name[locale]);
-    await userEvent.click(canvas.getAllByText(step("approved").name[locale]).at(-1)!);
+    const end = canvas.getAllByText(step("approved").name[locale]).at(-1)!;
+    await userEvent.click(end);
     const editor = editorOf(canvas, labels);
     await expect(editor.getByText(labels.endHint)).toBeVisible();
     await expect(editor.getByText(labels.incoming("3"))).toBeVisible();
     await expect(editor.getByRole("button", { name: labels.deleteEnd })).toBeVisible();
+    // The selection ring alone, in the pill's shape: never the browser's square focus ring, which
+    // showed or not with the page's focus, so the screenshot changed between runs (RP-1000).
+    await expect(getComputedStyle(end.closest(".react-flow__node")!).outlineStyle).toBe("none");
   },
 };
 

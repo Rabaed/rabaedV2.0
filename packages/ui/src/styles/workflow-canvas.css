@@ -47,6 +47,19 @@
   transform: translate(-50%, 50%) scale(1.35);
 }
 
+/*
+ * Keyboard focus on the node's own shape, never the browser's square ring around React Flow's
+ * wrapper (RP-555 review). A selected node shows only its selection ring: the browser painted the
+ * square ring or not with the page's focus, so a selected node's screenshot changed between runs (RP-1000).
+ */
+.wf-edit .react-flow__node:focus-visible {
+  outline: none;
+}
+.wf-edit .react-flow__node:focus-visible:not(.selected) > [data-node] {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* While a Transition is dragged: the Step under the pointer is outlined, labels let the pointer through. */
 .wf-edit.wf-connecting .react-flow__node:hover > [data-node] {
   box-shadow:
