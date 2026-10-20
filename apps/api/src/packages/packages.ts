@@ -262,7 +262,7 @@ type ToSubmit = { id: string; document_number: string | null; title: string; sub
 
 /**
  * What Submit Package would take on Package `packageId` for the acting Member: its
- * items they see that aren't Submitted yet (nor closed), each with its Submit
+ * items they see still to Submit (app.package_items_to_submit), each with its Submit
  * Transition they may take now (app.work_item_actions, as the item's own page offers
  * it), and whether an item still to Submit is one they don't see. Ready when there
  * is one to Submit, each has its Submit, and none is hidden.
@@ -274,9 +274,8 @@ async function submitReadiness(trx: Trx, packageId: string): Promise<{ items: To
       (select a.transition_key from app.work_item_actions(w.id) a
         where a.action = 'transition' and a.transition_kind = 'submit' and not a.picks_participant limit 1) as submit_key,
       exists (select 1 from app.work_item_actions(w.id) a where a.action = 'pick_up') as pick_up
-    from app.package_items(${packageId}::uuid) i
+    from app.package_items_to_submit(${packageId}::uuid) i
     join work_item w on w.id = i
-    where w.submitted_at is null and w.closed_at is null
     order by w.document_number nulls last, w.title, w.id
   `.execute(trx);
   const { rows } = await sql<{ hidden: boolean }>`select app.package_hides_unsubmitted(${packageId}::uuid) as hidden`.execute(trx);
@@ -318,8 +317,7 @@ export async function submitPackage(
     // The items still to Submit first, by id, then the Package (app.begin_package_submit locks it):
     // the lock order. An item added meanwhile, after this read, is locked when it is taken.
     const { rows: unsubmitted } = await sql<{ id: string }>`
-      select w.id from app.package_items(${packageId}::uuid) i join work_item w on w.id = i
-      where w.submitted_at is null and w.closed_at is null
+      select i as id from app.package_items_to_submit(${packageId}::uuid) i
     `.execute(trx);
     await lockWorkItems(
       trx,

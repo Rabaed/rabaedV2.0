@@ -11,7 +11,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { HttpError, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
+import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import {
   addPackageItem,
   createPackage,
@@ -98,9 +98,6 @@ export const packageRoutes =
         const memberId = ctx.requireMember(request);
         const result = await submitPackage(ctx.db, ctx.files, memberId, idOrNotFound(request.params.packageId), request.body, ctx.now());
         if (result.ok) return { submitted: result.submitted };
-        if (result.reason === "package_not_ready") {
-          throw new HttpError(409, "package_not_ready", { notReady: result.notReady, othersNotReady: result.othersNotReady });
-        }
         throw refusal(result);
       },
     );
