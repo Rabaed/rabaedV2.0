@@ -479,6 +479,38 @@ describe("Submit Package locks all its items before the Package", () => {
   });
 });
 
+// RP-973: the single-item writes of an Open Package take the same order, so none of them waits on
+// a Submit the other way round (a single Submit of the item, or Submit Package).
+describe("an Open Package's own writes lock the item(s) before the Package", () => {
+  it("removing an item holds it while waiting on the Package, as a single Submit of it does", async () => {
+    const pkg = await createPackage(at.c1Pm, "Lock order, remove");
+    const id = await readyForPm("Removed while locked");
+    await ok(addItem(at.c1Pm, pkg.id, id));
+    const { held, result } = await lockedWhileWaitingOnPackage(pkg.id, [id], () => removeItem(at.c1Pm, pkg.id, id));
+    expect(held).toEqual({ [id]: true });
+    expect(result.statusCode, result.body).toBeLessThan(300);
+  });
+
+  it("deleting it holds every item in it while waiting on the Package, as Submit Package does", async () => {
+    const pkg = await createPackage(at.c1Pm, "Lock order, delete");
+    const items = [await readyForPm("Deleted one"), await readyForPm("Deleted two")];
+    for (const id of items) await ok(addItem(at.c1Pm, pkg.id, id));
+    const { held, result } = await lockedWhileWaitingOnPackage(pkg.id, items, () =>
+      at.c1Pm.request("DELETE", `/v1/packages/${pkg.id}`),
+    );
+    expect(held).toEqual(Object.fromEntries(items.map((id) => [id, true])));
+    expect(result.statusCode, result.body).toBeLessThan(300);
+  });
+
+  it("adding an item holds it while waiting on the Package", async () => {
+    const pkg = await createPackage(at.c1Pm, "Lock order, add");
+    const id = await readyForPm("Added while locked");
+    const { held, result } = await lockedWhileWaitingOnPackage(pkg.id, [id], () => addItem(at.c1Pm, pkg.id, id));
+    expect(held).toEqual({ [id]: true });
+    expect(result.statusCode, result.body).toBeLessThan(300);
+  });
+});
+
 describe("an In Progress Package", () => {
   it("is In Progress once any item in it is Submitted, alone too; then items are added, never removed, and it is never deleted", async () => {
     const pkg = await createPackage(at.c1Pm, "Grows");
