@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
 
 // Runs pnpm with the given arguments, for root package.json scripts that call
-// another pnpm command (`pnpm -r run typecheck`, `pnpm --filter … run setup`).
+// another pnpm command (`pnpm --filter … run setup`), and for scripts/typecheck.ts.
 //
 // A bare `pnpm` in a script needs pnpm on PATH, which agent shells don't have:
 // they only have `corepack pnpm`, and the nested call failed with "'pnpm' is not
