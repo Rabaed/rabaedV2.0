@@ -19,7 +19,7 @@ export type PackageChipProps = {
   companyName: string;
   /** The Package's page. */
   href: string;
-  /** The link's accessible name, e.g. "Open Package PKG-004 Bathrooms – Tower 1, Gulf Builders". */
+  /** The link's accessible name, in the order it reads, e.g. "Open Package PKG-004 Gulf Builders Bathrooms – Tower 1". */
   label: string;
   /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
@@ -45,7 +45,7 @@ export function PackageChip({ number, name, companyName, href, label, linkAs: Li
         {number}
       </bdi>
       <span aria-hidden="true">·</span>
-      <span dir="auto" data-package-company="" className="max-w-[45%] min-w-0 truncate">
+      <span dir="auto" className="max-w-[45%] min-w-0 truncate">
         {companyName}
       </span>
       <span aria-hidden="true">·</span>

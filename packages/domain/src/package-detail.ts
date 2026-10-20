@@ -22,9 +22,9 @@ export const packageDetailItem = workItemRow.extend({
   /**
    * Why it stops Submit Package now (RP-974), with the 409's codes, before any attempt: it waits
    * in the viewer's Step Pool (`pick_up_first`) or at a Step where they can't Submit it
-   * (`cannot_submit`). Null when nothing of it stops it, and always for a viewer outside the
-   * owning Participant. A refusal found only by taking the Submit (an incomplete Form, a missing
-   * Signature) still comes back from the attempt.
+   * (`cannot_submit`). Null when nothing of it stops it, on a closed Project (no Submit Package
+   * there), and always for a viewer outside the owning Participant. A refusal found only by taking
+   * the Submit (an incomplete Form, a missing Signature) still comes back from the attempt.
    */
   notReady: packageNotReadyReason.nullable(),
 });
@@ -37,7 +37,8 @@ export const packageDetail = packageSummary.extend({
   owned: z.boolean(),
   /**
    * Whether a submittal still to Submit that the viewer doesn't see stops their Submit Package
-   * (app.package_hides_unsubmitted, RP-974), never which. Always false outside the owning Participant.
+   * (app.package_hides_unsubmitted, RP-974), never which. Always false outside the owning
+   * Participant and on a closed Project.
    */
   othersNotReady: z.boolean(),
   /** What the item table reads around its rows, as the List gives it: each Type's outcomes on the Project, its Trades and Locations. */

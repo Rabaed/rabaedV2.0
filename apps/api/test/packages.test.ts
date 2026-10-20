@@ -676,6 +676,8 @@ describe("on a Closed Project", () => {
     const pkg = await createPackage(closing.c1Engineer, "Before closing", closing.projectId);
     const [inIt, notYet] = [await draft(closing, closing.c1Engineer, "In it"), await draft(closing, closing.c1Engineer, "Not yet")];
     await ok(addItem(closing.c1Engineer, pkg.id, inIt));
+    // While active, the engineer reads why their Draft stops Submit Package (RP-974).
+    expect((await getPackage(closing.c1Engineer, pkg.id)).items.map((i) => i.notReady)).toEqual(["cannot_submit"]);
     await sql`update project set status = 'closed', closed_at = now() where id = ${closing.projectId}::uuid`.execute(migrator);
 
     const closed = { status: 409, body: { error: "project_closed" } };
@@ -688,6 +690,9 @@ describe("on a Closed Project", () => {
     const p = await getPackage(closing.c1Engineer, pkg.id);
     expect(p).toMatchObject({ name: name("Before closing"), items: [{ id: inIt }] });
     expect(p.actions).toEqual({ rename: false, addItems: false, removeItems: false, delete: false, submit: false });
+    // Closed, Submit Package is never offered, so nothing is listed as stopping it.
+    expect(p.items.map((i) => i.notReady)).toEqual([null]);
+    expect(p.othersNotReady).toBe(false);
     expect(await refusal(submitPackage(closing.c1Engineer, pkg.id))).toEqual(closed);
   });
 });

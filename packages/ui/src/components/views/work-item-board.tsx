@@ -72,7 +72,7 @@ export type WorkItemBoardLabels = {
   /** …and the Submission Date on anyone else's. */
   submittedOn: (date: string) => string;
   /** The Package chip's name (RP-659), e.g. "Open Package PKG-004 Bathrooms – Tower 1"; without it, no chip. */
-  openPackage?: (number: string, name: string, company: string) => string;
+  openPackage?: (number: string, company: string, name: string) => string;
 };
 
 export type WorkItemBoardProps = {
@@ -612,7 +612,7 @@ export function cardContent(
             name: card.package.name[locale],
             companyName: card.package.companyName[locale],
             href: packageHref(card.package.id),
-            label: labels.openPackage(card.package.number, card.package.name[locale], card.package.companyName[locale]),
+            label: labels.openPackage(card.package.number, card.package.companyName[locale], card.package.name[locale]),
           }
         : undefined,
     place: layout.location ? place : undefined,

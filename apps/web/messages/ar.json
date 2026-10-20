@@ -359,7 +359,7 @@
       "code": "Code {code}",
       "createdOn": "أُنشئ في {date}",
       "submittedOn": "قُدِّم في {date}",
-      "openPackage": "فتح الحزمة {number} {name}، {company}"
+      "openPackage": "فتح الحزمة {number} {company} {name}"
     },
     "viewSwitch": {
       "view": "طريقة العرض",

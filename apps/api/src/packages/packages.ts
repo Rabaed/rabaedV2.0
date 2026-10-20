@@ -147,23 +147,25 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
       trx,
       ids.map((i) => i.id),
     );
-    // Still to Submit, by the rule Submit Package takes them by, and what stops it (RP-974): for the owner only.
-    const readiness = row.owned ? await submitReadiness(trx, packageId) : null;
-    const toSubmit = new Map(readiness?.items.map((i) => [i.id, i]) ?? []);
-    const items = ids.flatMap(({ id }) => {
-      const r = seen.get(id);
-      const left = toSubmit.get(id);
-      return r ? [{ ...r, bulkTransitions: offers.get(id) ?? [], toSubmit: left !== undefined, notReady: left ? notReadyBefore(left) : null }] : [];
-    });
     const project = await trx.selectFrom("project").select("status").where("id", "=", row.project_id).executeTakeFirst();
     const active = row.owned && project?.status === "active";
+    // Still to Submit, by the rule Submit Package takes them by: for the owner only. What stops it (RP-974)
+    // only while it can be offered, on an active Project: a closed one offers no Submit Package at all.
+    const readiness = row.owned ? await submitReadiness(trx, packageId) : null;
+    const stillToSubmit = new Map(readiness?.items.map((i) => [i.id, i]) ?? []);
+    const items = ids.flatMap(({ id }) => {
+      const r = seen.get(id);
+      const pending = stillToSubmit.get(id);
+      const notReady = active && pending ? notReadyBefore(pending) : null;
+      return r ? [{ ...r, bulkTransitions: offers.get(id) ?? [], toSubmit: pending !== undefined, notReady }] : [];
+    });
     const open = row.status === "open";
     const submit = active && readiness !== null && readiness.ready;
     return {
       ...toSummary(row),
       items,
       owned: row.owned,
-      othersNotReady: readiness?.hidden ?? false,
+      othersNotReady: active && (readiness?.hidden ?? false),
       filters: await outcomeAndDimensionChoices(trx, scope),
       actions: { rename: active, addItems: active, removeItems: active && open, delete: active && open, submit },
     };
@@ -291,7 +293,7 @@ async function submitReadiness(trx: Trx, packageId: string): Promise<{ items: To
  * the Member's Step Pool, or at a Step where they can't Submit it; null when they may take it.
  * The Package's read (RP-974) and the 409 name the same.
  */
-const notReadyBefore = (i: ToSubmit): "pick_up_first" | "cannot_submit" | null =>
+const notReadyBefore = (i: ToSubmit): PackageNotReadyReason | null =>
   i.submit_key !== null ? null : i.pick_up ? "pick_up_first" : "cannot_submit";
 
 export type SubmitPackageResult =

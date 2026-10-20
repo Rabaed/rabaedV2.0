@@ -359,7 +359,7 @@
       "code": "Code {code}",
       "createdOn": "Created {date}",
       "submittedOn": "Submitted {date}",
-      "openPackage": "Open Package {number} {name}, {company}"
+      "openPackage": "Open Package {number} {company} {name}"
     },
     "viewSwitch": {
       "view": "View",

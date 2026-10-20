@@ -168,7 +168,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       code: (code) => t("board.code", { code }),
       createdOn: (date) => t("board.createdOn", { date }),
       submittedOn: (date) => t("board.submittedOn", { date }),
-      openPackage: (number, name, company) => t("board.openPackage", { number, name, company }),
+      openPackage: (number, company, name) => t("board.openPackage", { number, company, name }),
     },
     layout: Object.fromEntries(layoutKeys.map((key) => [key, t(`layout.${key}`)])) as BoardLayoutMenuLabels,
   };
