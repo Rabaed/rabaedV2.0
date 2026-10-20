@@ -647,6 +647,13 @@ export const workItemActions = z.object({
 });
 export type WorkItemActions = z.infer<typeof workItemActions>;
 
+/** The items raised from an item of one Work Item Type, open and closed: the viewer's own count (RP-624, RP-653). */
+const raisedItemCount = z.object({
+  type: z.object({ code: z.string(), name: bilingualText }),
+  open: z.number().int().nonnegative(),
+  closed: z.number().int().nonnegative(),
+});
+
 /** One Work Item, for someone who can see it. */
 export const workItemDetail = workItemSummary.extend({
   /** The Module its Type belongs to, which lays out its page (the Snag List's, RP-628). */
@@ -763,13 +770,21 @@ export const workItemDetail = workItemSummary.extend({
    * raised from it), counting only those the viewer sees and never a discarded one (visibility.md,
    * Lists and counts). A Type with none is absent; ordered by Type code.
    */
-  raisedItems: z.array(
-    z.object({
-      type: z.object({ code: z.string(), name: bilingualText }),
-      open: z.number().int().nonnegative(),
-      closed: z.number().int().nonnegative(),
-    }),
-  ),
+  raisedItems: z.array(raisedItemCount),
+  /**
+   * A Revision's previous item in its chain (RP-653, "Snags from Rev 0: 1 closed / 1 open"): its
+   * Revision number and Document Number, and the items raised from it per Type, counted as
+   * `raisedItems` counts them (only those the viewer sees, never a discarded one). Null for an item
+   * that is no Revision, when the viewer sees no previous item, or when nothing was raised from it.
+   * The counts never block a code.
+   */
+  previousRaisedItems: z
+    .object({
+      revisionNo: z.number().int().nonnegative(),
+      documentNumber: z.string().nullable(),
+      items: z.array(raisedItemCount),
+    })
+    .nullable(),
   /**
    * Its Package (RP-659, the chip on its page), by number and name: only where the
    * viewer sees the Package, as on its row (app.work_item_package). Left out otherwise.

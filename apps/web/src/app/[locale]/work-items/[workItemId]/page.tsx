@@ -99,6 +99,9 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const listHref = `/projects/${item.projectId}/${moduleTabPaths[snag ? "snag_list" : "submittals"]}`;
   const quote = snag && typeof item.answers.comment === "string" ? item.answers.comment : null;
 
+  // A Revision's previous item's follow-ups (RP-653); null for any other item.
+  const previous = item.previousRaisedItems;
+
   return (
     <WorkItemFormProvider
       workItemId={item.id}
@@ -349,6 +352,29 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                   {item.documentNumber ? (
                     <Link
                       href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [item.documentNumber] })}
+                      className="text-brand-fg underline underline-offset-4"
+                    >
+                      {counts}
+                    </Link>
+                  ) : (
+                    counts
+                  )}
+                </dd>
+              </Fragment>
+            );
+          })}
+          {/* A Revision: what its previous item in the chain left (RP-653), one line per Type, counting only what the viewer sees.
+              It never blocks the code; each opens the Snag List filtered to that item. */}
+          {previous?.items.map((f) => {
+            const counts = t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) });
+            const typeName = t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale];
+            return (
+              <Fragment key={`previous-${f.type.code}`}>
+                <dt className="text-muted">{t("fields.previousRaisedItems", { type: typeName, revision: formatNumber(previous.revisionNo, locale) })}</dt>
+                <dd data-testid={`previous-raised-item-counts-${f.type.code}`}>
+                  {previous.documentNumber ? (
+                    <Link
+                      href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [previous.documentNumber] })}
                       className="text-brand-fg underline underline-offset-4"
                     >
                       {counts}

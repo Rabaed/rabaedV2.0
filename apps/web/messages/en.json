@@ -852,7 +852,9 @@
       "package": "Package",
       "issuedCode": "Issued Code",
       "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "OBS": "Site Observations", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
-      "raisedItemCounts": "{open} open / {closed} closed"
+      "raisedItemCounts": "{open} open / {closed} closed",
+      "previousRaisedItems": "{type} from Rev {revision}",
+      "previousRaisedItemCounts": "{closed} closed / {open} open"
     },
     "paperRef": {
       "label": "Paper ref",
