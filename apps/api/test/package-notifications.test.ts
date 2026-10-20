@@ -6,13 +6,13 @@
 import { randomUUID } from "node:crypto";
 import { createDb, notificationDigestHandler, notificationEmailHandler } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { Notification, NotificationDigest, NotificationEmail, NotificationList, NotificationSettingsView } from "@rabaed/domain";
+import type { Notification, NotificationDigest, NotificationEmail, NotificationList, NotificationSettingsView, VisibilityGrant } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "./support/harness.ts";
 import { createTestApi } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { bilingual, buildTower, memberOnProject, ok, only, take, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, memberOnProject, ok, only, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -96,6 +96,10 @@ async function saveStepReached(by: Member, email: "immediate" | "digest") {
     }),
   );
 }
+
+/** K1's Authorized Person sets `by`'s Trades on the Project (every Location). */
+const setTrade = (by: Member, trade: VisibilityGrant) =>
+  ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${by.id}/visibility`, { trade, location: all }));
 
 /** `by`'s notifications of Package `id`. */
 const ofPackage = async (by: Member, id: string) => (await notifications(by)).filter((n) => n.kind === "package_submitted" && n.package.id === id);
@@ -196,8 +200,72 @@ describe("a Package Submit's notification", () => {
       .flatMap((d) => d.projects.flatMap((p) => p.items))
       .filter((i) => i.packageId === pkg.id);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ workItemId: null, documentNumber: null, packageNumber: pkg.number, entries: [{ kind: "package_submitted", package: { count: 2 } }] });
+    // C1 by its Company name only (V14), as in the bell and the immediate email.
+    expect(entries[0]).toMatchObject({
+      workItemId: null,
+      documentNumber: null,
+      packageNumber: pkg.number,
+      entries: [{ kind: "package_submitted", package: { count: 2, companyName: c1Name } }],
+    });
     await saveStepReached(k1Electrical, "immediate");
+  });
+
+  it("RP-588-2: narrowed between delivery and the send, the email counts what its recipient sees at send time", async () => {
+    const emails: NotificationEmail[] = [];
+    const send = notificationEmailHandler(async (e) => void emails.push(e));
+    const pkg = await packageOf("Busbars", 2, 1);
+    await submitPackage(pkg.id);
+    // Delivered as K1's engineer who sees everything sees it (3); narrowed to Electrical before the email goes.
+    let narrowed = false;
+    await drainOutbox(worker, {
+      email: async (trx, row) => {
+        if (!narrowed) {
+          narrowed = true;
+          await setTrade(k1All, only(at.electrical));
+        }
+        await send(trx, row);
+      },
+    });
+    expect(narrowed).toBe(true);
+    try {
+      const toAll = emails.filter((e) => e.to === k1All.email && e.content.package?.id === pkg.id);
+      expect(toAll).toEqual([expect.objectContaining({ kind: "package_submitted", content: expect.objectContaining({ package: expect.objectContaining({ count: 2, companyName: c1Name }) }) })]);
+    } finally {
+      await setTrade(k1All, all);
+    }
+  });
+
+  it("RP-588-2: a Member narrowed off every one of its items no longer has it in the bell, nor its email", async () => {
+    const pkg = await packageOf("Cable glands", 2, 0);
+    await submitPackage(pkg.id);
+    await drainOutbox(worker);
+    expect(await ofPackage(k1Electrical, pkg.id)).toHaveLength(1);
+    await setTrade(k1Electrical, only(at.mechanical));
+    try {
+      expect(await ofPackage(k1Electrical, pkg.id)).toEqual([]);
+      expect(JSON.stringify((await k1Electrical.caller.get("/v1/notifications")).json())).not.toContain(pkg.id);
+    } finally {
+      await setTrade(k1Electrical, only(at.electrical));
+    }
+    expect(await ofPackage(k1Electrical, pkg.id)).toHaveLength(1);
+  });
+
+  it("RP-588-2: one Member never reads another Member's, nor marks it read", async () => {
+    const pkg = await packageOf("Trunking", 1, 0);
+    await submitPackage(pkg.id);
+    await drainOutbox(worker);
+    const [theirs] = await ofPackage(k1All, pkg.id);
+    const [mine] = await ofPackage(k1Electrical, pkg.id);
+    expect(theirs!.id).not.toBe(mine!.id);
+    expect((await notifications(k1Electrical)).map((n) => n.id)).not.toContain(theirs!.id);
+    // Neither C1 nor any other Company's Member gets one.
+    expect(JSON.stringify((await at.c1Pm.get("/v1/notifications")).json())).not.toContain(pkg.id);
+    expect(JSON.stringify((await at.k1Manager.get("/v1/notifications")).json())).not.toContain(theirs!.id);
+    // Another Member's id marks nothing of theirs.
+    await ok(k1Electrical.caller.post("/v1/notifications/read", { ids: [theirs!.id] }));
+    expect((await ofPackage(k1All, pkg.id))[0]!.readAt).toBeNull();
+    await ok(k1All.caller.post("/v1/notifications/read", { ids: [theirs!.id] }));
+    expect((await ofPackage(k1All, pkg.id))[0]!.readAt).not.toBeNull();
   });
 
   it("reaches nobody who muted the Project", async () => {
