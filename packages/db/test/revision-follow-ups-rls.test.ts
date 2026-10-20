@@ -40,8 +40,9 @@ const codeScreen = {
 let migrator: pg.Client;
 let app: Db;
 
-const templateItems: unknown[] = [item("formwork", "Formwork tight"), item("cover", "Rebar cover")];
-const towerOptions = { projectCode: "RFK", tradeCode: "CV", otherProject: true, k1Manager: true, checklistTemplate: { items: templateItems } } as const;
+/** The Tower's own Template raises one Snag; this one raises two. */
+const templateItems = [item("formwork", "Formwork tight"), item("cover", "Rebar cover")];
+const towerOptions = { projectCode: "RFK", tradeCode: "CV", otherProject: true, k1Manager: true } as const;
 type Tower = SeamTwoTower<typeof towerOptions>;
 let tower: Tower;
 let c1: Tower["c1"];
@@ -94,7 +95,13 @@ beforeAll(async () => {
   c1Pm = c1.members.project_manager;
 
   // Rev 0: K1's Engineer fails both items and Sends it to the Manager, who issues Code C: two Snags.
-  rev0 = await wirAtConsultant(tower, { type: TYPE, title: "Slab pour, Level 2" });
+  const [template] = await call<{ outcome: string; template_id: string }>(
+    c1.ap,
+    sql`select outcome, template_id from app.create_checklist_template(${tower.projectId}::uuid, ${JSON.stringify(label("Two Snags"))}::jsonb, ${tower.tradeId}::uuid, ${JSON.stringify(templateItems)}::jsonb, now())`,
+  );
+  expect(template!.outcome).toBe("created");
+  const checklistVersionId = await one("select id from checklist_template_version where checklist_template_id = $1 and version_no = 1", [template!.template_id]);
+  rev0 = await wirAtConsultant({ ...tower, checklistVersionId }, { type: TYPE, title: "Slab pour, Level 2" });
   expect(
     await outcome(
       k1.members.engineer,
