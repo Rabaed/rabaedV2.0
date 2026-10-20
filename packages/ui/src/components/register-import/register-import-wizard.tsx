@@ -168,6 +168,7 @@ export function RegisterImportWizard({
   lead,
   resultActions,
   draftLink,
+  sample = false,
 }: {
   locale: Locale;
   /** The `registerImport` messages. */
@@ -198,6 +199,11 @@ export function RegisterImportWizard({
   resultActions?: (preview: RegisterImport, created: number) => ReactNode;
   /** A link to a Draft on the Validate step's rows, where the reader may open it. */
   draftLink?: (workItemId: string, children: ReactNode) => ReactNode;
+  /**
+   * "Use sample register" on Upload (RP-954), so a Member can try the wizard. Off in Rabaed Admin,
+   * where confirming it would put made-up Drafts in a Company's Project.
+   */
+  sample?: boolean;
 }) {
   const me = importer;
   const [step, setStep] = useState<Step>(initialPreview ? "validate" : "upload");
@@ -679,6 +685,7 @@ export function RegisterImportWizard({
   /** One Package for the whole register needs its name, or the Open Package chosen (RP-644). */
   const packagesReady =
     packagesChoice.mode !== "file" || (packagesChoice.how === "new" ? packagesChoice.name.trim() !== "" : packagesChoice.existing !== null);
+  const offerSample = sample && types.length > 0 && trades.length > 0;
   const tickedColumns = Object.entries(ticked).filter(([column, on]) => on && fieldOf(Number(column)) !== "none").length;
 
   return (
@@ -755,10 +762,12 @@ export function RegisterImportWizard({
                 <Icon name="upload" />
                 {t("upload.browse")}
               </Button>
-              {/* RP-954: a made-up register to try the wizard with. */}
-              <Button variant="secondary" onClick={() => void trySample()} disabled={busy}>
-                {t("upload.sample")}
-              </Button>
+              {/* RP-954: a made-up register to try the wizard with, of the Types and Trades offered. */}
+              {offerSample && (
+                <Button variant="secondary" onClick={() => void trySample()} disabled={busy}>
+                  {t("upload.sample")}
+                </Button>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

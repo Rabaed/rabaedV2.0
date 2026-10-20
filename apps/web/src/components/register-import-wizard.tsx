@@ -72,11 +72,13 @@ export function RegisterImportWizard({
       // A reload reopens this preview at Validate.
       onPreviewed={(id) => window.history.replaceState(null, "", `?preview=${id}`)}
       draftLink={draftLink}
+      // A Member tries the wizard with a made-up register (RP-954).
+      sample
       // "Open the Drafts" (RP-954): the Submittals List of this import's Drafts that the Member sees
-      // (the import read again after confirm gives each Draft only to a reader who sees it). The
-      // link names the import by its id only: no time.
-      resultActions={(preview) => {
-        const seen = preview.rows.filter((r) => r.workItemId !== null).length;
+      // (the import read again after confirm gives each Draft only to a reader who sees it; if that
+      // read failed, the count confirm gave). The link names the import by its id only: no time.
+      resultActions={(preview, created) => {
+        const seen = preview.status === "created" ? preview.rows.filter((r) => r.workItemId !== null).length : created;
         return (
           seen > 0 && (
             <Link href={workItemListHref(projectId, { importId: preview.id })} className={buttonVariants()}>

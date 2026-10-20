@@ -1,14 +1,14 @@
 import {
   formatNumber,
   registerSampleSheet,
-  registerTemplateFields,
-  registerTemplateXlsx,
+  registerSampleWords,
+  registerTemplateSheets,
+  registerTemplateWords,
   writeXlsx,
   xlsxContentType,
   type BilingualText,
   type Locale,
   type RegisterImport,
-  type RegisterTemplateWords,
 } from "@rabaed/domain";
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
 import { reasonLines } from "./register-import-rows.tsx";
@@ -53,34 +53,19 @@ export function logDownload(imported: RegisterImport, t: Translate, locale: Loca
   };
 }
 
-/** The template's words (RP-954) in the reader's language, from the `registerImport` messages. */
-const templateWords = (t: Translate): RegisterTemplateWords => ({
-  headings: Object.fromEntries(registerTemplateFields.map((f) => [f, t(`fields.${f}`)])) as RegisterTemplateWords["headings"],
-  sheet: t("template.sheet"),
-  helpSheet: t("template.helpSheet"),
-  help: [t("template.asText"), t("template.headerRow"), t("template.values")],
-});
-
 /** The blank register template (RP-954): Rabaed's fields as its header row, its columns set to text, and its help. No Project data. */
 export function templateDownload(t: Translate, locale: Locale): RegisterDownload {
-  return { fileName: t("template.file"), bytes: registerTemplateXlsx(templateWords(t), locale === "ar") };
+  return { fileName: t("template.file"), bytes: writeXlsx(...registerTemplateSheets(registerTemplateWords(t), locale === "ar")) };
 }
-
-/** The made-up Subjects of the sample register, by message key. */
-const sampleSubjects = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 
 /**
  * The sample register (RP-954), to try the wizard with: the made-up Subjects, each with one of the
  * Types the importer may raise (by code) and one of the Trades offered them (by name, in the
- * reader's language), so every row matches. Read like any register: nothing is created until confirm.
+ * reader's language), so every row matches; both non-empty. Read like any register: nothing is
+ * created until confirm.
  */
 export function sampleRegister(t: Translate, locale: Locale, types: readonly { code: string }[], trades: readonly { name: BilingualText }[]): RegisterDownload {
-  const words = {
-    sheet: t("sample.sheet"),
-    headings: { subject: t("fields.subject"), type: t("fields.type"), trade: t("fields.trade") },
-    subjects: sampleSubjects.map((key) => t(`sample.${key}`)),
-  };
-  const sheet = registerSampleSheet(words, types.map((ty) => ty.code), trades.map((tr) => tr.name[locale]), locale === "ar");
+  const sheet = registerSampleSheet(registerSampleWords(t), types.map((ty) => ty.code), trades.map((tr) => tr.name[locale]), locale === "ar");
   return { fileName: t("sample.file"), bytes: writeXlsx(sheet) };
 }
 

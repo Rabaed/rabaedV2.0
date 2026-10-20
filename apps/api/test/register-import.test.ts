@@ -16,7 +16,7 @@ import type {
   RegisterValues,
   WorkItemDetail,
 } from "@rabaed/domain";
-import { registerSampleSheet, registerTemplateFields, registerTemplateSheets, registerTemplateXlsx, writeXlsx, type RegisterSampleWords, type RegisterTemplateWords } from "@rabaed/domain";
+import { registerSampleSheet, registerSampleWords, registerTemplateFields, registerTemplateSheets, registerTemplateWords, writeXlsx } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -1389,24 +1389,24 @@ describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
 // browser from the app's own messages: its first sheet's header row names Rabaed's fields, its columns
 // are set to text, and a second sheet says to type reference numbers as text. Filled in, it imports
 // with every column suggested its field and every row good. No Project data, and no time, in it.
-describe("The register template (RP-954)", () => {
-  const messages = (locale: "en" | "ar") =>
-    JSON.parse(readFileSync(new URL(`../../web/messages/${locale}.json`, import.meta.url), "utf8")).registerImport as Record<string, Record<string, string>>;
-  const wordsOf = (locale: "en" | "ar"): RegisterTemplateWords => {
-    const m = messages(locale);
-    return {
-      headings: Object.fromEntries(registerTemplateFields.map((f) => [f, m.fields![f]!])) as RegisterTemplateWords["headings"],
-      sheet: m.template!.sheet!,
-      helpSheet: m.template!.helpSheet!,
-      help: [m.template!.asText!, m.template!.headerRow!, m.template!.values!],
-    };
+/** The web app's `registerImport` messages in `locale`, by key, as the wizard's `t` gives them (RP-954). */
+const registerImportWords = (locale: "en" | "ar") => {
+  const messages = JSON.parse(readFileSync(new URL(`../../web/messages/${locale}.json`, import.meta.url), "utf8")).registerImport;
+  return (key: string): string => {
+    const text = key.split(".").reduce((at, part) => at?.[part], messages);
+    if (typeof text !== "string") throw new Error(`No registerImport message ${key}`);
+    return text;
   };
+};
+
+describe("The register template (RP-954)", () => {
+  const wordsOf = (locale: "en" | "ar") => registerTemplateWords(registerImportWords(locale));
   const fileOf = (fileName: string, bytes: Uint8Array) => ({ fileName, content: Buffer.from(bytes).toString("base64") });
 
   for (const locale of ["en", "ar"] as const) {
     it(`reads, in ${locale === "en" ? "English" : "Arabic"}, as Rabaed's fields, one suggested for each column, and nothing else`, async () => {
       const words = wordsOf(locale);
-      const blank = registerTemplateXlsx(words, locale === "ar");
+      const blank = writeXlsx(...registerTemplateSheets(words, locale === "ar"));
       const sheet: RegisterSheet = (await ok(read(tower.c1Engineer, { file: fileOf("template.xlsx", blank) }), 200)).json();
       expect(sheet.sheets).toEqual([
         { name: words.sheet, rows: 1 },
@@ -1453,22 +1453,16 @@ describe("The register template (RP-954)", () => {
 // app's messages with the Types the importer may raise and the Trades they may raise in, that runs
 // through every step. Like any register, it creates nothing until the importer confirms.
 describe("The sample register (RP-954)", () => {
-  const messages = (locale: "en" | "ar") =>
-    JSON.parse(readFileSync(new URL(`../../web/messages/${locale}.json`, import.meta.url), "utf8")).registerImport as Record<string, Record<string, string>>;
 
   for (const locale of ["en", "ar"] as const) {
     it(`runs through every step in ${locale === "en" ? "English" : "Arabic"}, every row good, and creates nothing until confirmed`, async () => {
-      const m = messages(locale);
+      const t = registerImportWords(locale);
       const fields: RegisterImportFields = (await ok(electricalOnly.get(`/v1/projects/${tower.projectId}/register-imports/fields`), 200)).json();
-      const words: RegisterSampleWords = {
-        sheet: m.sample!.sheet!,
-        headings: { subject: m.fields!.subject!, type: m.fields!.type!, trade: m.fields!.trade! },
-        subjects: Object.keys(m.sample!).filter((k) => /^s\d+$/.test(k)).map((k) => m.sample![k]!),
-      };
+      const words = registerSampleWords(t);
       // As the wizard gives it: the Trades the importer's Visibility covers, here Electrical only.
       const electrical = fields.trades.find((t) => t.id === tower.electrical)!.name[locale];
       const sample = registerSampleSheet(words, fields.types.map((t) => t.code), [electrical], locale === "ar");
-      const file = { fileName: m.sample!.file!, content: Buffer.from(writeXlsx(sample)).toString("base64") };
+      const file = { fileName: t("sample.file"), content: Buffer.from(writeXlsx(sample)).toString("base64") };
 
       const sheet: RegisterSheet = (await ok(read(electricalOnly, { file }), 200)).json();
       expect(sheet).toMatchObject({ sheet: words.sheet, headerRow: 1, dataRows: 8 });
