@@ -14,7 +14,7 @@ import { resolve } from "node:path";
 //
 // Usage: node scripts/hooks-install.ts
 
-export const HOOKS_PATH = ".githooks";
+const HOOKS_PATH = ".githooks";
 
 /** Sets core.hooksPath unless CI, no repository, or a path someone set on purpose; says what it did. */
 export function installHooks(cwd: string, env: NodeJS.ProcessEnv): string {

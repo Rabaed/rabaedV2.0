@@ -27,16 +27,18 @@ export interface PushedRef {
 }
 
 export type Check = "lint" | "typecheck";
-export const CHECKS: Check[] = ["lint", "typecheck"];
+const CHECKS: Check[] = ["lint", "typecheck"];
 
 export interface PrePushSeam {
   /** The files a pushed ref changes against what the remote has; undefined when that can't be told. */
   changedFiles(ref: PushedRef): string[] | undefined;
   /** Runs `pnpm <check>`, its stdout and stderr together. */
   run(check: Check): Promise<{ status: number; output: string }>;
+  /** The checked-out commit, and whether tracked files have uncommitted changes. */
+  workingTree(): { head: string; dirty: boolean };
 }
 
-export function parsePushedRefs(stdin: string): PushedRef[] {
+function parsePushedRefs(stdin: string): PushedRef[] {
   return stdin
     .split("\n")
     .map((line) => line.trim().split(/\s+/))
@@ -47,16 +49,27 @@ export function parsePushedRefs(stdin: string): PushedRef[] {
 /** Whether the push may go: lint and typecheck pass, or nothing pushed needs them. */
 export async function prePush(stdin: string, seam: PrePushSeam): Promise<{ ok: boolean; message: string }> {
   const branches = parsePushedRefs(stdin).filter((ref) => ref.remoteRef.startsWith("refs/heads/") && !ZERO.test(ref.localSha));
-  if (branches.length === 0) return { ok: true, message: "pre-push: no branch pushed, nothing to check." };
+  if (branches.length === 0) return { ok: true, message: "pre-push: no branch pushed, lint and typecheck skipped." };
   const changed = branches.map((ref) => seam.changedFiles(ref));
   if (changed.every((files) => files !== undefined && files.every(isDoc))) return { ok: true, message: "pre-push: only docs changed, lint and typecheck skipped." };
 
   console.log("pre-push: running pnpm lint and pnpm typecheck…");
   const results = await Promise.all(CHECKS.map(async (check) => ({ check, ...(await seam.run(check)) })));
   const failed = results.filter((result) => result.status !== 0);
-  if (failed.length === 0) return { ok: true, message: "pre-push: pnpm lint and pnpm typecheck pass." };
+  const warning = treeWarning(branches, seam.workingTree());
+  if (failed.length === 0) return { ok: true, message: `pre-push: pnpm lint and pnpm typecheck pass.${warning}` };
   const report = failed.map(({ check, status, output }) => `pnpm ${check} failed (exit ${status}):\n${output.trimEnd()}`).join("\n\n");
-  return { ok: false, message: `${report}\n\nPush refused (pre-push, RP-989): fix ${failed.map((f) => `pnpm ${f.check}`).join(" and ")}, commit, and push again.` };
+  return { ok: false, message: `${report}\n\nPush refused (pre-push, RP-989): fix ${failed.map((f) => `pnpm ${f.check}`).join(" and ")}, commit, and push again.${warning}` };
+}
+
+/** A warning when the working tree the checks read is not what is pushed. */
+function treeWarning(branches: PushedRef[], tree: { head: string; dirty: boolean }): string {
+  const short = (sha: string) => sha.slice(0, 8);
+  const warnings = branches
+    .filter((ref) => ref.localSha !== tree.head)
+    .map((ref) => `Warning: pre-push checked the working tree (HEAD ${short(tree.head)}), not ${short(ref.localSha)} pushed to ${ref.remoteRef.replace("refs/heads/", "")}.`);
+  if (tree.dirty) warnings.push("Warning: pre-push checked the working tree, which has uncommitted changes; the pushed commit may differ.");
+  return warnings.map((line) => `\n${line}`).join("");
 }
 
 /** The files a pushed ref changes: since the remote's commit, or since it left origin/main for a new branch. */
@@ -69,11 +82,22 @@ export function changedFiles(repo: string, ref: PushedRef): string[] | undefined
   return diff.status === 0 ? diff.stdout.split("\n").filter(Boolean) : undefined;
 }
 
+const shell = process.platform === "win32"; // pnpm.cmd and corepack.cmd
+
+/**
+ * How to start pnpm. A git hook isn't started by pnpm, so it has no npm_execpath
+ * (scripts/pnpm.ts): pnpm comes from PATH, or else through corepack, which is
+ * all some agent shells have (RP-298).
+ */
+function pnpmCommand(repo: string): string[] {
+  return spawnSync("pnpm", ["--version"], { cwd: repo, shell, stdio: "ignore" }).status === 0 ? ["pnpm"] : ["corepack", "pnpm"];
+}
+
 /** Runs `pnpm <check>` in the repo, output captured so the two side by side don't interleave. */
-function runPnpm(repo: string, check: Check): Promise<{ status: number; output: string }> {
+function runPnpm(repo: string, pnpm: string[], check: Check): Promise<{ status: number; output: string }> {
   return new Promise((done) => {
-    // A git hook isn't started by pnpm, so pnpm comes from PATH (pnpm.cmd on Windows, hence the shell).
-    const child = spawn("pnpm", [check], { cwd: repo, shell: process.platform === "win32" });
+    const [command, ...args] = [...pnpm, check];
+    const child = spawn(command!, args, { cwd: repo, shell });
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
@@ -84,7 +108,14 @@ function runPnpm(repo: string, check: Check): Promise<{ status: number; output: 
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   const repo = process.cwd();
-  const result = await prePush(readFileSync(0, "utf8"), { changedFiles: (ref) => changedFiles(repo, ref), run: (check) => runPnpm(repo, check) });
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" }).stdout.trim();
+  let pnpm: string[] | undefined;
+  const result = await prePush(readFileSync(0, "utf8"), {
+    changedFiles: (ref) => changedFiles(repo, ref),
+    run: (check) => runPnpm(repo, (pnpm ??= pnpmCommand(repo)), check),
+    workingTree: () => ({ head: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain", "--untracked-files=no") !== "" }),
+  });
   (result.ok ? console.log : console.error)(result.message);
-  process.exit(result.ok ? 0 : 1);
+  // exitCode, not exit(): a long lint report to a piped stderr must finish writing first (Windows).
+  process.exitCode = result.ok ? 0 : 1;
 }

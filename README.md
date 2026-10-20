@@ -12,7 +12,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm install` also turns on the git hooks in `.githooks` for the clone and every worktree (`core.hooksPath`, RP-989; not in CI). `pre-commit` refuses a staged conflict marker (`git diff --cached --check`), a font file or embedded font data. `pre-push` runs `pnpm lint` and `pnpm typecheck` side by side, about a minute, and refuses a push to a branch when either exits non-zero; a push that changes only docs, a tag or a branch deletion runs neither. They check the working tree, so push the branch you have checked out with nothing uncommitted.
+`pnpm install` also turns on the git hooks in `.githooks` for the clone and every worktree (`core.hooksPath`, RP-989; not in CI). `pre-commit` refuses a staged conflict marker (`git diff --cached --check`; a Markdown line of exactly `=======` counts as one), a font file or embedded font data. Rebase and cherry-pick commit without it, so resolve conflicts with a merge. `pre-push` runs `pnpm lint` and `pnpm typecheck` side by side, about a minute, and refuses a push to a branch when either exits non-zero; a push that changes only docs, a tag or a branch deletion runs neither. They check the working tree, so push the branch you have checked out with nothing uncommitted.
 
 `pnpm dev` starts Postgres 16, Mailpit (the mail catcher) and the file store in Docker, creates the database roles, applies migrations, then runs:
 

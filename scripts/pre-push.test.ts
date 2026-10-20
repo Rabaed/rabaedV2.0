@@ -10,10 +10,11 @@ const zero = "0000000000000000000000000000000000000000";
 const branchPush = `refs/heads/RP-989-pre-push-hook ${"a".repeat(40)} refs/heads/RP-989-pre-push-hook ${"b".repeat(40)}\n`;
 
 /** A seam whose checks exit with the given codes, and that records which ran. */
-function seam(codes: { lint?: number; typecheck?: number } = {}, files: string[] | undefined = ["apps/api/src/a.ts"]) {
+function seam(codes: { lint?: number; typecheck?: number } = {}, files: string[] | undefined = ["apps/api/src/a.ts"], tree = { head: "a".repeat(40), dirty: false }) {
   const ran: string[] = [];
   const fake: PrePushSeam = {
     changedFiles: () => files,
+    workingTree: () => tree,
     run: async (script) => {
       ran.push(script);
       const status = codes[script] ?? 0;
@@ -44,6 +45,15 @@ describe("prePush", () => {
     const { fake, ran } = seam();
     expect((await prePush(branchPush, fake)).ok).toBe(true);
     expect(ran.sort()).toEqual(["lint", "typecheck"]);
+  });
+
+  it("says so when the checked tree is not the pushed commit: another branch pushed, or uncommitted changes", async () => {
+    const clean = await prePush(branchPush, seam().fake);
+    expect(clean.message).not.toContain("working tree");
+    const other = await prePush(branchPush, seam({}, undefined, { head: "f".repeat(40), dirty: false }).fake);
+    expect(other.message).toContain(`checked the working tree (HEAD ffffffff), not ${"a".repeat(8)} pushed to RP-989-pre-push-hook`);
+    const dirty = await prePush(branchPush, seam({ lint: 1 }, undefined, { head: "a".repeat(40), dirty: true }).fake);
+    expect(dirty.message).toContain("checked the working tree, which has uncommitted changes");
   });
 
   it("runs nothing for a branch deletion or a tag", async () => {

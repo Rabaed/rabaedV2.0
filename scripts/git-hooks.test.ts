@@ -9,8 +9,11 @@ import { installHooks } from "./hooks-install.ts";
 // that carries copies of them and of the scripts they call.
 const here = import.meta.dirname;
 let repo: string;
-const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], { cwd: repo, encoding: "utf8" });
-const tryGit = (...args: string[]) => spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], { cwd: repo, encoding: "utf8" });
+const author = ["-c", "user.name=test", "-c", "user.email=test@example.com"];
+/** Runs git in a folder; the result carries the exit status, so a refused commit or push can be checked. */
+const gitIn = (cwd: string, ...args: string[]) => spawnSync("git", [...author, ...args], { cwd, encoding: "utf8" });
+const tryGit = (...args: string[]) => gitIn(repo, ...args);
+const git = (...args: string[]) => execFileSync("git", [...author, ...args], { cwd: repo, encoding: "utf8" });
 
 function write(files: Record<string, string>) {
   for (const [path, content] of Object.entries(files)) {
@@ -65,8 +68,8 @@ describe("pre-commit", () => {
     git("worktree", "add", "-q", "-b", "lane", worktree);
     try {
       writeFileSync(join(worktree, "README.md"), "<<<<<<< HEAD\n");
-      execFileSync("git", ["add", "README.md"], { cwd: worktree });
-      const commit = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "x"], { cwd: worktree, encoding: "utf8" });
+      gitIn(worktree, "add", "README.md");
+      const commit = gitIn(worktree, "commit", "-q", "-m", "x");
       expect(commit.status).not.toBe(0);
       expect(commit.stderr).toContain("README.md:1: leftover conflict marker");
     } finally {
