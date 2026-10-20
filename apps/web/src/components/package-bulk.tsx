@@ -22,7 +22,7 @@ function useBulkLabels(): PackageBulkLabels {
     clear: t("clear"),
     selectAll: t("selectAll"),
     selectRow: (subject) => t("selectRow", { subject }),
-    description: (_n, count) => t("description", { count }),
+    description: (n, count) => t("description", { n, count }),
     appliesTo: t("appliesTo"),
     noNumber: t("noNumber"),
     loading: t("loading"),

@@ -847,7 +847,7 @@
       "paperRef": "Paper ref",
       "step": "Step",
       "with": "With",
-      "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +#}}",
+      "notPickedUpYet": "{company} · not picked up yet: {names}{more, plural, =0 {} other { +{n}}}",
       "raisedBy": "Raised by",
       "package": "Package",
       "issuedCode": "Issued Code",
@@ -1641,7 +1641,7 @@
     "close": "Close",
     "changed": "Something changed while you chose. Check the list and try again.",
     "nobodyCanTake": "Nobody else can take {step} on {project}. Give someone the Position or Visibility first.",
-    "otherCompany": "{count, plural, one {# Step of {company} needs} other {# Steps of {company} need}} a new holder first. Ask {company} to hand them over."
+    "otherCompany": "{count, plural, one {{n} Step of {company} needs} other {{n} Steps of {company} need}} a new holder first. Ask {company} to hand them over."
   },
   "notificationSettings": {
     "email": "Email",
@@ -1946,7 +1946,7 @@
         "approved": "Approved",
         "withdrawn": "Withdrawn"
       },
-      "approvedCount": "{count, plural, =0 {No approved suppliers} one {# approved} other {# approved}}",
+      "approvedCount": "{count, plural, =0 {No approved suppliers} one {{n} approved} other {{n} approved}}",
       "tableLabel": "Approved suppliers for {trade}",
       "noSuppliers": "No suppliers for this Trade yet.",
       "noTrades": "This Project has no Trades yet. Add them in Trades & Locations first.",
@@ -2751,7 +2751,7 @@
       "inOther": "In {number}",
       "inThis": "In this Package",
       "choose": "Choose {subject}",
-      "add": "{count, plural, one {Add # submittal} other {Add # submittals}}",
+      "add": "{count, plural, one {Add {n} submittal} other {Add {n} submittals}}",
       "numberOnSubmit": "Number on submit"
     },
     "bulk": {
@@ -2763,7 +2763,7 @@
       "clear": "Clear",
       "selectAll": "Select all waiting on you",
       "selectRow": "Select {subject}",
-      "description": "Taken on {count, plural, one {1 submittal} other {# submittals}} with the same answers, each signed as on its own. All or nothing: if one can't take it, none moves.",
+      "description": "Taken on {count, plural, one {1 submittal} other {{n} submittals}} with the same answers, each signed as on its own. All or nothing: if one can't take it, none moves.",
       "appliesTo": "Taken on",
       "noNumber": "No number yet",
       "loading": "Loading…",
@@ -2797,7 +2797,7 @@
       "trigger": "Submit Package",
       "title": "Submit {number}",
       "description": "Each submittal below is Submitted at once and gets its own Document Number. All or nothing: if one isn't ready, none is Submitted.",
-      "count": "{count, plural, one {# submittal to Submit} other {# submittals to Submit}}",
+      "count": "{count, plural, one {{n} submittal to Submit} other {{n} submittals to Submit}}",
       "confirm": "Submit Package",
       "numberOnSubmit": "Number on submit",
       "notReadyTitle": "Not ready",
