@@ -56,13 +56,13 @@ const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
   withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-/** A Draft of the test submittal Type (or of `type`) raised by `as`. */
-async function draft(as: string, title: string, type = TYPE): Promise<string> {
+/** A Draft of the test submittal Type (or of `type`) raised by `as`, in Electrical (or in `trade`). */
+async function draft(as: string, title: string, type = TYPE, trade = electrical): Promise<string> {
   const [created] = await call<{ outcome: string; work_item_id: string }>(
     as,
     sql`select outcome, work_item_id from app.create_work_item(
       ${projectId}::uuid, ${type}, ${title}, app.latest_form_version(${type}), ${JSON.stringify({ model: title })}::jsonb,
-      ${electrical}::uuid, ${buildingA}::uuid, now())`,
+      ${trade}::uuid, ${buildingA}::uuid, now())`,
   );
   expect(created!.outcome).toBe("created");
   return created!.work_item_id;
@@ -260,16 +260,20 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
   it("RP-588-1: C2's own Packages are numbered from PKG-001, never counting C1's", async () => {
     const own = await createPackage(c2.member, "C2's own");
     expect(own).toMatchObject({ outcome: "created", seq: 1 });
-    // C1's next one counts on from C1's own two.
-    const next = await createPackage(c1Pm, "C1's third");
-    expect(next).toMatchObject({ outcome: "created", seq: 3 });
+    // C1's next one counts on from C1's own.
+    const [c1Last] = await call<{ seq: number }>(c1Pm, sql`select max(seq) as seq from package where project_id = ${projectId}::uuid`);
+    expect(c1Last!.seq).toBeGreaterThanOrEqual(2);
+    const next = await createPackage(c1Pm, "C1's next");
+    expect(next).toMatchObject({ outcome: "created", seq: c1Last!.seq + 1 });
     // Each reads only its own: C2 never C1's, C1 never C2's.
     expect(await call(c2.member, sql<{ id: string }>`select id from package where project_id = ${projectId}::uuid`)).toEqual([{ id: own.package_id }]);
     expect(await readsOf(c1Pm, own.package_id, [])).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
     // Deleted, so the later scenarios' "C2 reads no Package" stays about C1's.
-    for (const id of [own.package_id, next.package_id]) {
-      const by = id === own.package_id ? c2.member : c1Pm;
-      expect(await outcome(by, sql`select app.discard_package(${id}::uuid, now()) as outcome`)).toBe("discarded");
+    for (const [by, id] of [
+      [c2.member, own.package_id],
+      [c1Pm, next.package_id],
+    ]) {
+      expect(await outcome(by!, sql`select app.discard_package(${id}::uuid, now()) as outcome`)).toBe("discarded");
     }
   });
 });
@@ -546,7 +550,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
   // The test Workflow with Remarks on Code A's Action Form, as the MAR Workflow has.
   const WITH_REMARKS = "PKGRM";
   const REMARKS = "Approved as submitted";
-  const NOTE = "K1 only: checked the datasheets";
+  const INTERNAL_NOTE = "K1 only: checked the datasheets";
   type Event = {
     type: string;
     audience: string;
@@ -564,7 +568,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
   /** K1's manager's Code A on `id`, with the Remarks and an Internal Note. */
   const codeA = (id: string) =>
     sql<{ outcome: string }>`
-      select app.take_transition(${id}::uuid, 'approve_a', ${JSON.stringify({ remarks: REMARKS })}::jsonb, ${NOTE}, app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
+      select app.take_transition(${id}::uuid, 'approve_a', ${JSON.stringify({ remarks: REMARKS })}::jsonb, ${INTERNAL_NOTE}, app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
     `;
 
   beforeAll(async () => {
@@ -603,7 +607,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
     expect(await outcome(k1.ap, codeA(single))).toBe("applied");
   });
 
-  it("C1 reads three separate Code events naming K1's Company and the signer, with the Remarks, as for a single Code, never K1's internal Steps or Notes", async () => {
+  it("RP-588-4: C1 reads three separate Code events naming K1's Company and the signer, with the Remarks, as for a single Code, never K1's internal Steps or Notes", async () => {
     const control = await historyOf(c1Pm, single);
     const code = control.filter((e) => e.outcome === "A");
     expect(code).toHaveLength(1);
@@ -617,7 +621,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
         k1.ap,
         sql`select internal_note from app.work_item_history(${id}::uuid) where type = 'internal_note'`,
       );
-      expect(k1Notes).toEqual([{ internal_note: NOTE }]);
+      expect(k1Notes).toEqual([{ internal_note: INTERNAL_NOTE }]);
       expect(await call(c1Pm, sql<{ internal_note: string }>`select internal_note from app.work_item_history(${id}::uuid) where internal_note is not null`)).toEqual([]);
     }
   });
@@ -660,9 +664,12 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
       expect(facts).toMatchObject({ workItemId: id, outcome: "A" });
       const coded = facts.transitions.filter((t) => t.remarks !== null);
       expect(coded).toEqual([expect.objectContaining({ companyName: expect.objectContaining({ en: "K1" }), memberName: expect.objectContaining({ en: "ap" }), remarks: REMARKS })]);
-      // A move inside K1 prints who took it, never answers (V5), and the Internal Note is in no fact.
-      for (const t of facts.transitions.filter((x) => x.companyName.en === "K1" && x.remarks === null)) expect(t.answers).toBeNull();
-      expect(JSON.stringify(facts)).not.toContain(NOTE);
+      // A move inside K1 (its engineer's Send to Manager) prints who took it (by design, RP-650), never answers (V5),
+      // and the Internal Note is in no fact.
+      const insideK1 = facts.transitions.filter((x) => x.companyName.en === "K1" && x.remarks === null);
+      expect(insideK1.length).toBeGreaterThan(0);
+      for (const t of insideK1) expect(t.answers).toBeNull();
+      expect(JSON.stringify(facts)).not.toContain(INTERNAL_NOTE);
     }
   });
 
@@ -916,7 +923,7 @@ describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's 
   let packageId = "";
   let k1Participant = "";
   let plumbing = "";
-  const eng = { wide: "", narrowedLater: "", goneLater: "", digest: "" }; // K1 engineers; the last narrowed to Electrical, by daily digest.
+  const eng = { seesAll: "", narrowedLater: "", narrowedOffAll: "", digest: "" }; // K1 engineers; the last narrowed to Electrical, by daily digest.
   const emails: Sent[] = [];
   const digests: Sent[] = [];
 
@@ -954,13 +961,7 @@ describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's 
     packageId = (await createPackage(c1Pm, "Switchgear, seam 2")).package_id;
     const items: string[] = [];
     for (const [title, trade] of [["S1", electrical], ["S2", electrical], ["S3", electrical], ["SP", plumbing]] as const) {
-      const [created] = await call<{ outcome: string; work_item_id: string }>(
-        c1.member,
-        sql`select outcome, work_item_id from app.create_work_item(
-          ${projectId}::uuid, ${TYPE}, ${title}, app.latest_form_version(${TYPE}), ${JSON.stringify({ model: title })}::jsonb,
-          ${trade}::uuid, ${buildingA}::uuid, now())`,
-      );
-      const id = created!.work_item_id;
+      const id = await draft(c1.member, title, TYPE, trade);
       expect(await take(c1.member, id, "send_for_review")).toBe("applied");
       expect(await pickUp(c1Pm, id)).toBe("picked_up");
       expect(await addItem(c1Pm, packageId, id)).toBe("added");
@@ -987,7 +988,7 @@ describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's 
         if (!narrowed) {
           narrowed = true;
           expect(await setTrade(eng.narrowedLater, false, [electrical])).toBe("set");
-          expect(await setTrade(eng.goneLater, false, [])).toBe("set");
+          expect(await setTrade(eng.narrowedOffAll, false, [])).toBe("set");
         }
         const { rows } = await sql<Sent>`select * from app.take_notification_email(${row.id}::uuid)`.execute(trx);
         emails.push(...rows);
@@ -1005,7 +1006,7 @@ describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's 
   };
 
   it("RP-588-2: the immediate email names the Package, no item, C1 by Company name only, and the count its recipient sees: 4", async () => {
-    expect(await ofPackage(emails, eng.wide)).toEqual([
+    expect(await ofPackage(emails, eng.seesAll)).toEqual([
       expect.objectContaining({
         kind: "package_submitted",
         work_item_id: null,
@@ -1018,7 +1019,7 @@ describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's 
 
   it("RP-588-2: narrowed between delivery and the send, the email counts what its recipient sees at send time: 3, and none once they see no item", async () => {
     expect(await ofPackage(emails, eng.narrowedLater)).toEqual([expect.objectContaining({ item_count: 3, package_company_name: { en: "C1", ar: "C1" } })]);
-    expect(await ofPackage(emails, eng.goneLater)).toEqual([]);
+    expect(await ofPackage(emails, eng.narrowedOffAll)).toEqual([]);
   });
 
   it("RP-588-2: the daily digest carries the Package with the count its recipient sees, 3, naming C1 by Company name only; never an email of its own", async () => {
