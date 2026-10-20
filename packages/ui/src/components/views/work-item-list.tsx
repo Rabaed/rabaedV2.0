@@ -194,6 +194,12 @@ export type WorkItemPackageFilter = {
   choices: { id: string; number: string; owner: { companyName: BilingualText } }[];
 };
 
+/**
+ * One Submittal Register Import's Drafts (RP-954, the Result step's "Open the Drafts"): the chip naming
+ * the import by its file name (null where the Member doesn't read it), with its own ×. No time.
+ */
+export type WorkItemImportFilter = { label: string; name: string | null };
+
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
 
@@ -242,6 +248,8 @@ export type WorkItemListProps = {
   hints?: WorkItemFilterHints;
   /** The Submittals' Package filter (RP-662), one Package at a time. Without it, the panel has no Package field. */
   packages?: WorkItemPackageFilter;
+  /** The import the List is filtered to (`query.importId`), named. */
+  importFilter?: WorkItemImportFilter;
   /** The table's columns at first, in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
   columns?: ListColumnLayout;
   /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
@@ -300,6 +308,7 @@ function WorkItemListBody({
   board,
   hints,
   packages,
+  importFilter,
   columns: initialColumns,
   onSaveColumns,
   loadExportRows,
@@ -650,6 +659,7 @@ function WorkItemListBody({
               location: [],
               outcome: [],
               packageId: undefined,
+              importId: undefined,
               stepAgeMin: undefined,
               createdWithin: undefined,
               submittedFrom: undefined,
@@ -686,6 +696,25 @@ function WorkItemListBody({
               aria-label={`${packages.label}: ${t("clearField")}`}
               title={`${packages.label}: ${t("clearField")}`}
               className={cn("inline-flex h-full w-7 items-center justify-center rounded-e-sm text-muted hover:bg-hover hover:text-text pointer-coarse:w-11", focusRing)}
+            >
+              <Icon name="x" size={14} />
+            </Link>
+          </span>
+        )}
+        {/* The import chosen (RP-954, "Open the Drafts"), named by its file name where the Member reads it. */}
+        {query.importId !== undefined && importFilter && (
+          <span
+            data-import-filter=""
+            className="inline-flex h-[34px] min-w-0 shrink items-center gap-1.5 rounded-sm border border-control-border bg-surface ps-2.5 text-sm pointer-coarse:min-h-11"
+          >
+            <Icon name="upload" size={15} className="shrink-0 text-muted" />
+            <span className={cn(importFilter.name !== null && "sr-only")}>{importFilter.label}{importFilter.name !== null && ": "}</span>
+            {importFilter.name !== null && <bdi className="max-w-60 truncate font-semibold text-text">{importFilter.name}</bdi>}
+            <Link
+              href={hrefFor({ ...query, importId: undefined })}
+              aria-label={`${importFilter.label}: ${t("clearField")}`}
+              title={`${importFilter.label}: ${t("clearField")}`}
+              className={cn("inline-flex h-full w-7 shrink-0 items-center justify-center rounded-e-sm text-muted hover:bg-hover hover:text-text pointer-coarse:w-11", focusRing)}
             >
               <Icon name="x" size={14} />
             </Link>

@@ -331,6 +331,12 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   // sees that they see too, none of one they don't (work_item.package_id is not theirs to read). So a
   // Package they don't see matches nothing, exactly like a made-up id.
   if (q.packageId !== undefined) conditions.push(sql`r.id in (select app.package_items(${q.packageId}::uuid))`);
+  // One import's items (RP-954), through app.register_import_results: the Drafts it created that the
+  // viewer sees, of an import of their own Participant only (it says the import's policy itself), so
+  // another Company, or a made-up id, matches nothing, even an item of the import it sees once Submitted.
+  if (q.importId !== undefined) {
+    conditions.push(sql`r.id in (select x.work_item_id from app.register_import_results(${q.importId}::uuid) x where x.work_item_id is not null)`);
+  }
   if (q.type.length > 0) conditions.push(sql`r.type_code = any(${q.type}::text[])`);
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);

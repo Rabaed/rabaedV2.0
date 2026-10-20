@@ -7,7 +7,7 @@ import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
 import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
 import { Link, getPathname, redirect } from "@/i18n/navigation";
-import { getMe, getPackages, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
+import { getMe, getPackages, getRegisterImports, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
 /**
  * A Module tab of a Project (RP-346): one page of the work item query over the
@@ -73,7 +73,7 @@ export async function ModuleWorkItemsPage({
     ...(view === "list" ? { ...listQuery, sort: snags && searchParams.sort === undefined ? snagListSort : listQuery.sort } : workItemQueryFromSearchParams(searchParams)),
     module,
   };
-  const [me, project, list, board, raisable, packages] = await Promise.all([
+  const [me, project, list, board, raisable, packages, imports] = await Promise.all([
     getMe(),
     getProject(projectId),
     // Names sort in the reader's language.
@@ -84,6 +84,9 @@ export async function ModuleWorkItemsPage({
     snags || module === "submittals" ? getRaisableTypes(projectId, module) : null,
     // The Submittals' Package filter (RP-662): only the Packages the Member sees.
     module === "submittals" ? getPackages(projectId) : null,
+    // One import's Drafts (RP-954, "Open the Drafts"): the import named by its file name, from the
+    // Imports page's list, which holds only the Member's own Company's. No time.
+    module === "submittals" && query.importId ? getRegisterImports(projectId) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !(list ?? board)) notFound();
@@ -110,7 +113,7 @@ export async function ModuleWorkItemsPage({
   // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
   // (story 4; the API refuses anyone else). Its Imports page, their Company's own, to every
   // Member on the Project (story 32).
-  const imports = await getTranslations("registerImport");
+  const importWords = await getTranslations("registerImport");
   const moreActions =
     module === "submittals"
       ? [
@@ -118,16 +121,21 @@ export async function ModuleWorkItemsPage({
             ? [
                 {
                   key: "import",
-                  label: imports("importRegister"),
-                  description: imports("importRegisterHint"),
+                  label: importWords("importRegister"),
+                  description: importWords("importRegisterHint"),
                   icon: "upload" as const,
                   href: getPathname({ href: `/projects/${project.id}/work-items/import`, locale }),
                 },
               ]
             : []),
-          { key: "imports", label: imports("imports"), icon: "history" as const, href: getPathname({ href: `/projects/${project.id}/work-items/imports`, locale }) },
+          { key: "imports", label: importWords("imports"), icon: "history" as const, href: getPathname({ href: `/projects/${project.id}/work-items/imports`, locale }) },
         ]
       : undefined;
+
+  // The chip naming the import the List is filtered to (RP-954); its name only where the Member reads it.
+  const importFilter = query.importId
+    ? { label: importWords("listFilter"), name: imports?.imports.find((i) => i.id === query.importId)?.fileName ?? null }
+    : undefined;
 
   return (
     <>
@@ -146,6 +154,7 @@ export async function ModuleWorkItemsPage({
           module={module}
           hints={hints}
           packages={packages?.packages}
+          importFilter={importFilter}
         />
       ) : (
         list && (
@@ -162,6 +171,7 @@ export async function ModuleWorkItemsPage({
             projectName={project.name[locale]}
             hints={hints}
             packages={packages?.packages}
+            importFilter={importFilter}
           />
         )
       )}

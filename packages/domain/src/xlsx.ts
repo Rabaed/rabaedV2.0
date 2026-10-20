@@ -1,8 +1,9 @@
 /* eslint-disable rabaed/no-avoid-terms -- "Relationships" are the Office Open XML format's own part names, not copy */
 /**
- * A small .xlsx writer (RP-644): one worksheet of text cells, its first row bold, left-to-right or
- * right-to-left. The Submittal Register Import's downloads (the rejected rows with a reasons
- * column, and the log) are built with it in the browser, in the reader's language.
+ * A small .xlsx writer (RP-644): worksheets of text cells, each one's first row bold, left-to-right
+ * or right-to-left. The Submittal Register Import's downloads (the rejected rows with a reasons
+ * column, the log, and RP-954's template and sample register) are built with it in the browser,
+ * in the reader's language.
  *
  * It writes no document properties (no docProps/core.xml: no author, no created or modified
  * time) and dates every zip entry 1980-01-01, the format's earliest: a workbook made from an
@@ -16,6 +17,11 @@ export type XlsxSheet = {
   /** Each row's cells, as text. The first row is the column headings, shown bold. */
   rows: readonly (readonly string[])[];
   rightToLeft?: boolean;
+  /**
+   * The first this many columns set to text (RP-954, the register template): what is typed in them
+   * is stored as typed, so a reference number 0012 keeps its zeros. The headings still read bold.
+   */
+  textColumns?: number;
 };
 
 /** The media type of an .xlsx file. */
@@ -140,9 +146,8 @@ const MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const RELATIONSHIPS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const PACKAGE_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships";
 
-/** The .xlsx of `sheet`. */
-export function writeXlsx(sheet: XlsxSheet): Uint8Array {
-  const encoder = new TextEncoder();
+/** A worksheet's XML: its rows, the first frozen at the top, and its text columns. */
+function worksheetXml(sheet: XlsxSheet): string {
   const rows = sheet.rows
     .map((cells, r) => {
       const style = r === 0 ? 1 : 2;
@@ -152,6 +157,19 @@ export function writeXlsx(sheet: XlsxSheet): Uint8Array {
       return `<row r="${r + 1}">${xml}</row>`;
     })
     .join("");
+  // Style 2 is text (number format 49): a cell typed in such a column is kept as typed.
+  const cols = sheet.textColumns ? `<cols><col min="1" max="${sheet.textColumns}" width="24" style="2" customWidth="1"/></cols>` : "";
+  return (
+    `${XML}<worksheet xmlns="${MAIN}" xmlns:r="${RELATIONSHIPS}">` +
+    `<sheetViews><sheetView workbookViewId="0"${sheet.rightToLeft ? ' rightToLeft="1"' : ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
+    `${cols}<sheetData>${rows}</sheetData></worksheet>`
+  );
+}
+
+/** The .xlsx of `sheets`, in order: the first is the one a reader opens on. */
+export function writeXlsx(...sheets: [XlsxSheet, ...XlsxSheet[]]): Uint8Array {
+  const encoder = new TextEncoder();
+  const numbered = sheets.map((sheet, i) => ({ sheet, n: i + 1 }));
   const files = [
     {
       name: "[Content_Types].xml",
@@ -160,7 +178,7 @@ export function writeXlsx(sheet: XlsxSheet): Uint8Array {
         `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
         `<Default Extension="xml" ContentType="application/xml"/>` +
         `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
-        `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+        numbered.map(({ n }) => `<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("") +
         `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
         `</Types>`,
     },
@@ -170,14 +188,14 @@ export function writeXlsx(sheet: XlsxSheet): Uint8Array {
     },
     {
       name: "xl/workbook.xml",
-      xml: `${XML}<workbook xmlns="${MAIN}" xmlns:r="${RELATIONSHIPS}"><sheets><sheet name="${xmlText(sheetName(sheet.name))}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      xml: `${XML}<workbook xmlns="${MAIN}" xmlns:r="${RELATIONSHIPS}"><sheets>${numbered.map(({ sheet, n }) => `<sheet name="${xmlText(sheetName(sheet.name))}" sheetId="${n}" r:id="rId${n}"/>`).join("")}</sheets></workbook>`,
     },
     {
       name: "xl/_rels/workbook.xml.rels",
       xml:
         `${XML}<Relationships xmlns="${PACKAGE_RELATIONSHIPS}">` +
-        `<Relationship Id="rId1" Type="${RELATIONSHIPS}/worksheet" Target="worksheets/sheet1.xml"/>` +
-        `<Relationship Id="rId2" Type="${RELATIONSHIPS}/styles" Target="styles.xml"/>` +
+        numbered.map(({ n }) => `<Relationship Id="rId${n}" Type="${RELATIONSHIPS}/worksheet" Target="worksheets/sheet${n}.xml"/>`).join("") +
+        `<Relationship Id="rId${sheets.length + 1}" Type="${RELATIONSHIPS}/styles" Target="styles.xml"/>` +
         `</Relationships>`,
     },
     {
@@ -193,13 +211,7 @@ export function writeXlsx(sheet: XlsxSheet): Uint8Array {
         `<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs>` +
         `</styleSheet>`,
     },
-    {
-      name: "xl/worksheets/sheet1.xml",
-      xml:
-        `${XML}<worksheet xmlns="${MAIN}" xmlns:r="${RELATIONSHIPS}">` +
-        `<sheetViews><sheetView workbookViewId="0"${sheet.rightToLeft ? ' rightToLeft="1"' : ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
-        `<sheetData>${rows}</sheetData></worksheet>`,
-    },
+    ...numbered.map(({ sheet, n }) => ({ name: `xl/worksheets/sheet${n}.xml`, xml: worksheetXml(sheet) })),
   ];
   return zip(files.map((f) => ({ name: f.name, bytes: encoder.encode(f.xml) })));
 }

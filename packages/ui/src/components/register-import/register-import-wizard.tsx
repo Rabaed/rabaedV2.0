@@ -28,7 +28,7 @@ import { Select } from "../form/select.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
-import { logDownload, rejectedRowsDownload, saveDownload } from "./register-import-downloads.ts";
+import { logDownload, rejectedRowsDownload, sampleRegister, saveDownload, templateDownload } from "./register-import-downloads.ts";
 import { PackagesCard, type PackagesChoice } from "./register-import-packages.tsx";
 import { ErrorRows, ImportRows, PackageCell, within } from "./register-import-rows.tsx";
 import { confirmSuggestion, suggestedFromMapping, suggestedMapping, suggestedOnLoad, type Suggested } from "./register-import-suggested.ts";
@@ -40,7 +40,8 @@ import { confirmSuggestion, suggestedFromMapping, suggestedMapping, suggestedOnL
 // columns matched once) → Assign (RP-640: who raises each row's Draft: the "Assign to"
 // column's email, else a rule by Trade or Type, else the default, else the importer) →
 // Validate (every row's reasons, the counts) → Result. Nothing is created until the
-// importer confirms. The design's "Assign & packages" step gets its Packages with RP-644.
+// importer confirms. The design's "Assign & packages" step gets its Packages with RP-644. Upload
+// also offers a blank template and a sample register to try it with (RP-954), both built here.
 //
 // One wizard for the customer app (a Member importing their own Company's register) and
 // Rabaed Admin (RP-645: a Rabaed Engineer importing for a Participant, its Company & reason
@@ -136,6 +137,13 @@ function base64Of(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+/** Bytes made in the browser (the sample register) as base64, for the JSON body. */
+function base64OfBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }
 
 /** Whether a field's values are matched to the Project's on Map values: the Type, Trade, Location, Scopes and choice fields. */
@@ -370,10 +378,23 @@ export function RegisterImportWizard({
       setError(refusal("file_too_large"));
       return;
     }
-    const uploaded = { fileName: chosen.name, content: await base64Of(chosen), sizeBytes: chosen.size };
+    await start({ fileName: chosen.name, content: await base64Of(chosen), sizeBytes: chosen.size });
+  }
+
+  /** Reads a register just chosen, then shows its sheets. */
+  async function start(uploaded: Uploaded) {
     setFile(uploaded);
     setPreview(null);
     if (await read(uploaded, {})) setStep("sheet");
+  }
+
+  /**
+   * "Use sample register" (RP-954): a made-up register with the Types the importer may raise and
+   * the Trades offered them, read like any register; nothing is created until they confirm.
+   */
+  async function trySample() {
+    const sample = sampleRegister(t, locale, types, trades);
+    await start({ fileName: sample.fileName, content: base64OfBytes(sample.bytes), sizeBytes: sample.bytes.length });
   }
 
   /**
@@ -526,6 +547,16 @@ export function RegisterImportWizard({
     if (!preview) return;
     try {
       const made = build(preview, t, locale);
+      saveDownload(made.fileName, made.bytes);
+    } catch {
+      setError(t("downloads.failed"));
+    }
+  }
+
+  /** The blank template (RP-954), built here in the reader's language. */
+  function downloadTemplate() {
+    try {
+      const made = templateDownload(t, locale);
       saveDownload(made.fileName, made.bytes);
     } catch {
       setError(t("downloads.failed"));
@@ -719,15 +750,28 @@ export function RegisterImportWizard({
               aria-label={t("upload.browse")}
               onChange={(e) => void choose(e.target.files?.[0])}
             />
-            <Button onClick={() => input.current?.click()} disabled={busy}>
-              <Icon name="upload" />
-              {t("upload.browse")}
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button onClick={() => input.current?.click()} disabled={busy}>
+                <Icon name="upload" />
+                {t("upload.browse")}
+              </Button>
+              {/* RP-954: a made-up register to try the wizard with. */}
+              <Button variant="secondary" onClick={() => void trySample()} disabled={busy}>
+                {t("upload.sample")}
+              </Button>
+            </div>
           </div>
-          <p className="flex items-start gap-2 text-[13px] text-muted">
-            <Icon name="info-circle" size={16} className="mt-0.5" />
-            {t("upload.anyLayout")}
-          </p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {/* RP-954: a blank register with Rabaed's fields as its columns, in the reader's language. */}
+            <Button variant="ghost" size="sm" onClick={downloadTemplate}>
+              <Icon name="download" />
+              {t("upload.template")}
+            </Button>
+            <p className="flex items-start gap-2 text-[13px] text-muted">
+              <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
+              {t("upload.anyLayout")}
+            </p>
+          </div>
           <p className="flex items-start gap-2 text-[13px] text-muted">
             <Icon name="info-circle" size={16} className="mt-0.5" />
             {t("upload.asText")}

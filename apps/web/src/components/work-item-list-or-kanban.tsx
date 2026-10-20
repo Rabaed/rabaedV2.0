@@ -32,6 +32,7 @@ import {
   type RowPermissions,
   type WorkItemBoardLabels,
   type WorkItemFilterHints,
+  type WorkItemImportFilter,
   type WorkItemListLabels,
 } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
@@ -198,6 +199,8 @@ export function WorkItemListOrKanban(
     hints?: WorkItemFilterHints;
     /** The Submittals' Package filter (RP-662): the Project's Packages the Member sees; none, no Package field. */
     packages?: PackageSummary[];
+    /** One import's Drafts (RP-954): the chip naming the import the List is filtered to. */
+    importFilter?: WorkItemImportFilter;
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
@@ -306,6 +309,7 @@ export function WorkItemListOrKanban(
       hints={hints}
       // No Package field for a Member who sees none, unless the URL already holds one (so it can be cleared).
       packages={props.packages && (props.packages.length > 0 || query.packageId) ? { label: t("list.package"), choices: props.packages } : undefined}
+      importFilter={props.importFilter}
       moreActions={moreActions && moreActions.length > 0 && <MoreActionsMenu actions={moreActions} label={t("moreActions")} linkAs={NextLink} />}
       viewSwitch={
         <>
