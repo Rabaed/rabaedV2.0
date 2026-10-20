@@ -1,9 +1,10 @@
 import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
 import { attachedFiles, pdfA3Problems, toPdfA3 } from "./pdfa.ts";
-import { sealPdf, sealTamperOffsets, verifySeal, withByteChanged } from "./seal.ts";
+import { longTermProblems } from "./revocation.ts";
+import { documentSecurityStore, sealPdf, sealTamperOffsets, verifySeal, withByteChanged, withDss } from "./seal.ts";
 import { LOCAL_SEAL_NAME, localSealSigner, type SealSigner } from "./signer.ts";
-import { localTimestampAuthority, type TimestampAuthority } from "./timestamp.ts";
+import { LOCAL_TSA_NAME, localTimestampAuthority, type TimestampAuthority } from "./timestamp.ts";
 
 // The seal and PDF/A-3 on a small PDF (ADR 0023). The record's own tests (seam 1,
 // apps/api/test/documental-record.test.ts) check the same on real records.
@@ -27,6 +28,13 @@ async function tamperedBytesThatStillVerify(pdf: Uint8Array): Promise<string[]> 
   return kept;
 }
 
+/** The sealed PDF's Document Security Store's streams, and where its signed revision ends. */
+async function storeOf(pdf: Uint8Array) {
+  const { store, signedLength } = await documentSecurityStore(pdf);
+  if (!store) throw new Error("no Document Security Store");
+  return { ...store, signedLength };
+}
+
 let signer: SealSigner;
 let timestamps: TimestampAuthority;
 let sealed: Uint8Array;
@@ -47,8 +55,39 @@ describe("the seal", () => {
       signer: LOCAL_SEAL_NAME,
       timestampedAt: at,
       subFilter: "ETSI.CAdES.detached",
-      dssCertificates: 2,
+      // The signer's and its authority's, the timestamp authority's and its root (fetched: the token carries only its own).
+      dssCertificates: 4,
+      // The signer's OCSP answer and the timestamp authority's CRL.
+      dssRevocation: 2,
+      longTerm: true,
     });
+  });
+
+  it("is PAdES B-LT: the store holds revocation data for every certificate of the seal's and the timestamp's chains but the roots", async () => {
+    const { certificates, ocspResponses, crls } = await storeOf(sealed);
+    expect(await longTermProblems(certificates, { certificates, ocspResponses, crls })).toEqual([]);
+    expect(await longTermProblems(certificates, { certificates, ocspResponses: [], crls: [] })).toEqual([
+      `no revocation data for ${LOCAL_SEAL_NAME}`,
+      `no revocation data for ${LOCAL_TSA_NAME}`,
+    ]);
+  });
+
+  it("still verifies a record sealed before RP-669, whose store holds the seal's certificates alone, as not long-term", async () => {
+    const { certificates, signedLength } = await storeOf(sealed);
+    // The CMS's two and the token's one, as RP-620 wrote them.
+    const before = await withDss(sealed.slice(0, signedLength), { certificates: certificates.slice(0, 3), ocspResponses: [], crls: [] });
+    expect(await verifySeal(before)).toMatchObject({ valid: true, dssCertificates: 3, dssRevocation: 0, longTerm: false });
+  });
+
+  it("breaks when the store's revocation data is dropped from a long-term seal", async () => {
+    const { certificates, ocspResponses, signedLength } = await storeOf(sealed);
+    const without = await withDss(sealed.slice(0, signedLength), { certificates, ocspResponses, crls: [] });
+    expect(await verifySeal(without)).toMatchObject({ valid: false, problem: `the seal's revocation data does not hold: no revocation data for ${LOCAL_TSA_NAME}` });
+  });
+
+  it("is never made under a revoked certificate", async () => {
+    const revoked: SealSigner = { ...signer, revocation: () => Promise.reject(new Error(`${LOCAL_SEAL_NAME} is revoked: nothing is sealed under it`)) };
+    await expect(sealPdf(await plainPdf(), { signer: revoked, timestamps, at })).rejects.toThrow("is revoked");
   });
 
   it("breaks when any one byte it covers changes", async () => {

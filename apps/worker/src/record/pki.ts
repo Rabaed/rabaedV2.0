@@ -3,9 +3,9 @@ import * as asn1js from "asn1js";
 import * as pkijs from "pkijs";
 
 // The ASN.1 and X.509 groundwork of the seal (ADR 0023): pkijs on Node's Web
-// Crypto, and the self-signed certificates the local adapters make for
-// themselves. Nothing here holds a real key: in AWS the sealing key stays in
-// KMS (signer.ts) and the timestamp comes from a public service (timestamp.ts).
+// Crypto. Nothing here holds a real key: in AWS the sealing key stays in KMS
+// (signer.ts) and the timestamp comes from a public service (timestamp.ts);
+// locally both are issued by an in-memory test authority (local-ca.ts).
 
 const crypto = webcrypto;
 // pkijs is typed for the DOM's Crypto, which Node's Web Crypto implements.
@@ -33,6 +33,12 @@ export const OID = {
   extendedKeyUsage: "2.5.29.37",
   basicConstraints: "2.5.29.19",
   timeStamping: "1.3.6.1.5.5.7.3.8",
+  ocspSigning: "1.3.6.1.5.5.7.3.9",
+  crlDistributionPoints: "2.5.29.31",
+  authorityInfoAccess: "1.3.6.1.5.5.7.1.1",
+  ocsp: "1.3.6.1.5.5.7.48.1",
+  caIssuers: "1.3.6.1.5.5.7.48.2",
+  ocspBasic: "1.3.6.1.5.5.7.48.1.1",
 } as const;
 
 export const toBytes = (buffer: ArrayBuffer | ArrayBufferView): Uint8Array =>
@@ -70,50 +76,23 @@ export const RSA_SHA256: webcrypto.RsaHashedKeyGenParams = {
   publicExponent: new Uint8Array([1, 0, 1]),
 };
 
-export interface LocalKey {
-  readonly privateKey: webcrypto.CryptoKey;
-  readonly certificate: Uint8Array;
+/** The certificate's DER. */
+export const certificateDer = (certificate: pkijs.Certificate): Uint8Array => toBytes(certificate.toSchema(true).toBER(false));
+
+/** `items` without repeats, by their bytes, in first-seen order. */
+export function distinct(items: readonly Uint8Array[]): Uint8Array[] {
+  const seen = new Set<string>();
+  return items.filter((der) => {
+    const key = Buffer.from(der).toString("base64");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-/**
- * A fresh RSA key and a self-signed certificate for it, made in memory: the
- * local sealing key and the local timestamp authority's. Never written anywhere.
- * `timeStamping` marks the certificate for RFC 3161 tokens only, as RFC 3161 asks.
- */
-export async function selfSignedKey(commonName: string, { timeStamping = false }: { timeStamping?: boolean } = {}): Promise<LocalKey> {
-  const keys = (await subtle.generateKey(RSA_SHA256, false, ["sign", "verify"])) as webcrypto.CryptoKeyPair;
-  const certificate = new pkijs.Certificate();
-  certificate.version = 2;
-  const serial = crypto.getRandomValues(new Uint8Array(16));
-  serial[0]! &= 0x7f;
-  certificate.serialNumber = new asn1js.Integer({ valueHex: toArrayBuffer(serial) });
-  const name = [
-    new pkijs.AttributeTypeAndValue({ type: OID.organization, value: new asn1js.Utf8String({ value: "Rabaed" }) }),
-    new pkijs.AttributeTypeAndValue({ type: OID.commonName, value: new asn1js.Utf8String({ value: commonName }) }),
-  ];
-  certificate.issuer.typesAndValues.push(...name);
-  certificate.subject.typesAndValues.push(...name);
-  const now = Date.now();
-  certificate.notBefore.value = new Date(now - 60 * 60 * 1000);
-  certificate.notAfter.value = new Date(now + 365 * 24 * 60 * 60 * 1000);
-  // digitalSignature and nonRepudiation (contentCommitment): bits 0 and 1.
-  const keyUsage = new asn1js.BitString({ valueHex: new Uint8Array([0xc0]).buffer, unusedBits: 6 });
-  certificate.extensions = [
-    new pkijs.Extension({ extnID: OID.basicConstraints, critical: true, extnValue: new pkijs.BasicConstraints({ cA: false }).toSchema().toBER(false) }),
-    new pkijs.Extension({ extnID: OID.keyUsage, critical: true, extnValue: keyUsage.toBER(false) }),
-    ...(timeStamping
-      ? [
-          new pkijs.Extension({
-            extnID: OID.extendedKeyUsage,
-            critical: true,
-            extnValue: new pkijs.ExtKeyUsage({ keyPurposes: [OID.timeStamping] }).toSchema().toBER(false),
-          }),
-        ]
-      : []),
-  ];
-  await certificate.subjectPublicKeyInfo.importKey(keys.publicKey);
-  await certificate.sign(keys.privateKey, "SHA-256");
-  return { privateKey: keys.privateKey, certificate: toBytes(certificate.toSchema(true).toBER(false)) };
+/** Every certificate a CMS SignedData (a seal, a timestamp token) carries, as DER. */
+export function signedDataCertificates(signed: pkijs.SignedData): Uint8Array[] {
+  return (signed.certificates ?? []).filter((c): c is pkijs.Certificate => c instanceof pkijs.Certificate).map(certificateDer);
 }
 
 /** ESS signing-certificate-v2 (RFC 5035): the SHA-256 of the signer's certificate, which PAdES requires. */

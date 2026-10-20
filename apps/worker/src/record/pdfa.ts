@@ -172,7 +172,9 @@ export async function toPdfA3(pdf: Uint8Array, info: PdfA3Info, attachments: rea
       afRelationship: a.relationship === "Source" ? AFRelationship.Source : AFRelationship.Data,
     });
   }
-  const metadata = ctx.stream(xmp({ ...info, at }), { Type: "Metadata", Subtype: "XML" });
+  // As UTF-8 bytes: pdf-lib writes a string's characters one byte each, which mangles the
+  // packet's byte-order mark and any non-Latin text, and the XMP is not then well-formed XML.
+  const metadata = ctx.stream(new TextEncoder().encode(xmp({ ...info, at })), { Type: "Metadata", Subtype: "XML" });
   doc.catalog.set(PDFName.of("Metadata"), ctx.register(metadata));
   const profile = ctx.register(ctx.stream(srgbIccProfile(), { N: 3 }));
   doc.catalog.set(
