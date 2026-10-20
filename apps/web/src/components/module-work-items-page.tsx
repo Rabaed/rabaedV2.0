@@ -31,14 +31,26 @@ export async function ModuleWorkItemsPage({
   const tabs = await getTranslations("projectTabs");
   // The Submittals' Packages view (RP-660): the Project's Packages the Member sees, as a Kanban of their status.
   if (moduleViewFromSearchParams(searchParams, module) === "packages") {
-    const [me, project, packages, raisable] = await Promise.all([getMe(), getProject(projectId), getPackages(projectId), getRaisableTypes(projectId, module)]);
+    const [me, project, packages, raisable, otherBoard] = await Promise.all([
+      getMe(),
+      getProject(projectId),
+      getPackages(projectId),
+      getRaisableTypes(projectId, module),
+      // The filter fields' names in the other language, small after each (RP-953, as the List's).
+      getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "packages.board" }),
+    ]);
     if (!me) return redirect({ href: "/sign-in", locale });
     if (!project || !packages) notFound();
     return (
       <>
         <h1 className="sr-only">{tabs(module)}</h1>
         {/* "+ New Package" for a Member who may raise a Submittals Type: a Package holds their Participant's submittals (the API checks again). */}
-        <PackagesBoardView packages={packages.packages} projectId={project.id} canCreate={(raisable?.types.length ?? 0) > 0} />
+        <PackagesBoardView
+          packages={packages.packages}
+          projectId={project.id}
+          canCreate={(raisable?.types.length ?? 0) > 0}
+          hints={{ trade: otherBoard("trade"), company: otherBoard("company") }}
+        />
       </>
     );
   }
