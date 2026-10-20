@@ -34,6 +34,14 @@ export const packageCounts = z.object({
 export type PackageCounts = z.infer<typeof packageCounts>;
 
 /**
+ * A Trade, as a Package names it (a Work Item's Trade; work-item.ts imports this file), with
+ * `sort`, its place in the Project's own order of Trades, so every list of them reads in that
+ * order (RP-953, product owner 2026-10-20).
+ */
+export const packageTrade = z.object({ id: z.uuid(), code: z.string(), name: bilingualText, sort: z.number().int() });
+export type PackageTrade = z.infer<typeof packageTrade>;
+
+/**
  * A Package as the board shows it (RP-641): what every Member who sees it reads. Its
  * status comes from all its submittals, one word for everyone (spec RP-616 "Status");
  * its counts from the ones the viewer sees.
@@ -47,6 +55,11 @@ export const packageSummary = z.object({
   status: packageStatus,
   /** The owning Participant, by its Company's name only (V14), for every viewer. */
   owner: z.object({ participantId: z.uuid(), companyName: bilingualText }),
+  /**
+   * The Trades of the submittals in it the viewer sees (RP-953), in the Project's order of
+   * Trades: what the Packages view's Trade filter matches. Never a Trade of one they don't see.
+   */
+  trades: z.array(packageTrade),
   counts: packageCounts,
 });
 export type PackageSummary = z.infer<typeof packageSummary>;
