@@ -362,6 +362,9 @@ export const noUiTranslations: Rule.RuleModule = {
   }),
 };
 
+const nativeDialogReason =
+  "sits in the top layer, and the kit's floating parts (Select, Popover, Tooltip) open hidden behind it. Use the kit's Modal (packages/ui/src/components/overlay: Dialog, ModalContent).";
+
 export const noNativeDialog: Rule.RuleModule = {
   meta: {
     type: "problem",
@@ -370,10 +373,8 @@ export const noNativeDialog: Rule.RuleModule = {
         "A native <dialog> opened with showModal() sits in the browser's top layer, above every kit floating part (Select list, Popover, Tooltip), which then open hidden behind it (RP-658). Use the kit's Modal.",
     },
     messages: {
-      element:
-        "A native <dialog> sits in the top layer, and the kit's floating parts (Select, Popover, Tooltip) open hidden behind it. Use the kit's Modal (packages/ui/src/components/overlay: Dialog, ModalContent). The Transition pop-up is the one allowed exception.",
-      showModal:
-        "showModal() puts a native <dialog> in the top layer, and the kit's floating parts (Select, Popover, Tooltip) open hidden behind it. Use the kit's Modal (packages/ui/src/components/overlay: Dialog, ModalContent). The Transition pop-up is the one allowed exception.",
+      element: `A native <dialog> ${nativeDialogReason}`,
+      showModal: `showModal() puts a native <dialog> in the top layer, and ${nativeDialogReason.replace(/^sits in the top layer, and /, "")}`,
     },
     schema: [],
   },
