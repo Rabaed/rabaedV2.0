@@ -1,4 +1,4 @@
-import type { StepContext } from "../screens.ts";
+import type { FlowContext } from "../screens.ts";
 import { readyPackage } from "./packages-seed.ts";
 
 // pnpm screens --as ali --steps scripts/screens-examples/packages-submit-flow.ts (RP-991)
@@ -9,7 +9,7 @@ import { readyPackage } from "./packages-seed.ts";
 
 const submitPackage = { en: "Submit Package", ar: "تقديم الحزمة" };
 
-export default async ({ page, api, goto, shot, inLocale, locale, width }: StepContext) => {
+export default async ({ page, api, goto, shot, inLocale, locale, width }: FlowContext) => {
   const pkg = await readyPackage(api, { en: `Tower 1 lighting (flow, ${locale} ${width})`, ar: `إنارة البرج 1 (تدفق، ${locale} ${width})` }, [
     `Recessed downlights – flow ${locale} ${width}`,
     `Corridor luminaires – flow ${locale} ${width}`,

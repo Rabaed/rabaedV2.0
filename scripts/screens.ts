@@ -58,13 +58,13 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 // requests it started (10 s, then a warning) and its finite animations (2 s). Examples:
 // scripts/screens-examples/.
 //
-// --steps <file> (RP-991): a flow the actions above cannot reach (a wizard, an upload, a step whose
-// page needs what the last step made). Its default export drives the signed-in Playwright page and
-// names each shot; it runs once per language at each width (and at 375 with --phone), after the
-// routes and screens, with the setup's values:
+// --steps <file> (RP-991): a flow the actions above cannot reach (a wizard, an upload, a page that
+// needs what the last one made). Its default export drives the signed-in Playwright page, which
+// starts on the locale's home page, and names each shot; it runs once per language at each width
+// (and at 375 with --phone), after the routes and screens, with the setup's values:
 //
 //   export default async ({ page, goto, shot, inLocale, values }) => {
-//     await goto(`/projects/${values.projectId}/registers/import`);    // as a route: no locale
+//     await goto(`/projects/${values.projectId}/work-items/import`);   // as a route: no locale
 //     await shot("choose-file");                                       // choose-file-<width>-<locale>.png
 //     await page.getByLabel(inLocale({ en: "File", ar: "الملف" })).setInputFiles(values.registerFile);
 //     await page.getByRole("button", { name: inLocale({ en: "Next", ar: "التالي" }) }).click();
@@ -74,9 +74,11 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 // `shot(name)` waits, as a screen does, for the requests since the last goto or shot (10 s, then a
 // warning) and the finite animations (2 s), and saves the full page. A name is a plain file name,
 // used once per run; a second "map-columns", or one that a route or screen already saves, stops the
-// run. The table's row is the name with the path it was taken on. The flow also gets `api`, the
-// setup's API from its page (with `as()`): it runs once per language and width, so a flow that
-// changes data makes its own each time. Example: scripts/screens-examples/packages-submit-flow.ts.
+// run. The table's row is the name with the path it was taken on. The flow also gets `api`, an API
+// like the setup's, calling from its page (with `as()`): it runs once per language and width, so a
+// flow that changes data makes its own each time. Example: scripts/screens-examples/packages-submit-flow.ts.
+// Only the web app's demo persons sign in, so Rabaed Admin's pages (its own origin and Engineer
+// sign-in) are not shot this way.
 //
 // --phone: a phone instead (RP-630): 375 × 812, touch, as a phone's browser says it is.
 //
@@ -86,9 +88,10 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 //
 // --publish-dir <dir> (RP-991): publishes PNGs already on disk the same way, shooting nothing (no
 // --as, no app running): every `<page>-<width>-<locale>.png` in <dir>, one row per page in the
-// order they were saved (oldest first, so a flow's steps keep theirs), under
-// <folder>/ (the branch's issue key unless --folder names another). Other files are skipped; a PNG
-// named otherwise stops the run, naming it.
+// order they were saved (oldest first, then by name: a copy can give files one time; so a flow's
+// shots keep their order), under <folder>/ (the branch's issue key unless --folder names another).
+// A row is the page's name alone: a file does not say which route it was. Other files are skipped;
+// a PNG named otherwise, two files for one cell, or two pages that differ only in case stop the run.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -226,7 +229,6 @@ function parseRole(value: unknown): string {
 
 /** The name in the page's language: `name[locale]`, or the one name both share. A --steps module uses it for its locators. */
 export const inLocale = (name: AccessibleName, locale: Locale) => (typeof name === "string" ? name : name[locale]);
-const nameIn = inLocale;
 
 /** What an action acts on: the one element with a role (and exact name), or the checkbox of the one row with a text. */
 export type Target = { role: string; name?: string } | { row: string };
@@ -242,7 +244,7 @@ const ACTIONS: { [V in Verb]: { parse(value: Record<string, unknown>): ScreenAct
     parse: (value) => ({ click: parseRole(value.click), name: parseName(value.name, "click") }),
     target: (action, locale) => {
       const { click, name } = action as Extract<ScreenAction, { click: string }>;
-      return { role: click, name: nameIn(name, locale) };
+      return { role: click, name: inLocale(name, locale) };
     },
     say: (target) => `click ${"role" in target ? `${target.role} "${target.name}"` : ""}`,
   },
@@ -258,7 +260,7 @@ const ACTIONS: { [V in Verb]: { parse(value: Record<string, unknown>): ScreenAct
     parse: (value) => ({ waitFor: parseRole(value.waitFor), ...(value.name === undefined ? {} : { name: parseName(value.name, "waitFor") }) }),
     target: (action, locale) => {
       const { waitFor, name } = action as Extract<ScreenAction, { waitFor: string }>;
-      return name === undefined ? { role: waitFor } : { role: waitFor, name: nameIn(name, locale) };
+      return name === undefined ? { role: waitFor } : { role: waitFor, name: inLocale(name, locale) };
     },
     say: (target) => `wait for ${"role" in target ? `${target.role}${target.name === undefined ? "" : ` "${target.name}"`}` : ""}`,
   },
@@ -504,21 +506,44 @@ export function shotsOnDisk(files: readonly string[]): Shot[] {
       return { route: "", page, width: Number(width), locale: locale.toLowerCase() as Locale, file };
     });
   if (shots.length === 0) throw new Error("The folder has no PNGs to publish.");
-  const pages = [...new Set(shots.map((shot) => shot.page!))];
+  const pageByKey = new Map<string, string>();
+  const cells = new Map<string, string>();
+  for (const shot of shots) {
+    const page = shot.page!;
+    const same = pageByKey.get(page.toLowerCase());
+    if (same !== undefined && same !== page) throw new Error(`Pages "${same}" and "${page}" differ only in case: Windows keeps one file for both. Rename one.`);
+    pageByKey.set(page.toLowerCase(), page);
+    const cell = `${page}|${shot.width}|${shot.locale}`;
+    const other = cells.get(cell);
+    if (other !== undefined) throw new Error(`${other} and ${shot.file} are the same page, width and locale: keep one.`);
+    cells.set(cell, shot.file);
+  }
+  const pages = [...pageByKey.values()];
   return shots.sort((a, b) => pages.indexOf(a.page!) - pages.indexOf(b.page!) || LOCALES.indexOf(a.locale) - LOCALES.indexOf(b.locale) || a.width - b.width);
 }
 
+/** Files by when they were saved (`at`, ms), oldest first; by name when two were saved at once, as a copy makes them. */
+export function oldestFirst(files: readonly { file: string; at: number }[]): string[] {
+  return [...files].sort((a, b) => a.at - b.at || a.file.localeCompare(b.file)).map(({ file }) => file);
+}
+
+/** A page URL's path without its locale, as a route is given: `/ar/packages/p1` → `/packages/p1`, `/en` → `/`. */
+export function pathInLocale(url: string, locale: Locale): string {
+  return new URL(url).pathname.replace(new RegExp(`^/${locale}(?=/|$)`), "") || "/";
+}
+
 /**
- * The `shot(name)` of a --steps flow at one locale and width: the Shot for a step named `name`,
- * taken on `route`, saved as `<name>-<width>-<locale>.png`. `taken` is every file the run saves
- * (lower-cased: Windows file names ignore case), shared across the run, so two steps, or a step and
- * a route or Screen, never overwrite each other.
+ * The `shot(name)` of a --steps flow at one locale and width: the Shot named `name`, taken on
+ * `route`, saved as `<name>-<width>-<locale>.png`. `taken` is every file the run saves
+ * (lower-cased: Windows file names ignore case), shared across the run, so two flow shots, or one
+ * and a route or Screen, never overwrite each other.
  */
-export function stepRecorder(at: { locale: Locale; width: number }, taken: Set<string>): (name: string, route: string) => Shot {
+export function flowShotRecorder(at: { locale: Locale; width: number }, taken: Set<string>): (name: string, route: string) => Shot {
   return (name, route) => {
-    if (!plainName.test(name)) throw new Error(`Step shot "${name}": a name is letters, digits, . _ - (it becomes the file name).`);
+    if (!plainName.test(name) || name.startsWith("."))
+      throw new Error(`Flow shot "${name}": a name is letters, digits, . _ - and does not start with a dot (it becomes the file name).`);
     const file = shotName(name, at.width, at.locale);
-    if (taken.has(file.toLowerCase())) throw new Error(`Step shot "${name}" (${at.locale}, ${at.width}) would be saved as ${file.toLowerCase()}, which this run already shot: name each shot once.`);
+    if (taken.has(file.toLowerCase())) throw new Error(`Flow shot "${name}" (${at.locale}, ${at.width}) would be saved as ${file.toLowerCase()}, which this run already shot: name each shot once.`);
     taken.add(file.toLowerCase());
     return { route, page: name, width: at.width, locale: at.locale, file };
   };
@@ -633,13 +658,15 @@ function loadPlaywright(): typeof import("playwright") {
 }
 
 /**
- * What a --steps module's default export gets, once per locale at each width: the signed-in page,
- * the setup's API and values, and three helpers. `goto(route)` opens a route without the locale as
- * the routes are opened; `shot(name)` waits for the requests since the last goto or shot and the
- * finite animations, then saves the full page as `<name>-<width>-<locale>.png`. The flow runs once
- * per locale and width, so one that changes data (Submits a Package) makes its own with `api`.
+ * What a --steps module's default export (a flow; not a workflow Step) gets, once per locale at
+ * each width: the signed-in page, already on the locale's home page; an API like the setup's,
+ * calling from that page (with `as()`); the setup's values; and three helpers. `goto(route)` opens
+ * a route without the locale as the routes are opened; `shot(name)` waits for the requests since
+ * the last goto or shot and the finite animations, then saves the full page as
+ * `<name>-<width>-<locale>.png`. The flow runs once per locale and width, so one that changes data
+ * (Submits a Package) makes its own with `api`.
  */
-export type StepContext = {
+export type FlowContext = {
   page: import("playwright").Page;
   api: SetupApi;
   locale: Locale;
@@ -659,46 +686,62 @@ async function openPage(page: import("playwright").Page, url: string, label: str
   await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
 }
 
-/** Runs a --steps module's flow on `page` at one locale and width, and returns the shots it named. */
-async function runSteps(
-  flow: (step: StepContext) => Promise<void>,
-  page: import("playwright").Page,
-  at: {
-    locale: Locale;
-    width: number;
-    webUrl: string;
-    email: string;
-    out: string;
-    values: Record<string, string>;
-    taken: Set<string>;
-    signInAs: (person: string) => Promise<SetupApi>;
-  },
-): Promise<Shot[]> {
-  const record = stepRecorder(at, at.taken);
+/**
+ * Saves the full page as `out/file`. With `settled` (a Screen's actions, a flow's step), first waits
+ * for its requests, warning as `name` if they never settled, and for the finite animations.
+ */
+async function capture(page: import("playwright").Page, out: string, shot: Shot, settled?: { settle(): Promise<boolean>; name: string }): Promise<void> {
+  if (settled) {
+    if (!(await settled.settle())) console.warn(unsettledWarning({ name: settled.name }, shot));
+    await page.evaluate(finishAnimations, ANIMATION_TIMEOUT);
+  }
+  await page.screenshot({ path: join(out, shot.file), fullPage: true });
+  console.log(join(out, shot.file));
+}
+
+/** What a flow run needs besides its page: where it runs, who is signed in, and the run's shared state. */
+type FlowRun = {
+  locale: Locale;
+  width: number;
+  webUrl: string;
+  email: string;
+  out: string;
+  values: Record<string, string>;
+  taken: Set<string>;
+  signInAs: (person: string) => Promise<SetupApi>;
+};
+
+/**
+ * Runs a --steps module's flow on `page` at one locale and width, and returns the shots it named.
+ * It starts on the locale's home page, so the flow's `api` can fetch and the previous run's page and
+ * language never carry over.
+ */
+async function runFlow(flow: (step: FlowContext) => Promise<void>, page: import("playwright").Page, run: FlowRun): Promise<Shot[]> {
+  const record = flowShotRecorder(run, run.taken);
   const shots: Shot[] = [];
+  const open = (route: string) => openPage(page, `${run.webUrl}/${run.locale}${route}`, `${run.locale}${route}`, run.email);
+  await open("");
   let requests = trackRequests(page);
   try {
     await flow({
       page,
-      api: setupApi(page, at.signInAs),
-      locale: at.locale,
-      width: at.width,
-      values: at.values,
-      inLocale: (name) => inLocale(name, at.locale),
+      api: setupApi(page, run.signInAs),
+      locale: run.locale,
+      width: run.width,
+      values: run.values,
+      inLocale: (name) => inLocale(name, run.locale),
       goto: async (route) => {
         requests.stop();
-        await openPage(page, `${at.webUrl}/${at.locale}${route}`, `${at.locale}${route}`, at.email);
+        await open(route);
         requests = trackRequests(page);
       },
       shot: async (name) => {
-        const path = new URL(page.url()).pathname.replace(new RegExp(`^/${at.locale}(?=/|$)`), "") || "/";
-        const shot = record(name, path);
-        if (!(await requests.settle())) console.warn(unsettledWarning({ name }, at));
-        await page.evaluate(finishAnimations, ANIMATION_TIMEOUT);
-        await page.screenshot({ path: join(at.out, shot.file), fullPage: true });
-        console.log(join(at.out, shot.file));
-        shots.push(shot);
+        const shot = record(name, pathInLocale(page.url(), run.locale));
+        const settling = requests;
+        // Requests the animations or the screenshot start belong to the next shot.
         requests = trackRequests(page);
+        await capture(page, run.out, shot, { settle: () => settling.settle(), name });
+        shots.push(shot);
       },
     });
   } finally {
@@ -714,8 +757,11 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
   try {
     let placeholders: Record<string, string> = {};
     let screens: Screen[] = [];
-    /** Pages signed in for the setup's and the steps' `as()`; closed with the browser. */
+    /** Pages signed in for the setup's and a flow's API and its `as()`; closed after the setup and after each flow run. */
     const apiContexts: import("playwright").BrowserContext[] = [];
+    const closeApiContexts = async () => {
+      for (const context of apiContexts.splice(0)) await context.close();
+    };
     /** A SetupApi from a page signed in with `state`; `as()` signs in someone else the same way. */
     const apiFor = async (state: Awaited<ReturnType<typeof signIn>>): Promise<SetupApi> => {
       const context = await browser.newContext({ storageState: state });
@@ -726,18 +772,22 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
     };
     const signInAs = async (person: string) => apiFor(await signIn(resolvePerson(person).email, webUrl));
     if (args.setup) {
-      const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as {
-        default?: (api: SetupApi) => Promise<Record<string, string> | void>;
-        screens?: unknown;
-      };
-      if (setup.screens !== undefined) screens = parseScreens(setup.screens, args.setup);
-      if (setup.default) placeholders = (await setup.default(await apiFor(storageState))) ?? {};
+      try {
+        const setup = (await import(pathToFileURL(resolve(process.cwd(), args.setup)).href)) as {
+          default?: (api: SetupApi) => Promise<Record<string, string> | void>;
+          screens?: unknown;
+        };
+        if (setup.screens !== undefined) screens = parseScreens(setup.screens, args.setup);
+        if (setup.default) placeholders = (await setup.default(await apiFor(storageState))) ?? {};
+      } finally {
+        await closeApiContexts();
+      }
     }
-    let flow: ((step: StepContext) => Promise<void>) | undefined;
+    let flow: ((step: FlowContext) => Promise<void>) | undefined;
     if (args.steps) {
       const module = (await import(pathToFileURL(resolve(process.cwd(), args.steps)).href)) as { default?: unknown };
       if (typeof module.default !== "function") throw new Error(`${args.steps} has no default export: a --steps module exports default async ({ page, goto, shot }) => { … }.`);
-      flow = module.default as (step: StepContext) => Promise<void>;
+      flow = module.default as (step: FlowContext) => Promise<void>;
     }
     if (args.routes.length === 0 && screens.length === 0 && !flow) throw new Error(`Give at least one route, or export screens from ${args.setup}.`);
     const shots = plannedShots([
@@ -754,23 +804,26 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {
         await openPage(page, `${webUrl}/${shot.locale}${shot.route}`, `${shot.locale}${shot.route}`, args.email);
-        if (shot.screen) {
-          const requests = trackRequests(page);
-          try {
-            await runActions(playwrightDriver(page), shot.screen, shot);
-            // What the last action opened finishes loading (a dialog reads its form) and animating in.
-            if (!(await requests.settle())) console.warn(unsettledWarning(shot.screen, shot));
-          } finally {
-            requests.stop();
-          }
-          await page.evaluate(finishAnimations, ANIMATION_TIMEOUT);
+        if (!shot.screen) {
+          await capture(page, args.out, shot);
+          continue;
         }
-        await page.screenshot({ path: join(args.out, shot.file), fullPage: true });
-        console.log(join(args.out, shot.file));
+        const requests = trackRequests(page);
+        try {
+          await runActions(playwrightDriver(page), shot.screen, shot);
+          // What the last action opened finishes loading (a dialog reads its form) and animating in.
+          await capture(page, args.out, shot, { settle: () => requests.settle(), name: shot.screen.name });
+        } finally {
+          requests.stop();
+        }
       }
       if (flow) {
         for (const locale of LOCALES) {
-          shots.push(...(await runSteps(flow, page, { locale, width, webUrl, email: args.email, out: args.out, values: placeholders, taken, signInAs })));
+          try {
+            shots.push(...(await runFlow(flow, page, { locale, width, webUrl, email: args.email, out: args.out, values: placeholders, taken, signInAs })));
+          } finally {
+            await closeApiContexts();
+          }
         }
       }
       await context.close();
@@ -821,11 +874,11 @@ async function main() {
   const args = parseArgs(process.argv.slice(2), { root, branch });
   if (args.publishDir) {
     if (!existsSync(args.publishDir)) throw new Error(`--publish-dir: there is no folder ${args.publishDir}.`);
-    const oldestFirst = readdirSync(args.publishDir)
-      .map((file) => ({ file, at: statSync(join(args.publishDir!, file)).mtimeMs }))
-      .sort((a, b) => a.at - b.at)
-      .map(({ file }) => file);
-    console.log(publish(args, shotsOnDisk(oldestFirst), branch));
+    const dir = args.publishDir;
+    const files = readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => ({ file: entry.name, at: statSync(join(dir, entry.name)).mtimeMs }));
+    console.log(publish(args, shotsOnDisk(oldestFirst(files)), branch));
     return;
   }
   const shots = await shoot(args, webUrlFromEnv());

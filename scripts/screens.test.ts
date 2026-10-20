@@ -8,9 +8,11 @@ import { screens as submitScreens } from "./screens-examples/packages-submit.ts"
 import {
   fillRoute,
   finishAnimations,
+  flowShotRecorder,
   inLocale,
+  oldestFirst,
+  pathInLocale,
   shotsOnDisk,
-  stepRecorder,
   loadPage,
   trackRequests,
   unsettledWarning,
@@ -85,6 +87,8 @@ describe("parseArgs", () => {
     const args = parseArgs(["--publish-dir", "shots/wizard"], at);
     expect(args).toMatchObject({ publishDir: resolve("shots/wizard"), out: resolve("shots/wizard"), folder: "RP-531", publish: true, routes: [] });
     expect(parseArgs(["--publish-dir", "shots", "--folder", "wizard"], at).folder).toBe("wizard");
+    // --publish says what --publish-dir already does.
+    expect(parseArgs(["--publish-dir", "shots", "--publish"], at).publish).toBe(true);
   });
 
   it("refuses --publish-dir with anything that shoots", () => {
@@ -431,7 +435,31 @@ describe("shotsOnDisk", () => {
   it("refuses a PNG not named <page>-<width>-<locale>.png, and a folder with none", () => {
     expect(() => shotsOnDisk(["wizard.png"])).toThrow(/wizard\.png is not named <page>-<width>-<locale>\.png/);
     expect(() => shotsOnDisk(["upload-1366-fr.png"])).toThrow(/upload-1366-fr\.png/);
+    expect(() => shotsOnDisk(["-1366-en.png"])).toThrow(/-1366-en\.png is not named/);
     expect(() => shotsOnDisk(["notes.txt"])).toThrow(/no PNGs/);
+  });
+
+  it("refuses two files for one cell, and two pages that differ only in case", () => {
+    expect(() => shotsOnDisk(["a-1366-en.png", "a-1366-en.PNG"])).toThrow(/a-1366-en\.png and a-1366-en\.PNG are the same page, width and locale/);
+    expect(() => shotsOnDisk(["Upload-1366-en.png", "upload-1366-ar.png"])).toThrow(/Pages "Upload" and "upload" differ only in case/);
+  });
+
+  it("keeps a page name that has dashes and digits of its own", () => {
+    expect(shotsOnDisk(["step-2-of-3-1920-ar.png"])[0]).toMatchObject({ page: "step-2-of-3", width: 1920, locale: "ar" });
+  });
+});
+
+describe("oldestFirst", () => {
+  it("orders files by when they were saved, then by name when two were saved at once (as a copy makes them)", () => {
+    expect(oldestFirst([{ file: "b.png", at: 2 }, { file: "z.png", at: 1 }, { file: "a.png", at: 2 }])).toEqual(["z.png", "a.png", "b.png"]);
+  });
+});
+
+describe("pathInLocale", () => {
+  it("is the page's path without its locale, as a route is given", () => {
+    expect(pathInLocale("http://lane12.localhost:3120/ar/packages/p1?tab=x", "ar")).toBe("/packages/p1");
+    expect(pathInLocale("http://x/en", "en")).toBe("/");
+    expect(pathInLocale("http://x/english/a", "en")).toBe("/english/a");
   });
 
   it("puts each page in one row, by its name alone", () => {
@@ -441,11 +469,11 @@ describe("shotsOnDisk", () => {
   });
 });
 
-describe("stepRecorder", () => {
-  it("names each step's shot <name>-<width>-<locale>.png, at the path it was taken on", () => {
-    const record = stepRecorder({ locale: "ar", width: 1920 }, new Set());
-    expect(record("choose-file", "/projects/p1/registers/import")).toEqual({
-      route: "/projects/p1/registers/import",
+describe("flowShotRecorder", () => {
+  it("names each flow shot <name>-<width>-<locale>.png, at the path it was taken on", () => {
+    const record = flowShotRecorder({ locale: "ar", width: 1920 }, new Set());
+    expect(record("choose-file", "/projects/p1/work-items/import")).toEqual({
+      route: "/projects/p1/work-items/import",
       page: "choose-file",
       width: 1920,
       locale: "ar",
@@ -453,17 +481,18 @@ describe("stepRecorder", () => {
     });
   });
 
-  it("refuses a name that is not plain, and a file already taken in the run, case aside", () => {
+  it("refuses a name that is not plain or starts with a dot, and a file already taken in the run, case aside", () => {
     const taken = new Set(["home-1366-en.png"]);
-    const record = stepRecorder({ locale: "en", width: 1366 }, taken);
-    expect(() => record("../x", "/a")).toThrow(/Step shot "\.\.\/x": a name is letters, digits, \. _ -/);
+    const record = flowShotRecorder({ locale: "en", width: 1366 }, taken);
+    expect(() => record("../x", "/a")).toThrow(/Flow shot "\.\.\/x": a name is letters, digits, \. _ -/);
+    expect(() => record(".x", "/a")).toThrow(/Flow shot "\.x"/);
     record("map-columns", "/a");
-    expect(() => record("Map-Columns", "/a")).toThrow(/Step shot "Map-Columns" \(en, 1366\) would be saved as map-columns-1366-en\.png, which this run already shot/);
+    expect(() => record("Map-Columns", "/a")).toThrow(/Flow shot "Map-Columns" \(en, 1366\) would be saved as map-columns-1366-en\.png, which this run already shot/);
     expect(() => record("home", "/a")).toThrow(/already shot/);
   });
 
-  it("puts a step's row by its name and path, like a screen's", () => {
-    const record = stepRecorder({ locale: "en", width: 1366 }, new Set());
+  it("puts a flow shot's row by its name and path, like a screen's", () => {
+    const record = flowShotRecorder({ locale: "en", width: 1366 }, new Set());
     expect(markdownTable([record("review", "/import/1")], (file) => file).split("\n")[2]).toBe("| review: `/import/1` | ![](review-1366-en.png) |  |");
   });
 });
