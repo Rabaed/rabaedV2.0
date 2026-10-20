@@ -1,6 +1,6 @@
 "use client";
 
-import { directionOf, type BilingualText, type Locale } from "@rabaed/domain";
+import { directionOf, formatDate, formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
 import {
   Badge,
   Button,
@@ -11,6 +11,7 @@ import {
   DirectionProvider,
   Field,
   Icon,
+  Input,
   Table,
   TableBody,
   TableCell,
@@ -22,7 +23,7 @@ import {
 import { Fragment, useEffect, useState } from "react";
 import { AdminHeader, SignedOutOrLoading, useAdminSession } from "./admin-header.tsx";
 import { ApiError, api } from "./api.ts";
-import { recordsWords, recordTime, type RecordsWords } from "./records-messages.ts";
+import { recordsWords, type RecordsWords } from "./records-messages.ts";
 
 // Rabaed Admin -> Records (RP-670, spec RP-632; ADR 0023): the Record Job Monitor. A Rabaed
 // Engineer gives a reason (first: every read is logged with it, V9), then reads the record jobs
@@ -82,17 +83,39 @@ export function RecordsApp() {
 const failure = (error: unknown, known: Record<string, string>, fallback: string) =>
   (error instanceof ApiError && typeof error.body.error === "string" ? known[error.body.error] : undefined) ?? fallback;
 
-/** A time as `yyyy-mm-dd hh:mm` (UTC), left to right. */
-function Time({ iso, none }: { iso: string | null; none: string }) {
+/** A date and time in Saudi time and Latin digits (the repo's `formatDate`), left to right; `none` for no time. */
+function Time({ iso, none, locale }: { iso: string | null; none: string; locale: Locale }) {
   return (
     <span dir="ltr" className="whitespace-nowrap">
-      {recordTime(iso, none)}
+      {iso ? formatDate(new Date(iso), locale, { dateStyle: "medium", timeStyle: "short" }) : none}
     </span>
   );
 }
 
+const UUID_FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The History toggle of a table row: opens or closes the row's `rowKey` in `historyOf`. */
+function HistoryButton({
+  w,
+  rowKey,
+  historyOf,
+  setHistoryOf,
+}: {
+  w: RecordsWords;
+  rowKey: string;
+  historyOf: string | null;
+  setHistoryOf: (key: string | null) => void;
+}) {
+  const open = historyOf === rowKey;
+  return (
+    <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setHistoryOf(open ? null : rowKey)}>
+      {open ? w.hideHistory : w.history}
+    </Button>
+  );
+}
+
 function DocumentNumber({ value, none }: { value: string | null; none: string }) {
-  return value ? <span dir="ltr">{value}</span> : <span className="text-muted">{none}</span>;
+  return value ? <span dir="ltr" className="whitespace-nowrap">{value}</span> : <span className="text-muted">{none}</span>;
 }
 
 function Records({ locale }: { locale: Locale }) {
@@ -107,7 +130,11 @@ function Records({ locale }: { locale: Locale }) {
   const [busy, setBusy] = useState(false);
   const [retrying, setRetrying] = useState<RecordJob | null>(null);
   const [reproducing, setReproducing] = useState<RecordAlert | null>(null);
+  /** The table row whose history is open: `job:<outbox id>` or `alert:<Work Item id>`. */
   const [historyOf, setHistoryOf] = useState<string | null>(null);
+  const [find, setFind] = useState("");
+  /** The Work Item whose history the Find field shows. */
+  const [foundFor, setFoundFor] = useState<string | null>(null);
   const why = reason.trim();
 
   async function load(with_: string = why) {
@@ -115,6 +142,7 @@ function Records({ locale }: { locale: Locale }) {
     setBusy(true);
     setError(null);
     setHistoryOf(null);
+    setFoundFor(null);
     try {
       const query = `?reason=${encodeURIComponent(with_)}`;
       const [j, a] = await Promise.all([
@@ -132,6 +160,8 @@ function Records({ locale }: { locale: Locale }) {
   }
 
   const changed = readWith !== null && readWith !== why;
+  const findText = find.trim();
+  const findInvalid = findText !== "" && !UUID_FORMAT.test(findText);
   const statusWord = (status: RecordAlert["status"]) => (status === "published" ? w.statusPublished : w.statusFailedChecks);
 
   return (
@@ -175,6 +205,20 @@ function Records({ locale }: { locale: Locale }) {
         </p>
       )}
 
+      {readWith !== null && (
+        <section aria-label={w.findLabel} className="flex max-w-[860px] flex-col gap-3">
+          <Field label={w.findLabel} help={w.findHelp} error={findInvalid ? w.findNotUuid : undefined}>
+            <Input dir="ltr" value={find} onChange={(e) => setFind(e.target.value)} placeholder={w.findPlaceholder} />
+          </Field>
+          <div>
+            <Button variant="secondary" size="sm" disabled={!UUID_FORMAT.test(findText)} onClick={() => setFoundFor(findText.toLowerCase())}>
+              {w.findShow}
+            </Button>
+          </div>
+          {foundFor && <History key={foundFor} locale={locale} workItemId={foundFor} reason={readWith} />}
+        </section>
+      )}
+
       {jobs && (
         <section aria-labelledby="record-jobs" className="flex flex-col gap-3">
           <h2 id="record-jobs" className="text-h4 font-bold">
@@ -202,23 +246,24 @@ function Records({ locale }: { locale: Locale }) {
               </TableHeader>
               <TableBody>
                 {jobs.map((job) => (
-                  <TableRow key={job.outboxId}>
+                  <Fragment key={job.outboxId}>
+                  <TableRow>
                     <TableCell>
                       <DocumentNumber value={job.documentNumber} none={w.noDocumentNumber} />
                     </TableCell>
                     <TableCell>{job.projectName[locale]}</TableCell>
-                    <TableCell>{job.kind === "record" ? w.kindRecord : w.kindReproduce}</TableCell>
+                    <TableCell className="whitespace-nowrap">{job.kind === "record" ? w.kindRecord : w.kindReproduce}</TableCell>
                     <TableCell>
                       <Badge tone={job.state === "dead" ? "danger" : "warning"}>{job.state === "dead" ? w.stateDead : w.stateFailing}</Badge>
                     </TableCell>
                     <TableCell>
-                      <span dir="ltr">{job.attempts}</span>
+                      <span dir="ltr">{formatNumber(job.attempts, locale)}</span>
                     </TableCell>
                     <TableCell>
-                      <Time iso={job.lastRanAt} none={w.noTime} />
+                      <Time iso={job.lastRanAt} none={w.noTime} locale={locale} />
                     </TableCell>
                     <TableCell>
-                      <Time iso={job.nextTryAt} none={w.noTime} />
+                      <Time iso={job.nextTryAt} none={w.noTime} locale={locale} />
                     </TableCell>
                     <TableCell>
                       <code dir="ltr" className="block max-w-[420px] font-mono text-[12.5px] [overflow-wrap:anywhere]">
@@ -226,13 +271,24 @@ function Records({ locale }: { locale: Locale }) {
                       </code>
                     </TableCell>
                     <TableCell>
-                      {job.state === "dead" && (
-                        <Button variant="secondary" size="sm" onClick={() => setRetrying(job)}>
-                          {w.retry}
-                        </Button>
-                      )}
+                      <span className="flex flex-wrap gap-2">
+                        {job.state === "dead" && (
+                          <Button variant="secondary" size="sm" onClick={() => setRetrying(job)}>
+                            {w.retry}
+                          </Button>
+                        )}
+                        <HistoryButton w={w} rowKey={`job:${job.outboxId}`} historyOf={historyOf} setHistoryOf={setHistoryOf} />
+                      </span>
                     </TableCell>
                   </TableRow>
+                  {historyOf === `job:${job.outboxId}` && readWith && (
+                    <TableRow>
+                      <TableCell colSpan={9}>
+                        <History locale={locale} workItemId={job.workItemId} reason={readWith} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -288,18 +344,11 @@ function Records({ locale }: { locale: Locale }) {
                           <Button variant="secondary" size="sm" onClick={() => setReproducing(alert)}>
                             {w.reproduce}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-expanded={historyOf === alert.workItemId}
-                            onClick={() => setHistoryOf(historyOf === alert.workItemId ? null : alert.workItemId)}
-                          >
-                            {historyOf === alert.workItemId ? w.hideHistory : w.history}
-                          </Button>
+                          <HistoryButton w={w} rowKey={`alert:${alert.workItemId}`} historyOf={historyOf} setHistoryOf={setHistoryOf} />
                         </span>
                       </TableCell>
                     </TableRow>
-                    {historyOf === alert.workItemId && readWith && (
+                    {historyOf === `alert:${alert.workItemId}` && readWith && (
                       <TableRow>
                         <TableCell colSpan={5}>
                           <History locale={locale} workItemId={alert.workItemId} reason={readWith} />
@@ -429,6 +478,8 @@ function History({ locale, workItemId, reason }: { locale: Locale; workItemId: s
   if (history === null) return <p className="text-muted">{w.historyLoading}</p>;
   if (history === "failed") return <p role="alert">{w.historyFailed}</p>;
 
+  if (history.requests.length === 0 && history.checks.length === 0) return <p className="py-2 text-muted">{w.noHistory}</p>;
+
   const outcome = (o: RecordHistory["requests"][number]["outcome"]) =>
     ({ replaced: w.outcomeReplaced, waiting: w.outcomeWaiting, job_failed: w.outcomeJobFailed, checks_failed: w.outcomeChecksFailed })[o];
   return (
@@ -451,7 +502,7 @@ function History({ locale, workItemId, reason }: { locale: Locale; workItemId: s
               {history.requests.map((request) => (
                 <TableRow key={request.requestedAt + request.reason}>
                   <TableCell>
-                    <Time iso={request.requestedAt} none={w.noTime} />
+                    <Time iso={request.requestedAt} none={w.noTime} locale={locale} />
                   </TableCell>
                   <TableCell>
                     <span dir="ltr">{request.engineerEmail}</span>
@@ -484,7 +535,7 @@ function History({ locale, workItemId, reason }: { locale: Locale; workItemId: s
             <TableHeader>
               <TableRow>
                 <TableHead>{w.colRun}</TableHead>
-                <TableHead>{w.colRequestedAt}</TableHead>
+                <TableHead>{w.colRanAt}</TableHead>
                 <TableHead>{w.colResult}</TableHead>
                 <TableHead>{w.colProblems}</TableHead>
               </TableRow>
@@ -494,7 +545,7 @@ function History({ locale, workItemId, reason }: { locale: Locale; workItemId: s
                 <TableRow key={check.ranAt + check.runKind}>
                   <TableCell>{check.runKind === "closure" ? w.runClosure : w.runReproduce}</TableCell>
                   <TableCell>
-                    <Time iso={check.ranAt} none={w.noTime} />
+                    <Time iso={check.ranAt} none={w.noTime} locale={locale} />
                   </TableCell>
                   <TableCell>
                     <Badge tone={check.passed ? "success" : "danger"}>{check.passed ? w.passed : w.failed}</Badge>

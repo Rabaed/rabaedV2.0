@@ -63,7 +63,14 @@ const en = {
   historyFailed: "Couldn't load the history. Try again.",
   historyRequests: "Re-produce requests",
   noRequests: "No Re-produce was requested for this record.",
+  noHistory: "Nothing is recorded for this item: it has no record and no Re-produce, or Rabaed does not know it.",
+  findLabel: "Find a record's history",
+  findHelp: "The Work Item's UUID, for a record with no alert or job here, such as one whose Re-produce passed.",
+  findPlaceholder: "Work Item UUID",
+  findShow: "Show history",
+  findNotUuid: "That is not a UUID.",
   colRequestedAt: "Requested",
+  colRanAt: "Ran",
   colEngineer: "Engineer",
   colReason: "Reason",
   colOutcome: "Outcome",
@@ -152,7 +159,14 @@ const ar: RecordsWords = {
   historyFailed: "تعذّر تحميل السجل التاريخي. حاول مرة أخرى.",
   historyRequests: "طلبات إعادة الإنتاج",
   noRequests: "لم تُطلب إعادة إنتاج لهذا السجل.",
+  noHistory: "لا شيء مسجَّل لهذا العنصر: لا سجل له ولا إعادة إنتاج، أو أن المعرّف غير معروف لدى رباد.",
+  findLabel: "البحث عن السجل التاريخي لسجل",
+  findHelp: "معرّف عنصر العمل، لسجل لا تنبيه له ولا مهمة هنا، مثل سجل نجحت إعادة إنتاجه.",
+  findPlaceholder: "معرّف عنصر العمل",
+  findShow: "عرض السجل التاريخي",
+  findNotUuid: "هذا ليس معرّف عنصر عمل.",
   colRequestedAt: "وقت الطلب",
+  colRanAt: "وقت التشغيل",
   colEngineer: "المهندس",
   colReason: "السبب",
   colOutcome: "النتيجة",
@@ -180,8 +194,3 @@ const ar: RecordsWords = {
 };
 
 export const recordsWords = (locale: Locale): RecordsWords => (locale === "ar" ? ar : en);
-
-/** `yyyy-mm-dd hh:mm`, UTC, Latin digits: the time of an ISO 8601 string, or a dash for none. */
-export function recordTime(iso: string | null, none: string): string {
-  return iso ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : none;
-}

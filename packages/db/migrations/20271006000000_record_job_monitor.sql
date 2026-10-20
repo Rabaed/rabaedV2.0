@@ -63,6 +63,22 @@ create or replace function app.outbox_failed(p_outbox_id uuid, p_attempts intege
     end
   $$;
 
+-- The item a record job (an outbox row of `p_kind` with `p_payload`) is for: the payload key
+-- is `closed_work_item_id` for a 'documental_record' job and `work_item_id` for a
+-- 'documental_record_reproduce' job; null for any other kind. The one place that rule is written.
+create function app.record_job_item(p_kind text, p_payload jsonb) returns uuid
+  language plpgsql immutable
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      return case p_kind
+        when 'documental_record' then (p_payload ->> 'closed_work_item_id')::uuid
+        when 'documental_record_reproduce' then (p_payload ->> 'work_item_id')::uuid
+      end;
+    end
+  $$;
+revoke all on function app.record_job_item(text, jsonb) from public;
+
 -- The retry of a dead record job: the dead row, the fresh row that replaced it, and the
 -- Engineer's action (with its reason). Written once, never changed.
 create table record_job_retry (
@@ -100,7 +116,7 @@ create function app.record_jobs()
           o.last_error, o.attempts, coalesce(o.dead_at, o.last_failed_at),
           case when o.dead_at is null then o.available_at end
         from outbox o
-        join work_item w on w.id = coalesce((o.payload ->> 'closed_work_item_id')::uuid, (o.payload ->> 'work_item_id')::uuid)
+        join work_item w on w.id = app.record_job_item(o.kind, o.payload)
         join project pr on pr.id = w.project_id
         where o.kind in ('documental_record', 'documental_record_reproduce')
           and (
@@ -114,37 +130,61 @@ revoke all on function app.record_jobs() from public;
 grant execute on function app.record_jobs() to rabaed_admin;
 
 -- Retries dead record job `p_outbox_id` for the Engineer whose admin_action is
--- `p_admin_action_id` (written in the same transaction, by the caller). 'queued': a fresh row of
--- the same kind, Project and payload is waiting, attempts 0. 'already_queued': a job of that
--- kind for that item is waiting or running. 'not_found': not a dead record job, or already
--- retried. The dead row is locked, so two retries cannot both queue; it is never changed.
-create function app.retry_record_job(p_outbox_id uuid, p_admin_action_id uuid) returns text
+-- `p_admin_action_id` (written in the same transaction, by the caller). `result`: 'queued' (a
+-- fresh row of the same kind, Project and payload is waiting, attempts 0); 'already_queued' (a job
+-- of that kind for that item is waiting or running); 'not_found' (not a dead record job, already
+-- retried, or a Re-produce that was carried out after all, so nothing would be remade). `item_id`:
+-- the job's item, for the caller's admin_action target; null when the row is no dead record job.
+-- The dead row is never changed.
+--
+-- Locks, always in this order: the dead row, the item's work_item row, then (a Re-produce) the
+-- item's documental_record row, which is the one app.request_documental_record_reproduction
+-- locks. So two retries of one item, or a retry beside a Re-produce request, cannot both find no
+-- job waiting and both queue one. The pending test is app.record_job_pending's, by the one
+-- payload-key rule (app.record_job_item).
+create function app.retry_record_job(p_outbox_id uuid, p_admin_action_id uuid, out result text, out item_id uuid)
+  returns record
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
   as $$
+    #variable_conflict use_column
     declare
       v_dead outbox%rowtype;
-      v_key text;
-      v_item uuid;
       v_fresh uuid;
     begin
       select * into v_dead from outbox o
       where o.id = p_outbox_id and o.kind in ('documental_record', 'documental_record_reproduce') and o.dead_at is not null
       for update;
-      if v_dead.id is null or exists (select 1 from record_job_retry r where r.dead_outbox_id = v_dead.id) then
-        return 'not_found';
+      if v_dead.id is null then
+        result := 'not_found';
+        return;
       end if;
-      v_key := case v_dead.kind when 'documental_record' then 'closed_work_item_id' else 'work_item_id' end;
-      v_item := (v_dead.payload ->> v_key)::uuid;
-      if app.record_job_pending(v_dead.kind, v_key, v_item) then
-        return 'already_queued';
+      item_id := app.record_job_item(v_dead.kind, v_dead.payload);
+      perform 1 from work_item w where w.id = item_id for update;
+      if v_dead.kind = 'documental_record_reproduce' then
+        perform 1 from documental_record r where r.work_item_id = item_id for update;
+      end if;
+      if exists (select 1 from record_job_retry r where r.dead_outbox_id = v_dead.id)
+        or (v_dead.kind = 'documental_record_reproduce' and exists (
+          select 1 from documental_record_reproduction x where x.admin_action_id = (v_dead.payload ->> 'admin_action_id')::uuid
+        )) then
+        result := 'not_found';
+        return;
+      end if;
+      if exists (
+        select 1 from outbox o
+        where o.kind = v_dead.kind and app.record_job_item(o.kind, o.payload) = item_id
+          and o.processed_at is null and o.dead_at is null
+      ) then
+        result := 'already_queued';
+        return;
       end if;
       insert into outbox (kind, project_id, payload)
       values (v_dead.kind, v_dead.project_id, v_dead.payload)
       returning id into v_fresh;
       insert into record_job_retry (dead_outbox_id, outbox_id, admin_action_id)
       values (v_dead.id, v_fresh, p_admin_action_id);
-      return 'queued';
+      result := 'queued';
     end
   $$;
 revoke all on function app.retry_record_job(uuid, uuid) from public;
@@ -173,7 +213,7 @@ create or replace function app.documental_record_alerts()
         union all
         select w.id, w.project_id, pr.name, w.document_number, 'job_failed', jsonb_build_array(coalesce(o.last_error, 'failed')), o.dead_at
         from outbox o
-        join work_item w on w.id = coalesce((o.payload ->> 'closed_work_item_id')::uuid, (o.payload ->> 'work_item_id')::uuid)
+        join work_item w on w.id = app.record_job_item(o.kind, o.payload)
         join project pr on pr.id = w.project_id
         where o.kind in ('documental_record', 'documental_record_reproduce') and o.dead_at is not null
           and not exists (select 1 from record_job_retry t where t.dead_outbox_id = o.id)

@@ -162,7 +162,7 @@ describe("the Record Job Monitor", () => {
     }
     await expect(admin.query("select * from app.record_jobs()")).resolves.toBeTruthy();
     // Nothing to retry for a row that isn't a dead record job.
-    expect((await admin.query<{ result: string }>("select app.retry_record_job($1, $1) as result", [id])).rows[0]!.result).toBe("not_found");
+    expect((await admin.query<{ result: string }>("select (app.retry_record_job($1, $1)).result", [id])).rows[0]!.result).toBe("not_found");
   });
 
   it("shows no Member a failed job's error text: the outbox has no read for the app role", async () => {

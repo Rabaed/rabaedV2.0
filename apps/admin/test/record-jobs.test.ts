@@ -13,7 +13,7 @@ import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller } from "../../api/test/support/harness.ts";
+import { createTestApi, expectHidden, type Caller } from "../../api/test/support/harness.ts";
 import { buildTower, detail, draft, memberOnProject, ok, take, type Tower } from "../../api/test/support/tower.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
@@ -52,6 +52,7 @@ let at: Tower;
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let k1Pm: Caller;
+let outsider: Caller;
 let engineer: { id: string; email: string; browser: Browser };
 
 beforeAll(async () => {
@@ -62,6 +63,8 @@ beforeAll(async () => {
   c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"])).caller;
   c1Pm = (await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"])).caller;
   k1Pm = (await memberOnProject(api, k1, k1ParticipantId, ["manager"])).caller;
+  // A Member of a Company that is not on the Project: it sees nothing of the item.
+  outsider = (await api.authorizedPerson()).caller;
   engineer = await admin.signedInEngineer();
 });
 
@@ -242,7 +245,7 @@ describe("a record job that fails", { timeout: SLOW_MS }, () => {
     expect((await engineer.browser.post(`/v1/record-jobs/${dead.id}/retry`, { reason: "  " })).statusCode).toBe(400);
   });
 
-  it("RP-670-1: no Member of the Project reads the error, failing or dead", async () => {
+  it("RP-670-1: no Member, of the Project or of another Company, reads the error, failing or dead", async () => {
     const hidden = "the secret renderer failure RP-670-1";
     const mine = await closed("Cable lugs, a job a Member watches");
     const [job] = await rowsOf(mine);
@@ -256,6 +259,12 @@ describe("a record job that fails", { timeout: SLOW_MS }, () => {
         (await ok(c1Pm.get(`/v1/work-items/${mine}/history`), 200)).body,
       ];
       for (const body of bodies) expect(body).not.toContain(hidden);
+      // Another Company's Member sees no item at all, and its bell and its record carry nothing.
+      await expectHidden(outsider.get(`/v1/work-items/${mine}`), "another Company reads the item");
+      await expectHidden(outsider.get(`/v1/work-items/${mine}/documental-record`), "another Company reads the record");
+      expect((await ok(outsider.get("/v1/notifications"), 200)).body).not.toContain(hidden);
+      // The Engineer's routes are not theirs: they are not an Engineer.
+      expect((await outsider.get(URL_JOBS())).statusCode).toBe(404);
     };
     // Failing: the record is "being prepared", the job still has attempts.
     expect((await detail(c1Pm, mine)).documentalRecord).toBe("preparing");
@@ -369,6 +378,26 @@ describe("a record's history", { timeout: SLOW_MS }, () => {
     expect((await history()).requests.map((r) => r.outcome)).toEqual(["replaced", "checks_failed", "waiting"]);
     await runOnly((await latestJob()).id, reproduces(true));
     expect((await history()).requests.map((r) => r.outcome)).toEqual(["replaced", "checks_failed", "replaced"]);
+  });
+
+  it("is not retried when its Re-produce was carried out after all: the plain 404, and nothing is queued", async () => {
+    // A dead Re-produce row for the first request, which was replaced (its reproduction exists).
+    const carriedOut = (await rowsOf(id, "documental_record_reproduce"))[0]!;
+    expect((await sql`select 1 from documental_record_reproduction where admin_action_id = ${carriedOut.payload.admin_action_id}::uuid`.execute(migrator)).rows).toHaveLength(1);
+    const { rows } = await sql<{ id: string }>`
+      insert into outbox (kind, project_id, payload, attempts, dead_at, last_error)
+      values ('documental_record_reproduce', ${at.projectId}::uuid, ${JSON.stringify(carriedOut.payload)}::jsonb, 1, now(), 'died after the swap')
+      returning id
+    `.execute(migrator);
+    const before = (await rowsOf(id, "documental_record_reproduce")).length;
+    const retry = await engineer.browser.post(`/v1/record-jobs/${rows[0]!.id}/retry`, { reason: "Retry a Re-produce already carried out" });
+    expect([retry.statusCode, retry.json()]).toEqual([404, { error: "not_found" }]);
+    expect(await rowsOf(id, "documental_record_reproduce")).toHaveLength(before);
+    // Its item is still the retry's target, so the refusal is logged against the record.
+    const logged = (await actionsOf("retry_record_job", id)).filter((a) => a.reason === "Retry a Re-produce already carried out");
+    expect(logged).toEqual([expect.objectContaining({ target_kind: "documental_record", after: { result: "not_found" } })]);
+    // Removed, so the dead row does not alert in the tests that follow.
+    await sql`delete from outbox where id = ${rows[0]!.id}::uuid`.execute(migrator);
   });
 
   it("is nothing for an item with no Re-produce, and nothing is invented for an unknown item", async () => {

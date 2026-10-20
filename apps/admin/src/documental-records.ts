@@ -108,26 +108,23 @@ export function listRecordJobs(adminDb: Db, engineerId: string, reason: string):
   });
 }
 
-export type RetryResult = "queued" | "already_queued" | "not_found";
+/** What a request for a record job answers: 'queued', 'already_queued' while one waits or runs, or 'not_found'. */
+export type RecordJobRequestResult = "queued" | "already_queued" | "not_found";
 
 /**
  * Retries the dead record job `outboxId`: a fresh job of the same kind and item (the dead one is
  * kept as it was). 'already_queued' while a job of that kind for the item waits or runs;
- * 'not_found' for a row that is not a dead record job, or was already retried. The admin_action
- * names the job's item (else the job) and keeps the reason.
+ * 'not_found' for a row that is not a dead record job, was already retried, or is a Re-produce
+ * that was carried out. The admin_action names the job's item (else the job) and keeps the reason.
  */
-export function retryRecordJob(adminDb: Db, engineerId: string, outboxId: string, reason: string): Promise<RetryResult> {
+export function retryRecordJob(adminDb: Db, engineerId: string, outboxId: string, reason: string): Promise<RecordJobRequestResult> {
   const actionId = randomUUID();
   return asEngineer(adminDb, { engineerId, action: "retry_record_job", reason, id: actionId }, async (trx) => {
-    const { rows: found } = await sql<{ work_item_id: string }>`
-      select coalesce(payload ->> 'closed_work_item_id', payload ->> 'work_item_id') as work_item_id
-      from outbox where id = ${outboxId}::uuid and kind in ('documental_record', 'documental_record_reproduce')
+    const { rows } = await sql<{ result: RecordJobRequestResult; item_id: string | null }>`
+      select * from app.retry_record_job(${outboxId}::uuid, ${actionId}::uuid)
     `.execute(trx);
-    const { rows } = await sql<{ result: RetryResult }>`
-      select app.retry_record_job(${outboxId}::uuid, ${actionId}::uuid) as result
-    `.execute(trx);
-    const result = rows[0]!.result;
-    const target = found[0] ? { kind: "documental_record", id: found[0].work_item_id } : { kind: "outbox", id: outboxId };
+    const { result, item_id: itemId } = rows[0]!;
+    const target = itemId ? { kind: "documental_record", id: itemId } : { kind: "outbox", id: outboxId };
     return { target, after: { result }, result };
   });
 }
@@ -184,7 +181,7 @@ export function readDocumentalRecordHistory(adminDb: Db, engineerId: string, wor
   });
 }
 
-export type ReproduceResult = "queued" | "already_queued" | "not_found";
+export type ReproduceResult = RecordJobRequestResult;
 
 /**
  * Asks the worker for the Re-produce of item `workItemId`'s record (published, or one whose
