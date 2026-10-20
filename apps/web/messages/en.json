@@ -2708,7 +2708,13 @@
     "board": {
       "board": "Packages",
       "toolbar": "Packages toolbar",
-      "noPackages": "No Packages"
+      "noPackages": "No Packages",
+      "searchPlaceholder": "Search PKG number or name",
+      "searchHelp": "Finds a Package by its PKG number or name, in English or Arabic.",
+      "trade": "Trade",
+      "company": "Owning Company",
+      "noMatchesTitle": "No Packages match",
+      "noMatchesBody": "Try another search, or clear the filters."
     },
     "create": {
       "trigger": "New Package",
