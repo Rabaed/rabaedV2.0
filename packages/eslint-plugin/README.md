@@ -45,3 +45,9 @@ Try the fixes in this order. Do not rename the code or the copy just to dodge th
    In JSX text use the `{/* … */}` form. For a block of lines use `/* eslint-disable rabaed/no-avoid-terms -- reason */` and re-enable after it (`apps/api/src/demo/seed.ts`). Always give the reason; every disable of this rule in the repo has one.
 
 A whole file the rule should skip (it quotes the terms by design, or speaks another system's vocabulary) is added to `ignores` in `eslint.config.js`, with a comment. That is rare; prefer the narrower fixes.
+
+## Rabaed Admin runs the api's code as the app role (`rabaed/admin-api-as-app-role`)
+
+Rabaed Admin connects as `rabaed_admin`, which bypasses row-level security. In `apps/admin` (tests aside), a function imported from `@rabaed/api`, or by path from `apps/api/`, may only be called with an importer as its first argument: a call to one of the rule's `importers`, declared at the top of its `module` or imported from there (both options are in `eslint.config.js`), directly or through a `const` that is only ever passed on. Their steps run `set local role rabaed_app` (RP-960), so the api's reads stay held to row-level security as the Member acted as (RP-987). Type imports are free. A namespace import, a re-export or a dynamic import of the api is refused, since its calls could not be checked.
+
+A new kind of Admin step on the api's code gets its own importer in that module, which switches to the app role, and a seam test that its statements ran as `rabaed_app` (`packages/db/test-support/statement-roles.ts`, as in `apps/admin/test/register-import.test.ts`). Only then is it added to `importers`. The rule checks Admin's own files only: a workspace package that wrapped the api for Admin would not be checked.
