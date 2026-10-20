@@ -1,9 +1,10 @@
 // Removes the rabaed-* Docker Compose projects old worktrees left behind: those whose
 // worktree no longer exists, that are not running, or that only have volumes left.
 // With --merged, also those whose worktrees are all merged into origin/main (their branch, or a detached HEAD's commit, RP-601)
-// (as of the last fetch), unless a worktree that is not merged names the project in its .env. A worktree a
-// running Claude session works in is never merged here (RP-956), so its project stays; so does one whose
-// Claude desktop session is open (RP-612). Both are named.
+// (as of the last fetch), unless a worktree that is not merged names the project in its .env. A merged
+// project stays, named with the session, while a running Claude session works in one of its worktrees
+// (RP-956) or its Claude desktop session is open (RP-612), or when they cannot be checked; both are read
+// again just before each merged project is removed.
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
 //
@@ -14,8 +15,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { readDesktopSessions } from "./desktop-sessions.ts";
-import { chooseMerged, composeProjectOfEnv, LANE_SCHEME, laneProject, listContainers, listVolumes, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
+import { systemHolders } from "./claude-sessions.ts";
+import { chooseMerged, composeProjectOfEnv, heldSinceListed, LANE_SCHEME, laneProject, listContainers, listVolumes, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
 import { judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
@@ -38,6 +39,8 @@ const readEnv = (dir: string) => {
 const currentProject = composeProjectOfEnv(readEnv(".") ?? "");
 const volumes = listVolumes();
 const stale = staleProjects({ containers, volumes, cwd: process.cwd(), currentProject, exists: existsSync });
+/** The candidates chosen as merged (--merged): checked again for sessions just before each removal. */
+const mergedOnes = new Set<string>();
 
 if (withMerged) {
   const all = listWorktrees();
@@ -58,16 +61,12 @@ if (withMerged) {
       project: composeProjectOfEnv(readEnv(w.path) ?? ""),
     }));
   const known = new Set(stale.map((s) => s.project));
-  // RP-612: a holder whose Claude desktop session is open keeps its project; name the session.
-  const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd: process.cwd(), currentProject, openSession: readDesktopSessions() });
-  stale.push(...merged.filter((m) => !known.has(m.project)));
-  for (const line of kept) if (lane === undefined || line.startsWith(`Not pruned as merged: ${laneProject(lane)} `)) console.log(line);
-  // RP-956: judgeWorktree counts these as not finished, so --merged keeps their project; name the session.
-  for (const w of worktrees.slice(1)) {
-    if (w.project === undefined || (lane !== undefined && w.project !== laneProject(lane)) || stale.some((s) => s.project === w.project)) continue;
-    const held = live.heldBySession?.(w.path);
-    if (held !== undefined) console.log(`Not pruned as merged: ${w.project} of ${w.path}: ${held}.`);
-  }
+  // RP-956, RP-612: a holder a running or desktop Claude session holds keeps its project; name the session.
+  const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd: process.cwd(), currentProject, holders: live.holders });
+  const fresh = merged.filter((m) => !known.has(m.project));
+  stale.push(...fresh);
+  for (const m of fresh) mergedOnes.add(m.project);
+  for (const k of kept) if (!known.has(k.project) && (lane === undefined || k.project === laneProject(lane))) console.log(`Not pruned as merged: ${k.project} of ${k.path}: ${k.reason}.`);
 }
 
 const candidates = onlyLane(stale, lane);
@@ -93,6 +92,12 @@ await confirmOrExit("Remove them with their volumes? Their databases are lost, i
 
 let failed = 0;
 for (const s of candidates) {
+  // Read again just before: a session may have moved into or opened a merged project's worktree since the prompt.
+  const held = mergedOnes.has(s.project) ? heldSinceListed(s, containers, systemHolders()) : undefined;
+  if (held !== undefined) {
+    console.log(`Kept ${s.project}: ${held}.`);
+    continue;
+  }
   try {
     removeProject(s);
     console.log(`Removed ${s.project}.`);
