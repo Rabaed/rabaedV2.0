@@ -91,6 +91,12 @@ export default tseslint.config(
     },
   },
   {
+    // An async assertion such as `expectHidden` checks nothing unless awaited (RP-1001): five visibility 404s never ran.
+    files: ["apps/api/test/**/*.ts", "packages/db/test/**/*.ts", "packages/db/test-support/**/*.ts"],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    rules: { "@typescript-eslint/no-floating-promises": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },
