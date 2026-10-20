@@ -7,6 +7,7 @@
 // apps/api/test/register-import.test.ts).
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { registerImportMaxBytes } from "@rabaed/domain";
 import type {
   AdminRegisterImportParticipants,
   AdminRegisterImportProjects,
@@ -277,8 +278,8 @@ describe("An Engineer's import for C1", () => {
     });
 
     it("takes the original only for the Engineer's own new preview, once, and only on Rabaed Admin's role", async () => {
-      const handOver = (db: typeof adminDb, engineerId: string, importId: string) =>
-        sql<{ outcome: string }>`select app.hand_over_register_import_original_by_engineer(${engineerId}::uuid, ${importId}::uuid, ${Buffer.from("x")}) as outcome`
+      const handOver = (db: typeof adminDb, engineerId: string, importId: string, bytes = Buffer.from("x")) =>
+        sql<{ outcome: string }>`select app.hand_over_register_import_original_by_engineer(${engineerId}::uuid, ${importId}::uuid, ${bytes}) as outcome`
           .execute(db)
           .then((r) => r.rows[0]!.outcome);
       // Confirmed, and its original handed over already.
@@ -297,8 +298,15 @@ describe("An Engineer's import for C1", () => {
         const other = await admin.signedInEngineer();
         expect(await handOver(adminDb, other.id, fresh.id)).toBe("not_found");
         await expect(handOver(appDb, engineer.id, fresh.id)).rejects.toThrow(/permission denied/);
+        // No larger than the import reads: 10 MB (registerImportMaxBytes).
+        await expect(handOver(adminDb, engineer.id, fresh.id, Buffer.alloc(registerImportMaxBytes + 1, 1))).rejects.toThrow(/check constraint/);
         expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("handed_over");
         expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("not_found");
+        // A preview never confirmed is cleaned up (app.clean_previewed_register_imports deletes it): its hand-over goes with it.
+        const held = () => sql<{ n: number }>`select count(*)::int as n from register_import_original_hand_over where import_id = ${fresh.id}::uuid`.execute(migrator).then((r) => r.rows[0]!.n);
+        expect(await held()).toBe(1);
+        await sql`delete from submittal_register_import where id = ${fresh.id}::uuid`.execute(migrator);
+        expect(await held()).toBe(0);
       } finally {
         await Promise.all([migrator.destroy(), appDb.destroy()]);
       }

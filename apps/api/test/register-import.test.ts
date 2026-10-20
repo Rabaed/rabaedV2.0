@@ -1115,7 +1115,12 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
         await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
       }
       expect(await handedOver()).toBe(1);
-      // The first download stores it and empties the hand-over; the rest read it from the store.
+      // Two first downloads at once: one stores it and empties the hand-over (the other waits on
+      // its row, then reads the store), and both get the file.
+      const firsts = await Promise.all([defaultMember.caller, tower.c1Pm].map((by) => ok(by.get(`/v1/register-imports/${done.importId}/original`), 200)));
+      for (const res of firsts) expect(res.rawPayload.equals(Buffer.from(xlsx.content, "base64"))).toBe(true);
+      expect(await handedOver()).toBe(0);
+      // Then every Member of C1 reads it from the store.
       for (const by of [defaultMember.caller, tower.c1Pm, tower.c1Engineer]) {
         expect((await ok(getImport(by, done.importId), 200)).json().original).toBe(true);
         const res = await ok(by.get(`/v1/register-imports/${done.importId}/original`), 200);

@@ -315,13 +315,22 @@ export function registerImportOriginal(importer: RegisterImporter, importId: str
     const { rows } = await sql<{ key: string }>`select app.register_import_file_key(${r.project_id}::uuid, ${r.id}::uuid, ${r.source_file_id}::uuid) as key`.execute(trx);
     const key = rows[0]!.key;
     const contentType = registerContentType(r.file_name);
-    // Taken off the hand-over in this transaction: a store that fails leaves it there for the next download.
-    const { rows: handed } = await sql<{ bytes: Buffer | null }>`select app.take_register_import_original_hand_over(${r.id}::uuid) as bytes`.execute(trx);
-    const handedOver = handed[0]?.bytes;
-    if (handedOver) await files.put(key, handedOver, contentType);
-    const bytes = handedOver ?? (await files.read(key));
+    const bytes = (await storeHandedOverOriginal(trx, files, r.id, key, contentType)) ?? (await files.read(key));
     return bytes ? { fileName: r.file_name, contentType, bytes } : null;
   });
+}
+
+/**
+ * Stores a Rabaed Engineer's original register, handed over by Rabaed Admin (RP-959), under the
+ * import's key, and answers it; null when none waits. Taken off the hand-over in the reader's
+ * transaction: a store that fails leaves it there for the next download, and a second download at
+ * once waits for this one, then reads the store.
+ */
+async function storeHandedOverOriginal(trx: Trx, files: FileStore, importId: string, key: string, contentType: string): Promise<Uint8Array | null> {
+  const { rows } = await sql<{ bytes: Buffer | null }>`select app.take_register_import_original_hand_over(${importId}::uuid) as bytes`.execute(trx);
+  const bytes = rows[0]?.bytes ?? null;
+  if (bytes) await files.put(key, bytes, contentType);
+  return bytes;
 }
 
 type ImportRow = {
