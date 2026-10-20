@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
-import { REVIEWED_LABEL } from "./reviewed-label.ts";
+import { onlyMainMergedSince, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { isAncestor } from "./worktrees.ts";
@@ -24,6 +24,9 @@ import { isAncestor } from "./worktrees.ts";
 // The PR needs the `reviewed` label (a finished /code-review, RP-584), or the `docs-only` label when
 // every file it changes is a doc: the rule of the main ruleset's reviewed-required check (RP-606).
 // --no-review only names the docs-only label when it is missing; it no longer skips the rule.
+// A PR queued under `reviewed` also needs `pnpm verify passed on <sha>:` in its body, where <sha> is
+// its head or a commit only clean merges of main followed (the reviewed-label rule, RP-1017): PR #288's
+// labelled, green old head was queued after verify had found a visibility leak on it.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -31,7 +34,8 @@ export interface PullStatus {
   isInMergeQueue: boolean;
 }
 
-export interface QueueSeam {
+/** Also the reviewed-label rule's git (`parents`, `onMain`, `tree`, `mergedTree`), for the verify line's walk. */
+export interface QueueSeam extends ReviewedGit {
   /** `git fetch origin main`; false when it fails. */
   fetchMain(): boolean;
   /** Fetches `refs/pull/<pr>/head` (the PR's own head, whatever is checked out) and returns its commit. */
@@ -54,6 +58,8 @@ export interface QueueSeam {
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
   /** The PR's label names (`gh pr view <pr> --json labels`). */
   labels(pr: number): string[];
+  /** The PR's body (`gh pr view <pr> --json body`); "" when it has none. */
+  body(pr: number): string;
   /** True when `.github/workflows/reviewed-label.yml` exists on origin/main (`git cat-file -e`). */
   labelWorkflowOnMain(): boolean;
   /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
@@ -152,6 +158,23 @@ function labelRunState(pr: number, head: string, runs: { status: string; conclus
 /** Since RP-604 a PR's opening makes a run too; a PR opened before that and not pushed to since has none. */
 const NO_LABEL_RUN = " A PR opened before RP-604 and not pushed to since never gets one: merge origin/main in cleanly and push (the label stays).";
 
+/** The commits the body's `pnpm verify passed on <sha>:` lines name (scripts/verify-steps.ts `finalLine`); a dirty run has more before the colon and does not count. */
+export function verifiedCommits(body: string): string[] {
+  return [...body.matchAll(/pnpm verify passed on ([0-9a-f]{4,40}):/g)].map((match) => match[1] ?? "");
+}
+
+/** RP-1017: the refusal when no verify line names `head` or a commit only clean merges of main followed. */
+function verifyRefusal(pr: number, head: string, seam: QueueSeam): QueueResult | undefined {
+  const verified = verifiedCommits(seam.body(pr));
+  if (verified.some((commit) => onlyMainMergedSince(commit, head, seam))) return undefined;
+  return fail(
+    verified.length === 0
+      ? `PR #${pr}: its body has no \`pnpm verify passed on <sha>:\` line, so nothing shows \`pnpm verify\` passed on its head ${head}.`
+      : `PR #${pr}: its body's verify line names ${verified.join(", ")}, not the head ${head}, and more than clean merges of main came after it.`,
+    `Fix: run \`pnpm verify\` on ${head} (a clean checkout of it), put its last line in the PR body (\`gh pr edit ${pr} --body-file <file>\`), then run \`pnpm queue ${pr}\` again.`,
+  );
+}
+
 /** The refusals, in order; on success, what to enqueue. `waitForLabelRun` (--wait) lets a reviewed-label run still going through. */
 function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): Prepared {
   const prepared = refusals(pr, seam, options);
@@ -206,6 +229,10 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
     }
   } else {
     warnings.push("Warning: .github/workflows/reviewed-label.yml is not on origin/main yet, so the label could not be tied to the head; not checked.");
+  }
+  if (gate.via !== DOCS_ONLY_LABEL) {
+    const unverified = verifyRefusal(pr, head, seam);
+    if (unverified) return unverified;
   }
   const checkout = seam.head();
   // Only a checkout of the PR's own branch can be behind it; an old main is just another branch.
@@ -440,6 +467,7 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
   const graphql = (query: string, variables: Record<string, string>) =>
     JSON.parse(must("gh", ["api", "graphql", "-f", `query=${query}`, ...Object.entries(variables).flatMap(([name, value]) => ["-F", `${name}=${value}`])])) as { data: Record<string, unknown> & { node: Record<string, unknown> } };
   return {
+    ...realGit(cwd, spawn),
     fetchMain: () => run("git", ["fetch", "origin", "main"]).status === 0,
     fetchPull: (pr) => {
       must("git", ["fetch", "origin", `refs/pull/${pr}/head`]);
@@ -466,6 +494,7 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     },
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
     labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
+    body: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "body"])) as { body: string | null }).body ?? "",
     labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,
     labelRuns: (commit) => JSON.parse(must("gh", ["run", "list", "--workflow", "reviewed-label.yml", "--commit", commit, "--json", "status,conclusion"])) as { status: string; conclusion: string }[],
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,

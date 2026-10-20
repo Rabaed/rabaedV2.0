@@ -20,6 +20,12 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     packageJsonVersions: () => ({ before: undefined, after: undefined }),
     check: () => ({ status: 0, output: "ok\n" }),
     labels: () => ["reviewed"],
+    // Verified at whatever head the test gives the PR, unless a test says otherwise (RP-1017).
+    body: (pr) => `## Summary\n\npnpm verify passed on ${seam.pullRequest(pr).headRefOid}: lint, typecheck, unit.\n`,
+    parents: () => [],
+    onMain: () => false,
+    tree: () => "tree1",
+    mergedTree: () => "tree1",
     labelWorkflowOnMain: () => true,
     labelRuns: () => [{ status: "completed", conclusion: "success" }],
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
@@ -164,6 +170,74 @@ describe("queuePr", () => {
     expect(enqueued).toHaveLength(1);
   });
 
+  // RP-1017: PR #288's old head was labelled and green, but `pnpm verify` had found a visibility leak on it.
+  describe("verify line (RP-1017)", () => {
+    const verifiedOn = (sha: string) => () => `Closes RP-1\n\npnpm verify passed on ${sha}: lint, typecheck, unit.`;
+    const fix = "Fix: run `pnpm verify` on abc123";
+
+    it("refuses a PR whose body has no verify line, naming the head that needs a run", () => {
+      const { seam, enqueued } = fakeSeam({ body: () => "## Summary\n\nNo verify run yet." });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      const text = result.lines.join("\n");
+      expect(text).toContain("no `pnpm verify passed on <sha>:` line");
+      expect(text).toContain(fix);
+      expect(text).toContain("gh pr edit 149 --body-file");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("refuses a verify line that names a different head, naming both", () => {
+      const { seam, enqueued } = fakeSeam({ body: verifiedOn("5356b95") });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      const text = result.lines.join("\n");
+      expect(text).toContain("5356b95");
+      expect(text).toContain(fix);
+      expect(enqueued).toEqual([]);
+    });
+
+    it("refuses a dirty verify run on the head", () => {
+      const { seam } = fakeSeam({ body: () => "pnpm verify passed on abc123 (dirty: uncommitted changes): lint." });
+      expect(queuePr(149, seam).ok).toBe(false);
+    });
+
+    it("queues when the verified commit is followed only by clean merges of main", () => {
+      // abc123 merges main's m2 into n1, which merged main's m1 into the verified beef99.
+      const graph: Record<string, string[]> = { abc123: ["n1", "m2"], n1: ["beef99", "m1"] };
+      const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef99"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
+      expect(queuePr(149, seam).ok).toBe(true);
+      expect(enqueued).toEqual([["PR_node", "abc123"]]);
+    });
+
+    it("refuses when a commit after the verified one is not a clean merge of main", () => {
+      const graph: Record<string, string[]> = { abc123: ["n1", "m2"], n1: ["beef99"] };
+      const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef99"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain(fix);
+      expect(enqueued).toEqual([]);
+    });
+
+    it("queues when any of several verify lines names the head (a later run after fixes)", () => {
+      const { seam } = fakeSeam({ body: () => "pnpm verify passed on 5356b95: lint.\n\n`pnpm verify passed on abc123: lint, typecheck.`" });
+      expect(queuePr(149, seam).ok).toBe(true);
+    });
+
+    it("queues a docs-only PR without a verify line", () => {
+      const { seam, enqueued } = fakeSeam({ labels: () => ["docs-only"], changedFiles: () => ["docs/a.md"], body: () => "" });
+      expect(queuePr(149, seam, { noReview: true }).ok).toBe(true);
+      expect(enqueued).toHaveLength(1);
+    });
+
+    it("--wait refuses before waiting when the verify line is missing", async () => {
+      const { seam, enqueued } = fakeSeam({ body: () => "" });
+      const result = await queuePrWhenChecksPass(149, seam, { sleep: async () => {} });
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain(fix);
+      expect(enqueued).toEqual([]);
+    });
+  });
+
   describe("dependencies-only PR (RP-573)", () => {
     const admin = (fields: Record<string, unknown>) => JSON.stringify({ name: "admin", scripts: { dev: "vite" }, devDependencies: { a: "1.0.0" }, ...fields });
     const withAdmin = (after: string, files = ["pnpm-lock.yaml", "apps/admin/package.json"]) =>
@@ -219,8 +293,8 @@ describe("queuePr", () => {
     const checked: string[] = [];
     const { seam, enqueued } = fakeSeam({
       head: () => "unrelated9",
-      fetchPull: () => "prhead7",
-      pullRequest: () => ({ id: "PR_node", headRefOid: "prhead7", headRefName: "feature" }),
+      fetchPull: () => "fed777",
+      pullRequest: () => ({ id: "PR_node", headRefOid: "fed777", headRefName: "feature" }),
       mergeTree: (sha) => {
         checked.push(`merge-tree ${sha}`);
         return { status: 0, output: "", stderr: "" };
@@ -232,25 +306,25 @@ describe("queuePr", () => {
     });
     const result = queuePr(157, seam);
     expect(result.ok).toBe(true);
-    expect(checked).toEqual(["merge-tree prhead7", "drift prhead7", "immutable prhead7"]);
-    expect(enqueued).toEqual([["PR_node", "prhead7"]]);
+    expect(checked).toEqual(["merge-tree fed777", "drift fed777", "immutable fed777"]);
+    expect(enqueued).toEqual([["PR_node", "fed777"]]);
     expect(result.lines.join("\n")).not.toContain("behind");
   });
 
   it("warns, and still queues the PR's head, when HEAD is on the PR's branch but behind it", () => {
-    const { seam, enqueued } = fakeSeam({ head: () => "old1", fetchPull: () => "new2", pullRequest: () => ({ id: "PR_node", headRefOid: "new2", headRefName: "feature" }), isAncestor: () => true });
+    const { seam, enqueued } = fakeSeam({ head: () => "old1", fetchPull: () => "ace222", pullRequest: () => ({ id: "PR_node", headRefOid: "ace222", headRefName: "feature" }), isAncestor: () => true });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).toContain("behind");
-    expect(enqueued).toEqual([["PR_node", "new2"]]);
+    expect(enqueued).toEqual([["PR_node", "ace222"]]);
   });
 
   it("does not warn when an old main (another branch) is checked out and is an ancestor of the PR's head", () => {
-    const { seam, enqueued } = fakeSeam({ head: () => "oldmain", branch: () => "main", fetchPull: () => "new2", pullRequest: () => ({ id: "PR_node", headRefOid: "new2", headRefName: "feature" }), isAncestor: () => true });
+    const { seam, enqueued } = fakeSeam({ head: () => "oldmain", branch: () => "main", fetchPull: () => "ace222", pullRequest: () => ({ id: "PR_node", headRefOid: "ace222", headRefName: "feature" }), isAncestor: () => true });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).not.toContain("behind");
-    expect(enqueued).toEqual([["PR_node", "new2"]]);
+    expect(enqueued).toEqual([["PR_node", "ace222"]]);
   });
 
   it("refuses when the PR's head moved between the API answer and the fetch", () => {
@@ -714,6 +788,19 @@ describe("realSeam", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("reads the PR's body through gh pr view, empty when it has none", () => {
+    const { calls, seam } = recorded(() => ({ status: 0, stdout: '{"body":"pnpm verify passed on abc123: lint."}' }));
+    expect(seam.body(149)).toBe("pnpm verify passed on abc123: lint.");
+    expect([calls[0]?.command, ...(calls[0]?.args ?? [])]).toEqual(["gh", "pr", "view", "149", "--json", "body"]);
+    expect(recorded(() => ({ status: 0, stdout: '{"body":null}' })).seam.body(149)).toBe("");
+  });
+
+  it("reads parents through git rev-list, the reviewed-label rule's git", () => {
+    const { calls, seam } = recorded(() => ({ status: 0, stdout: "n1 v99 m1\n" }));
+    expect(seam.parents("n1")).toEqual(["v99", "m1"]);
+    expect(calls[0]?.args).toEqual(["rev-list", "--parents", "-n", "1", "n1"]);
   });
 
   it("reads the PR's label names through gh pr view", () => {

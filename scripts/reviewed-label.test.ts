@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { keepsLabel, dropLabelOnPush, realGit, type ReviewedGit } from "./reviewed-label.ts";
+import { keepsLabel, dropLabelOnPush, onlyMainMergedSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
 
 // A clean merge of main into the reviewed head: before = R, main commit = M, new head = N.
 function git(overrides: Partial<ReviewedGit> = {}): ReviewedGit {
@@ -57,6 +57,46 @@ describe("keepsLabel", () => {
         }),
       ),
     ).toBe(false);
+  });
+});
+
+// RP-1017: `pnpm queue` takes a verify run on an older head when only clean merges of main followed it.
+describe("onlyMainMergedSince", () => {
+  // V (verified) <- N1 (merges main M1) <- N2 (merges main M2); E is an ordinary commit on top of N1.
+  const graph: Record<string, string[]> = { N2: ["N1", "M2"], N1: ["V", "M1"], E: ["N1"], V: ["P"] };
+  const chain = (overrides: Partial<ReviewedGit> = {}) => git({ parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("M"), ...overrides });
+
+  it("accepts the verified commit itself", () => {
+    expect(onlyMainMergedSince("V", "V", chain())).toBe(true);
+  });
+
+  it("accepts a head reached from it by clean merges of main only, each one as keepsLabel decides", () => {
+    expect(onlyMainMergedSince("V", "N1", chain())).toBe(true);
+    expect(onlyMainMergedSince("V", "N2", chain())).toBe(true);
+  });
+
+  it("accepts an abbreviated verified sha (pnpm verify prints git's short form)", () => {
+    expect(onlyMainMergedSince("abc1234", "abc1234def5678", chain())).toBe(true);
+  });
+
+  it("refuses when any later commit is not a clean merge of main", () => {
+    expect(onlyMainMergedSince("V", "E", chain())).toBe(false);
+    expect(onlyMainMergedSince("V", "N2", chain({ tree: (commit) => (commit === "N1" ? "edited" : "tree1") }))).toBe(false);
+    expect(onlyMainMergedSince("V", "N2", chain({ onMain: (commit) => commit === "M2" }))).toBe(false);
+  });
+
+  it("refuses a commit the head does not descend from, and a newer head than the one verified", () => {
+    expect(onlyMainMergedSince("X", "N2", chain())).toBe(false);
+    expect(onlyMainMergedSince("N2", "V", chain())).toBe(false);
+  });
+
+  it("refuses when git cannot answer", () => {
+    const broken = chain({
+      parents: () => {
+        throw new Error("bad object");
+      },
+    });
+    expect(onlyMainMergedSince("V", "N1", broken)).toBe(false);
   });
 });
 
