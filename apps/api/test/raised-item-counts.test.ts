@@ -110,7 +110,7 @@ describe("the counts follow what the viewer sees (seam 2, scenarios RP-624-1 and
     const forC2 = await raised("Stair B: C2's side", at.electrical, buildingB);
     await raiseFrom(forC1, source);
     await raiseFrom(forC2, source);
-    expectHidden(await c2Engineer.get(`/v1/work-items/${forC1}`));
+    await expectHidden(await c2Engineer.get(`/v1/work-items/${forC1}`));
     // C2 sees the source and counts the one Snag it sees.
     expect(await snagLines(c2Engineer, source)).toEqual([{ open: 1, closed: 0 }]);
   });
@@ -122,7 +122,7 @@ describe("the counts follow what the viewer sees (seam 2, scenarios RP-624-1 and
     await raiseFrom(electrical, source);
     await raiseFrom(mechanical, source);
     expect(await snagLines(at.c1Pm, source)).toEqual([{ open: 2, closed: 0 }]);
-    expectHidden(await c1ElectricalOnly.get(`/v1/work-items/${mechanical}`));
+    await expectHidden(await c1ElectricalOnly.get(`/v1/work-items/${mechanical}`));
     expect(await snagLines(c1ElectricalOnly, source)).toEqual([{ open: 1, closed: 0 }]);
   });
 });
