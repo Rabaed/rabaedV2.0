@@ -18,7 +18,7 @@ import {
   laneEnv,
   laneHolders,
   lanePorts,
-  mergedProjects,
+  heldSinceListed,
   onlyLane,
   orphanDatabases,
   parseConnections,
@@ -40,6 +40,10 @@ import {
   type TakeoverWorktree,
   type WorktreeLane,
 } from "./lanes.ts";
+import type { Holders } from "./claude-sessions.ts";
+
+/** Holders that hold nothing: no running and no desktop session. */
+const none: Holders = { runningSession: () => undefined, desktopSession: () => undefined };
 
 // `docker ps -a --format` lines as lanes.ts asks for them: name, state, compose project, working dir, ports.
 const psLine = (name: string, state: string, project: string, dir: string, ports: string) => [name, state, project, dir, ports].join("\t");
@@ -254,7 +258,7 @@ describe("laneClashes between legacy lane m and lane m0", () => {
       container({ name: "rabaed-lane5-db-1", project: "rabaed-lane5", workingDir: "G:\\rabaed-wt\\other", ports: [5932] }),
     ];
     const worktrees: TakeoverWorktree[] = [{ path: old, branch: "RP-500-x", merged: true, dirty: false, exists: true, project: "rabaed-lane3" }];
-    const p = chooseTakeover(30, { containers, worktrees, cwd: here, platform: "win32" });
+    const p = chooseTakeover(30, { containers, worktrees, cwd: here, holders: none, platform: "win32" });
     expect(p.takeOver.map((c) => c.name)).toEqual(["rabaed-lane3-db-1"]);
     expect(p.refused).toEqual([]);
     expect(holdsLaneProject(30, containers, old, "win32")).toBe(true);
@@ -266,7 +270,7 @@ describe("laneClashes between legacy lane m and lane m0", () => {
     expect(clashesAfterRemoval(30, busy, running)).toEqual([]);
     // Not when an unmerged worktree has the twin's project in its .env.
     const sharer: TakeoverWorktree = { path: "G:\\rabaed-wt\\agent-2", branch: "worktree-agent-2", merged: false, dirty: false, exists: true, project: "rabaed-lane3" };
-    expect(chooseTakeover(30, { containers, worktrees: [...worktrees, sharer], cwd: here, platform: "win32" }).refused).toEqual([
+    expect(chooseTakeover(30, { containers, worktrees: [...worktrees, sharer], cwd: here, holders: none, platform: "win32" }).refused).toEqual([
       "G:\\rabaed-wt\\agent-2 is on worktree-agent-2, not merged into origin/main yet, and has rabaed-lane3 in its .env.",
     ]);
   });
@@ -474,7 +478,7 @@ describe("dropOrKeep", () => {
   });
 });
 
-describe("mergedProjects (lanes:prune --merged)", () => {
+describe("chooseMerged (lanes:prune --merged)", () => {
   const cwd = "G:\\rabaed-wt\\current";
   const wt = (path: string, branch: string, merged: boolean, project?: string): WorktreeLane => ({ path: path.replace(/\\/g, "/"), branch, merged, project });
   const worktrees = [
@@ -493,7 +497,7 @@ describe("mergedProjects (lanes:prune --merged)", () => {
   const volumes = [{ name: "rabaed-lane3_db-data", project: "rabaed-lane3" }];
 
   it("picks a project whose worktrees are all merged, and keeps one that an unmerged worktree's .env names", () => {
-    expect(mergedProjects({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", platform: "win32" })).toEqual([
+    expect(chooseMerged({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", holders: none, platform: "win32" }).merged).toEqual([
       {
         project: "rabaed-lane3",
         reason: "branch merged into origin/main (RP-362-views at G:/rabaed-wt/RP-362)",
@@ -505,35 +509,64 @@ describe("mergedProjects (lanes:prune --merged)", () => {
 
   it("never picks the current worktree's project, even when its branch is merged", () => {
     const merged = worktrees.map((w) => ({ ...w, merged: true }));
-    const picked = mergedProjects({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", platform: "win32" }).map((p) => p.project);
+    const picked = chooseMerged({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", holders: none, platform: "win32" }).merged.map((p) => p.project);
     expect(picked).toEqual(["rabaed-lane3", "rabaed-lane4", "rabaed-lane5"]);
   });
 
   it("keeps a merged project whose holder's Claude desktop session is open, and says why (RP-612)", () => {
     const held = "G:/rabaed-wt/RP-362";
-    const openSession = (path: string) => (path === held ? { kind: "open" as const, session: 'session "RP-628 snag detail"' } : undefined);
+    const holders: Holders = { ...none, desktopSession: (path) => (path === held ? { kind: "open", session: 'session "RP-628 snag detail"' } : undefined) };
     const merged = worktrees.map((w) => ({ ...w, merged: true }));
-    const { merged: picked, kept } = chooseMerged({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", openSession, platform: "win32" });
+    const { merged: picked, kept } = chooseMerged({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", holders, platform: "win32" });
     expect(picked.map((p) => p.project)).toEqual(["rabaed-lane4", "rabaed-lane5"]);
-    expect(kept).toEqual([`Not pruned as merged: rabaed-lane3 of ${held}: its Claude desktop session is open (session "RP-628 snag detail"); archive it first.`]);
-    expect(mergedProjects({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", openSession, platform: "win32" }).map((p) => p.project)).toEqual([
-      "rabaed-lane4",
-      "rabaed-lane5",
-    ]);
+    expect(kept).toEqual([{ project: "rabaed-lane3", path: held, reason: 'its Claude desktop session is open (session "RP-628 snag detail"); archive it first' }]);
   });
 
-  it("keeps every merged project when the desktop sessions cannot be checked (RP-612)", () => {
-    const unknown = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list could not be read" });
-    const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", openSession: unknown, platform: "win32" });
+  it("keeps a merged project a running Claude session works in, and names it before a desktop session (RP-956)", () => {
+    const held = "G:/rabaed-wt/RP-362";
+    const running = 'a running Claude session is in it: session "Main 3" (pid 35408)';
+    const holders: Holders = { runningSession: (path) => (path === held ? running : undefined), desktopSession: () => ({ kind: "open", session: 'session "x"' }) };
+    const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", holders, platform: "win32" });
     expect(merged).toEqual([]);
-    expect(kept).toEqual([
-      "Not pruned as merged: rabaed-lane3 of G:/rabaed-wt/RP-362: a Claude desktop session may hold it: Claude desktop's worktree list could not be read.",
+    expect(kept).toEqual([{ project: "rabaed-lane3", path: held, reason: running }]);
+  });
+
+  it("keeps every merged project when the sessions cannot be checked, and lists only projects that were merged (RP-612, RP-956)", () => {
+    const unknown: Holders = { ...none, desktopSession: () => ({ kind: "unknown", reason: "Claude desktop's worktree list could not be read" }) };
+    const unchecked: Holders = { ...none, runningSession: () => "running Claude sessions could not be checked: the process list could not be read" };
+    // rabaed-lane4 (not merged) and rabaed-lane5 (an unmerged worktree names it) are never listed as kept.
+    expect(chooseMerged({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", holders: unknown, platform: "win32" })).toEqual({
+      merged: [],
+      kept: [{ project: "rabaed-lane3", path: "G:/rabaed-wt/RP-362", reason: "a Claude desktop session may hold it: Claude desktop's worktree list could not be read" }],
+    });
+    expect(chooseMerged({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", holders: unchecked, platform: "win32" }).kept).toEqual([
+      { project: "rabaed-lane3", path: "G:/rabaed-wt/RP-362", reason: "running Claude sessions could not be checked: the process list could not be read" },
     ]);
   });
 
   it("keeps a project with a container from a folder that is not a worktree of this clone", () => {
     const other = [container({ name: "rabaed-lane6-db-1", project: "rabaed-lane6", workingDir: "D:\\other-clone\\wt" })];
-    expect(mergedProjects({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, platform: "win32" })).toEqual([]);
+    expect(chooseMerged({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, holders: none, platform: "win32" }).merged).toEqual([]);
+  });
+});
+
+describe("heldSinceListed (lanes:prune --merged, just before each removal)", () => {
+  const project = { project: "rabaed-lane3", reason: "branch merged into origin/main (x)", containers: ["rabaed-lane3-db-1"], volumes: [] };
+  const containers = [
+    container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\RP-362" }),
+    container({ name: "rabaed-lane4-db-1", project: "rabaed-lane4", workingDir: "G:\\rabaed-wt\\RP-363" }),
+  ];
+
+  it("names the session that now holds one of the project's worktrees, without saying to archive it", () => {
+    const holders: Holders = { ...none, desktopSession: (path) => (path === "G:\\rabaed-wt\\RP-362" ? { kind: "open", session: 'session "RP-9"' } : undefined) };
+    expect(heldSinceListed(project, containers, holders)).toBe('G:\\rabaed-wt\\RP-362: its Claude desktop session is open (session "RP-9")');
+    const running: Holders = { ...none, runningSession: (path) => (path === "G:\\rabaed-wt\\RP-362" ? "a running Claude session is in it: x" : undefined) };
+    expect(heldSinceListed(project, containers, running)).toBe("G:\\rabaed-wt\\RP-362: a running Claude session is in it: x");
+  });
+
+  it("lets the project go when nothing holds its worktrees, whatever holds another project's", () => {
+    const holders: Holders = { ...none, runningSession: (path) => (path === "G:\\rabaed-wt\\RP-363" ? "a running Claude session is in it: x" : undefined) };
+    expect(heldSinceListed(project, containers, holders)).toBeUndefined();
   });
 });
 
@@ -588,7 +621,7 @@ describe("holderAdvice (lane:env's line per holder)", () => {
     const claimant = wt("G:/rabaed-wt/agent-1", "worktree-agent-1", false, "rabaed-lane3");
     const worktrees = [holder, claimant];
     // The same keep rule as lanes:prune --merged: it would free nothing here.
-    expect(mergedProjects({ containers: [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: holder.path })], volumes: [], worktrees, cwd, currentProject: undefined, platform: "win32" })).toEqual([]);
+    expect(chooseMerged({ containers: [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: holder.path })], volumes: [], worktrees, cwd, currentProject: undefined, holders: none, platform: "win32" }).merged).toEqual([]);
     const [line] = holderAdvice(3, [holder.path], input(worktrees));
     expect(line).not.toContain("lanes:prune --merged");
     expect(line).toContain("G:/rabaed-wt/agent-1");
@@ -626,7 +659,7 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     container({ name: "rabaed-lane4-db-1", project: "rabaed-lane4", workingDir: "G:\\rabaed-wt\\other", ports: [5832] }),
   ];
   const wt = (w: Partial<TakeoverWorktree>): TakeoverWorktree => ({ path: old, branch: "RP-448-workflow-core", merged: true, dirty: false, exists: true, ...w });
-  const choice = (worktrees: TakeoverWorktree[], lane = 3) => chooseTakeover(lane, { containers, worktrees, cwd, platform: "win32" });
+  const choice = (worktrees: TakeoverWorktree[], lane = 3) => chooseTakeover(lane, { containers, worktrees, cwd, holders: none, platform: "win32" });
 
   it("takes the project over from a merged, clean worktree and says where it came from", () => {
     const p = choice([wt({})]);
@@ -648,25 +681,37 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
   });
 
   it("refuses, naming the session, a worktree a running Claude session is in, merged or not (RP-956)", () => {
-    const heldBySession = 'a running Claude session is in it: session "Main 4" (pid 35760)';
-    const p = choice([wt({ merged: false, heldBySession })]);
+    const running = 'a running Claude session is in it: session "Main 4" (pid 35760)';
+    const holders: Holders = { ...none, runningSession: (path) => (path === old ? running : undefined) };
+    const p = chooseTakeover(3, { containers, worktrees: [wt({ merged: false })], cwd, holders, platform: "win32" });
     expect(p.takeOver).toEqual([]);
-    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and ${heldBySession}.`]);
+    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and ${running}.`]);
+  });
+
+  it("refuses every holder when the running sessions cannot be checked (RP-956)", () => {
+    const why = "running Claude sessions could not be checked: the process list could not be read";
+    const p = chooseTakeover(3, { containers, worktrees: [wt({})], cwd, holders: { ...none, runningSession: () => why }, platform: "win32" });
+    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and ${why}.`]);
   });
 
   it("refuses a merged, clean worktree whose Claude desktop session is open, naming the session (RP-612)", () => {
-    const openSession = (path: string) => (path === old ? { kind: "open" as const, session: 'session "RP-628 snag detail"' } : undefined);
-    const p = chooseTakeover(3, { containers, worktrees: [wt({})], cwd, openSession, platform: "win32" });
+    const holders: Holders = { ...none, desktopSession: (path) => (path === old ? { kind: "open", session: 'session "RP-628 snag detail"' } : undefined) };
+    const p = chooseTakeover(3, { containers, worktrees: [wt({})], cwd, holders, platform: "win32" });
     expect(p.takeOver).toEqual([]);
     expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and its Claude desktop session is open (session "RP-628 snag detail"); archive it first.`]);
   });
 
   it("refuses when the desktop sessions cannot be checked, and takes over when no session holds the worktree (RP-612)", () => {
-    const unknown = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list could not be read" });
-    expect(chooseTakeover(3, { containers, worktrees: [wt({})], cwd, openSession: unknown, platform: "win32" }).refused).toEqual([
+    const unknown: Holders = { ...none, desktopSession: () => ({ kind: "unknown", reason: "Claude desktop's worktree list could not be read" }) };
+    expect(chooseTakeover(3, { containers, worktrees: [wt({})], cwd, holders: unknown, platform: "win32" }).refused).toEqual([
       `${old} is on RP-448-workflow-core and a Claude desktop session may hold it: Claude desktop's worktree list could not be read.`,
     ]);
-    expect(chooseTakeover(3, { containers, worktrees: [wt({})], cwd, openSession: () => undefined, platform: "win32" }).takeOver).toHaveLength(2);
+    expect(chooseTakeover(3, { containers, worktrees: [wt({})], cwd, holders: none, platform: "win32" }).takeOver).toHaveLength(2);
+  });
+
+  it("does not count a session in this worktree, which is never taken over from (RP-956)", () => {
+    const holders: Holders = { ...none, runningSession: (path) => (path === cwd ? "a running Claude session is in it: mine" : undefined) };
+    expect(chooseTakeover(3, { containers, worktrees: [wt({}), wt({ path: cwd })], cwd, holders, platform: "win32" }).takeOver).toHaveLength(2);
   });
 
   it("refuses a worktree that is not merged", () => {
@@ -687,21 +732,21 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     expect(unmerged.takeOver).toEqual([]);
     expect(unmerged.refused).toEqual([`${old} is on a detached HEAD, not merged into origin/main yet.`]);
     expect(choice([wt({ branch: undefined, dirty: true })]).refused).toEqual([`${old} is on a detached HEAD and has uncommitted changes.`]);
-    const locked = chooseTakeover(3, { containers, worktrees: [wt({ branch: undefined, locked: "claude agent x (pid 7)" })], cwd, pidRunning: (pid) => pid === 7, platform: "win32" });
+    const locked = chooseTakeover(3, { containers, worktrees: [wt({ branch: undefined, locked: "claude agent x (pid 7)" })], cwd, pidRunning: (pid) => pid === 7, holders: none, platform: "win32" });
     expect(locked.refused).toEqual([`${old} is locked by a session that is still running (pid 7).`]);
   });
 
   it("takes over from a worktree that is gone, and refuses a folder that is not a worktree of this clone", () => {
     expect(choice([wt({ exists: false })]).takeOver).toHaveLength(2);
     expect(choice([]).takeOver).toHaveLength(2);
-    const there = chooseTakeover(3, { containers, worktrees: [], cwd, platform: "win32", exists: () => true });
+    const there = chooseTakeover(3, { containers, worktrees: [], cwd, holders: none, platform: "win32", exists: () => true });
     expect(there.takeOver).toEqual([]);
     expect(there.refused).toEqual([`${old} is not a worktree of this clone.`]);
   });
 
   it("takes nothing when any holder is refused", () => {
     const mixed = [...containers, container({ name: "rabaed-lane3-web", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\busy" })];
-    const p = chooseTakeover(3, { containers: mixed, worktrees: [wt({}), wt({ path: "G:\\rabaed-wt\\busy", merged: false })], cwd, platform: "win32" });
+    const p = chooseTakeover(3, { containers: mixed, worktrees: [wt({}), wt({ path: "G:\\rabaed-wt\\busy", merged: false })], cwd, holders: none, platform: "win32" });
     expect(p.takeOver).toEqual([]);
     expect(p.refused).toHaveLength(1);
   });
@@ -711,7 +756,7 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     expect(lane4.takeOver).toEqual([]);
     expect(lane4.refused).toHaveLength(1);
     expect(choice([wt({})], 5).takeOver).toEqual([]);
-    expect(chooseTakeover(3, { containers, worktrees: [wt({ path: cwd })], cwd: old, platform: "win32" }).takeOver).toEqual([]);
+    expect(chooseTakeover(3, { containers, worktrees: [wt({ path: cwd })], cwd: old, holders: none, platform: "win32" }).takeOver).toEqual([]);
   });
 });
 
@@ -720,7 +765,7 @@ describe("chooseTakeover guards (RP-500 review)", () => {
   const old = "G:\\rabaed-wt\\RP-448";
   const containers = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: old, ports: [5732] })];
   const wt = (w: Partial<TakeoverWorktree>): TakeoverWorktree => ({ path: old, branch: "RP-448-x", merged: true, dirty: false, exists: true, ...w });
-  const choose = (worktrees: TakeoverWorktree[], pidRunning: (pid: number) => boolean = () => false) => chooseTakeover(3, { containers, worktrees, cwd, pidRunning, platform: "win32" });
+  const choose = (worktrees: TakeoverWorktree[], pidRunning: (pid: number) => boolean = () => false) => chooseTakeover(3, { containers, worktrees, cwd, pidRunning, holders: none, platform: "win32" });
 
   it("refuses a live holder: its worktree exists and its branch is not merged", () => {
     const p = choose([wt({ merged: false })]);

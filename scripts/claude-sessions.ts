@@ -2,8 +2,9 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { openSessionReason, readDesktopSessions, type DesktopSessions } from "./desktop-sessions.ts";
 import { normalPath } from "./paths.ts";
-import { ancestors, isClaude, parseProcessTable, sessionPidOf, type ProcessList } from "./session-lock.ts";
+import { parseProcessTable, type ProcessList } from "./session-lock.ts";
 
 // RP-956: worktrees:prune removed worktrees whose Claude session was still working in them.
 // A session that moved into a worktree with EnterWorktree (every Main and the Orchestrator)
@@ -11,6 +12,8 @@ import { ancestors, isClaude, parseProcessTable, sessionPidOf, type ProcessList 
 // it writes ~/.claude/sessions/<pid>.json for each running session, with the session's
 // working directory. A worktree is held while a running session's cwd is in it.
 // Only the *.json files are read, never the *.key files beside them.
+// The command's own session counts too: its file's cwd can be stale (it moved on with
+// EnterWorktree), and each command already leaves the worktree it runs from alone.
 
 /** What this reads of one ~/.claude/sessions/<pid>.json; the rest is never kept. */
 export type ClaudeSession = {
@@ -31,14 +34,14 @@ export type TimedProcessList = ProcessList & { startOf?: (pid: number) => string
 
 /**
  * The running sessions, or why they cannot be known. "unavailable" when the process list or
- * the sessions folder cannot be read, or a live session's file cannot.
+ * the sessions folder cannot be read, or a live pid's session file cannot.
  */
 export type SessionCheck = { kind: "ok"; sessions: ClaudeSession[] } | { kind: "unavailable"; reason: string };
 
 /** Two FILETIMEs (decimal strings) in the same microsecond: Win32_Process.CreationDate drops the last 100 ns digit. */
 const sameMicrosecond = (a: string, b: string): boolean => /^\d+$/.test(a) && /^\d+$/.test(b) && BigInt(a) / 10n === BigInt(b) / 10n;
 
-const text = (x: unknown): string | undefined => (typeof x === "string" && x !== "" ? x : undefined);
+const nonEmptyString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
 /** Reads one session file's text, keeping only pid, cwd, name, sessionId, hostSessionId and procStart. */
 export function parseSessionFile(fileName: string, content: string): SessionFile {
@@ -49,49 +52,44 @@ export function parseSessionFile(fileName: string, content: string): SessionFile
   } catch {
     return { pid, unreadable: `${fileName} is not JSON` };
   }
-  const j = (typeof json === "object" && json !== null ? json : {}) as Record<string, unknown>;
-  const cwd = text(j.cwd);
-  if (!Number.isInteger(j.pid) || cwd === undefined) return { pid, unreadable: `${fileName} has no pid or cwd` };
-  const session: ClaudeSession = { pid: j.pid as number, cwd };
+  const fields = (typeof json === "object" && json !== null ? json : {}) as Record<string, unknown>;
+  const cwd = nonEmptyString(fields.cwd);
+  if (!Number.isInteger(fields.pid) || cwd === undefined) return { pid, unreadable: `${fileName} has no pid or cwd` };
+  const session: ClaudeSession = { pid: fields.pid as number, cwd };
   for (const key of ["name", "sessionId", "hostSessionId", "procStart"] as const) {
-    const value = text(j[key]);
+    const value = nonEmptyString(fields[key]);
     if (value !== undefined) session[key] = value;
   }
   return { pid: session.pid, session };
 }
 
+/** The names a Claude Code session runs under: the desktop app's claude.exe, or node for the npm-installed CLI. */
+const isClaudeOrNode = (pid: number, processes: ProcessList): boolean => /^(claude|node)(\.exe)?$/i.test(processes.nameOf(pid) ?? "");
+
 /**
- * The sessions of the files that run now, other than this command's own: the pid is alive and a
- * `claude` process, started when the file says (when both sides know it: pids are reused), and is
- * neither sessionPid (CLAUDE_PID) nor an ancestor of ownPid or sessionPid. A file that cannot be
- * read while its pid is a live claude makes the check unavailable: that session may hold anything.
+ * The sessions of the files that run now: the pid is alive and either started when the file
+ * says (to the microsecond) or is named claude or node. A live pid with another name and
+ * another start time was reused by another program, and is dropped. A file that cannot be
+ * read while its pid is alive makes the check unavailable: that session may hold anything.
  */
-export function sessionCheck(files: SessionFile[], processes: TimedProcessList, ownPid: number, sessionPid?: number): SessionCheck {
-  const own = new Set([...ancestors(ownPid, processes), ...(sessionPid === undefined ? [] : ancestors(sessionPid, processes))]);
-  const running = (pid: number) => processes.isAlive(pid) && isClaude(pid, processes) && !own.has(pid);
+export function sessionCheck(files: SessionFile[], processes: TimedProcessList): SessionCheck {
   const sessions: ClaudeSession[] = [];
   for (const f of files) {
-    if (!running(f.pid)) continue;
+    if (!processes.isAlive(f.pid)) continue;
     if ("unreadable" in f) return { kind: "unavailable", reason: f.unreadable };
     const started = processes.startOf?.(f.pid);
-    if (f.session.procStart !== undefined && started !== undefined && !sameMicrosecond(started, f.session.procStart)) continue;
-    sessions.push(f.session);
+    const startMatches = f.session.procStart !== undefined && started !== undefined && sameMicrosecond(started, f.session.procStart);
+    if (startMatches || isClaudeOrNode(f.pid, processes)) sessions.push(f.session);
   }
   return { kind: "ok", sessions };
 }
 
-/** The folder names of the worktrees a Main or the Orchestrator works in (planning/parallel-sessions.md). */
-const isMainWorktree = (path: string): boolean => /^(main|orchestrator)-/i.test(path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "");
-
 /**
  * Why the worktree at path is held by a running Claude session, or undefined. When the
- * sessions cannot be checked, a main-* or orchestrator-* worktree is held (a Main's session
- * moves in with EnterWorktree and leaves no other trace); any other is left to the other checks.
+ * sessions cannot be checked, every worktree is held: a session may be in any of them.
  */
 export function heldReason(path: string, check: SessionCheck, platform: NodeJS.Platform = process.platform): string | undefined {
-  if (check.kind === "unavailable") {
-    return isMainWorktree(path) ? `a Main or the Orchestrator may be working in it, and the running sessions could not be checked (${check.reason})` : undefined;
-  }
+  if (check.kind === "unavailable") return `running Claude sessions could not be checked: ${check.reason}`;
   const holder = sessionHolding(path, check.sessions, platform);
   return holder === undefined ? undefined : `a running Claude session is in it: ${holder}`;
 }
@@ -103,10 +101,11 @@ export function describeSession(s: ClaudeSession): string {
 }
 
 /**
- * Whether path is folder or inside it, but not inside a worktree nested in it: the app makes
- * worktrees under <main>/.claude/worktrees/, and a session there works in that worktree, not the main checkout.
+ * Whether path is folder or inside it, ignoring what is inside a worktree nested in folder's
+ * .claude/worktrees/: the app makes worktrees there, and a session in one works in that
+ * worktree, not in the checkout around it.
  */
-const within = (path: string, folder: string, platform: NodeJS.Platform): boolean => {
+const insideIgnoringNestedWorktrees = (path: string, folder: string, platform: NodeJS.Platform): boolean => {
   const p = normalPath(path, platform);
   const f = normalPath(folder, platform);
   if (f === "" || (p !== f && !p.startsWith(`${f}/`))) return false;
@@ -114,12 +113,34 @@ const within = (path: string, folder: string, platform: NodeJS.Platform): boolea
 };
 
 /**
- * The running sessions (already filtered to live, foreign ones) whose working directory is
- * the worktree at path or inside it, described; undefined when none is.
+ * The running sessions whose working directory is the worktree at path or inside it,
+ * described; undefined when none is.
  */
 export function sessionHolding(path: string, sessions: ClaudeSession[], platform: NodeJS.Platform = process.platform): string | undefined {
-  const holders = sessions.filter((s) => within(s.cwd, path, platform));
+  const holders = sessions.filter((s) => insideIgnoringNestedWorktrees(s.cwd, path, platform));
   return holders.length === 0 ? undefined : holders.map(describeSession).join(", ");
+}
+
+/**
+ * What may hold a worktree a command would remove or take over: a running Claude session in
+ * its folder (heldReason), or an open Claude desktop session (desktop-sessions.ts, RP-608/RP-612).
+ */
+export type Holders = {
+  /** Why a running Claude session holds the folder (heldReason), or undefined. */
+  runningSession: (path: string) => string | undefined;
+  desktopSession: DesktopSessions;
+};
+
+/**
+ * The first reason a worktree is held, in the one order every command uses: a running
+ * session, then a desktop session; undefined when nothing holds it. sinceListed: the check
+ * just before removing it, so the desktop reason does not say to archive the session first.
+ */
+export function holdReason(path: string, holders: Holders, { sinceListed = false }: { sinceListed?: boolean } = {}): string | undefined {
+  const running = holders.runningSession(path);
+  if (running !== undefined) return running;
+  const desktop = holders.desktopSession(path);
+  return desktop === undefined ? undefined : openSessionReason(desktop, { sinceListed });
 }
 
 /** Where Claude Code writes a file per running session. */
@@ -163,23 +184,43 @@ export function readTimedProcessList(): TimedProcessList {
   return parseTimedProcessTable(execFileSync("powershell.exe", ["-NoProfile", "-Command", query], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
 }
 
+/** readTimedProcessList, or undefined when the processes cannot be read. */
+export function tryReadTimedProcessList(): TimedProcessList | undefined {
+  try {
+    return readTimedProcessList();
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * The real check: the session files against the process list (read by readProcesses, so a caller
- * that has one already passes it), excluding this command's own session (CLAUDE_PID and this
- * process's ancestors). "unavailable" when either cannot be read.
+ * The real check: the session files against the process list (read by readProcesses, undefined
+ * when it cannot be read, so a caller that has one already passes it). "unavailable" when either
+ * cannot be read.
  */
-export function systemSessionCheck(readProcesses: () => TimedProcessList = readTimedProcessList, dir: string = claudeSessionsDir()): SessionCheck {
+export function systemSessionCheck(readProcesses: () => TimedProcessList | undefined = tryReadTimedProcessList, dir: string = claudeSessionsDir()): SessionCheck {
   let files: SessionFile[];
   try {
     files = readSessionFiles(dir);
   } catch {
     return { kind: "unavailable", reason: `${dir} could not be read` };
   }
-  let processes: TimedProcessList;
-  try {
-    processes = readProcesses();
-  } catch {
-    return { kind: "unavailable", reason: "the process list could not be read" };
-  }
-  return sessionCheck(files, processes, process.pid, sessionPidOf(process.env));
+  const processes = readProcesses();
+  if (processes === undefined) return { kind: "unavailable", reason: "the process list could not be read" };
+  return sessionCheck(files, processes);
+}
+
+/**
+ * The real holders, read now: the running sessions (read once, on first need) and the desktop
+ * app's records. A fresh call reads them again, as the checks just before each removal do.
+ */
+export function systemHolders(readProcesses: () => TimedProcessList | undefined = tryReadTimedProcessList, platform: NodeJS.Platform = process.platform): Holders {
+  let check: SessionCheck | undefined;
+  return {
+    runningSession: (path) => {
+      check ??= systemSessionCheck(readProcesses);
+      return heldReason(path, check, platform);
+    },
+    desktopSession: readDesktopSessions(),
+  };
 }

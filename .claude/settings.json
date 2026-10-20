@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/main-folder-guard.ts\""
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/scripts/main-folder-guard.ts\" ] || { echo 'this worktree lost its files (scripts/main-folder-guard.ts is missing): stop and ask' >&2; exit 2; }; node \"$CLAUDE_PROJECT_DIR/scripts/main-folder-guard.ts\""
           }
         ]
       }

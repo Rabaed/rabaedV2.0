@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { heldReason } from "./claude-sessions.ts";
+import { heldReason, type Holders } from "./claude-sessions.ts";
 import { samePath } from "./paths.ts";
 import { choosePrune } from "./worktrees-pruning.ts";
 import {
@@ -45,6 +45,8 @@ const wt = (name: string, w: Partial<WorktreeFacts> = {}): WorktreeFacts => ({
 
 /** A Liveness that sees no running session or process. */
 const nobody: Liveness = { lockLive: () => false, heldByProcess: () => false };
+/** Holders that hold nothing: no running and no desktop session. */
+const none: Holders = { runningSession: () => undefined, desktopSession: () => undefined };
 
 describe("parseWorktrees", () => {
   it("reads path, head, branch and lock reason", () => {
@@ -80,7 +82,7 @@ describe("isAgentWorktree", () => {
 });
 
 describe("chooseWorktrees", () => {
-  const choose = (worktrees: WorktreeFacts[]) => chooseWorktrees({ worktrees, currentPath: here, platform: "linux" });
+  const choose = (worktrees: WorktreeFacts[]) => chooseWorktrees({ worktrees, currentPath: here, holders: none, platform: "linux" });
 
   it("removes merged and clean worktrees, with a branch or a detached HEAD", () => {
     const { remove, skipped } = choose([wt("agent-a"), wt("agent-b", { branch: undefined })]);
@@ -90,22 +92,31 @@ describe("chooseWorktrees", () => {
 
   it("skips a merged worktree a desktop session holds, found by its path whatever its branch (RP-608)", () => {
     const held = wt("agent-held", { branch: "RP-602-renamed" });
-    const openSession = (path: string) => (path === held.path ? { kind: "open" as const, session: 'session "RP-602"' } : undefined);
-    const { remove, skipped } = chooseWorktrees({ worktrees: [held, wt("agent-free")], currentPath: here, platform: "linux", openSession, only: ["agent-held", "agent-free"] });
+    const holders: Holders = { ...none, desktopSession: (path) => (path === held.path ? { kind: "open", session: 'session "RP-602"' } : undefined) };
+    const { remove, skipped } = chooseWorktrees({ worktrees: [held, wt("agent-free")], currentPath: here, platform: "linux", holders, only: ["agent-held", "agent-free"] });
     expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
     expect(skipped.map((s) => s.reason)).toEqual(['its Claude desktop session is open (session "RP-602"); archive it first']);
   });
 
   it("skips and names a merged worktree a running Claude session is in, even with --only (RP-956)", () => {
     const held = 'a running Claude session is in it: session "Main 9" (pid 9)';
-    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-held", { heldBySession: held }), wt("agent-free")], currentPath: here, platform: "linux", only: ["agent-held", "agent-free"] });
+    const holders: Holders = { ...none, runningSession: (path) => (path.endsWith("agent-held") ? held : undefined) };
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-held"), wt("agent-free")], currentPath: here, platform: "linux", holders, only: ["agent-held", "agent-free"] });
     expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
     expect(skipped.map((s) => s.reason)).toEqual([held]);
   });
 
+  it("skips every worktree, even with --only, when the running sessions cannot be checked (RP-956)", () => {
+    const why = "running Claude sessions could not be checked: the process list could not be read";
+    const holders: Holders = { ...none, runningSession: () => why };
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-a"), wt("agent-b")], currentPath: here, platform: "linux", holders, only: ["agent-a"] });
+    expect(remove).toEqual([]);
+    expect(skipped.map((s) => s.reason)).toEqual([why]);
+  });
+
   it("skips every worktree when the desktop app's records cannot be read (RP-608)", () => {
-    const openSession = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list (x.json) could not be read" });
-    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-a")], currentPath: here, platform: "linux", openSession });
+    const holders: Holders = { ...none, desktopSession: () => ({ kind: "unknown", reason: "Claude desktop's worktree list (x.json) could not be read" }) };
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-a")], currentPath: here, platform: "linux", holders });
     expect(remove).toEqual([]);
     expect(skipped.map((s) => s.reason)).toEqual(["a Claude desktop session may hold it: Claude desktop's worktree list (x.json) could not be read"]);
   });
@@ -144,7 +155,7 @@ describe("chooseWorktrees", () => {
   });
 
   it("compares the current path ignoring case and slashes on Windows", () => {
-    const { remove } = chooseWorktrees({ worktrees: [wt("agent-current")], currentPath: "g:\\rabaed contech\\.claude\\worktrees\\AGENT-CURRENT\\", platform: "win32" });
+    const { remove } = chooseWorktrees({ worktrees: [wt("agent-current")], currentPath: "g:\\rabaed contech\\.claude\\worktrees\\AGENT-CURRENT\\", holders: none, platform: "win32" });
     expect(remove).toEqual([]);
   });
 
@@ -166,7 +177,7 @@ describe("chooseWorktrees", () => {
   });
 
   it("removes a worktree with no commits yet when asked to (--include-empty)", () => {
-    const { remove } = chooseWorktrees({ worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, includeEmpty: true, platform: "linux" });
+    const { remove } = chooseWorktrees({ worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, includeEmpty: true, holders: none, platform: "linux" });
     expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-a`]);
   });
 
@@ -174,6 +185,7 @@ describe("chooseWorktrees", () => {
     const { remove } = chooseWorktrees({
       worktrees: [wt("agent-a", { noCommitsYet: true, dirty: true }), wt("agent-b", { noCommitsYet: true, ahead: 1 })],
       currentPath: here,
+      holders: none,
       includeEmpty: true,
       platform: "linux",
     });
@@ -184,6 +196,7 @@ describe("chooseWorktrees", () => {
     const { remove, skipped } = chooseWorktrees({
       worktrees: [wt("agent-a", { noCommitsYet: true }), wt("agent-b", { noCommitsYet: true }), wt("agent-c", { ahead: 2 })],
       currentPath: here,
+      holders: none,
       only: ["agent-a"],
       platform: "linux",
     });
@@ -192,7 +205,7 @@ describe("chooseWorktrees", () => {
   });
 
   it("with only, matches names case-insensitively on win32 and exactly elsewhere", () => {
-    const input = { worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, only: ["Agent-A"] };
+    const input = { worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, holders: none, only: ["Agent-A"] };
     expect(chooseWorktrees({ ...input, platform: "win32" }).remove).toHaveLength(1);
     expect(chooseWorktrees({ ...input, platform: "linux" }).remove).toEqual([]);
   });
@@ -201,6 +214,7 @@ describe("chooseWorktrees", () => {
     const { remove, skipped } = chooseWorktrees({
       worktrees: [wt("agent-a", { noCommitsYet: true, dirty: true }), wt("agent-b", { noCommitsYet: true, ahead: 1 })],
       currentPath: here,
+      holders: none,
       only: ["agent-a", "agent-b"],
       platform: "linux",
     });
@@ -238,10 +252,6 @@ describe("isFinished and stillStarting (RP-585)", () => {
 
   it("finishes an unlocked detached HEAD with no commits of its own once nothing holds it (RP-601)", () => {
     expect(isFinished(facts({ branch: undefined, locked: undefined, noCommitsYet: true }))).toBe(true);
-  });
-
-  it("is never finished while a running Claude session holds it, commits or not (RP-956)", () => {
-    expect(isFinished(facts({ heldBySession: 'a running Claude session is in it: session "Main 4" (pid 7)' }))).toBe(false);
   });
 });
 
@@ -423,18 +433,22 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
   });
 
-  it("never calls a merged worktree finished while a running Claude session is in it (RP-956)", () => {
-    run(["worktree", "add", "-b", "main-9-test", agent("main-9-test")]);
-    writeFileSync(join(agent("main-9-test"), "c.txt"), "c");
-    run(["add", "c.txt"], agent("main-9-test"));
-    run(["commit", "-m", "work"], agent("main-9-test"));
-    run(["merge", "--no-ff", "-m", "merge", "main-9-test"]);
+  it("keeps a merged worktree a running Claude session is in, in worktrees:clean and worktrees:prune (RP-956)", () => {
+    run(["worktree", "add", "-b", "agent-main9", agent("agent-main9")]);
+    writeFileSync(join(agent("agent-main9"), "c.txt"), "c");
+    run(["add", "c.txt"], agent("agent-main9"));
+    run(["commit", "-m", "work"], agent("agent-main9"));
+    run(["merge", "--no-ff", "-m", "merge", "agent-main9"]);
     // The session's cwd is the worktree (EnterWorktree): a fixture session check, as the process list would give it.
-    const check = { kind: "ok" as const, sessions: [{ pid: 4242, cwd: join(agent("main-9-test"), "apps"), name: "Main 9" }] };
-    const held: Liveness = { ...nobody, heldBySession: (path) => heldReason(path, check) };
-    expect(gatherFacts([listed("main-9-test")], "main", root, held)[0]!.heldBySession).toBe('a running Claude session is in it: session "Main 9" (pid 4242)');
-    expect(judgeWorktree(listed("main-9-test"), "main", root, held).finished).toBe(false);
-    expect(judgeWorktree(listed("main-9-test"), "main", root, nobody).finished).toBe(true);
+    const check = { kind: "ok" as const, sessions: [{ pid: 4242, cwd: join(agent("agent-main9"), "apps"), name: "Main 9" }] };
+    const holders: Holders = { ...none, runningSession: (path) => heldReason(path, check) };
+    const facts = gatherFacts([listed("agent-main9")], "main", root, nobody);
+    const why = 'a running Claude session is in it: session "Main 9" (pid 4242)';
+    // Merged by git alone: the hold is each command's, by holdReason.
+    expect(judgeWorktree(listed("agent-main9"), "main", root, nobody).finished).toBe(true);
+    expect(chooseWorktrees({ worktrees: facts, currentPath: root, holders }).skipped.map((s) => s.reason)).toEqual([why]);
+    const pruneFacts = facts.map((f) => ({ ...f, upstreamGone: false, unpushed: 0, project: undefined }));
+    expect(choosePrune({ worktrees: pruneFacts, branches: [], mainRoot: root, currentPath: root, docker: undefined, exists: existsSync, holders }).skipped.map((s) => s.reason)).toEqual([why]);
   });
 
   // RP-585: lane:env called RP-555-review-fixes (made on the merged integration tip, never committed to) not merged,
@@ -447,8 +461,8 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
       const pruneFacts = facts.map((f) => ({ ...f, upstreamGone: false, unpushed: 0, project: undefined }));
       return {
         "lane:env, lanes:prune": judgeWorktree(w, "main", root, live).finished,
-        "worktrees:clean": chooseWorktrees({ worktrees: facts, currentPath: root }).remove.length === 1,
-        "worktrees:prune": choosePrune({ worktrees: pruneFacts, branches: [], mainRoot: root, currentPath: root, docker: undefined, exists: existsSync }).remove.length === 1,
+        "worktrees:clean": chooseWorktrees({ worktrees: facts, currentPath: root, holders: none }).remove.length === 1,
+        "worktrees:prune": choosePrune({ worktrees: pruneFacts, branches: [], mainRoot: root, currentPath: root, docker: undefined, exists: existsSync, holders: none }).remove.length === 1,
       };
     };
     const all = (finished: boolean) => ({ "lane:env, lanes:prune": finished, "worktrees:clean": finished, "worktrees:prune": finished });

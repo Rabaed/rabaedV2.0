@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Holders } from "./claude-sessions.ts";
 import type { Container, Volume } from "./lanes.ts";
 import { changedSinceListed, choosePrune, type PruneWorktree } from "./worktrees-pruning.ts";
 import type { LocalBranch } from "./worktrees.ts";
@@ -25,10 +26,11 @@ const mainCheckout = wt(main, { branch: "main", project: "rabaed" });
 const current = wt(here, { branch: "RP-1-current", ahead: 2, project: "rabaed-lane2" });
 const container = (name: string, project: string, workingDir: string, state = "running"): Container => ({ name, state, project, workingDir, ports: [] });
 const merged = (branch: string, b: Partial<LocalBranch> = {}): LocalBranch => ({ branch, inTarget: true, ownCommit: true, upstreamGone: false, ...b });
-const volume =(project: string): Volume => ({ name: `${project}_db`, project });
+const none: Holders = { runningSession: () => undefined, desktopSession: () => undefined };
+const volume = (project: string): Volume => ({ name: `${project}_db`, project });
 
 const choose = (worktrees: PruneWorktree[], more: Partial<Parameters<typeof choosePrune>[0]> = {}) =>
-  choosePrune({ worktrees: [mainCheckout, current, ...worktrees], branches: [], mainRoot: main, currentPath: here, docker: undefined, exists: () => true, platform: "linux", ...more });
+  choosePrune({ worktrees: [mainCheckout, current, ...worktrees], branches: [], mainRoot: main, currentPath: here, docker: undefined, exists: () => true, holders: none, platform: "linux", ...more });
 const reasons = (p: ReturnType<typeof choosePrune>) => p.skipped.map((s) => [s.worktree.path, s.reason]);
 
 describe("choosePrune", () => {
@@ -54,6 +56,7 @@ describe("choosePrune", () => {
       currentPath: here,
       docker: undefined,
       exists: () => true,
+      holders: none,
       platform: "linux",
     });
     expect(p.remove).toEqual([]);
@@ -71,6 +74,7 @@ describe("choosePrune", () => {
       currentPath: here,
       docker: undefined,
       exists: () => true,
+      holders: none,
       platform: "win32",
     });
     expect(p.remove).toEqual([]);
@@ -96,9 +100,26 @@ describe("choosePrune", () => {
 
   it("skips and names a merged worktree a running Claude session is in, before any other reason (RP-956)", () => {
     const held = 'a running Claude session is in it: session "Main 4" (pid 35760)';
-    const p = choose([wt(`${main}/.claude/worktrees/main-4-inspections`, { heldBySession: held, dirty: true }), wt("/w/done")]);
+    const path = `${main}/.claude/worktrees/main-4-inspections`;
+    const holders: Holders = { ...none, runningSession: (p) => (p === path ? held : undefined) };
+    const p = choose([wt(path, { dirty: true }), wt("/w/done")], { holders });
     expect(p.remove.map((w) => w.path)).toEqual(["/w/done"]);
-    expect(reasons(p)[2]).toEqual([`${main}/.claude/worktrees/main-4-inspections`, held]);
+    expect(reasons(p)[2]).toEqual([path, held]);
+  });
+
+  it("skips every worktree when the running sessions cannot be checked, naming why (RP-956)", () => {
+    const why = "running Claude sessions could not be checked: the process list could not be read";
+    const p = choose([wt(`${main}/.claude/worktrees/agent-a`), wt("/w/done")], { holders: { ...none, runningSession: () => why } });
+    expect(p.remove).toEqual([]);
+    expect(reasons(p).slice(2)).toEqual([
+      [`${main}/.claude/worktrees/agent-a`, why],
+      ["/w/done", why],
+    ]);
+  });
+
+  it("names a running session before an open desktop session when both hold a worktree", () => {
+    const holders: Holders = { runningSession: () => "a running Claude session is in it: x", desktopSession: () => ({ kind: "open", session: 'session "RP-9"' }) };
+    expect(reasons(choose([wt("/w/done")], { holders }))[2]?.[1]).toBe("a running Claude session is in it: x");
   });
 
   it("removes a worktree never committed to once the session its lock names has stopped and nothing holds it (RP-585)", () => {
@@ -144,15 +165,15 @@ describe("choosePrune", () => {
   it("skips a merged desktop-app worktree whose session is open after its branch was renamed (RP-608)", () => {
     // The app does not lock its own worktrees: the open session is known by the worktree's path only.
     const renamed = wt(`${main}/.claude/worktrees/quiet-heron-0a1b2c`, { branch: "RP-602-lane-numbers", upstreamGone: true });
-    const openSession = (path: string) => (path === renamed.path ? { kind: "open" as const, session: 'session "Build RP-602"' } : undefined);
-    const p = choose([renamed], { openSession });
+    const holders: Holders = { ...none, desktopSession: (path) => (path === renamed.path ? { kind: "open", session: 'session "Build RP-602"' } : undefined) };
+    const p = choose([renamed], { holders });
     expect(p.remove).toEqual([]);
     expect(reasons(p)[2]).toEqual([renamed.path, 'its Claude desktop session is open (session "Build RP-602"); archive it first']);
   });
 
   it("skips every worktree when the desktop app's records cannot be read (RP-608)", () => {
-    const openSession = () => ({ kind: "unknown" as const, reason: "Claude desktop's worktree list (x.json) could not be read" });
-    const p = choose([wt("/w/done")], { openSession });
+    const holders: Holders = { ...none, desktopSession: () => ({ kind: "unknown", reason: "Claude desktop's worktree list (x.json) could not be read" }) };
+    const p = choose([wt("/w/done")], { holders });
     expect(p.remove).toEqual([]);
     expect(reasons(p)[2]).toEqual(["/w/done", "a Claude desktop session may hold it: Claude desktop's worktree list (x.json) could not be read"]);
   });
@@ -213,17 +234,22 @@ describe("choosePrune", () => {
 
 describe("changedSinceListed", () => {
   it("lets a worktree go that is still clean and pushed", () => {
-    expect(changedSinceListed(wt("/w/done"))).toBeUndefined();
+    expect(changedSinceListed(wt("/w/done"), none)).toBeUndefined();
   });
 
   it("keeps one that got uncommitted changes or unpushed commits after it was listed, or is gone from git", () => {
-    expect(changedSinceListed(wt("/w/done", { dirty: true }))).toBe("uncommitted changes since it was listed");
-    expect(changedSinceListed(wt("/w/done", { unpushed: 1 }))).toBe("1 commit on no origin branch since it was listed");
-    expect(changedSinceListed(undefined)).toBe("no longer a worktree");
-    expect(changedSinceListed(wt("/w/done", { heldBySession: 'a running Claude session is in it: session "Main 9" (pid 9)' }))).toBe(
-      'a running Claude session is in it: session "Main 9" (pid 9)',
+    expect(changedSinceListed(wt("/w/done", { dirty: true }), none)).toBe("uncommitted changes since it was listed");
+    expect(changedSinceListed(wt("/w/done", { unpushed: 1 }), none)).toBe("1 commit on no origin branch since it was listed");
+    expect(changedSinceListed(undefined, none)).toBe("no longer a worktree");
+  });
+
+  it("keeps one a running or desktop session holds now, the running one named first", () => {
+    const running = 'a running Claude session is in it: session "Main 9" (pid 9)';
+    const open = () => ({ kind: "open" as const, session: 'session "RP-9"' });
+    expect(changedSinceListed(wt("/w/done"), { runningSession: () => running, desktopSession: open })).toBe(running);
+    expect(changedSinceListed(wt("/w/done"), { ...none, desktopSession: open })).toBe('its Claude desktop session is open (session "RP-9")');
+    expect(changedSinceListed(wt("/w/done"), { ...none, desktopSession: () => ({ kind: "unknown", reason: "list unreadable" }) })).toBe(
+      "a Claude desktop session may hold it: list unreadable",
     );
-    expect(changedSinceListed(wt("/w/done"), () => ({ kind: "open", session: 'session "RP-9"' }))).toBe('its Claude desktop session is open (session "RP-9")');
-    expect(changedSinceListed(wt("/w/done"), () => ({ kind: "unknown", reason: "list unreadable" }))).toBe("a Claude desktop session may hold it: list unreadable");
   });
 });

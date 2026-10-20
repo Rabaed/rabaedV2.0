@@ -6,7 +6,9 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 // Main session opens on the main folder, and on 2026-10-16 one left an uncommitted
 // GLOSSARY.md change there that no branch held (RP-613). `.claude/` (local settings, the
 // app's worktrees) stays editable. For Bash and PowerShell it refuses a git command that changes
-// HEAD or branches from a worktree folder that lost its .git file (gitFallbackRefusal, RP-956).
+// HEAD or branches run against a worktree folder that lost its .git file (gitFallbackRefusal, RP-956),
+// after any cd, Set-Location or pushd earlier in the command line, or at its -C. The hook entry in
+// .claude/settings.json refuses every command when this file itself is missing: the worktree lost its files.
 // RABAED_ALLOW_MAIN_FOLDER=1 turns the guard off.
 
 export type GitKind = "dir" | "file" | undefined;
@@ -36,37 +38,70 @@ export function refusal(path: string, cwd: string, gitKind: (dir: string) => Git
   }
 }
 
-/** git subcommands that move HEAD or change branches; `branch` only with a rename or delete flag. */
-const HEAD_CHANGING = new Set(["switch", "checkout", "reset", "merge", "commit", "rebase", "pull", "stash"]);
-const BRANCH_CHANGING = /^(-[mMdD]|--move|--delete|--force-move)$/;
+/** git subcommands that move HEAD or change branches; `branch` only with a rename, delete or force flag. */
+const HEAD_CHANGING = new Set(["switch", "checkout", "reset", "merge", "commit", "rebase", "pull", "stash", "cherry-pick", "revert", "am"]);
+const BRANCH_CHANGING = /^(-[mMdDf]|--move|--delete|--force-move|--force)$/;
+/** Commands that change the directory for the segments after them: bash's and PowerShell's. */
+const DIRECTORY_CHANGING = /^(cd|chdir|pushd|set-location|sl)$/i;
+/** git or git.exe, bare or by a path. */
+const GIT = /^(?:.*[\\/])?git(?:\.exe)?$/i;
 
-/** The git subcommand of a command that moves HEAD or changes branches (`switch`, `branch -m`), or undefined. */
-export function headChangingGit(command: string): string | undefined {
+/** One git command of a shell command line: its subcommand and the directory it runs against. */
+export type GitCall = { sub: string; dir: string };
+
+/** The words of one segment, quotes removed; a backslash is no escape (Windows paths keep theirs). */
+const wordsOf = (segment: string): string[] => [...segment.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? "");
+
+/**
+ * The git commands of a command line that move HEAD or change branches (`switch`, `branch -m`, …),
+ * each with the directory it runs against. The line is split into segments on &&, ||, ;, | and
+ * newlines; a `cd`, `Set-Location` or `pushd` segment moves the directory for the segments after
+ * it, and `git -C <dir>` points one git command elsewhere, both resolved against the directory so far.
+ * git may follow PowerShell's call operator `&`, and may be named by a quoted or unquoted path.
+ */
+export function headChangingGitCalls(command: string, cwd: string): GitCall[] {
+  const calls: GitCall[] = [];
+  let dir = resolve(cwd);
   for (const segment of command.split(/&&|\|\||[;|\n]/)) {
-    const tokens = segment.trim().split(/\s+/);
-    if (!/^(?:.*[\\/])?git(?:\.exe)?$/i.test(tokens[0] ?? "")) continue;
-    let i = 1;
-    // Global options: -c name=value and -C dir take a value.
-    while (tokens[i]?.startsWith("-")) i += tokens[i] === "-c" || tokens[i] === "-C" ? 2 : 1;
-    const sub = tokens[i];
+    const words = wordsOf(segment.trim().replace(/^&\s*/, ""));
+    const [first = "", ...rest] = words;
+    if (DIRECTORY_CHANGING.test(first)) {
+      const target = rest.find((w) => !w.startsWith("-") && w.toLowerCase() !== "/d");
+      if (target !== undefined && !/^[~$]/.test(target)) dir = resolve(dir, target);
+      continue;
+    }
+    if (!GIT.test(first)) continue;
+    let gitDir = dir;
+    let i = 0;
+    // Global options: -c name=value and -C dir take a value; -C points git at dir.
+    while (rest[i]?.startsWith("-")) {
+      if (rest[i] === "-C" && rest[i + 1] !== undefined) gitDir = resolve(gitDir, rest[i + 1] ?? "");
+      i += rest[i] === "-c" || rest[i] === "-C" ? 2 : 1;
+    }
+    const sub = rest[i];
     if (sub === undefined) continue;
-    if (HEAD_CHANGING.has(sub)) return sub;
-    if (sub === "branch" && tokens.slice(i + 1).some((t) => BRANCH_CHANGING.test(t))) return "branch";
+    if (HEAD_CHANGING.has(sub) || (sub === "branch" && rest.slice(i + 1).some((w) => BRANCH_CHANGING.test(w)))) calls.push({ sub, dir: gitDir });
   }
-  return undefined;
+  return calls;
 }
 
 /**
  * RP-956: why a HEAD- or branch-changing git command must be refused, or undefined. It is when the
- * cwd is in `<main>/.claude/worktrees/<name>` but that folder has no `.git` file: the worktree was
- * removed or lost its link while a session worked in it, and git falls back to the main checkout's
- * `.git` directory, so `git switch` would move the main folder off main. Walking up from the cwd,
- * meeting the main `.git` directory before any `.git` file is that mismatch; no git is spawned.
+ * directory it runs against (the cwd, after any cd, or its -C) is in `<main>/.claude/worktrees/<name>`
+ * but that folder has no `.git` file: the worktree was removed or lost its link while a session worked
+ * in it, and git falls back to the main checkout's `.git` directory, so `git switch` would move the
+ * main folder off main. Walking up from that directory, meeting the main `.git` directory before any
+ * `.git` file is that mismatch; no git is spawned.
  */
 export function gitFallbackRefusal(command: string, cwd: string, gitKind: (dir: string) => GitKind = gitKindOnDisk): string | undefined {
-  const sub = headChangingGit(command);
-  if (sub === undefined) return undefined;
-  const start = resolve(cwd);
+  for (const { sub, dir } of headChangingGitCalls(command, cwd)) {
+    const why = lostLinkRefusal(sub, dir, gitKind);
+    if (why !== undefined) return why;
+  }
+  return undefined;
+}
+
+function lostLinkRefusal(sub: string, start: string, gitKind: (dir: string) => GitKind): string | undefined {
   for (let dir = start; ; dir = dirname(dir)) {
     const kind = gitKind(dir);
     if (kind === "file") return undefined;
