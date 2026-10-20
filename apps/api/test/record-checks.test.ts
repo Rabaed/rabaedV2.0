@@ -12,7 +12,7 @@ import { crc32, deflateSync } from "node:zlib";
 import { createDb, dailyDigestJob, notificationDigestHandler, notificationEmailHandler, processOutbox, runScheduledJobs, type OutboxHandler } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationDigest, NotificationList, NotificationSettingsView, SignedUrl } from "@rabaed/domain";
-import { mailerFromEnv, notificationDigestMessage, notificationMessage, renderEmail } from "@rabaed/mailer";
+import { notificationDigestMessage, notificationMessage, renderEmail, type MailMessage } from "@rabaed/mailer";
 import {
   attachedFiles,
   chromiumRenderer,
@@ -298,30 +298,18 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
   });
 });
 
-// Record ready by email and in the daily digest (RP-950). The immediate emails go through the real mailer to Mailpit and
-// are read back through its API; the digest is run as the worker runs it, and its email rendered as the worker sends it.
+// Record ready by email and in the daily digest (RP-950). Each immediate email is the message the worker hands the mailer,
+// rendered as the mailer sends it (as notification-email.test.ts does; seam 1 runs without Mailpit, and the mailer's own
+// delivery of this email to Mailpit is packages/mailer/test/catcher.test.ts). The digest is run as the worker runs it.
 const WEB_URL = "https://rabaed.test";
-const catcherUrl = process.env.MAIL_CATCHER_URL;
-if (!catcherUrl) throw new Error("MAIL_CATCHER_URL is not set: start Mailpit (docker compose up -d mailpit) and see .env.example");
-const mailer = mailerFromEnv({ ...process.env, MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: undefined });
-interface CaughtMessage {
-  To: { Address: string }[];
-  Subject: string;
-  Text: string;
-}
-/** What Mailpit holds for `to`: waits a moment for a first message, so an empty answer means none came. */
-async function caught(to: string): Promise<CaughtMessage[]> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const search = await fetch(new URL(`/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`, catcherUrl));
-    const { messages } = (await search.json()) as { messages: { ID: string }[] };
-    if (messages.length > 0) {
-      return Promise.all(messages.map(async ({ ID }) => (await fetch(new URL(`/api/v1/message/${ID}`, catcherUrl))).json() as Promise<CaughtMessage>));
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return [];
-}
-const emailHandler = notificationEmailHandler(async (email) => mailer.send(notificationMessage(email, WEB_URL)));
+const sentMessages: MailMessage[] = [];
+/** The emails sent to `to`, rendered. */
+const caught = async (to: string) =>
+  sentMessages.filter((m) => m.to === to).map((m) => {
+    const rendered = renderEmail(m.template, m.locale, m.values as never);
+    return { Subject: rendered.subject, Text: rendered.text };
+  });
+const emailHandler = notificationEmailHandler(async (email) => void sentMessages.push(notificationMessage(email, WEB_URL)));
 const saveWatched = async (by: Caller, email: "off" | "immediate" | "digest", preferredLanguage?: "en" | "ar") => {
   const now: NotificationSettingsView = (await ok(by.get("/v1/notification-settings"), 200)).json();
   await ok(
