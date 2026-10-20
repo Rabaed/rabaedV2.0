@@ -3,7 +3,8 @@ import type { DocumentFact } from "@rabaed/db";
 import { decodePDFRawStream, PDFArray, PDFContentStream, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream } from "pdf-lib";
 import type { Browser } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { appendixOf, MAX_RENDERED_IMAGE_BYTES, renderWithAppendix } from "./appendix.ts";
+import { MAX_RENDERED_IMAGE_BYTES } from "./appendix-images.ts";
+import { appendixFrom, appendixOf, renderWithAppendix } from "./appendix.ts";
 import type { RecordFiles } from "./files.ts";
 import { fallbackFonts } from "./fonts.ts";
 import { fixtureImages, goldenFacts, goldenRecord } from "./golden-fixtures.ts";
@@ -206,5 +207,10 @@ describe("the appendix's image pages (RP-957)", () => {
       ["big.gif", "attached"],
       ["big.jpg", "pages"],
     ]);
+    // A record made before this rule gave it as pages: a Re-produce gives it as pages again.
+    const before = [{ way: "pages" as const, fileName: "big.gif", sha256: hex(big), pageCount: 1, pages: { first: 5, last: 5 } }];
+    const again = await appendixFrom(before, [{ fileName: "big.gif", contentType: "image/gif", storageKey: "key/big.gif", sha256: hex(big) }], files);
+    expect(again.problems).toEqual([]);
+    expect([...again.appendix.toDraw].map(([index, source]) => [index, source.kind])).toEqual([[0, "image"]]);
   });
 });

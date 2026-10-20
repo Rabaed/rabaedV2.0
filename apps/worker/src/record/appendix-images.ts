@@ -23,7 +23,7 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const DRAWABLE_SOF = new Set([0xc0, 0xc1, 0xc2]);
 
 /** Whether pdf-lib can draw `bytes` as they are: a PNG, or an 8-bit grey or RGB JPEG (with its EXIF orientation). Null otherwise. */
-export function drawable(bytes: Uint8Array): Drawable | null {
+export function pdfLibImageOf(bytes: Uint8Array): Drawable | null {
   if (PNG_SIGNATURE.every((b, i) => bytes[i] === b)) return { type: "png" };
   if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
   let orientation = 1;
@@ -112,7 +112,7 @@ export function fittedMatrix(frame: Frame, width: number, height: number, orient
 
 /** Draws the image `bytes` (of `contentType`) into `frame` on `page` of `out`: with pdf-lib when it can, else drawn by Chromium alone. */
 export async function drawImage(out: PDFDocument, page: PDFPage, frame: Frame, bytes: Uint8Array, contentType: string, renderer: PdfRenderer): Promise<void> {
-  const kind = drawable(bytes);
+  const kind = pdfLibImageOf(bytes);
   let image: PDFImage | undefined;
   try {
     // pdf-lib reads a JPEG through its whole ArrayBuffer, not the view: a pooled Buffer is copied out first.
@@ -130,6 +130,9 @@ export async function drawImage(out: PDFDocument, page: PDFPage, frame: Frame, b
     await image.embed();
     return;
   }
+  // A large file that starts as a JPEG or PNG but doesn't read as one: its frame stays empty, as
+  // Chromium would leave it, rather than a data URL too large for Chromium's pipe failing the job.
+  if (kind !== null && bytes.length > MAX_RENDERED_IMAGE_BYTES) return;
   const alone = await renderer.render(appendixImageHtml(`data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`));
   const [drawn] = await out.embedPdf(alone, [0]);
   page.drawPage(drawn!, { x: frame.x, y: frame.y, width: frame.width, height: frame.height });

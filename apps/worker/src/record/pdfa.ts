@@ -153,7 +153,7 @@ function makeAnnotationsPrintable(doc: PDFDocument) {
   }
 }
 
-/** `pdf` (Chromium's) as a PDF/A-3b with `attachments` inside it. */
+/** `pdf` (Chromium's, or the record's document as drawn, which it changes in place) as a PDF/A-3b with `attachments` inside it. */
 export async function toPdfA3(pdf: Uint8Array | PDFDocument, info: PdfA3Info, attachments: readonly PdfA3Attachment[]): Promise<Uint8Array> {
   const at = new Date(Math.floor(info.at.getTime() / 1000) * 1000);
   // A document already open (the record's, as drawn: make-pdf.ts) is changed in place, not copied.
