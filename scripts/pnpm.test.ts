@@ -52,7 +52,7 @@ describe("root package.json scripts", () => {
     expect(direct).toEqual([]);
   });
 
-  it("typecheck every workspace package: `pnpm -r run typecheck` skips a package without the script", () => {
+  it("typecheck every workspace package: `pnpm typecheck` (scripts/typecheck.ts) skips a package without the script", () => {
     const packages = ["apps", "packages"].flatMap((group) =>
       readdirSync(join(root, group))
         .map((name) => join(group, name, "package.json"))
