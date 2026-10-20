@@ -131,7 +131,7 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20270925 | RP-658 | 3A | Unused: the migration moved to 20270928 (main's RP-650 took 20270925) |
 | 20270925 | RP-650 | 22 | record_signatures |
 | 20270926 | RP-147 | 22 | record_appendix |
-| 20270930 | RP-653 | 43 | previous_item_raised_counts (moved from 20270929 after main's RP-658 took it) |
+| 20271002 | RP-653 | 43 | previous_item_raised_counts (moved from 20270929, then 20270930, after main's RP-658 and RP-677 took them) |
 | 20270928 | RP-658 | 3A | Unused: the migration moved to 20270929 (main's RP-621 took 20270928) |
 | 20270928 | RP-621 | 24 | working_copy |
 | 20270930 | RP-677 | 34 | snag_report |
