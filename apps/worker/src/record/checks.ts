@@ -90,6 +90,8 @@ export async function recordProblems(pdf: Uint8Array, expected: RecordExpectatio
   if (!archival.compliant) problems.push(...archival.problems);
   const seal = await verifySeal(pdf);
   if (!seal.valid) problems.push(`the seal does not verify: ${seal.problem ?? "unknown"}`);
+  // Every record sealed now must be PAdES B-LT (RP-669): a store without its revocation data is not published.
+  else if (!seal.longTerm) problems.push("the seal is not long-term (PAdES B-LT): its Document Security Store holds no revocation data");
   return problems;
 }
 
