@@ -52,8 +52,11 @@ async function allPages(by: Caller, query: WorkItemQueryInput) {
   return { rows, sizes, totals };
 }
 
-/** What a failed page-size check prints: the sizes it got, the rows read, and the totals the pages reported (RP-611). */
-function readout({ rows, sizes, totals }: Awaited<ReturnType<typeof allPages>>) {
+/**
+ * What a failed page-size check prints: the sizes it got, the rows read, and the totals the pages reported (RP-611).
+ * Every page's total is the whole List's visible count, so a page whose total differs from the others is the signal.
+ */
+function describePages({ rows, sizes, totals }: Awaited<ReturnType<typeof allPages>>) {
   return `page sizes ${JSON.stringify(sizes)}, ${rows.length} rows read, Stage-count totals per page ${JSON.stringify(totals)}`;
 }
 
@@ -125,9 +128,8 @@ describe("the Member's own columns (Save as my default)", () => {
 describe("numbered pages", () => {
   it("pages 10 rows at a time, each row once, and says when there is a next page", async () => {
     const pages = await allPages(at.c1Engineer, { pageSize: 10 });
-    const { rows, sizes } = pages;
-    expect(sizes, readout(pages)).toEqual([10, 10, 5]);
-    expect([...rows].sort()).toEqual([...created].sort());
+    expect(pages.sizes, describePages(pages)).toEqual([10, 10, 5]);
+    expect([...pages.rows].sort()).toEqual([...created].sort());
     const first = await list(at.c1Engineer, { page: 1, pageSize: 10 });
     expect(first.page).toEqual({ number: 1, size: 10, hasNext: true });
     expect(total(first)).toBe(25);
@@ -248,9 +250,8 @@ describe("every column's sort", () => {
     for (const dir of ["asc", "desc"] as const) {
       it(`lists each row once across the pages (${sort}, ${dir})`, async () => {
         const pages = await allPages(at.c1Engineer, { sort, dir, pageSize: 10 });
-        const { rows } = pages;
-        expect(rows, readout(pages)).toHaveLength(created.length);
-        expect(new Set(rows).size, readout(pages)).toBe(created.length);
+        expect(pages.rows, describePages(pages)).toHaveLength(created.length);
+        expect(new Set(pages.rows).size, describePages(pages)).toBe(created.length);
       });
     }
   }
