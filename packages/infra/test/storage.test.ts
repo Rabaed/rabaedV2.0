@@ -150,13 +150,15 @@ describe("Project files", () => {
     const worker = grants
       .filter((g) => g.role === "rabaed-dev-worker-task")
       .flatMap((g) => g.resources.map((r) => [g.actions.join(","), String(render(r))]));
-    expect(worker).toHaveLength(5);
+    expect(worker).toHaveLength(6);
     expect(worker).toEqual(expect.arrayContaining([
       ["s3:GetObject", expect.stringMatching(/\/projects\/\*$/)],
       ["s3:GetObject", expect.stringMatching(/\/members\/\*\/signatures\/\*$/)],
       ["s3:GetObject", expect.stringMatching(/\/companies\/\*\/logo\/\*$/)],
       ["s3:GetObject", expect.stringMatching(/\/companies\/\*\/stamp\/\*$/)],
       ["s3:PutObject", expect.stringMatching(/\/projects\/\*\/work-items\/\*\/documental-record\/\*$/)],
+      // And the Snag reports (RP-677), plain PDFs under each Project's snag-reports/.
+      ["s3:PutObject", expect.stringMatching(/\/projects\/\*\/snag-reports\/\*$/)],
     ]));
     // And listing, on the bucket itself, so a file not uploaded yet answers 404 rather than 403 (RP-269).
     const lists = api.filter(isList);

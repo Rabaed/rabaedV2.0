@@ -470,6 +470,13 @@ const exportLabels: Record<Locale, SnagExportLabels> = {
 const ali = { memberId: "00000000-0000-4000-8000-0000000000d1", name: b("Ali Sonour", "علي سنور") };
 const khalid = { memberId: "00000000-0000-4000-8000-0000000000d2", name: b("Khalid Bakr", "خالد بكر") };
 
+const reportLabels: Record<Locale, SnagBulk["report"]["labels"]> = {
+  en: { exportPdf: "Export PDF", preparing: "Preparing the PDF…", download: (n) => `Download the Snag List PDF (${n} items)`, failed: "The PDF could not be made. Try again." },
+  ar: { exportPdf: "تصدير PDF", preparing: "جارٍ إعداد ملف PDF…", download: (n) => `تنزيل قائمة الملاحظات PDF (${n} عنصر)`, failed: "تعذّر إعداد ملف PDF. حاول مرة أخرى." },
+};
+
+const reportId = "00000000-0000-4000-8000-0000000000e1";
+
 const bulkFor = (locale: Locale, actions: Partial<SnagBulk["actions"]> = {}): SnagBulk => ({
   actions: {
     labels: bulkLabels[locale],
@@ -481,7 +488,29 @@ const bulkFor = (locale: Locale, actions: Partial<SnagBulk["actions"]> = {}): Sn
   },
   exportLabels: exportLabels[locale],
   loadExportRows: async () => ({ items: items.slice(0, 3), capped: false }),
+  report: {
+    labels: reportLabels[locale],
+    request: async (ids) => ({ id: reportId, status: "preparing", url: null, count: ids?.length ?? 3 }),
+    check: async () => ({ id: reportId, status: "ready", url: "#", count: null }),
+  },
 });
+
+/** "Export PDF" on the bar: the worker makes the Snag report, the line says so, then links to it (RP-677). */
+export const ExportPdf: Story = {
+  render: (args, context) => (
+    <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} bulk={bulkFor(storyLocale(context))} />
+  ),
+  play: async (context) => {
+    const text = bulkLabels[storyLocale(context)];
+    const pdf = reportLabels[storyLocale(context)];
+    const table = context.canvas.getByRole("table", { name: labels[storyLocale(context)].table });
+    await userEvent.click(within(table).getByRole("checkbox", { name: text.selectRow("Cable tray not bonded") }));
+    // The toolbar has one too (every row the filters match); the bar's is the last.
+    await userEvent.click(context.canvas.getAllByRole("button", { name: pdf.exportPdf }).at(-1)!);
+    await expect(await context.canvas.findByText(pdf.preparing)).toBeVisible();
+    await expect(await context.canvas.findByRole("link", { name: pdf.download("1", 1) }, { timeout: 5000 })).toBeVisible();
+  },
+};
 
 /** With rows ticked, the bar says how many, and offers Reassign, Move Stage and Export (RP-629). */
 export const BulkSelect: Story = {

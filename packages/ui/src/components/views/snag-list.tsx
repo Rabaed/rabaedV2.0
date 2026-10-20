@@ -15,7 +15,7 @@ import {
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import { useId, useState, type ElementType, type ReactNode } from "react";
+import { useEffect, useId, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, buttonVariants } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
@@ -33,7 +33,7 @@ import { stageColour } from "../status/stage-colour.ts";
 import { StageDot, StagePill } from "../status/stage-pill.tsx";
 import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
-import { SnagBulkBar, type SnagBulkActions } from "./snag-bulk.tsx";
+import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
 import { lookOf, placeText, type Places } from "./snag-look.ts";
 import { SnagPhoneList, type SnagPhoneLabels, type SnagSwipe } from "./snag-phone.tsx";
@@ -126,6 +126,8 @@ export type SnagBulk = {
   exportLabels: SnagExportLabels;
   /** Every row the viewer reads with the List's filters (null when it couldn't be read). */
   loadExportRows: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>;
+  /** "Export PDF" (RP-677): the Snag report, made by the worker. */
+  report: SnagReportActions;
 };
 
 /** A Type the viewer may raise, for "+ New". */
@@ -221,6 +223,43 @@ export function SnagList({
       setExporting(false);
     }
   };
+  // The PDF report (RP-677): asked for, then asked after until the worker has made it.
+  const [report, setReport] = useState<{ status: "asking" | "preparing" | "ready" | "failed"; id?: string; url?: string; count?: number } | null>(null);
+  const exportPdf = async (ids: string[] | null) => {
+    if (!bulk) return;
+    setReport({ status: "asking" });
+    try {
+      const asked = await bulk.report.request(ids);
+      setReport(asked === null ? { status: "failed" } : { status: asked.status, id: asked.id, count: asked.count ?? undefined });
+    } catch {
+      setReport({ status: "failed" });
+    }
+  };
+  const reporting = report?.status === "asking" || report?.status === "preparing";
+  const polledId = report?.status === "preparing" ? report.id : undefined;
+  useEffect(() => {
+    if (!bulk || polledId === undefined) return;
+    let stopped = false;
+    let tries = 0;
+    const timer = setInterval(() => {
+      // The worker never answered (a stopped worker): stop asking, say it failed.
+      if (++tries > 90) {
+        setReport((was) => (was?.id === polledId ? { status: "failed" } : was));
+        return;
+      }
+      void bulk.report
+        .check(polledId)
+        .then((got) => {
+          if (stopped || !got || got.status === "preparing") return;
+          setReport((was) => (was?.id === polledId ? { status: got.status, id: polledId, url: got.url ?? undefined, count: was.count } : was));
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [bulk, polledId]);
   // A new filter starts again from the first page.
   const change = (next: Partial<WorkItemQuery>) => {
     const { cursor: _cursor, page: _page, ...rest } = query;
@@ -333,7 +372,17 @@ export function SnagList({
         photoUrls={photoUrls}
         linkAs={Link}
         onQueryChange={change}
-        bulk={bulk && { bulk, selected, onSelect: select, exporting, onExport: (rows) => void exportRows(async () => ({ items: rows, capped: false })) }}
+        bulk={
+          bulk && {
+            bulk,
+            selected,
+            onSelect: select,
+            exporting,
+            onExport: (rows) => void exportRows(async () => ({ items: rows, capped: false })),
+            reporting,
+            onExportPdf: (ids) => void exportPdf(ids),
+          }
+        }
       />
     );
   } else {
@@ -375,7 +424,32 @@ export function SnagList({
             {bulk.actions.labels.exportAll}
           </Button>
         )}
+        {bulk && data.view === "list" && total > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={reporting}
+            onClick={() => void exportPdf(null)}
+            className="h-[34px]"
+          >
+            <Icon name="file-text" />
+            {bulk.report.labels.exportPdf}
+          </Button>
+        )}
       </ListToolbar>
+      {bulk && report !== null && (
+        <p role="status" className="text-caption text-muted">
+          {reporting ? (
+            bulk.report.labels.preparing
+          ) : report.status === "failed" ? (
+            bulk.report.labels.failed
+          ) : report.url ? (
+            <a href={report.url} className={cn("font-semibold text-brand-fg underline", focusRing)}>
+              {bulk.report.labels.download(n(report.count ?? 0), report.count ?? 0)}
+            </a>
+          ) : null}
+        </p>
+      )}
       {exportNote !== null && (
         <p role="status" className="text-caption text-muted">
           {exportNote}
@@ -630,6 +704,10 @@ function SnagTable({
     onSelect: (ids: ReadonlySet<string>) => void;
     exporting: boolean;
     onExport: (rows: WorkItemRow[]) => void;
+    /** A report is being asked for or made. */
+    reporting: boolean;
+    /** Ask for the PDF of these items. */
+    onExportPdf: (ids: string[]) => void;
   };
 }) {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -652,6 +730,9 @@ function SnagTable({
           actions={bulk.bulk.actions}
           exporting={bulk.exporting}
           onExport={() => bulk.onExport(list.items.filter((r) => bulk.selected.has(r.id)))}
+          report={bulk.bulk.report}
+          reporting={bulk.reporting}
+          onExportPdf={() => bulk.onExportPdf(list.items.filter((r) => bulk.selected.has(r.id)).map((r) => r.id))}
           onClear={() => bulk.onSelect(new Set())}
         />
       )}

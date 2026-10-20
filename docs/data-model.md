@@ -422,6 +422,9 @@ As built (RP-147, `20270926000000_record_appendix.sql`): `app.documental_record_
 **documental_record_check** (RP-155)
 `id`, `documental_record_id`, `run_kind` (`closure`, the record job's, or `reproduce`), `passed`, `problems` (jsonb array of what failed, in words for a Rabaed Engineer; empty exactly when passed), `ran_at`. One row for each run of the checks (workflow-engine.md §7), not granted to the app role, never changed, written by `app.finish_documental_record` and `app.reproduce_documental_record`. A record whose latest check failed, and a record job that ran out of attempts, are Rabaed Admin's alerts (`app.documental_record_alerts`). `documental_record.status`: `preparing` until the job's checks have run, then `published` or `failed_checks`; an item with no published record shows none (`app.documental_record_state`). `notification.kind` also holds `record_ready` (the bell only).
 
+**snag_report** (RP-677)
+`id`, `project_id`, `member_id` (who asked), `language` (`en`, `ar`), `content` (jsonb: the Snag List items the Member read when they asked, with each item's first photo's storage key where they may see it), `outbox_id` (the worker's job, kind `snag_report`, ids only), `file_id` (→ `stored_file`, the plain PDF once made) and `made_at`, `created_at`. A plain PDF of the Snag List, not a Documental Record: unsealed, not PDF/A-3, kept under `projects/<project>/snag-reports/<id>/` with no expiry. Row-level security: its asker's own rows, while they are still on the Project; the app role has no grant on the table and reaches it through `app.request_snag_report` (refuses a photo key outside the Project's prefix), `app.snag_report_state` (its asker only) and, for the worker, `app.snag_report_job` and `app.save_snag_report`.
+
 ## 7. Drawings, Markups, Pins
 
 **drawing**
