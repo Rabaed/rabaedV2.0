@@ -150,6 +150,24 @@ jsonTester.run("json-no-deadline-words", rules["json-no-deadline-words"], {
   ],
 });
 
+jsonTester.run("json-no-plural-pound", rules["json-no-plural-pound"], {
+  valid: [
+    `{ "a": "{count, plural, one {{n} file} other {{n} files}}" }`,
+    `{ "a": "RFI #{n}", "b": "{count, select, one {#1} other {#2}}" }`,
+    `{ "a": "{count, plural, one {'#' tag} other {'#' tags}}" }`,
+    `{ "a": "{count, plural, one {Can't add {n}} other {Can't add {n}}}" }`,
+    `{ "a": "{count, plural, offset:1 =0 {none} other {{n} more}}" }`,
+  ],
+  invalid: [
+    { code: `{ "a": "{n, plural, one {# file} other {# files}}" }`, errors: [{ messageId: "pound" }] },
+    { code: `{ "a": "{n, selectordinal, one {#st} other {#th}}" }`, errors: [{ messageId: "pound" }] },
+    { code: `{ "a": { "b": "{more, plural, =0 {} other { +#}}" } }`, errors: [{ messageId: "pound", data: { key: "a.b" } }] },
+    // `#` in a select inside a plural branch is still the plural's count.
+    { code: `{ "a": "{n, plural, other {{g, select, f {# of hers} other {# of his}}}}" }`, errors: [{ messageId: "pound" }] },
+    { code: `{ "a": "{n, plural, other {{d, date, short} and #}}" }`, errors: [{ messageId: "pound" }] },
+  ],
+});
+
 tsx.run("no-raw-error-logging", rules["no-raw-error-logging"], {
   valid: [
     `log.error({ err: error }, "outbox run failed");`,

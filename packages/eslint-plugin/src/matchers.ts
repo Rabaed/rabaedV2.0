@@ -224,3 +224,66 @@ const awsIdentifier = /arn:aws[\w-]*:|(?<![\w.+-])(?<!tel:)(?<!wa\.me\/)\d{12}(?
 export function awsIdentifierIn(text: string): string | null {
   return awsIdentifier.exec(text)?.[0] ?? null;
 }
+
+// ---- ICU messages ------------------------------------------------------------
+
+// An argument's head: its name, then its type and the comma before its options or style, if any.
+const argumentHead = /[^,{}]*(?:,\s*(\w+)\s*,?)?/y;
+
+/**
+ * Whether an ICU message prints a `#` inside a plural or selectordinal, at any depth (a select inside
+ * a plural branch too). The `#` prints the count in the locale's own digits, Arabic-Indic in Arabic,
+ * so the count goes in as an argument formatted with formatNumber instead (RP-1022). A quoted `'#'`
+ * is literal text.
+ */
+export function hasPluralPound(message: string): boolean {
+  let i = 0;
+
+  // Message text up to the `}` that closes it, which is left for the caller.
+  const text = (inPlural: boolean): boolean => {
+    while (i < message.length && message[i] !== "}") {
+      const c = message[i]!;
+      if (c === "'" && /[{}#|']/.test(message[i + 1] ?? "")) {
+        const end = message[i + 1] === "'" ? i + 1 : message.indexOf("'", i + 1);
+        i = end < 0 ? message.length : end + 1;
+      } else if (c === "#" && inPlural) {
+        return true;
+      } else if (c === "{") {
+        i++;
+        if (argument(inPlural)) return true;
+      } else {
+        i++;
+      }
+    }
+    return false;
+  };
+
+  // An argument after its `{`, through its closing `}`.
+  const argument = (inPlural: boolean): boolean => {
+    argumentHead.lastIndex = i;
+    const type = argumentHead.exec(message)![1];
+    i = argumentHead.lastIndex;
+    if (type === "plural" || type === "selectordinal" || type === "select") {
+      const branchesInPlural = inPlural || type !== "select";
+      // Selectors (one, =0, offset:1) and spaces are skipped; each `{…}` is a branch.
+      while (i < message.length && message[i] !== "}") {
+        if (message[i] === "{") {
+          i++;
+          if (text(branchesInPlural)) return true;
+        }
+        i++;
+      }
+    } else {
+      // A plain argument, or a number, date or time with a style that may hold braces.
+      for (let depth = 0; i < message.length && (message[i] !== "}" || depth > 0); i++) {
+        if (message[i] === "{") depth++;
+        else if (message[i] === "}") depth--;
+      }
+    }
+    i++;
+    return false;
+  };
+
+  for (; i < message.length; i++) if (text(false)) return true;
+  return false;
+}

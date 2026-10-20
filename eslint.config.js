@@ -185,6 +185,6 @@ export default tseslint.config(
     files: ["apps/web/messages/*.json"],
     plugins: { json, rabaed },
     language: "json/json",
-    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error", "rabaed/json-no-raw-bidi": "error" },
+    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error", "rabaed/json-no-raw-bidi": "error", "rabaed/json-no-plural-pound": "error" },
   },
 );
