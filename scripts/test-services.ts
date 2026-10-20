@@ -8,7 +8,7 @@ import { envValue, laneOf } from "./lanes.ts";
 // needs Mailpit, which is waited for briefly since it answers a moment after starting.
 
 // eslint-disable-next-line rabaed/no-avoid-terms -- `files` is the Docker Compose service's name, not a Document
-export const startServices ="`docker compose up -d --wait db mailpit files`";
+export const startServices = "`docker compose up -d --wait db mailpit files`";
 
 /** The message for a service that doesn't answer. */
 export const unreachable = (name: string, port: number) => `${name} for this worktree (port ${port}) isn't reachable: run ${startServices}.`;
