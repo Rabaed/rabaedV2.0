@@ -120,13 +120,14 @@ export function readClaims(comments: Comment[], filesWidth = 70): Claim[] {
 }
 
 /** A glob (`scripts/lane*.ts`) as a regex; `*` stays inside a path segment unless doubled. */
-const globRegex = (glob: string): RegExp => new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "").replace(/\*/g, "[^/]*").replace(//g, ".*")}$`);
+const globRegex = (glob: string): RegExp => new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*|\*/g, (stars) => (stars === "**" ? ".*" : "[^/]*"))}$`);
 
 /** Whether the claim's text covers `path`: named in it, under a named directory, or matched by a named glob. */
 export function claimCovers(claim: Pick<Claim, "text">, path: string): boolean {
   const wanted = path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
   const text = claim.text.replace(/\\/g, "/");
-  if (text.includes(wanted)) return true;
+  // Named whole: `x.ts` is not found in `max.ts` or `x.tsx`, `scripts/db` not in `scripts/db-fn.ts`.
+  if (new RegExp(`(?<![\\w./-])${wanted.replace(/[.+?^${}()|[\]\\*]/g, "\\$&")}(?![\\w-]|\\.\\w)`).test(text)) return true;
   for (const raw of text.split(/[\s,;()]+/)) {
     const token = raw.replace(/^[^\w@.*/-]+|[.:]+$/g, "");
     if (token === "" || !/[./]/.test(token)) continue;
@@ -145,7 +146,7 @@ export function flagMergedClaims(claims: Claim[], merged: MergedPr[]): void {
     if (claim.releasedBy !== undefined) continue;
     const named = new Set([...claim.text.matchAll(/\bPR #(\d+)/g)].map((m) => Number(m[1])));
     for (const pr of merged) {
-      if (pr.mergedAt <= claim.created) continue;
+      if (Date.parse(pr.mergedAt) <= Date.parse(claim.created)) continue;
       const byKey = claim.key !== undefined && (pr.branch.startsWith(`${claim.key}-`) || pr.branch === claim.key || pr.title.startsWith(`${claim.key}:`) || pr.title.startsWith(`${claim.key} `));
       if (named.has(pr.number) || byKey) claim.mergedPrs.push(pr.number);
     }

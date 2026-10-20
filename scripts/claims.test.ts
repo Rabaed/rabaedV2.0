@@ -85,7 +85,10 @@ describe("claimCovers", () => {
   it("does not match another file, a glob that does not fit, or a longer name", () => {
     expect(claimCovers(claim("CLAIM scripts/check-migrations*.ts"), "scripts/queue-pr.ts")).toBe(false);
     expect(claimCovers(claim("CLAIM scripts/screens*.ts"), "scripts/sub/screens.ts")).toBe(false);
-    expect(claimCovers(claim("CLAIM apps/api/package.json"), "package.json")).toBe(true); // a plain substring: the safe side of "is it claimed?"
+    expect(claimCovers(claim("CLAIM apps/api/package.json"), "package.json")).toBe(false);
+    expect(claimCovers(claim("CLAIM scripts/max.ts, scripts/db-fn.ts"), "scripts/x.ts")).toBe(false);
+    expect(claimCovers(claim("CLAIM scripts/db-fn.ts"), "scripts/db")).toBe(false);
+    expect(claimCovers(claim("CLAIM scripts/x.tsx"), "scripts/x.ts")).toBe(false);
     expect(claimCovers(claim("CLAIM apps/admin/workflows-old/x.json"), "apps/admin/workflows/x.json")).toBe(false);
   });
   it("reads Jira's escaped markdown glob (scripts/lanes\\*.ts)", () => {
@@ -106,6 +109,14 @@ describe("flagMergedClaims", () => {
     const claims = readClaims([at(14005, "CLAIM a.ts — Main 4, lane-4a, RP-577, PR #328 (not yet queued)")]);
     flagMergedClaims(claims, [pr(328, "other-branch", "2026-10-19T00:00:00Z")]);
     expect(claims[0]?.mergedPrs).toEqual([328]);
+  });
+  it("compares merge time to claim time across time zones", () => {
+    // Posted 23:30 UTC on 1 Oct (02:30 on the 2nd in Riyadh); merged 23:00 UTC, before it.
+    const claims = readClaims([{ id: 14005, created: "2026-10-02T02:30:00.000+0300", text: "CLAIM a.ts — Main 3, lane-3a, RP-658" }]);
+    flagMergedClaims(claims, [pr(1, "RP-658-x", "2026-10-01T23:00:00Z")]);
+    expect(claims[0]?.mergedPrs).toEqual([]);
+    flagMergedClaims(claims, [pr(2, "RP-658-y", "2026-10-02T00:00:00Z")]);
+    expect(claims[0]?.mergedPrs).toEqual([2]);
   });
   it("ignores a PR merged before the claim, another key's PR, and a released claim", () => {
     const claims = readClaims([at(14005, "CLAIM a.ts — Main 3, lane-3a, RP-658"), at(14006, "CLAIM b.ts — Main 3, lane-3a, RP-659"), at(14007, "RELEASE b.ts — RP-659")]);
