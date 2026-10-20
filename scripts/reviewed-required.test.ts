@@ -12,7 +12,7 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
   const source = existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : "jobs: {}";
   const wf = parse(source) as {
     on: Record<string, { types?: string[] } | null>;
-    jobs: Record<string, { name?: string; if?: string; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
+    jobs: Record<string, { name?: string; if?: string; "timeout-minutes"?: number; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
   };
   const jobs = Object.values(wf.jobs);
 
@@ -24,6 +24,10 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.name).toBe(REQUIRED_CHECK);
     expect(jobs[0]?.if).toBeUndefined();
+  });
+
+  it("gives the job longer than the script's 1500 s wait for the reviewed-label run (RP-984)", () => {
+    expect(jobs[0]?.["timeout-minutes"]).toBe(30);
   });
 
   it("reads only, and runs the default branch's script, never the PR's", () => {
@@ -182,6 +186,21 @@ describe("requireReviewed on pull_request", () => {
     const result = await requireReviewed(event, seam, { pollMs: 10, timeoutMs: 30 });
     expect(result.ok).toBe(false);
     expect(result.summary).toContain("reviewed-label");
+  });
+
+  it("passes when the reviewed-label run finishes after 12 minutes (a busy CI waits that long for a runner, RP-984)", async () => {
+    let polls = 0;
+    const { seam, slept } = fakeSeam({ labelRuns: async () => (polls++ * 10 < 12 * 60 ? [{ status: "queued" }] : [{ status: "completed" }]) });
+    expect((await requireReviewed(event, seam)).ok).toBe(true);
+    expect(slept.reduce((a, b) => a + b, 0)).toBe(12 * 60_000);
+  });
+
+  it("gives up after 1500 s by default, naming the wait", async () => {
+    const { seam, slept } = fakeSeam({ labelRuns: async () => [{ status: "in_progress" }] });
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("within 1500 s");
+    expect(slept.reduce((a, b) => a + b, 0)).toBe(1_500_000);
   });
 
   it("does not wait on a fork's PR (it never gets a reviewed-label run) or before the workflow exists", async () => {
