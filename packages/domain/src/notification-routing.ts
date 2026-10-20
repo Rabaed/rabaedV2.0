@@ -8,7 +8,7 @@ import { locales, type Locale } from "./locale.ts";
 // seam-2 test checks the two agree on every combination.
 
 /** What a notification is about. `weekly_report` is the weekly Step Age report, an email only. */
-export const notificationKinds = ["step_reached", "watched_event", "sent_back", "package_submitted", "weekly_report"] as const;
+export const notificationKinds = ["step_reached", "watched_event", "sent_back", "package_submitted", "record_ready", "weekly_report"] as const;
 export type NotificationKind = (typeof notificationKinds)[number];
 
 /**
@@ -25,6 +25,8 @@ const groupOfKind = {
   sent_back: "sent_back",
   // A Package Submit (RP-643) stands for the "Step reached" of each of its submittals.
   package_submitted: "step_reached",
+  // A closed item's Documental Record being ready (RP-950): the "Items I watch" email choice; it has no outcome, so no tick applies.
+  record_ready: "watched",
   weekly_report: "weekly_report",
 } as const satisfies Record<NotificationKind, NotificationGroup>;
 
