@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { heldReason } from "./claude-sessions.ts";
 import { samePath } from "./paths.ts";
 import { choosePrune } from "./worktrees-pruning.ts";
 import {
@@ -93,6 +94,13 @@ describe("chooseWorktrees", () => {
     const { remove, skipped } = chooseWorktrees({ worktrees: [held, wt("agent-free")], currentPath: here, platform: "linux", openSession, only: ["agent-held", "agent-free"] });
     expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
     expect(skipped.map((s) => s.reason)).toEqual(['its Claude desktop session is open (session "RP-602"); archive it first']);
+  });
+
+  it("skips and names a merged worktree a running Claude session is in, even with --only (RP-956)", () => {
+    const held = 'a running Claude session is in it: session "Main 9" (pid 9)';
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-held", { heldBySession: held }), wt("agent-free")], currentPath: here, platform: "linux", only: ["agent-held", "agent-free"] });
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
+    expect(skipped.map((s) => s.reason)).toEqual([held]);
   });
 
   it("skips every worktree when the desktop app's records cannot be read (RP-608)", () => {
@@ -230,6 +238,10 @@ describe("isFinished and stillStarting (RP-585)", () => {
 
   it("finishes an unlocked detached HEAD with no commits of its own once nothing holds it (RP-601)", () => {
     expect(isFinished(facts({ branch: undefined, locked: undefined, noCommitsYet: true }))).toBe(true);
+  });
+
+  it("is never finished while a running Claude session holds it, commits or not (RP-956)", () => {
+    expect(isFinished(facts({ heldBySession: 'a running Claude session is in it: session "Main 4" (pid 7)' }))).toBe(false);
   });
 });
 
@@ -409,6 +421,20 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: false, neverCommitted: false });
     run(["merge", "--no-ff", "-m", "merge", "RP-3-done"]);
     expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+  });
+
+  it("never calls a merged worktree finished while a running Claude session is in it (RP-956)", () => {
+    run(["worktree", "add", "-b", "main-9-test", agent("main-9-test")]);
+    writeFileSync(join(agent("main-9-test"), "c.txt"), "c");
+    run(["add", "c.txt"], agent("main-9-test"));
+    run(["commit", "-m", "work"], agent("main-9-test"));
+    run(["merge", "--no-ff", "-m", "merge", "main-9-test"]);
+    // The session's cwd is the worktree (EnterWorktree): a fixture session check, as the process list would give it.
+    const check = { kind: "ok" as const, sessions: [{ pid: 4242, cwd: join(agent("main-9-test"), "apps"), name: "Main 9" }] };
+    const held: Liveness = { ...nobody, heldBySession: (path) => heldReason(path, check) };
+    expect(gatherFacts([listed("main-9-test")], "main", root, held)[0]!.heldBySession).toBe('a running Claude session is in it: session "Main 9" (pid 4242)');
+    expect(judgeWorktree(listed("main-9-test"), "main", root, held).finished).toBe(false);
+    expect(judgeWorktree(listed("main-9-test"), "main", root, nobody).finished).toBe(true);
   });
 
   // RP-585: lane:env called RP-555-review-fixes (made on the merged integration tip, never committed to) not merged,

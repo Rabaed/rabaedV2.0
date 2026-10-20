@@ -1,7 +1,8 @@
 // Removes the rabaed-* Docker Compose projects old worktrees left behind: those whose
 // worktree no longer exists, that are not running, or that only have volumes left.
 // With --merged, also those whose worktrees are all merged into origin/main (their branch, or a detached HEAD's commit, RP-601)
-// (as of the last fetch), unless a worktree that is not merged names the project in its .env.
+// (as of the last fetch), unless a worktree that is not merged names the project in its .env. A worktree a
+// running Claude session works in is never merged here (RP-956), so its project stays.
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
 //
@@ -12,7 +13,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { composeProjectOfEnv, LANE_SCHEME, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
+import { composeProjectOfEnv, LANE_SCHEME, laneProject, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
 import { judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
@@ -56,6 +57,12 @@ if (withMerged) {
     }));
   const known = new Set(stale.map((s) => s.project));
   stale.push(...mergedProjects({ containers, volumes, worktrees, cwd: process.cwd(), currentProject }).filter((m) => !known.has(m.project)));
+  // RP-956: judgeWorktree counts these as not finished, so --merged keeps their project; name the session.
+  for (const w of worktrees.slice(1)) {
+    if (w.project === undefined || (lane !== undefined && w.project !== laneProject(lane)) || stale.some((s) => s.project === w.project)) continue;
+    const held = live.heldBySession?.(w.path);
+    if (held !== undefined) console.log(`Not pruned as merged: ${w.project} of ${w.path}: ${held}.`);
+  }
 }
 
 const candidates = onlyLane(stale, lane);

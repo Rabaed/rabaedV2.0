@@ -619,6 +619,13 @@ describe("chooseTakeover (lane:env --force, RP-500)", () => {
     expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and has uncommitted changes.`]);
   });
 
+  it("refuses, naming the session, a worktree a running Claude session is in, merged or not (RP-956)", () => {
+    const heldBySession = 'a running Claude session is in it: session "Main 4" (pid 35760)';
+    const p = choice([wt({ merged: false, heldBySession })]);
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and ${heldBySession}.`]);
+  });
+
   it("refuses a worktree that is not merged", () => {
     const p = choice([wt({ merged: false })]);
     expect(p.takeOver).toEqual([]);

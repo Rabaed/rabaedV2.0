@@ -94,6 +94,13 @@ describe("choosePrune", () => {
     ]);
   });
 
+  it("skips and names a merged worktree a running Claude session is in, before any other reason (RP-956)", () => {
+    const held = 'a running Claude session is in it: session "Main 4" (pid 35760)';
+    const p = choose([wt(`${main}/.claude/worktrees/main-4-inspections`, { heldBySession: held, dirty: true }), wt("/w/done")]);
+    expect(p.remove.map((w) => w.path)).toEqual(["/w/done"]);
+    expect(reasons(p)[2]).toEqual([`${main}/.claude/worktrees/main-4-inspections`, held]);
+  });
+
   it("removes a worktree never committed to once the session its lock names has stopped and nothing holds it (RP-585)", () => {
     const p = choose([wt(`${main}/.claude/worktrees/agent-paused`, { branch: "RP-555-review-fixes", noCommitsYet: true, locked: "claude agent agent-paused (pid 4242)" })]);
     expect(p.remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-paused`]);
@@ -213,6 +220,9 @@ describe("changedSinceListed", () => {
     expect(changedSinceListed(wt("/w/done", { dirty: true }))).toBe("uncommitted changes since it was listed");
     expect(changedSinceListed(wt("/w/done", { unpushed: 1 }))).toBe("1 commit on no origin branch since it was listed");
     expect(changedSinceListed(undefined)).toBe("no longer a worktree");
+    expect(changedSinceListed(wt("/w/done", { heldBySession: 'a running Claude session is in it: session "Main 9" (pid 9)' }))).toBe(
+      'a running Claude session is in it: session "Main 9" (pid 9)',
+    );
     expect(changedSinceListed(wt("/w/done"), () => ({ kind: "open", session: 'session "RP-9"' }))).toBe('its Claude desktop session is open (session "RP-9")');
     expect(changedSinceListed(wt("/w/done"), () => ({ kind: "unknown", reason: "list unreadable" }))).toBe("a Claude desktop session may hold it: list unreadable");
   });

@@ -324,6 +324,8 @@ export type TakeoverWorktree = {
   locked?: string | undefined;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project?: string | undefined;
+  /** Why a running Claude session holds it (worktrees.ts WorktreeFacts.heldBySession, RP-956); it is never taken over. */
+  heldBySession?: string | undefined;
 };
 
 type TakeoverInput = {
@@ -343,7 +345,7 @@ type TakeoverInput = {
  * volumes stay: once these containers are removed the new worktree's `docker compose up`
  * recreates them under its own folder in the same project and reuses the database.
  * All or nothing: a holder that is not merged, has uncommitted changes (or whose status
- * cannot be read), is locked by a process that still runs, or is a folder git does not
+ * cannot be read), is locked by a process that still runs, has a running Claude session in it (RP-956), or is a folder git does not
  * list refuses the whole takeover (refused names each, with why). So does a worktree that
  * is not merged (other than cwd) naming the lane's project in its .env: it shares the lane.
  * The twin lane's project (legacy m for m0, or m0 for m) counts as the lane's, as it holds the
@@ -366,6 +368,7 @@ export function chooseTakeover(
       else from.push(`${dir} (gone)`);
     } else if (!w.exists) from.push(`${dir} (gone)`);
     else if (pid !== undefined && pidRunning(pid)) refused.push(`${dir} is locked by a session that is still running (pid ${pid}).`);
+    else if (w.heldBySession !== undefined) refused.push(`${dir} is on ${on} and ${w.heldBySession}.`);
     else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
     else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
     else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);

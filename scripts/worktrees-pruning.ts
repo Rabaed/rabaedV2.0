@@ -100,12 +100,14 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
 /**
  * Why a worktree chosen for removal stays after all, judged on its facts gathered
  * again just before removing it (undefined when no longer listed by git) with the
- * desktop sessions read again too, or undefined when it still goes.
+ * desktop sessions read again too (and the running Claude sessions, heldBySession: the caller
+ * gathers the facts with a fresh liveness), or undefined when it still goes.
  */
 export function changedSinceListed(now: PruneWorktree | undefined, openSession?: DesktopSessions): string | undefined {
   if (!now) return "no longer a worktree";
   const session = openSession?.(now.path);
   if (session !== undefined) return openSessionReason(session, { sinceListed: true });
+  if (now.heldBySession !== undefined) return now.heldBySession;
   if (now.dirty) return "uncommitted changes since it was listed";
   if (now.unpushed > 0) return `${plural(now.unpushed, "commit")} on no origin branch since it was listed`;
   return undefined;
@@ -118,6 +120,7 @@ function skipReason(w: PruneWorktree, session: DesktopSession | undefined, mainR
   if (w.branch === "main") return "on main";
   if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return openSessionReason({ kind: "open", session: w.locked });
   if (session !== undefined) return openSessionReason(session);
+  if (w.heldBySession !== undefined) return w.heldBySession;
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
   if (w.dirty) return "uncommitted changes";
   if (w.unpushed > 0) return `${plural(w.unpushed, "commit")} on no origin branch`;
