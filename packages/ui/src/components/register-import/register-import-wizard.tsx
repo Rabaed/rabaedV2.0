@@ -408,7 +408,7 @@ export function RegisterImportWizard({
       ...(Object.keys(fieldMatches).length > 0 ? { fields: fieldMatches } : {}),
       ...(packagesChoice.mode === "column" && byHand("package") ? { package: byHand("package") } : {}),
     };
-    const unconfirmed = suggestedMapping(suggested, matches);
+    const suggestedKeys = suggestedMapping(suggested, matches);
     const byColumn = (allColumns || packagesChoice.mode === "column") && columnOf("package");
     const forFile =
       !allColumns && packagesChoice.mode === "file"
@@ -428,7 +428,7 @@ export function RegisterImportWizard({
       ...(columnOf("assignTo") ? { assignTo: columnOf("assignTo") } : {}),
       ...(formFields.length > 0 ? { fields: formFields } : {}),
       ...(withMatches && Object.keys(valueMatches).length > 0 ? { values: valueMatches } : {}),
-      ...(withMatches && unconfirmed ? { suggested: unconfirmed } : {}),
+      ...(withMatches && suggestedKeys ? { suggested: suggestedKeys } : {}),
       ...(defaultAssignee || rules.length > 0
         ? { assign: { ...(defaultAssignee ? { default: defaultAssignee } : {}), ...(rules.length > 0 ? { rules } : {}) } }
         : {}),
