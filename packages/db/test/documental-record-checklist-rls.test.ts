@@ -21,6 +21,8 @@ import { addTestScreen, addTestWorkflow, bilingual, buildSeamTwoTower, c2Draft, 
 
 const urls = testDatabaseUrls();
 const TYPE = `WR${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
+/** The same Inspection on a Workflow whose Approve · A shows no checklist: that close takes none of it. */
+const UNTAKEN_TYPE = `${TYPE}U`;
 const FIELD = "inspection_checklist";
 const wirForm = readFileSync(new URL("../../../apps/admin/forms/WIR.json", import.meta.url), "utf8");
 /** What the Engineer saved first: changed before the code. */
@@ -54,26 +56,26 @@ const photos: Record<"formwork" | "dropped" | "cover" | "annotated", string> = {
 const run = (text: string) => migrator.query(text);
 const one = async (text: string, values: unknown[]): Promise<string> => (await migrator.query(text, values)).rows[0].id as string;
 
-/** `as` takes `transition` on the Inspection with `answers`, an Internal Note and a Recommended Code. */
-const takeWith = (as: string, transition: string, options: { answers?: object; note?: string; recommended?: string } = {}) =>
+/** `as` takes `transition` on Inspection `itemId` with `answers`, an Internal Note and a Recommended Code. */
+const takeWith = (as: string, itemId: string, transition: string, options: { answers?: object; note?: string; recommended?: string } = {}) =>
   tower.outcome(
     as,
-    sql`select app.take_transition(${id}::uuid, ${transition}, ${JSON.stringify(options.answers ?? {})}::jsonb, ${options.note ?? ""},
-      app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now(), null, ${options.recommended ?? null}) as outcome`,
+    sql`select app.take_transition(${itemId}::uuid, ${transition}, ${JSON.stringify(options.answers ?? {})}::jsonb, ${options.note ?? ""},
+      app.answers_sha256(${itemId}::uuid), ${randomUUID()}::uuid, now(), null, ${options.recommended ?? null}) as outcome`,
   );
-const save = (answers: object) =>
-  tower.outcome(tower.k1.members.engineer, sql`select app.save_reply_checklist(${id}::uuid, ${FIELD}, ${JSON.stringify(answers)}::jsonb, now()) as outcome`);
+const save = (itemId: string, answers: object) =>
+  tower.outcome(tower.k1.members.engineer, sql`select app.save_reply_checklist(${itemId}::uuid, ${FIELD}, ${JSON.stringify(answers)}::jsonb, now()) as outcome`);
 
 /** K1's Engineer photographs check item `item` as `fileName`: started and confirmed, as the api does once the file is stored. */
-async function addPhoto(item: string, fileName: string): Promise<string> {
+async function addPhoto(itemId: string, item: string, fileName: string): Promise<string> {
   const [started] = await tower.call<{ outcome: string; document_id: string }>(
     tower.k1.members.engineer,
-    sql`select outcome, document_id from app.start_reply_document_upload(${id}::uuid, ${FIELD}, ${item}, ${fileName}, 1024, 'image/jpeg', now())`,
+    sql`select outcome, document_id from app.start_reply_document_upload(${itemId}::uuid, ${FIELD}, ${item}, ${fileName}, 1024, 'image/jpeg', now())`,
   );
   expect(started!.outcome).toBe("started");
   const confirmed = await tower.outcome(
     tower.k1.members.engineer,
-    sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 1024, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
+    sql`select app.confirm_document_upload(${itemId}::uuid, ${started!.document_id}::uuid, 1024, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`,
   );
   expect(confirmed).toBe("confirmed");
   return started!.document_id;
@@ -94,6 +96,11 @@ beforeAll(async () => {
     recommendCode: true,
     screens: { approve_a: screenVersion, revise_c: screenVersion },
   });
+  const untakenWorkflowId = await addTestWorkflow(run, {
+    name: bilingual(`RP-982 untaken checklist ${digits(6)}`),
+    recommendCode: true,
+    screens: { revise_c: screenVersion },
+  });
   const formId = await one("insert into form_definition (owner_kind, name) values ('rabaed', $1) returning id", [JSON.stringify(bilingual("Inspection (RP-982)"))]);
   await migrator.query("insert into form_version (form_definition_id, version_no, status, published_at, schema) values ($1, 1, 'published', now(), $2::jsonb)", [formId, wirForm]);
   await migrator.query(
@@ -101,20 +108,25 @@ beforeAll(async () => {
      select 'rabaed', module_key, $1, $2, $3, outcome_kind, $4 from work_item_type where owner_kind = 'rabaed' and code = 'WIR'`,
     [TYPE, JSON.stringify(bilingual("Inspection (RP-982)")), workflowId, formId],
   );
+  await migrator.query(
+    `insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+     select 'rabaed', module_key, $1, $2, $3, outcome_kind, $4 from work_item_type where owner_kind = 'rabaed' and code = 'WIR'`,
+    [UNTAKEN_TYPE, JSON.stringify(bilingual("Inspection, untaken (RP-982)")), untakenWorkflowId, formId],
+  );
   tower = await buildSeamTwoTower(app, migrator, towerOptions);
   const { k1 } = tower;
 
   id = await wirAtConsultant(tower, { type: TYPE, title: "Slab pour, Level 2" });
-  expect(await save(FIRST)).toBe("saved");
-  photos.formwork = await addPhoto("formwork", "formwork.jpg");
-  photos.dropped = await addPhoto("cover", "dropped.jpg");
+  expect(await save(id, FIRST)).toBe("saved");
+  photos.formwork = await addPhoto(id, "formwork", "formwork.jpg");
+  photos.dropped = await addPhoto(id, "cover", "dropped.jpg");
   expect(await tower.outcome(k1.members.engineer, sql`select app.remove_document(${id}::uuid, ${photos.dropped}::uuid, now()) as outcome`)).toBe("removed");
-  expect(await takeWith(k1.members.engineer, "send_to_manager", { note: INTERNAL_NOTE, recommended: "A" })).toBe("applied");
+  expect(await takeWith(k1.members.engineer, id, "send_to_manager", { note: INTERNAL_NOTE, recommended: "A" })).toBe("applied");
   expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
-  expect(await takeWith(k1.members.manager, "return_to_engineer")).toBe("applied");
+  expect(await takeWith(k1.members.manager, id, "return_to_engineer")).toBe("applied");
   expect(await tower.pickUp(k1.members.engineer, id)).toBe("picked_up");
-  expect(await save(FINAL)).toBe("saved");
-  photos.cover = await addPhoto("cover", "cover.jpg");
+  expect(await save(id, FINAL)).toBe("saved");
+  photos.cover = await addPhoto(id, "cover", "cover.jpg");
   const [copy] = await tower.call<{ outcome: string; document_id: string }>(
     k1.members.engineer,
     sql`select outcome, document_id from app.start_annotated_copy_upload(${id}::uuid, ${photos.formwork}::uuid, 'formwork-annotated.jpg', 2048, 'image/jpeg', now())`,
@@ -127,9 +139,9 @@ beforeAll(async () => {
     ),
   ).toBe("confirmed");
   photos.annotated = copy!.document_id;
-  expect(await takeWith(k1.members.engineer, "send_to_manager", { note: INTERNAL_NOTE, recommended: "C" })).toBe("applied");
+  expect(await takeWith(k1.members.engineer, id, "send_to_manager", { note: INTERNAL_NOTE, recommended: "C" })).toBe("applied");
   expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
-  expect(await takeWith(k1.members.manager, "revise_c", { answers: { remarks: "Seal the formwork" } })).toBe("applied");
+  expect(await takeWith(k1.members.manager, id, "revise_c", { answers: { remarks: "Seal the formwork" } })).toBe("applied");
 
   // The record job's read, as the worker: the app role with no Member set.
   const outbox = await one("select id from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = $1", [id]);
@@ -172,9 +184,56 @@ describe("RP-982-1: the record's facts hold the checklist as the code shared it,
     expect(facts.transitions.filter((t) => t.answers !== null && FIELD in t.answers)).toHaveLength(1);
   });
 
-  it("give no reply photo a Send Back discarded, nor one no Transition took", async () => {
+  it("give no reply photo the Engineer took back before the code", async () => {
     const { rows } = await migrator.query<{ file_name: string }>("select file_name from app.documents_shared_before_close($1) order by created_at, id", [id]);
     expect(rows.map((r) => r.file_name)).toEqual(["formwork.jpg", "cover.jpg", "formwork-annotated.jpg"]);
+  });
+});
+
+// V19 (and RP-955, the open question on the holder's files at a close): a reply Document is the
+// record's only when a shared event of the item took it. One the holder added that no Transition
+// took stays out; so does one an internal event, or another item's event, names.
+describe("RP-982-1: a reply Document no shared event of the item took stays out", () => {
+  let untaken = "";
+  const recordDocuments = async (itemId: string): Promise<string[]> =>
+    (await migrator.query<{ file_name: string }>("select file_name from app.documents_shared_before_close($1) order by created_at, id", [itemId])).rows.map((r) => r.file_name);
+
+  beforeAll(async () => {
+    // K1's Engineer answers and photographs the checklist, but the Manager closes with Approve · A,
+    // whose Screen holds no checklist: no Transition takes them, and the close discards them.
+    untaken = await wirAtConsultant(tower, { type: UNTAKEN_TYPE, title: "Slab pour, Level 3" });
+    expect(await save(untaken, FINAL)).toBe("saved");
+    await addPhoto(untaken, "formwork", "untaken.jpg");
+    expect(await takeWith(tower.k1.members.engineer, untaken, "send_to_manager", { recommended: "A" })).toBe("applied");
+    expect(await tower.pickUp(tower.k1.members.manager, untaken)).toBe("picked_up");
+    expect(await takeWith(tower.k1.members.manager, untaken, "approve_a")).toBe("applied");
+  });
+
+  it("one the holder added that no Transition took: not the record's, and no checklist in its facts; the code's photos are (positive control)", async () => {
+    expect(await recordDocuments(untaken)).toEqual([]);
+    const outbox = await one("select id from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = $1", [untaken]);
+    const untakenFacts = (await sql<{ facts: RecordFacts }>`select app.documental_record_facts(${outbox}::uuid) as facts`.execute(app)).rows[0]!.facts;
+    expect(JSON.stringify(untakenFacts)).not.toContain("untaken.jpg");
+    expect(untakenFacts.transitions.filter((t) => t.answers !== null && FIELD in t.answers)).toEqual([]);
+    expect(await recordDocuments(id)).toEqual(["formwork.jpg", "cover.jpg", "formwork-annotated.jpg"]);
+  });
+
+  it("one taken by an internal event, or naming another item's shared event: not the record's", async () => {
+    const internal = await one("select id from work_item_event where work_item_id = $1 and audience = 'internal' order by seq desc limit 1", [id]);
+    const elsewhere = await one("select id from work_item_event where work_item_id = $1 and audience = 'shared' order by seq desc limit 1", [untaken]);
+    // cover.jpg was added in the arrival the close follows: only the code's shared event makes it the record's.
+    for (const event of [internal, elsewhere]) {
+      await migrator.query("begin");
+      try {
+        // The owner, bypassing the frozen-document trigger for this rolled-back setup only.
+        await migrator.query("alter table document disable trigger document_frozen");
+        await migrator.query("update document set reply_event_id = $1 where id = $2", [event, photos.cover]);
+        expect(await recordDocuments(id), event).toEqual(["formwork.jpg", "formwork-annotated.jpg"]);
+      } finally {
+        await migrator.query("rollback");
+      }
+    }
+    expect(await recordDocuments(id)).toContain("cover.jpg");
   });
 });
 

@@ -10,7 +10,7 @@ import { attachmentFieldKeysOf, isListedDocument } from "./form-content.ts";
 // Documents under the item's prefix (ADR 0023). A file it can't read or open
 // is left without a count or an image, never a failed record.
 
-/** A photo larger than this is listed by name and time only, so a record still opens on a phone. */
+/** A photo larger than this is listed by name, time and fingerprint only, so a record still opens on a phone. */
 const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
 /** All the inlined photos together stay under this. */
 const MAX_PHOTOS_TOTAL_BYTES = 40 * 1024 * 1024;
@@ -22,7 +22,10 @@ export interface DocumentAssets {
   readonly pageCounts: ReadonlyMap<string, number | null>;
   /** The data URL of each Form photo, Signature, logo and Stamp by storage key. */
   readonly images: ReadonlyMap<string, string>;
-  /** The SHA-256 (hex) of each inlined image's bytes (photos, Signatures, logos, Stamps) by storage key: the Record Data carries it (RP-155). */
+  /**
+   * The SHA-256 (hex) of each inlined image's bytes (photos, Signatures, logos, Stamps), and of each Form
+   * photo past the limits (RP-982), by storage key: the Record Data carries it (RP-155).
+   */
   readonly fingerprints: ReadonlyMap<string, string>;
 }
 
@@ -71,10 +74,15 @@ export async function formAssets(facts: Pick<RecordFacts, "form" | "documents">,
     else if (d.contentType === "application/pdf") pageCounts.set(d.storageKey, await pdfPages(files, d.storageKey));
     else pageCounts.set(d.storageKey, null);
   }
-  const { images, fingerprints } = await inlinePhotos(
-    facts.documents.filter((d) => !isListedDocument(d, attachmentFields)),
-    files,
-  );
+  const photos = facts.documents.filter((d) => !isListedDocument(d, attachmentFields));
+  const { images, fingerprints } = await inlinePhotos(photos, files);
+  // One past the limits prints its name and fingerprint (RP-982): its Document's (RP-618), or, from
+  // before RP-618, its stored bytes' (streamed, never held in memory); none when the file is gone.
+  for (const d of photos) {
+    if (fingerprints.has(d.storageKey)) continue;
+    const sha256 = d.sha256 ?? (await files.sha256(d.storageKey));
+    if (sha256) fingerprints.set(d.storageKey, sha256);
+  }
   return { pageCounts, images, fingerprints };
 }
 

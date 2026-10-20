@@ -1,9 +1,11 @@
 import type { RecordFacts } from "@rabaed/db";
 import { describe, expect, it } from "vitest";
+import { fallbackFonts } from "./fonts.ts";
 import type { RecordBlock } from "./form-content.ts";
-import { goldenFacts } from "./golden-fixtures.ts";
+import { fixtureImages, goldenFacts } from "./golden-fixtures.ts";
+import { recordHtml } from "./layout.ts";
 import { parseRecordData } from "./record-data-read.ts";
-import { recordDataOf, recordDataXml } from "./record-data.ts";
+import { recordDataOf, recordDataXml, recordOf } from "./record-data.ts";
 
 // A reply checklist frozen at the code (RP-982; form-engine.md §3.3 and §6, element 8): the Record
 // prints the checklist a Transition on the path took into its shared event like any Form
@@ -65,6 +67,18 @@ describe("a reply checklist on the record", () => {
       ["Work to inspect", ["field", "field"]],
       ["Checklist", ["checklist"]],
     ]);
+  });
+
+  it("prints the fingerprint of a photo it has no image of (past the inline limits), and only of that one", () => {
+    const fingerprints = new Map([
+      ["photo-1", "a".repeat(64)],
+      ["photo-3", "c".repeat(64)],
+    ]);
+    const { data, images } = recordOf(goldenFacts("wir", "en"), verification, new Map(), () => true, fingerprints);
+    // photo-1 inlined; photo-3 (cover.jpg) not: no image, so its fingerprint is printed beside its name.
+    const html = recordHtml(data, fallbackFonts(), new Map([["photo-1", fixtureImages.get("photo-1")!]]), images);
+    expect(html).toContain("c".repeat(64));
+    expect(html).not.toContain("a".repeat(64));
   });
 
   it("writes the Snag line into the Record Data, and reads it back", () => {

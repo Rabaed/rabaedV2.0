@@ -60,6 +60,25 @@ describe("findPhotos", () => {
     const found = await findPhotos(new Set([sha(one)]), [doc("k1", one)], store({}));
     expect(found.keys.size).toBe(0);
   });
+
+  // A photo past the inline limits (assets.ts) printed its name and fingerprint, no image (RP-982).
+  const large = { size: 7 * 1024 * 1024 };
+
+  it("finds a photo past the inline limits by its fingerprint, its stored bytes checked, and gives no image of it", async () => {
+    const found = await findPhotos(new Set([sha(one)]), [doc("big", one, large)], store({ big: one }));
+    expect(found.keys).toEqual(new Map([[sha(one), "big"]]));
+    expect(found.images.size).toBe(0);
+  });
+
+  it("finds one confirmed before its fingerprint was kept, by streaming its bytes", async () => {
+    const found = await findPhotos(new Set([sha(one)]), [doc("old-big", one, { ...large, sha256: null })], store({ "old-big": one }));
+    expect(found.keys).toEqual(new Map([[sha(one), "old-big"]]));
+  });
+
+  it("does not find one whose stored bytes changed, or are gone", async () => {
+    expect((await findPhotos(new Set([sha(one)]), [doc("big", one, large)], store({ big: two }))).keys.size).toBe(0);
+    expect((await findPhotos(new Set([sha(one)]), [doc("big", one, large)], store({}))).keys.size).toBe(0);
+  });
 });
 
 describe("findPhotos with the record's Signatures, logos and Stamps", () => {

@@ -5,6 +5,8 @@ import {
   checklistSummary,
   checklistSummaryText,
   checklistTemplateItem,
+  replyChecklistOf,
+  snagTickLabels,
   formatFormValue,
   formatTableCell,
   formSchema,
@@ -12,6 +14,7 @@ import {
   isAnswerField,
   snagTick,
   tableTotals,
+  type ChecklistAnswers,
   type ChecklistField,
   type ChecklistTemplateChoice,
   type FormField,
@@ -120,18 +123,15 @@ function camelLinks(answers: Readonly<Record<string, unknown>>): Record<string, 
   );
 }
 
-/** A failed check item's "Raise a Snag" tick as the record says it (RP-577), in the web's words. */
-const SNAG = {
-  ticked: { en: "A Snag is raised with the code", ar: "يُنشأ عيب مع الرمز" },
-  unticked: { en: "No Snag is raised", ar: "لا يُنشأ عيب" },
-} as const;
+/** A field's label in the record's languages; a field with none has an empty one. */
+const labelOf = (field: FormField, language: RecordLanguage): RecordText => ("label" in field ? pick(field.label, language) : same("", language));
 
 /** A checklist's block: its summary, then each item's text, answer, comment, Snag line and photos (field `checklist.key`'s Documents). */
 function checklistBlock(checklist: ChecklistField, value: unknown, documents: readonly DocumentFact[], language: RecordLanguage): RecordBlock {
-  const entry = (isChecklist(value) ? value : {}) as Record<string, { answer?: string; comment?: string; snag?: false }>;
+  const entry = (isChecklist(value) ? value : {}) as ChecklistAnswers;
   return {
     kind: "checklist",
-    label: "label" in checklist ? pick(checklist.label, language) : same("", language),
+    label: labelOf(checklist, language),
     summary: perLanguage(language, (l) => checklistSummaryText(checklistSummary(checklist, value), l)),
     items: checklist.items.map((item) => {
       const tick = snagTick(item, entry[item.key]);
@@ -142,7 +142,7 @@ function checklistBlock(checklist: ChecklistField, value: unknown, documents: re
           return answer ? ((checklistAnswerLabels[l] as Record<string, string>)[answer] ?? answer) : none;
         }),
         comment: entry[item.key]?.comment ?? null,
-        snag: tick === null ? null : pick(SNAG[tick], language),
+        snag: tick === null ? null : perLanguage(language, (l) => snagTickLabels[l][tick]),
         photos: photosOf(documents, checklist.key, item.key),
       };
     }),
@@ -177,8 +177,8 @@ function replyChecklists(
         if (field.type !== "copied_checklist" || !isChecklist(answers[field.key])) return [];
         const items = z.array(checklistTemplateItem).safeParse(copies.find((c) => c.fieldKey === field.copyOf)?.items);
         if (!items.success) return [];
-        // As the api checked it (replyChecklistOf), on the copy's items.
-        const checklist: ChecklistField = { key: field.key, type: "checklist", label: field.label, required: field.required !== false, items: items.data };
+        // As the api checks it, on the copy's items.
+        const checklist = replyChecklistOf(field, { items: items.data });
         return [{ copyOf: field.copyOf, title: pick(section.title, language), block: checklistBlock(checklist, answers[field.key], documents, language) }];
       }),
     );
@@ -209,7 +209,6 @@ export function formContent(
   const attachmentFieldKeys = attachmentFieldKeysOf(facts);
   const replies = replyChecklists(path, copies, facts.documents, language);
 
-  const labelOf = (field: FormField): RecordText => ("label" in field ? pick(field.label, language) : same("", language));
 
   function blockOf(field: FormField): RecordBlock | null {
     if (!isAnswerField(field) || !shown.fields.has(field.key)) return null;
@@ -225,7 +224,7 @@ export function formContent(
         return null; // listed with the Documents
       case "photos": {
         const photos = photosOf(facts.documents, field.key, null);
-        return photos.length === 0 ? null : { kind: "photos", label: labelOf(field), photos };
+        return photos.length === 0 ? null : { kind: "photos", label: labelOf(field, language), photos };
       }
       case "checklist":
         return checklistBlock(field as ChecklistField, value, facts.documents, language);
@@ -236,7 +235,7 @@ export function formContent(
         const totals = tableTotals(table, rows);
         return {
           kind: "table",
-          label: labelOf(field),
+          label: labelOf(field, language),
           columns: table.columns.map((c) => pick(c.label, language)),
           rows: rows.map((row) => table.columns.map((c) => perLanguage(language, (l) => formatTableCell(c, row[c.key], l, lists) || none))),
           totals: table.columns.some((c) => totals[c.key] !== undefined)
@@ -245,14 +244,14 @@ export function formContent(
         };
       }
       default: {
-        if (isBlank(value)) return { kind: "field", label: labelOf(field), value: same(none, language) };
+        if (isBlank(value)) return { kind: "field", label: labelOf(field, language), value: same(none, language) };
         const named =
           field.type === "participant" && typeof value === "string" && facts.form.companyNames[value]
             ? { companyName: facts.form.companyNames[value], memberName: null }
             : undefined;
         return {
           kind: "field",
-          label: labelOf(field),
+          label: labelOf(field, language),
           value: perLanguage(language, (l) => formatFormValue(field, value, l, named, lists, {}, suppliers, templates) || none),
         };
       }

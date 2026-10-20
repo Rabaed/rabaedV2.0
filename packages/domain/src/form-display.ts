@@ -108,6 +108,15 @@ export const checklistAnswerLabels = {
   ar: { yes: "نعم", no: "لا", pass: "مقبول", fail: "مرفوض", na: "لا ينطبق" },
 } satisfies Record<Locale, Record<ChecklistAnswer, string>>;
 
+/**
+ * What a failed check item's "Raise a Snag" tick (snagTick, RP-577) says once read: the web's read
+ * mode and the Documental Record (RP-982) in the same words.
+ */
+export const snagTickLabels = {
+  en: { ticked: "A Snag is raised with the code", unticked: "No Snag is raised" },
+  ar: { ticked: "يُنشأ عيب مع الرمز", unticked: "لا يُنشأ عيب" },
+} satisfies Record<Locale, Record<"ticked" | "unticked", string>>;
+
 const summaryWords = {
   en: { unanswered: "not answered", none: "Not answered" },
   ar: { unanswered: "بلا إجابة", none: "لم تتم الإجابة" },

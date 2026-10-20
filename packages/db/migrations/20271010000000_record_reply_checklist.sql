@@ -218,7 +218,8 @@ create or replace function app.documental_record_facts(p_outbox_id uuid) returns
           -- The Documents the other Participants saw, in the order they were added, each with its
           -- fingerprint (RP-618): none of an item never Submitted, none added after the arrival the
           -- close follows (the close counts one arrival itself), so never one the holder added while
-          -- it held the item at the close (V19).
+          -- it held the item at the close (V19), except a reply Document a shared event took, such as
+          -- the closing code's checklist photos (RP-982): that event shared it.
           'documents', coalesce((
             select jsonb_agg(jsonb_build_object(
               'fileName', d.file_name, 'contentType', d.content_type, 'size', d.size_bytes::bigint, 'storageKey', d.storage_key,
