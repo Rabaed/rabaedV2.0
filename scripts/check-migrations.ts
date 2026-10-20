@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { reportMigrationProblems } from "./check-migration-drift.ts";
 import { branchIssue, formatReservation, migrationDays, reservationsFile } from "./check-migrations-days.ts";
+import { reportImmutable } from "./check-migrations-immutable.ts";
+import { verdictLine } from "./check-migrations-verdict.ts";
 import { git } from "./migrations.ts";
 
 // `pnpm check:migrations` (RP-384): the CI drift check, run before a push or
@@ -13,17 +15,19 @@ import { git } from "./migrations.ts";
 // fails here with its own message, not only in CI after the push.
 // Then the migration days (RP-560): a migration on a day planning/migration-days.md
 // reserves for another issue is refused; one on a day nobody reserved is named.
+// Last, one verdict line with each kind of refusal and its count (RP-990), so any
+// tail of the output shows the outcome.
 
 const repo = process.cwd();
-const options = { cwd: repo, stdio: "inherit" } as const;
-const fetched = spawnSync("git", ["fetch", "origin", "main"], options);
+const fetched = spawnSync("git", ["fetch", "origin", "main"], { cwd: repo, stdio: "inherit" });
 if (fetched.status !== 0) {
   console.error("git fetch origin main failed; the migration check needs a current origin/main.");
+  console.log("check:migrations: FAILED (git fetch origin main failed)");
   process.exit(fetched.status ?? 1);
 }
-const checked = spawnSync(process.execPath, [join(import.meta.dirname, "check-migration-drift.ts"), "origin/main", "HEAD"], options);
+const { drift, ordering, overloads, duplicates, hiddenSorts } = reportMigrationProblems(repo, "origin/main", "HEAD");
 
-const ordered = spawnSync(process.execPath, [join(import.meta.dirname, "check-migrations-immutable.ts"), "origin/main"], options);
+const { altered, misordered } = reportImmutable(repo, "origin/main", "HEAD");
 
 const branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
 const { refused, unreserved } = migrationDays(repo, "origin/main", "HEAD", branchIssue(branch));
@@ -34,6 +38,15 @@ for (const { name, reservation } of refused) {
 if (unreserved.length > 0) console.error(`Warning: no day in ${reservationsFile} is reserved for ${unreserved.join(", ")}. Create migrations with \`pnpm migration:new <name> --issue RP-nnn\`: it takes the next free day and reserves it, so another lane doesn't take it.`);
 if (refused.length === 0) console.log("Every new migration is on a day reserved for its issue, or on an unreserved one.");
 
-if (checked.status !== 0) process.exit(checked.status ?? 1);
-if (ordered.status !== 0) process.exit(ordered.status ?? 1);
-if (refused.length > 0) process.exit(1);
+const refusals = {
+  redefinedOnMain: drift.length,
+  redefinedUnseen: ordering.length,
+  staleOverloads: overloads.length,
+  sharedTimestamps: duplicates.length,
+  hiddenSortKeys: hiddenSorts.length,
+  existingChanged: altered.length,
+  sortBeforeMain: misordered.length,
+  otherIssueDays: refused.length,
+};
+console.log(verdictLine(refusals, unreserved.length));
+if (Object.values(refusals).some((count) => count > 0)) process.exit(1);

@@ -94,6 +94,24 @@ describe("check-migrations", () => {
     expect(result.stdout).toContain("every new migration sorts after the base's latest");
   });
 
+  // RP-990: whatever prints above it, the last line of stdout is the verdict, with the counts.
+  const lastLine = (output: string) => output.trimEnd().split("\n").at(-1);
+
+  it("ends with a FAILED verdict counting each kind of refusal, keeping exit code 1", () => {
+    commit(clone, { [`${dir}/20261210000000_other.sql`]: "select 3;\n", [`${dir}/20261205000000_early.sql`]: "select 4;\n", [`${dir}/20261201000000_start.sql`]: "select 99;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(1);
+    // _other shares _watch's timestamp and sorts before it by name, as _early does by day.
+    expect(lastLine(result.stdout)).toBe("check:migrations: FAILED (1 shared timestamp, 1 already on main and changed, 2 sort before main; warning: 2 on a day nobody reserved)");
+  });
+
+  it("ends with a passed verdict, with the unreserved-day warning", () => {
+    commit(clone, { [`${dir}/20261211000000_other.sql`]: "select 3;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(0);
+    expect(lastLine(result.stdout)).toBe("check:migrations: passed (warning: 1 on a day nobody reserved)");
+  });
+
   it("passes on main itself", () => {
     git(clone, "switch", "-q", "main");
     expect(check().status).toBe(0);

@@ -41,15 +41,10 @@ export function misorderedMigrations(repo: string, base: string, head: string = 
     .map(({ path }) => ({ path, latest }));
 }
 
-if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
-  const base = process.argv[2];
-  if (!base) {
-    console.error("Usage: node scripts/check-migrations-immutable.ts <base-ref> [head-ref]");
-    process.exit(2);
-  }
-  const head = process.argv[3] ?? "HEAD";
-  const altered = alteredMigrations(process.cwd(), base, head);
-  const misordered = misorderedMigrations(process.cwd(), base, head);
+/** Prints each migration altered or misordered, with its fix, or the passing line, and returns them (RP-990: `check:migrations` counts them). */
+export function reportImmutable(repo: string, base: string, head: string = "HEAD"): { altered: string[]; misordered: { path: string; latest: string }[] } {
+  const altered = alteredMigrations(repo, base, head);
+  const misordered = misorderedMigrations(repo, base, head);
   if (altered.length > 0) {
     console.error("Migrations that already exist on the base branch must not change. Put the change in a new migration:");
     for (const entry of altered) console.error(`  ${entry}`);
@@ -58,6 +53,16 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error(`${path} sorts before ${latest}, the latest migration on the base branch.`);
     console.error("  Merge the base branch, then rename the file to sort after that migration, and re-check every function it re-defines against the base's latest definition: a copy made before the base moved on brings back an outdated body or a stale overload.");
   }
+  if (altered.length === 0 && misordered.length === 0) console.log("No existing migration was changed, and every new migration sorts after the base's latest.");
+  return { altered, misordered };
+}
+
+if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
+  const base = process.argv[2];
+  if (!base) {
+    console.error("Usage: node scripts/check-migrations-immutable.ts <base-ref> [head-ref]");
+    process.exit(2);
+  }
+  const { altered, misordered } = reportImmutable(process.cwd(), base, process.argv[3] ?? "HEAD");
   if (altered.length > 0 || misordered.length > 0) process.exit(1);
-  console.log("No existing migration was changed, and every new migration sorts after the base's latest.");
 }
