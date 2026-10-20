@@ -60,6 +60,15 @@ describe("committedFontFiles", () => {
     expect(committedFontFiles(repo, "main..pr")).toEqual(["design/fonts/added-then-removed.ttf"]);
   });
 
+  it("finds a font that a pull request's merge of another branch brings into its range", () => {
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.woff2": "wOF2\u0000" });
+    git("checkout", "-q", "-b", "pr", "main");
+    commit({ "pr.txt": "clean\n" });
+    git("merge", "-q", "--no-edit", "other");
+    expect(committedFontFiles(repo, "main..pr")).toEqual(["other.woff2"]);
+  });
+
   it("checks one branch's whole history when given a single revision", () => {
     commit({ "old.otf": "OTTO\u0000" });
     git("rm", "-q", "old.otf");
