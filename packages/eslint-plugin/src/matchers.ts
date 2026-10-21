@@ -224,3 +224,74 @@ const awsIdentifier = /arn:aws[\w-]*:|(?<![\w.+-])(?<!tel:)(?<!wa\.me\/)\d{12}(?
 export function awsIdentifierIn(text: string): string | null {
   return awsIdentifier.exec(text)?.[0] ?? null;
 }
+
+// ---- ICU messages ------------------------------------------------------------
+
+// An argument's head: its name, then its type and the comma before its options or style, if any.
+const argumentHead = /[^,{}]*(?:,\s*(\w+)\s*,?)?/y;
+
+/**
+ * Whether an ICU message prints a `#` in a plural or selectordinal branch: the `#` prints the count in
+ * the locale's own digits, Arabic-Indic in Arabic on some runtimes, so the count goes in as an argument
+ * formatted with formatNumber instead (RP-1022). Read as intl-messageformat (next-intl's) reads it: in a
+ * select's branch, even inside a plural, `#` is plain text, and so is a quoted `'#'`.
+ */
+export function hasPluralPound(message: string): boolean {
+  let i = 0;
+
+  // Message text up to the `}` that closes it, which is left for the caller.
+  const text = (inPlural: boolean): boolean => {
+    while (i < message.length && message[i] !== "}") {
+      const c = message[i]!;
+      const next = message[i + 1] ?? "";
+      if (c === "'" && next === "'") {
+        i += 2;
+      } else if (c === "'" && ("{}<>".includes(next) || (next === "#" && inPlural))) {
+        // Quoted text runs to the next lone apostrophe; `''` inside it is an apostrophe.
+        for (i += 2; i < message.length; i++) {
+          if (message[i] !== "'") continue;
+          if (message[i + 1] !== "'") break;
+          i++;
+        }
+        i++;
+      } else if (c === "#" && inPlural) {
+        return true;
+      } else if (c === "{") {
+        i++;
+        if (argument()) return true;
+      } else {
+        i++;
+      }
+    }
+    return false;
+  };
+
+  // An argument after its `{`, through its closing `}`.
+  const argument = (): boolean => {
+    argumentHead.lastIndex = i;
+    const type = argumentHead.exec(message)![1];
+    i = argumentHead.lastIndex;
+    if (type === "plural" || type === "selectordinal" || type === "select") {
+      const branchesInPlural = type !== "select";
+      // Selectors (one, =0, offset:1) and spaces are skipped; each `{…}` is a branch.
+      while (i < message.length && message[i] !== "}") {
+        if (message[i] === "{") {
+          i++;
+          if (text(branchesInPlural)) return true;
+        }
+        i++;
+      }
+    } else {
+      // A plain argument, or a number, date or time with a style that may hold braces.
+      for (let depth = 0; i < message.length && (message[i] !== "}" || depth > 0); i++) {
+        if (message[i] === "{") depth++;
+        else if (message[i] === "}") depth--;
+      }
+    }
+    i++;
+    return false;
+  };
+
+  for (; i < message.length; i++) if (text(false)) return true;
+  return false;
+}

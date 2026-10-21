@@ -1,6 +1,6 @@
 "use client";
 
-import type { ApprovedSupplier, BilingualText, Locale, Scope } from "@rabaed/domain";
+import { formatNumber, type ApprovedSupplier, type BilingualText, type Locale, type Scope } from "@rabaed/domain";
 import {
   Badge,
   Button,
@@ -83,7 +83,7 @@ export function ApprovedSupplierList({
                 </bdi>
               </>
             }
-            actions={<span className="text-caption text-muted">{t("approvedCount", { count: approved })}</span>}
+            actions={<span className="text-caption text-muted">{t("approvedCount", { count: approved, n: formatNumber(approved, locale) })}</span>}
             bodyClassName="px-5 pt-3 pb-5"
             data-testid={`suppliers-${trade.code}`}
           >

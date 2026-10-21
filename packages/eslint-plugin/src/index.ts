@@ -13,7 +13,7 @@ import {
   noUiTranslations,
   useClientDirective,
 } from "./js-rules.ts";
-import { jsonNoDeadlineWords } from "./json-rules.ts";
+import { jsonNoDeadlineWords, jsonNoPluralPound } from "./json-rules.ts";
 
 /**
  * Rabaed design guard rails (RP-199): design tokens only, logical (RTL-safe)
@@ -41,6 +41,7 @@ const plugin = {
     "json-no-deadline-words": jsonNoDeadlineWords,
     "json-no-avoid-terms": jsonNoAvoidTerms,
     "json-no-raw-bidi": jsonNoRawBidi,
+    "json-no-plural-pound": jsonNoPluralPound,
   },
 };
 
