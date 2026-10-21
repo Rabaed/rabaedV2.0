@@ -2562,7 +2562,7 @@
       "assignee_unknown_picked": "العضو المختار لم يعد عضواً نشطاً في شركتك في هذا المشروع",
       "assignee_cannot_create": "لا يستطيع {value} إنشاء {type}",
       "assignee_outside_visibility": "لا يغطي {value} {values}",
-      "package_not_open": "الحزمة {value} {status}: الحزم المفتوحة فقط تقبل مسودات جديدة",
+      "package_not_open": "الحزمة \u2066{value}\u2069 {status}: الحزم المفتوحة فقط تقبل مسودات جديدة",
       "package_name_too_long": "الحزمة «{value}» أطول من 200 حرف"
     },
     "rows": {
