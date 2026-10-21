@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 // The bot's comment on every PR woke every lane's Auto-fix for a report that asked for nothing.
 //
 // A later push edits the same comment, so a PR gets at most one. When the diff or a synth fails, the
-// script posts nothing: the job's red status says it.
+// script posts nothing: the job's red status, or the summary's warning, says it.
 //
 // Environment: DIFF_FILE (the diff's output), OUTCOME (the diff step's outcome), BASE_OUT and HEAD_OUT
 // (the base's and the PR's cloud assemblies), ACCOUNT (the AWS account ID, redacted from the report),
@@ -23,24 +23,22 @@ export const MARKER = "<!-- infra-diff -->";
 
 interface Resource {
   Type: string;
-  Properties?: unknown;
   DeletionPolicy?: string;
   UpdateReplacePolicy?: string;
-  Metadata?: unknown;
   [key: string]: unknown;
 }
 
 /** Each stack's CloudFormation template, by stack name. */
 export type Templates = Record<string, { Resources?: Record<string, Resource> }>;
 
-export type Why = "IAM" | "stateful";
+export type Sensitivity = "IAM" | "stateful";
 
 export interface SensitiveChange {
   stack: string;
   logicalId: string;
   type: string;
   change: "added" | "removed" | "modified";
-  why: Why[];
+  why: Sensitivity[];
 }
 
 /** Resources that grant access without being in AWS::IAM: a resource policy is IAM too. */
@@ -71,23 +69,27 @@ const STATEFUL_TYPES = new Set([
 /** The deletion policies CDK sets on a resource that keeps data (RemovalPolicy.RETAIN or SNAPSHOT). */
 const KEEPS_DATA = new Set(["Retain", "RetainExceptOnCreate", "Snapshot"]);
 
-function sensitivity(resource: Resource): Why[] {
-  const why: Why[] = [];
+function sensitivity(resource: Resource): Sensitivity[] {
+  const why: Sensitivity[] = [];
   if (resource.Type.startsWith("AWS::IAM::") || RESOURCE_POLICY_TYPES.has(resource.Type)) why.push("IAM");
   if (STATEFUL_TYPES.has(resource.Type) || KEEPS_DATA.has(resource.DeletionPolicy ?? "") || KEEPS_DATA.has(resource.UpdateReplacePolicy ?? "")) why.push("stateful");
   return why;
 }
 
-/** JSON with sorted keys and without CDK's construct metadata, which moves without changing the resource. */
+/** JSON with sorted keys, so key order never reads as a change. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => key !== "Metadata")
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     return `{${entries.map(([key, inner]) => `${JSON.stringify(key)}:${canonical(inner)}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+/** A resource without its own Metadata (CDK's construct path), which moves without changing the resource. */
+function resourceKey(resource: Resource): string {
+  const { Metadata: _metadata, ...rest } = resource;
+  return canonical(rest);
 }
 
 /** The IAM and stateful resources the head adds, removes or changes against the base, by stack then logical ID. */
@@ -99,28 +101,36 @@ export function sensitiveChanges(base: Templates, head: Templates): SensitiveCha
     const after = head[stack]?.Resources ?? {};
     const ids = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
     for (const logicalId of ids) {
-      const old = before[logicalId];
-      const now = after[logicalId];
-      if (old && now && canonical(old) === canonical(now)) continue;
-      const change = !old ? "added" : !now ? "removed" : "modified";
+      const inBase = before[logicalId];
+      const inHead = after[logicalId];
+      if (inBase && inHead && resourceKey(inBase) === resourceKey(inHead)) continue;
+      const change = !inBase ? "added" : !inHead ? "removed" : "modified";
       // A resource that stops being stateful counts: dropping Retain is the change that loses data.
-      const why = [...new Set([...(old ? sensitivity(old) : []), ...(now ? sensitivity(now) : [])])].sort();
-      const type = (now ?? old)?.Type ?? "";
+      const why = [...new Set([...(inBase ? sensitivity(inBase) : []), ...(inHead ? sensitivity(inHead) : [])])].sort();
+      const type = (inHead ?? inBase)?.Type ?? "";
       if (why.length > 0) changes.push({ stack, logicalId, type, change, why });
     }
   }
   return changes;
 }
 
-/** Each stack's template in a cloud assembly (`cdk synth -o <dir>`); throws when the assembly is not there. */
+/**
+ * Each stack's template in a cloud assembly (`cdk synth -o <dir>`). Throws when the assembly is not there, and
+ * on a CDK Stage (a nested assembly) or a nested stack, whose templates it does not read: either would otherwise
+ * report "no change" for what it skipped. The infra has neither (2026-10).
+ */
 export function readAssembly(dir: string): Templates {
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as {
     artifacts?: Record<string, { type: string; properties?: { templateFile?: string } }>;
   };
   const templates: Templates = {};
   for (const [name, artifact] of Object.entries(manifest.artifacts ?? {})) {
+    if (artifact.type === "cdk:cloud-assembly") throw new Error(`${name} is a nested cloud assembly (a CDK Stage), which this report does not read`);
     if (artifact.type !== "aws:cloudformation:stack" || !artifact.properties?.templateFile) continue;
-    templates[name] = JSON.parse(readFileSync(join(dir, artifact.properties.templateFile), "utf8")) as Templates[string];
+    const template = JSON.parse(readFileSync(join(dir, artifact.properties.templateFile), "utf8")) as Templates[string];
+    const nested = Object.entries(template.Resources ?? {}).find(([, resource]) => resource.Type === "AWS::CloudFormation::Stack");
+    if (nested) throw new Error(`${name} has a nested stack, ${nested[0]}, whose template this report does not read`);
+    templates[name] = template;
   }
   return templates;
 }
@@ -165,11 +175,8 @@ export function summaryMarkdown(input: { outcome: string; diff: string; changes:
   return [`### cdk diff (dev): ${outcome}`, "", verdict, "", "The diff against the deployed dev stacks, which also shows `main`'s undeployed changes:", "", fenced(shown), ""].join("\n");
 }
 
-/** The PR comment: the IAM and stateful changes, or, once a push removed them, that the earlier warning no longer holds. */
+/** The PR comment: the PR's IAM and stateful changes, with a link to the whole diff. */
 export function commentBody(changes: SensitiveChange[], runUrl: string): string {
-  if (changes.length === 0) {
-    return `${MARKER}\n### cdk diff (dev): no IAM or stateful change now\n\nThe latest push changes no IAM or stateful resource. The full diff is in the [job summary](${runUrl}).\n`;
-  }
   return `${MARKER}\n### cdk diff (dev): this PR changes IAM or a stateful resource\n\n${table(changes)}\n\nThe full diff against dev is in the [job summary](${runUrl}).\n`;
 }
 
@@ -182,15 +189,15 @@ export interface PrComments {
 
 /**
  * Comments only when the PR changes IAM or a stateful resource, editing its earlier comment rather than
- * adding one. With no such change, it edits an earlier warning to say so and otherwise posts nothing;
- * with no comparison (`undefined`), it posts nothing.
+ * adding one (found by MARKER and the Actions bot, never by "last comment": queue-drop-comment posts as the
+ * same bot). With no such change, or no comparison (`undefined`), it posts and edits nothing: an edit can
+ * wake Auto-fix too, so an earlier warning stays until a push changes IAM or state again.
  */
 export async function reportOnPr(changes: SensitiveChange[] | undefined, comments: PrComments, runUrl: string): Promise<"created" | "updated" | "none"> {
-  if (changes === undefined) return "none";
+  if (!changes?.length) return "none";
   const earlier = (await comments.list()).filter((comment) => comment.bot && comment.body.startsWith(MARKER)).at(-1);
   const body = commentBody(changes, runUrl);
   if (!earlier) {
-    if (changes.length === 0) return "none";
     await comments.create(body);
     return "created";
   }
@@ -234,9 +241,9 @@ async function main() {
     return value;
   };
   const outcome = env("OUTCOME");
-  const account = env("ACCOUNT");
   const runUrl = env("RUN_URL");
-  const diff = redact(readFileSync(env("DIFF_FILE"), "utf8"), account);
+  // ACCOUNT is empty when `aws sts get-caller-identity` failed; redact says so and nothing is posted.
+  const diff = redact(readFileSync(env("DIFF_FILE"), "utf8"), process.env.ACCOUNT ?? "");
   let changes: SensitiveChange[] | undefined;
   if (outcome === "success") {
     try {
@@ -246,8 +253,8 @@ async function main() {
     }
   }
   appendFileSync(env("GITHUB_STEP_SUMMARY"), summaryMarkdown({ outcome, diff, changes }));
-  const done = await reportOnPr(changes, overHttp(env("GITHUB_REPOSITORY"), env("GITHUB_TOKEN"), Number(env("PR"))), runUrl);
-  console.log(`IAM or stateful changes: ${changes === undefined ? "not compared" : changes.length}; PR comment: ${done}.`);
+  const comment = await reportOnPr(changes, overHttp(env("GITHUB_REPOSITORY"), env("GITHUB_TOKEN"), Number(env("PR"))), runUrl);
+  console.log(`IAM or stateful changes: ${changes === undefined ? "not compared" : changes.length}; PR comment: ${comment}.`);
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {

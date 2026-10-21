@@ -80,6 +80,12 @@ describe("sensitiveChanges", () => {
     expect(sensitiveChanges(base, head)).toEqual([]);
   });
 
+  it("still sees a property that happens to be named Metadata: only the resource's own Metadata is ignored", () => {
+    const base: Templates = { S: { Resources: { Role: { Type: "AWS::IAM::Role", Properties: { Metadata: "a" } } } } };
+    const head: Templates = { S: { Resources: { Role: { Type: "AWS::IAM::Role", Properties: { Metadata: "b" } } } } };
+    expect(sensitiveChanges(base, head)).toMatchObject([{ logicalId: "Role", change: "modified" }]);
+  });
+
   it("counts every resource of a new or removed stack", () => {
     expect(sensitiveChanges({}, { New: { Resources: { Role: role("a") } } })).toMatchObject([{ stack: "New", change: "added" }]);
     expect(sensitiveChanges({ Old: { Resources: { Bucket: bucket } } }, {})).toMatchObject([{ stack: "Old", change: "removed" }]);
@@ -95,6 +101,17 @@ describe("readAssembly", () => {
       JSON.stringify({ artifacts: { S: { type: "aws:cloudformation:stack", properties: { templateFile: "S.template.json" } }, Tree: { type: "cdk:tree", properties: { file: "tree.json" } } } }),
     );
     expect(readAssembly(dir)).toEqual({ S: { Resources: { Role: role("a") } } });
+  });
+
+  it("throws on a CDK Stage or a nested stack, whose templates it does not read, rather than report no change", () => {
+    const stage = mkdtempSync(join(tmpdir(), "infra-diff-"));
+    writeFileSync(join(stage, "manifest.json"), JSON.stringify({ artifacts: { Dev: { type: "cdk:cloud-assembly", properties: { directoryName: "assembly-Dev" } } } }));
+    expect(() => readAssembly(stage)).toThrow("Stage");
+
+    const nested = mkdtempSync(join(tmpdir(), "infra-diff-"));
+    writeFileSync(join(nested, "S.template.json"), JSON.stringify({ Resources: { Child: { Type: "AWS::CloudFormation::Stack", Properties: {} } } }));
+    writeFileSync(join(nested, "manifest.json"), JSON.stringify({ artifacts: { S: { type: "aws:cloudformation:stack", properties: { templateFile: "S.template.json" } } } }));
+    expect(() => readAssembly(nested)).toThrow("nested stack, Child");
   });
 
   it("throws when there is no assembly, so a failed synth never reads as 'no changes'", () => {
@@ -155,9 +172,6 @@ describe("commentBody", () => {
     expect(commentBody([{ ...change, type: "AWS::X|<b>`" }], "u")).toContain("| AWS::X__b__ |");
   });
 
-  it("says the earlier warning no longer holds when there are no changes", () => {
-    expect(commentBody([], "u")).toContain("no IAM or stateful change now");
-  });
 });
 
 function fakeComments(existing: { id: number; body: string; bot: boolean }[]) {
@@ -190,14 +204,22 @@ describe("reportOnPr", () => {
     expect(later.calls).toEqual(["update 5 ### cdk diff (dev): this PR changes IAM or a stateful resource"]);
   });
 
-  it("edits the earlier warning when a push removes the change, and leaves it once it says so", async () => {
+  it("leaves an earlier warning alone when a push removes the change: an edit can wake Auto-fix too", async () => {
     const { seam, calls } = fakeComments([{ id: 5, body: `${MARKER}\nold`, bot: true }]);
-    expect(await reportOnPr([], seam, "u")).toBe("updated");
-    expect(calls).toEqual(["update 5 ### cdk diff (dev): no IAM or stateful change now"]);
+    expect(await reportOnPr([], seam, "u")).toBe("none");
+    expect(calls).toEqual([]);
+  });
 
-    const settled = fakeComments([{ id: 5, body: commentBody([], "u"), bot: true }]);
-    expect(await reportOnPr([], settled.seam, "u")).toBe("none");
-    expect(settled.calls).toEqual([]);
+  it("does not edit a comment it posted with the same changes again", async () => {
+    const { seam, calls } = fakeComments([{ id: 5, body: commentBody([change], "u"), bot: true }]);
+    expect(await reportOnPr([change], seam, "u")).toBe("none");
+    expect(calls).toEqual([]);
+  });
+
+  it("never edits another bot comment, such as queue-drop-comment's (gh pr comment --edit-last did)", async () => {
+    const { seam, calls } = fakeComments([{ id: 7, body: "<!-- queue-drop-comment -->\nThe merge queue removed this PR", bot: true }]);
+    expect(await reportOnPr([change], seam, "u")).toBe("created");
+    expect(calls).toEqual(["create ### cdk diff (dev): this PR changes IAM or a stateful resource"]);
   });
 
   it("posts nothing when the diffs could not be compared (a failed diff or synth): the job's status says it", async () => {
