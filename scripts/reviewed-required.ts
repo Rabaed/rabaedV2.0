@@ -10,7 +10,9 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 // Run by .github/workflows/reviewed-required.yml, from the default branch's copy (a PR cannot edit
 // the script that checks it), on pull_request (opened, reopened, synchronize, labeled, unlabeled,
 // ready_for_review, converted_to_draft) and on merge_group, as one job name in both so the merge
-// queue runs it too. A draft PR passes with a note and is checked when marked ready (RP-1018). In
+// queue runs it too. A draft PR passes with a note and is checked when marked ready (RP-1018: a
+// check red until the final review woke Auto-fix about 15 times on one draft; a draft cannot enter
+// the merge queue). In
 // the queue the PR number comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the
 // labels are read live.
 //
@@ -71,8 +73,7 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
     if (queued === undefined) return { ok: false, summary: `The merge queue ref ${event.headRef} names no PR (expected gh-readonly-queue/<branch>/pr-<n>-<sha>).` };
     pr = queued;
   } else pr = event.pr;
-  // A draft passes (RP-1018): a check that is red until the final review woke Auto-fix about 15 times on one
-  // draft. Marking it ready (ready_for_review) runs this check again, and a draft cannot enter the merge queue.
+  // A draft passes (RP-1018, see the header); ready_for_review runs this check again.
   if (event.kind === "pull_request" && event.draft) return { ok: true, summary: `PR #${pr} is a draft: checked when marked ready.` };
   // On a PR, the reviewed-label run for this head may still be about to remove the label. It removes
   // it with GITHUB_TOKEN, which starts no `unlabeled` run, so this run waits and reads what it left.
