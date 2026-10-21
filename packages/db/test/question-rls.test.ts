@@ -1,5 +1,5 @@
 // Seam 2 for the Question Types (RP-626, SNAG-6; spec RP-619; workflow-engine.md §3; visibility.md
-// V3, V5 and scenarios RP-626-3 and RP-626-4), as the app role. C1 asks K1, the Consultant, a
+// V3, V5 and scenarios RP-626-1 to RP-626-4), as the app role. C1 asks K1, the Consultant, a
 // Question to Consultant and K1 answers it; K1 asks C1 a Question to Contractor. C2, another
 // Contractor of the same Trade covering another Location, never reads either; each Company
 // reads the other's work only through the shared Transitions.
@@ -141,6 +141,62 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.destroy();
   await migrator?.end();
+});
+
+describe("C2 reads none of C1's or K1's Questions at any Step (scenarios RP-626-1, RP-626-2)", () => {
+  /** `asker`'s Draft Question of `type` on Building A, Electrical. */
+  async function drafted(asker: Company, type: "QSN" | "QSC", title: string): Promise<string> {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      asker.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${type}, ${title}, app.latest_form_version(${type}), ${JSON.stringify({ question: title })}::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    return created!.work_item_id;
+  }
+  /** What `who` reads of item `id`: its row, events, Links, Steps and Stage, and how many of the Project's items it counts with it. */
+  const reads = async (who: string, id: string) => [
+    await seen(who, id),
+    await events(who, id),
+    await call(who, sql<{ to_id: string }>`select * from app.work_item_links(${id}::uuid)`),
+    await call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
+    await stepAsSeen(who, id),
+    (await call<{ n: number }>(who, sql`select count(*)::int as n from work_item where project_id = ${projectId}::uuid and id = ${id}::uuid`))[0]!.n,
+  ];
+  const nothing = [[], [], [], [], undefined, 0];
+
+  it("RP-626-1: C2 reads no row, event, Link, Step, Stage or count of C1's Question to Consultant, Draft to Closed", async () => {
+    const id = await drafted(c1, "QSN", "C1's own question");
+    const hidden = async (step: string) => expect(await reads(c2.member, id), step).toEqual(nothing);
+    await hidden("draft");
+    expect(await take(c1.member, id, "ask")).toBe("applied");
+    await hidden("open");
+    expect(await take(k1.member, id, "answer", { answer: "Yes" })).toBe("applied");
+    await hidden("answered");
+    expect(await pickUp(c1.member, id)).toBe("picked_up");
+    expect(await take(c1.member, id, "ask_again", { reason: "Which one?" })).toBe("applied");
+    await hidden("asked again");
+    expect(await take(k1.member, id, "answer", { answer: "This one" })).toBe("applied");
+    expect(await pickUp(c1.member, id)).toBe("picked_up");
+    expect(await take(c1.member, id, "close")).toBe("applied");
+    await hidden("closed");
+    // Positive control: K1, the asked Company, reads it.
+    expect(await seen(k1.member, id)).toEqual([id]);
+  });
+
+  it("RP-626-2: K1's Draft Question to Contractor is K1's alone; C1 reads it once asked; C2 never", async () => {
+    const id = await drafted(k1, "QSC", "For C1 only");
+    expect(await reads(c1.member, id), "draft, C1").toEqual(nothing);
+    expect(await reads(c2.member, id), "draft, C2").toEqual(nothing);
+    expect(await seen(k1.member, id)).toEqual([id]);
+    expect(await take(k1.member, id, "ask")).toBe("applied");
+    expect(await seen(c1.member, id)).toEqual([id]);
+    expect(await reads(c2.member, id), "open, C2").toEqual(nothing);
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "answer", { answer: "Behind the panel" })).toBe("applied");
+    expect(await reads(c2.member, id), "answered, C2").toEqual(nothing);
+  });
 });
 
 describe("a Question reaches exactly its asker and the asked Company", () => {

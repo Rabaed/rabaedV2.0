@@ -1,5 +1,5 @@
 // Seam 2 for a reply Screen's files (RP-623, SNAG-4; ADR 0024; visibility.md V19 and scenarios
-// RP-623-1 to RP-623-3), as the app role. K1, the Consultant, raises a Snag on C1; C1 adds
+// RP-623-1 to RP-623-3 and RP-1002-1), as the app role. K1, the Consultant, raises a Snag on C1; C1 adds
 // After photos to the Resolve Screen's field while it works the Snag. Until the Resolve takes
 // them only C1 reads them: neither K1 nor an Owner with oversight reads them, by list or by
 // id, and C2, another Contractor of the same Trade covering another Location, never does.
@@ -150,6 +150,46 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
       expect(await afterPhotos(outsider, id)).toEqual([photo]);
       expect(await byId(outsider, next)).toEqual([]);
     }
+  });
+});
+
+// The spec's own Testing Decision (RP-619), scenario RP-1002-1: an informed Consultant reads shared events
+// only, never C1's in-progress After photos. C1 raises a Snag on itself (the Snag's Version 3 informs K1).
+describe("an informed Consultant reads none of C1's After photos until its Resolve (RP-1002-1)", () => {
+  it("RP-1002-1: C1 raises its own Snag, informing K1, and adds After photos at Open and In Progress: K1 reads none, by list, by id or shared, until the Resolve; then reads them frozen", async () => {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1Pm,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', 'Exposed cable', app.latest_form_version('SNG'), ${JSON.stringify({ description: "Exposed cable" })}::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    const id = created!.work_item_id;
+    expect(await take(c1Pm, id, "raise")).toBe("applied");
+    await pickUp(c1Pm, id);
+    // K1 is informed: it reads the Snag itself.
+    expect(await call(k1.members.engineer, sql<{ id: string }>`select id from work_item where id = ${id}::uuid`)).toEqual([{ id }]);
+    const atOpen = await addAfterPhoto(c1Pm, id);
+    expect(await take(c1Pm, id, "start_work")).toBe("applied");
+    await pickUp(c1Pm, id);
+    const inProgress = await addAfterPhoto(c1.members.engineer, id);
+
+    const outsiders = [k1.members.engineer, ow.members.representative];
+    for (const outsider of outsiders) {
+      expect(await afterPhotos(outsider, id)).toEqual([]);
+      for (const photo of [atOpen, inProgress]) expect(await byId(outsider, photo)).toEqual([]);
+      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`)).toEqual([]);
+    }
+    expect(await afterPhotos(c1.members.engineer, id)).toEqual([atOpen, inProgress].sort());
+
+    expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Clipped and covered" })).toBe("applied");
+    for (const outsider of outsiders) expect(await afterPhotos(outsider, id)).toEqual([atOpen, inProgress].sort());
+    const frozen = await call<{ frozen: boolean }>(
+      k1.members.engineer,
+      sql`select frozen_at is not null as frozen from document where work_item_id = ${id}::uuid and field_key = 'after_photos'`,
+    );
+    expect(frozen).toEqual([{ frozen: true }, { frozen: true }]);
+    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
   });
 });
 
