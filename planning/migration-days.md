@@ -143,3 +143,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271008 | RP-653 | 43 | previous_item_raised_counts |
 | 20271012 | RP-1003 | 34 | snag_report_photo_check |
 | 20271009 | RP-976 | 1d | package_one_definition |
+| 20271013 | RP-959 | 51 | register_import_original_hand_over (moved from 20271009: main's RP-976 took it) |
