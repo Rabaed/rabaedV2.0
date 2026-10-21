@@ -28,6 +28,7 @@ afterAll(async () => {
 });
 
 let at: Tower;
+let c1: Company;
 let c2Engineer: Caller;
 let first = "";
 let second = "";
@@ -82,7 +83,7 @@ async function printed(bytes: Uint8Array): Promise<string> {
 }
 
 beforeAll(async () => {
-  const c1: Company = await api.projectCreator();
+  c1 = await api.projectCreator();
   const k1 = await api.authorizedPerson();
   const c2 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "SRP");
@@ -151,6 +152,18 @@ describe("the Snag report (seam 1)", () => {
     await expectHidden(at.k1Manager.get(`${reportsPath()}/${mine.id}`));
     await expectHidden(c2Engineer.get(`${reportsPath()}/${mine.id}`));
     await expectHidden(at.c1Pm.get(`${reportsPath()}/00000000-0000-4000-8000-000000000000`));
+  });
+
+  it("is found under its own Project's URL only, not under another Project its asker is on (RP-1003)", async () => {
+    // A C1 PM on the Tower and on a second Project of C1's.
+    const pm = await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"]);
+    const annex = (await api.createProject(c1.caller, { code: "SRA" })).id;
+    const annexParticipant = (await c1.caller.get(`/v1/projects/${annex}/participants`)).json().participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
+    await api.addProjectMember(c1.caller, annexParticipant, pm.id);
+    const asked: SnagReportState = (await ok(pm.caller.post(reportsPath(), { language: "en" }), 202)).json();
+    await expectHidden(pm.caller.get(`/v1/projects/${annex}/snag-list/reports/${asked.id}`));
+    // Positive control: under the Tower's URL it is there.
+    expect((await ok(pm.caller.get(`${reportsPath()}/${asked.id}`), 200)).json().id).toBe(asked.id);
   });
 
   it("is refused to someone who is not on the Project", async () => {
