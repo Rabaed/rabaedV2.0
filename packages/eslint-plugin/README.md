@@ -55,3 +55,9 @@ A new kind of Admin step on the api's code gets its own importer in that module,
 ## No plural `#` in message files (`rabaed/json-no-plural-pound`)
 
 In an ICU `plural` or `selectordinal`, `#` prints the count through the locale's own number format, which can render Arabic-Indic digits in Arabic, against the Latin-digits rule. In `apps/web/messages/*.json` the rule fails a `#` inside either, read as intl-messageformat (next-intl's) reads it: a `#` in a `select`'s branch, even inside a plural, and a quoted `'#'` are plain text and pass. Write `{n}` instead, and pass the count twice: `count` for the plural to choose its branch, `n: formatNumber(count, locale)` for the text (RP-1022).
+
+## No `.slice()` on a Buffer (`rabaed/no-buffer-slice`)
+
+On a `Buffer`, `.slice()` does not copy, unlike `Array#slice` and `Uint8Array#slice`: it returns a view on the same memory, and a small Buffer's memory is Node's shared pool. RP-635's spreadsheet reader passed such a view to fflate, and every `.xlsx` test failed on Linux CI while passing on Windows (RP-1025). Write `.subarray()` when you mean a view, or `Buffer.from(buf.subarray(…))` for a copy; the rule offers both as suggestions.
+
+The rule reads types: it fails a `.slice()` whose object is typed `Buffer`, or a type built on one (a union or intersection with it, a type parameter constrained to it, an interface extending it). So it runs only on the Node code its `eslint.config.js` block lints with `parserOptions.projectService`, and it throws on a file linted without type information. It does not check `scripts/` (no tsconfig), `apps/web` or `packages/ui`, a Buffer typed as `Uint8Array`, or a detached call such as `Buffer.prototype.slice.call(buf)`.

@@ -47,7 +47,7 @@ const row = (n: number, title: string, rest: Partial<WorkItemRow> = {}): WorkIte
   creationDate: "2026-09-01T09:00:00.000Z",
   with: { kind: "own", companyName: consultant, step: reviewStep, holder: me, role: null },
   raiserCompanyName: contractor,
-  package: { id: pkgId, number: "PKG-001", name: b("Bathrooms – Tower 1", "الحمامات – البرج 1") },
+  package: { id: pkgId, number: "PKG-001", name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), companyName: contractor },
   ...rest,
 });
 const tiles = row(11, "Floor tiles");
@@ -64,7 +64,7 @@ const codes: BulkOffer[] = [
   { key: "revise_c", label: b("Code C", "الرمز C"), form: "screen:pm-1" },
 ];
 const otherScreen: BulkOffer[] = codes.map((c) => ({ ...c, form: "screen:pm-2" }));
-const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({ ...r, bulkTransitions, toSubmit: false });
+const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({ ...r, bulkTransitions, toSubmit: false, notReady: null });
 
 const pkg: PackageDetail = {
   id: pkgId,
@@ -77,6 +77,7 @@ const pkg: PackageDetail = {
   counts: { total: 5, open: 4, codes: { A: 1 } },
   items: [itemOf(tiles, codes), itemOf(ware, codes), itemOf(lights, codes), itemOf(fans, otherScreen), itemOf(basins, [])],
   owned: false,
+  othersNotReady: false,
   filters: {
     outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
     locations: [],

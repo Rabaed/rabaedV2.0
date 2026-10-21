@@ -1,6 +1,6 @@
 // Seam 1 for the Question Types (RP-626, SNAG-6; spec RP-619; glossary Question, Snag List,
-// Stage, Step; workflow-engine.md §3.1, §12; visibility.md V3, V5 and scenarios RP-626-1 to
-// RP-626-3).
+// Stage, Step; workflow-engine.md §3.1, §12; visibility.md V3, V5, V14 and scenarios RP-626-1 to
+// RP-626-4).
 //
 // A Contractor asks the Consultant a Question to Consultant (QSN) and a Consultant asks the
 // Contractor a Question to Contractor (QSC); each Type is offered only to the other role. The
@@ -207,6 +207,38 @@ describe("C2 never sees C1's Questions (scenarios RP-626-1, RP-626-2)", () => {
     expect((await detail(at.c1Pm, id)).id).toBe(id);
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}`), "open, C2");
     expect((await snags(c2Engineer)).items.map((i) => i.id)).not.toContain(id);
+  });
+});
+
+describe("each Company reads the other's work as the shared Transitions only (scenario RP-626-4)", () => {
+  it("RP-626-4: K1 reads C1's Ask, Ask again and Close; C1 reads K1's two Answers and their text; neither reads the other's pick-ups", async () => {
+    const id = await asked(at.c1Engineer, "QSN", "Which floor");
+    await pickUp(at.k1Manager, id);
+    await take(at.k1Manager, id, "answer", { answers: { answer: "The ground floor" } });
+    await pickUp(at.c1Engineer, id);
+    await take(at.c1Engineer, id, "ask_again", { reason: "The finished one?" });
+    await pickUp(at.k1Manager, id);
+    await take(at.k1Manager, id, "answer", { answers: { answer: "The finished ground floor" } });
+    await pickUp(at.c1Engineer, id);
+    await take(at.c1Engineer, id, "close");
+
+    // Another Company's events name it by Company only, never a person (V14): those are the other's work.
+    const others = async (by: Caller) =>
+      (await history(by, id))
+        .filter((e) => e.by.memberName === null)
+        .map((e) => ({ type: e.type, audience: e.audience, transition: e.transition?.en ?? null, answers: e.answers }));
+    expect((await others(at.k1Manager)).map(({ answers: _, ...e }) => e)).toEqual([
+      { type: "transition", audience: "shared", transition: "Ask" },
+      { type: "transition", audience: "shared", transition: "Ask again" },
+      { type: "transition", audience: "shared", transition: "Close" },
+    ]);
+    expect(await others(at.c1Engineer)).toEqual([
+      { type: "transition", audience: "shared", transition: "Answer", answers: { answer: "The ground floor" } },
+      { type: "transition", audience: "shared", transition: "Answer", answers: { answer: "The finished ground floor" } },
+    ]);
+    // Positive control: C1 reads its own pick-ups, internal, which K1 never does.
+    expect((await history(at.c1Engineer, id)).some((e) => e.type === "picked_up" && e.audience === "internal" && e.by.memberName !== null)).toBe(true);
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
   });
 });
 

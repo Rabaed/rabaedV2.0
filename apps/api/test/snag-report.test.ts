@@ -7,14 +7,14 @@
 // where the viewer sees it, Step Age in weeks and no due date, and is its asker's alone.
 import { createDb, type OutboxHandler } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { SnagReportState } from "@rabaed/domain";
+import type { SnagReportState, StartedDocumentUpload } from "@rabaed/domain";
 import { chromiumRenderer, fallbackFonts, imageCountOf, projectFilesFromEnv, s3RecordFiles } from "@rabaed/worker/record";
 import { snagReportHandler } from "@rabaed/worker/snag-report";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, memberOnProject, ok, only, take, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, detail, memberOnProject, ok, only, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -28,6 +28,7 @@ afterAll(async () => {
 });
 
 let at: Tower;
+let c1: Company;
 let c2Engineer: Caller;
 let first = "";
 let second = "";
@@ -82,7 +83,7 @@ async function printed(bytes: Uint8Array): Promise<string> {
 }
 
 beforeAll(async () => {
-  const c1: Company = await api.projectCreator();
+  c1 = await api.projectCreator();
   const k1 = await api.authorizedPerson();
   const c2 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "SRP");
@@ -97,7 +98,7 @@ beforeAll(async () => {
 }, 120_000);
 
 describe("the Snag report (seam 1)", () => {
-  it("holds the viewer's items only: C2's report has none of C1's, C1's none of C2's", async () => {
+  it("RP-677-1: holds the viewer's items only: C2's report has none of C1's, C1's none of C2's", async () => {
     const c1Report = await report(at.c1Pm, { language: "en" });
     expect(c1Report.count).toBe(2);
     const c1Text = await printed(await pdfOf(c1Report));
@@ -113,7 +114,7 @@ describe("the Snag report (seam 1)", () => {
     expect(c2Text).not.toContain("Ductinsulation");
   });
 
-  it("holds the chosen items, never one the viewer does not see, and prints a photo, Step Age in weeks and no due date", async () => {
+  it("RP-677-1: holds the chosen items, never one the viewer does not see, and prints a photo, Step Age in weeks and no due date", async () => {
     const chosen = await report(at.c1Pm, { ids: [first, c2Snag], language: "en" });
     expect(chosen.count).toBe(1);
     const bytes = await pdfOf(chosen);
@@ -129,14 +130,14 @@ describe("the Snag report (seam 1)", () => {
     await expectHidden(at.c1Pm.post(reportsPath(), { ids: [c2Snag], language: "en" }));
   });
 
-  it("follows the List's filters", async () => {
+  it("RP-677-1: follows the List's filters", async () => {
     const filtered = await report(at.k1Manager, { language: "en" }, `?location=${at.buildingA}`);
     const text = await printed(await pdfOf(filtered));
     expect(text).toContain("Cabletraynotbonded");
     expect(text).not.toContain("Paintdrips");
   });
 
-  it("prints an Arabic report right to left with the Document Number left to right and Latin digits", async () => {
+  it("RP-677-1: prints an Arabic report right to left with the Document Number left to right and Latin digits", async () => {
     const arabic = await report(at.c1Pm, { ids: [first], language: "ar" });
     const text = await printed(await pdfOf(arabic));
     // Arabic is shaped into its presentation forms, and the Document Number is left whole, left to right.
@@ -145,7 +146,7 @@ describe("the Snag report (seam 1)", () => {
     expect(text).not.toMatch(/[٠-٩]/);
   });
 
-  it("is its asker's alone: another Member of the same Company, another Company and a made-up id get the plain 404", async () => {
+  it("RP-677-1: is its asker's alone: another Member of the same Company, another Company and a made-up id get the plain 404", async () => {
     const mine = await report(at.c1Pm, { language: "en" });
     await expectHidden(at.c1Engineer.get(`${reportsPath()}/${mine.id}`));
     await expectHidden(at.k1Manager.get(`${reportsPath()}/${mine.id}`));
@@ -153,8 +154,67 @@ describe("the Snag report (seam 1)", () => {
     await expectHidden(at.c1Pm.get(`${reportsPath()}/00000000-0000-4000-8000-000000000000`));
   });
 
+  it("is found under its own Project's URL only, not under another Project its asker is on (RP-1003)", async () => {
+    // A C1 PM on the Tower and on a second Project of C1's.
+    const pm = await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"]);
+    const annex = (await api.createProject(c1.caller, { code: "SRA" })).id;
+    const annexParticipant = (await c1.caller.get(`/v1/projects/${annex}/participants`)).json().participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
+    await api.addProjectMember(c1.caller, annexParticipant, pm.id);
+    const asked: SnagReportState = (await ok(pm.caller.post(reportsPath(), { language: "en" }), 202)).json();
+    await expectHidden(pm.caller.get(`/v1/projects/${annex}/snag-list/reports/${asked.id}`));
+    // Positive control: under the Tower's URL it is there.
+    expect((await ok(pm.caller.get(`${reportsPath()}/${asked.id}`), 200)).json().id).toBe(asked.id);
+  });
+
   it("is refused to someone who is not on the Project", async () => {
     const outsider = await api.projectCreator();
     await expectHidden(outsider.caller.post(reportsPath(), { language: "en" }));
+  });
+});
+
+describe("what another Company's report leaves out (scenarios RP-677-1, RP-677-2)", () => {
+  /** C1's PM adds an After photo to Snag `id`, waiting for its Resolve (RP-623): start, PUT to the signed URL, confirm. */
+  async function waitingAfterPhoto(id: string): Promise<void> {
+    const body = jpegWithExif();
+    const started = await ok(
+      at.c1Pm.post(`/v1/work-items/${id}/documents`, { fieldKey: "after_photos", reply: true, fileName: "after.jpg", contentType: "image/jpeg", sizeBytes: body.byteLength }),
+      201,
+    );
+    const { id: documentId, upload } = started.json() as StartedDocumentUpload;
+    expect((await fetch(upload.url, { method: upload.method, headers: upload.headers, body })).status).toBe(200);
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/documents/${documentId}/confirm`));
+  }
+
+  it("RP-677-1: K1's report leaves out a photo K1 may not read (C1's waiting After photo), which C1's own report draws", async () => {
+    const id = await snag("Riser door gap", at.buildingA);
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await waitingAfterPhoto(id);
+    expect(await imageCountOf(await pdfOf(await report(at.c1Pm, { ids: [id], language: "en" })))).toBe(1);
+    const k1Report = await report(at.k1Manager, { ids: [id], language: "en" });
+    expect(k1Report.count).toBe(1);
+    expect(await imageCountOf(await pdfOf(k1Report))).toBe(0);
+  });
+
+  it("RP-677-1: names another Company by its name only (V14): K1's report never prints the C1 Member holding the Snag, C1's does", async () => {
+    const holder = await memberOnProject(api, { caller: at.admin! }, at.c1ParticipantId, ["project_manager"], { name: "Zubair Haddad" });
+    const id = await snag("Sleeve not sealed", at.buildingA);
+    await ok(holder.caller.post(`/v1/work-items/${id}/pick-up`));
+    expect((await detail(holder.caller, id)).heldBy?.memberName?.en).toBe("Zubair Haddad");
+
+    const c1Text = await printed(await pdfOf(await report(holder.caller, { ids: [id], language: "en" })));
+    expect(c1Text).toContain("ZubairHaddad");
+    const k1Text = await printed(await pdfOf(await report(at.k1Manager, { ids: [id], language: "en" })));
+    expect(k1Text).toContain("Sleevenotsealed");
+    expect(k1Text).not.toContain("Zubair");
+    expect(k1Text).not.toContain("Haddad");
+  });
+
+  it("RP-677-2: a Member of no Project gets the plain 404 for a report by id, and for its Project's reports", async () => {
+    const mine = await report(at.c1Pm, { ids: [first], language: "en" });
+    const outsider = await api.projectCreator();
+    await expectHidden(outsider.caller.get(`${reportsPath()}/${mine.id}`));
+    // Even under a Project of its own.
+    const own = (await api.createProject(outsider.caller, { code: "SRO" })).id;
+    await expectHidden(outsider.caller.get(`/v1/projects/${own}/snag-list/reports/${mine.id}`));
   });
 });

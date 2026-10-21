@@ -97,6 +97,16 @@ export default tseslint.config(
     rules: { "@typescript-eslint/no-floating-promises": "error" },
   },
   {
+    // Buffer#slice shares memory (Node's pool for a small Buffer), unlike Array and Uint8Array: a pooled view broke every
+    // .xlsx test on Linux CI (RP-1025). The rule reads types, so the Node code is linted with the project service; that
+    // needs a tsconfig, which scripts/ and the packages' tool configs (vite.config.ts) don't have.
+    files: ["apps/{api,worker,admin}/**/*.ts", "packages/{auth,db,domain,infra,mailer}/**/*.ts"],
+    ignores: ["**/*.config.ts"],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    plugins: { rabaed },
+    rules: { "rabaed/no-buffer-slice": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },
