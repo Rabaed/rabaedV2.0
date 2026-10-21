@@ -130,7 +130,10 @@ async function submit(id: string) {
   expect(await take(c1Pm, id, "submit")).toBe("applied");
 }
 
-/** A confirmed Document of item `id`, uploaded by the C1 engineer (into `field`, or the Attachments System Field). */
+/**
+ * A confirmed Document of item `id`, uploaded by the C1 engineer (into `field`, or the Attachments System Field).
+ * Its fingerprint is the SHA-256 of its file name, standing in for the bytes the api would hash (RP-618).
+ */
 async function document(id: string, fileName: string, field: string | null = null): Promise<string> {
   const [started] = await call<{ outcome: string; document_id: string }>(
     c1.member,

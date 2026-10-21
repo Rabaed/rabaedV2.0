@@ -17,7 +17,7 @@ export function jsonbText(value: unknown): string {
 
 /** The SHA-256 of a file's bytes as hex, the form a Transition's content hash names (a UTF-8 string is hashed as its bytes). */
 export function sha256Hex(body: string | Buffer): string {
-  return createHash("sha256").update(body).digest("hex");
+  return sha256Bytea(body).toString("hex");
 }
 
 /** The SHA-256 of a file's bytes as `bytea`, the form `document.file_sha256` and `confirm_document_upload` take. */

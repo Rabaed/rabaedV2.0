@@ -14,8 +14,9 @@
  *   addActionsWorkflow(run)         actions-workflow.ts: a Workflow whose Transitions carry actions.
  *   actionsFormSchema               actions-workflow.ts: the Form that Workflow is published with.
  *   addOwnerReviewWorkflow(run)     owner-review-workflow.ts: a 1→1→1 Workflow ending with the Owner's review (ADR 0022).
- *   expectedContentSha256, jsonbText   content-hash.ts: the content hash a closed item must carry
- *   (HashedDocument, HASHED_DOCUMENT_COLUMNS, sha256Hex, sha256Bytea: its Documents and their fingerprints).
+ *   expectedContentSha256, jsonbText, sha256Hex, sha256Bytea, HashedDocument, HASHED_DOCUMENT_COLUMNS
+ *                                      content-hash.ts: the content hash a closed item must carry, its
+ *                                      Documents and their fingerprints.
  *   withSignature(run, memberId)    signature.ts: gives a Member a new active Signature, as the owner; returns the id.
  *   withoutSignature(run, memberId) signature.ts: ends the Member's Signature in force, for a test of the gate.
  *   runAsOwner(db)                  signature.ts: a Kysely db (the migrator's) as the `run` those take.
