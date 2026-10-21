@@ -961,12 +961,12 @@ async function boardMoves(trx: Trx, cards: readonly WorkItemRow[]): Promise<Reco
     from unnest(${mine}::uuid[]) as c (id)
     join work_item w on w.id = c.id
     join work_item_type t on t.id = w.work_item_type_id
-    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, picks_participant, n)
+    cross join lateral app.work_item_actions(w.id) with ordinality a
     join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
     join workflow_step s on s.id = tr.to_step_id
     -- One that needs the Participant field (RP-658) is taken from the item's page, not by a drag.
     where a.action = 'transition' and not a.picks_participant
-    order by w.id, a.n
+    order by w.id, a.ordinality
   `.execute(trx);
   const moves: Record<string, WorkItemMove[]> = {};
   for (const r of rows) {
