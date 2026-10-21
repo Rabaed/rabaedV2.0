@@ -153,11 +153,21 @@ const pickTransition = async (canvas: Canvas, key: string, locale: "en" | "ar") 
   await shown(canvas, label);
   await userEvent.click(canvas.getAllByText(label)[0]!);
 };
+/**
+ * A click leaves the card focused, and whether its focus ring is painted follows the page's focus,
+ * which no story controls: the screenshot shows the selection alone (RP-1000).
+ */
+const unfocus = async (target: HTMLElement) => {
+  target.closest<HTMLElement>(".react-flow__node")!.blur();
+  await expect(target.closest(".react-flow__node")).not.toHaveFocus();
+};
 /** Clicks a Step's card on the canvas: it selects the Step. */
 const pickStep = async (canvas: Canvas, key: string, locale: "en" | "ar") => {
   const name = step(key).name[locale];
   await shown(canvas, name);
-  await userEvent.click(canvas.getAllByText(name)[0]!);
+  const card = canvas.getAllByText(name)[0]!;
+  await userEvent.click(card);
+  await unfocus(card);
 };
 /** Opens a Select and picks one of its options (they open in a portal). */
 const pickOption = async (select: HTMLElement, option: string) => {
@@ -333,11 +343,21 @@ export const EndSelected: Story = {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
     await shown(canvas, step("consultant_qa").name[locale]);
-    await userEvent.click(canvas.getAllByText(step("approved").name[locale]).at(-1)!);
+    const end = canvas.getAllByText(step("approved").name[locale]).at(-1)!;
+    await userEvent.click(end);
     const editor = editorOf(canvas, labels);
     await expect(editor.getByText(labels.endHint)).toBeVisible();
     await expect(editor.getByText(labels.incoming("3"))).toBeVisible();
     await expect(editor.getByRole("button", { name: labels.deleteEnd })).toBeVisible();
+    // Keyboard focus on the selected End: a ring on the pill itself, outside its selection ring,
+    // never the browser's square ring around React Flow's node (RP-1000).
+    const node = end.closest<HTMLElement>(".react-flow__node")!;
+    await userEvent.keyboard("{Shift}");
+    node.focus();
+    await expect(node).toHaveFocus();
+    await expect(getComputedStyle(node).outlineStyle).toBe("none");
+    await expect(getComputedStyle(node.querySelector("[data-node]")!).outlineStyle).toBe("solid");
+    await unfocus(node);
   },
 };
 
