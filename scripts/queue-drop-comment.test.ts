@@ -308,8 +308,9 @@ describe("commentOnRemoval", () => {
 });
 
 // RP-1020: the real git commands, on throwaway repositories. "origin" plays GitHub;
-// the runner's clone is made the way actions/checkout makes it.
-describe("mergeTreeConflicts", () => {
+// the runner's clone is made the way actions/checkout makes it. Each test runs several git commands,
+// which on a busy machine can pass vitest's 5 s default.
+describe("mergeTreeConflicts", { timeout: 30_000 }, () => {
   let dir = "";
   const run = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" }).trim();
   const commit = (cwd: string, files: Record<string, string>, message: string) => {
@@ -340,7 +341,7 @@ describe("mergeTreeConflicts", () => {
     run(work, "switch", "-q", "main");
     commit(work, { "a.md": "main's line\n" }, "main moves on");
     run(work, "push", "-q", origin, "main:refs/heads/main");
-  });
+  }, 60_000);
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   // The runner's clone: full history, no file contents (actions/checkout's fetch-depth: 0, filter: blob:none),
