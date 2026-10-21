@@ -6,7 +6,7 @@ import { PDFArray, PDFContext, PDFDict, PDFName, PDFNumber, PDFObject, PDFObject
 // reads are parsed, and nothing before the update is copied. Classic cross-reference tables
 // only, as toPdfA3 and the seal write them.
 
-const latin1 = new TextDecoder("latin1");
+export const latin1 = new TextDecoder("latin1");
 export const ascii = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0));
 /** A Buffer over the same memory, for indexOf: no copy. */
 export const bufferOf = (bytes: Uint8Array) => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -149,6 +149,8 @@ export function incrementalUpdate(revision: Revision, length: number, objects: r
   for (const [n, g, at] of offsets.toSorted((a, b) => a[0] - b[0])) {
     lines.push(`${n} 1`, `${String(at).padStart(10, "0")} ${String(g).padStart(5, "0")} n\r`);
   }
+  // One past the largest number in use, not the earlier /Size: what pdf-lib's parse gave the
+  // records sealed since RP-620, whose store update must still be rebuilt byte for byte.
   const largestObjectNumber = Math.max(revision.largestObjectNumber, ...objects.map((o) => o.ref.objectNumber));
   const trailer = PDFDict.withContext(revision.context);
   trailer.set(PDFName.of("Size"), PDFNumber.of(largestObjectNumber + 1));
@@ -189,13 +191,14 @@ export function concat(...parts: Uint8Array[]): Uint8Array {
 }
 
 /**
- * The first match of `pattern` (anchored with `^`) where `keyword` starts, reading a few hundred
- * bytes there: a search in the file's bytes, never a string of the whole file.
+ * The last place in `pdf` where `keyword` starts a match of `pattern` (anchored with `^`), read
+ * from the few hundred bytes there: searched from the end of the file's bytes, never in a string
+ * of the whole file. The last, since what an update appends comes after anything a user wrote.
  */
-export function matchAt(pdf: Uint8Array, keyword: string, pattern: RegExp, window = 256): RegExpExecArray | null {
+export function lastMatch(pdf: Uint8Array, keyword: string, pattern: RegExp): RegExpExecArray | null {
   const buffer = bufferOf(pdf);
-  for (let at = buffer.indexOf(keyword, 0, "latin1"); at >= 0; at = buffer.indexOf(keyword, at + 1, "latin1")) {
-    const found = pattern.exec(latin1.decode(pdf.subarray(at, at + window)));
+  for (let at = buffer.lastIndexOf(keyword, undefined, "latin1"); at >= 0; at = at === 0 ? -1 : buffer.lastIndexOf(keyword, at - 1, "latin1")) {
+    const found = pattern.exec(latin1.decode(pdf.subarray(at, at + 256)));
     if (found) return found;
   }
   return null;

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFString } from "pdf-lib";
-import { ascii, bufferOf, concat, incrementalUpdate, lastRevision, resolveAs, matchAt, type IndirectObject, type Revision, type Update } from "./pdf-revision.ts";
+import { ascii, bufferOf, concat, incrementalUpdate, lastMatch, lastRevision, latin1, resolveAs, type IndirectObject, type Revision, type Update } from "./pdf-revision.ts";
 import {
   asn1js,
   commonNameOf,
@@ -33,7 +33,6 @@ const CONTENTS_BYTES = 24 * 1024;
 /** As wide as any final byte range of a file under 10 GB. */
 const BYTE_RANGE_PLACEHOLDER = "/ByteRange [ 0 1234567890 1234567890 1234567890 ]";
 
-const latin1 = new TextDecoder("latin1");
 
 /** `pdf` with its last cross-reference a classic table, to append to: as it is, or written once again when it isn't. */
 async function withClassicTable(pdf: Uint8Array): Promise<{ pdf: Uint8Array; revision: Revision }> {
@@ -60,7 +59,7 @@ interface SignatureUpdate extends Update {
   /** Where `<` of /Contents is in the whole file, and just past its `>`. */
   readonly contentsStart: number;
   readonly contentsEnd: number;
-  /** Where the /ByteRange placeholder is in the update's own bytes. */
+  /** Where the /ByteRange placeholder is in the whole file. */
   readonly byteRangeAt: number;
 }
 
@@ -115,7 +114,8 @@ function signatureUpdate(revision: Revision, length: number, at: Date): Signatur
   const update = incrementalUpdate(revision, length, objects);
   const signatureAt = update.bodyAt[0]!;
   const contentsStart = signatureAt + head.length - 1;
-  return { ...update, contentsStart, contentsEnd: contentsStart + zeros.length + 2, byteRangeAt: signatureAt - length + 3 };
+  // The body starts `<<\n`, then the placeholder.
+  return { ...update, contentsStart, contentsEnd: contentsStart + zeros.length + 2, byteRangeAt: signatureAt + "<<\n".length };
 }
 
 /** The SHA-256 of `parts`, read where they are. */
@@ -221,8 +221,9 @@ export async function sealPdf(pdf: Uint8Array, { signer, timestamps, at }: { sig
   const signedLength = base.pdf.length + bytes.length;
   const rangeText = `/ByteRange [ ${[0, contentsStart, contentsEnd, signedLength - contentsEnd].join(" ")} ]`.padEnd(BYTE_RANGE_PLACEHOLDER.length, " ");
   if (rangeText.length !== BYTE_RANGE_PLACEHOLDER.length) throw new Error("the seal's byte range does not fit");
-  bytes.set(ascii(rangeText), byteRangeAt);
-  const inUpdate = (at: number) => at - base.pdf.length;
+  // The update's bytes follow the PDF's: an offset in the file, in them.
+  const inUpdate = (offset: number) => offset - base.pdf.length;
+  bytes.set(ascii(rangeText), inUpdate(byteRangeAt));
   const digest = digestOf(base.pdf, bytes.subarray(0, inUpdate(contentsStart)), bytes.subarray(inUpdate(contentsEnd)));
   const { cms, token } = await cadesSignature(digest, signer, timestamps);
   if (cms.length > CONTENTS_BYTES) throw new Error("the seal's signature is larger than its room");
@@ -240,9 +241,9 @@ export async function sealPdf(pdf: Uint8Array, { signer, timestamps, at }: { sig
  * signed revision (its start, middle and end). For the tests that change one byte at each.
  */
 export function sealTamperOffsets(pdf: Uint8Array): Record<string, number> {
-  const m = byteRangeOf(pdf);
-  if (!m) throw new Error("no seal");
-  const [, contentsStart, afterContents, rest] = m;
+  const range = byteRangeOf(pdf);
+  if (!range) throw new Error("no seal");
+  const [, contentsStart, afterContents, rest] = range;
   const signedEnd = afterContents + rest;
   return {
     start: 20,
@@ -301,7 +302,7 @@ const invalid = (problem: string, rest: Partial<SealCheck> = {}): SealCheck => (
 
 /** The seal's /ByteRange: its four numbers, the first found that reads. */
 function byteRangeOf(pdf: Uint8Array): [number, number, number, number] | null {
-  const m = matchAt(pdf, "/ByteRange", /^\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/);
+  const m = lastMatch(pdf, "/ByteRange", /^\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/);
   return m ? (m.slice(1).map(Number) as [number, number, number, number]) : null;
 }
 
@@ -321,9 +322,9 @@ function dssOf(pdf: Uint8Array): Dss | null {
 
 /** The sealed PDF's Document Security Store, and the length of the revision it was signed in (before the store's update). */
 export function documentSecurityStore(pdf: Uint8Array): { store: Dss | null; signedLength: number } {
-  const m = byteRangeOf(pdf);
-  if (!m || m[0] !== 0) throw new Error("no seal");
-  return { store: dssOf(pdf), signedLength: m[2] + m[3] };
+  const range = byteRangeOf(pdf);
+  if (!range || range[0] !== 0) throw new Error("no seal");
+  return { store: dssOf(pdf), signedLength: range[2] + range[3] };
 }
 
 /** The signer's certificate among the CMS's, by the issuer and serial number its signer info names. */
@@ -345,7 +346,9 @@ async function signsDigest(signed: pkijs.SignedData, digest: Uint8Array): Promis
   const signer = signerCertificateOf(signed, signerInfo);
   const attribute = (type: string) => signerInfo.signedAttrs!.attributes.find((a) => a.type === type);
   const messageDigest = attribute(OID.messageDigest)?.values[0];
-  if (!attribute(OID.contentType) || !(messageDigest instanceof asn1js.OctetString)) throw new Error("the signature's attributes are not a detached CMS's");
+  const contentType = attribute(OID.contentType)?.values[0];
+  const isData = contentType instanceof asn1js.ObjectIdentifier && contentType.getValue() === OID.data;
+  if (!isData || !(messageDigest instanceof asn1js.OctetString)) throw new Error("the signature's attributes are not a detached CMS's");
   if (signerInfo.digestAlgorithm.algorithmId !== OID.sha256) throw new Error("the signature is not over SHA-256");
   if (Buffer.compare(Buffer.from(messageDigest.valueBlock.valueHexView), Buffer.from(digest)) !== 0) return { matches: false, signer };
   if (!signer) throw new Error("the signer's certificate is not in the signature");
@@ -360,11 +363,11 @@ const sameList = (a: readonly Uint8Array[], b: readonly Uint8Array[]) =>
 
 /** Checks the PDF's seal: what a reader such as Adobe Reader checks, but trusting the certificate it carries. */
 export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
-  const m = byteRangeOf(pdf);
-  if (!m) return invalid("no seal");
-  const [a, b, c, d] = m;
+  const range = byteRangeOf(pdf);
+  if (!range) return invalid("no seal");
+  const [a, b, c, d] = range;
   if (a !== 0 || c <= b || c + d > pdf.length || pdf[b] !== 0x3c || pdf[c - 1] !== 0x3e) return invalid("the seal does not cover the file");
-  const subFilter = matchAt(pdf, "/SubFilter", /^\/SubFilter\s*\/([A-Za-z.]+)/)?.[1] ?? null;
+  const subFilter = lastMatch(pdf, "/SubFilter", /^\/SubFilter\s*\/([A-Za-z.]+)/)?.[1] ?? null;
   // /Contents is exactly the CMS's DER, then zeros: a byte changed in its padding breaks the seal too.
   const contentsHex = latin1.decode(pdf.subarray(b + 1, c - 1));
   if (contentsHex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(contentsHex)) return invalid("the seal's signature is not hexadecimal", { subFilter });
@@ -384,9 +387,9 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
   try {
     const signed = new pkijs.SignedData({ schema: pkijs.ContentInfo.fromBER(toArrayBuffer(cms)).content });
     // Hashed where it is: no copy of what was signed.
-    const ok = await signsDigest(signed, digestOf(pdf.subarray(0, b), pdf.subarray(c, c + d)));
-    const name = ok.signer ? commonNameOf(ok.signer) : null;
-    if (!ok.matches) return invalid("the signature does not match the file", { signer: name, subFilter, dssCertificates });
+    const signature = await signsDigest(signed, digestOf(pdf.subarray(0, b), pdf.subarray(c, c + d)));
+    const name = signature.signer ? commonNameOf(signature.signer) : null;
+    if (!signature.matches) return invalid("the signature does not match the file", { signer: name, subFilter, dssCertificates });
     const signerInfo = signed.signerInfos[0]!;
     const tokenAttr = signerInfo.unsignedAttrs?.attributes.find((x) => x.type === OID.signatureTimeStampToken);
     if (!tokenAttr) return invalid("no timestamp", { signer: name, subFilter, dssCertificates });

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KMSClient } from "@aws-sdk/client-kms";
-import { PDFDocument } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
 import { attachedFiles, pdfA3Problems, toPdfA3 } from "./pdfa.ts";
 import { asn1js, certificateDer, OID, pkijs, RSA_SHA256, subtle, toArrayBuffer } from "./pki.ts";
@@ -171,6 +171,42 @@ describe("the seal", () => {
   it("names a file changed in what was signed", async () => {
     const changed = withByteChanged(sealed, sealTamperOffsets(sealed)["middle of what was signed"]!);
     expect(await verifySeal(changed)).toMatchObject({ valid: false, problem: "the signature does not match the file" });
+  });
+
+  it("breaks when its signature value changes, though the digest its attributes name still matches the file", async () => {
+    const text = new TextDecoder("latin1").decode(sealed);
+    const [, b, c] = /\/ByteRange \[ 0 (\d+) (\d+)/.exec(text)!.map(Number) as [number, number, number];
+    const der = asn1js.fromBER(toArrayBuffer(new Uint8Array(Buffer.from(text.slice(b + 1, c - 1), "hex")))).result;
+    const signed = new pkijs.SignedData({ schema: new pkijs.ContentInfo({ schema: der }).content });
+    const value = Buffer.from(signed.signerInfos[0]!.signature.valueBlock.valueHexView).toString("hex");
+    const at = text.indexOf(value, b);
+    // A digit for the next one, in the middle of the value: still hexadecimal.
+    let index = at + value.length / 2;
+    while (!/[0-8]/.test(text[index]!)) index++;
+    const forged = sealed.slice();
+    forged[index] = forged[index]! + 1;
+    expect(await verifySeal(forged)).toMatchObject({ valid: false, problem: "the signature does not match the file" });
+  });
+
+  it.each([
+    ["in the page", false],
+    ["an object of its own", true],
+  ])("adds its field beside a page's annotations, their array %s, and reads its own byte range, not a user's text", async (_, indirect) => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595, 842]);
+    const ctx = doc.context;
+    const link = ctx.register(ctx.obj({ Type: "Annot", Subtype: "Link", Rect: [10, 10, 60, 30], F: 4, Border: [0, 0, 0] }));
+    const annots = ctx.obj([link]);
+    page.node.set(PDFName.of("Annots"), indirect ? ctx.register(annots) : annots);
+    // What a user could type into a Form, in a stream left uncompressed, before the seal.
+    ctx.register(ctx.stream("/ByteRange [ 0 10 20 30 ] /SubFilter /adbe.pkcs7.detached"));
+    const pdf = await sealPdf(await toPdfA3(await doc.save({ useObjectStreams: false }), { title: "MAR-002", at }, []), { signer, timestamps, at });
+    expect(new TextDecoder("latin1").decode(pdf)).toContain("/ByteRange [ 0 10 20 30 ]");
+    expect(await verifySeal(pdf)).toMatchObject({ valid: true, subFilter: "ETSI.CAdES.detached", longTerm: true });
+    expect(await tamperedBytesThatStillVerify(pdf)).toEqual([]);
+    const opened = await PDFDocument.load(pdf);
+    const fields = opened.getPage(0).node.lookup(PDFName.of("Annots"), PDFArray).asArray();
+    expect(fields.map((ref) => opened.context.lookup(ref, PDFDict).get(PDFName.of("Subtype"))?.toString())).toEqual(["/Link", "/Widget"]);
   });
 
   it("is refused on an unsealed PDF", async () => {
