@@ -3,17 +3,32 @@ import type { CallExpression, Node } from "estree";
 
 // The few TypeScript checker calls the rule makes, typed here so the package needs no `typescript` dependency.
 interface TsType {
-  isUnion(): this is { types: TsType[] };
+  isUnionOrIntersection(): this is { types: TsType[] };
+  isClassOrInterface(): boolean;
   getSymbol(): { getName(): string } | undefined;
 }
+interface TypeChecker {
+  getTypeAtLocation(node: unknown): TsType;
+  /** A type parameter's constraint (`T extends Buffer` gives Buffer); other types as they are. */
+  getApparentType(type: TsType): TsType;
+  getBaseTypes(type: TsType): TsType[];
+}
 interface TypeServices {
-  program?: { getTypeChecker(): { getTypeAtLocation(node: unknown): TsType } } | null;
+  program?: { getTypeChecker(): TypeChecker } | null;
   esTreeNodeToTSNodeMap?: { get(node: Node): unknown };
 }
 
-/** A Buffer, or a union with one in it (`Buffer | undefined`). */
-function isBuffer(type: TsType): boolean {
-  return (type.isUnion() ? type.types : [type]).some((part) => part.getSymbol()?.getName() === "Buffer");
+/**
+ * A Buffer, or a type built on one: a union or intersection with one in it (`Buffer | undefined`, a branded
+ * `Buffer & { tag: true }`), a type parameter constrained to one, or an interface or class extending it.
+ */
+function isBuffer(checker: TypeChecker, type: TsType, seen = new Set<TsType>()): boolean {
+  if (seen.has(type)) return false;
+  seen.add(type);
+  const apparent = checker.getApparentType(type);
+  if (apparent.isUnionOrIntersection()) return apparent.types.some((part) => isBuffer(checker, part, seen));
+  if (apparent.getSymbol()?.getName() === "Buffer") return true;
+  return apparent.isClassOrInterface() && checker.getBaseTypes(apparent).some((base) => isBuffer(checker, base, seen));
 }
 
 /**
@@ -48,9 +63,9 @@ export const noBufferSlice: Rule.RuleModule = {
         const { callee } = node;
         if (callee.type !== "MemberExpression") return;
         const { property } = callee;
-        const named = callee.computed ? property.type === "Literal" && property.value === "slice" : property.type === "Identifier" && property.name === "slice";
-        if (!named || callee.object.type === "Super") return;
-        if (!isBuffer(checker.getTypeAtLocation(map.get(callee.object)))) return;
+        const callsSlice = callee.computed ? property.type === "Literal" && property.value === "slice" : property.type === "Identifier" && property.name === "slice";
+        if (!callsSlice || callee.object.type === "Super") return;
+        if (!isBuffer(checker, checker.getTypeAtLocation(map.get(callee.object)))) return;
 
         const toSubarray = (fixer: Rule.RuleFixer) =>
           fixer.replaceText(property, callee.computed ? context.sourceCode.getText(property).replace("slice", "subarray") : "subarray");

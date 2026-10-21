@@ -59,6 +59,27 @@ typed.run("no-buffer-slice", rabaed.rules["no-buffer-slice"], {
       ...at(`declare const maybe: Buffer | undefined; maybe?.slice(1);`),
       errors: [{ messageId: "slice", suggestions: [{ messageId: "subarray", output: `declare const maybe: Buffer | undefined; maybe?.subarray(1);` }] }],
     },
+    // Types that hide the Buffer: a brand, a type parameter, an interface built on it.
+    ...[
+      [`declare const branded: Buffer & { tag: true }; `, `branded.slice(1)`, `;`],
+      [`function head<T extends Buffer>(bytes: T) { return `, `bytes.slice(0, 4)`, `; }`],
+      [`interface Chunk extends Buffer { at0: number } declare const chunk: Chunk; `, `chunk.slice(1)`, `;`],
+      [`import type { NonSharedBuffer } from "node:buffer"; declare const owned: NonSharedBuffer; `, `owned.slice(1)`, `;`],
+    ].map(([before, call, after]) => {
+      const view = call!.replace(".slice(", ".subarray(");
+      return {
+        ...at(`${before}${call}${after}`),
+        errors: [
+          {
+            messageId: "slice",
+            suggestions: [
+              { messageId: "subarray", output: `${before}${view}${after}` },
+              { messageId: "copy", output: `${before}Buffer.from(${view})${after}` },
+            ],
+          },
+        ],
+      };
+    }),
     {
       ...at(`declare const buf: Buffer; buf["slice"](2);`),
       errors: [
