@@ -1,4 +1,7 @@
 import type { webcrypto } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KMSClient } from "@aws-sdk/client-kms";
 import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -12,6 +15,7 @@ import { LOCAL_TSA_NAME, localTimestampAuthority, type TimestampAuthority } from
 // The seal and PDF/A-3 on a small PDF (ADR 0023). The record's own tests (seam 1,
 // apps/api/test/documental-record.test.ts) check the same on real records.
 
+const here = dirname(fileURLToPath(import.meta.url));
 const at = new Date("2026-10-17T09:30:00Z");
 const xml = new TextEncoder().encode('<?xml version="1.0" encoding="UTF-8"?>\n<recordData/>\n');
 
@@ -33,7 +37,7 @@ async function tamperedBytesThatStillVerify(pdf: Uint8Array): Promise<string[]> 
 
 /** The sealed PDF's Document Security Store's streams, and where its signed revision ends. */
 async function storeOf(pdf: Uint8Array) {
-  const { store, signedLength } = await documentSecurityStore(pdf);
+  const { store, signedLength } = documentSecurityStore(pdf);
   if (!store) throw new Error("no Document Security Store");
   return { ...store, signedLength };
 }
@@ -69,11 +73,12 @@ async function kmsSignerUnderSelfSignedCertificate(commonName: string): Promise<
 
 let signer: SealSigner;
 let timestamps: TimestampAuthority;
+let archival: Uint8Array;
 let sealed: Uint8Array;
 beforeAll(async () => {
   signer = await localSealSigner();
   timestamps = await localTimestampAuthority(() => at);
-  const archival = await toPdfA3(await plainPdf(), { title: "MAR-001", at }, [
+  archival = await toPdfA3(await plainPdf(), { title: "MAR-001", at }, [
     { name: "record-data.xml", mimeType: "application/xml", description: "Record Data", bytes: xml },
   ]);
   sealed = await sealPdf(archival, { signer, timestamps, at });
@@ -107,13 +112,13 @@ describe("the seal", () => {
   it("still verifies a record sealed before RP-669, whose store holds the seal's certificates alone, as not long-term", async () => {
     const { certificates, signedLength } = await storeOf(sealed);
     // The CMS's two and the token's one, as RP-620 wrote them.
-    const before = await withDss(sealed.slice(0, signedLength), { certificates: certificates.slice(0, 3), ocspResponses: [], crls: [] });
+    const before = withDss(sealed.slice(0, signedLength), { certificates: certificates.slice(0, 3), ocspResponses: [], crls: [] });
     expect(await verifySeal(before)).toMatchObject({ valid: true, dssCertificates: 3, dssRevocation: 0, longTerm: false });
   });
 
   it("breaks when the store's revocation data is dropped from a long-term seal", async () => {
     const { certificates, ocspResponses, signedLength } = await storeOf(sealed);
-    const without = await withDss(sealed.slice(0, signedLength), { certificates, ocspResponses, crls: [] });
+    const without = withDss(sealed.slice(0, signedLength), { certificates, ocspResponses, crls: [] });
     expect(await verifySeal(without)).toMatchObject({ valid: false, problem: `the seal's revocation data does not hold: no revocation data for ${LOCAL_TSA_NAME}` });
   });
 
@@ -139,6 +144,33 @@ describe("the seal", () => {
   it("breaks when a byte is added after it, as another revision", async () => {
     const appended = new Uint8Array([...sealed, ...new TextEncoder().encode("\n% another revision\n")]);
     expect((await verifySeal(appended)).valid).toBe(false);
+  });
+
+  it("is appended to the PDF/A-3 it seals, which stays byte for byte as it was: no copy of it is written again (RP-1006)", async () => {
+    expect(sealed.length).toBeGreaterThan(archival.length);
+    expect(Buffer.compare(Buffer.from(sealed.subarray(0, archival.length)), Buffer.from(archival))).toBe(0);
+    // Signed in the revision that adds the signature, then the store's update after it: three revisions.
+    expect(new TextDecoder("latin1").decode(sealed).match(/%%EOF/g)).toHaveLength(3);
+  });
+
+  it("still verifies a record sealed before RP-1006 (written whole again, then the store's update), and breaks on any one byte", async () => {
+    const before = new Uint8Array(readFileSync(join(here, "fixtures", "sealed-before-rp-1006.pdf")));
+    expect(await verifySeal(before)).toEqual({
+      valid: true,
+      problem: null,
+      signer: LOCAL_SEAL_NAME,
+      timestampedAt: at,
+      subFilter: "ETSI.CAdES.detached",
+      dssCertificates: 4,
+      dssRevocation: 2,
+      longTerm: true,
+    });
+    expect(await tamperedBytesThatStillVerify(before)).toEqual([]);
+  });
+
+  it("names a file changed in what was signed", async () => {
+    const changed = withByteChanged(sealed, sealTamperOffsets(sealed)["middle of what was signed"]!);
+    expect(await verifySeal(changed)).toMatchObject({ valid: false, problem: "the signature does not match the file" });
   });
 
   it("is refused on an unsealed PDF", async () => {
