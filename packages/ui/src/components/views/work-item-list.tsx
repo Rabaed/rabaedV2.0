@@ -35,7 +35,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Avatar } from "../data/avatar.tsx";
-import { Icon } from "../icon/icon.tsx";
+import { Icon, type IconName } from "../icon/icon.tsx";
 import { filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { HeaderBadge, poolIcon } from "./kanban-card.tsx";
@@ -194,6 +194,12 @@ export type WorkItemPackageFilter = {
   choices: { id: string; number: string; owner: { companyName: BilingualText } }[];
 };
 
+/**
+ * One Submittal Register Import's Drafts (RP-954, the Result step's "Open the Drafts"): the chip naming
+ * the import by its file name (null where the Member doesn't read it), with its own ×. No time.
+ */
+export type WorkItemImportFilter = { label: string; name: string | null };
+
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
 
@@ -242,6 +248,8 @@ export type WorkItemListProps = {
   hints?: WorkItemFilterHints;
   /** The Submittals' Package filter (RP-662), one Package at a time. Without it, the panel has no Package field. */
   packages?: WorkItemPackageFilter;
+  /** The import the List is filtered to (`query.importId`), named. */
+  importFilter?: WorkItemImportFilter;
   /** The table's columns at first, in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
   columns?: ListColumnLayout;
   /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
@@ -285,6 +293,48 @@ export function WorkItemList(props: WorkItemListProps) {
   );
 }
 
+/**
+ * A filter the toolbar names rather than counts (the Package, RP-662; the import, RP-954): its icon,
+ * what it is (`children`; with none, its label shows instead) and a × leading to the query without it.
+ */
+function NamedFilter({
+  kind,
+  icon,
+  label,
+  clear,
+  clearHref,
+  linkAs: Link,
+  children,
+}: {
+  kind: "package" | "import";
+  icon: IconName;
+  label: string;
+  clear: string;
+  clearHref: string;
+  linkAs: ElementType;
+  children?: ReactNode;
+}) {
+  const named = Boolean(children);
+  return (
+    <span
+      {...{ [`data-${kind}-filter`]: "" }}
+      className="inline-flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-sm border border-control-border bg-surface ps-2.5 text-sm pointer-coarse:min-h-11"
+    >
+      <Icon name={icon} size={15} className="shrink-0 text-muted" />
+      <span className={cn(named && "sr-only")}>{named ? `${label}: ` : label}</span>
+      {children}
+      <Link
+        href={clearHref}
+        aria-label={`${label}: ${clear}`}
+        title={`${label}: ${clear}`}
+        className={cn("inline-flex h-full w-7 shrink-0 items-center justify-center rounded-e-sm text-muted hover:bg-hover hover:text-text pointer-coarse:w-11", focusRing)}
+      >
+        <Icon name="x" size={14} />
+      </Link>
+    </span>
+  );
+}
+
 function WorkItemListBody({
   list,
   query,
@@ -300,6 +350,7 @@ function WorkItemListBody({
   board,
   hints,
   packages,
+  importFilter,
   columns: initialColumns,
   onSaveColumns,
   loadExportRows,
@@ -650,6 +701,7 @@ function WorkItemListBody({
               location: [],
               outcome: [],
               packageId: undefined,
+              importId: undefined,
               stepAgeMin: undefined,
               createdWithin: undefined,
               submittedFrom: undefined,
@@ -671,25 +723,18 @@ function WorkItemListBody({
         </span>
         {/* The Package chosen (RP-662), named: its number left to right beside its owning Company (V14), as the Package page links here. */}
         {chosenPackage && packages && (
-          <span
-            data-package-filter=""
-            className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border border-control-border bg-surface ps-2.5 text-sm pointer-coarse:min-h-11"
-          >
-            <Icon name="packages" size={15} className="text-muted" />
-            <span className="sr-only">{packages.label}: </span>
+          <NamedFilter kind="package" icon="packages" label={packages.label} clear={t("clearField")} clearHref={hrefFor({ ...query, packageId: undefined })} linkAs={Link}>
             <bdi dir="ltr" translate="no" className="font-ui font-semibold text-text">
               {chosenPackage.number}
             </bdi>{" "}
             <span className="text-muted">{chosenPackage.owner.companyName[locale]}</span>
-            <Link
-              href={hrefFor({ ...query, packageId: undefined })}
-              aria-label={`${packages.label}: ${t("clearField")}`}
-              title={`${packages.label}: ${t("clearField")}`}
-              className={cn("inline-flex h-full w-7 items-center justify-center rounded-e-sm text-muted hover:bg-hover hover:text-text pointer-coarse:w-11", focusRing)}
-            >
-              <Icon name="x" size={14} />
-            </Link>
-          </span>
+          </NamedFilter>
+        )}
+        {/* The import chosen (RP-954, "Open the Drafts"), named by its file name where the Member reads it. */}
+        {query.importId !== undefined && importFilter && (
+          <NamedFilter kind="import" icon="upload" label={importFilter.label} clear={t("clearField")} clearHref={hrefFor({ ...query, importId: undefined })} linkAs={Link}>
+            {importFilter.name !== null && <bdi className="max-w-60 truncate font-semibold text-text">{importFilter.name}</bdi>}
+          </NamedFilter>
         )}
         <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
         {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}

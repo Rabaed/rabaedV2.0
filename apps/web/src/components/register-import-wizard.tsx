@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, type BilingualText, type Locale, type RegisterImport, type RegisterImportFields, type RegisterImportMapping, type RegisterImportRow } from "@rabaed/domain";
+import { formatNumber, workItemListHref, type BilingualText, type Locale, type RegisterImport, type RegisterImportFields, type RegisterImportMapping, type RegisterImportRow } from "@rabaed/domain";
 import { Button, Icon, ImportRows, RegisterImportWizard as Wizard, buttonVariants, rejectedRowsDownload, saveDownload, type RegisterImportClient } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
@@ -72,12 +72,22 @@ export function RegisterImportWizard({
       // A reload reopens this preview at Validate.
       onPreviewed={(id) => window.history.replaceState(null, "", `?preview=${id}`)}
       draftLink={draftLink}
-      resultActions={(preview, created) => (
-        <Link href={`/projects/${projectId}/work-items/imports/${preview.id}`} className={buttonVariants()}>
-          <Icon name="list" />
-          {t("result.open", { count: created, n: formatNumber(created, locale) })}
-        </Link>
-      )}
+      // A Member tries the wizard with a made-up register (RP-954).
+      sample
+      // "Open the Drafts" (RP-954): the Submittals List of this import's Drafts that the Member sees
+      // (the import read again after confirm gives each Draft only to a reader who sees it; if that
+      // read failed, the count confirm gave). The link names the import by its id only: no time.
+      resultActions={(preview, created) => {
+        const seen = preview.status === "created" ? preview.rows.filter((r) => r.workItemId !== null).length : created;
+        return (
+          seen > 0 && (
+            <Link href={workItemListHref(projectId, { importId: preview.id })} className={buttonVariants()}>
+              <Icon name="list" />
+              {t("result.open", { count: seen, n: formatNumber(seen, locale) })}
+            </Link>
+          )
+        );
+      }}
     />
   );
 }

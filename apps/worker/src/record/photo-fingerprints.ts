@@ -3,9 +3,10 @@ import type { RecordBlock, RecordPhoto, RecordSection } from "./form-content.ts"
 // The Form photos of a record and their fingerprints (RP-155). The record job inlines each
 // photo's image into the page and writes the SHA-256 of that image's bytes into the Record
 // Data, so a Re-produce finds the very same file again among the item's Documents by its
-// fingerprint (document.file_sha256), never by a name that two photos can share. A photo the
-// job did not inline (too large, unreadable) has no fingerprint, and a Re-produce prints it
-// the same way: by name and time only.
+// fingerprint (document.file_sha256), never by a name that two photos can share. A photo past
+// the inline limits carries its Document's fingerprint and prints it beside its name, with no
+// image (RP-982), and a Re-produce prints it the same way, its stored bytes checked. Only one
+// from before RP-618 whose file is gone has none, and prints by name and time only.
 
 const photosOfBlock = (block: RecordBlock): readonly RecordPhoto[] =>
   block.kind === "photos" ? block.photos : block.kind === "checklist" ? block.items.flatMap((item) => item.photos) : [];
