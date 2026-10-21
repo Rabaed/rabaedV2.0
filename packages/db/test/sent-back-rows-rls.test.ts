@@ -6,12 +6,12 @@
 // themselves, app.work_item_links, app.work_item_linked_from. What C1 adds or
 // removes is C1's until it Submits the item again; then it is everyone's, and the
 // Transition event's content hash still covers the Subject and the answers.
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, expectedContentSha256, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, expectedContentSha256, joinProject, sha256Bytea, sha256Hex, testDatabaseUrls, type HashedDocument } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -130,9 +130,6 @@ async function submit(id: string) {
   expect(await take(c1Pm, id, "submit")).toBe("applied");
 }
 
-/** The fingerprint the api would take of a test file: here, the SHA-256 of its name (RP-618). */
-const fingerprint = (fileName: string) => createHash("sha256").update(fileName, "utf8").digest();
-
 /** A confirmed Document of item `id`, uploaded by the C1 engineer (into `field`, or the Attachments System Field). */
 async function document(id: string, fileName: string, field: string | null = null): Promise<string> {
   const [started] = await call<{ outcome: string; document_id: string }>(
@@ -143,7 +140,7 @@ async function document(id: string, fileName: string, field: string | null = nul
   expect(
     await outcome(
       c1.member,
-      sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'application/pdf', ${fingerprint(fileName)}, now()) as outcome`,
+      sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'application/pdf', ${sha256Bytea(fileName)}, now()) as outcome`,
     ),
   ).toBe("confirmed");
   return started!.document_id;
@@ -345,7 +342,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     // The item's content as the Submit left it (RP-436: its Documents and outcome
     // too; RP-618: each Document's fingerprint), worked out here from what C1 put
     // in, not by the database's function.
-    const file = (docId: string, fileName: string, fieldKey: string | null) => ({
+    const file = (docId: string, fileName: string, fieldKey: string | null): HashedDocument => ({
       id: docId,
       field_key: fieldKey,
       item_key: null,
@@ -353,7 +350,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
       content_type: "application/pdf",
       size_bytes: 10,
       storage_key: `projects/${projectId}/work-items/${id}/documents/${docId}`,
-      file_sha256: fingerprint(fileName).toString("hex"),
+      file_sha256: sha256Hex(fileName),
     });
     const documents = [
       file(first[0]!, "datasheet-1.pdf", "datasheet"),

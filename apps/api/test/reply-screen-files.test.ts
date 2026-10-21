@@ -7,9 +7,8 @@
 // and everyone who sees the Snag sees them. After a Return to Open the next Resolve starts
 // empty, and the first round's photos stay on the first Resolve. Leaving the Contractor any
 // other way (here a Send Back, on a Project copy of the Workflow) discards them.
-import { createHash } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { expectedContentSha256, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
+import { expectedContentSha256, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
 import type { DocumentList, StartedDocumentUpload, WorkflowDefinition, WorkflowRead, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -81,15 +80,15 @@ async function eventHash(id: string, transition: string): Promise<string> {
 async function expectedHash(id: string, ids: string[]): Promise<string> {
   const { rows: items } = await sql<{ title: string; data: object }>`select title, data from work_item where id = ${id}::uuid`.execute(migrator);
   const { rows: documents } = await sql<HashedDocument>`
-    select id, field_key, item_key, file_name, content_type, size_bytes::int as size_bytes, storage_key from document
+    select ${sql.raw(HASHED_DOCUMENT_COLUMNS)} from document
     where id = any (${ids}::uuid[])
   `.execute(migrator);
-  const fingerprint = createHash("sha256").update(photo).digest("hex");
+  const fingerprint = sha256Hex(photo);
   return expectedContentSha256({
     title: items[0]!.title,
     data: items[0]!.data,
     outcome: null,
-    documents: documents.map((d) => ({ ...d, file_sha256: fingerprint }) as HashedDocument),
+    documents: documents.map((d) => ({ ...d, file_sha256: fingerprint })),
   });
 }
 

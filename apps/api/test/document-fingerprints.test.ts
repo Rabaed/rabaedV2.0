@@ -4,9 +4,9 @@
 // Revision's and a Duplicate's copies carry their source's. Each Transition's
 // content hash then covers what is inside every file, not only its name and size,
 // so a file swapped in storage no longer matches the trail.
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { expectedContentSha256, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
+import { expectedContentSha256, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
 import type { DocumentList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -25,11 +25,6 @@ const DATASHEET = "%PDF-1.7 a datasheet (test)";
 /** Two files of the same name and size, with different bytes. */
 const FIRST = "%PDF-1.7 the signed letter, first";
 const OTHER = "%PDF-1.7 the signed letter, other";
-
-/** A Document as the content hash names it (workflow-engine.md §7), its fingerprint hex. */
-type FingerprintedDocument = HashedDocument & { file_sha256: string | null };
-
-const sha256 = (body: string) => createHash("sha256").update(body, "utf8").digest("hex");
 
 let at: Tower;
 
@@ -63,16 +58,16 @@ async function lastContentHash(id: string): Promise<string> {
  */
 async function expectedHash(id: string, bodies: Record<string, string>): Promise<string> {
   const { rows: items } = await sql<{ title: string; data: object }>`select title, data from work_item where id = ${id}::uuid`.execute(migrator);
+  // The fingerprint is the one of the bytes this test uploaded, not the stored one the hash was taken from.
   const { rows: documents } = await sql<HashedDocument>`
-    select id, field_key, item_key, file_name, content_type, size_bytes::int as size_bytes, storage_key from document
+    select ${sql.raw(HASHED_DOCUMENT_COLUMNS)} from document
     where work_item_id = ${id}::uuid and confirmed_at is not null and removed_at is null
   `.execute(migrator);
   return expectedContentSha256({
     title: items[0]!.title,
     data: items[0]!.data,
     outcome: null,
-    // Each Document as the hash names it from RP-618 on: with its fingerprint (the shared HashedDocument predates it).
-    documents: documents.map((d): FingerprintedDocument => ({ ...d, file_sha256: sha256(bodies[d.file_name]!) })),
+    documents: documents.map((d) => ({ ...d, file_sha256: sha256Hex(bodies[d.file_name]!) })),
   });
 }
 
@@ -83,7 +78,7 @@ describe("a confirmed upload", () => {
   it("keeps the SHA-256 of the file's bytes on its Document", async () => {
     const id = await draft(at, at.c1Engineer, "Fingerprinted");
     const documentId = await letter(at.c1Engineer, id, FIRST);
-    expect(await storedFingerprint(documentId)).toBe(sha256(FIRST));
+    expect(await storedFingerprint(documentId)).toBe(sha256Hex(FIRST));
   });
 });
 
@@ -133,7 +128,7 @@ describe("copied Documents", () => {
     await ok(at.k1Manager.post(`/v1/work-items/${closed}/pick-up`));
     await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit" });
     source = await fingerprintsByName(closed);
-    expect(source).toEqual({ "datasheet.pdf": sha256(DATASHEET), "letter.pdf": sha256(FIRST) });
+    expect(source).toEqual({ "datasheet.pdf": sha256Hex(DATASHEET), "letter.pdf": sha256Hex(FIRST) });
   });
 
   async function fingerprintsByName(id: string): Promise<Record<string, string | null>> {
