@@ -143,12 +143,11 @@ export function buildComment(input: { pr: number; reason: string; jobs: FailedJo
       lines.push(quote(`##[error]${found.error}`), "```", "");
     }
   } else if (kind === "conflict") {
-    lines.push(...conflictLines(conflicts), "", `Fix: merge \`main\` into the branch, resolve the conflicts, push, then \`pnpm queue ${pr}\` (RP-400).`);
-    return lines.join("\n");
+    lines.push(...conflictLines(conflicts), "");
   } else {
     lines.push("Open the PR timeline for the details.", "");
   }
-  lines.push(`Fix: merge \`main\` into the branch, fix it, push, then \`pnpm queue ${pr}\` (RP-400).`);
+  lines.push(`Fix: merge \`main\` into the branch, ${kind === "conflict" ? "resolve the conflicts" : "fix it"}, push, then \`pnpm queue ${pr}\` (RP-400).`);
   return lines.join("\n");
 }
 
@@ -230,7 +229,9 @@ export async function mergeTreeConflicts(head: string, base: string, cwd = proce
   const tracking = `refs/remotes/origin/${base}`;
   const fetch = git(cwd, ["fetch", "--no-tags", "--quiet", "origin", head, `+refs/heads/${base}:${tracking}`]);
   if (fetch.status !== 0) throw new Error(`git fetch failed: ${fetch.stderr}`);
-  const tip = git(cwd, ["rev-parse", "--verify", `${tracking}^{commit}`]).stdout;
+  const resolved = git(cwd, ["rev-parse", "--verify", `${tracking}^{commit}`]);
+  if (resolved.status !== 0) throw new Error(`${tracking} did not resolve: ${resolved.stderr}`);
+  const tip = resolved.stdout;
   // Exit 0: clean; 1: conflicts. The first line is the merged tree; with --name-only the conflicted files follow, one per line.
   const merge = git(cwd, ["merge-tree", "--write-tree", "--name-only", "--no-messages", tip, head]);
   if (merge.status !== 0 && merge.status !== 1) throw new Error(`git merge-tree failed: ${merge.stderr}`);
@@ -281,7 +282,7 @@ async function main() {
   };
   const { pull_request: pr } = event;
   const removal = { pr: pr.number, reason: event.reason, merged: pr.merged === true, head: pr.head.sha, base: pr.base.ref };
-  const body = await commentOnRemoval(removal, overHttp(repository, token), (head, base) => mergeTreeConflicts(head, base));
+  const body = await commentOnRemoval(removal, overHttp(repository, token), mergeTreeConflicts);
   const summary = body ?? "Nothing to post: the PR merged, or a person removed it from the queue on purpose.";
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);

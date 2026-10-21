@@ -370,7 +370,11 @@ describe("mergeTreeConflicts", () => {
   it("refuses a head that is not a full commit id, and a base that could read as an option", async () => {
     const clone = runnerClone("checks", "--filter=blob:none");
     await expect(mergeTreeConflicts("--upload-pack=touch x", "main", clone)).rejects.toThrow(/head/);
+    await expect(mergeTreeConflicts(conflicting.toUpperCase(), "main", clone)).rejects.toThrow(/head/);
     await expect(mergeTreeConflicts(conflicting, "-x", clone)).rejects.toThrow(/base/);
+    // A colon would turn the refspec into one that writes another ref.
+    await expect(mergeTreeConflicts(conflicting, "main:refs/heads/x", clone)).rejects.toThrow(/base/);
+    await expect(mergeTreeConflicts(conflicting, "main/../x", clone)).rejects.toThrow(/base/);
   });
 });
 
@@ -413,9 +417,10 @@ describe("queue-drop-comment.yml", () => {
 
   // RP-1020: merge-tree needs the merge base, so the checkout takes main's whole history but no file
   // contents (about 4 MB of commits and trees in 2026-10; git fetches the blobs a merge needs). The
-  // workflow lands in its own PR after the script (rule 3); until then these wait for it.
+  // workflow lands in its own PR after the script (rule 3); until then these wait for it. Either key
+  // wakes them, so a workflow change that sets only one of the two fails here instead of skipping.
   const checkout = Object.values(wf.jobs)[0]?.steps.find((s) => s.uses?.startsWith("actions/checkout"));
-  describe.skipIf(checkout?.with?.filter === undefined)("checkout for git merge-tree (RP-1020)", () => {
+  describe.skipIf(checkout?.with?.filter === undefined && checkout?.with?.["fetch-depth"] === undefined)("checkout for git merge-tree (RP-1020)", () => {
     it("takes the whole history without file contents", () => {
       expect(checkout?.with?.["fetch-depth"]).toBe(0);
       expect(checkout?.with?.filter).toBe("blob:none");
