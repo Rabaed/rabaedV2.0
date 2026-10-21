@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { connect, createServer } from "node:net";
+import { join } from "node:path";
 import { holdReason, type Holders } from "./claude-sessions.ts";
 import { samePath } from "./paths.ts";
 import { lockPid } from "./worktrees-stale.ts";
@@ -93,6 +95,27 @@ export function parseVolumes(out: string): Volume[] {
 
 const lines = (out: string) => out.split(/\r?\n/).filter((line) => line.trim() !== "");
 
+/** A worktree whose .env names a rabaed-* compose project (RP-1007): it holds that lane, even with its containers stopped or gone. */
+export type EnvClaim = { path: string; branch: string | undefined; project: string };
+
+/** A folder's .env text, or undefined when it has none (or the folder is gone). */
+export function readWorktreeEnv(dir: string): string | undefined {
+  const file = join(dir, ".env");
+  return existsSync(file) ? readFileSync(file, "utf8") : undefined;
+}
+
+/** The worktrees other than cwd whose .env names a rabaed-* compose project, read through readEnv (RP-1007). */
+export function envClaims(
+  worktrees: { path: string; branch: string | undefined }[],
+  { cwd, readEnv, platform }: { cwd: string; readEnv: (dir: string) => string | undefined; platform?: NodeJS.Platform },
+): EnvClaim[] {
+  return worktrees.flatMap((w) => {
+    if (samePath(w.path, cwd, platform)) return [];
+    const project = composeProjectOfEnv(readEnv(w.path) ?? "");
+    return project?.startsWith("rabaed-") ? [{ path: w.path, branch: w.branch, project }] : [];
+  });
+}
+
 type ClashInput = {
   containers: Container[];
   takenPorts: ReadonlySet<number>;
@@ -100,14 +123,19 @@ type ClashInput = {
   platform?: NodeJS.Platform;
   /** The caller has its own database (lane:env --db), so other worktrees' containers of this lane's compose project are not a clash. */
   ownDatabase?: boolean;
+  /** The other worktrees' .env claims (envClaims, RP-1007): one naming the lane's project, or its twin's, holds the lane. */
+  claims?: EnvClaim[];
+  /** A claim that does not hold the lane after all (lane:env: its worktree is finished and no session holds it); default none. */
+  claimFree?: (claim: EnvClaim) => boolean;
 };
 
 /**
  * Why lane n cannot be used from the worktree at cwd: a lane port taken by
- * something other than this worktree's own containers, or its compose project
- * already used from another worktree (it would share that worktree's database).
+ * something other than this worktree's own containers, its compose project
+ * already used from another worktree (it would share that worktree's database),
+ * or named in another worktree's .env (RP-1007: its stack may only be stopped).
  */
-export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase }: ClashInput): string[] {
+export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase, claims = [], claimFree = () => false }: ClashInput): string[] {
   // A --db run shares the lane's stack, under either project of its ports (RP-605).
   const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (ownDatabase === true && laneProjects(n).includes(c.project));
   const clashes: string[] = [];
@@ -131,6 +159,15 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
   const twins = twin === undefined ? [] : [...new Set(containers.filter((c) => c.project === laneProject(twin) && !own(c)).map((c) => c.workingDir))];
   if (twin !== undefined && twins.length > 0) {
     clashes.push(`Compose project ${laneProject(twin)} (lane ${twin} has the same ports as lane ${n}) belongs to ${twins.join(", ")}.`);
+  }
+  // A --db run shares its own session's lane, so a claim on it is not a clash (as with its containers).
+  if (ownDatabase !== true) {
+    const named = [...others, ...twins];
+    for (const claim of claims) {
+      if (!laneProjects(n).includes(claim.project) || samePath(claim.path, cwd, platform) || claimFree(claim)) continue;
+      if (named.some((dir) => samePath(dir, claim.path, platform))) continue;
+      clashes.push(`Compose project ${claim.project} is in the .env of ${claim.path} (on ${claim.branch ?? "a detached HEAD"}): that worktree holds the lane even with its containers stopped.`);
+    }
   }
   return clashes;
 }
@@ -289,6 +326,29 @@ export function heldSinceListed(project: StaleProject, containers: Container[], 
   return held === undefined ? undefined : `${held.path}: ${held.reason}`;
 }
 
+/**
+ * lanes:prune's stale candidates split by the other worktrees' .env claims (RP-1007): a project
+ * a worktree that still exists names in its .env stays, though it is not running or has only
+ * volumes left, as that worktree's lane database; kept names the first such worktree.
+ */
+export function keptByClaims(candidates: StaleProject[], claims: EnvClaim[]): { prune: StaleProject[]; kept: KeptProject[] } {
+  const prune: StaleProject[] = [];
+  const kept: KeptProject[] = [];
+  for (const candidate of candidates) {
+    const claim = claims.find((c) => c.project === candidate.project);
+    if (claim === undefined) prune.push(candidate);
+    else kept.push({ project: candidate.project, path: claim.path, reason: `its .env names ${claim.project} (on ${claim.branch ?? "a detached HEAD"}), so the lane is still in use` });
+  }
+  return { prune, kept };
+}
+
+/**
+ * A worktree whose .env names project now but did not when the list was made (lanes:prune reads
+ * the .env files again just before each removal, RP-1007: lane:env may have run since the prompt).
+ */
+export const newClaimant = (project: string, listed: EnvClaim[], now: EnvClaim[], platform?: NodeJS.Platform): EnvClaim | undefined =>
+  now.find((c) => c.project === project && !listed.some((l) => l.project === project && samePath(l.path, c.path, platform)));
+
 /** lanes:prune --lane N: only lane N's compose project among the candidates (all of them without --lane). */
 export const onlyLane = (projects: StaleProject[], lane: number | undefined): StaleProject[] =>
   lane === undefined ? projects : projects.filter((p) => p.project === laneProject(lane));
@@ -393,50 +453,85 @@ type TakeoverInput = {
  * is not merged (other than cwd) naming the lane's project in its .env: it shares the lane.
  * The twin lane's project (legacy m for m0, or m0 for m) counts as the lane's, as it holds the
  * same ports; its volumes stay too, but lane n's project starts with a database of its own (RP-605).
+ * A worktree that only names the lane in its .env, with no container of it (RP-1007), is judged
+ * like a holder: once it is merged, clean and held by no session its claim is released (nothing
+ * is removed, and its .env is left as it is).
  */
 export function chooseTakeover(
   n: number,
   { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, holders, platform }: TakeoverInput,
-): { takeOver: Container[]; from: string[]; refused: string[] } {
+): { takeOver: Container[]; from: string[]; refused: string[]; released: string[] } {
   const projects = laneProjects(n);
   const mine = containers.filter((c) => projects.includes(c.project) && !samePath(c.workingDir, cwd, platform));
   const from: string[] = [];
   const refused: string[] = [];
+  const released: string[] = [];
+  const claimants = worktrees.filter((w) => w.exists && w.project !== undefined && projects.includes(w.project) && !samePath(w.path, cwd, platform));
   for (const dir of new Set(mine.map((c) => c.workingDir))) {
     const w = worktrees.find((x) => samePath(x.path, dir, platform));
     const on = w?.branch ?? "a detached HEAD";
-    const pid = lockPid(w?.locked);
-    const held = w?.exists ? holdReason(w.path, holders) : undefined;
     if (!w) {
       if (exists(dir)) refused.push(`${dir} is not a worktree of this clone.`);
       else from.push(`${dir} (gone)`);
     } else if (!w.exists) from.push(`${dir} (gone)`);
-    else if (pid !== undefined && pidRunning(pid)) refused.push(`${dir} is locked by a session that is still running (pid ${pid}).`);
-    else if (held !== undefined) refused.push(`${dir} is on ${on} and ${held}.`);
-    else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
-    else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
-    else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);
-    else if (w.neverCommitted) from.push(`${dir} (${on}, never committed to: its tip is in origin/main, it is clean and unlocked, and no process holds it)`);
-    else from.push(`${dir} (${on}, merged into origin/main)`);
-  }
-  if (mine.length > 0) {
-    for (const w of worktrees) {
-      if (!w.merged && w.project !== undefined && projects.includes(w.project) && !samePath(w.path, cwd, platform)) {
-        refused.push(`${w.path} is on ${w.branch ?? "a detached HEAD"}, not merged into origin/main yet, and has ${w.project} in its .env.`);
-      }
+    else {
+      const why = holderRefusal(w, { pidRunning, holders });
+      if (why !== undefined) refused.push(why);
+      else if (w.neverCommitted) from.push(`${dir} (${on}, never committed to: its tip is in origin/main, it is clean and unlocked, and no process holds it)`);
+      else from.push(`${dir} (${on}, merged into origin/main)`);
     }
   }
-  return refused.length > 0 ? { takeOver: [], from: [], refused } : { takeOver: mine, from, refused };
+  for (const w of claimants) {
+    const on = w.branch ?? "a detached HEAD";
+    const holdsContainers = mine.some((c) => samePath(c.workingDir, w.path, platform));
+    if (!w.merged) {
+      refused.push(`${w.path} is on ${on}, not merged into origin/main yet, and has ${w.project} in its .env.`);
+      continue;
+    }
+    if (holdsContainers) {
+      released.push(w.path);
+      continue;
+    }
+    const why = holderRefusal(w, { pidRunning, holders });
+    if (why !== undefined) refused.push(why);
+    else {
+      released.push(w.path);
+      from.push(`${w.path} (${on}, merged into origin/main; ${w.project} is in its .env)`);
+    }
+  }
+  return refused.length > 0 ? { takeOver: [], from: [], refused, released: [] } : { takeOver: mine, from, refused, released };
+}
+
+/** Why lane:env --force may not take a lane from this existing worktree (chooseTakeover's checks, in order), or undefined. */
+function holderRefusal(w: TakeoverWorktree, { pidRunning, holders }: { pidRunning: (pid: number) => boolean; holders: Holders }): string | undefined {
+  const on = w.branch ?? "a detached HEAD";
+  const pid = lockPid(w.locked);
+  const held = holdReason(w.path, holders);
+  if (pid !== undefined && pidRunning(pid)) return `${w.path} is locked by a session that is still running (pid ${pid}).`;
+  if (held !== undefined) return `${w.path} is on ${on} and ${held}.`;
+  if (w.statusError !== undefined) return `${w.path} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`;
+  if (w.dirty) return `${w.path} is on ${on} and has uncommitted changes.`;
+  if (!w.merged) return `${w.path} is on ${on}, not merged into origin/main yet.`;
+  return undefined;
 }
 
 /** Whether a worktree has a container of lane n's compose project (or its twin's); its folder is then checked before a takeover. */
 export const holdsLaneProject = (n: number, containers: Container[], dir: string, platform?: NodeJS.Platform): boolean =>
   containers.some((c) => laneProjects(n).includes(c.project) && samePath(c.workingDir, dir, platform));
 
-/** laneClashes for lane n once the containers `removed` are gone: their containers and the ports they held no longer count. */
-export function clashesAfterRemoval(n: number, input: ClashInput, removed: Container[]): string[] {
+/**
+ * laneClashes for lane n once the containers `removed` are gone: their containers and the ports they held no longer count,
+ * nor do the .env claims of the worktrees `released` (chooseTakeover's, RP-1007).
+ */
+export function clashesAfterRemoval(n: number, input: ClashInput, removed: Container[], released: string[] = []): string[] {
   const freed = new Set(removed.flatMap((c) => c.ports));
-  return laneClashes(n, { ...input, containers: input.containers.filter((c) => !removed.includes(c)), takenPorts: new Set([...input.takenPorts].filter((p) => !freed.has(p))) });
+  const claimFree = (claim: EnvClaim) => released.some((path) => samePath(path, claim.path, input.platform)) || (input.claimFree?.(claim) ?? false);
+  return laneClashes(n, {
+    ...input,
+    containers: input.containers.filter((c) => !removed.includes(c)),
+    takenPorts: new Set([...input.takenPorts].filter((p) => !freed.has(p))),
+    claimFree,
+  });
 }
 
 /**
