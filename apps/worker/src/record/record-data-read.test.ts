@@ -13,7 +13,7 @@ import { recordDataXml, type RecordData, type RecordImages } from "./record-data
 // the golden records (RP-151): every Code, in each record language, with the Form, tables,
 // checklists, photos, Parties and the approval flow.
 
-const codes: GoldenCode[] = ["A", "B", "C", "D", "owner", "cancelled", "rabaed-cancelled"];
+const codes: GoldenCode[] = ["A", "B", "C", "D", "owner", "cancelled", "rabaed-cancelled", "wir"];
 const languages = ["bilingual", "ar", "en"] as const;
 const cases = codes.flatMap((code) => languages.map((language) => [code, language] as const));
 

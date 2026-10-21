@@ -289,6 +289,24 @@ describe("a Snag where two Contractors cover its Trade and Location (a Visibilit
   });
 });
 
+describe("K1's Return to Open (scenario RP-622-3)", () => {
+  it("RP-622-3: goes back to C1, which resolved it, held by its PM again; K1 is offered nothing more, and C2 gets the plain 404", async () => {
+    const id = await raised("Returned by K1");
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Done" } });
+    await take(at.k1Manager, id, "return_to_open", { reason: "Not done" });
+
+    const back = await detail(at.c1Pm, id);
+    expect(back.step.key).toBe("open");
+    expect(back.actions.pickUp).toBe(false);
+    expect(back.actions.transitions.map((t) => t.key)).toEqual(expect.arrayContaining(["start_work", "resolve"]));
+    expect((await detail(at.k1Manager, id)).actions.transitions).toEqual([]);
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
+    expect((await snags(c2Engineer)).items.map((i) => i.id)).not.toContain(id);
+  });
+});
+
 describe("C2 never sees C1's Snag; C1 never sees K1's internal events (scenarios RP-90-1, RP-90-2)", () => {
   it("RP-90-1: C2, another Contractor of the same Trade, sees it in no list, count or Kanban, by id, Links or history", async () => {
     const id = await raised("Not C2's", 1);

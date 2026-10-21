@@ -208,6 +208,69 @@ describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
   });
 });
 
+describe("who reads and adds a Snag's After photos (scenarios RP-623-1, RP-623-2)", () => {
+  it("RP-623-1: K1 and the Owner, who both see the Snag, read none of C1's at In Progress or On Hold; both C1 Members do; K1's upload is refused `not_editable`", async () => {
+    const id = await raised("Riser door gap");
+    await move(id, "start_work");
+    const photo = await addAfterPhoto(at.c1Engineer, id, "after.jpg");
+    await move(id, "put_on_hold_in_progress");
+
+    for (const reader of [at.c1Pm, at.c1Engineer]) expect((await afterPhotos(reader, id)).map((d) => d.id)).toEqual([photo]);
+    for (const outsider of [at.k1Manager, owner]) {
+      expect((await detail(outsider, id)).id).toBe(id);
+      expect(await afterPhotos(outsider, id)).toEqual([]);
+      await expectHidden(outsider.get(`/v1/work-items/${id}/documents/${photo}/download`));
+    }
+    const k1Adds = await startReplyUpload(at.k1Manager, id, "k1.jpg");
+    expect({ status: k1Adds.statusCode, body: k1Adds.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+  });
+
+  it("RP-623-2: C2 reads them neither before nor after the Resolve, and its upload is `not_found`, as for a made-up id", async () => {
+    const id = await raised("Tray lid missing");
+    const photo = await addAfterPhoto(at.c1Pm, id, "after.jpg");
+    const c2Reads = async (when: string) => {
+      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents`), when);
+      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents/${photo}/download`), when);
+      await expectHidden(startReplyUpload(c2Engineer, id, "c2.jpg"), when);
+    };
+    await c2Reads("before the Resolve");
+    await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Lid fitted" } });
+    // Positive control: K1 now reads it.
+    expect((await afterPhotos(at.k1Manager, id)).map((d) => d.id)).toEqual([photo]);
+    await c2Reads("after the Resolve");
+    await expectHidden(startReplyUpload(c2Engineer, "00000000-0000-4000-8000-000000000000", "c2.jpg"), "a made-up id");
+  });
+});
+
+// The spec's own Testing Decision (RP-619), scenario RP-1002-1: an informed Consultant reads a Snag's shared
+// events only, never the Contractor's in-progress After photos.
+describe("an informed Consultant and C1's After photos (scenario RP-1002-1)", () => {
+  it("RP-1002-1: C1 raises its own Snag, informing K1, and adds After photos at Open and In Progress: K1 reads none until C1's Resolve, then reads them frozen", async () => {
+    const answers = { description: "Exposed cable: see the photos", trade: at.electrical, location: at.buildingA };
+    const id = (await ok(at.c1Pm.post(`/v1/projects/${at.projectId}/work-items`, { type: "SNG", title: "Exposed cable", answers }), 201)).json().id as string;
+    await move(id, "raise");
+    // K1 is informed: it reads the Snag itself.
+    expect((await detail(at.k1Manager, id)).stage.key).toBe("open");
+    const atOpen = await addAfterPhoto(at.c1Pm, id, "open.jpg");
+    await move(id, "start_work");
+    const inProgress = await addAfterPhoto(at.c1Engineer, id, "in-progress.jpg");
+
+    for (const outsider of [at.k1Manager, owner]) {
+      expect(await afterPhotos(outsider, id)).toEqual([]);
+      for (const photo of [atOpen, inProgress]) await expectHidden(outsider.get(`/v1/work-items/${id}/documents/${photo}/download`));
+    }
+    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? [])).toEqual([]);
+
+    await take(at.c1Pm, id, "resolve_in_progress", { answers: { resolution_note: "Clipped and covered" } });
+    expect((await afterPhotos(at.k1Manager, id)).map((d) => [d.id, d.frozen])).toEqual([
+      [atOpen, true],
+      [inProgress, true],
+    ]);
+    expect((await ok(at.k1Manager.get(`/v1/work-items/${id}/documents/${atOpen}/download`), 200)).json().url).toBeTruthy();
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents`));
+  });
+});
+
 describe("the Rabaed Default Snag Workflow (seam 1)", () => {
   it("pins the Resolve Screen's Version with After photos on its three Resolve Transitions", async () => {
     const { rows } = await sql<{ key: string; pinned: number; latest: number; fields: string[] }>`

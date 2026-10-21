@@ -38,6 +38,7 @@ export * from "./bulk-transition.ts";
 export * from "./checklist-template.ts";
 export * from "./register-import.ts";
 export * from "./register-import-match.ts";
+export * from "./register-import-template.ts";
 export * from "./step-age.ts";
 export * from "./visibility.ts";
 export * from "./watch.ts";
