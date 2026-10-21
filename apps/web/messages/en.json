@@ -359,7 +359,7 @@
       "code": "Code {code}",
       "createdOn": "Created {date}",
       "submittedOn": "Submitted {date}",
-      "openPackage": "Open Package {number} {name}"
+      "openPackage": "Open Package {number} {company} {name}"
     },
     "viewSwitch": {
       "view": "View",
@@ -2825,6 +2825,7 @@
       "numberOnSubmit": "Number on submit",
       "notReadyTitle": "Not ready",
       "notReadyIntro": "Nothing was Submitted. These stop it:",
+      "notReadyOnPage": "Submit Package is offered once nothing stops it. These stop it now:",
       "reasons": {
         "pick_up_first": "Pick it up first: it waits in your Step Pool.",
         "cannot_submit": "It waits at a Step where you can't Submit it.",

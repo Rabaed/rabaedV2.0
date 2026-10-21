@@ -328,7 +328,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     code: (code) => `Code ${code}`,
     createdOn: (date) => `Created ${date}`,
     submittedOn: (date) => `Submitted ${date}`,
-    openPackage: (number, name) => `Open Package ${number} ${name}`,
+    openPackage: (number, company, name) => `Open Package ${number} ${company} ${name}`,
   },
   ar: {
     board: "كانبان",
@@ -352,7 +352,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     code: (code) => `Code ${code}`,
     createdOn: (date) => `أُنشئ في ${date}`,
     submittedOn: (date) => `قُدِّم في ${date}`,
-    openPackage: (number, name) => `فتح الحزمة ${number} ${name}`,
+    openPackage: (number, company, name) => `فتح الحزمة ${number} ${company} ${name}`,
   },
 };
 

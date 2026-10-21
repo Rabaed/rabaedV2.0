@@ -819,8 +819,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
     `.execute(trx);
     // Its Package (RP-659), as its row gives it: only one the viewer sees (work_item.package_id is not theirs to read).
-    const { rows: pkg } = await sql<{ package_id: string; seq: number; name: BilingualText }>`
-      select package_id, seq, name from app.work_item_package(${workItemId}::uuid)
+    const { rows: pkg } = await sql<{ package_id: string; seq: number; name: BilingualText; company_name: BilingualText }>`
+      select package_id, seq, name, app.package_owner_name(package_id) as company_name from app.work_item_package(${workItemId}::uuid)
     `.execute(trx);
     const { rows: record } = await sql<{ state: "preparing" | "published" | null }>`select app.documental_record_state(${workItemId}::uuid) as state`.execute(trx);
     return {
@@ -871,7 +871,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
             items: previous.map(raisedCount),
           }
         : null,
-      ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name } } : {}),
+      ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name, companyName: pkg[0].company_name } } : {}),
       actions: {
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,

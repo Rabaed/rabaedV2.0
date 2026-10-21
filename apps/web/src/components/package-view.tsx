@@ -90,7 +90,7 @@ function usePackageLabels(): PackagePageLabels {
       add: (n, count) => t("addItems.add", { n, count }),
     },
     submit: {
-      ...keys("submit", ["trigger", "description", "confirm", "numberOnSubmit", "notReadyTitle", "notReadyIntro", "othersNotReady"] as const),
+      ...keys("submit", ["trigger", "description", "confirm", "numberOnSubmit", "notReadyTitle", "notReadyIntro", "notReadyOnPage", "othersNotReady"] as const),
       title: (number) => t("submit.title", { number }),
       count: (n, count) => t("submit.count", { n, count }),
       reasons: keys("submit.reasons", packageNotReadyReasons),
