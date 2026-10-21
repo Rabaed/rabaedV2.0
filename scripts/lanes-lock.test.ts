@@ -1,11 +1,11 @@
 // RP-1007: two `lane:env --free` runs two seconds apart both got lane 33 (2026-10-21). lane:env
 // now holds one lock per clone from reading the lanes until its .env is written.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { envClaims, firstFreeLane, laneClashes, readWorktreeEnv } from "./lanes.ts";
-import { acquireLaneLock, type LockDeps } from "./lanes-lock.ts";
+import { acquireLaneLock, removeStale, type LockDeps } from "./lanes-lock.ts";
 
 let root: string;
 let file: string;
@@ -59,6 +59,24 @@ describe("acquireLaneLock", () => {
     expect("release" in acquireLaneLock(file, deps(11, { alive: (pid) => pid !== 10 }))).toBe(true);
     writeFileSync(file, "garbage");
     expect("release" in acquireLaneLock(file, deps(12))).toBe(true);
+  });
+
+  it("takes over a lock older than staleMs although its pid still runs (the pid may be reused)", () => {
+    writeFileSync(file, JSON.stringify({ pid: 10, at: -700_000 }));
+    expect("release" in acquireLaneLock(file, deps(11))).toBe(true);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ pid: 11 });
+  });
+
+  it("removes a stale lock only if it is still the one judged stale", () => {
+    const stale = JSON.stringify({ pid: 10, at: 0 });
+    const fresh = JSON.stringify({ pid: 12, at: 5 });
+    // Another waiter replaced the stale lock between our read and our removal: it stays.
+    writeFileSync(file, fresh);
+    removeStale(file, stale, 11);
+    expect(readFileSync(file, "utf8")).toBe(fresh);
+    removeStale(file, fresh, 11);
+    expect(existsSync(file)).toBe(false);
+    expect(readdirSync(root)).toEqual([]);
   });
 
   it("never removes a lock another run has taken since", () => {

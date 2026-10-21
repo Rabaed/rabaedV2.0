@@ -13,6 +13,7 @@ import {
   firstFreeLane,
   keptByClaims,
   laneClashes,
+  laneKeptByClaim,
   newClaimant,
   readWorktreeEnv,
   staleProjects,
@@ -69,7 +70,7 @@ describe("envClaims", () => {
 });
 
 describe("lane:env with a lane another worktree's .env names (RP-1007)", () => {
-  const check = (claims: EnvClaim[], extra: { claimFree?: (c: EnvClaim) => boolean; ownDatabase?: boolean } = {}) => ({
+  const check = (claims: EnvClaim[], extra: { ownDatabase?: boolean } = {}) => ({
     containers: [] as Container[],
     takenPorts: new Set<number>(),
     cwd: second,
@@ -96,10 +97,9 @@ describe("lane:env with a lane another worktree's .env names (RP-1007)", () => {
     expect(laneClashes(30, check(claims))).toHaveLength(1);
   });
 
-  it("does not count this worktree's own .env, a claim the caller frees, or a --db run sharing its lane", () => {
+  it("does not count this worktree's own .env, or a --db run sharing its lane", () => {
     const own: EnvClaim[] = [{ path: second, branch: "RP-992-second", project: "rabaed-lane32" }];
     expect(laneClashes(32, check(own))).toEqual([]);
-    expect(laneClashes(32, check(claimsFrom(second), { claimFree: (c) => c.path === first }))).toEqual([]);
     expect(laneClashes(32, check(claimsFrom(second), { ownDatabase: true }))).toEqual([]);
   });
 
@@ -170,6 +170,29 @@ describe("lanes:prune with a lane another worktree's .env names (RP-1007)", () =
       { path: second, branch: "RP-992-second", merged: false, project: "rabaed-lane31" },
     ];
     expect(chooseMerged({ containers: stopped, volumes, worktrees: lanes, cwd: second, currentProject: "rabaed-lane31", holders: none }).merged).toEqual([]);
+  });
+
+  it("with --merged, keeps a lane whose merged claimant a session holds, naming it, though its containers are another merged worktree's", () => {
+    const owner = other; // the containers' folder, merged and held by no session
+    const containers = [container({ name: "rabaed-lane32-db-1", state: "exited", project: "rabaed-lane32", workingDir: owner })];
+    const lanes = [
+      { path: owner, branch: "RP-1-other", merged: true, project: undefined },
+      { path: first, branch: "RP-983-first", merged: true, project: "rabaed-lane32" },
+    ];
+    const why = 'its Claude desktop session is open (session "RP-983")';
+    const holders: Holders = { ...none, runningSession: (path) => (path === first ? why : undefined) };
+    const input = { containers, volumes: [], worktrees: lanes, cwd: second, currentProject: "rabaed-lane31", holders };
+    expect(chooseMerged(input)).toEqual({ merged: [], kept: [{ project: "rabaed-lane32", path: first, reason: why }] });
+    expect(chooseMerged({ ...input, holders: none }).merged.map((p) => p.project)).toEqual(["rabaed-lane32"]);
+  });
+
+  it("lanes:prune --lane N refuses (exits 1) when a claim kept N's project and --merged did not pick it", () => {
+    const kept = [{ project: "rabaed-lane32", path: first, reason: "x" }];
+    const picked = [{ project: "rabaed-lane32", reason: "merged", containers: [], volumes: [] }];
+    expect(laneKeptByClaim(32, kept, [])).toBe(true);
+    expect(laneKeptByClaim(32, kept, picked)).toBe(false);
+    expect(laneKeptByClaim(33, kept, [])).toBe(false);
+    expect(laneKeptByClaim(undefined, kept, [])).toBe(false);
   });
 
   it("sees a worktree that names the lane after the list was made", () => {

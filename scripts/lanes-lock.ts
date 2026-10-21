@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { closeSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { closeSync, linkSync, openSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { join } from "node:path";
 
 // One lane:env at a time per clone (RP-1007). On 2026-10-21 two `lane:env --free` runs started two
@@ -36,6 +36,56 @@ function readHolder(file: string): { pid: number; at: number } | undefined {
 }
 
 /**
+ * Creates file holding text, only if it does not exist yet: the text goes to a file of this run's
+ * own first and is hard-linked into place, so another run never sees the lock half-written.
+ */
+function createWith(file: string, text: string, pid: number): boolean {
+  const own = `${file}.${pid}.tmp`;
+  const fd = openSync(own, "w");
+  try {
+    writeSync(fd, text);
+  } finally {
+    closeSync(fd);
+  }
+  try {
+    linkSync(own, file);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  } finally {
+    rmSync(own, { force: true });
+  }
+}
+
+/**
+ * Removes a stale lock, but only the one that was judged stale: it is moved aside first, and when
+ * what moved is not that lock (another waiter took over in between) it is put back.
+ */
+export function removeStale(file: string, judged: string | undefined, pid: number): void {
+  const aside = `${file}.${pid}.stale`;
+  try {
+    renameSync(file, aside);
+  } catch {
+    return; // Gone already: another waiter removed it.
+  }
+  let moved: string | undefined;
+  try {
+    moved = readFileSync(aside, "utf8");
+  } catch {
+    moved = undefined;
+  }
+  if (moved !== judged) {
+    try {
+      linkSync(aside, file);
+    } catch {
+      // A third run has created the lock meanwhile; it holds it.
+    }
+  }
+  rmSync(aside, { force: true });
+}
+
+/**
  * Takes the lock at file, waiting while another run that still runs holds it. A lock whose run is
  * gone, that is older than staleMs, or that cannot be read is taken over. Gives up after waitMs with
  * the refusal to print. release() removes the lock only while it is still this run's.
@@ -43,24 +93,22 @@ function readHolder(file: string): { pid: number; at: number } | undefined {
 export function acquireLaneLock(file: string, deps: LockDeps, { waitMs = 120_000, staleMs = 600_000 }: Options = {}): { release: () => void } | { error: string } {
   const started = deps.now();
   for (;;) {
-    try {
-      const fd = openSync(file, "wx");
-      try {
-        writeSync(fd, JSON.stringify({ pid: deps.pid, at: deps.now() }));
-      } finally {
-        closeSync(fd);
-      }
+    if (createWith(file, JSON.stringify({ pid: deps.pid, at: deps.now() }), deps.pid)) {
       return {
         release: () => {
           if (readHolder(file)?.pid === deps.pid) rmSync(file, { force: true });
         },
       };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    let text: string | undefined;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue; // Removed since: try again.
     }
     const holder = readHolder(file);
     if (holder === undefined || !deps.alive(holder.pid) || deps.now() - holder.at > staleMs) {
-      rmSync(file, { force: true });
+      removeStale(file, text, deps.pid);
       continue;
     }
     if (deps.now() - started >= waitMs) {

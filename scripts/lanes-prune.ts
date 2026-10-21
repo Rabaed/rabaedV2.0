@@ -23,6 +23,7 @@ import {
   envClaims,
   heldSinceListed,
   keptByClaims,
+  laneKeptByClaim,
   LANE_SCHEME,
   laneProject,
   listContainers,
@@ -33,6 +34,7 @@ import {
   readWorktreeEnv,
   removeProject,
   staleProjects,
+  type StaleProject,
   type WorktreeLane,
 } from "./lanes.ts";
 import { judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
@@ -50,17 +52,15 @@ if (!containers) {
   console.error("Docker is not running (or not installed); start it and re-run.");
   process.exit(1);
 }
-const readEnv = readWorktreeEnv;
-const currentProject = composeProjectOfEnv(readEnv(".") ?? "");
+const currentProject = composeProjectOfEnv(readWorktreeEnv(".") ?? "");
 const volumes = listVolumes();
 /** Every other worktree's .env claim (RP-1007), read now; a project one names is not pruned as stale. */
-const readClaims = () => envClaims(listWorktrees().filter((w) => existsSync(w.path)), { cwd: process.cwd(), readEnv });
+const readClaims = () => envClaims(listWorktrees().filter((w) => existsSync(w.path)), { cwd: process.cwd(), readEnv: readWorktreeEnv });
 const claims = readClaims();
 const { prune: stale, kept: claimed } = keptByClaims(staleProjects({ containers, volumes, cwd: process.cwd(), currentProject, exists: existsSync }), claims);
-const shown = (project: string) => lane === undefined || project === laneProject(lane);
-for (const k of claimed) if (shown(k.project)) console.log(`Not pruned: ${k.project} of ${k.path}: ${k.reason}.`);
-/** --lane N's own project was kept for a claim: a refusal, so the run exits 1 (unless --merged then picks it). */
-let laneRefused = lane !== undefined && claimed.some((k) => k.project === laneProject(lane));
+const inScope = (project: string) => lane === undefined || project === laneProject(lane);
+/** The projects --merged adds (none without it); a claimed project it adds is not reported as kept. */
+let fresh: StaleProject[] = [];
 /** The candidates chosen as merged (--merged): checked again for sessions just before each removal. */
 const mergedOnes = new Set<string>();
 
@@ -80,17 +80,20 @@ if (withMerged) {
       path: w.path,
       branch: w.branch,
       merged: i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
-      project: composeProjectOfEnv(readEnv(w.path) ?? ""),
+      project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? ""),
     }));
   const known = new Set(stale.map((s) => s.project));
   // RP-956, RP-612: a holder a running or desktop Claude session holds keeps its project; name the session.
   const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd: process.cwd(), currentProject, holders: live.holders });
-  const fresh = merged.filter((m) => !known.has(m.project));
+  fresh = merged.filter((m) => !known.has(m.project));
   stale.push(...fresh);
   for (const m of fresh) mergedOnes.add(m.project);
-  if (lane !== undefined && fresh.some((m) => m.project === laneProject(lane))) laneRefused = false;
-  for (const k of kept) if (!known.has(k.project) && shown(k.project)) console.log(`Not pruned as merged: ${k.project} of ${k.path}: ${k.reason}.`);
+  for (const k of kept) if (!known.has(k.project) && inScope(k.project)) console.log(`Not pruned as merged: ${k.project} of ${k.path}: ${k.reason}.`);
 }
+
+for (const k of claimed) if (inScope(k.project) && !fresh.some((m) => m.project === k.project)) console.log(`Not pruned: ${k.project} of ${k.path}: ${k.reason}.`);
+// --lane N's own project kept for a claim is a refusal: exit 1.
+const laneRefused = laneKeptByClaim(lane, claimed, fresh);
 
 const candidates = onlyLane(stale, lane);
 if (candidates.length === 0) {

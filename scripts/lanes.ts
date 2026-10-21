@@ -125,8 +125,6 @@ type ClashInput = {
   ownDatabase?: boolean;
   /** The other worktrees' .env claims (envClaims, RP-1007): one naming the lane's project, or its twin's, holds the lane. */
   claims?: EnvClaim[];
-  /** A claim that does not hold the lane after all (lane:env: its worktree is finished and no session holds it); default none. */
-  claimFree?: (claim: EnvClaim) => boolean;
 };
 
 /**
@@ -135,7 +133,7 @@ type ClashInput = {
  * already used from another worktree (it would share that worktree's database),
  * or named in another worktree's .env (RP-1007: its stack may only be stopped).
  */
-export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase, claims = [], claimFree = () => false }: ClashInput): string[] {
+export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase, claims = [] }: ClashInput): string[] {
   // A --db run shares the lane's stack, under either project of its ports (RP-605).
   const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (ownDatabase === true && laneProjects(n).includes(c.project));
   const clashes: string[] = [];
@@ -164,7 +162,7 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
   if (ownDatabase !== true) {
     const named = [...others, ...twins];
     for (const claim of claims) {
-      if (!laneProjects(n).includes(claim.project) || samePath(claim.path, cwd, platform) || claimFree(claim)) continue;
+      if (!laneProjects(n).includes(claim.project) || samePath(claim.path, cwd, platform)) continue;
       if (named.some((dir) => samePath(dir, claim.path, platform))) continue;
       clashes.push(`Compose project ${claim.project} is in the .env of ${claim.path} (on ${claim.branch ?? "a detached HEAD"}): that worktree holds the lane even with its containers stopped.`);
     }
@@ -296,8 +294,10 @@ export function chooseMerged({ containers, volumes, worktrees, cwd, currentProje
     // Each container's folder must be a merged worktree of this clone.
     const owners = dirs.flatMap((dir) => worktrees.filter((w) => w.merged && samePath(w.path, dir, platform)).slice(0, 1));
     if (owners.length < dirs.length) continue;
+    // RP-1007: the merged worktrees whose .env names the project hold it too, while a session holds them.
+    const claimants = worktrees.filter((w) => w.merged && w.project === project && !owners.includes(w));
     const held = firstHeld(
-      owners.map((w) => w.path),
+      [...owners, ...claimants].map((w) => w.path),
       holders,
     );
     if (held) {
@@ -341,6 +341,10 @@ export function keptByClaims(candidates: StaleProject[], claims: EnvClaim[]): { 
   }
   return { prune, kept };
 }
+
+/** lanes:prune --lane N refuses (exits 1) when a claim kept lane N's project and --merged did not pick it after all (RP-1007). */
+export const laneKeptByClaim = (lane: number | undefined, claimed: KeptProject[], merged: StaleProject[]): boolean =>
+  lane !== undefined && claimed.some((k) => k.project === laneProject(lane)) && !merged.some((m) => m.project === laneProject(lane));
 
 /**
  * A worktree whose .env names project now but did not when the list was made (lanes:prune reads
@@ -525,12 +529,11 @@ export const holdsLaneProject = (n: number, containers: Container[], dir: string
  */
 export function clashesAfterRemoval(n: number, input: ClashInput, removed: Container[], released: string[] = []): string[] {
   const freed = new Set(removed.flatMap((c) => c.ports));
-  const claimFree = (claim: EnvClaim) => released.some((path) => samePath(path, claim.path, input.platform)) || (input.claimFree?.(claim) ?? false);
   return laneClashes(n, {
     ...input,
     containers: input.containers.filter((c) => !removed.includes(c)),
     takenPorts: new Set([...input.takenPorts].filter((p) => !freed.has(p))),
-    claimFree,
+    claims: (input.claims ?? []).filter((claim) => !released.some((path) => samePath(path, claim.path, input.platform))),
   });
 }
 
