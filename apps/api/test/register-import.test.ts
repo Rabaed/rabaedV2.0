@@ -18,6 +18,7 @@ import type {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildForeignProject, type ForeignProject } from "./support/foreign-project.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, memberOnProject, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
 
@@ -1094,16 +1095,44 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       }
     });
 
-    it("is the plain 404 to C2, K1 and the Owner, and for an Engineer's import, which keeps none", async () => {
+    it("is the plain 404 to C2, K1 and the Owner", async () => {
       for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${imported.id}/original`));
       await expectHidden(tower.c1Engineer.get(`/v1/register-imports/${randomUUID()}/original`));
+    });
+
+    // RP-959: Rabaed Admin hands its Engineer's original over through the database (it has no
+    // file store), and the api stores it at the first download, as a Member's import keeps it.
+    it("is kept for a Rabaed Engineer's import too: C1's Members download it as uploaded, with no time; C2, K1 and the Owner get the plain 404", async () => {
       const defaultMember = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"]);
       const done = await api.engineerImport({
         for: { projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: defaultMember.id, reason: "Onboarding C1, original" },
         ...register,
       });
-      expect((await ok(getImport(defaultMember.caller, done.importId), 200)).json().original).toBe(false);
-      await expectHidden(defaultMember.caller.get(`/v1/register-imports/${done.importId}/original`));
+      const handedOver = async () =>
+        (await sql<{ n: number }>`select count(*)::int as n from register_import_original_hand_over where import_id = ${done.importId}::uuid`.execute(migrator)).rows[0]!.n;
+      // Nobody else's request stores it, nor takes it off the hand-over.
+      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) {
+        await expectHidden(getImport(by, done.importId));
+        await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
+      }
+      expect(await handedOver()).toBe(1);
+      // Two first downloads at once: one stores it and empties the hand-over (the other waits on
+      // its row, then reads the store), and both get the file.
+      const firsts = await Promise.all([defaultMember.caller, tower.c1Pm].map((by) => ok(by.get(`/v1/register-imports/${done.importId}/original`), 200)));
+      for (const res of firsts) expect(res.rawPayload.equals(Buffer.from(xlsx.content, "base64"))).toBe(true);
+      expect(await handedOver()).toBe(0);
+      // Then every Member of C1 reads it from the store.
+      for (const by of [defaultMember.caller, tower.c1Pm, tower.c1Engineer]) {
+        expect((await ok(getImport(by, done.importId), 200)).json().original).toBe(true);
+        const res = await ok(by.get(`/v1/register-imports/${done.importId}/original`), 200);
+        expect(res.rawPayload.equals(Buffer.from(xlsx.content, "base64"))).toBe(true);
+        expect(res.headers["content-disposition"]).toBe(`attachment; filename="import-register.xlsx"; filename*=UTF-8''import-register.xlsx`);
+        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined();
+        const { date: _date, ...rest } = res.headers;
+        expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}|GMT|\d{2}:\d{2}/);
+        expect(await handedOver()).toBe(0);
+      }
+      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
     });
 
     it("keeps a preview's file to its importer", async () => {
@@ -1225,69 +1254,35 @@ describe("The Imports page and its Packages (story 32, RP-657)", () => {
 // RP-960 (the gap RP-657 found): a Rabaed Type whose own Workflow is another Project's (only a
 // migrator can make one, as apps/api/test/outcome-sets.test.ts does) is raised by nobody on
 // this Project: "+ New" doesn't offer it, so neither does the import, and a row naming it is
-// a Type the importer may not raise.
+// a Type the importer may not raise. The foreign Project (RP-1016, ./support/foreign-project.ts) is
+// built before any call, with its own Type, Trade "Electrical" and Location "Building A" too.
 describe("The Types a register may name are the ones \"+ New\" offers (RP-960)", () => {
+  let foreign: ForeignProject;
   /** A Rabaed Type whose own Workflow is the other Project's, published. */
   let lent: string;
 
   beforeAll(async () => {
-    const other = await api.projectCreator();
-    const otherProjectId = (await api.createProject(other.caller, { code: "ORW" })).id;
-    lent = `ZL${Array.from({ length: 3 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("")}`;
-    // A copy of the MAR's latest Workflow Version as the other Project's own Workflow, and the Type on it.
-    const { rows } = await sql<{ version_id: string }>`
-      with definition as (
-        insert into workflow_definition (owner_kind, project_id, name)
-        values ('project', ${otherProjectId}::uuid, '{"en": "Another Project''s Workflow (test)", "ar": "سير عمل مشروع آخر (اختبار)"}')
-        returning id
-      ), mar as (
-        select v.id, v.layout, t.form_definition_id from workflow_version v
-        join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
-        where t.code = 'MAR' and t.owner_kind = 'rabaed' and v.status = 'published'
-        order by v.version_no desc limit 1
-      ), version as (
-        insert into workflow_version (workflow_definition_id, version_no, status, layout)
-        select definition.id, 1, 'draft', mar.layout from definition, mar
-        returning id, workflow_definition_id
-      ), steps as (
-        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
-        select version.id, s.key, s.name, s.stage_key, s.actor_rule, s.outcome_mode
-        from version, mar join workflow_step s on s.workflow_version_id = mar.id
-        returning id, key, workflow_version_id
-      ), transitions as (
-        insert into workflow_transition (
-          workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions, notifications)
-        select f.workflow_version_id, tr.key, f.id, s.id, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions, tr.notifications
-        from mar
-        join workflow_transition tr on tr.workflow_version_id = mar.id
-        join workflow_step fs on fs.id = tr.from_step_id
-        join workflow_step ts on ts.id = tr.to_step_id
-        join steps f on f.key = fs.key
-        join steps s on s.key = ts.key
-        returning workflow_version_id
-      ), type as (
-        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        select 'rabaed', 'submittals', ${lent}, '{"en": "Material Submittal on another Project''s Workflow", "ar": "اعتماد المواد بسير عمل مشروع آخر"}',
-          version.workflow_definition_id, 'review_code', mar.form_definition_id
-        from version, mar
-        returning id
-      )
-      select version.id as version_id from version, type
-    `.execute(migrator);
-    await sql`update workflow_version set status = 'published', published_at = now() where id = ${rows[0]!.version_id}::uuid`.execute(migrator);
+    foreign = await buildForeignProject(api, migrator, { code: "ORW" });
+    lent = foreign.lentType;
   });
 
-  it("offers the importer the Types \"+ New\" offers them, none on another Project's Workflow", async () => {
+  it("offers the importer the Types \"+ New\" offers them, none on another Project's Workflow, nor that Project's own", async () => {
     const raisable = (await ok(tower.c1Engineer.get(`/v1/projects/${tower.projectId}/raisable-types`), 200)).json().types.map((t: { code: string }) => t.code);
     const fields: RegisterImportFields = (await ok(tower.c1Engineer.get(`/v1/projects/${tower.projectId}/register-imports/fields`), 200)).json();
     expect(raisable).not.toContain(lent);
     expect(fields.types.map((t) => t.code)).not.toContain(lent);
     expect(fields.types.map((t) => t.code).sort()).toEqual([...raisable].sort());
+    const seen = JSON.stringify(fields);
+    for (const id of [foreign.ownType, ...foreign.ids]) expect(seen).not.toContain(id);
   });
 
-  it("refuses a row naming it as a Type the importer may not raise", async () => {
-    const file = { fileName: "Lent.csv", content: Buffer.from(`Subject,Type,Trade\r\nPanels,${lent},Electrical\r\nPumps,MAR,Electrical`).toString("base64") };
-    const previewed = await preview(tower.c1Engineer, { file, sheet: "Lent", headerRow: 1, mapping: { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 } } });
-    expect(reasonsByRow(previewed)).toEqual({ 2: ["type_not_allowed"], 3: [] });
+  it("refuses a row naming it as a Type the importer may not raise, and the other Project's own as unknown; its Trade and Location match nothing", async () => {
+    const rows = [`Panels,${lent},Electrical,Building A`, "Pumps,MAR,Electrical,Building A", `Doors,${foreign.ownType},Electrical,Building A`];
+    const file = { fileName: "Lent.csv", content: Buffer.from(["Subject,Type,Trade,Location", ...rows].join("\r\n")).toString("base64") };
+    const mapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, location: { column: 3 } };
+    const previewed = await preview(tower.c1Engineer, { file, sheet: "Lent", headerRow: 1, mapping });
+    expect(reasonsByRow(previewed)).toEqual({ 2: ["type_not_allowed"], 3: [], 4: ["type_unknown"] });
+    // "Electrical" and "Building A" are the foreign Project's codes and names too: only this Project's match.
+    expect(previewed.rows.map((r) => [r.trade.match?.id, r.location.match?.id])).toEqual(rows.map(() => [tower.electrical, tower.buildingA]));
   });
 });

@@ -847,7 +847,7 @@
       "paperRef": "المرجع الورقي",
       "step": "الخطوة",
       "with": "لدى",
-      "notPickedUpYet": "{company} · لم تُستلَم بعد: {names}{more, plural, =0 {} other { +#}}",
+      "notPickedUpYet": "{company} · لم تُستلَم بعد: {names}{more, plural, =0 {} other { +{n}}}",
       "raisedBy": "أنشأه",
       "package": "الحزمة",
       "issuedCode": "الرمز الصادر",
@@ -1641,7 +1641,7 @@
     "close": "إغلاق",
     "changed": "تغيّر شيء أثناء اختيارك. راجع القائمة وحاول مرة أخرى.",
     "nobodyCanTake": "لا أحد غيره يمكنه تولّي {step} في {project}. امنح أحدًا المنصب أو الرؤية أولًا.",
-    "otherCompany": "{count, plural, one {خطوة واحدة من خطوات {company} تحتاج} other {# من خطوات {company} تحتاج}} إلى متولٍّ جديد أولًا. اطلب من {company} تسليمها."
+    "otherCompany": "{count, plural, one {خطوة واحدة من خطوات {company} تحتاج} other {{n} من خطوات {company} تحتاج}} إلى متولٍّ جديد أولًا. اطلب من {company} تسليمها."
   },
   "notificationSettings": {
     "email": "البريد الإلكتروني",
@@ -1946,7 +1946,7 @@
         "approved": "معتمد",
         "withdrawn": "مسحوب"
       },
-      "approvedCount": "{count, plural, =0 {لا يوجد موردون معتمدون} one {مورد معتمد واحد} two {موردان معتمدان} few {# موردين معتمدين} many {# موردًا معتمدًا} other {# مورد معتمد}}",
+      "approvedCount": "{count, plural, =0 {لا يوجد موردون معتمدون} one {مورد معتمد واحد} two {موردان معتمدان} few {{n} موردين معتمدين} many {{n} موردًا معتمدًا} other {{n} مورد معتمد}}",
       "tableLabel": "الموردون المعتمدون في {trade}",
       "noSuppliers": "لا يوجد موردون لهذا التخصص بعد.",
       "noTrades": "لا توجد تخصصات في هذا المشروع بعد. أضفها أولًا في التخصصات والمواقع.",
@@ -2751,7 +2751,7 @@
       "inOther": "في {number}",
       "inThis": "في هذه الحزمة",
       "choose": "اختيار {subject}",
-      "add": "{count, plural, one {إضافة اعتماد واحد} other {إضافة # اعتمادات}}",
+      "add": "{count, plural, one {إضافة اعتماد واحد} other {إضافة {n} اعتمادات}}",
       "numberOnSubmit": "الرقم عند التقديم"
     },
     "bulk": {
@@ -2763,7 +2763,7 @@
       "clear": "مسح",
       "selectAll": "تحديد كل ما ينتظرك",
       "selectRow": "تحديد {subject}",
-      "description": "يُنفَّذ على {count, plural, one {اعتماد واحد} two {اعتمادين} few {# اعتمادات} other {# اعتمادًا}} بالإجابات نفسها، ويُوقَّع كلٌّ منها كما لو نُفِّذ وحده. الكل أو لا شيء: إن تعذّر أحدها فلا ينتقل أي منها.",
+      "description": "يُنفَّذ على {count, plural, one {اعتماد واحد} two {اعتمادين} few {{n} اعتمادات} other {{n} اعتمادًا}} بالإجابات نفسها، ويُوقَّع كلٌّ منها كما لو نُفِّذ وحده. الكل أو لا شيء: إن تعذّر أحدها فلا ينتقل أي منها.",
       "appliesTo": "يُنفَّذ على",
       "noNumber": "لا رقم بعد",
       "loading": "جارٍ التحميل…",
@@ -2797,7 +2797,7 @@
       "trigger": "تقديم الحزمة",
       "title": "تقديم {number}",
       "description": "يُقدَّم كل اعتماد أدناه دفعة واحدة ويأخذ رقم مستنده. الكل أو لا شيء: إن لم يكن أحدها جاهزًا فلا يُقدَّم أي منها.",
-      "count": "{count, plural, one {اعتماد واحد للتقديم} other {# اعتمادات للتقديم}}",
+      "count": "{count, plural, one {اعتماد واحد للتقديم} other {{n} اعتمادات للتقديم}}",
       "confirm": "تقديم الحزمة",
       "numberOnSubmit": "الرقم عند التقديم",
       "notReadyTitle": "غير جاهزة",

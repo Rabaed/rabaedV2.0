@@ -7,6 +7,7 @@
 // apps/api/test/register-import.test.ts).
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { registerImportMaxBytes } from "@rabaed/domain";
 import type {
   AdminRegisterImportParticipants,
   AdminRegisterImportProjects,
@@ -18,6 +19,7 @@ import type {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildForeignProject, type ForeignProject } from "../../api/test/support/foreign-project.ts";
 import { createTestApi, expectHidden } from "../../api/test/support/harness.ts";
 import { all, bilingual, buildTower, memberOnProject, ok, only, type Company, type Tower } from "../../api/test/support/tower.ts";
 import { statementRoles } from "../../../packages/db/test-support/statement-roles.ts";
@@ -31,7 +33,8 @@ import {
 } from "../src/register-import.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
-const api = await createTestApi();
+// With the api's file store: C1's Members download an Engineer's original register through it (RP-959).
+const api = await createTestApi({ files: true });
 const admin = await createTestAdmin();
 // Reads the audit trail and the outbox directly.
 const adminDb = createDb(testDatabaseUrls().admin, { max: 1 });
@@ -228,7 +231,8 @@ describe("An Engineer's import for C1", () => {
           target_kind: "submittal_register_import",
           target_id: previewed.id,
           reason,
-          after: { participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, outcome: "previewed" },
+          // RP-959: the original register handed over to the api, which stores it.
+          after: { participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, outcome: "previewed", original: "handed_over" },
         },
         { action: "confirm_register_import", target_kind: "submittal_register_import", target_id: previewed.id, reason, after: { rowsCreated: 3 } },
       ]);
@@ -258,6 +262,55 @@ describe("An Engineer's import for C1", () => {
       await expectHidden(k1Person.caller.get(`/v1/register-imports/${previewed.id}`));
       expect((await ok(k1Person.caller.get(`/v1/projects/${tower.projectId}/register-imports`), 200)).json().imports).toEqual([]);
       for (const id of [draftOf("Panels"), draftOf("Fans")]) await expectHidden(k1Person.caller.get(`/v1/work-items/${id}`));
+    });
+
+    // RP-959: Rabaed Admin has no file store and no way to the api; it hands the original over
+    // through the database, and the api stores it, as it keeps a Member's.
+    it("RP-589-3: keeps the original register, which C1's Members download as uploaded with no time, and nobody else", async () => {
+      for (const by of [hafiz.caller, tower.c1Pm]) {
+        expect((await ok(by.get(`/v1/register-imports/${previewed.id}`), 200)).json().original).toBe(true);
+        const res = await ok(by.get(`/v1/register-imports/${previewed.id}/original`), 200);
+        expect(res.rawPayload.equals(Buffer.from(file().content, "base64"))).toBe(true);
+        expect(res.headers["content-type"]).toBe("text/csv; charset=utf-8");
+        expect(res.headers["content-disposition"]).toContain(`filename="TMC_Register_Rev4.csv"`);
+        for (const header of ["last-modified", "etag", "expires"]) expect(res.headers[header], header).toBeUndefined();
+      }
+      await expectHidden(k1Person.caller.get(`/v1/register-imports/${previewed.id}/original`));
+    });
+
+    it("takes the original only for the Engineer's own new preview, once, and only on Rabaed Admin's role", async () => {
+      const handOver = (db: typeof adminDb, engineerId: string, importId: string, bytes = Buffer.from("x")) =>
+        sql<{ outcome: string }>`select app.hand_over_register_import_original_by_engineer(${engineerId}::uuid, ${importId}::uuid, ${bytes}) as outcome`
+          .execute(db)
+          .then((r) => r.rows[0]!.outcome);
+      // Confirmed, and its original handed over already.
+      expect(await handOver(adminDb, engineer.id, previewed.id)).toBe("not_found");
+      const fresh: RegisterImport = (await ok(engineer.browser.post("/v1/register-imports", request()), 201)).json();
+      // Handed over by the preview itself: a second is refused.
+      expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("not_found");
+      // A preview keeping none yet (as the migrator leaves it): another Engineer's hand-over and the
+      // app role's are refused; the Engineer's own is taken, once.
+      const urls = testDatabaseUrls();
+      const migrator = createDb(urls.migrator, { max: 1 });
+      const appDb = createDb(urls.app, { max: 1 });
+      try {
+        await sql`delete from register_import_original_hand_over where import_id = ${fresh.id}::uuid`.execute(migrator);
+        await sql`update submittal_register_import set source_file_id = null where id = ${fresh.id}::uuid`.execute(migrator);
+        const other = await admin.signedInEngineer();
+        expect(await handOver(adminDb, other.id, fresh.id)).toBe("not_found");
+        await expect(handOver(appDb, engineer.id, fresh.id)).rejects.toThrow(/permission denied/);
+        // No larger than the import reads: 10 MB (registerImportMaxBytes).
+        await expect(handOver(adminDb, engineer.id, fresh.id, Buffer.alloc(registerImportMaxBytes + 1, 1))).rejects.toThrow(/check constraint/);
+        expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("handed_over");
+        expect(await handOver(adminDb, engineer.id, fresh.id)).toBe("not_found");
+        // A preview never confirmed is cleaned up (app.clean_previewed_register_imports deletes it): its hand-over goes with it.
+        const held = () => sql<{ n: number }>`select count(*)::int as n from register_import_original_hand_over where import_id = ${fresh.id}::uuid`.execute(migrator).then((r) => r.rows[0]!.n);
+        expect(await held()).toBe(1);
+        await sql`delete from submittal_register_import where id = ${fresh.id}::uuid`.execute(migrator);
+        expect(await held()).toBe(0);
+      } finally {
+        await Promise.all([migrator.destroy(), appDb.destroy()]);
+      }
     });
 
     it("tells nobody: the confirm writes no outbox row", async () => {
@@ -419,14 +472,16 @@ describe("An Engineer's import checks as the default Member, past row-level secu
   });
 });
 
-// RP-657 past row-level security: another Company's Project has its own Workflow, a Project-level
-// Type of its own, and a Rabaed Type whose Workflow is that Project's (as
-// apps/api/test/outcome-sets.test.ts makes one). Made here, before any call, so no other test file's
-// timing decides it. An Engineer's import as C1's default Member reads none of that Project's
-// configuration: it offers and matches exactly what the default Member's own import does.
+// RP-657 past row-level security: a foreign Project (RP-1016, apps/api/test/support/foreign-project.ts)
+// has its own Trade, Location, Workflow, Form and Project-level Type, a Rabaed Type whose Workflow is
+// that Project's (as apps/api/test/outcome-sets.test.ts makes one) and a Rabaed Type whose Form is.
+// Built in the beforeAll, before any call, so no other test file's timing decides it. An Engineer's
+// import as C1's default Member reads none of that Project's configuration: it offers and matches
+// exactly what the default Member's own import does.
 describe("An Engineer's import and another Project's Types and Workflows (RP-657)", () => {
   const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
   afterAll(() => migrator.destroy());
+  let foreign: ForeignProject;
   /** A Rabaed Type whose own Workflow is the other Project's. */
   let lent: string;
   /** A Rabaed Type whose Form is the other Project's (its Workflow C1's Project's own). */
@@ -434,107 +489,42 @@ describe("An Engineer's import and another Project's Types and Workflows (RP-657
   /** The other Project's own Type. */
   let theirs: string;
 
-  /** A copy of the MAR's latest Workflow Version, as `projectId`'s own Workflow, published. */
-  const projectWorkflow = async (projectId: string): Promise<string> => {
-    const { rows } = await sql<{ definition_id: string; version_id: string }>`
-      with definition as (
-        insert into workflow_definition (owner_kind, project_id, name)
-        values ('project', ${projectId}::uuid, '{"en": "A Project''s own Workflow (test)", "ar": "سير عمل خاص بمشروع (اختبار)"}')
-        returning id
-      ), mar as (
-        select v.id, v.layout from workflow_version v
-        join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
-        where t.code = 'MAR' and t.owner_kind = 'rabaed' and v.status = 'published'
-        order by v.version_no desc limit 1
-      ), version as (
-        insert into workflow_version (workflow_definition_id, version_no, status, layout)
-        select definition.id, 1, 'draft', mar.layout from definition, mar
-        returning id, workflow_definition_id
-      ), steps as (
-        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
-        select version.id, s.key, s.name, s.stage_key, s.actor_rule, s.outcome_mode
-        from version, mar join workflow_step s on s.workflow_version_id = mar.id
-        returning id, key, workflow_version_id
-      ), transitions as (
-        insert into workflow_transition (
-          workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions, notifications)
-        select f.workflow_version_id, tr.key, f.id, s.id, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions, tr.notifications
-        from mar
-        join workflow_transition tr on tr.workflow_version_id = mar.id
-        join workflow_step fs on fs.id = tr.from_step_id
-        join workflow_step ts on ts.id = tr.to_step_id
-        join steps f on f.key = fs.key
-        join steps s on s.key = ts.key
-        returning workflow_version_id
-      )
-      select version.workflow_definition_id as definition_id, version.id as version_id from version
-    `.execute(migrator);
-    await sql`update workflow_version set status = 'published', published_at = now() where id = ${rows[0]!.version_id}::uuid`.execute(migrator);
-    return rows[0]!.definition_id;
-  };
-
-  /** A copy of the MAR's latest Form Version, as `projectId`'s own Form, published. */
-  const projectForm = async (projectId: string): Promise<string> => {
-    const { rows } = await sql<{ id: string }>`
-      with definition as (
-        insert into form_definition (owner_kind, project_id, name)
-        values ('project', ${projectId}::uuid, '{"en": "A Project''s own Form (test)", "ar": "نموذج خاص بمشروع (اختبار)"}')
-        returning id
-      ), version as (
-        insert into form_version (form_definition_id, version_no, status, schema, published_at)
-        select definition.id, 1, 'published', v.schema, now() from definition, form_version v
-        where v.id = app.latest_form_version('MAR')
-        returning form_definition_id
-      )
-      select form_definition_id as id from version
-    `.execute(migrator);
-    return rows[0]!.id;
-  };
-
   const forHafiz = () => ({ projectId: tower.projectId, participantId: tower.c1ParticipantId, defaultMemberId: hafiz.id, reason });
   const projectUrl = (path: string) => `/v1/projects/${tower.projectId}/${path}`;
   const upload = () => ({
     file: {
       fileName: "TMC_Types.csv",
       content: Buffer.from(
-        ["Subject,Type,Trade,Manufacturer", `Panels,${theirs},Electrical,ACME`, `Pumps,${lent},Electrical,ACME`, `Doors,${formed},Electrical,ACME`, "Fans,MAR,Electrical,ACME"].join("\r\n"),
+        [
+          "Subject,Type,Trade,Location,Manufacturer",
+          `Panels,${theirs},Electrical,Building A,ACME`,
+          `Pumps,${lent},Electrical,Building A,ACME`,
+          `Doors,${formed},Electrical,Building A,ACME`,
+          "Fans,MAR,Electrical,Building A,ACME",
+        ].join("\r\n"),
       ).toString("base64"),
     },
     sheet: "TMC_Types",
     headerRow: 1,
-    mapping: { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, fields: [{ key: "manufacturer", column: 3 }] } as RegisterImportMapping,
+    mapping: { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, location: { column: 3 }, fields: [{ key: "manufacturer", column: 4 }] } as RegisterImportMapping,
   });
   const rowsOf = (preview: RegisterImport) => preview.rows.map((r) => ({ rowNo: r.rowNo, type: r.type, fields: r.fields, reasons: r.reasons }));
 
   beforeAll(async () => {
-    const other = await api.projectCreator();
-    const otherProjectId = (await api.createProject(other.caller, { code: "OTW" })).id;
-    const letters = () => Array.from({ length: 3 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
-    lent = `ZW${letters()}`;
-    formed = `ZF${letters()}`;
-    theirs = `ZP${letters()}`;
-    const otherWorkflow = await projectWorkflow(otherProjectId);
-    const ownWorkflow = await projectWorkflow(tower.projectId);
-    const otherForm = await projectForm(otherProjectId);
-    await sql`
-      insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-      select k.owner_kind, k.project_id, 'submittals', k.code, k.name, k.workflow_definition_id, 'review_code', coalesce(k.form_definition_id, t.form_definition_id)
-      from work_item_type t, (values
-        ('rabaed', null::uuid, ${lent}, '{"en": "Material Submittal on another Workflow", "ar": "اعتماد المواد بسير عمل آخر"}'::jsonb, ${otherWorkflow}::uuid, null::uuid),
-        ('rabaed', null::uuid, ${formed}, '{"en": "Material Submittal on another Form", "ar": "اعتماد المواد بنموذج آخر"}'::jsonb, ${ownWorkflow}::uuid, ${otherForm}::uuid),
-        ('project', ${otherProjectId}::uuid, ${theirs}, '{"en": "Their own Material Submittal", "ar": "اعتماد المواد الخاص بهم"}'::jsonb, ${otherWorkflow}::uuid, null::uuid)
-      ) k (owner_kind, project_id, code, name, workflow_definition_id, form_definition_id)
-      where t.code = 'MAR' and t.owner_kind = 'rabaed'
-    `.execute(migrator);
+    foreign = await buildForeignProject(api, migrator, { code: "OTW", host: tower.projectId });
+    lent = foreign.lentType;
+    formed = foreign.formedType!;
+    theirs = foreign.ownType;
   });
 
-  it("offers the fields the default Member is offered through the customer api: no Form field by another Project's Workflow, none of its Types", async () => {
+  it("offers the fields the default Member is offered through the customer api: no Form field by another Project's Workflow, none of its Types, Trades or Locations", async () => {
     const fields: RegisterImportFields = (await ok(engineer.browser.post("/v1/register-imports/fields", { for: forHafiz() }), 200)).json();
     const theirFields: RegisterImportFields = (await ok(hafiz.caller.get(projectUrl("register-imports/fields")), 200)).json();
     expect(fields.formFields.flatMap((f) => f.types)).not.toContain(lent);
     expect(fields.formFields.flatMap((f) => f.types)).not.toContain(formed);
     expect(fields.types.map((t) => t.code)).not.toContain(theirs);
-    expect(JSON.stringify(fields)).not.toContain(theirs);
+    const seen = JSON.stringify(fields);
+    for (const id of [theirs, ...foreign.ids]) expect(seen).not.toContain(id);
     expect(fields).toEqual(theirFields);
   });
 
@@ -548,6 +538,10 @@ describe("An Engineer's import and another Project's Types and Workflows (RP-657
     const asMember: RegisterImport = (await ok(hafiz.caller.post(projectUrl("register-imports"), upload()), 201)).json();
     expect(reasonsByRow(previewed)[2]).toEqual(["type_unknown"]);
     expect(rowsOf(previewed)).toEqual(rowsOf(asMember));
+    // "Electrical" and "Building A" are the foreign Project's codes and names too: only C1's Project's match.
+    expect(previewed.rows.map((r) => [r.trade.match?.id, r.location.match?.id])).toEqual(previewed.rows.map(() => [tower.electrical, tower.buildingA]));
+    const seen = JSON.stringify([values, previewed]);
+    for (const id of foreign.ids) expect(seen).not.toContain(id);
   });
 });
 

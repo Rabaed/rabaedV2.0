@@ -60,10 +60,10 @@ export async function bulkOffers(trx: Trx, ids: string[]): Promise<Map<string, B
     select w.id, a.transition_key as key, a.label, ${formToken} as form
     from unnest(${ids}::uuid[]) with ordinality as u (id, n)
     join work_item w on w.id = u.id
-    cross join lateral app.work_item_actions(w.id) with ordinality a (action, transition_key, label, transition_kind, picks_participant, m)
+    cross join lateral app.work_item_actions(w.id) with ordinality a
     join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
     where a.action = 'transition' and not a.picks_participant and app.need_my_action(w.id) = 'waiting'
-    order by u.n, a.m
+    order by u.n, a.ordinality
   `.execute(trx);
   for (const r of rows) offers.get(r.id)?.push({ key: r.key, label: r.label, form: r.form });
   return offers;

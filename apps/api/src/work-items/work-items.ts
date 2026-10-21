@@ -1324,12 +1324,12 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
     select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form, a.picks_participant,
       coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to,
       coalesce(tr.kind = 'send' and src.outcome_mode = 'recommend_code', false) as may_recommend, tr.outcome
-    from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, picks_participant, n)
+    from app.work_item_actions(${workItemId}::uuid) with ordinality a
     left join work_item w on w.id = ${workItemId}::uuid
     left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
     left join workflow_step src on src.id = tr.from_step_id
     where ${transitionKey === undefined ? sql`true` : sql`a.action = 'transition' and a.transition_key = ${transitionKey}`}
-    order by a.n
+    order by a.ordinality
   `.execute(trx);
   return rows;
 }
