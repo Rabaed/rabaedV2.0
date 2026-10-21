@@ -14,6 +14,7 @@ import {
   useClientDirective,
 } from "./js-rules.ts";
 import { jsonNoDeadlineWords, jsonNoPluralPound } from "./json-rules.ts";
+import { noBufferSlice } from "./buffer-rules.ts";
 
 /**
  * Rabaed design guard rails (RP-199): design tokens only, logical (RTL-safe)
@@ -42,6 +43,7 @@ const plugin = {
     "json-no-avoid-terms": jsonNoAvoidTerms,
     "json-no-raw-bidi": jsonNoRawBidi,
     "json-no-plural-pound": jsonNoPluralPound,
+    "no-buffer-slice": noBufferSlice,
   },
 };
 
