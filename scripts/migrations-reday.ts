@@ -24,8 +24,8 @@ import { type Migration, migrationsDir } from "./migrations.ts";
 // moved days land after them. References to the old file names elsewhere in the
 // repository are rewritten; the migrations themselves, other migrations
 // included, are not edited. In planning/migration-days.md the branch's rows on
-// the old days go, unless another branch or main still has a migration on that
-// day (a spec's day its other tickets share); every "Unused" row naming the
+// the old days go, except a spec's row (`spec RP-nnn`) on a day another branch
+// or main still has a migration on (its other tickets share it); every "Unused" row naming the
 // branch's issues goes too, even when nothing moves. Each moved day gets a row
 // with the old row's issue and purpose (one per issue when it had none) and
 // this worktree's lane, as `pnpm migration:new` writes. Then the change is
@@ -107,7 +107,7 @@ export function redayChanges(input: RedayInput): RedayChanges {
   const addedNames = new Set(added.map(({ name }) => name));
   const branches = input.days.remoteBranches().map((branch) => ({ ...branch, migrations: branch.migrations.filter((name) => !addedNames.has(name)) }));
   const localOthers = input.days.localMigrations().filter((name) => !addedNames.has(name));
-  // An old day another branch (or main) still has a migration on, such as a spec's day its other tickets share: its rows stay.
+  // An old day another branch (or main) still has a migration on: a spec's row there (`spec RP-nnn`) stays for its other tickets. A ticket's own row goes even so: left behind, it would block the issue that took the day.
   const sharedDays = new Set(
     [...branches.filter((branch) => branch.migrations.some((name) => byDay.has(dayOf(name))) && branch.sharesHistory()).flatMap((branch) => branch.migrations), ...localOthers]
       .map(dayOf)
@@ -115,7 +115,8 @@ export function redayChanges(input: RedayInput): RedayChanges {
   );
   const isOldDayRow = (r: Reservation) => issues(r.owner).some((issue) => dayIssues.get(r.day)?.has(issue) === true);
   const isOwnUnused = (r: Reservation) => /^unused\b/i.test(r.purpose) && issues(r.owner).some((issue) => ownIssues.has(issue));
-  const isOurs = (r: Reservation) => (isOldDayRow(r) && !sharedDays.has(r.day)) || isOwnUnused(r);
+  const isSharedSpecRow = (r: Reservation) => /^spec\b/i.test(r.owner) && sharedDays.has(r.day);
+  const isOurs = (r: Reservation) => (isOldDayRow(r) && !isSharedSpecRow(r)) || isOwnUnused(r);
 
   // freeDay over everything but this branch's own migrations and rows.
   const others: FreeDaySeam = {

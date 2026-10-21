@@ -141,6 +141,15 @@ describe("migrations:reday", () => {
     );
   });
 
+  it("still drops a ticket's own row on a day main's migration also has", () => {
+    const daysFile = table("| 20271005 | RP-700 | 21 | b |", "| 20271003 | RP-631 | 5B | Snag report |", "| 20271004 | RP-640 | 5B | Snag photos |");
+    const branches = [branch("main", [...mainMigrations, "20271003000500_main_took_it.sql"])];
+    const changes = redayChanges(input({ daysFile, branches }));
+    expect(changes.daysFile).toBe(
+      table("| 20271005 | RP-700 | 21 | b |", "| 20271006 | RP-631 | 1b | Snag report (moved from 20271003) |", "| 20271007 | RP-640 | 1b | Snag photos (moved from 20271004) |"),
+    );
+  });
+
   it("gives each issue on a moved day with no row its own row", () => {
     const added = [
       { name: "20271003000000_first.sql", sql: "-- RP-640: first.\n" },
