@@ -31,8 +31,8 @@ export const snagReportRoutes =
       { schema: { params: reportParams, response: { 200: snagReportState } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        idOrNotFound(request.params.projectId);
-        return visibleOrNotFound(snagReportOf(ctx.db, ctx.files, memberId, idOrNotFound(request.params.reportId), ctx.now()));
+        const projectId = idOrNotFound(request.params.projectId);
+        return visibleOrNotFound(snagReportOf(ctx.db, ctx.files, memberId, projectId, idOrNotFound(request.params.reportId), ctx.now()));
       },
     );
   };
