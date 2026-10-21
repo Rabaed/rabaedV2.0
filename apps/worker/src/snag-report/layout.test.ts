@@ -63,12 +63,18 @@ describe("snagReportHtml", () => {
   });
 
   it("words the Step Age as the app does, in every Arabic plural form (RP-1005)", () => {
-    for (const weeks of [1, 2, 3, 11, 100]) {
+    const words: [number, string][] = [
+      [1, "أسبوع واحد في هذه الخطوة"],
+      [2, "أسبوعان في هذه الخطوة"],
+      [3, "3 أسابيع في هذه الخطوة"],
+      [11, "11 أسبوعًا في هذه الخطوة"],
+      [100, "100 أسبوع في هذه الخطوة"],
+    ];
+    for (const [weeks, said] of words) {
       const out = snagReportHtml(content([item({ stepAgeWeeks: weeks })]), "ar", fonts, new Map(), at);
-      expect(out).toContain(`>${stepAgeLabel(weeks, "ar")}<`);
+      expect(out).toContain(`>${said}<`);
+      expect(said).toBe(stepAgeLabel(weeks, "ar"));
     }
-    const hundred = snagReportHtml(content([item({ stepAgeWeeks: 100 })]), "ar", fonts, new Map(), at);
-    expect(hundred).toContain("100 أسبوع في هذه الخطوة");
   });
 
   it("prints the item count through formatNumber, Latin digits in both languages (RP-1005)", () => {
@@ -77,7 +83,7 @@ describe("snagReportHtml", () => {
       const out = snagReportHtml(many, locale, fonts, new Map(), at);
       expect(out).toContain(`<bdi dir="ltr" class="ltr">${formatNumber(1200, locale)}</bdi>`);
     }
-    expect(formatNumber(1200, "ar")).not.toBe("1200");
+    expect(formatNumber(1200, "ar")).toMatch(/^1[^0-9]200$/);
   });
 
   it("draws a photo only where the job read one, and says when the report stopped at its cap", () => {

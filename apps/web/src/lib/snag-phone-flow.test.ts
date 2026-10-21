@@ -12,7 +12,7 @@ const locations: DimensionValues["location"] = [place("zone", null, 1), place("t
 const draft = (answers: Record<string, unknown>, category: "draft" | "in_progress" = "draft") => ({ answers, stage: { category } });
 
 describe("phoneSteps", () => {
-  it("is the camera, then the Subject, the Location and the Raise: no Pin until Pins exist, and the Contractor picked in the Raise pop-up (RP-658)", () => {
+  it("is the camera, then the Subject, the Location and the Raise: no Pin until Pins exist, and the Contractor picked in the Raise's Action Form (RP-658)", () => {
     expect(phoneSteps).toEqual(["photo", "subject", "location", "raise"]);
   });
 });

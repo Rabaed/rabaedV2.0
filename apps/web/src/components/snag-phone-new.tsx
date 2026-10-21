@@ -55,7 +55,7 @@ function useFlowLabels(): SnagFlowLabels {
  * the Draft is created at the Subject step (its Subject can't change after), with its Description and
  * Trade, and the photos are uploaded to it; the Location is saved to the Draft as soon as it is picked.
  * The URL then holds the Draft and the step. Raise is the Draft's own, offered only when the API offers
- * it; where two Contractors cover the Snag, its pop-up asks which one holds it (RP-658).
+ * it; where two Contractors cover the Snag, its Action Form asks which one holds it (RP-658).
  */
 export function SnagPhoneNew({
   projectId,

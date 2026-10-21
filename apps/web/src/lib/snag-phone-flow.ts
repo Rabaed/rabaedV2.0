@@ -4,13 +4,13 @@ import type { DimensionValues, WorkItemDetail } from "@rabaed/domain";
 // Subject (with the Description and Trade: the Draft is created here, since its Subject is fixed
 // once it exists, and the photos are uploaded to it), then the Location (saved to the Draft as soon
 // as it is picked), then Raise. The kit's "Pin on plan" waits for Pins. Where two Contractors cover
-// the Snag, the Raise pop-up asks which one holds it (the engine's pick, RP-658), so there is no
-// Contractor step of its own. The page's URL holds the Draft and the step, so a reload reopens the
+// the Snag, the Raise's Action Form asks which one holds it (the engine's pick, RP-658), so there
+// is no Contractor step of its own. The page's URL holds the Draft and the step, so a reload reopens the
 // same step.
 //
 // Not the spec's order (RP-619, RP-630: camera, Location, Subject, Contractor): creating the Draft
 // needs its Subject and Trade, and its Subject can't change once it exists, so the Subject comes
-// second and the Location, saved to the Draft, after it. Agreed by Main 3 on RP-630 (2026-10-19).
+// second and the Location, saved to the Draft, after it (agreed on RP-630).
 
 export const phoneSteps = ["photo", "subject", "location", "raise"] as const;
 export type PhoneStep = (typeof phoneSteps)[number];
