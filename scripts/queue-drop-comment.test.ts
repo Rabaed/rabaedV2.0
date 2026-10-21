@@ -1,8 +1,11 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { pathToFileURL } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { buildComment, classify, commentOnRemoval, firstErrorWithContext, latestQueueRun, type QueueDropGitHub } from "./queue-drop-comment.ts";
+import { buildComment, classify, commentOnRemoval, firstErrorWithContext, latestQueueRun, mergeTreeConflicts, type QueueDropGitHub } from "./queue-drop-comment.ts";
 
 // RP-401: a PR the merge queue removes gets one comment saying why. The comment
 // is what wakes the session's Auto-fix; the removal itself reaches only the PR
@@ -102,10 +105,84 @@ describe("buildComment", () => {
     expect(buildComment({ pr, reason: "failed_checks", jobs: [] })).toContain("could not find a failing job");
   });
 
-  it("says a conflict removed the PR, and that the queue does not resolve it", () => {
+  // RP-1020: these two bodies stay exactly as they were.
+  it("keeps the failed_checks comment as it was", () => {
+    expect(buildComment({ pr, reason: "failed_checks", jobs: [{ name: "lint", url: "https://github.com/o/r/actions/runs/1/job/2", log: `${stamp} oops\n${stamp} ##[error]boom` }] })).toBe(
+      [
+        "<!-- queue-drop-comment -->",
+        "The merge queue removed this PR (reason: `failed_checks`).",
+        "",
+        "A check failed in the queue's CI run, on this PR merged with the PRs ahead of it. This PR's own checks can still be green.",
+        "",
+        "Failing job: [lint](https://github.com/o/r/actions/runs/1/job/2)",
+        "",
+        "```",
+        "oops",
+        "##[error]boom",
+        "```",
+        "",
+        "Fix: merge `main` into the branch, fix it, push, then `pnpm queue 149` (RP-400).",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps the checks_timed_out comment as it was", () => {
+    expect(buildComment({ pr, reason: "checks_timed_out", jobs: [] })).toBe(
+      [
+        "<!-- queue-drop-comment -->",
+        "The merge queue removed this PR (reason: `checks_timed_out`).",
+        "",
+        "Open the PR timeline for the details.",
+        "",
+        "Fix: merge `main` into the branch, fix it, push, then `pnpm queue 149` (RP-400).",
+      ].join("\n"),
+    );
+  });
+
+  const head = "a".repeat(40);
+  const tip = "b".repeat(40);
+
+  it("names the files git merge-tree finds in conflict with main, and the fix", () => {
+    const text = buildComment({ pr, reason: "merge_conflict", jobs: [], conflicts: { head, base: "main", tip, files: ["docs/visibility.md", "apps/web/src/lib/session.ts"] } });
+    expect(text).toBe(
+      [
+        "<!-- queue-drop-comment -->",
+        "The merge queue removed this PR (reason: `merge_conflict`).",
+        "",
+        "`git merge-tree` finds these files in conflict between this PR's head (`aaaaaaaaa`) and `main` (`bbbbbbbbb`):",
+        "",
+        "- `docs/visibility.md`",
+        "- `apps/web/src/lib/session.ts`",
+        "",
+        "Fix: merge `main` into the branch, resolve the conflicts, push, then `pnpm queue 149` (RP-400).",
+      ].join("\n"),
+    );
+  });
+
+  it("says when git merge-tree finds no conflict with main: the clash is with a PR ahead, or the queue dropped it while rebuilding", () => {
+    const text = buildComment({ pr, reason: "merge_conflict", jobs: [], conflicts: { head, base: "main", tip, files: [] } });
+    expect(text).toContain("`git merge-tree` finds no conflict between this PR's head (`aaaaaaaaa`) and `main` (`bbbbbbbbb`)");
+    expect(text).toContain("a PR ahead of it in the queue");
+    expect(text).toContain("Fix: merge `main` into the branch, resolve the conflicts, push, then `pnpm queue 149` (RP-400).");
+  });
+
+  it("says when the conflicted files could not be read", () => {
     const text = buildComment({ pr, reason: "merge_conflict", jobs: [] });
-    expect(text).toContain("conflict");
-    expect(text).toContain(fix);
+    expect(text).toContain("could not run `git merge-tree`");
+    expect(text).toContain("Fix: merge `main` into the branch, resolve the conflicts, push, then `pnpm queue 149` (RP-400).");
+  });
+
+  it("lists at most 30 conflicted files, and says how many more", () => {
+    const files = Array.from({ length: 33 }, (_, i) => `f${i}.ts`);
+    const text = buildComment({ pr, reason: "merge_conflict", jobs: [], conflicts: { head, base: "main", tip, files } });
+    expect(text).toContain("- `f29.ts`");
+    expect(text).not.toContain("- `f30.ts`");
+    expect(text).toContain("and 3 more");
+  });
+
+  it("cannot break out of its inline code with a file name", () => {
+    const text = buildComment({ pr, reason: "merge_conflict", jobs: [], conflicts: { head, base: "main", tip, files: ["a`b.md"] } });
+    expect(text).toContain("- `a'b.md`");
   });
 
   it("names any other reason as it is", () => {
@@ -151,59 +228,149 @@ describe("commentOnRemoval", () => {
     };
     return { api, posted };
   };
+  const head = "c".repeat(40);
+  const event = (reason: string | undefined, merged = false) => ({ pr: 149, reason, merged, head, base: "main" });
+  const conflicted = (files: string[]) => async (h: string, base: string) => ({ head: h, base, tip: "d".repeat(40), files });
+  const noMergeTree = async () => Promise.reject(new Error("must not be called"));
 
   it("posts the failing job of the latest queue run for failed checks", async () => {
     const { api, posted } = github();
-    await commentOnRemoval({ pr: 149, reason: "failed_checks", merged: false }, api);
+    await commentOnRemoval(event("failed_checks", false), api, noMergeTree);
     expect(posted).toHaveLength(1);
     expect(posted[0]).toContain("migration-drift");
     expect(posted[0]).toContain("These migrations share a timestamp");
   });
 
-  it("posts a conflict comment without reading any run", async () => {
+  it("posts one comment naming the files merge-tree finds in conflict between the PR's head and its base, without reading any run", async () => {
     const { api, posted } = github({ mergeGroupRuns: async () => Promise.reject(new Error("must not be called")) });
-    await commentOnRemoval({ pr: 149, reason: "merge_conflict", merged: false }, api);
-    expect(posted[0]).toContain("conflict");
+    const asked: string[][] = [];
+    await commentOnRemoval(event("merge_conflict"), api, async (h, base) => {
+      asked.push([h, base]);
+      return conflicted(["docs/visibility.md"])(h, base);
+    });
+    expect(asked).toEqual([[head, "main"]]);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toContain("- `docs/visibility.md`");
+  });
+
+  it("still posts the conflict comment when merge-tree cannot run", async () => {
+    const { api, posted } = github();
+    await commentOnRemoval(event("merge_conflict"), api, async () => Promise.reject(new Error("shallow")));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toContain("could not run `git merge-tree`");
+  });
+
+  it("does not run merge-tree for a failed check", async () => {
+    const { api, posted } = github();
+    await commentOnRemoval(event("failed_checks"), api, async () => Promise.reject(new Error("must not be called")));
+    expect(posted[0]).not.toContain("merge-tree");
   });
 
   it("reads the reason from the PR timeline first, and treats its upper-case enum form as the reason", async () => {
     const { api, posted } = github({ removalReason: async () => "MERGE_CONFLICT" });
-    await commentOnRemoval({ pr: 149, reason: "failed_checks", merged: false }, api);
+    await commentOnRemoval(event("failed_checks"), api, conflicted(["a.ts"]));
     expect(posted).toHaveLength(1);
-    expect(posted[0]).toContain("conflicts with");
+    expect(posted[0]).toContain("- `a.ts`");
   });
 
   it("falls back to the webhook's reason when the timeline has none or cannot be read", async () => {
     for (const removalReason of [async () => undefined, async () => Promise.reject(new Error("403"))]) {
       const { api, posted } = github({ removalReason });
-      await commentOnRemoval({ pr: 149, reason: "merge_conflict", merged: false }, api);
-      expect(posted[0]).toContain("conflicts with");
+      await commentOnRemoval(event("merge_conflict"), api, conflicted(["a.ts"]));
+      expect(posted[0]).toContain("- `a.ts`");
     }
   });
 
   it("posts nothing for a PR a person took out of the queue on purpose", async () => {
     const { api, posted } = github({ removalReason: async () => "MANUAL" });
-    expect(await commentOnRemoval({ pr: 149, reason: undefined, merged: false }, api)).toBeUndefined();
+    expect(await commentOnRemoval(event(undefined, false), api, noMergeTree)).toBeUndefined();
     expect(posted).toEqual([]);
   });
 
   it("posts nothing when the timeline says the PR merged", async () => {
     const { api, posted } = github({ removalReason: async () => "MERGED" });
-    await commentOnRemoval({ pr: 149, reason: "failed_checks", merged: false }, api);
+    await commentOnRemoval(event("failed_checks", false), api, noMergeTree);
     expect(posted).toEqual([]);
   });
 
   it("still posts the reason when the run's jobs cannot be read", async () => {
     const { api, posted } = github({ failedJobs: async () => Promise.reject(new Error("403")) });
-    await commentOnRemoval({ pr: 149, reason: "failed_checks", merged: false }, api);
+    await commentOnRemoval(event("failed_checks", false), api, noMergeTree);
     expect(posted[0]).toContain("failed_checks");
     expect(posted[0]).toContain("could not find a failing job");
   });
 
   it("posts nothing for a PR that merged", async () => {
     const { api, posted } = github();
-    await commentOnRemoval({ pr: 149, reason: "merged", merged: true }, api);
+    await commentOnRemoval(event("merged", true), api, noMergeTree);
     expect(posted).toEqual([]);
+  });
+});
+
+// RP-1020: the real git commands, on throwaway repositories. "origin" plays GitHub;
+// the runner's clone is made the way actions/checkout makes it.
+describe("mergeTreeConflicts", () => {
+  let dir = "";
+  const run = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" }).trim();
+  const commit = (cwd: string, files: Record<string, string>, message: string) => {
+    for (const [file, text] of Object.entries(files)) writeFileSync(join(cwd, file), text);
+    run(cwd, "add", "-A");
+    run(cwd, "commit", "-q", "-m", message);
+    return run(cwd, "rev-parse", "HEAD");
+  };
+  let conflicting = "";
+  let clean = "";
+  let origin = "";
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "rabaed-queue-drop-"));
+    origin = join(dir, "origin.git");
+    const work = join(dir, "work");
+    run(dir, "init", "-q", "--bare", origin);
+    run(origin, "config", "uploadpack.allowFilter", "true");
+    run(dir, "init", "-q", work);
+    commit(work, { "a.md": "one\n", "b.md": "two\n" }, "start");
+    run(work, "push", "-q", origin, "HEAD:refs/heads/main");
+    run(work, "switch", "-q", "-c", "pr");
+    conflicting = commit(work, { "a.md": "the PR's line\n", "c.md": "new\n" }, "the PR");
+    run(work, "push", "-q", origin, "pr:refs/heads/pr");
+    run(work, "switch", "-q", "-c", "other", "main");
+    clean = commit(work, { "d.md": "only the PR touches this\n" }, "a clean PR");
+    run(work, "push", "-q", origin, "other:refs/heads/other");
+    run(work, "switch", "-q", "main");
+    commit(work, { "a.md": "main's line\n" }, "main moves on");
+    run(work, "push", "-q", origin, "main:refs/heads/main");
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  // The runner's clone: full history, no file contents (actions/checkout's fetch-depth: 0, filter: blob:none),
+  // cut before main moved, so the function has to fetch main's tip itself.
+  const runnerClone = (name: string, ...options: string[]) => {
+    const clone = join(dir, name);
+    run(dir, "clone", "-q", "--no-checkout", ...options, pathToFileURL(origin).href, clone);
+    return clone;
+  };
+
+  it("lists the files in conflict between the PR's head and the base branch's tip, in a blobless clone", async () => {
+    const clone = runnerClone("blobless", "--filter=blob:none");
+    const tip = run(origin, "rev-parse", "main");
+    expect(await mergeTreeConflicts(conflicting, "main", clone)).toEqual({ head: conflicting, base: "main", tip, files: ["a.md"] });
+  });
+
+  it("lists no file when the head merges cleanly", async () => {
+    const clone = runnerClone("clean", "--filter=blob:none");
+    expect((await mergeTreeConflicts(clean, "main", clone)).files).toEqual([]);
+  });
+
+  it("refuses a shallow clone, whose fetch of the head would download the whole history", async () => {
+    const clone = runnerClone("shallow", "--depth=1");
+    await expect(mergeTreeConflicts(conflicting, "main", clone)).rejects.toThrow(/shallow/);
+  });
+
+  it("refuses a head that is not a full commit id, and a base that could read as an option", async () => {
+    const clone = runnerClone("checks", "--filter=blob:none");
+    await expect(mergeTreeConflicts("--upload-pack=touch x", "main", clone)).rejects.toThrow(/head/);
+    await expect(mergeTreeConflicts(conflicting, "-x", clone)).rejects.toThrow(/base/);
   });
 });
 
@@ -242,5 +409,16 @@ describe("queue-drop-comment.yml", () => {
   it("is not a CI job: it never runs on merge_group or push, so it cannot be a required check", () => {
     expect(Object.keys(wf.on)).not.toContain("merge_group");
     expect(Object.keys(wf.on)).not.toContain("push");
+  });
+
+  // RP-1020: merge-tree needs the merge base, so the checkout takes main's whole history but no file
+  // contents (about 4 MB of commits and trees in 2026-10; git fetches the blobs a merge needs). The
+  // workflow lands in its own PR after the script (rule 3); until then these wait for it.
+  const checkout = Object.values(wf.jobs)[0]?.steps.find((s) => s.uses?.startsWith("actions/checkout"));
+  describe.skipIf(checkout?.with?.filter === undefined)("checkout for git merge-tree (RP-1020)", () => {
+    it("takes the whole history without file contents", () => {
+      expect(checkout?.with?.["fetch-depth"]).toBe(0);
+      expect(checkout?.with?.filter).toBe("blob:none");
+    });
   });
 });
