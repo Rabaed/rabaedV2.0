@@ -138,7 +138,9 @@ describe("what an informed Consultant reads (scenarios RP-625-1 to RP-625-3)", (
     expect(await documents(at.k1Manager, id)).toEqual([{ id: before, frozen: true }]);
     // Nobody adds to them once they have reached another Company (ADR 0020).
     const late = await at.c1Pm.post(`/v1/work-items/${id}/documents`, { fieldKey: "photos", fileName: "late.jpg", contentType: "image/jpeg", sizeBytes: 10 });
-    expect(late.statusCode, late.body).toBe(409);
+    expect({ status: late.statusCode, body: late.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+    // Positive control: before the Raise, C1 added the photo through the same call.
+    expect((await documents(at.c1Pm, id)).map((d) => d.id)).toEqual([before]);
     await move(id, "start_work");
     expect(await documents(at.k1Manager, id)).toEqual([{ id: before, frozen: true }]);
     expect(await documents(at.c1Pm, id)).toEqual([{ id: before, frozen: true }]);

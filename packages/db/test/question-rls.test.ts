@@ -26,6 +26,7 @@ let participant: Record<"c1" | "k1" | "c2", string>;
 let projectId = "";
 let electrical = "";
 let buildingA = "";
+let buildingB = ""; // C2's only Location.
 
 async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
@@ -114,7 +115,7 @@ beforeAll(async () => {
     )[0]!.value_id;
   electrical = await value("trade", "EL");
   buildingA = await value("location", "BA");
-  const buildingB = await value("location", "BB");
+  buildingB = await value("location", "BB");
   for (const p of Object.values(participant)) {
     for (const kind of ["trade", "location"]) {
       const onlyB = p === participant.c2 && kind === "location";
@@ -165,6 +166,17 @@ describe("C2 reads none of C1's or K1's Questions at any Step (scenarios RP-626-
     (await call<{ n: number }>(who, sql`select count(*)::int as n from work_item where project_id = ${projectId}::uuid and id = ${id}::uuid`))[0]!.n,
   ];
   const nothing = [[], [], [], [], undefined, 0];
+  /** The positive control beside a refusal to C2 (RP-995): C2's own Draft Question on Building B, which it reads. */
+  async function c2ReadsItsOwn(): Promise<void> {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c2.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'QSN', 'C2''s own question', app.latest_form_version('QSN'), ${JSON.stringify({ question: "C2's own question" })}::jsonb,
+        ${electrical}::uuid, ${buildingB}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    expect(await seen(c2.member, created!.work_item_id)).toEqual([created!.work_item_id]);
+  }
 
   it("RP-626-1: C2 reads no row, event, Link, Step, Stage or count of C1's Question to Consultant, Draft to Closed", async () => {
     const id = await drafted(c1, "QSN", "C1's own question");
@@ -181,8 +193,9 @@ describe("C2 reads none of C1's or K1's Questions at any Step (scenarios RP-626-
     expect(await pickUp(c1.member, id)).toBe("picked_up");
     expect(await take(c1.member, id, "close")).toBe("applied");
     await hidden("closed");
-    // Positive control: K1, the asked Company, reads it.
+    // Positive controls: K1, the asked Company, reads it; C2 reads its own.
     expect(await seen(k1.member, id)).toEqual([id]);
+    await c2ReadsItsOwn();
   });
 
   it("RP-626-2: K1's Draft Question to Contractor is K1's alone; C1 reads it once asked; C2 never", async () => {
@@ -196,6 +209,7 @@ describe("C2 reads none of C1's or K1's Questions at any Step (scenarios RP-626-
     expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await take(c1Pm, id, "answer", { answer: "Behind the panel" })).toBe("applied");
     expect(await reads(c2.member, id), "answered, C2").toEqual(nothing);
+    await c2ReadsItsOwn();
   });
 });
 

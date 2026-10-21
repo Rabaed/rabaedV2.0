@@ -9,10 +9,12 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { bilingual, buildSeamTwoTower, digits, joinProject, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestWorkflow, bilingual, buildSeamTwoTower, digits, joinProject, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
+/** A test-only submittal Type on the test Workflow with Code B, whose rows become Comments (RP-94-1's source). */
+const REVIEWED = "SLSRL";
 
 let migrator: pg.Client;
 let app: Db;
@@ -24,7 +26,7 @@ let pickUp: SeamTwoTower["pickUp"];
 
 let c1Pm = "";
 let c1Engineer = "";
-let k1 = ""; // K1's Engineer, its only Member: holds each of K1's Steps as it arrives.
+let k1 = ""; // K1's Engineer, its only Member until RP-94-1 adds a Manager: holds each of K1's Steps as it arrives.
 let c2 = ""; // C2's Engineer.
 let outsider = ""; // The Authorized Person of a Company on another Project only (layer 1).
 let electrical = "";
@@ -78,7 +80,10 @@ const readsOf = async (as: string, id: string) => ({
   stage: await stepAsSeen(as, id),
 });
 const nothing = { row: [], events: [], steps: [], documents: [], links: [], companies: [], holder: [], photos: [], counts: [], stage: undefined };
-/** The Snag List's rows `as` reads on the Tower's Project: the List, the Kanban and the export read these alone. */
+/**
+ * The Tower's items `as` reads through `work_item` (its row-level security): the rows the work item query's List,
+ * Kanban and export start from before their own filters.
+ */
 const listed = async (as: string) =>
   (await call<{ id: string }>(as, sql`select id from work_item where project_id = ${tower.projectId}::uuid order by id`)).map((r) => r.id);
 
@@ -116,9 +121,10 @@ async function photo(id: string): Promise<string> {
 }
 
 /**
- * Links `from` to `source` as raised from it, as a Code B's Comment or a check item's Snag is: made with `from`
- * itself, in its Draft (arrival 0, at its creation). A Link added later, while a Participant holds the item, is
- * that Participant's alone until the item leaves it (V19).
+ * Links Snag `from` to Snag `source` as raised from it, by hand (as seam 1's raised-item-counts.test.ts does): a
+ * stand-in for the Snags a WIR's failed check items raise, for the counts by Type. Dated and stamped as if made with
+ * `from` in its Draft (arrival 0), so it is no Link added while a Participant holds the item (V19).
+ * RP-94-1 uses a real Code B's Comments instead.
  */
 async function raiseFrom(from: string, source: string): Promise<void> {
   const { rows } = await migrator.query(
@@ -134,6 +140,21 @@ beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
+  const workflowId = await addTestWorkflow((text) => migrator.query(text), { withApproveB: true });
+  await migrator.query(`
+    do $$
+      declare
+        v_form uuid;
+      begin
+        insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "Snag List source (test)", "ar": "مصدر"}')
+        returning id into v_form;
+        insert into form_version (form_definition_id, version_no, status, published_at, schema)
+        values (v_form, 1, 'published', now(), '{"sections": [{"key": "material", "title": {"en": "Material", "ar": "المادة"},
+          "fields": [{"key": "model", "type": "text", "label": {"en": "Model", "ar": "الطراز"}}]}]}'::jsonb);
+        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+        values ('rabaed', 'submittals', '${REVIEWED}', '{"en": "Snag List source (test)", "ar": "مصدر"}', '${workflowId}', 'review_code', v_form);
+      end
+    $$`);
   tower = await buildSeamTwoTower(app, migrator, { projectCode: "RSL", otherProject: true, checklistTemplate: false });
   ({ call, outcome, take, pickUp, tradeId: electrical, buildingA, buildingB } = tower);
   c1Pm = tower.c1.members.project_manager;
@@ -203,43 +224,97 @@ describe("a Snag raised on C1 stays with C1 when C3 is widened over it (scenario
 });
 
 describe("C2's Snag List names and counts none of C1's items (scenario RP-94-1)", () => {
-  let source = ""; // C1's source item.
+  let source = ""; // C1's review, closed by K1 at Code B.
   let sourceNumber = "";
-  let comment = ""; // A C1 Snag raised from it.
-  let photographed = ""; // A C1 Snag with a photo.
+  let comments: string[] = []; // Its two rows, Comments (CMT) with C1.
+  let photographed = ""; // K1's Snag on C1 with a photo.
   let photoId = "";
   let c2Snag = "";
+  const tracked = () => [source, ...comments, photographed, c2Snag];
+  /** The Tower's items `as` reads, by Type: the Snag List's type chips (the source is a submittal, another Module's). */
+  const byType = (as: string) =>
+    call<{ code: string; n: number }>(
+      as,
+      sql`select t.code, count(*)::int as n from work_item w join work_item_type t on t.id = w.work_item_type_id
+          where w.project_id = ${tower.projectId}::uuid and t.code in ('SNG', 'CMT') group by t.code order by t.code`,
+    );
+  /** The items `as` reads whose `raised_from` Link names `number`: the "Raised from" filter. */
+  const raisedFrom = async (as: string, number: string) =>
+    (
+      await call<{ id: string }>(
+        as,
+        sql`select w.id from work_item w where w.project_id = ${tower.projectId}::uuid
+            and exists (select 1 from app.work_item_links(w.id) l where l.kind = 'raised_from' and l.document_number = ${number}) order by w.id`,
+      )
+    ).map((r) => r.id);
+  /** The items `as` reads that Participant `p` holds: the Company filter. */
+  const heldBy = async (as: string, p: string) =>
+    (
+      await call<{ id: string }>(
+        as,
+        sql`select w.id from work_item w cross join lateral app.work_item_holder(w.id) h
+            where w.project_id = ${tower.projectId}::uuid and h.participant_id = ${p}::uuid order by w.id`,
+      )
+    ).map((r) => r.id);
+  /** The Comments (CMT) `as` reads: the Comment Type filter. */
+  const ofCommentType = async (as: string) =>
+    (
+      await call<{ id: string }>(
+        as,
+        sql`select w.id from work_item w join work_item_type t on t.id = w.work_item_type_id
+            where w.project_id = ${tower.projectId}::uuid and t.code = 'CMT' order by w.id`,
+      )
+    ).map((r) => r.id);
 
   beforeAll(async () => {
-    source = await raised("Lighting fixtures");
+    // A K1 Manager, who closes the review at Code B (the test Workflow sends it to K1's Manager).
+    const manager = await newMember(tower.k1.id, "manager");
+    await onProject(tower.k1.ap, tower.k1.participantId, manager, ["manager"]);
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1Engineer,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${tower.projectId}::uuid, ${REVIEWED}, 'Lighting fixtures', app.latest_form_version(${REVIEWED}), ${JSON.stringify({ model: "Lighting fixtures" })}::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    source = created!.work_item_id;
+    expect(await take(c1Engineer, source, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, source)).toBe("picked_up");
+    expect(await take(c1Pm, source, "submit")).toBe("applied");
+    expect(await pickUp(k1, source)).toBe("picked_up");
+    expect(await take(k1, source, "send_to_manager")).toBe("applied");
+    expect(await pickUp(manager, source)).toBe("picked_up");
+    const rows = [{ comment: "Provide the IP65 certificate" }, { comment: "Update the luminaire schedule" }];
+    expect(await take(manager, source, "approve_b", { items_to_create: rows })).toBe("applied");
     sourceNumber = (await migrator.query("select document_number from work_item where id = $1", [source])).rows[0].document_number as string;
-    comment = await raised("Provide the IP65 certificate");
-    await raiseFrom(comment, source);
+    comments = (await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from' order by from_id", [source])).rows.map(
+      (r: { from_id: string }) => r.from_id,
+    );
+    expect(comments).toHaveLength(2);
     photographed = await draft("Cable tray not bonded");
     photoId = await photo(photographed);
     expect(await take(k1, photographed, "raise")).toBe("applied");
     c2Snag = await raised("Paint drips on skirting", { location: buildingB });
   });
 
-  it("RP-94-1: C2's rows, type counts and Stage counts hold its own Snag only", async () => {
-    const mine = [c2Snag];
-    expect((await listed(c2)).filter((id) => [source, comment, photographed, c2Snag].includes(id))).toEqual(mine);
-    const byType = await call<{ code: string; n: number }>(
-      c2,
-      sql`select t.code, count(*)::int as n from work_item w join work_item_type t on t.id = w.work_item_type_id
-          where w.project_id = ${tower.projectId}::uuid group by t.code order by t.code`,
-    );
-    expect(byType).toEqual([{ code: "SNG", n: 1 }]);
+  it("RP-94-1: C2's rows, type chip counts and Stage counts hold its own Snag only; C1's hold its Comments and Snag", async () => {
+    expect((await listed(c2)).filter((id) => tracked().includes(id))).toEqual([c2Snag]);
+    expect(await byType(c2)).toEqual([{ code: "SNG", n: 1 }]);
     const byStage = await call<{ stage_key: string; n: number }>(
       c2,
       sql`select s.stage_key, count(*)::int as n from work_item w cross join lateral app.step_as_seen(w.id) s
           where w.project_id = ${tower.projectId}::uuid group by s.stage_key`,
     );
     expect(byStage).toEqual([{ stage_key: "open", n: 1 }]);
+    // Positive control: C1 counts its two Comments, and its Snags (earlier describes' among them).
+    const c1Counts = await byType(c1Pm);
+    expect(c1Counts.map((c) => c.code)).toEqual(["CMT", "SNG"]);
+    expect(c1Counts[0]).toEqual({ code: "CMT", n: 2 });
   });
 
-  it("RP-94-1: no read names C1's items, their source's number or C1's Participant; Company and Raised from offer C1 nothing", async () => {
-    for (const id of [source, comment, photographed]) expect(await readsOf(c2, id), id).toEqual(nothing);
+  it("RP-94-1: no read names C1's items, their source's number or Review Code, or C1's Participant; Company and Raised from offer C1 nothing", async () => {
+    for (const id of [source, ...comments, photographed]) expect(await readsOf(c2, id), id).toEqual(nothing);
+    expect(await call(c2, sql<{ outcome: string }>`select outcome from work_item where id = ${source}::uuid`)).toEqual([]);
     const companies = await call<{ participant_id: string }>(
       c2,
       sql`select distinct hc.participant_id from work_item w cross join lateral app.work_item_holder(w.id) h
@@ -255,29 +330,31 @@ describe("C2's Snag List names and counts none of C1's items (scenario RP-94-1)"
     expect(sources).toEqual([]);
   });
 
-  it("RP-94-1: filtering by C1's source, by C1 or by the photo finds nothing and counts nothing", async () => {
-    const bySource = await call<{ id: string }>(
-      c2,
-      sql`select w.id from work_item w where w.project_id = ${tower.projectId}::uuid
-          and exists (select 1 from app.work_item_links(w.id) l where l.kind = 'raised_from' and l.document_number = ${sourceNumber})`,
-    );
-    expect(bySource).toEqual([]);
-    const byCompany = await call<{ id: string }>(
-      c2,
-      sql`select w.id from work_item w cross join lateral app.work_item_holder(w.id) h
-          where w.project_id = ${tower.projectId}::uuid and h.participant_id = ${tower.c1.participantId}::uuid`,
-    );
-    expect(byCompany).toEqual([]);
+  it("RP-94-1: filtering by C1's source, by C1 or by the Comment Type finds nothing for C2, and each finds C1's items for C1", async () => {
+    expect(await raisedFrom(c2, sourceNumber)).toEqual([]);
+    expect(await heldBy(c2, tower.c1.participantId)).toEqual([]);
+    expect(await ofCommentType(c2)).toEqual([]);
     expect(await call(c2, sql<{ id: string }>`select id from document where id = ${photoId}::uuid`)).toEqual([]);
+    // Positive controls: C2's own filter finds its Snag; C1's filters find its items.
+    expect(await heldBy(c2, tower.c2.participantId)).toEqual([c2Snag]);
+    expect(await raisedFrom(c1Pm, sourceNumber)).toEqual([...comments].sort());
+    expect(await ofCommentType(c1Pm)).toEqual([...comments].sort());
+    expect((await heldBy(c1Pm, tower.c1.participantId)).filter((id) => tracked().includes(id)).sort()).toEqual([...comments, photographed].sort());
   });
 
-  it("RP-94-1: the Raised from source is given by Document Number and Subject, and the thumbnail is the first photo, to those who see them (E1, V19)", async () => {
-    for (const reader of [c1Pm, k1]) {
+  it("RP-94-1: the Raised from source is given by Document Number, Subject and Review Code, and the thumbnail is the first photo, to those who see them (E1, V19)", async () => {
+    // C1, holding the Comments, reads their source. (K1, who raised them, does not yet: app.work_item_links stamps a
+    // Code B's `raised_from` Link with the Comment's current arrival, so only its holder reads it. Hides, never leaks;
+    // a follow-up of RP-1002.)
+    for (const comment of comments) {
       const links = await call<{ kind: string; document_number: string; subject: string; work_item_id: string }>(
-        reader,
+        c1Pm,
         sql`select kind, document_number, subject, work_item_id from app.work_item_links(${comment}::uuid) where kind = 'raised_from'`,
       );
-      expect(links, reader).toEqual([{ kind: "raised_from", document_number: sourceNumber, subject: "Lighting fixtures", work_item_id: source }]);
+      expect(links, comment).toEqual([{ kind: "raised_from", document_number: sourceNumber, subject: "Lighting fixtures", work_item_id: source }]);
+    }
+    for (const reader of [c1Pm, k1]) {
+      expect(await call(reader, sql<{ outcome: string }>`select outcome from work_item where id = ${source}::uuid`), reader).toEqual([{ outcome: "B" }]);
       const photos = await call<{ document_id: string }>(reader, sql`select t.document_id from app.document_times(${photographed}::uuid) t order by t.seq`);
       expect(photos.map((p) => p.document_id), reader).toEqual([photoId]);
     }
@@ -333,6 +410,9 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
     (await call<{ member_id: string }>(as, sql`select member_id from app.reassign_candidates(${id}::uuid)`)).map((r) => r.member_id);
   const reassign = (as: string, id: string, to: string) => outcome(as, sql`select app.reassign_step(${id}::uuid, ${to}::uuid, now()) as outcome`);
   const holder = (id: string) => call<{ assignee_member_id: string }>(c1Pm, sql`select assignee_member_id from app.work_item_holder(${id}::uuid)`);
+  /** The positive control beside a refusal to the outsider: it reads its own Project. */
+  const outsiderReadsOwnProject = async () =>
+    (await call<{ id: string }>(outsider, sql`select id from project where id = ${tower.other.projectId}::uuid`)).length === 1;
   /** The Transitions `as` is offered on `id` and the Stage each leads to: what Move Stage takes. */
   const moves = (as: string, id: string) =>
     call<{ transition_key: string; stage_key: string }>(
@@ -358,16 +438,21 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
     expect(offered).not.toContain(c2);
     expect(offered).not.toContain(k1);
     for (const other of [k1, c2, outsider]) expect(await candidates(other, first), other).toEqual([]);
-    // C2 is offered its own Snag's pool, never C1's Members.
-    expect(await candidates(c2, c2Snag)).not.toContain(c1Engineer);
+    // Positive controls: K1 and C2 read the item list they are offered nothing on; the outsider its own Project.
+    expect(await seen(k1, first)).toEqual([first]);
+    expect(await seen(c2, c2Snag)).toEqual([c2Snag]);
+    expect(await outsiderReadsOwnProject()).toBe(true);
   });
 
-  it("RP-629-1: a pick of C2's engineer is refused whoever asks, an item the asker does not see is not_found, and nothing changes", async () => {
+  it("RP-629-1: a pick of C2's engineer is refused whoever asks, K1 may reassign nothing, an item the asker does not see is not_found, and nothing changes", async () => {
     expect(await reassign(c1Pm, first, c2)).toBe("not_offered");
-    expect(await reassign(k1, first, c1Engineer)).not.toBe("reassigned");
+    expect(await reassign(k1, first, c2)).toBe("forbidden");
+    expect(await reassign(c2, first, c2)).toBe("not_found");
+    expect(await reassign(k1, first, c1Engineer)).toBe("forbidden");
     expect(await reassign(c2, first, c1Engineer)).toBe("not_found");
     expect(await reassign(outsider, first, c1Engineer)).toBe("not_found");
     expect(await holder(first)).toEqual([{ assignee_member_id: c1Pm }]);
+    expect(await outsiderReadsOwnProject()).toBe(true);
   });
 
   it("RP-629-1: the reassign is an internal event of C1's: K1's history never shows it", async () => {
@@ -384,16 +469,32 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
     expect((await moves(c1Pm, first)).map((m) => m.stage_key).sort()).toEqual(["in_progress", "on_hold", "resolved"]);
     for (const other of [k1, c1Engineer, c2, outsider]) expect(await moves(other, first), other).toEqual([]);
     expect(await call(c2, sql<{ action: string }>`select action from app.work_item_actions(${first}::uuid)`)).toEqual([]);
+    // Positive controls: C2 is offered a pick-up of its own Snag; the outsider reads its own Project.
+    expect((await call<{ action: string }>(c2, sql`select action from app.work_item_actions(${c2Snag}::uuid)`)).length).toBeGreaterThan(0);
+    expect(await outsiderReadsOwnProject()).toBe(true);
   });
 
-  it("RP-629-1: the export, the List's own read, holds C2's Snag only for C2 and none of C2's for C1; an outsider reads nothing", async () => {
+  it("RP-629-1: the export's rows hold C2's Snag only for C2 and none of C2's for C1, filtered by Stage too; an outsider reads nothing", async () => {
     const ours = [first, second, c2Snag];
     expect((await listed(c2)).filter((id) => ours.includes(id))).toEqual([c2Snag]);
     expect((await listed(c1Pm)).filter((id) => ours.includes(id)).sort()).toEqual([first, second].sort());
     expect((await listed(k1)).filter((id) => ours.includes(id)).sort()).toEqual(ours.sort());
+    /** The Tower's items `as` reads at Stage `stage`, as it sees the Stage (the export filtered by Stage). */
+    const atStage = async (as: string, stage: string) =>
+      (
+        await call<{ id: string }>(
+          as,
+          sql`select w.id from work_item w cross join lateral app.step_as_seen(w.id) s
+              where w.project_id = ${tower.projectId}::uuid and s.stage_key = ${stage} order by w.id`,
+        )
+      )
+        .map((r) => r.id)
+        .filter((id) => ours.includes(id));
+    expect(await atStage(c2, "open")).toEqual([c2Snag]);
+    expect((await atStage(c1Pm, "open")).sort()).toEqual([first, second].sort());
+    expect(await atStage(c2, "in_progress")).toEqual([]);
     expect(await listed(outsider)).toEqual([]);
-    // Positive control: the outsider reads its own Project.
-    expect(await call(outsider, sql<{ id: string }>`select id from project where id = ${tower.other.projectId}::uuid`)).toEqual([{ id: tower.other.projectId }]);
+    expect(await outsiderReadsOwnProject()).toBe(true);
   });
 });
 
@@ -422,8 +523,8 @@ describe("the cards' swipe actions are the item's own Transitions (scenario RP-6
     const id = await heldByPm("Ceiling tile cracked");
     expect(await offered(c1Engineer, id)).toEqual([]);
     expect(await offered(k1, id)).toEqual([]);
-    expect(await take(c1Engineer, id, "start_work")).not.toBe("applied");
-    expect(await take(k1, id, "close")).not.toBe("applied");
+    expect(await take(c1Engineer, id, "start_work")).toBe("not_holder");
+    expect(await take(k1, id, "start_work")).toBe("not_holder");
     expect((await stepAsSeen(c1Pm, id))!.stage_key).toBe("open");
   });
 });
