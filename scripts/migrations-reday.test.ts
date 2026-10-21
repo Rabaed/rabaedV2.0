@@ -127,6 +127,40 @@ describe("migrations:reday", () => {
     expect(changes.references.size).toBe(0);
   });
 
+  it("keeps a row on an old day that another branch's migration still uses (a spec's shared day)", () => {
+    const daysFile = table("| 20271005 | RP-700 | 21 | b |", "| 20271003 | spec RP-631 | 5B | Snag report |", "| 20271004 | RP-640 | 5B | Snag photos |");
+    const branches = [branch("main", mainMigrations), branch("RP-632-other-ticket", [...mainMigrations, "20271003000200_other_ticket.sql"])];
+    const changes = redayChanges(input({ daysFile, branches }));
+    expect(changes.daysFile).toBe(
+      table(
+        "| 20271005 | RP-700 | 21 | b |",
+        "| 20271003 | spec RP-631 | 5B | Snag report |",
+        "| 20271006 | spec RP-631 | 1b | Snag report (moved from 20271003) |",
+        "| 20271007 | RP-640 | 1b | Snag photos (moved from 20271004) |",
+      ),
+    );
+  });
+
+  it("gives each issue on a moved day with no row its own row", () => {
+    const added = [
+      { name: "20271003000000_first.sql", sql: "-- RP-640: first.\n" },
+      { name: "20271003000100_second.sql", sql: "-- RP-641: second.\n" },
+      { name: "20271003000200_third.sql", sql: "-- RP-640: third.\n" },
+    ];
+    const changes = redayChanges(input({ added, daysFile: table("| 20271005 | RP-700 | 21 | b |") }));
+    expect(changes.daysFile).toBe(
+      table("| 20271005 | RP-700 | 21 | b |", "| 20271006 | RP-640 | 1b | first, third (moved from 20271003) |", "| 20271006 | RP-641 | 1b | second (moved from 20271003) |"),
+    );
+  });
+
+  it("drops the branch's Unused rows even when nothing moves", () => {
+    const added = [{ name: "20271009000000_late.sql", sql: "-- RP-631: late.\n" }];
+    const daysFile = table("| 20271005 | RP-700 | 21 | b |", "| 20271002 | RP-631 | 5B | Unused: moved to 20271009 |", "| 20271009 | RP-631 | 1b | late |");
+    const changes = redayChanges(input({ added, daysFile }));
+    expect(changes.moves).toEqual([]);
+    expect(changes.daysFile).toBe(table("| 20271005 | RP-700 | 21 | b |", "| 20271009 | RP-631 | 1b | late |"));
+  });
+
   it("refuses a migration whose header and branch name no issue", () => {
     const added = [{ name: "20271003000000_x.sql", sql: "create table x ();\n" }];
     const changes = redayChanges(input({ added, branch: "main-1-integration" }));

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { branchIssue, formatReservation, headerIssue, parseReservations, type Reservation, reservationsFile } from "./check-migrations-days.ts";
+import { branchIssue, formatReservation, headerIssue, issues, parseReservations, type Reservation, reservationsFile } from "./check-migrations-days.ts";
 import { laneOf } from "./lanes.ts";
 import { withRow } from "./migration-new.ts";
 import { fetchOrigin, freeDay, type FreeDaySeam, type Git, nextDay, readRepoFile, realFreeDaySeam, repoGit } from "./migration-free-days.ts";
@@ -19,13 +19,18 @@ import { type Migration, migrationsDir } from "./migrations.ts";
 // `pnpm migration:new`), with this branch's own migrations and rows left out,
 // so the branch doesn't move past itself (its copies on origin included). The
 // migrations keep their order, time of day and body (so the issue key in the
-// header stays); each old day moves to the next free day. References to the old
-// file names elsewhere in the repository are rewritten. In
-// planning/migration-days.md the branch's rows on the old days, and every
-// "Unused" row of its issues, go; each moved day gets a row with the old row's
-// issue and purpose. Then the move is committed and `pnpm check:migrations`
-// runs. A worktree with uncommitted changes is refused, so the commit holds
-// only the move.
+// header stays); each old day moves to the next free day. The branch's rows on
+// days it has no migration on yet (a spec's later days) still count, so the
+// moved days land after them. References to the old file names elsewhere in the
+// repository are rewritten; the migrations themselves, other migrations
+// included, are not edited. In planning/migration-days.md the branch's rows on
+// the old days go, unless another branch or main still has a migration on that
+// day (a spec's day its other tickets share); every "Unused" row naming the
+// branch's issues goes too, even when nothing moves. Each moved day gets a row
+// with the old row's issue and purpose (one per issue when it had none) and
+// this worktree's lane, as `pnpm migration:new` writes. Then the change is
+// committed and `pnpm check:migrations` runs on that commit (it checks HEAD). A
+// worktree with uncommitted changes is refused, so the commit holds only the move.
 //
 // redayChanges is the pure seam the tests drive; the git and file calls are below it.
 
@@ -63,7 +68,9 @@ export interface RedayChanges {
   problems: string[];
 }
 
-const issuesOf = (text: string) => text.match(/\bRP-\d+\b/g) ?? [];
+/** A migration's day (`yyyymmdd`), and the rest of its name (`hhmmss_name.sql`). */
+const dayOf = (name: string) => name.slice(0, 8);
+const afterDay = (name: string) => name.slice(8);
 const stem = (name: string) => name.replace(/\.sql$/, "");
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const movedSuffix = /\s*\(moved from [^)]*\)\s*$/;
@@ -94,23 +101,26 @@ export function redayChanges(input: RedayInput): RedayChanges {
 
   // The issues each old day's migrations are for, and every issue of the branch.
   const byDay = new Map<string, Migration[]>();
-  for (const migration of added) byDay.set(migration.name.slice(0, 8), [...(byDay.get(migration.name.slice(0, 8)) ?? []), migration]);
+  for (const migration of added) byDay.set(dayOf(migration.name), [...(byDay.get(dayOf(migration.name)) ?? []), migration]);
   const dayIssues = new Map([...byDay].map(([day, migrations]) => [day, new Set([ownBranchIssue, ...migrations.map(ownerOf)].filter((issue) => issue !== null))]));
-  const ownIssues = new Set([...dayIssues.values()].flatMap((issues) => [...issues]));
-  const isOwnRow = (r: Reservation) => issuesOf(r.owner).some((issue) => dayIssues.get(r.day)?.has(issue) === true);
-  const isOwnUnused = (r: Reservation) => /^unused\b/i.test(r.purpose) && issuesOf(r.owner).some((issue) => ownIssues.has(issue));
-  const isOurs = (r: Reservation) => isOwnRow(r) || isOwnUnused(r);
+  const ownIssues = new Set([...dayIssues.values()].flatMap((set) => [...set]));
+  const addedNames = new Set(added.map(({ name }) => name));
+  const branches = input.days.remoteBranches().map((branch) => ({ ...branch, migrations: branch.migrations.filter((name) => !addedNames.has(name)) }));
+  const localOthers = input.days.localMigrations().filter((name) => !addedNames.has(name));
+  // An old day another branch (or main) still has a migration on, such as a spec's day its other tickets share: its rows stay.
+  const sharedDays = new Set(
+    [...branches.filter((branch) => branch.migrations.some((name) => byDay.has(dayOf(name))) && branch.sharesHistory()).flatMap((branch) => branch.migrations), ...localOthers]
+      .map(dayOf)
+      .filter((day) => byDay.has(day)),
+  );
+  const isOldDayRow = (r: Reservation) => issues(r.owner).some((issue) => dayIssues.get(r.day)?.has(issue) === true);
+  const isOwnUnused = (r: Reservation) => /^unused\b/i.test(r.purpose) && issues(r.owner).some((issue) => ownIssues.has(issue));
+  const isOurs = (r: Reservation) => (isOldDayRow(r) && !sharedDays.has(r.day)) || isOwnUnused(r);
 
   // freeDay over everything but this branch's own migrations and rows.
-  const addedNames = new Set(added.map(({ name }) => name));
   const others: FreeDaySeam = {
-    remoteBranches: () =>
-      input.days.remoteBranches().map((branch) => ({
-        ...branch,
-        migrations: branch.migrations.filter((name) => !addedNames.has(name)),
-        reservations: () => withoutRows(branch.reservations(), isOurs),
-      })),
-    localMigrations: () => input.days.localMigrations().filter((name) => !addedNames.has(name)),
+    remoteBranches: () => branches.map((branch) => ({ ...branch, reservations: () => withoutRows(branch.reservations(), isOurs) })),
+    localMigrations: () => localOthers,
     reservations: () => {
       const [onMain, here] = input.days.reservations();
       return [withoutRows(onMain, isOurs), withoutRows(here, isOurs)];
@@ -119,7 +129,7 @@ export function redayChanges(input: RedayInput): RedayChanges {
   };
   const { first, warnings } = freeDay(others);
   const oldDays = [...byDay.keys()];
-  if ((oldDays[0] as string) >= first) return { ...nothing, warnings, problems: [] };
+  if ((oldDays[0] ?? "") >= first) return { ...nothing, daysFile: withoutRows(input.daysFile, isOwnUnused), warnings, problems: [] };
 
   // Each old day, in order, onto the next free day.
   const newDay = new Map<string, string>();
@@ -128,17 +138,20 @@ export function redayChanges(input: RedayInput): RedayChanges {
     newDay.set(old, day);
     day = nextDay(day);
   }
-  const moves = added.map(({ name, sql }) => ({ from: name, to: `${newDay.get(name.slice(0, 8))}${name.slice(8)}`, sql }));
+  const moves = added.map(({ name, sql }) => ({ from: name, to: `${newDay.get(dayOf(name)) ?? ""}${afterDay(name)}`, sql }));
 
-  // The rows: the branch's old ones go, each moved day gets its own.
-  const oldRows = parseReservations(input.daysFile).filter(isOwnRow);
+  // The rows: each moved day gets the old day's rows of its issues (else one per issue); the branch's old ones go.
+  const oldRows = parseReservations(input.daysFile).filter(isOldDayRow);
   const newRows = oldDays.flatMap((old) => {
-    const to = newDay.get(old) as string;
+    const to = newDay.get(old) ?? "";
     const rows = oldRows.filter((r) => r.day === old);
     if (rows.length > 0) return rows.map((r) => ({ day: to, owner: r.owner, lane: input.lane || r.lane, purpose: `${r.purpose.replace(movedSuffix, "")} (moved from ${old})` }));
-    const migrations = byDay.get(old) as Migration[];
-    const purpose = migrations.map(({ name }) => stem(name).slice(15)).join(", ");
-    return [{ day: to, owner: ownerOf(migrations[0] as Migration) as string, lane: input.lane, purpose: `${purpose} (moved from ${old})` }];
+    const byOwner = new Map<string, string[]>();
+    for (const migration of byDay.get(old) ?? []) {
+      const owner = ownerOf(migration) ?? "";
+      byOwner.set(owner, [...(byOwner.get(owner) ?? []), stem(afterDay(migration.name)).slice(7)]);
+    }
+    return [...byOwner].map(([owner, names]) => ({ day: to, owner, lane: input.lane, purpose: `${names.join(", ")} (moved from ${old})` }));
   });
   const daysFile = newRows.reduce((text, r) => withRow(text, `| ${formatReservation(r)} |`), withoutRows(input.daysFile, isOurs));
 
@@ -147,7 +160,7 @@ export function redayChanges(input: RedayInput): RedayChanges {
   const pattern = new RegExp([...renames.keys()].sort((a, b) => b.length - a.length).map(escape).join("|"), "g");
   const references = new Map<string, string>();
   for (const [path, text] of input.references) {
-    const rewritten = text.replace(pattern, (old) => renames.get(old) as string);
+    const rewritten = text.replace(pattern, (old) => renames.get(old) ?? old);
     if (rewritten !== text) references.set(path, rewritten);
   }
 
@@ -192,6 +205,13 @@ export function reday(repo: string = process.cwd(), git: Git = repoGit(repo)): n
   if (changes.problems.length > 0) return fail(...changes.problems);
   if (changes.moves.length === 0) {
     say(`This branch's ${added.length} migration${added.length === 1 ? " is" : "s are"} already past main's newest and every branch's reservations: nothing to move.`);
+    if (changes.daysFile === readRepoFile(repo, reservationsFile)) return check(repo);
+    writeFileSync(join(repo, reservationsFile), changes.daysFile);
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the reservations file's name, not a data import
+    if (git("add", "--", reservationsFile).status !== 0 || git("commit", "-m", `${branchIssue(branch) ?? "Migration days"}: drop this branch's Unused rows (pnpm migrations:reday)`).status !== 0) {
+      return fail(`git add or commit failed; ${reservationsFile} is written but not committed.`);
+    }
+    say(`Committed ${reservationsFile} without this branch's "Unused" rows.`);
     return check(repo);
   }
 
@@ -208,7 +228,7 @@ export function reday(repo: string = process.cwd(), git: Git = repoGit(repo)): n
   if (git("add", "-A", "--", ...touched).status !== 0) return fail("git add failed; the move is written but not committed.");
   // eslint-disable-next-line rabaed/no-avoid-terms -- database migrations, not a data import
   if (git("commit", "-m", `${issue}: move migrations past main's newest (pnpm migrations:reday)`).status !== 0) return fail("git commit failed; the move is written and staged but not committed.");
-  say(`Committed the move. ${reservationsFile} has the new rows.`);
+  say(`Committed the move; ${reservationsFile} has the new rows. If pnpm check:migrations (next) refuses anything, fix it in a new commit.`);
   return check(repo);
 }
 

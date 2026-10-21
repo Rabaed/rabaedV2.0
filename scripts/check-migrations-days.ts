@@ -18,7 +18,7 @@ export interface Reservation {
   purpose: string;
 }
 
-const issues = (text: string) => text.match(/\bRP-\d+\b/g) ?? [];
+export const issues = (text: string): string[] => text.match(/\bRP-\d+\b/g) ?? [];
 
 /** The reservations in the file's text: each table row that starts with a day. */
 export function parseReservations(text: string): Reservation[] {
