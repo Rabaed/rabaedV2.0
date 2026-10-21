@@ -72,7 +72,8 @@ export interface RegisterImporter<R = unknown> {
   engineer: ImportingEngineer | null;
   /**
    * Where a preview's original register is kept, under the Project's prefix (RP-644, story 34):
-   * the api's file store. Rabaed Admin has none, so an Engineer's import keeps no original.
+   * the api's file store. Rabaed Admin has none: an Engineer's preview hands its original over
+   * through the database instead, and the api stores it at the first download (RP-959).
    */
   files?: FileStore;
 }
@@ -98,8 +99,13 @@ type NotTheirs = { ok: false; reason: "not_found" | "forbidden" };
 export type ReadRegisterResult = { ok: true; sheet: RegisterSheet } | Unreadable | NotTheirs;
 
 const previewRefusals = ["not_found", "project_closed", "forbidden", "type_not_found", "trade_not_found", "package_not_found"] as const;
+/**
+ * What became of a preview's original register: stored in the file store (a Member's), handed
+ * over for the api to store (a Rabaed Engineer's, RP-959), or not kept (no file store set up).
+ */
+export type RegisterImportOriginalKept = "stored" | "handed_over" | "none";
 export type PreviewRegisterImportResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; original: RegisterImportOriginalKept }
   | Unreadable
   | NotTheirs
   | { ok: false; reason: (typeof previewRefusals)[number] | "column_not_found" | "field_not_found" };
@@ -252,8 +258,12 @@ export function previewRegisterImport(
     const outcome = checkedOutcome(rows[0]!.outcome, ["previewed", ...previewRefusals]);
     if (outcome !== "previewed") return { ok: false, reason: outcome };
     const importId = rows[0]!.import_id!;
-    if (importer.files && !engineer) await keepOriginal(trx, importer.files, projectId, importId, request.file);
-    return { ok: true, id: importId };
+    const original = engineer
+      ? await engineer.own(trx, (own) => handOverOriginal(own, engineer.id, importId, request.file))
+      : importer.files
+        ? await keepOriginal(trx, importer.files, projectId, importId, request.file)
+        : "none";
+    return { ok: true, id: importId, original };
   });
 }
 
@@ -264,7 +274,7 @@ const registerContentType = (fileName: string) => (/\.csv$/i.test(fileName) ? "t
  * Keeps a Member's previewed register as its original (RP-644, story 34), under the Project's
  * prefix (ADR 0007), and deletes the files of the previews cleaned up since (the worker can't).
  */
-async function keepOriginal(trx: Trx, files: FileStore, projectId: string, importId: string, file: RegisterImportFile): Promise<void> {
+async function keepOriginal(trx: Trx, files: FileStore, projectId: string, importId: string, file: RegisterImportFile): Promise<"stored"> {
   const fileId = randomUUID();
   const { rows } = await sql<{ key: string }>`select app.register_import_file_key(${projectId}::uuid, ${importId}::uuid, ${fileId}::uuid) as key`.execute(trx);
   await files.put(rows[0]!.key, Buffer.from(file.content, "base64"), registerContentType(file.fileName));
@@ -273,6 +283,19 @@ async function keepOriginal(trx: Trx, files: FileStore, projectId: string, impor
   // A file the store fails to delete never fails the Member's preview: it stays, unread (its key is gone).
   const { rows: gone } = await sql<{ key: string }>`select app.take_register_import_file_removals(100) as key`.execute(trx);
   await Promise.allSettled(gone.map(({ key }) => files.remove(key)));
+  return "stored";
+}
+
+/**
+ * Hands a Rabaed Engineer's previewed register over as its original (RP-959): Rabaed Admin has no
+ * file store and no way to the api (ADR 0010), so the file waits in the database, the Engineer's
+ * own (`engineer.own`), until the api stores it at the first download (registerImportOriginal).
+ */
+async function handOverOriginal(trx: Trx, engineerId: string, importId: string, file: RegisterImportFile): Promise<"handed_over"> {
+  const { rows } = await sql<{ outcome: string }>`
+    select app.hand_over_register_import_original_by_engineer(${engineerId}::uuid, ${importId}::uuid, ${Buffer.from(file.content, "base64")}) as outcome
+  `.execute(trx);
+  return checkedOutcome(rows[0]!.outcome, ["handed_over"]);
 }
 
 /** An import's original register, as its reader downloads it: its name as uploaded, never a time. */
@@ -280,7 +303,8 @@ export type RegisterImportOriginal = { fileName: string; contentType: string; by
 
 /**
  * The original register of an import the Member reads (RP-644, story 34); null when they
- * don't read it, or it keeps none (an Engineer's import, or a file no longer stored).
+ * don't read it, or it keeps none (a file no longer stored). A Rabaed Engineer's, handed over
+ * through the database, is stored here at its first download, under the import's key (RP-959).
  */
 export function registerImportOriginal(importer: RegisterImporter, importId: string): Promise<RegisterImportOriginal | null> {
   return importer.run(async (trx) => {
@@ -289,9 +313,24 @@ export function registerImportOriginal(importer: RegisterImporter, importId: str
     const [r] = await importsWhere(trx, importer, sql`i.id = ${importId}::uuid`);
     if (!r?.source_file_id) return null;
     const { rows } = await sql<{ key: string }>`select app.register_import_file_key(${r.project_id}::uuid, ${r.id}::uuid, ${r.source_file_id}::uuid) as key`.execute(trx);
-    const bytes = await files.read(rows[0]!.key);
-    return bytes ? { fileName: r.file_name, contentType: registerContentType(r.file_name), bytes } : null;
+    const key = rows[0]!.key;
+    const contentType = registerContentType(r.file_name);
+    const bytes = (await storeHandedOverOriginal(trx, files, r.id, key, contentType)) ?? (await files.read(key));
+    return bytes ? { fileName: r.file_name, contentType, bytes } : null;
   });
+}
+
+/**
+ * Stores a Rabaed Engineer's original register, handed over by Rabaed Admin (RP-959), under the
+ * import's key, and answers it; null when none waits. Taken off the hand-over in the reader's
+ * transaction: a store that fails leaves it there for the next download, and a second download at
+ * once waits for this one, then reads the store.
+ */
+async function storeHandedOverOriginal(trx: Trx, files: FileStore, importId: string, key: string, contentType: string): Promise<Uint8Array | null> {
+  const { rows } = await sql<{ bytes: Buffer | null }>`select app.take_register_import_original_hand_over(${importId}::uuid) as bytes`.execute(trx);
+  const bytes = rows[0]?.bytes ?? null;
+  if (bytes) await files.put(key, bytes, contentType);
+  return bytes;
 }
 
 type ImportRow = {
@@ -311,7 +350,7 @@ type ImportRow = {
   header_row: number;
   headers: string[];
   mapping: unknown;
-  /** Its original register as stored (RP-644); null for an Engineer's import. */
+  /** Its original register as stored (RP-644), or handed over by Rabaed Admin for the api to store (RP-959); null when it keeps none. */
   source_file_id: string | null;
 };
 type SummaryRow = Omit<ImportRow, "project_id" | "sheet" | "header_row" | "headers" | "mapping" | "raiser_id" | "raiser_name" | "source_file_id">;

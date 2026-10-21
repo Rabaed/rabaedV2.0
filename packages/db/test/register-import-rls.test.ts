@@ -741,6 +741,46 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
       }
     });
   });
+
+  // RP-959: Rabaed Admin has no file store, so it hands the original register over in the
+  // database; the api alone takes it off, for a Member who reads the import, and stores it.
+  it("RP-589-3: hands its original register over for the api to store; only a C1 Member's request on the api's connection takes it off, once", async () => {
+    const handedOver = Buffer.from("the register as uploaded");
+    const take = (as: string, id: string) =>
+      call<{ bytes: Buffer | null }>(as, sql`select app.take_register_import_original_hand_over(${id}::uuid) as bytes`).then((r) => r[0]!.bytes);
+    const { import_id: id } = await engineerPreview(engineer, c1Participant, defaultMember);
+    const [handed] = await asAdmin<{ outcome: string }>(
+      defaultMember,
+      sql`select app.hand_over_register_import_original_by_engineer(${engineer}::uuid, ${id}::uuid, ${handedOver}) as outcome`,
+    );
+    expect(handed).toEqual({ outcome: "handed_over" });
+    // Neither role reads it, and the app role hands nothing over.
+    expect(await failure(defaultMember, sql`select import_id from register_import_original_hand_over`)).toBe("42501");
+    expect(await adminFailure(defaultMember, sql`select import_id from register_import_original_hand_over`)).toBe("42501");
+    expect(await failure(defaultMember, sql`select app.hand_over_register_import_original_by_engineer(${engineer}::uuid, ${id}::uuid, ${handedOver})`)).toBe("42501");
+    // A preview no Member reads: nobody takes it off.
+    for (const as of [defaultMember, c1Colleague]) expect(await take(as, id!)).toBeNull();
+    expect((await engineerConfirm(engineer, defaultMember, id!)).outcome).toBe("created");
+    // Confirmed: still not K1's, C2's or the Owner's, nor for a made-up id.
+    for (const as of [k1.member, k1.ap, c2.member, ow.member]) expect(await take(as, id!)).toBeNull();
+    expect(await take(c1Colleague, randomUUID())).toBeNull();
+    // Rabaed Admin's connection, run as the app role with C1's Member set as it runs the import, is refused.
+    const fromAdmin = await adminDb
+      .transaction()
+      .execute(async (trx) => {
+        await sql`select set_config('app.member_id', ${c1Colleague}, true)`.execute(trx);
+        await sql`set local role rabaed_app`.execute(trx);
+        return sql`select app.take_register_import_original_hand_over(${id}::uuid)`.execute(trx);
+      })
+      .then(
+        () => null,
+        (error: { code?: string }) => error.code ?? "?",
+      );
+    expect(fromAdmin).toBe("42501");
+    // A C1 Member on the api's connection takes it, once.
+    expect(await take(c1Colleague, id!)).toEqual(handedOver);
+    expect(await take(defaultMember, id!)).toBeNull();
+  });
 });
 
 // RP-644: Packages from an import. The api hands each row an existing Package (`package_id`) or
