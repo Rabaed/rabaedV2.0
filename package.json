@@ -29,6 +29,7 @@
     "db:fn": "node scripts/db-fn.ts",
     "queue": "node scripts/queue-pr.ts",
     "claims": "node scripts/claims.ts",
+    "check:claims": "node scripts/check-claims.ts",
     "verify": "node scripts/verify.ts",
     "lint": "eslint .",
     "typecheck": "node scripts/typecheck.ts",
