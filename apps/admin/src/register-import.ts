@@ -232,7 +232,8 @@ export function previewRegisterImportFor(
     imported,
     "preview_register_import",
     (result) => (result.ok ? { kind: "submittal_register_import", id: result.id } : { kind: "project", id: imported.projectId }),
-    (result) => ({ outcome: result.ok ? "previewed" : result.reason }),
+    // The original register handed over to the api with the preview, which stores it (RP-959).
+    (result) => (result.ok ? { outcome: "previewed", original: result.original } : { outcome: result.reason }),
   );
   return checked(() => previewRegisterImport(importer, imported.projectId, preview, now));
 }

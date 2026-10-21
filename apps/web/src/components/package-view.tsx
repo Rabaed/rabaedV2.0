@@ -87,12 +87,12 @@ function usePackageLabels(): PackagePageLabels {
       ...keys("addItems", ["trigger", "title", "description", "search", "searchPlaceholder", "trade", "allTrades", "loading", "noResults", "results", "inThis", "numberOnSubmit"] as const),
       inOther: (number) => t("addItems.inOther", { number }),
       choose: (subject) => t("addItems.choose", { subject }),
-      add: (_n, count) => t("addItems.add", { count }),
+      add: (n, count) => t("addItems.add", { n, count }),
     },
     submit: {
       ...keys("submit", ["trigger", "description", "confirm", "numberOnSubmit", "notReadyTitle", "notReadyIntro", "notReadyOnPage", "othersNotReady"] as const),
       title: (number) => t("submit.title", { number }),
-      count: (_n, count) => t("submit.count", { count }),
+      count: (n, count) => t("submit.count", { n, count }),
       reasons: keys("submit.reasons", packageNotReadyReasons),
     },
   };

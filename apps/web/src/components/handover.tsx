@@ -1,6 +1,6 @@
 "use client";
 
-import type { BilingualText, HandoverPick, HandoverStep, Locale } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type HandoverPick, type HandoverStep, type Locale } from "@rabaed/domain";
 import { HandoverDialog } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
@@ -58,7 +58,7 @@ export function useHandover() {
       return t("nobodyCanTake", { step: body.step[locale], project: body.project[locale] });
     }
     if (body.error === "other_company_handover" && body.steps && body.company) {
-      return t("otherCompany", { count: body.steps, company: body.company[locale] });
+      return t("otherCompany", { count: body.steps, n: formatNumber(body.steps, locale), company: body.company[locale] });
     }
     return null;
   }

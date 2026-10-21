@@ -91,6 +91,12 @@ export default tseslint.config(
     },
   },
   {
+    // An async assertion such as `expectHidden` checks nothing unless awaited (RP-1001), so the visibility tests await every promise.
+    files: ["apps/api/test/**/*.ts", "apps/admin/test/**/*.ts", "packages/db/test/**/*.ts", "packages/db/test-support/**/*.ts"],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    rules: { "@typescript-eslint/no-floating-promises": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },
@@ -185,6 +191,6 @@ export default tseslint.config(
     files: ["apps/web/messages/*.json"],
     plugins: { json, rabaed },
     language: "json/json",
-    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error", "rabaed/json-no-raw-bidi": "error" },
+    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error", "rabaed/json-no-raw-bidi": "error", "rabaed/json-no-plural-pound": "error" },
   },
 );

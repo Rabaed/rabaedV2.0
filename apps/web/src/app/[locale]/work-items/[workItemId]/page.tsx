@@ -319,6 +319,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                           .map((n) => n[locale])
                           .join(locale === "ar" ? "، " : ", "),
                         more: Math.max(item.heldBy.pool.names.length - 3, 0),
+                        n: formatNumber(Math.max(item.heldBy.pool.names.length - 3, 0), locale),
                       })
                     : item.heldBy.companyName[locale]}
               </dd>
