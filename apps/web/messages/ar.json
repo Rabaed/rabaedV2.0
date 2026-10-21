@@ -359,7 +359,7 @@
       "code": "Code {code}",
       "createdOn": "أُنشئ في {date}",
       "submittedOn": "قُدِّم في {date}",
-      "openPackage": "فتح الحزمة {number} {name}"
+      "openPackage": "فتح الحزمة {number} {company} {name}"
     },
     "viewSwitch": {
       "view": "طريقة العرض",
@@ -2802,6 +2802,7 @@
       "numberOnSubmit": "الرقم عند التقديم",
       "notReadyTitle": "غير جاهزة",
       "notReadyIntro": "لم يُقدَّم شيء. هذه تمنع التقديم:",
+      "notReadyOnPage": "يُتاح «تقديم الحزمة» حين لا يمنعه شيء. هذه تمنعه الآن:",
       "reasons": {
         "pick_up_first": "استلمه أولًا: إنه ينتظر في مجموعة خطوتك.",
         "cannot_submit": "إنه في خطوة لا يمكنك تقديمه منها.",

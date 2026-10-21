@@ -1,4 +1,4 @@
-import { defaultOutcomeSets, type PackageDetail, type WorkItemRow } from "@rabaed/domain";
+import { defaultOutcomeSets, type PackageDetail, type PackageNotReadyReason, type WorkItemRow } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
@@ -50,7 +50,7 @@ const row = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
   creationDate: "2026-09-01T09:00:00.000Z",
   with: { kind: "company", companyName: consultant },
   raiserCompanyName: ownCompany,
-  package: { id: pkgId, number: "PKG-001", name: b("Bathrooms – Tower 1", "الحمامات – البرج 1") },
+  package: { id: pkgId, number: "PKG-001", name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), companyName: ownCompany },
   ...rest,
 });
 const draftOf = (n: number, title: string, rest: Partial<WorkItemRow> = {}) =>
@@ -92,6 +92,7 @@ const openPkg: PackageDetail = {
   counts: { total: 3, open: 3, codes: {} },
   items: [],
   owned: true,
+  othersNotReady: false,
   filters: { outcomes: [], locations: [], trades: [] },
   actions: { rename: true, addItems: true, removeItems: true, delete: true, submit: true },
 };
@@ -113,19 +114,20 @@ const filters: PackageDetail["filters"] = {
 
 /**
  * Package `pkg` with `rows` as its items, as the API gives them: each still to Submit when the
- * viewer owns it and it was never Submitted nor closed (the API's rule), with the table's filters.
+ * viewer owns it and it was never Submitted nor closed (the API's rule), with the table's filters;
+ * those in `notReady` stop Submit Package, with why (RP-974).
  */
-const withItems = (pkg: PackageDetail, rows: WorkItemRow[]): PackageDetail => ({
+const withItems = (pkg: PackageDetail, rows: WorkItemRow[], notReady: Record<string, PackageNotReadyReason> = {}): PackageDetail => ({
   ...pkg,
   filters,
-  items: rows.map((r) => ({ ...r, bulkTransitions: [], toSubmit: pkg.owned && r.submissionDate === null && r.outcome === null })),
+  items: rows.map((r) => ({ ...r, bulkTransitions: [], toSubmit: pkg.owned && r.submissionDate === null && r.outcome === null, notReady: notReady[r.id] ?? null })),
 });
 
 const ok = async () => ({ ok: true as const });
 const found: WorkItemRow[] = [
   // In no Package yet.
   draftOf(21, "Shower screens", { package: undefined }),
-  draftOf(22, "Grab rails", { package: { id: "00000000-0000-4000-8000-0000000000f2", number: "PKG-002", name: b("Accessible WCs", "دورات مياه ميسّرة") } }),
+  draftOf(22, "Grab rails", { package: { id: "00000000-0000-4000-8000-0000000000f2", number: "PKG-002", name: b("Accessible WCs", "دورات مياه ميسّرة"), companyName: ownCompany } }),
   tiles,
 ];
 const search: PackageItemSearch = async () => found;
@@ -210,11 +212,39 @@ export const InProgress: Story = {
   },
 };
 
-/** Nothing left to Submit: Submit Package is gone. */
+/** Nothing left to Submit: Submit Package is gone, and nothing is listed as stopping it. */
 export const NothingLeftToSubmit: Story = {
   args: { pkg: withItems({ ...inProgress, actions: { ...inProgress.actions, submit: false } }, [lights, fans]) },
   play: async (context) => {
     await expect(context.canvas.queryByRole("button", { name: labelsOf(context).submit.trigger })).toBeNull();
+    await expect(context.canvasElement.querySelector("[data-package-not-ready]")).toBeNull();
+  },
+};
+
+/**
+ * Not ready, before any attempt (spec RP-616 story 11, RP-974): something stops Submit Package, so
+ * it isn't offered; the page lists each submittal the owner sees that stops it, with why (the API's
+ * codes) and a link to it, and says one they don't see stops it too, never which.
+ */
+export const NotReadyBeforeSubmit: Story = {
+  args: {
+    pkg: withItems({ ...openPkg, othersNotReady: true, actions: { ...openPkg.actions, submit: false } }, [tiles, ware, mixer], {
+      [mixer.id]: "pick_up_first",
+      [ware.id]: "cannot_submit",
+    }),
+  },
+  play: async (context) => {
+    const l = labelsOf(context);
+    await expect(within(actionsOf(context)).queryByRole("button", { name: l.submit.trigger })).toBeNull();
+    const list = context.canvas.getByRole("region", { name: l.submit.notReadyTitle });
+    await expect(list).toHaveTextContent(l.submit.notReadyOnPage);
+    await expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    await expect(within(list).getByRole("link", { name: new RegExp(mixer.title) })).toHaveAttribute("href", `#${mixer.id}`);
+    await expect(within(list).getByRole("link", { name: new RegExp(ware.title) })).toHaveAttribute("href", `#${ware.id}`);
+    await expect(within(list).queryByRole("link", { name: new RegExp(tiles.title) })).toBeNull();
+    await expect(list).toHaveTextContent(l.submit.reasons.pick_up_first);
+    await expect(list).toHaveTextContent(l.submit.reasons.cannot_submit);
+    await expect(list).toHaveTextContent(l.submit.othersNotReady);
   },
 };
 
@@ -223,6 +253,8 @@ export const ReadByAnotherCompany: Story = {
   args: { pkg: withItems(asConsultant, [lights, fans, mixer]) },
   play: async (context) => {
     await expect(within(actionsOf(context)).queryAllByRole("button")).toHaveLength(0);
+    // Nothing of what stops the owner's Submit Package (RP-974).
+    await expect(context.canvasElement.querySelector("[data-package-not-ready]")).toBeNull();
     await expect(context.canvas.queryByRole("button", { name: /Remove|إزالة/ })).toBeNull();
   },
 };
