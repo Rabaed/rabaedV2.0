@@ -1,6 +1,6 @@
 // Seam 1 for an item Sent Back to its raiser (RP-309; ADR 0013, ADR 0014;
 // visibility.md V1, V19, the Links, Linked from, Link search, Documents and
-// Activity Feed channels, and scenarios 58, 59 and 60). Once Submitted, an item
+// Activity Feed channels, and scenarios 58, 59, 60 and RP-625-5). Once Submitted, an item
 // Sent Back to C1 stays with everyone who saw it: K1, the Owner Representative
 // and the Owner go on seeing it, in their Link search and in the Linked from of
 // the items it linked, as it was at the Send Back. What C1 adds, removes or
@@ -291,6 +291,60 @@ describe("C2 searches for an item to link, before and after C1's item is Sent Ba
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}/links`));
     // K1 still finds it.
     expect(await linkSearch(k1Pm, "SBR-60")).toEqual([id]);
+  });
+});
+
+// RP-625-5: only a Submit or Send Back inside one Participant counts as the item reaching the others
+// (app.submit_reaches_others). C1's internal review is a Send and a Return: it reaches neither K1 nor the
+// Owner, and freezes nothing, before the first Submit and after a Send Back alike (V1, V19, ADR 0020).
+describe("C1's internal review reaches no other Company (scenario RP-625-5)", () => {
+  const frozen = async (id: string) =>
+    ((await ok(engineer.get(`/v1/work-items/${id}/documents`), 200)).json() as DocumentList).documents.map((d) => d.frozen);
+
+  it("RP-625-5: K1 and the Owner read nothing through C1's Send for Review, Return and Send again; its Documents freeze only at the Submit", async () => {
+    const id = await draftOf("RP625-5-A");
+    await uploadDocument(engineer, id, pdf("datasheet-a.pdf"));
+    await take(engineer, id, "send_for_review");
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(pm, id, "return");
+    await take(engineer, id, "send_for_review");
+    for (const other of [k1Pm, owner]) {
+      await expectHidden(other.get(`/v1/work-items/${id}`));
+      await expectHidden(other.get(`/v1/work-items/${id}/documents`));
+      await expectHidden(other.get(`/v1/work-items/${id}/history`));
+    }
+    expect(await frozen(id)).toEqual([false]);
+
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(pm, id, "submit");
+    expect(await frozen(id)).toEqual([true]);
+    for (const other of [k1Pm, owner]) expect((await detail(other, id)).stage.category).not.toBe("draft");
+  });
+
+  it("RP-625-5: after K1's Send Back, C1's Send for Review moves nothing K1 or the Owner reads, and its new Document stays C1's until it Submits again", async () => {
+    const id = await submitted("RP625-5-B");
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+    await take(k1Engineer, id, "send_back_to_draft");
+    const atSendBack = async (by: Caller) => {
+      const read = await detail(by, id);
+      return { stage: read.stage.key, stepEnteredAt: read.stepEnteredAt };
+    };
+    const seen = { k1: await atSendBack(k1Pm), owner: await atSendBack(owner) };
+    const added = await uploadDocument(engineer, id, pdf("datasheet-b2.pdf"));
+
+    await take(engineer, id, "send_for_review");
+    expect(await atSendBack(k1Pm)).toEqual(seen.k1);
+    expect(await atSendBack(owner)).toEqual(seen.owner);
+    for (const other of [k1Pm, owner]) {
+      expect(await documentIds(other, id)).not.toContain(added);
+      await expectHidden(other.get(`/v1/work-items/${id}/documents/${added}/download`));
+    }
+    expect(await frozen(id)).toEqual([false]);
+
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(pm, id, "submit");
+    for (const other of [k1Pm, owner]) expect(await documentIds(other, id)).toContain(added);
+    expect(await frozen(id)).toEqual([true]);
   });
 });
 

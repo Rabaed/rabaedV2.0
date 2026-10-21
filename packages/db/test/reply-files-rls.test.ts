@@ -1,5 +1,5 @@
 // Seam 2 for a reply Screen's files (RP-623, SNAG-4; ADR 0024; visibility.md V19 and scenarios
-// RP-623-1 to RP-623-3), as the app role. K1, the Consultant, raises a Snag on C1; C1 adds
+// RP-623-1 to RP-623-3 and RP-1002-1), as the app role. K1, the Consultant, raises a Snag on C1; C1 adds
 // After photos to the Resolve Screen's field while it works the Snag. Until the Resolve takes
 // them only C1 reads them: neither K1 nor an Owner with oversight reads them, by list or by
 // id, and C2, another Contractor of the same Trade covering another Location, never does.
@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { buildSeamTwoTower, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 
@@ -29,6 +29,7 @@ let pickUp: SeamTwoTower["pickUp"];
 let projectId = "";
 let electrical = "";
 let buildingA = "";
+let buildingB = ""; // C2's only Location.
 
 /** `as` adds an After photo to Snag `id`: started and confirmed, as the api does once the file is stored. */
 async function addAfterPhoto(as: string, id: string): Promise<string> {
@@ -74,7 +75,7 @@ beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
-  ({ c1, k1, ow, c2, call, outcome, take, pickUp, projectId, tradeId: electrical, buildingA } = await buildSeamTwoTower(app, migrator, {
+  ({ c1, k1, ow, c2, call, outcome, take, pickUp, projectId, tradeId: electrical, buildingA, buildingB } = await buildSeamTwoTower(app, migrator, {
     projectCode: "RFT",
     checklistTemplate: false,
   }));
@@ -150,6 +151,61 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
       expect(await afterPhotos(outsider, id)).toEqual([photo]);
       expect(await byId(outsider, next)).toEqual([]);
     }
+  });
+});
+
+// The spec's own Testing Decision (RP-619), scenario RP-1002-1: an informed Consultant reads shared events
+// only, never C1's in-progress After photos. C1 raises a Snag on itself (the Snag's Version 3 informs K1).
+describe("an informed Consultant reads none of C1's After photos until its Resolve (RP-1002-1)", () => {
+  it("RP-1002-1: C1 raises its own Snag, informing K1, and adds After photos at Open and In Progress: K1 reads none, by list, by id or shared, until the Resolve; then reads them frozen", async () => {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1Pm,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', 'Exposed cable', app.latest_form_version('SNG'), ${JSON.stringify({ description: "Exposed cable" })}::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    const id = created!.work_item_id;
+    expect(await take(c1Pm, id, "raise")).toBe("applied");
+    await pickUp(c1Pm, id);
+    // K1 is informed: it reads the Snag itself.
+    expect(await call(k1.members.engineer, sql<{ id: string }>`select id from work_item where id = ${id}::uuid`)).toEqual([{ id }]);
+    const atOpen = await addAfterPhoto(c1Pm, id);
+    expect(await take(c1Pm, id, "start_work")).toBe("applied");
+    await pickUp(c1Pm, id);
+    const inProgress = await addAfterPhoto(c1.members.engineer, id);
+
+    const outsiders = [k1.members.engineer, ow.members.representative];
+    for (const outsider of outsiders) {
+      expect(await afterPhotos(outsider, id)).toEqual([]);
+      for (const photo of [atOpen, inProgress]) expect(await byId(outsider, photo)).toEqual([]);
+      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`)).toEqual([]);
+    }
+    expect(await afterPhotos(c1.members.engineer, id)).toEqual([atOpen, inProgress].sort());
+    /** The files `as` reads on a shared event of the Snag (a Transition that took them). */
+    const filesOnEvents = async (as: string) =>
+      (
+        await call<{ id: string }>(
+          as,
+          sql`select d.id from document d join work_item_event e on e.id = d.reply_event_id
+              where d.work_item_id = ${id}::uuid and e.audience = 'shared' order by d.id`,
+        )
+      ).map((r) => r.id);
+    // No file on any history event K1 reads while C1 holds them.
+    expect(await filesOnEvents(k1.members.engineer)).toEqual([]);
+
+    expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Clipped and covered" })).toBe("applied");
+    for (const outsider of outsiders) expect(await afterPhotos(outsider, id)).toEqual([atOpen, inProgress].sort());
+    expect(await filesOnEvents(k1.members.engineer)).toEqual([atOpen, inProgress].sort());
+    const frozen = await call<{ frozen: boolean }>(
+      k1.members.engineer,
+      sql`select frozen_at is not null as frozen from document where work_item_id = ${id}::uuid and field_key = 'after_photos'`,
+    );
+    expect(frozen).toEqual([{ frozen: true }, { frozen: true }]);
+    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
+    // Positive control (RP-995): C2 reads its own Draft.
+    const own = await c2Draft({ projectId, tradeId: electrical, buildingB, c2, call }, { type: "SNG", title: "C2's own" });
+    expect(await call(c2.members.engineer, sql<{ id: string }>`select id from work_item where id = ${own}::uuid`)).toEqual([{ id: own }]);
   });
 });
 
