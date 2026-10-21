@@ -60,6 +60,35 @@ describe("findPhotos", () => {
     const found = await findPhotos(new Set([sha(one)]), [doc("k1", one)], store({}));
     expect(found.keys.size).toBe(0);
   });
+
+  // A photo past the inline limits (assets.ts) printed its name and fingerprint, no image (RP-982).
+  const large = { size: 7 * 1024 * 1024 };
+
+  it("finds a photo past the inline limits by its fingerprint, its stored bytes checked, and gives no image of it", async () => {
+    const found = await findPhotos(new Set([sha(one)]), [doc("big", one, large)], store({ big: one }));
+    expect(found.keys).toEqual(new Map([[sha(one), "big"]]));
+    expect(found.images.size).toBe(0);
+  });
+
+  it("finds one confirmed before its fingerprint was kept, by streaming its bytes", async () => {
+    const found = await findPhotos(new Set([sha(one)]), [doc("old-big", one, { ...large, sha256: null })], store({ "old-big": one }));
+    expect(found.keys).toEqual(new Map([[sha(one), "old-big"]]));
+  });
+
+  it("inlines what it finds in the Documents' order, as the job did, whichever way it found each", async () => {
+    // At close: the old photo (no fingerprint kept, RP-618) and six more fill 38.5 of the 40 MB; the eighth is past it.
+    const body = (n: number) => new Uint8Array(5_500_000).fill(n);
+    const bodies = [0, 1, 2, 3, 4, 5, 6, 7].map(body);
+    const docs = bodies.map((b, i) => doc(`p${i}`, b, i === 0 ? { sha256: null } : {}));
+    const found = await findPhotos(new Set(bodies.map(sha)), docs, store(Object.fromEntries(bodies.map((b, i) => [`p${i}`, b]))));
+    expect(found.keys.size).toBe(8);
+    expect([...found.images.keys()]).toEqual(["p0", "p1", "p2", "p3", "p4", "p5", "p6"]);
+  });
+
+  it("does not find one whose stored bytes changed, or are gone", async () => {
+    expect((await findPhotos(new Set([sha(one)]), [doc("big", one, large)], store({ big: two }))).keys.size).toBe(0);
+    expect((await findPhotos(new Set([sha(one)]), [doc("big", one, large)], store({}))).keys.size).toBe(0);
+  });
 });
 
 describe("findPhotos with the record's Signatures, logos and Stamps", () => {

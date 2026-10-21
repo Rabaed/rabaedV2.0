@@ -197,6 +197,7 @@ const base = {
   comments: [],
   pdf: { disclaimer: DISCLAIMER, show_review_duration: true },
   cancelledByRabaed: null,
+  checklistCopies: [],
 };
 
 const doc = (fileName: string, contentType: string, key: string, fieldKey: string | null, takenAt: string | null = null) => ({
@@ -322,7 +323,67 @@ const B_COMMENTS = [
   { comment: "Submit the fire-stopping detail where trays pass through walls.", reference: "Drawing E-12" },
 ];
 
-export type GoldenCode = "A" | "B" | "C" | "D" | "owner" | "cancelled" | "rabaed-cancelled";
+/** The WIR Form Version 3's sections the record prints: the work, its Classification and the Checklist Template it copied (RP-651). */
+const wirForm = {
+  sections: [
+    {
+      key: "inspection",
+      title: t("Work to inspect", "الأعمال المطلوب معاينتها"),
+      fields: [
+        { key: "description", type: "textarea", label: t("Description", "الوصف") },
+        { key: "requested_for", type: "datetime", label: t("Requested for", "موعد المعاينة") },
+      ],
+    },
+    {
+      key: "checklist",
+      title: t("Checklist", "قائمة التحقق"),
+      fields: [{ key: "checklist_template", type: "checklist_template", required: true, label: t("Checklist Template", "قالب قائمة التحقق") }],
+    },
+  ],
+};
+
+/** The Checklist Template Version the WIR copied (RP-651): two checks raise a Snag when they fail, one never does. */
+export const WIR_CHECKLIST_COPY = {
+  fieldKey: "checklist_template",
+  versionId: "version-slab-pour-2",
+  name: t("Slab pour", "صب البلاطة"),
+  items: [
+    { key: "formwork", text: t("Formwork tight", "القوالب محكمة"), answers: "pass_fail_na", comment: "required_on_negative", photo: "required_on_negative", on_negative: "create_snag" },
+    { key: "cover", text: t("Rebar cover as per drawing", "غطاء حديد التسليح حسب المخطط"), answers: "pass_fail_na", comment: "optional", photo: "optional", on_negative: "create_snag" },
+    { key: "clean", text: t("Clean of debris", "خالية من المخلفات"), answers: "yes_no_na", comment: "off", photo: "off", on_negative: "none" },
+  ],
+};
+
+/** The WIR's code Screen (`inspection_code_c`): the checklist first, then the verification and the Remarks. */
+const inspectionCodeForm = {
+  sections: [
+    {
+      key: "checklist",
+      title: t("Checklist", "قائمة التحقق"),
+      fields: [{ key: "inspection_checklist", type: "copied_checklist", copyOf: "checklist_template", required: true, label: t("Checklist", "قائمة التحقق") }],
+    },
+    {
+      key: "final_verification",
+      title: t("Final verification", "التحقق النهائي"),
+      fields: [
+        { key: "sample_checked", type: "yes_no", label: t("Sample checked", "تم فحص العينة") },
+        { key: "remarks", type: "textarea", label: t("Remarks", "الملاحظات") },
+      ],
+    },
+  ],
+};
+
+/** The checklist as the Manager's Code C took it: formwork and cover Fail (cover's Snag unticked), clean No. */
+export const WIR_CHECKLIST_ANSWERS = {
+  formwork: { answer: "fail", comment: "Gap at the joint between panels 4 and 5" },
+  cover: { answer: "fail", comment: "Cover 15 mm at the slab edge", snag: false },
+  clean: { answer: "no" },
+};
+
+/** A reply Document of the checklist (RP-86): a check item's photo, which the code froze. */
+const checkPhoto = (fileName: string, key: string, itemKey: string, takenAt: string) => ({ ...doc(fileName, "image/jpeg", key, "inspection_checklist", takenAt), itemKey });
+
+export type GoldenCode = "A" | "B" | "C" | "D" | "owner" | "cancelled" | "rabaed-cancelled" | "wir";
 
 /**
  * The facts of a closed MAR (Code A, Code B with Comments, Cancelled), DAR (Code C; Code A
@@ -440,6 +501,45 @@ export function goldenFacts(golden: GoldenCode, language: RecordData["language"]
         // The Consultant PM's Recommendation to the Owner: internal to the two, so no answers on the record.
         step(3, ["Recommend A", "التوصية بالرمز A"], huda, "submit", "recommend_code"),
         code(4, ["Confirm", "تأكيد"], nora, "confirm_code", "Confirmed as recommended by the Consultant."),
+      ],
+    };
+  }
+  if (golden === "wir") {
+    const remarks = "Seal the formwork joint and raise the cover at the slab edge, then request the inspection again.";
+    return {
+      ...common,
+      type: { code: "WIR", name: t("Work Inspection Request", "طلب معاينة أعمال") },
+      documentNumber: "RGT-WIR-EL-0021",
+      revisionNo: 0,
+      subject: "Level 2 slab pour, Building A",
+      outcome: "C",
+      closedAt: "2026-10-15T10:00:00.000Z",
+      submittedAt: "2026-10-12T07:00:00.000Z",
+      pdf: { disclaimer: DISCLAIMER, show_review_duration: false },
+      form: {
+        sections: wirForm.sections,
+        answers: { description: "Slab, Level 2, bays 1 to 6", requested_for: "2026-10-14T05:30:00.000Z", checklist_template: WIR_CHECKLIST_COPY.versionId },
+        optionLists: [],
+        options: [],
+        suppliers: [],
+        companyNames: {},
+      },
+      checklistCopies: [WIR_CHECKLIST_COPY],
+      documents: [
+        checkPhoto("formwork.jpg", "photo-1", "formwork", "2026-10-14T06:10:00.000Z"),
+        checkPhoto("formwork-annotated.jpg", "photo-2", "formwork", "2026-10-14T06:10:00.000Z"),
+        checkPhoto("cover.jpg", "photo-3", "cover", "2026-10-14T06:25:00.000Z"),
+      ],
+      transitions: [
+        step(1, ["Send for Review", "إرسال للمراجعة"], omar, "send", null),
+        submit(2),
+        // A move inside the Consultant: its event is internal, so the facts give no answers (the Recommended Code is never one).
+        step(3, ["Send to Manager", "إرسال للمدير"], faisal, "send", null),
+        step(4, ["Revise & Resubmit · C", "مراجعة وإعادة تقديم · C"], huda, "close", "issue_code", {
+          remarks,
+          answers: { inspection_checklist: WIR_CHECKLIST_ANSWERS, sample_checked: true, remarks },
+          actionForm: inspectionCodeForm,
+        }),
       ],
     };
   }
