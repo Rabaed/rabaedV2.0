@@ -1,4 +1,15 @@
-import { formatNumber, writeXlsx, xlsxContentType, type Locale, type RegisterImport } from "@rabaed/domain";
+import {
+  formatNumber,
+  registerSampleSheet,
+  registerSampleWords,
+  registerTemplateSheets,
+  registerTemplateWords,
+  writeXlsx,
+  xlsxContentType,
+  type BilingualText,
+  type Locale,
+  type RegisterImport,
+} from "@rabaed/domain";
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
 import { reasonLines } from "./register-import-rows.tsx";
 
@@ -6,7 +17,8 @@ import { reasonLines } from "./register-import-rows.tsx";
 // register's own columns plus a "Reasons" column, to fix and import again; and the log, every
 // bad row with its reasons. Built in the browser from the import as read, in the reader's
 // language, with @rabaed/domain writeXlsx: no time anywhere, neither in the file's name nor in
-// the workbook (owner, 2026-10-19). `t` is the `registerImport` messages.
+// the workbook (owner, 2026-10-19). And the Upload step's blank template and sample register
+// (RP-954), with no Project data and no time either. `t` is the `registerImport` messages.
 
 /** The register's name without its extension: what each download is named after. */
 const registerOf = (fileName: string) => fileName.replace(/\.(xlsx|csv)$/i, "");
@@ -39,6 +51,22 @@ export function logDownload(imported: RegisterImport, t: Translate, locale: Loca
       rightToLeft: locale === "ar",
     }),
   };
+}
+
+/** The blank register template (RP-954): Rabaed's fields as its header row, its columns set to text, and its help. No Project data. */
+export function templateDownload(t: Translate, locale: Locale): RegisterDownload {
+  return { fileName: t("template.file"), bytes: writeXlsx(...registerTemplateSheets(registerTemplateWords(t), locale === "ar")) };
+}
+
+/**
+ * The sample register (RP-954), to try the wizard with: the made-up Subjects, each with one of the
+ * Types the importer may raise (by code) and one of the Trades offered them (by name, in the
+ * reader's language), so every row matches; both non-empty. Read like any register: nothing is
+ * created until confirm.
+ */
+export function sampleRegister(t: Translate, locale: Locale, types: readonly { code: string }[], trades: readonly { name: BilingualText }[]): RegisterDownload {
+  const sheet = registerSampleSheet(registerSampleWords(t), types.map((ty) => ty.code), trades.map((tr) => tr.name[locale]), locale === "ar");
+  return { fileName: t("sample.file"), bytes: writeXlsx(sheet) };
 }
 
 /** Hands `bytes` to the browser to save as `fileName`. */
