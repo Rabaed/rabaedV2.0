@@ -326,8 +326,8 @@ export const PackageChip: Story = {
   args: { board: boardWithPackage, packageHref: (id: string) => `#package-${id}` },
   play: async (context) => {
     const locale = storyLocale(context);
-    const name = `${bathrooms.number} ${bathrooms.companyName[locale]} ${bathrooms.name[locale]}`;
-    const chip = within(cardOf(context, cards.fire)).getByRole("link", { name: new RegExp(name) });
+    const name = workItemBoardLabels[locale].openPackage(bathrooms.number, bathrooms.companyName[locale], bathrooms.name[locale]);
+    const chip = within(cardOf(context, cards.fire)).getByRole("link", { name });
     await expect(chip).toHaveAttribute("href", `#package-${bathrooms.id}`);
     await expect(chip).toHaveAccessibleName(new RegExp(bathrooms.companyName[locale]));
     await expect(within(chip).getByText(bathrooms.companyName[locale])).toBeVisible();
