@@ -8,9 +8,13 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 // the rule `pnpm queue` applies (PR #225 and #229 merged unreviewed). Both apply `reviewGate`.
 //
 // Run by .github/workflows/reviewed-required.yml, from the default branch's copy (a PR cannot edit
-// the script that checks it), on pull_request (opened, reopened, synchronize, labeled, unlabeled)
-// and on merge_group, as one job name in both so the merge queue runs it too. In the queue the PR
-// number comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the labels are read live.
+// the script that checks it), on pull_request (opened, reopened, synchronize, labeled, unlabeled,
+// ready_for_review, converted_to_draft) and on merge_group, as one job name in both so the merge
+// queue runs it too. A draft PR passes with a note and is checked when marked ready (RP-1018: a
+// check red until the final review woke Auto-fix about 15 times on one draft; a draft cannot enter
+// the merge queue). In
+// the queue the PR number comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the
+// labels are read live.
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH.
 
@@ -55,7 +59,7 @@ export interface RequiredSeam {
   sleep(ms: number): Promise<void>;
 }
 
-export type RequiredEvent = { kind: "merge_group"; headRef: string } | { kind: "pull_request"; pr: number; headSha: string; sameRepo: boolean };
+export type RequiredEvent = { kind: "merge_group"; headRef: string } | { kind: "pull_request"; pr: number; headSha: string; sameRepo: boolean; draft: boolean };
 
 export interface RequiredResult {
   ok: boolean;
@@ -69,6 +73,8 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
     if (queued === undefined) return { ok: false, summary: `The merge queue ref ${event.headRef} names no PR (expected gh-readonly-queue/<branch>/pr-<n>-<sha>).` };
     pr = queued;
   } else pr = event.pr;
+  // A draft passes (RP-1018, see the header); ready_for_review runs this check again.
+  if (event.kind === "pull_request" && event.draft) return { ok: true, summary: `PR #${pr} is a draft: checked when marked ready.` };
   // On a PR, the reviewed-label run for this head may still be about to remove the label. It removes
   // it with GITHUB_TOKEN, which starts no `unlabeled` run, so this run waits and reads what it left.
   // A fork's PR gets no such run. In the queue the head cannot change, so there is nothing to wait for.
@@ -106,13 +112,13 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
 /** The event the workflow ran for, from its payload (GITHUB_EVENT_PATH). */
 export function requiredEvent(eventName: string, payload: unknown, repository: string): RequiredEvent {
   const event = payload as {
-    pull_request?: { number: number; head: { sha: string; repo: { full_name: string } | null } };
+    pull_request?: { number: number; draft?: boolean; head: { sha: string; repo: { full_name: string } | null } };
     merge_group?: { head_ref: string };
   };
   if (eventName === "merge_group" && event.merge_group) return { kind: "merge_group", headRef: event.merge_group.head_ref };
   if (eventName === "pull_request" && event.pull_request) {
-    const { number, head } = event.pull_request;
-    return { kind: "pull_request", pr: number, headSha: head.sha, sameRepo: head.repo?.full_name === repository };
+    const { number, draft, head } = event.pull_request;
+    return { kind: "pull_request", pr: number, headSha: head.sha, sameRepo: head.repo?.full_name === repository, draft: draft === true };
   }
   throw new Error(`reviewed-required runs on pull_request and merge_group, not ${eventName}`);
 }

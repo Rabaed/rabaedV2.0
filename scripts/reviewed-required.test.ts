@@ -15,9 +15,15 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
     jobs: Record<string, { name?: string; if?: string; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
   };
   const jobs = Object.values(wf.jobs);
+  const types = wf.on.pull_request?.types ?? [];
 
   it("runs on every PR event that can change the answer, and on merge_group", () => {
-    expect(wf.on).toEqual({ pull_request: { types: ["opened", "reopened", "synchronize", "labeled", "unlabeled"] }, merge_group: null });
+    expect(wf.on).toEqual({ pull_request: { types: expect.arrayContaining(["opened", "reopened", "synchronize", "labeled", "unlabeled"]) }, merge_group: null });
+  });
+
+  // The draft events land in the workflow's own PR after this script (rule 3, RP-1018), so this waits for them.
+  it.skipIf(!types.includes("ready_for_review"))("re-runs when a draft is marked ready, and when a PR goes back to draft (RP-1018)", () => {
+    expect(types).toEqual(["opened", "reopened", "synchronize", "labeled", "unlabeled", "ready_for_review", "converted_to_draft"]);
   });
 
   it("is one job, named as the ruleset requires it, with no condition that could skip it", () => {
@@ -35,10 +41,11 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
 });
 
 describe("requiredEvent", () => {
-  it("reads a pull_request event: number, head, and whether the head is this repository's", () => {
-    const payload = { pull_request: { number: 7, head: { sha: "h", repo: { full_name: "Rabaed/rabaedV2.0" } } } };
-    expect(requiredEvent("pull_request", payload, "Rabaed/rabaedV2.0")).toEqual({ kind: "pull_request", pr: 7, headSha: "h", sameRepo: true });
+  it("reads a pull_request event: number, head, whether the head is this repository's, and whether it is a draft", () => {
+    const payload = { pull_request: { number: 7, draft: false, head: { sha: "h", repo: { full_name: "Rabaed/rabaedV2.0" } } } };
+    expect(requiredEvent("pull_request", payload, "Rabaed/rabaedV2.0")).toEqual({ kind: "pull_request", pr: 7, headSha: "h", sameRepo: true, draft: false });
     expect(requiredEvent("pull_request", payload, "Other/repo")).toMatchObject({ sameRepo: false });
+    expect(requiredEvent("pull_request", { pull_request: { ...payload.pull_request, draft: true } }, "Rabaed/rabaedV2.0")).toMatchObject({ draft: true });
   });
 
   it("reads a merge_group event's head ref", () => {
@@ -152,7 +159,22 @@ describe("requireReviewed on merge_group", () => {
 });
 
 describe("requireReviewed on pull_request", () => {
-  const event = { kind: "pull_request" as const, pr: 7, headSha: "head1", sameRepo: true };
+  const event = { kind: "pull_request" as const, pr: 7, headSha: "head1", sameRepo: true, draft: false };
+
+  it("passes a draft with a note, without waiting or reading its labels: it is checked when marked ready (RP-1018)", async () => {
+    const { seam, slept } = fakeSeam({
+      pull: async () => expect.unreachable("a draft's labels are not read"),
+      labelRuns: async () => expect.unreachable("a draft does not wait for the reviewed-label run"),
+    });
+    const result = await requireReviewed({ ...event, draft: true }, seam);
+    expect(result).toEqual({ ok: true, summary: "PR #7 is a draft: checked when marked ready." });
+    expect(slept).toEqual([]);
+  });
+
+  it("checks a ready PR as before: no label fails (the run for ready_for_review)", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: [], changedFiles: 1 }) });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
 
   it("waits for the head's reviewed-label run, then reads the labels it left: a push that dropped the label fails", async () => {
     // The run removes the label with GITHUB_TOKEN, which starts no `unlabeled` run, so this run must see the result itself.
