@@ -283,9 +283,14 @@ describe("RP-577-1: who sees the Snags raised at the code", () => {
     await expectHidden(yousef.caller.get(`/v1/work-items/${wir}`));
   });
 
-  it("C1, K1 and the Owner Representative see it, its photo, and count it", async () => {
+  it("C1, K1 and the Owner Representative see it, its photo and its source, and count it", async () => {
+    const number = (await detail(mohammed.caller, wir)).documentNumber!;
     for (const reader of [hafiz, ali, ahmed, mohammed, faisal]) {
-      expect((await snagList(reader.caller)).map((i) => i.id), reader.id).toContain(snag);
+      const list = await snagList(reader.caller);
+      expect(list.map((i) => i.id), reader.id).toContain(snag);
+      // Its source too, not only to C1 holding it (RP-1031): in the row and through the filter.
+      expect(list.find((i) => i.id === snag)!.raisedFrom, reader.id).toMatchObject({ documentNumber: number, workItemId: wir });
+      expect((await raisedFrom(reader.caller, wir, "SNG")).map((i) => i.id), reader.id).toEqual([snag]);
       expect((await documentsOf(reader.caller, snag)).documents.map((d) => d.fileName), reader.id).toEqual(["formwork.jpg"]);
       expect(await snagCount(reader.caller, wir), reader.id).toEqual({ open: 1, closed: 0 });
     }
