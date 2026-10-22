@@ -32,15 +32,20 @@
 // "Merged" is the finished rule lanes:prune, worktrees:clean and worktrees:prune share (worktrees.ts isFinished,
 // RP-585): a branch never committed to whose tip is in origin/main counts once it is clean, carries no live lock and
 // no running process holds its folder, and the takeover line says so.
+// A lane another worktree's .env names is held, even with its containers stopped or gone (RP-1007), and the refusal
+// names that worktree; --free skips it. --force takes it over only from a worktree that is merged into origin/main,
+// clean and held by no Claude session, and names it (its .env is left as it is).
+// One lane:env runs at a time per clone (a lock in the common git folder, lanes-lock.ts), from reading the
+// lanes until .env is written, so two runs at once never choose the same lane.
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { claimWarnings, currentBranch, realClaimGit } from "./lane-claims.ts";
 import {
   chooseTakeover,
   clashesAfterRemoval,
   composeProjectOfEnv,
+  envClaims,
   firstFreeLane,
   holderAdvice,
   holdsLaneProject,
@@ -52,10 +57,12 @@ import {
   laneProjects,
   listContainers,
   parseLaneEnvArgs,
+  readWorktreeEnv,
   releaseContainers,
   takenLanePorts,
   type TakeoverWorktree,
 } from "./lanes.ts";
+import { acquireLaneLock, laneLockFile, systemLockDeps } from "./lanes-lock.ts";
 import { samePath } from "./paths.ts";
 import { foreignSessionLock, listeningPid, ownServerHint, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
 import { currentRoot, gitDirty, gitError, judgeWorktree, listWorktrees, NOT_FINISHED, refExists, systemLiveness, type Verdict, type Worktree } from "./worktrees.ts";
@@ -92,40 +99,64 @@ if (existsSync(".env") && !force) {
 
 for (const warning of claimWarnings(realClaimGit, process.cwd(), currentBranch())) console.warn(`Warning: ${warning}`);
 
-const containers = listContainers();
-if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
-const check = { containers: containers ?? [], takenPorts: await takenLanePorts(), cwd: process.cwd(), ownDatabase: db !== undefined };
-const clashesOf = (lane: number) => laneClashes(lane, check);
+// RP-1007: one lane:env at a time per clone, from reading the lanes until .env is written, so a second
+// run sees this run's .env (two --free runs two seconds apart both chose lane 33 on 2026-10-21).
+let lockFile: string | undefined;
+try {
+  lockFile = laneLockFile();
+} catch {
+  console.warn("Not a git checkout: another lane:env running at the same time would not be noticed.");
+}
+if (lockFile !== undefined) {
+  const lock = acquireLaneLock(lockFile, systemLockDeps());
+  if ("error" in lock) {
+    console.error(lock.error);
+    process.exit(1);
+  }
+  process.on("exit", lock.release);
+}
 
 const live = systemLiveness();
+let allWorktrees: Worktree[] = [];
+try {
+  allWorktrees = listWorktrees();
+} catch {
+  // Not a git checkout: no other worktree's .env to read.
+}
+const mainRoot = allWorktrees[0]?.path ?? ".";
+const hasOriginMain = allWorktrees.length > 0 && refExists("origin/main", mainRoot);
 
 /**
  * Whether a worktree is finished against origin/main (worktrees.ts isFinished, the rule lanes:prune,
  * worktrees:clean and worktrees:prune share; RP-585), on a branch or a detached HEAD (RP-601). Never the main checkout or a worktree on main.
  */
-const verdictOf = (w: Worktree, mainRoot: string): Verdict =>
+const verdictOf = (w: Worktree): Verdict =>
   w.branch === "main" || samePath(w.path, mainRoot) ? NOT_FINISHED : judgeWorktree(w, "origin/main", mainRoot, live);
+
+const containers = listContainers();
+if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
+const check = {
+  containers: containers ?? [],
+  takenPorts: await takenLanePorts(),
+  cwd: process.cwd(),
+  ownDatabase: db !== undefined,
+  // RP-1007: another worktree whose .env names a lane holds it, even with its containers stopped; only --force takes it over.
+  claims: envClaims(allWorktrees, { cwd: process.cwd(), readEnv: readWorktreeEnv }),
+};
+const clashesOf = (lane: number) => laneClashes(lane, check);
 
 /** For each worktree holding lane n: whether its branch is merged into origin/main, and how to free the lane. */
 function holderStatus(lane: number): string[] {
   const holders = laneHolders(lane, check);
-  if (holders.length === 0) return [];
-  let worktrees: Worktree[];
-  try {
-    worktrees = listWorktrees();
-  } catch {
-    return [];
-  }
-  const mainRoot = worktrees[0]?.path ?? ".";
-  const hasOriginMain = refExists("origin/main", mainRoot);
+  if (holders.length === 0 || allWorktrees.length === 0) return [];
   // Only the holders and the worktrees whose .env names the lane: lanes:prune --merged keeps the lane for the latter.
-  const relevant = worktrees
-    .map((w) => ({ w, project: existsSync(join(w.path, ".env")) ? composeProjectOfEnv(readFileSync(join(w.path, ".env"), "utf8")) : undefined }))
+  const relevant = allWorktrees
+    .map((w) => ({ w, project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") }))
     .filter(({ w, project }) => (project !== undefined && laneProjects(lane).includes(project)) || holders.some((dir) => samePath(w.path, dir)))
     .map(({ w, project }) => ({
       path: w.path,
       branch: w.branch,
-      merged: hasOriginMain && verdictOf(w, mainRoot).finished,
+      merged: hasOriginMain && verdictOf(w).finished,
       project,
     }));
   return holderAdvice(lane, holders, { worktrees: relevant, hasOriginMain, cwd: check.cwd, containers: check.containers });
@@ -154,28 +185,18 @@ function ownServerHints(lane: number): string[] {
  * recreates them in the same project with the database. Returns whether the lane is free now.
  */
 function takeOverLane(lane: number): boolean {
-  let worktrees: Worktree[];
-  try {
-    worktrees = listWorktrees();
-  } catch {
-    return false;
-  }
-  const mainRoot = worktrees[0]?.path ?? ".";
-  const hasOriginMain = refExists("origin/main", mainRoot);
-  const readEnv = (dir: string) => {
-    const file = join(dir, ".env");
-    return existsSync(file) ? readFileSync(file, "utf8") : "";
-  };
-  const facts = worktrees.map((w): TakeoverWorktree => {
+  if (allWorktrees.length === 0) return false;
+  const facts = allWorktrees.map((w): TakeoverWorktree => {
     const exists = existsSync(w.path);
-    const project = exists ? composeProjectOfEnv(readEnv(w.path)) : undefined;
+    const project = exists ? composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") : undefined;
     const holds = holdsLaneProject(lane, check.containers, w.path);
+    const namesLane = project !== undefined && laneProjects(lane).includes(project) && !samePath(w.path, check.cwd);
     // chooseTakeover reads merged only for holders and for worktrees whose .env names the lane.
-    const { finished, neverCommitted } = hasOriginMain && (holds || project === laneProject(lane)) ? verdictOf(w, mainRoot) : NOT_FINISHED;
+    const { finished, neverCommitted } = hasOriginMain && (holds || namesLane) ? verdictOf(w) : NOT_FINISHED;
     let dirty = false;
     let statusError: string | undefined;
-    // Every worktree with a container of the lane's project, whether or not laneHolders counts it.
-    if (exists && holds) {
+    // Every worktree with a container of the lane's project, whether or not laneHolders counts it, and every one whose .env names it (RP-1007).
+    if (exists && (holds || namesLane)) {
       try {
         dirty = gitDirty(w.path);
       } catch (error) {
@@ -201,8 +222,8 @@ function takeOverLane(lane: number): boolean {
     for (const line of choice.refused) console.error(`  ${line}`);
     return false;
   }
-  if (choice.takeOver.length === 0) return false;
-  if (clashesAfterRemoval(lane, check, choice.takeOver).length > 0) return false;
+  if (choice.takeOver.length === 0 && choice.released.length === 0) return false;
+  if (clashesAfterRemoval(lane, check, choice.takeOver, choice.released).length > 0) return false;
   try {
     releaseContainers(choice.takeOver);
   } catch (error) {
@@ -210,6 +231,11 @@ function takeOverLane(lane: number): boolean {
     process.exit(1);
   }
   const taken = [...new Set(choice.takeOver.map((c) => c.project))];
+  if (taken.length === 0) {
+    // RP-1007: only finished worktrees' .env files named the lane; nothing ran, so nothing is removed.
+    console.log(`Took lane ${lane} over from ${choice.from.join(", ")}: no containers to remove.`);
+    return true;
+  }
   console.log(`Took lane ${lane} over from ${choice.from.join(", ")}: removed its containers, kept the volumes (database) of ${taken.join(", ")}.`);
   // The twin lane's project (legacy m for m0, or m0 for m): its database stays in its volumes, and lane n's project starts a new one (RP-605).
   if (taken.some((p) => p !== laneProject(lane))) console.log(`${laneProject(lane)} starts with a database of its own; \`pnpm lanes:prune\` removes the volumes left behind.`);
