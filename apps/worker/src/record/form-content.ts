@@ -1,22 +1,29 @@
-import type { DocumentFact, RecordFacts } from "@rabaed/db";
+import type { ChecklistCopyFact, DocumentFact, RecordFacts, TransitionFact } from "@rabaed/db";
 import {
   buildOptionLists,
   checklistAnswerLabels,
   checklistSummary,
   checklistSummaryText,
+  checklistTemplateItem,
+  replyChecklistOf,
+  snagTickLabels,
   formatFormValue,
   formatTableCell,
   formSchema,
   formVisibility,
   isAnswerField,
+  snagTick,
   tableTotals,
+  type ChecklistAnswers,
   type ChecklistField,
+  type ChecklistTemplateChoice,
   type FormField,
   type Locale,
   type OptionList,
   type SupplierChoice,
   type TableField,
 } from "@rabaed/domain";
+import { z } from "zod";
 import { pick, same, type RecordLanguage, type RecordText } from "./record-text.ts";
 
 // The Form's content as the record prints it (form-engine.md §6, element 8): its
@@ -24,6 +31,11 @@ import { pick, same, type RecordLanguage, type RecordText } from "./record-text.
 // tables, checklists with their summary, photos with when they were taken. Built
 // from the answers as every reader of the closed item reads them (the facts), so
 // nothing here is one Company's alone.
+//
+// A reply Screen's checklist (RP-86) is printed as one of the Form's checklists
+// (RP-982): the answers a Transition on the path took into its shared event (the
+// facts give no other), on the item's copy of the Checklist Template, right after
+// the Form field that copied it, with its photos the code froze.
 
 export interface RecordPhoto {
   readonly fileName: string;
@@ -53,6 +65,8 @@ export type RecordBlock =
         readonly text: RecordText;
         readonly answer: RecordText;
         readonly comment: string | null;
+        /** Whether the failed item raised a Snag with the code (RP-577); null where it offers none. */
+        readonly snag: RecordText | null;
         readonly photos: readonly RecordPhoto[];
       }[];
     }
@@ -87,10 +101,23 @@ export function isListedDocument(document: DocumentFact, attachmentFieldKeys: Re
   return document.itemKey === null && (document.fieldKey === null || attachmentFieldKeys.has(document.fieldKey));
 }
 
-/** The keys of the Form's `attachments` fields: their files are listed with the shared Documents. */
-export function attachmentFieldKeysOf(facts: Pick<RecordFacts, "form">): Set<string> {
+/** The keys of the Form's fields of `type`. */
+function fieldKeysOf(facts: Pick<RecordFacts, "form">, type: FormField["type"]): Set<string> {
   const schema = formSchema.parse({ sections: facts.form.sections });
-  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === "attachments").map((f) => f.key)));
+  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === type).map((f) => f.key)));
+}
+
+/** The keys of the Form's `attachments` fields: their files are listed with the shared Documents. */
+export const attachmentFieldKeysOf = (facts: Pick<RecordFacts, "form">): Set<string> => fieldKeysOf(facts, "attachments");
+
+/**
+ * The Documents the record prints as photos, in the order they were added: a check item's (a Form
+ * checklist's or a reply checklist's, RP-982) and a Form `photos` field's. Never a reply Screen's
+ * own file field's, which no block prints.
+ */
+export function printedPhotosOf(facts: Pick<RecordFacts, "form" | "documents">): DocumentFact[] {
+  const photoFields = fieldKeysOf(facts, "photos");
+  return facts.documents.filter((d) => d.itemKey !== null || (d.fieldKey !== null && photoFields.has(d.fieldKey)));
 }
 
 /** A link question's items as the database gives them (`document_number`) in the shape the display takes (`documentNumber`). */
@@ -109,8 +136,78 @@ function camelLinks(answers: Readonly<Record<string, unknown>>): Record<string, 
   );
 }
 
-/** The Form's sections as the record prints them, and the blocks of its Classification section. */
-export function formContent(facts: Pick<RecordFacts, "form" | "documents">, language: RecordLanguage): { sections: RecordSection[]; classification: RecordBlock[]; attachmentFieldKeys: Set<string> } {
+/** A field's label in the record's languages; a field with none has an empty one. */
+const labelOf = (field: FormField, language: RecordLanguage): RecordText => ("label" in field ? pick(field.label, language) : same("", language));
+
+/** A checklist's block: its summary, then each item's text, answer, comment, Snag line and photos (field `checklist.key`'s Documents). */
+function checklistBlock(checklist: ChecklistField, value: unknown, documents: readonly DocumentFact[], language: RecordLanguage): RecordBlock {
+  const entry = (isChecklist(value) ? value : {}) as ChecklistAnswers;
+  return {
+    kind: "checklist",
+    label: labelOf(checklist, language),
+    summary: perLanguage(language, (l) => checklistSummaryText(checklistSummary(checklist, value), l)),
+    items: checklist.items.map((item) => {
+      const tick = snagTick(item, entry[item.key]);
+      return {
+        text: pick(item.text, language),
+        answer: perLanguage(language, (l) => {
+          const answer = entry[item.key]?.answer;
+          return answer ? ((checklistAnswerLabels[l] as Record<string, string>)[answer] ?? answer) : none;
+        }),
+        comment: entry[item.key]?.comment ?? null,
+        snag: tick === null ? null : perLanguage(language, (l) => snagTickLabels[l][tick]),
+        photos: photosOf(documents, checklist.key, item.key),
+      };
+    }),
+  };
+}
+
+/** A reply checklist a Transition on the path took (RP-86): its block, the Form field whose copy it answers, and its Screen section's title. */
+interface ReplyChecklist {
+  readonly copyOf: string;
+  readonly title: RecordText;
+  readonly block: RecordBlock;
+}
+
+/**
+ * The reply checklists the Transitions of `path` took into their shared events, each on the
+ * item's copy its field answers. A Transition whose event isn't shared has no answers in the
+ * facts, so the Consultant's own work (a Recommended Code, an Internal Note, answers before the
+ * code) is never here; neither is a checklist whose copy the item doesn't hold.
+ */
+function replyChecklists(
+  path: readonly TransitionFact[],
+  copies: readonly ChecklistCopyFact[],
+  documents: readonly DocumentFact[],
+  language: RecordLanguage,
+): ReplyChecklist[] {
+  return path.flatMap((t) => {
+    const answers = t.answers;
+    const screen = answers ? formSchema.safeParse(t.actionForm) : null;
+    if (!answers || !screen?.success) return [];
+    return screen.data.sections.flatMap((section) =>
+      section.fields.flatMap((field) => {
+        if (field.type !== "copied_checklist" || !isChecklist(answers[field.key])) return [];
+        const items = z.array(checklistTemplateItem).safeParse(copies.find((c) => c.fieldKey === field.copyOf)?.items);
+        if (!items.success) return [];
+        // As the api checks it, on the copy's items.
+        const checklist = replyChecklistOf(field, { items: items.data });
+        return [{ copyOf: field.copyOf, title: pick(section.title, language), block: checklistBlock(checklist, answers[field.key], documents, language) }];
+      }),
+    );
+  });
+}
+
+/**
+ * The Form's sections as the record prints them, and the blocks of its Classification section.
+ * With the Transitions of the path (recordPath), the reply checklists they took print too, each
+ * after the Form field whose copy it answers, or, when the Form shows none, in a section of its own.
+ */
+export function formContent(
+  facts: Pick<RecordFacts, "form" | "documents"> & Partial<Pick<RecordFacts, "checklistCopies">>,
+  language: RecordLanguage,
+  path: readonly TransitionFact[] = [],
+): { sections: RecordSection[]; classification: RecordBlock[]; attachmentFieldKeys: Set<string> } {
   const schema = formSchema.parse({ sections: facts.form.sections });
   const shown = formVisibility(schema, camelLinks(facts.form.answers));
   const answers = shown.answers;
@@ -119,9 +216,11 @@ export function formContent(facts: Pick<RecordFacts, "form" | "documents">, lang
     facts.form.options.map((o) => ({ id: o.id, option_list_id: o.optionListId, parent_id: o.parentId, value: o.value, label: o.label, retired: o.retired })),
   );
   const suppliers: SupplierChoice[] = facts.form.suppliers.map((s) => ({ id: s.id, tradeId: "", status: "approved", name: s.name }));
+  const copies = facts.checklistCopies ?? [];
+  // A `checklist_template` answer is the Version copied: the copy names it.
+  const templates: ChecklistTemplateChoice[] = copies.map((c) => ({ id: c.versionId, tradeId: "", offered: false, name: c.name }));
   const attachmentFieldKeys = attachmentFieldKeysOf(facts);
-
-  const labelOf = (field: FormField): RecordText => ("label" in field ? pick(field.label, language) : same("", language));
+  const replies = replyChecklists(path, copies, facts.documents, language);
 
   function blockOf(field: FormField): RecordBlock | null {
     if (!isAnswerField(field) || !shown.fields.has(field.key)) return null;
@@ -137,26 +236,10 @@ export function formContent(facts: Pick<RecordFacts, "form" | "documents">, lang
         return null; // listed with the Documents
       case "photos": {
         const photos = photosOf(facts.documents, field.key, null);
-        return photos.length === 0 ? null : { kind: "photos", label: labelOf(field), photos };
+        return photos.length === 0 ? null : { kind: "photos", label: labelOf(field, language), photos };
       }
-      case "checklist": {
-        const entry = (isChecklist(value) ? value : {}) as Record<string, { answer?: string; comment?: string }>;
-        const checklist = field as ChecklistField;
-        return {
-          kind: "checklist",
-          label: labelOf(field),
-          summary: perLanguage(language, (l) => checklistSummaryText(checklistSummary(checklist, value), l)),
-          items: checklist.items.map((item) => ({
-            text: pick(item.text, language),
-            answer: perLanguage(language, (l) => {
-              const answer = entry[item.key]?.answer;
-              return answer ? ((checklistAnswerLabels[l] as Record<string, string>)[answer] ?? answer) : none;
-            }),
-            comment: entry[item.key]?.comment ?? null,
-            photos: photosOf(facts.documents, field.key, item.key),
-          })),
-        };
-      }
+      case "checklist":
+        return checklistBlock(field as ChecklistField, value, facts.documents, language);
       case "table": {
         const table = field as TableField;
         const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
@@ -164,7 +247,7 @@ export function formContent(facts: Pick<RecordFacts, "form" | "documents">, lang
         const totals = tableTotals(table, rows);
         return {
           kind: "table",
-          label: labelOf(field),
+          label: labelOf(field, language),
           columns: table.columns.map((c) => pick(c.label, language)),
           rows: rows.map((row) => table.columns.map((c) => perLanguage(language, (l) => formatTableCell(c, row[c.key], l, lists) || none))),
           totals: table.columns.some((c) => totals[c.key] !== undefined)
@@ -173,15 +256,15 @@ export function formContent(facts: Pick<RecordFacts, "form" | "documents">, lang
         };
       }
       default: {
-        if (isBlank(value)) return { kind: "field", label: labelOf(field), value: same(none, language) };
+        if (isBlank(value)) return { kind: "field", label: labelOf(field, language), value: same(none, language) };
         const named =
           field.type === "participant" && typeof value === "string" && facts.form.companyNames[value]
             ? { companyName: facts.form.companyNames[value], memberName: null }
             : undefined;
         return {
           kind: "field",
-          label: labelOf(field),
-          value: perLanguage(language, (l) => formatFormValue(field, value, l, named, lists, {}, suppliers) || none),
+          label: labelOf(field, language),
+          value: perLanguage(language, (l) => formatFormValue(field, value, l, named, lists, {}, suppliers, templates) || none),
         };
       }
     }
@@ -189,12 +272,21 @@ export function formContent(facts: Pick<RecordFacts, "form" | "documents">, lang
 
   const classification: RecordBlock[] = [];
   const sections: RecordSection[] = [];
+  const placed = new Set<ReplyChecklist>();
   for (const section of schema.sections) {
     if (!shown.sections.has(section.key)) continue;
-    const blocks = section.fields.flatMap((f) => blockOf(f) ?? []);
+    const blocks = section.fields.flatMap((f) => {
+      const block = blockOf(f);
+      if (!block) return [];
+      // The reply checklists answering this field's copy follow it.
+      const answering = f.type === "checklist_template" ? replies.filter((r) => r.copyOf === f.key) : [];
+      answering.forEach((r) => placed.add(r));
+      return [block, ...answering.map((r) => r.block)];
+    });
     if (section.key === CLASSIFICATION_SECTION) classification.push(...blocks);
     else if (blocks.length > 0) sections.push({ title: pick(section.title, language), blocks });
   }
+  for (const r of replies) if (!placed.has(r)) sections.push({ title: r.title, blocks: [r.block] });
   return { sections, classification, attachmentFieldKeys };
 }
 

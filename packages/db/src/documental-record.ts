@@ -123,6 +123,20 @@ export interface FormFacts {
   readonly companyNames: Readonly<Record<string, BilingualText>>;
 }
 
+/**
+ * A Checklist Template Version the item copied by its `checklist_template` field `fieldKey`
+ * (RP-651, `work_item_checklist`): the definition a reply Screen's checklist answers (RP-86). Whoever
+ * sees the item reads it.
+ */
+export interface ChecklistCopyFact {
+  readonly fieldKey: string;
+  /** The Version copied: the `checklist_template` answer names it. */
+  readonly versionId: string;
+  readonly name: BilingualText;
+  /** The copy's check items, as copied (form-engine.md §3.2). */
+  readonly items: unknown;
+}
+
 /** What the record job is told about a closed item (app.documental_record_facts). */
 export interface RecordFacts {
   readonly workItemId: string;
@@ -151,6 +165,8 @@ export interface RecordFacts {
   readonly scopes: readonly BilingualText[];
   readonly reviewComments: number;
   readonly form: FormFacts;
+  /** The Checklist Template Versions it copied (RP-982): what a reply checklist on the path answers. */
+  readonly checklistCopies: readonly ChecklistCopyFact[];
   readonly documents: readonly DocumentFact[];
   readonly transitions: readonly TransitionFact[];
   /** The raiser's Participant: a Code C's Revision is theirs to make. */

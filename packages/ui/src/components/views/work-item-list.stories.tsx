@@ -667,6 +667,31 @@ export const PackageNamedInToolbar: Story = {
   },
 };
 
+const importId = "5b0c7d1e-2f3a-4b5c-8d9e-0a1b2c3d4e5f";
+
+/**
+ * One import's Drafts (RP-954, the Result step's "Open the Drafts"): the import named in the
+ * toolbar by its file name, never a time; its × leads to the same query without it.
+ */
+export const ImportNamedInToolbar: Story = {
+  args: { query: { ...defaults, importId } },
+  render: (args, context) => (
+    <WorkItemList
+      {...args}
+      importFilter={{ label: storyLocale(context) === "ar" ? "الاستيراد" : "Import", name: "Tower register Rev 4.xlsx" }}
+      locale={storyLocale(context)}
+      labels={workItemListLabels[storyLocale(context)]}
+    />
+  ),
+  play: async (context) => {
+    const chip = context.canvasElement.querySelector<HTMLElement>("[data-import-filter]")!;
+    await expect(chip).toHaveTextContent("Tower register Rev 4.xlsx");
+    const clear = within(chip).getByRole("link");
+    await expect(clear).toHaveAccessibleName(new RegExp(storyLocale(context) === "ar" ? "الاستيراد" : "Import"));
+    await expect(clear.getAttribute("href")).not.toContain(importId);
+  },
+};
+
 /** The Kanban shares the toolbar, so it filters by Package too. */
 export const PackageOnTheKanban: Story = {
   args: { packages: packageFilter, board: <p>Kanban</p> },
