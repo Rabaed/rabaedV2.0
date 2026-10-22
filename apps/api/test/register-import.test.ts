@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import type {
   RegisterImport,
   RegisterImportFields,
@@ -16,11 +16,12 @@ import type {
   RegisterValues,
   WorkItemDetail,
 } from "@rabaed/domain";
+import { registerSampleSheet, registerSampleWords, registerTemplateFields, registerTemplateSheets, registerTemplateWords, writeXlsx } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildForeignProject, type ForeignProject } from "./support/foreign-project.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, detail, memberOnProject, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { all, bilingual, buildTower, detail, draft, memberOnProject, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 // Only to give a Project its own DAR Form (RP-639), as a Company's Library would.
@@ -1285,4 +1286,192 @@ describe("The Types a register may name are the ones \"+ New\" offers (RP-960)",
     // "Electrical" and "Building A" are the foreign Project's codes and names too: only this Project's match.
     expect(previewed.rows.map((r) => [r.trade.match?.id, r.location.match?.id])).toEqual(rows.map(() => [tower.electrical, tower.buildingA]));
   });
+});
+
+// RP-954 (visibility.md RP-589-5): "Open the Drafts" on the Result step opens the Submittals List
+// filtered to one import (`importId`): its created items the viewer sees, nothing else. The filter
+// reads the import through app.register_import_results, so it is the importing Company's alone:
+// another Company, a made-up id, or an item outside the viewer's Visibility lists nothing.
+describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
+  let at: Tower;
+  let c1Co: Company;
+  let k1Co: Company;
+  /** A C1 engineer whose Trade Visibility is Electrical only. */
+  let narrowed: Caller;
+  let c2: Caller;
+  let k1: Caller;
+  /** A C1 engineer the import assigns one row to, who sends it for review. */
+  let sender: Awaited<ReturnType<typeof memberOnProject>>;
+  let imported: RegisterImport;
+  /** The import's Drafts by Subject. */
+  let byTitle: Record<string, string>;
+  /** A C1 Draft raised by hand, and one of another import. */
+  let byHand: string;
+  let otherImport: string;
+
+  const fileOf = (name: string, rows: string[][]) => ({
+    fileName: `${name}.csv`,
+    content: Buffer.from(["Subject,Type,Trade,Assign to", ...rows.map((r) => r.join(","))].join("\r\n")).toString("base64"),
+  });
+  const mapping: RegisterImportMapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, assignTo: { column: 3 } };
+  const importOf = async (name: string, rows: string[][]): Promise<RegisterImport> => {
+    const previewed: RegisterImport = (await ok(tryPreview(at.c1Pm, { file: fileOf(name, rows), sheet: name, headerRow: 1, mapping }, at.projectId), 201)).json();
+    await ok(confirm(at.c1Pm, previewed.id), 200);
+    return (await ok(getImport(at.c1Pm, previewed.id), 200)).json();
+  };
+  /** The ids `by` lists on the Submittals List with `query`. */
+  const listedWith = async (by: Caller, query: string): Promise<string[]> =>
+    (await ok(by.get(`/v1/projects/${at.projectId}/modules/submittals/work-items?pageSize=50&${query}`), 200)).json().items.map((i: { id: string }) => i.id);
+
+  beforeAll(async () => {
+    c1Co = await api.projectCreator();
+    k1Co = await api.authorizedPerson();
+    at = await buildTower(api, { c1: c1Co, k1: k1Co }, "ODR");
+    const k1ParticipantId = (await c1Co.caller.get(`/v1/projects/${at.projectId}/participants`))
+      .json()
+      .participants.find((p: { projectRole: { baseRole: string } }) => p.projectRole.baseRole === "consultant").id;
+    const c2Co = await api.authorizedPerson();
+    const c2ParticipantId = await api.addParticipant(c1Co.caller, at.projectId, c2Co.company, "contractor");
+    await ok(c1Co.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
+    c2 = await projectMember(api, c2Co, c2ParticipantId, ["engineer"]);
+    k1 = await projectMember(api, k1Co, k1ParticipantId, ["engineer"]);
+    narrowed = await projectMember(api, c1Co, at.c1ParticipantId, ["engineer"], { trade: only(at.electrical) });
+    sender = await memberOnProject(api, c1Co, at.c1ParticipantId, ["engineer"]);
+
+    byHand = await draft(at, at.c1Pm, "Raised by hand");
+    otherImport = (await importOf("Other", [["Another register's row", "MAR", "Electrical", ""]])).rows[0]!.workItemId!;
+    imported = await importOf("Tower register", [
+      ["Panels", LEGACY_MAR, "Electrical", sender.email],
+      ["Pumps", "MAR", "Mechanical", ""],
+      ["Cables", "SAR", "Electrical", ""],
+      ["", "MAR", "Electrical", ""],
+    ]);
+    byTitle = Object.fromEntries(imported.rows.filter((r) => r.workItemId).map((r) => [r.subject, r.workItemId!]));
+  });
+
+  it("lists the import's Drafts, and nothing raised by hand or by another import", async () => {
+    expect(Object.keys(byTitle).sort()).toEqual(["Cables", "Panels", "Pumps"]);
+    const ids = await listedWith(at.c1Pm, `importId=${imported.id}`);
+    expect(ids.sort()).toEqual(Object.values(byTitle).sort());
+    expect(ids).not.toContain(byHand);
+    expect(ids).not.toContain(otherImport);
+    // Unfiltered, the PM lists them all.
+    expect(await listedWith(at.c1Pm, "")).toEqual(expect.arrayContaining([...ids, byHand, otherImport]));
+  });
+
+  it("lists only the ones the viewer sees: none outside their Visibility", async () => {
+    expect((await listedWith(narrowed, `importId=${imported.id}`)).sort()).toEqual([byTitle.Panels, byTitle.Cables].sort());
+  });
+
+  it("lists nothing to another Company, even an item of the import it sees once Submitted, nor for a made-up id", async () => {
+    // The legacy MAR's Form, filled as `draft` fills it, to leave Draft.
+    const panels = byTitle.Panels!;
+    const answers = { ...(await detail(sender.caller, panels)).answers, manufacturer: "ACME Panels", description: "IP65", location: at.buildingA };
+    await ok(sender.caller.request("PUT", `/v1/work-items/${panels}/answers`, { answers }), 204);
+    await attachDatasheet(sender.caller, panels);
+    await take(sender.caller, panels, "send_for_review");
+    await ok(at.c1Pm.post(`/v1/work-items/${byTitle.Panels}/pick-up`));
+    await take(at.c1Pm, byTitle.Panels!, "submit");
+    expect(await listedWith(k1, "")).toContain(byTitle.Panels);
+    for (const by of [k1, c2]) expect(await listedWith(by, `importId=${imported.id}`)).toEqual([]);
+    expect(await listedWith(at.c1Pm, `importId=${randomUUID()}`)).toEqual([]);
+    // The import's own Company still lists it, Submitted.
+    expect(await listedWith(at.c1Pm, `importId=${imported.id}`)).toContain(byTitle.Panels);
+  });
+});
+
+// RP-954: "Download template" on the Upload step. A blank .xlsx in the reader's language, built in the
+// browser from the app's own messages: its first sheet's header row names Rabaed's fields, its columns
+// are set to text, and a second sheet says to type reference numbers as text. Filled in, it imports
+// with every column suggested its field and every row good. No Project data, and no time, in it.
+/** The web app's `registerImport` messages in `locale`, by key, as the wizard's `t` gives them (RP-954). */
+const registerImportWords = (locale: "en" | "ar") => {
+  const messages = JSON.parse(readFileSync(new URL(`../../web/messages/${locale}.json`, import.meta.url), "utf8")).registerImport;
+  return (key: string): string => {
+    const text = key.split(".").reduce((at, part) => at?.[part], messages);
+    if (typeof text !== "string") throw new Error(`No registerImport message ${key}`);
+    return text;
+  };
+};
+
+describe("The register template (RP-954)", () => {
+  const wordsOf = (locale: "en" | "ar") => registerTemplateWords(registerImportWords(locale));
+  const fileOf = (fileName: string, bytes: Uint8Array) => ({ fileName, content: Buffer.from(bytes).toString("base64") });
+
+  for (const locale of ["en", "ar"] as const) {
+    it(`reads, in ${locale === "en" ? "English" : "Arabic"}, as Rabaed's fields, one suggested for each column, and nothing else`, async () => {
+      const words = wordsOf(locale);
+      const blank = writeXlsx(...registerTemplateSheets(words, locale === "ar"));
+      const sheet: RegisterSheet = (await ok(read(tower.c1Engineer, { file: fileOf("template.xlsx", blank) }), 200)).json();
+      expect(sheet.sheets).toEqual([
+        { name: words.sheet, rows: 1 },
+        { name: words.helpSheet, rows: words.help.length + 1 },
+      ]);
+      expect(sheet).toMatchObject({ sheet: words.sheet, headerRow: 1, dataRows: 0, headers: registerTemplateFields.map((f) => words.headings[f]) });
+      expect(sheet.suggestions.map((s) => s?.field)).toEqual([...registerTemplateFields]);
+      const help: RegisterSheet = (await ok(read(tower.c1Engineer, { file: fileOf("template.xlsx", blank), sheet: words.helpSheet }), 200)).json();
+      expect(help.top.slice(1).map((r) => r.cells[0])).toEqual(words.help);
+      // No document properties (author, created, modified): nothing in it says when it was made.
+      expect(Buffer.from(blank).includes("docProps")).toBe(false);
+    });
+
+    it(`imports cleanly once filled in, in ${locale === "en" ? "English" : "Arabic"}, a reference number typed as text kept as typed`, async () => {
+      const words = wordsOf(locale);
+      const ref = locale === "en" ? "0012" : "0021";
+      const [register, help] = registerTemplateSheets(words, locale === "ar");
+      const filled = writeXlsx(
+        { ...register!, rows: [...register!.rows, ["Template panels", "MAR", "Electrical", "", "", "", "", ref], ["Template pumps", "SAR", "Mechanical", "", "", "", "", ""]] },
+        help!,
+      );
+      const file = fileOf("template.xlsx", filled);
+      const sheet: RegisterSheet = (await ok(read(tower.c1Engineer, { file }), 200)).json();
+      const column = (field: string) => ({ column: sheet.suggestions.findIndex((s) => s?.field === field) });
+      const mapping: RegisterImportMapping = {
+        subject: column("subject"),
+        type: column("type"),
+        trade: column("trade"),
+        scopes: column("scopes"),
+        location: column("location"),
+        package: column("package"),
+        assignTo: column("assignTo"),
+        paperRef: column("paperRef"),
+      };
+      const previewed = await preview(tower.c1Engineer, { file, sheet: words.sheet, headerRow: 1, mapping });
+      expect(reasonsByRow(previewed)).toEqual({ 2: [], 3: [] });
+      expect(previewed.rows.map((r) => r.paperRef)).toEqual([ref, ""]);
+      expect((await ok(confirm(tower.c1Engineer, previewed.id), 200)).json()).toEqual({ rowsCreated: 2 });
+    });
+  }
+});
+
+// RP-954: "Use sample register" on the Upload step: a made-up register, built in the browser from the
+// app's messages with the Types the importer may raise and the Trades they may raise in, that runs
+// through every step. Like any register, it creates nothing until the importer confirms.
+describe("The sample register (RP-954)", () => {
+
+  for (const locale of ["en", "ar"] as const) {
+    it(`runs through every step in ${locale === "en" ? "English" : "Arabic"}, every row good, and creates nothing until confirmed`, async () => {
+      const t = registerImportWords(locale);
+      const fields: RegisterImportFields = (await ok(electricalOnly.get(`/v1/projects/${tower.projectId}/register-imports/fields`), 200)).json();
+      const words = registerSampleWords(t);
+      // As the wizard gives it: the Trades the importer's Visibility covers, here Electrical only.
+      const electrical = fields.trades.find((t) => t.id === tower.electrical)!.name[locale];
+      const sample = registerSampleSheet(words, fields.types.map((t) => t.code), [electrical], locale === "ar");
+      const file = { fileName: t("sample.file"), content: Buffer.from(writeXlsx(sample)).toString("base64") };
+
+      const sheet: RegisterSheet = (await ok(read(electricalOnly, { file }), 200)).json();
+      expect(sheet).toMatchObject({ sheet: words.sheet, headerRow: 1, dataRows: 8 });
+      expect(sheet.suggestions.map((s) => s?.field)).toEqual(["subject", "type", "trade"]);
+      const body = { file, sheet: words.sheet, headerRow: 1, mapping: { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 } } };
+      const values: RegisterValues = (await ok(electricalOnly.post(`/v1/projects/${tower.projectId}/register-imports/values`, body), 200)).json();
+      for (const f of values.fields) for (const v of f.values) expect(v.how, `${f.field} ${v.text}`).toBe("exact");
+
+      const before = await listed(electricalOnly);
+      const previewed = await preview(electricalOnly, body);
+      expect(previewed).toMatchObject({ rowsTotal: 8, rowsRejected: 0 });
+      expect(await listed(electricalOnly)).toEqual(before);
+      expect((await ok(confirm(electricalOnly, previewed.id), 200)).json()).toEqual({ rowsCreated: 8 });
+      expect(await listed(electricalOnly)).toHaveLength(before.length + 8);
+    });
+  }
 });

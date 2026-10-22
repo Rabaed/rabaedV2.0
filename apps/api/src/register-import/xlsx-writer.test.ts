@@ -58,6 +58,23 @@ describe("an .xlsx written for a download", () => {
     expect(parts.find((p) => p.name === "xl/worksheets/sheet1.xml")!.text).toContain('rightToLeft="1"');
   });
 
+  it("writes several sheets in order, the first the one a reader opens on, each read back as written (RP-954)", async () => {
+    const help = [["Help"], ["Type each Paper ref as text"]];
+    const book = await openSpreadsheet({ fileName: "t.xlsx", bytes: Buffer.from(writeXlsx({ name: "Register", rows: [rows[0]!] }, { name: "Help", rows: help })) });
+    expect(book.sheets).toEqual(["Register", "Help"]);
+    expect(book.table({ headerRow: 1 })).toMatchObject({ sheet: "Register", headers: rows[0], rows: [] });
+    expect(book.table({ sheet: "Help", headerRow: 1 })).toMatchObject({ headers: help[0], rows: [{ rowNo: 2, values: help[1] }] });
+  });
+
+  it("sets the first columns to text when asked, so what is typed in them later is kept as typed (RP-954)", () => {
+    const parts = entries(writeXlsx({ name: "Register", rows: [rows[0]!], textColumns: 3 }, { name: "Help", rows: [["Help"]] }));
+    const styles = parts.find((p) => p.name === "xl/styles.xml")!.text;
+    // Style 2 is the text number format (49).
+    expect(styles.match(/<cellXfs[^>]*>(.*)<\/cellXfs>/)![1]!.split("<xf ")[3]).toContain('numFmtId="49"');
+    expect(parts.find((p) => p.name === "xl/worksheets/sheet1.xml")!.text).toContain('<col min="1" max="3" width="24" style="2" customWidth="1"/>');
+    expect(parts.find((p) => p.name === "xl/worksheets/sheet2.xml")!.text).not.toContain("<cols>");
+  });
+
   it("names its sheet as Excel allows", async () => {
     const book = await openSpreadsheet({ fileName: "x.xlsx", bytes: Buffer.from(writeXlsx({ name: "a/b: [rejected] rows that go on and on", rows })) });
     expect(book.sheets).toEqual(["a b   rejected  rows that go on"]);

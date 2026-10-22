@@ -26,7 +26,7 @@ import {
  * Screen field's key, required as the field says. A condition never reads it, so a
  * conditional `required` counts as required.
  */
-export function replyChecklistOf(field: CopiedChecklistField, copy: ChecklistCopy): ChecklistField {
+export function replyChecklistOf(field: CopiedChecklistField, copy: Pick<ChecklistCopy, "items">): ChecklistField {
   return { key: field.key, type: "checklist", label: field.label, required: field.required !== false, items: copy.items };
 }
 

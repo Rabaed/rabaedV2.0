@@ -184,6 +184,12 @@ const queryFields = {
    * matches nothing, the same answer as a made-up id: no row tells that an item is in it.
    */
   packageId: uuid.optional(),
+  /**
+   * One Submittal Register Import's items (RP-954, the Result step's "Open the Drafts"): those it
+   * created that the viewer sees. Only Members of the importing Participant read an import, so for
+   * anyone else, as for a made-up id, it matches nothing. No time of the import goes with it.
+   */
+  importId: uuid.optional(),
   trade: list(uuid),
   /** A Location takes in the Locations under it. */
   location: list(uuid),
@@ -252,7 +258,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "owner", "role", "company", "raisedFrom", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "packageId", "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
+const filterKeys = [...listKeys, "packageId", "importId", "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort, in its own order, and never with a numbered page. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -311,6 +317,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     if (values && values.length > 0) params.set(key, values.join(","));
   }
   if (query.packageId) params.set("packageId", query.packageId);
+  if (query.importId) params.set("importId", query.importId);
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
   if (query.createdWithin !== undefined) params.set("createdWithin", String(query.createdWithin));
   if (query.q) params.set("q", query.q);
