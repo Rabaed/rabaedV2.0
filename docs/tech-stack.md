@@ -18,7 +18,7 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | `packages/domain` | Shared rules and types: the Form schema and validator, the condition and formula evaluators, Step Age, visibility helpers. Pure and portable, so the browser, the server and the future offline app use the same code (ADR 0004) |
 | `packages/db` | PostgreSQL migrations (plain SQL), the Kysely client, and role bootstrap |
 | `packages/auth` | Passwords, sessions and invitation tokens |
-| `packages/mailer` | Email behind one interface: Amazon SES in the cloud, Mailpit locally |
+| `packages/mailer` | Email behind one interface: Amazon SES on AWS, SendGrid on Vercel (ADR 0026), Mailpit locally |
 | `packages/ui` | The design system: tokens, components, Storybook |
 | `packages/eslint-plugin` | Rabaed's own lint rules: no hard-coded colours, no physical left/right CSS, no deadline words |
 | `packages/infra` | AWS infrastructure as code (CDK) |
@@ -87,6 +87,19 @@ All defined as code with **AWS CDK 2** in TypeScript. The region is a parameter,
 | Cost | AWS Budgets monthly alert |
 
 Stacks: account, network, data, storage, registry, migrations, app and monitoring. A guided wizard (`packages/infra/scripts/setup-aws-account.sh`) covers the steps only a human can do.
+
+## Dev and UAT: Vercel
+
+Dev, demo and UAT run on Vercel with demo data only, so builders get a link to every change ([ADR 0026](adr/0026-dev-and-uat-run-on-vercel.md)). Production and the KSA Instance are not decided yet.
+
+| | Choice |
+|---|---|
+| Apps | Three Vercel projects in Frankfurt: web, api (Fastify unchanged) and Admin (alone holds the bypass role) |
+| Database | Supabase in Frankfurt as plain PostgreSQL 16: Data API off, no Supabase Auth or Storage, no anon or service keys |
+| Background work | Vercel Cron delivers the outbox; Documental Records run on an always-on container in Frankfurt with a UAT test signer |
+| Files and fonts | Cloudflare R2 |
+| Email | SendGrid, tracking off |
+| Deploy | A GitHub Action on `main`: migrate, deploy, visibility smoke tests. Pull requests without a migration get a preview behind Vercel Authentication |
 
 ## CI/CD: GitHub Actions
 
