@@ -11,9 +11,8 @@
 //
 // The seam suites' global setup runs the migrations, then the demo seed, which publishes the
 // Rabaed Defaults.
-import { createHash } from "node:crypto";
 import { createDb, withMember } from "@rabaed/db";
-import { expectedContentSha256, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
+import { expectedContentSha256, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, DocumentList, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -219,16 +218,16 @@ describe("the Consultant Engineer fills the checklist on site (seam 1)", () => {
 
     const { rows: item } = await sql<{ title: string; data: object }>`select title, data from work_item where id = ${id}::uuid`.execute(migrator);
     const { rows: documents } = await sql<HashedDocument>`
-      select id, field_key, item_key, file_name, content_type, size_bytes::int as size_bytes, storage_key from document where work_item_id = ${id}::uuid
+      select ${sql.raw(HASHED_DOCUMENT_COLUMNS)} from document where work_item_id = ${id}::uuid
     `.execute(migrator);
-    const fingerprint = createHash("sha256").update(photo).digest("hex");
+    const fingerprint = sha256Hex(photo);
     expect(documents.map((d) => d.id)).toEqual([formworkPhoto]);
     expect(await codeHash(id)).toBe(
       expectedContentSha256({
         title: item[0]!.title,
         data: item[0]!.data,
         outcome: "C",
-        documents: documents.map((d) => ({ ...d, file_sha256: fingerprint }) as HashedDocument),
+        documents: documents.map((d) => ({ ...d, file_sha256: fingerprint })),
         checklists: [{ field_key: FIELD, answers: changed }],
       }),
     );
@@ -339,12 +338,11 @@ describe("RP-981-1: the Consultant Engineer annotates a checklist item's photo",
     await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
 
     const { rows: item } = await sql<{ title: string; data: object }>`select title, data from work_item where id = ${id}::uuid`.execute(migrator);
-    const { rows: documents } = await sql<HashedDocument & { file_sha256: string }>`
-      select id, field_key, item_key, file_name, content_type, size_bytes::int as size_bytes, storage_key, encode(file_sha256, 'hex') as file_sha256
+    const { rows: documents } = await sql<HashedDocument>`
+      select ${sql.raw(HASHED_DOCUMENT_COLUMNS)}
       from document where work_item_id = ${id}::uuid
     `.execute(migrator);
-    const fingerprint = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
-    expect(Object.fromEntries(documents.map((d) => [d.id, d.file_sha256]))).toEqual({ [original]: fingerprint(photo), [copy]: fingerprint(drawn) });
+    expect(Object.fromEntries(documents.map((d) => [d.id, d.file_sha256]))).toEqual({ [original]: sha256Hex(photo), [copy]: sha256Hex(drawn) });
     expect(await codeHash(id)).toBe(
       expectedContentSha256({ title: item[0]!.title, data: item[0]!.data, outcome: "C", documents, checklists: [{ field_key: FIELD, answers: FAILED }] }),
     );

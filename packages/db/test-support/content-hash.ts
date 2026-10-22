@@ -15,7 +15,22 @@ export function jsonbText(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** A Document as a Transition's content hash names it (workflow-engine.md §7). */
+/** The SHA-256 of a file's bytes as hex, the form a Transition's content hash names (a UTF-8 string is hashed as its bytes). */
+export function sha256Hex(body: string | Buffer): string {
+  return sha256Bytea(body).toString("hex");
+}
+
+/** The SHA-256 of a file's bytes as `bytea`, the form `document.file_sha256` and `confirm_document_upload` take. */
+export function sha256Bytea(body: string | Buffer): Buffer {
+  return createHash("sha256").update(body).digest();
+}
+
+/**
+ * A Document as a Transition's content hash names it (workflow-engine.md §7): these
+ * columns, and `file_sha256` (hex, null before the upload is confirmed), the fingerprint
+ * of its bytes (RP-618, as built). Keep the list in step with the `jsonb_build_object`
+ * of `app.work_item_content_sha256` (`pnpm db:fn work_item_content_sha256`).
+ */
 export type HashedDocument = {
   id: string;
   field_key: string | null;
@@ -24,7 +39,15 @@ export type HashedDocument = {
   content_type: string;
   size_bytes: number;
   storage_key: string;
+  file_sha256: string | null;
 };
+
+/**
+ * The columns of `document` a Transition's content hash names, as a select list for the
+ * migrator: rows that read as a `HashedDocument`. The one list to change with the SQL.
+ */
+export const HASHED_DOCUMENT_COLUMNS =
+  "id, field_key, item_key, file_name, content_type, size_bytes::int as size_bytes, storage_key, encode(file_sha256, 'hex') as file_sha256";
 
 /**
  * The content hash a Transition's event should carry (RP-436, workflow-engine.md
