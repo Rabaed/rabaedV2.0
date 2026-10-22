@@ -25,6 +25,7 @@
     "design:strip-fonts": "node scripts/design-strip-fonts.ts",
     "migration:new": "node scripts/migration-new.ts",
     "migration:days": "node scripts/migration-days.ts",
+    "migrations:reday": "node scripts/migrations-reday.ts",
     "migration-days": "node scripts/migration-days.ts",
     "db:fn": "node scripts/db-fn.ts",
     "queue": "node scripts/queue-pr.ts",

@@ -36,7 +36,7 @@ export async function makeRecordPdf(
 
 /**
  * The record's PDF/A-3, before its seal. Its own function so that the drawn document is let go
- * before the seal makes its copies (RP-957: at the 100 MB limit each copy is about 100 MB).
+ * before the seal makes its one copy (RP-957, RP-1006: at the 100 MB limit a copy is about 100 MB).
  */
 async function archivalPdf(
   deps: Pick<RecordJobDeps, "renderer" | "fonts">,

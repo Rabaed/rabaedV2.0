@@ -164,7 +164,7 @@ const stages = {
 const snag = { code: "SNG", name: b("Snag", "عيب") };
 const comment = { code: "CMT", name: b("Comment", "ملاحظة") };
 // A Project's own Type: a neutral chip, with no change to the views.
-const punch = { code: "WLK", name: b("Walkdown item", "بند جولة") };
+const walkdown = { code: "WLK", name: b("Walkdown item", "بند جولة") };
 const electrical = { id: "00000000-0000-4000-8000-0000000000e1", code: "EL", name: b("Electrical", "الكهرباء") };
 const finishes = { id: "00000000-0000-4000-8000-0000000000e2", code: "AR", name: b("Finishes", "التشطيبات") };
 const tower = { id: "00000000-0000-4000-8000-0000000000a1", code: "T1", name: b("Tower 1", "البرج 1") };
@@ -213,7 +213,7 @@ const items: WorkItemRow[] = [
   row(4, {
     title: "Ceiling plasterboard rework",
     trade: finishes,
-    type: punch,
+    type: walkdown,
     documentNumber: "TWR-DCL-AR-WLK-002",
     stage: stages.onHold,
     stepAgeWeeks: 4,
@@ -225,7 +225,7 @@ const items: WorkItemRow[] = [
 ];
 
 const filters: WorkItemListData["filters"] = {
-  types: [comment, snag, punch],
+  types: [comment, snag, walkdown],
   outcomes: [],
   trades: [electrical, finishes],
   locations: [
@@ -333,7 +333,7 @@ export const TypeChips: Story = {
     const chosen = within(chips).getByRole("link", { current: true });
     await expect(chosen).toHaveTextContent(snag.name[storyLocale(context)]);
     await expect(links[0]!.getAttribute("href")).not.toContain("type=");
-    await expect(within(chips).getByRole("link", { name: new RegExp(punch.name[storyLocale(context)]) })).toHaveAttribute("href", expect.stringContaining("type=WLK"));
+    await expect(within(chips).getByRole("link", { name: new RegExp(walkdown.name[storyLocale(context)]) })).toHaveAttribute("href", expect.stringContaining("type=WLK"));
   },
 };
 

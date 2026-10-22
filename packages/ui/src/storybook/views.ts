@@ -352,7 +352,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     code: (code) => `Code ${code}`,
     createdOn: (date) => `أُنشئ في ${date}`,
     submittedOn: (date) => `قُدِّم في ${date}`,
-    openPackage: (number, company, name) => `فتح الحزمة ${number} ${company} ${name}`,
+    openPackage: (number, company, name) => `فتح الحزمة \u2066${number}\u2069 ${company} ${name}`,
   },
 };
 

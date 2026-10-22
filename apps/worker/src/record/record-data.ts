@@ -25,6 +25,11 @@ import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 // fingerprint, and whether the record gives its pages (which), carries it inside
 // the PDF, or only lists it, held in Rabaed. Never its storage key or its size.
 //
+// A reply Screen's checklist a Transition on the path took into its shared event (RP-982) is
+// one of the Form's checklists, after the field whose copy it answers; a failed item that
+// offers a Snag says whether it raised one (`<snag>`, also on a Form checklist that offers
+// one). It adds no element a version 4 reader can't skip, so the version stays 4.
+//
 // Each Form photo, logo, Signature and Stamp whose image the page prints also carries
 // that image's fingerprint (a `sha256` attribute, RP-155), so a Re-produce finds the
 // same file again. It is not text on the page: it fingerprints the picture the page
@@ -337,7 +342,7 @@ export function recordOf(
   const codeEntry = !cancelled && (closing?.outcomeMode === "issue_code" || closing?.outcomeMode === "confirm_code") ? closing : undefined;
   const markOf = (t: TransitionFact): FlowMark => (t === closing && look === "c" ? "revise" : t === closing && look === "d" ? "rejected" : "done");
 
-  const { sections, classification, attachmentFieldKeys } = formContent(facts, language);
+  const { sections, classification, attachmentFieldKeys } = formContent(facts, language, path);
   const company = (c: RecordFacts["companies"][number]): CompanyLine => ({ name: pick(c.name, language), role: pick(c.roleName, language) });
   const acted = new Set(path.map((t) => t.participantId));
   const companyOf = (participantId: string) => facts.companies.find((c) => c.participantId === participantId);
@@ -541,6 +546,7 @@ function blockXml(block: RecordBlock, indent: string): string[] {
           ...lang("text", item.text, `${i2}  `),
           ...lang("answer", item.answer, `${i2}  `),
           ...(item.comment === null ? [] : [`${i2}  <comment>${escape(item.comment)}</comment>`]),
+          ...(item.snag === null ? [] : lang("snag", item.snag, `${i2}  `)),
           ...item.photos.map((p) => `${i2}  ${photoXml(p)}`),
           `${i2}</item>`,
         ]),

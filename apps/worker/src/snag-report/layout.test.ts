@@ -1,4 +1,4 @@
-import type { SnagReportContent, SnagReportItem } from "@rabaed/domain";
+import { formatNumber, stepAgeLabel, type SnagReportContent, type SnagReportItem } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
 import { fallbackFonts } from "../record/fonts.ts";
 import { snagReportHtml } from "./layout.ts";
@@ -58,8 +58,32 @@ describe("snagReportHtml", () => {
 
   it("shows the weeks only for an item with a Step Age, and never a due date or 'overdue'", () => {
     const out = snagReportHtml(content([item({ stepAgeWeeks: null }), item({ stepAgeWeeks: 1 })]), "en", fonts, new Map(), at);
-    expect(out).toContain("1 week<");
+    expect(out).toContain("1 week at this step<");
     expect(out).not.toMatch(/overdue|due date|deadline|متأخر|موعد/i);
+  });
+
+  it("words the Step Age as the app does, in every Arabic plural form (RP-1005)", () => {
+    const words: [number, string][] = [
+      [1, "أسبوع واحد في هذه الخطوة"],
+      [2, "أسبوعان في هذه الخطوة"],
+      [3, "3 أسابيع في هذه الخطوة"],
+      [11, "11 أسبوعًا في هذه الخطوة"],
+      [100, "100 أسبوع في هذه الخطوة"],
+    ];
+    for (const [weeks, said] of words) {
+      const out = snagReportHtml(content([item({ stepAgeWeeks: weeks })]), "ar", fonts, new Map(), at);
+      expect(out).toContain(`>${said}<`);
+      expect(said).toBe(stepAgeLabel(weeks, "ar"));
+    }
+  });
+
+  it("prints the item count through formatNumber, Latin digits in both languages (RP-1005)", () => {
+    const many = content(Array.from({ length: 1200 }, () => item()));
+    for (const locale of ["en", "ar"] as const) {
+      const out = snagReportHtml(many, locale, fonts, new Map(), at);
+      expect(out).toContain(`<bdi dir="ltr" class="ltr">${formatNumber(1200, locale)}</bdi>`);
+    }
+    expect(formatNumber(1200, "ar")).toMatch(/^1[^0-9]200$/);
   });
 
   it("draws a photo only where the job read one, and says when the report stopped at its cap", () => {

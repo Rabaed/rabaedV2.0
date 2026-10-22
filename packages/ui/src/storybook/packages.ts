@@ -169,7 +169,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     },
     delete: {
       trigger: "حذف",
-      title: (number) => `حذف ${number}؟`,
+      title: (number) => `حذف \u2066${number}\u2069؟`,
       description: "تبقى اعتماداتها كما هي، دون حزمة.",
       confirm: "حذف الحزمة",
     },
@@ -184,7 +184,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
       loading: "جارٍ التحميل…",
       noResults: "لا توجد اعتمادات مطابقة.",
       results: "الاعتمادات التي وُجدت",
-      inOther: (number) => `في ${number}`,
+      inOther: (number) => `في \u2066${number}\u2069`,
       inThis: "في هذه الحزمة",
       choose: (subject) => `اختيار ${subject}`,
       add: (n, count) => (count === 1 ? "إضافة اعتماد واحد" : `إضافة ${n} اعتمادات`),
@@ -192,7 +192,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     },
     submit: {
       trigger: "تقديم الحزمة",
-      title: (number) => `تقديم ${number}`,
+      title: (number) => `تقديم \u2066${number}\u2069`,
       description: "يُقدَّم كل اعتماد أدناه دفعة واحدة ويأخذ رقم مستنده. الكل أو لا شيء: إن لم يكن أحدها جاهزًا فلا يُقدَّم أي منها.",
       count: (n, count) => (count === 1 ? "اعتماد واحد للتقديم" : `${n} اعتمادات للتقديم`),
       confirm: "تقديم الحزمة",

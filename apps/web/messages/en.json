@@ -2370,6 +2370,7 @@
     "importRegister": "Import register",
     "importRegisterHint": "Create Drafts from your .xlsx / .csv register",
     "imports": "Imports",
+    "listFilter": "Import",
     "importsHint": "Your Company's registers imported into this Project, and what each created.",
     "backToSubmittals": "Submittals",
     "rabaed": "Rabaed",
@@ -2392,7 +2393,29 @@
       "drop": "Drop your submittal register here",
       "browse": "Browse",
       "anyLayout": "Any order of columns works: you map them next. Nothing is created until you confirm.",
-      "asText": "Cells are read as stored, not as shown: type each Paper ref as text in your register, so 0012 stays 0012."
+      "asText": "Cells are read as stored, not as shown: type each Paper ref as text in your register, so 0012 stays 0012.",
+      "sample": "Use sample register",
+      "template": "Download template (.xlsx)"
+    },
+    "template": {
+      "file": "Rabaed submittal register template.xlsx",
+      "sheet": "Register",
+      "helpSheet": "How to fill it in",
+      "asText": "Type each Paper ref as text, so 0012 stays 0012: cells are read as stored, not as shown. The Register worksheet's columns are already set to text; keep them so.",
+      "headerRow": "Row 1 of the Register worksheet holds Rabaed's fields: keep it, and add one submittal a row below it.",
+      "values": "Every row needs its Subject, Type and Trade. Type, Trade, Scopes, Location and Package take the Project's values as Rabaed shows them, or their codes, and Assign to a Member's email. Leave any other column empty, or delete it."
+    },
+    "sample": {
+      "file": "Rabaed sample register.xlsx",
+      "sheet": "Sample register",
+      "s1": "Lighting fixtures – Level 1",
+      "s2": "Fire pump datasheet",
+      "s3": "Main distribution board",
+      "s4": "Chilled water pipework",
+      "s5": "Cable trays – Basement",
+      "s6": "Ventilation fans",
+      "s7": "Fire alarm control unit",
+      "s8": "Ceramic floor tiles – Lobby"
     },
     "sheet": {
       "fileDetail": "{worksheets, plural, one {1 worksheet} other {{n} worksheets}} · {size} MB",

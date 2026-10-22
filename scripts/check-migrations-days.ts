@@ -18,7 +18,7 @@ export interface Reservation {
   purpose: string;
 }
 
-const issues = (text: string) => text.match(/\bRP-\d+\b/g) ?? [];
+export const issues = (text: string): string[] => text.match(/\bRP-\d+\b/g) ?? [];
 
 /** The reservations in the file's text: each table row that starts with a day. */
 export function parseReservations(text: string): Reservation[] {
@@ -70,7 +70,7 @@ export function branchIssue(branch: string): string | null {
  * when that is a `--` comment. Issues named after it, or further down, are
  * mentions, not owners ("-- … rebuilt from RP-437's …").
  */
-function headerIssue(sql: string): string | null {
+export function headerIssue(sql: string): string | null {
   const comment = /^\s*--(.*)$/.exec(sql.split(/\r?\n/, 1)[0] ?? "")?.[1];
   return comment === undefined ? null : (issues(comment)[0] ?? null);
 }

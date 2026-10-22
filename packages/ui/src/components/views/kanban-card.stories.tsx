@@ -38,7 +38,7 @@ const text = {
   bathrooms: b("Bathrooms – Tower 1", "الحمامات – البرج 1"),
   // The owning Company, next to the number (RP-974).
   builders: b("Gulf Builders", "بناة الخليج"),
-  openPackage: b("Open Package PKG-004 Gulf Builders Bathrooms – Tower 1", "فتح الحزمة PKG-004 بناة الخليج الحمامات – البرج 1"),
+  openPackage: b("Open Package PKG-004 Gulf Builders Bathrooms – Tower 1", "فتح الحزمة \u2066PKG-004\u2069 بناة الخليج الحمامات – البرج 1"),
 };
 
 const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardProps => ({

@@ -28,7 +28,7 @@ type Draft = {
   answers: Record<string, unknown>;
   trade: WorkItemDetail["trade"];
   photos: DocumentSummary[];
-  /** The Raise offered to the viewer on it now; null when none is (two Contractors cover it, say). */
+  /** The Raise offered to the viewer on it now; null when none is (no Contractor covers it, say). */
   raise: WorkItemActions["transitions"][number] | null;
   saveAnswers: boolean;
 };
@@ -55,7 +55,7 @@ function useFlowLabels(): SnagFlowLabels {
  * the Draft is created at the Subject step (its Subject can't change after), with its Description and
  * Trade, and the photos are uploaded to it; the Location is saved to the Draft as soon as it is picked.
  * The URL then holds the Draft and the step. Raise is the Draft's own, offered only when the API offers
- * it: there is no Contractor to pick until the engine offers one (RP-658).
+ * it; where two Contractors cover the Snag, its Action Form asks which one holds it (RP-658).
  */
 export function SnagPhoneNew({
   projectId,
