@@ -1,0 +1,6 @@
+# The ui-ux-tester's throwaway helper scripts and job files: not part of the round.
+*.ts
+*.cjs
+*.mjs
+*.txt
+jobs*.json
