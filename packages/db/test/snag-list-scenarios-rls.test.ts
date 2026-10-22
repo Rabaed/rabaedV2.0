@@ -343,15 +343,17 @@ describe("C2's Snag List names and counts none of C1's items (scenario RP-94-1)"
   });
 
   it("RP-94-1: the Raised from source is given by Document Number, Subject and Review Code, and the thumbnail is the first photo, to those who see them (E1, V19)", async () => {
-    // C1, holding the Comments, reads their source. (K1, who raised them, does not yet: app.work_item_links stamps a
-    // Code B's `raised_from` Link with the Comment's current arrival, so only its holder reads it. Hides, never leaks;
-    // a follow-up of RP-1002.)
-    for (const comment of comments) {
-      const links = await call<{ kind: string; document_number: string; subject: string; work_item_id: string }>(
-        c1Pm,
-        sql`select kind, document_number, subject, work_item_id from app.work_item_links(${comment}::uuid) where kind = 'raised_from'`,
-      );
-      expect(links, comment).toEqual([{ kind: "raised_from", document_number: sourceNumber, subject: "Lighting fixtures", work_item_id: source }]);
+    // C1, holding the Comments, and K1, who raised them, both read their source (RP-1031: the Link came with the
+    // Comment, before its first arrival).
+    for (const reader of [c1Pm, k1]) {
+      for (const comment of comments) {
+        const links = await call<{ kind: string; document_number: string; subject: string; work_item_id: string }>(
+          reader,
+          sql`select kind, document_number, subject, work_item_id from app.work_item_links(${comment}::uuid) where kind = 'raised_from'`,
+        );
+        expect(links, `${reader} ${comment}`).toEqual([{ kind: "raised_from", document_number: sourceNumber, subject: "Lighting fixtures", work_item_id: source }]);
+      }
+      expect(await raisedFrom(reader, sourceNumber), reader).toEqual([...comments].sort());
     }
     for (const reader of [c1Pm, k1]) {
       expect(await call(reader, sql<{ outcome: string }>`select outcome from work_item where id = ${source}::uuid`), reader).toEqual([{ outcome: "B" }]);

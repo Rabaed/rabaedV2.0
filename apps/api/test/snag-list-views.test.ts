@@ -139,6 +139,18 @@ describe("the Snag List's rows (seam 1)", () => {
     expect(list.items.find((i) => i.id === photographed)!.raisedFrom).toBeNull();
   });
 
+  it("give each Comment's source to K1, who raised it, as to C1, holding it (RP-1031)", async () => {
+    const list = await snags(at.k1Manager);
+    for (const id of comments) {
+      expect(list.items.find((i) => i.id === id)!.raisedFrom, id).toEqual({
+        documentNumber: sourceNumber,
+        subject: "Lighting fixtures",
+        workItemId: source,
+        outcome: { code: "B", name: expect.objectContaining({ en: expect.any(String) }), look: "b" },
+      });
+    }
+  });
+
   it("carry the first photo the viewer sees, and none for an item with no photo", async () => {
     const list = await snags(at.c1Pm);
     const photo = list.items.find((i) => i.id === photographed)!.photo;
@@ -164,6 +176,7 @@ describe("the Snag List's rows (seam 1)", () => {
     expect(c1Sees.filters.companies).toEqual([{ participantId: at.c1ParticipantId, name: expect.any(Object), own: true }]);
     expect(c1Sees.filters.raisedFrom).toEqual([{ documentNumber: sourceNumber, subject: "Lighting fixtures" }]);
     const k1Sees = await snags(at.k1Manager);
+    expect(k1Sees.filters.raisedFrom).toEqual([{ documentNumber: sourceNumber, subject: "Lighting fixtures" }]);
     expect(k1Sees.filters.companies!.map((c) => [c.participantId, c.own]).sort()).toEqual(
       sorted(at.c1ParticipantId, c2Participant).map((id) => [id, false]),
     );
@@ -228,6 +241,7 @@ describe("the Snag List's filters and search, over the items the viewer sees (se
 
   it("filter by what it was raised from, or raised by hand", async () => {
     expect(ids(await snags(at.c1Pm, `?raisedFrom=${sourceNumber}`))).toEqual(sorted(...comments));
+    expect(ids(await snags(at.k1Manager, `?raisedFrom=${sourceNumber}`))).toEqual(sorted(...comments));
     expect(ids(await snags(at.c1Pm, "?raisedFrom=manual"))).toEqual(sorted(photographed, started));
     const both = await board(at.c1Pm, `?raisedFrom=manual,${sourceNumber}`);
     expect(both.columns.reduce((n, c) => n + c.shown, 0)).toBe(4);

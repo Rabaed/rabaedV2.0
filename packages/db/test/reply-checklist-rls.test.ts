@@ -287,12 +287,18 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     call<{ type_code: string; open_count: number }>(as, sql`select type_code, open_count::integer from app.work_item_raised_item_counts(${id}::uuid)`);
   const checkItem = async (as: string) =>
     (await call<{ item: unknown }>(as, sql`select app.raised_from_check_item(${snag}::uuid) as item`))[0]!.item;
+  /** The Snag's "Raised from" source, as `as` reads its Links. */
+  const source = (as: string) =>
+    call<{ document_number: string; work_item_id: string }>(as, sql`select document_number, work_item_id from app.work_item_links(${snag}::uuid) where kind = 'raised_from'`);
 
-  it("C1, K1 and the Owner read the Snag, its photo, its check item and its count", async () => {
+  it("C1, K1 and the Owner read the Snag, its photo, its check item, its source and its count", async () => {
+    const number = (await migrator.query("select document_number from work_item where id = $1", [id])).rows[0].document_number as string;
     for (const reader of [c1.members.engineer, c1.members.project_manager, k1.members.engineer, k1.members.manager, ow.members.representative]) {
       expect(await seesSnag(reader), reader).toBe(true);
       expect(await snagPhotos(reader), reader).toBe(1);
       expect(await checkItem(reader), reader).toEqual({ key: "formwork", text: bilingual("Formwork tight") });
+      // Not only C1, holding it: the Link came with the Snag, before its first arrival (RP-1031).
+      expect(await source(reader), reader).toEqual([{ document_number: number, work_item_id: id }]);
       expect(await snagCount(reader), reader).toEqual([{ type_code: "SNG", open_count: 1 }]);
     }
   });
@@ -302,6 +308,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
       expect(await seesSnag(outsider), outsider).toBe(false);
       expect(await snagPhotos(outsider), outsider).toBe(0);
       expect(await checkItem(outsider), outsider).toBeNull();
+      expect(await source(outsider), outsider).toEqual([]);
       expect(await snagCount(outsider), outsider).toEqual([]);
       expect(await call(outsider, sql<object>`select * from app.raised_document_copies(${id}::uuid)`), outsider).toEqual([]);
     }
