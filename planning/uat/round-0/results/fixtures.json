@@ -1,0 +1,27 @@
+{
+  "FX-C2": {
+    "status": "already",
+    "detail": "Beta Build already covers Tower 2 only.",
+    "at": "2026-10-22T17:47:31.738Z"
+  },
+  "FX-K1M": {
+    "status": "already",
+    "detail": "Sara already covers Mechanical only.",
+    "at": "2026-10-22T17:47:32.628Z"
+  },
+  "FX-OR": {
+    "status": "already",
+    "detail": "Hind narrowed Locations. faisal.alotaibi Tower 1: already; noura.alharbi Tower 2: already.",
+    "at": "2026-10-22T17:47:33.576Z"
+  },
+  "FX-OW": {
+    "status": "manual",
+    "detail": "Needs Rabaed Admin sign-in as the Rabaed Engineer (password plus an emailed code). No script signs an Engineer in without handling the password, so ADM-02 (onboard UAT Owner Co, CR 9999000005) is done by a person, then Saeed invites it as Owner (PAR-16). Cases needing the Owner stay blocked until then.",
+    "at": "2026-10-22T17:47:33.576Z"
+  },
+  "FX-SB": {
+    "status": "already",
+    "detail": "\"UAT FX-SB MAR Send Back (Comment only)\" already published (v1); \"UAT FX-SB MAR Send Back (Edit the Form)\" already published (v1); MAR already bound to \"UAT FX-SB MAR Send Back (Comment only)\".",
+    "at": "2026-10-22T17:47:34.184Z"
+  }
+}

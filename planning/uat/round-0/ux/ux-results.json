@@ -1,0 +1,1030 @@
+{
+  "UX-01": {
+    "status": "pass",
+    "checks": [
+      {
+        "text": "Sidebar entries are RP-405 decision 5 only (Home, Projects, Company Profile, Members, Library); no Overdue/Payments/Subscriptions/Roles/theme toggle",
+        "ok": true,
+        "detail": "Seen as Hafiz and Ali"
+      },
+      {
+        "text": "Company name shown, not a switcher",
+        "ok": true,
+        "detail": "No swap icon"
+      },
+      {
+        "text": "Arabic mirrored",
+        "ok": true,
+        "detail": "Sidebar right, back arrow and chevrons flipped"
+      },
+      {
+        "text": "Drawer at 820/375 opened",
+        "ok": false,
+        "detail": "Only seen closed (hamburger present at 375); opening it and the member menu not exercised"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-01-1-home-en-1366.png",
+      "ux/UX-01-2-home-ar-1366.png",
+      "ux/UX-01-3-home-en-375.png"
+    ],
+    "notes": "Kit top-bar Search and New project button are absent; assumed removed by RP-405, confirm.",
+    "uiIssues": [],
+    "uxRecommendations": [
+      "Confirm the top-bar Search box of the kit is intentionally dropped.",
+      "A person should open the 820/375 drawer and the member menu once."
+    ]
+  },
+  "UX-02": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Four numbers: Active Projects, Need My Action, 4+ weeks at step, waiting with others",
+        "ok": true,
+        "detail": "Labels use 'My Company: ...' prefix; no Overdue"
+      },
+      {
+        "text": "Empty state of Needs my action has a next step",
+        "ok": false,
+        "detail": "Only 'Nothing is waiting on you.' in a tall white panel"
+      },
+      {
+        "text": "Every number opens the List with its filter",
+        "ok": false,
+        "detail": "Not followed (all counts 0/2 on seed data); needs a person"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-02-1-home-ali-en.png",
+      "ux/UX-02-2-home-ali-ar.png",
+      "ux/UX-01-1-home-en-1366.png"
+    ],
+    "notes": "Kit Needs my action has an 'Open board' link and project cards with progress; neither is on the built page.",
+    "uiIssues": [
+      {
+        "element": "Needs my action panel",
+        "reference": "design/reference/claude-design/ui_kits/app/saas-shell.html",
+        "expected": "Panel sized to content, rows or a compact empty state with a link",
+        "actual": "Panel stretches to Recent activity's height (~340px) with one line of text: excessive white space",
+        "screenshot": "ux/UX-02-1-home-ali-en.png"
+      },
+      {
+        "element": "Needs my action header",
+        "reference": "saas-shell.html",
+        "expected": "'Open board' link at the header end",
+        "actual": "No link",
+        "screenshot": "ux/UX-02-1-home-ali-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Add a next step to the empty state, such as 'Open Submittals'.",
+      "Make the four stat cards link-looking (hover and focus state) so it is clear they open the List."
+    ]
+  },
+  "UX-03": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Projects page card matches kit",
+        "ok": true,
+        "detail": "Card with status pill, counts, code and Role"
+      },
+      {
+        "text": "Dashboard type cards not squashed",
+        "ok": true,
+        "detail": "No squashed card"
+      },
+      {
+        "text": "Dashboard layout as designed with no stray white space",
+        "ok": false,
+        "detail": "Equal-height stretching and a clipped Activity Feed panel"
+      },
+      {
+        "text": "Each figure opens the List",
+        "ok": false,
+        "detail": "Not followed"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-03-1-projects-en.png",
+      "ux/UX-03-2-dashboard-en.png",
+      "ux/UX-03-3-dashboard-ar.png"
+    ],
+    "notes": "'1 items' plural error on Dashboard cards.",
+    "uiIssues": [
+      {
+        "element": "DAR and SAR type cards",
+        "reference": "views-dashboard-notifications.md",
+        "expected": "Cards sized to their content",
+        "actual": "DAR card is stretched to the MAR card's height: ~200px empty space under 'Approved (A+B)'; SAR wraps alone to a new row leaving a hole to its right",
+        "screenshot": "ux/UX-03-2-dashboard-en.png"
+      },
+      {
+        "element": "Activity Feed panel",
+        "reference": "views-dashboard-notifications.md",
+        "expected": "Feed shows its latest entries in a panel that fits them",
+        "actual": "Panel is ~1000px tall; list is cut off after 4 entries (last entry clipped mid-line) with ~950px empty below",
+        "screenshot": "ux/UX-03-2-dashboard-en.png"
+      },
+      {
+        "element": "Section order",
+        "reference": "saas-shell.html",
+        "expected": "Submittals first or the busiest Module first",
+        "actual": "Snag List section (all zeros, five cards) comes first and pushes Submittals below the fold",
+        "screenshot": "ux/UX-03-2-dashboard-en.png"
+      },
+      {
+        "element": "Card count text",
+        "reference": "GLOSSARY.md wording",
+        "expected": "'1 item'",
+        "actual": "'1 items'",
+        "screenshot": "ux/UX-03-2-dashboard-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Order Dashboard sections by use, or collapse Modules with zero items.",
+      "Make the Activity Feed panel scroll inside a fixed height or grow with its content."
+    ]
+  },
+  "UX-04": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Columns, Rev chip, Code/status pills, Step Age",
+        "ok": true,
+        "detail": "Submittal No., Title, Rev, Discipline, Type, Status as kit; no Step Age dots on seed rows (all under a week)"
+      },
+      {
+        "text": "Table scrolls inside its region, page never sideways",
+        "ok": true,
+        "detail": "scrollWidth equals clientWidth at 1366, 820, 375"
+      },
+      {
+        "text": "Toolbar layout as anatomy",
+        "ok": false,
+        "detail": "Group/Export and view switch moved to a second row"
+      },
+      {
+        "text": "Filter panel, saving columns, sorting, paging exercised",
+        "ok": false,
+        "detail": "Not driven in this pre-check"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-04-1-list-en.png",
+      "ux/UX-04-2-list-ar.png",
+      "ux/UX-19-4-list-en-820.png"
+    ],
+    "notes": "Packages is a third view toggle, not a tab (spec choice).",
+    "uiIssues": [
+      {
+        "element": "Toolbar",
+        "reference": "D:\\Artifacts\\Rabaed Submittals List.html; submittals-list.html",
+        "expected": "Add, Search, Filter, Need My Action, Group, Export in one row; Kanban/List switch beneath",
+        "actual": "Row 1 has Add, Search, Filter, toggle; Group, Export, Kanban/List/Packages and a more-menu sit in row 2 at the right: two toolbar rows, ~55px extra height and a split of related controls",
+        "screenshot": "ux/UX-04-1-list-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Keep list filtering controls together; only the view switch belongs in a second place."
+    ]
+  },
+  "UX-05": {
+    "status": "pass",
+    "checks": [
+      {
+        "text": "Column headers with dot and count, Closed in the last 30 days block",
+        "ok": true,
+        "detail": "Matches Board Anatomy"
+      },
+      {
+        "text": "Card: Code/Revision badge at the start, number, Subject, discipline chip + type, Plan location chips, With avatar+name, date",
+        "ok": true,
+        "detail": "Matches Card Anatomy; Code A card turns green"
+      },
+      {
+        "text": "Step Age dots and closed-by line",
+        "ok": false,
+        "detail": "No dots visible on seed data (all under a week); could not judge"
+      },
+      {
+        "text": "Arabic mirrored",
+        "ok": true,
+        "detail": "Columns right to left, badge position kept"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-05-1-kanban-en.png",
+      "ux/UX-05-2-kanban-ar.png",
+      "ux/UX-05-3-kanban-1920.png"
+    ],
+    "notes": "Group rows are by Company, with the anatomy using role swimlanes; follows the glossary/visibility rule, so not an issue.",
+    "uiIssues": [],
+    "uxRecommendations": [
+      "Month names on cards stay English ('Oct 22') in the Arabic board; consider Arabic month names with Latin digits.",
+      "Owner name truncates ('Design Consultant...') because the date shares the line; allow two lines or move the date.",
+      "Toolbar wraps to two rows with ~60px of gap above the columns; tighten."
+    ]
+  },
+  "UX-06": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Header: Subject, Stage pill, Step Age dots, Download PDF, Watching, View workflow",
+        "ok": true,
+        "detail": "Present"
+      },
+      {
+        "text": "Header shows With and Document Number",
+        "ok": false,
+        "detail": "With/Step/Type sit in a block near the bottom; Document Number repeated in a mis-aligned Subject block"
+      },
+      {
+        "text": "Every Transition pop-up and View workflow drawer opened",
+        "ok": false,
+        "detail": "Not exercised in this pre-check (needs a person)"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-06-1-item-en.png",
+      "ux/UX-06-2-item2-en.png",
+      "ux/UX-06-3-item-ar.png"
+    ],
+    "notes": "Only one MAR state seen (Pending Approval).",
+    "uiIssues": [
+      {
+        "element": "Subject / Document Number block",
+        "reference": "design/prompts/work-item-page.md",
+        "expected": "Aligned label/value rows",
+        "actual": "Document Number value and the Revision select sit on different baselines and columns",
+        "screenshot": "ux/UX-06-1-item-en.png"
+      },
+      {
+        "element": "Items section",
+        "reference": "work-item-page.md",
+        "expected": "One heading",
+        "actual": "'Items' heading followed by an 'Items' field label (also on New Submittal)",
+        "screenshot": "ux/UX-06-1-item-en.png"
+      },
+      {
+        "element": "Workflow line",
+        "reference": "work-item-page.md",
+        "expected": "A readable Workflow name",
+        "actual": "'Workflow: 2→2 Contractor Engineer → ... · Version 3' reads as a code",
+        "screenshot": "ux/UX-06-1-item-en.png"
+      },
+      {
+        "element": "Linked from",
+        "reference": "work-item-page.md",
+        "expected": "Other items that link here",
+        "actual": "'Linked from' lists the item itself (TWR-MAR-01-0003)",
+        "screenshot": "ux/UX-06-1-item-en.png"
+      },
+      {
+        "element": "Unanswered fields",
+        "reference": "work-item-page.md",
+        "expected": "Hidden or muted when empty",
+        "actual": "'Not answered' repeated 5 times, adds ~250px of clutter",
+        "screenshot": "ux/UX-06-1-item-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Move With and Step into the header beside Stage.",
+      "Collapse empty Form sections."
+    ]
+  },
+  "UX-07": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Sections, required marks, field help",
+        "ok": true,
+        "detail": "As new-work-item.md"
+      },
+      {
+        "text": "Nothing overlaps at 375",
+        "ok": true,
+        "detail": "No overlap, no page sideways scroll"
+      },
+      {
+        "text": "Type chooser readable at 375",
+        "ok": false,
+        "detail": "Labels wrap to 3 lines; Arabic mixes 'MAR', 'SAR' and 'DAR' codes with full names"
+      },
+      {
+        "text": "Upload, Items rows, Saved indicator, attention list",
+        "ok": false,
+        "detail": "Not driven; documents say 'can be added once the Draft is saved' three times"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-07-1-new-en.png",
+      "ux/UX-07-2-new-ar-375.png"
+    ],
+    "notes": "",
+    "uiIssues": [
+      {
+        "element": "Type segmented control at 375",
+        "reference": "new-work-item.md",
+        "expected": "Short labels, one line",
+        "actual": "Three-line wrapped labels inside a 40px-wide control, unequal heights",
+        "screenshot": "ux/UX-07-2-new-ar-375.png"
+      },
+      {
+        "element": "Items section",
+        "reference": "form-template-brief.md",
+        "expected": "One heading",
+        "actual": "'Items' heading plus 'Items' label",
+        "screenshot": "ux/UX-07-1-new-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Say once, at the top of Documents, that files are added after Save Draft.",
+      "Show the Save Draft button sticky at 375."
+    ]
+  },
+  "UX-08": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Newest first, another Company by name only",
+        "ok": true,
+        "detail": "Company name shown, never members"
+      },
+      {
+        "text": "Entries worded from what happened",
+        "ok": false,
+        "detail": "'Ali Sonour Submit TWR...', 'Approve · A', 'Revise & Resubmit · C' use Transition names"
+      },
+      {
+        "text": "Paging keeps place",
+        "ok": false,
+        "detail": "Not exercised"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-08-1-activity-en.png"
+    ],
+    "notes": "No page h1 (heading is inside the card).",
+    "uiIssues": [
+      {
+        "element": "Entry wording",
+        "reference": "design/prompts/activity.md",
+        "expected": "Past tense: 'Ali Sonour submitted ...'",
+        "actual": "Transition names as verbs, mixed with approval Code letter",
+        "screenshot": "ux/UX-08-1-activity-en.png"
+      },
+      {
+        "element": "Page heading",
+        "reference": "activity.md",
+        "expected": "Page title above the card",
+        "actual": "Breadcrumb only, title inside the card",
+        "screenshot": "ux/UX-08-1-activity-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Reuse the Home Recent activity sentence form here."
+    ]
+  },
+  "UX-09": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Bell badge matches unread count",
+        "ok": true,
+        "detail": "9 and 9 unread entries"
+      },
+      {
+        "text": "Unread state clear",
+        "ok": false,
+        "detail": "Only a small red 'Unread' text; no dot or tint"
+      },
+      {
+        "text": "Grouping by day",
+        "ok": false,
+        "detail": "Flat list"
+      },
+      {
+        "text": "Empty state, open entry, Mark all as read",
+        "ok": false,
+        "detail": "Not exercised"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-09-1-notifications-en.png"
+    ],
+    "notes": "Topbar title and page h1 both say 'Notifications'.",
+    "uiIssues": [
+      {
+        "element": "Unread entries",
+        "reference": "design/prompts/notifications.md",
+        "expected": "Unread dot or tint, grouped by day",
+        "actual": "Flat rows, red text label only; every Subject is an underlined red link so unread and read look alike",
+        "screenshot": "ux/UX-09-1-notifications-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Group by Today and Earlier; use a leading dot for unread."
+    ]
+  },
+  "UX-10": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "No In-app switch",
+        "ok": true,
+        "detail": "Only Email per group, Pause all, language and Project mute"
+      },
+      {
+        "text": "Each change confirms it saved",
+        "ok": false,
+        "detail": "Not exercised (needs a person)"
+      },
+      {
+        "text": "Language change keeps the page",
+        "ok": false,
+        "detail": "Not exercised"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-10-1-profile-en.png"
+    ],
+    "notes": "Layout is clean; settings column is 770px wide leaving the right third empty.",
+    "uiIssues": [],
+    "uxRecommendations": [
+      "'Outcomes that notify me' disclosure is a bare red triangle link; give it a button look."
+    ]
+  },
+  "UX-11": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "One error for a wrong email or password",
+        "ok": false,
+        "detail": "Not run: no password may be typed"
+      },
+      {
+        "text": "Invitation steps",
+        "ok": false,
+        "detail": "/accept-invitation without a token says 'This invitation link is not valid'; needs the PAR-02 fixture"
+      },
+      {
+        "text": "Sign-in layout",
+        "ok": true,
+        "detail": "Fields, labels, language switch present; no horizontal scroll at 375"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-11-1-signin-en-1366.png",
+      "ux/UX-11-2-signin-ar-375.png",
+      "ux/UX-11-3-accept-invite-en.png"
+    ],
+    "notes": "",
+    "uiIssues": [
+      {
+        "element": "Sign-in form",
+        "reference": "design/prompts/sign-in.md",
+        "expected": "Centered card with product mark",
+        "actual": "Form left-aligned at x=419 inside a full-width page with ~450px blank below and no card/brand panel",
+        "screenshot": "ux/UX-11-1-signin-en-1366.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Add a 'Forgot password' route if the design asks for it."
+    ]
+  },
+  "UX-12": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "Members table: role, Projects count, status",
+        "ok": true,
+        "detail": "Own Company only"
+      },
+      {
+        "text": "Company Projects list",
+        "ok": true,
+        "detail": "Present but sparse"
+      },
+      {
+        "text": "Participant page, Member Visibility page, pickers with many values, Visibility Gap warning",
+        "ok": false,
+        "detail": "Not exercised"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-12-1-members-en.png",
+      "ux/UX-12-2-participants-en.png"
+    ],
+    "notes": "",
+    "uiIssues": [
+      {
+        "element": "Company Projects page",
+        "reference": "design/prompts/participants.md",
+        "expected": "Rows as cards with Member counts",
+        "actual": "One bare text row and ~650px empty page",
+        "screenshot": "ux/UX-12-2-participants-en.png"
+      }
+    ],
+    "uxRecommendations": []
+  },
+  "UX-13": {
+    "status": "pass",
+    "checks": [
+      {
+        "text": "One Settings template: left Project Settings nav, title, card",
+        "ok": true,
+        "detail": "Trades & Locations, Stages, Modules, Numbering, Workflows share it"
+      },
+      {
+        "text": "Read-only state clear for Ali",
+        "ok": true,
+        "detail": "'Only Project Admins can change this' pill on Modules; fewer nav entries"
+      },
+      {
+        "text": "Arabic mirrored",
+        "ok": true,
+        "detail": "Stages in AR"
+      },
+      {
+        "text": "One change on each page, save/cancel place",
+        "ok": false,
+        "detail": "Not exercised; Required links, Outcomes, Screens, Checklist Templates only shot, not studied"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-13-s-trades-locations.png",
+      "ux/UX-13-s-stages.png",
+      "ux/UX-13-s-modules-ali.png",
+      "ux/UX-13-s-stages-ar.png"
+    ],
+    "notes": "",
+    "uiIssues": [],
+    "uxRecommendations": [
+      "Trades & Locations has no description line unlike the other pages; the add-Scope form is permanently open under every Trade (long page); indent for child Scopes is inconsistent.",
+      "Document Numbering has the Settings nav while the Workflows list page is far wider and scrolls the clipped table."
+    ]
+  },
+  "UX-14": {
+    "status": "pass",
+    "checks": [
+      {
+        "text": "Live preview, segment builder, Sequence, per-Type table, Revision suffix",
+        "ok": true,
+        "detail": "Matches settings-numbering.html"
+      },
+      {
+        "text": "Preview left to right",
+        "ok": true,
+        "detail": "TWR-CMT-01-0001"
+      },
+      {
+        "text": "Ali sees examples only",
+        "ok": false,
+        "detail": "Ali view shot but not studied"
+      },
+      {
+        "text": "Shared-counter warning wording",
+        "ok": false,
+        "detail": "Not triggered"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-14-1-numbering-en.png",
+      "ux/UX-14-2-numbering-ali.png"
+    ],
+    "notes": "Differences (Customize vs Override, Participant Codes, Counters sections) are spec additions.",
+    "uiIssues": [],
+    "uxRecommendations": []
+  },
+  "UX-15": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Builder: palette, canvas, Step panel, problems bar, Validate, Publish",
+        "ok": true,
+        "detail": "Matches Workflow Builder V2"
+      },
+      {
+        "text": "Workflows page fits its card",
+        "ok": false,
+        "detail": "Right action column cut off"
+      },
+      {
+        "text": "Add Step, connect, undo, auto-layout, Publish, Library",
+        "ok": false,
+        "detail": "Not exercised"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-15-1-workflows-en.png",
+      "ux/UX-15-3-builder-en.png",
+      "ux/UX-15-4-version-en.png",
+      "ux/UX-15-2-library-en.png"
+    ],
+    "notes": "",
+    "uiIssues": [
+      {
+        "element": "Rabaed Default Workflows table",
+        "reference": "D:\\Artifacts\\Rabaed Settings Workflows.html",
+        "expected": "Whole action column visible",
+        "actual": "'Use for ...' and copy buttons run past the card's right edge, copy icon cut off, on every row",
+        "screenshot": "ux/UX-15-1-workflows-en.png"
+      },
+      {
+        "element": "Work Item Types table",
+        "reference": "settings-workflows.html",
+        "expected": "One or two actions per row",
+        "actual": "Two stacked buttons plus a menu per row; rows ~58px tall",
+        "screenshot": "ux/UX-15-1-workflows-en.png"
+      },
+      {
+        "element": "Builder canvas",
+        "reference": "D:\\Artifacts\\Rabaed Workflow Builder V2.html",
+        "expected": "Graph fills canvas at readable size",
+        "actual": "Graph is tiny (text ~5px) with large empty margins at 1366; title truncated 'UAT FX-SB MAR Send Ba...'",
+        "screenshot": "ux/UX-15-3-builder-en.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Fit-to-view should zoom to fill the canvas width."
+    ]
+  },
+  "UX-16": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "Step 1 Upload: six-step bar saying where you are",
+        "ok": true,
+        "detail": "Present"
+      },
+      {
+        "text": "Mapping, preview with bad rows, confirm count, results page",
+        "ok": false,
+        "detail": "Needs a file upload and a person"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-16-1-import-en.png",
+      "ux/UX-16-2-imports-en.png"
+    ],
+    "notes": "'Nothing is created until you confirm' appears twice on the first step.",
+    "uiIssues": [],
+    "uxRecommendations": [
+      "Say it once."
+    ]
+  },
+  "UX-17": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "Type chips with counts, filters, Kanban/List switch",
+        "ok": true,
+        "detail": "Present"
+      },
+      {
+        "text": "Groups by Stage, Step Age dots, Code B Comments",
+        "ok": false,
+        "detail": "Seed Project has no Snags, only the empty state could be seen"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-17-1-snag-en.png"
+    ],
+    "notes": "Empty state reads well, with a next step.",
+    "uiIssues": [],
+    "uxRecommendations": []
+  },
+  "UX-18": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "WIR raised as Hafiz, Saved indicator, Checklist Template picker with preview",
+        "ok": true,
+        "detail": "TWR-WIR-01-0002 'UAT UX-18 inspect conduits before plastering'; 'Saved 8:57 PM' shown"
+      },
+      {
+        "text": "Phone layout: one column, no sideways scroll, nothing cut off at 375",
+        "ok": true,
+        "detail": "scrollWidth 375 on new WIR and item page"
+      },
+      {
+        "text": "Large touch targets",
+        "ok": true,
+        "detail": "Pass/Fail/N/A segments are 44px high, about 45px wide"
+      },
+      {
+        "text": "Per-check card: Pass/Fail/N/A, Raise a Snag (on by default), comment and photo (required) on Fail",
+        "ok": true,
+        "detail": "Appears when Fail is tapped"
+      },
+      {
+        "text": "Camera first / photo tool with Take photo and Upload, annotate tools",
+        "ok": false,
+        "detail": "'Take a photo' button present but sits under a native 'Choose Files / No file chosen' control; annotation not reachable without a captured photo, not tested"
+      },
+      {
+        "text": "Sticky summary '18 Pass / 2 Fail' and progress",
+        "ok": false,
+        "detail": "Only a static '1 Fail / 2 not answered' line at the top of the list that scrolls away"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-18-7-wir-saved.png",
+      "ux/UX-18-10-ahmed-onsite-375.png",
+      "ux/UX-18-12-fail-picked.png"
+    ],
+    "notes": "Data left by this run: WIR TWR-WIR-01-0002 is Pending Approval with Ahmed (Consultant Engineer); first check answered Fail with Raise a Snag, no comment or photo. Arabic on-site page shot (UX-18-11-ahmed-onsite-ar-375) not read closely.",
+    "uiIssues": [
+      {
+        "element": "Checklist block on item page (Consultant view)",
+        "reference": "design/prompts/inspection-on-phone.md",
+        "expected": "Template shown once, as the answering cards",
+        "actual": "The read-only 'Checklist' section repeats the same 3 items below the answering cards, with the raw key 'workItems.form.checklistTemplateField.raisesSnag' on each (a missing translation)",
+        "screenshot": "ux/UX-18-10-ahmed-onsite-375.png"
+      },
+      {
+        "element": "Photo control on a Fail",
+        "reference": "inspection-on-phone.md",
+        "expected": "Two buttons: Take photo and Upload",
+        "actual": "Native 'Choose Files / No file chosen' beside a 'Take a photo' button; no 'Upload' button",
+        "screenshot": "ux/UX-18-12-fail-picked.png"
+      },
+      {
+        "element": "Progress summary",
+        "reference": "inspection-on-phone.md",
+        "expected": "Sticky summary at the bottom: '18 Pass / 2 Fail / 1 N/A' and 'n of N answered'",
+        "actual": "Static line at the top of the list, scrolls out of view",
+        "screenshot": "ux/UX-18-12-fail-picked.png"
+      },
+      {
+        "element": "Page title and breadcrumb of a WIR",
+        "reference": "new-work-item.md",
+        "expected": "'New Inspection' / 'Inspections'",
+        "actual": "Create page h1 says 'New Submittal'; the item page breadcrumb says 'Submittals'",
+        "screenshot": "ux/UX-18-7-wir-saved.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Make the segmented Pass/Fail/N/A full width on a phone for easier thumb taps.",
+      "Say once on the New WIR page that Documents and Photos come after Save Draft."
+    ]
+  },
+  "UX-19": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "No page-level sideways scroll",
+        "ok": true,
+        "detail": "Home, List, Kanban, New item, Notifications at 375 and 820 (scrollWidth = width)"
+      },
+      {
+        "text": "Tables/Kanban scroll inside region",
+        "ok": true,
+        "detail": "Table scrolls; Kanban columns scroll"
+      },
+      {
+        "text": "Sidebar is a drawer",
+        "ok": true,
+        "detail": "Hamburger at 375"
+      },
+      {
+        "text": "Every action reachable without clutter",
+        "ok": false,
+        "detail": "List toolbar takes four rows (~400px of 812) before the table"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-19-1-list-en-375.png",
+      "ux/UX-19-2-kanban-ar-375.png",
+      "ux/UX-19-3-home-ar-375.png",
+      "ux/UX-19-4-list-en-820.png"
+    ],
+    "notes": "Item page, Profile, Settings not shot at 375.",
+    "uiIssues": [
+      {
+        "element": "List toolbar at 375",
+        "reference": "D:\\Artifacts\\Rabaed Responsive Anatomy.html; responsive.md",
+        "expected": "Search + one Filter button that opens a sheet",
+        "actual": "Add, Search, Filter+toggle, Group+Export, view switch each on own row; table starts at y=720",
+        "screenshot": "ux/UX-19-1-list-en-375.png"
+      },
+      {
+        "element": "List table at 375",
+        "reference": "responsive.md",
+        "expected": "Title visible with row",
+        "actual": "Title is cut to ~110px beside a sticky action column; Document Number takes most width",
+        "screenshot": "ux/UX-19-1-list-en-375.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Collapse secondary controls into a Filter sheet at 375."
+    ]
+  },
+  "UX-20": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "Not-found says nothing about the request",
+        "ok": true,
+        "detail": "'We can't find this page. It may not exist, or you may not have access to it.'"
+      },
+      {
+        "text": "Empty states",
+        "ok": true,
+        "detail": "Snag list, inspections show a message; Snag has a next step, Inspections does not"
+      },
+      {
+        "text": "Loading and api-down states",
+        "ok": false,
+        "detail": "Cannot be forced from here"
+      }
+    ],
+    "screenshots": [],
+    "notes": "",
+    "uiIssues": [],
+    "uxRecommendations": [
+      "Inspections empty table gives no next step."
+    ]
+  },
+  "UX-21": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "Feedback after actions",
+        "ok": false,
+        "detail": "Writes are not allowed in this pre-check"
+      }
+    ],
+    "screenshots": [],
+    "notes": "",
+    "uiIssues": [],
+    "uxRecommendations": []
+  },
+  "UX-22": {
+    "status": "manual",
+    "checks": [
+      {
+        "text": "Keyboard and a11y scan",
+        "ok": false,
+        "detail": "Needs a person or the accessibility agent; not run"
+      }
+    ],
+    "screenshots": [],
+    "notes": "",
+    "uiIssues": [],
+    "uxRecommendations": []
+  },
+  "UX-23": {
+    "status": "not-run",
+    "checks": [],
+    "screenshots": [],
+    "notes": "Waits for RP-588: Packages UI (RP-659 to RP-662).",
+    "uiIssues": [],
+    "uxRecommendations": []
+  },
+  "UX-24": {
+    "status": "pass",
+    "checks": [
+      {
+        "text": "Photo-first cards",
+        "ok": true,
+        "detail": "Thumbnail left, Document Number, Subject, Stage pill, Step Age dots, location and Company"
+      },
+      {
+        "text": "Camera-first create",
+        "ok": true,
+        "detail": "'+' opens New Snag step 1 of 4: camera viewfinder with shutter, Library and Skip; then What's wrong?, Where is it? (Zone > Building > Floor drill-down), Ready to raise; 'Draft saved' shown; errors 'Describe the snag.' and 'Pick the Trade.'"
+      },
+      {
+        "text": "Snag raised end to end",
+        "ok": true,
+        "detail": "TWR-SNG-03-0002 'UAT UX-24 corridor ceiling gap' by Ahmed, now Open"
+      },
+      {
+        "text": "Bottom-sheet filters",
+        "ok": false,
+        "detail": "Filter icon seen at the end of the chip row; sheet not opened"
+      },
+      {
+        "text": "No page-level sideways scroll at 375",
+        "ok": true,
+        "detail": "scrollWidth 375"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-24-2-snag-list-375.png",
+      "ux/UX-24-4-step1.png",
+      "ux/UX-24-11-pick-Tower1Floor01.png",
+      "ux/UX-24-13-after-raise.png"
+    ],
+    "notes": "snag-list-mobile.html not compared pixel by pixel; the flow matches its intent. The usual New page (reached by the desktop route) still reads 'New Submittal' on a Snag Type.",
+    "uiIssues": [
+      {
+        "element": "Camera step",
+        "reference": "design/reference/claude-design/ui_kits/app/snag-list-mobile.html",
+        "expected": "Full-screen camera",
+        "actual": "App header and the project tab bar stay above the camera (~250px of 812)",
+        "screenshot": "ux/UX-24-4-step1.png"
+      },
+      {
+        "element": "Where is it? step",
+        "reference": "snag-list-mobile.html",
+        "expected": "Leaf level shows no chevron",
+        "actual": "'Tower 1 Floor 01' keeps a chevron after it is picked and ~700px of empty space follows",
+        "screenshot": "ux/UX-24-11-pick-Tower1Floor01.png"
+      },
+      {
+        "element": "New page for a Snag opened from the desktop route",
+        "reference": "new-work-item.md",
+        "expected": "'New Snag'",
+        "actual": "h1 'New Submittal' with the Type chooser",
+        "screenshot": "ux/UX-24-1-snag-new-375.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Hide the project tab bar during the 4-step flow so the viewfinder fills the screen."
+    ]
+  },
+  "UX-25": {
+    "status": "not-run",
+    "checks": [],
+    "screenshots": [
+      "ux/UX-25-1-signature-en.png"
+    ],
+    "notes": "Waits for RP-23: Add Signature UI (RP-665, RP-666). A Profile signature page exists but the no-Signature and no-Stamp pop-ups and Company logo/Stamp were not checked.",
+    "uiIssues": [],
+    "uxRecommendations": []
+  },
+  "UX-26": {
+    "status": "fail",
+    "checks": [
+      {
+        "text": "Record of a closed MAR downloaded as Ali (6 pages, bilingual)",
+        "ok": true,
+        "detail": "TWR-MAR-01-0001 at Code A"
+      },
+      {
+        "text": "Page 1 order: logos/Companies, title block, Parties, Classification, Final decision with chips, QR and Verification Code",
+        "ok": true,
+        "detail": "Matches docs/form-engine.md section 6 elements 1-5; Document Number and Verification Code left to right; Latin digits"
+      },
+      {
+        "text": "Form body, Signature cards with signature image, Stamps, Disclaimer, Appendix present",
+        "ok": true,
+        "detail": "Pages 2 to 6; the Disclaimer is the placeholder '‹Disclaimer: the owner's text to come›'"
+      },
+      {
+        "text": "Compared with the owner samples of RP-151",
+        "ok": false,
+        "detail": "The sample files are not in the repo or D:Artifacts; compared with the spec text instead. A person must compare with the samples"
+      },
+      {
+        "text": "Working Copy",
+        "ok": true,
+        "detail": "Download PDF on a Pending item gives a 2-page 'Not Final' watermarked copy, Companies by name only"
+      }
+    ],
+    "screenshots": [
+      "ux/UX-26-rec-1.png",
+      "ux/UX-26-rec-2.png",
+      "ux/UX-26-rec-4.png",
+      "ux/UX-26-wc-1.png"
+    ],
+    "notes": "Arabic-only and English-only record language not run (needs the Project's record setting changed).",
+    "uiIssues": [
+      {
+        "element": "Working Copy title block",
+        "reference": "docs/form-engine.md section 6 element 1",
+        "expected": "'TWR-MAR-01-0003 Rev 1'",
+        "actual": "Document Number prints 'TWR-MAR-01-0003 Rev 1 Rev 1'",
+        "screenshot": "ux/UX-26-wc-1.png"
+      },
+      {
+        "element": "Working Copy revision line",
+        "reference": "form-engine.md section 6 element 1",
+        "expected": "Arabic and English lines paired like other rows",
+        "actual": "Arabic line sits right, English 'Revision of TWR-MAR-01-0003, closed at Code C ...' sits alone on the left under the rule; Arabic date is 2026/10/22 while elsewhere 'Oct 22, 2026'",
+        "screenshot": "ux/UX-26-wc-1.png"
+      },
+      {
+        "element": "Record page 3",
+        "reference": "form-engine.md section 6 element 9",
+        "expected": "Documents list shares a page with the next block",
+        "actual": "Page 3 holds only the 1-row Documents table, ~90% blank",
+        "screenshot": "ux/UX-26-rec-3.png"
+      },
+      {
+        "element": "Record page 1",
+        "reference": "form-engine.md section 6",
+        "expected": "Approval flow follows the Final decision",
+        "actual": "~190px blank at the foot of page 1 while the Approval flow starts on page 2",
+        "screenshot": "ux/UX-26-rec-1.png"
+      }
+    ],
+    "uxRecommendations": [
+      "Content hash column in the Approval flow is 3 lines of 20-char fragments and repeats the same value for steps 1 to 3; consider a shorter display.",
+      "Compare page 1 and the Signature cards with the owner's sample PDFs side by side."
+    ]
+  }
+}
