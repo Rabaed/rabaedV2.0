@@ -94,7 +94,7 @@ Stacks: account, network, data, storage, registry, migrations, app and monitorin
 |---|---|
 | `ci.yml` | Lint (including the rule against logging an error's message), typecheck, unit tests, seam 1 (the API as a Member), seam 2 (database RLS, and every `security definer` function sets `search_path` and is written in plpgsql), story tests, infra assertions, mail, web build, web image start, and on pull requests that no existing migration was changed |
 | `secret-scan.yml` | gitleaks; refuses font files |
-| `infra-diff.yml` | Posts a `cdk diff` on each PR, using a read-only role |
+| `infra-diff.yml` | Runs `cdk diff` against dev on each PR, using a read-only role, and writes it to the job summary; comments on the PR only when the PR itself changes an IAM or stateful resource (RP-1018) |
 | `deploy-dev.yml` | On merge to `main`: build and push images → migrate → deploy → smoke tests (including the visibility checks in the cloud); serialised; rolls back on smoke failure |
 | `update-screenshots.yml` | Refreshes story screenshot baselines on a PR that touches stories or `packages/ui/src` (or carries the label), and adds new stories' baselines after CI, with least privilege |
 

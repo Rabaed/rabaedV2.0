@@ -7,10 +7,13 @@ name: Reviewed required
 # The code it runs is the default branch's, never the pull request's. On a PR it
 # first waits for the head's reviewed-label run: that run removes a stale label with
 # GITHUB_TOKEN, which starts no `unlabeled` run here.
+# A draft PR passes with a note (RP-1018: a check red until the final review woke
+# Auto-fix about 15 times on one draft). Marking it ready runs the check again, and
+# a draft cannot enter the merge queue.
 # The label must exist in the repository: gh label create docs-only.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
 permissions: {}
 concurrency:

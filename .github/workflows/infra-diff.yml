@@ -1,4 +1,9 @@
 name: Infra diff
+# The `cdk diff (dev)` report (RP-1018). The whole diff goes to the job summary.
+# The PR gets a comment only when it adds, removes or changes an IAM or stateful
+# resource, found by comparing its synthesized templates with its base's
+# (scripts/infra-diff-report.ts); a later push edits that comment. A failed AWS
+# sign-in or diff posts nothing: the job's red status says it.
 on:
   pull_request:
 permissions:
@@ -24,8 +29,9 @@ jobs:
       id-token: write
       pull-requests: write
     steps:
+      # Depth 2: the PR's merge commit and its first parent, the base its templates are compared with.
       - uses: actions/checkout@v7
-        with: { persist-credentials: false }
+        with: { persist-credentials: false, fetch-depth: 2 }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -44,23 +50,29 @@ jobs:
         # no change set, so it needs no write access.
         run: |
           set -o pipefail
-          pnpm --silent cdk diff --method=template --no-color -c "env=$RABAED_ENV" 2>&1 | tee "$RUNNER_TEMP/diff.txt"
-      - name: Post the diff on the pull request
+          pnpm --silent cdk diff --method=template --no-color -c "env=$RABAED_ENV" --output "$RUNNER_TEMP/head.out" 2>&1 | tee "$RUNNER_TEMP/diff.txt"
+      # The base's templates (synth needs no AWS), so the report can tell what this PR itself
+      # changes: dev lags main, so the diff above also shows main's undeployed changes.
+      # A failed base synth only leaves the PR's changes unlisted (the report warns), so it does not fail the job.
+      - name: Synthesize the base
+        if: steps.diff.outcome == 'success'
+        continue-on-error: true
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
+          cd "$RUNNER_TEMP/base"
+          pnpm install --frozen-lockfile --prefer-offline
+          cd packages/infra
+          pnpm --silent cdk synth --quiet --no-color -c "env=$RABAED_ENV" --output "$RUNNER_TEMP/base.out"
+      - name: Report the diff
         if: ${{ !cancelled() && steps.diff.outcome != 'skipped' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           OUTCOME: ${{ steps.diff.outcome }}
+          DIFF_FILE: ${{ runner.temp }}/diff.txt
+          BASE_OUT: ${{ runner.temp }}/base.out
+          HEAD_OUT: ${{ runner.temp }}/head.out
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # The account ID is redacted from the report (the repository is public); the script refuses to report without it.
         run: |
-          # Never post without knowing what to redact.
-          account=$(aws sts get-caller-identity --query Account --output text)
-          [[ "$account" =~ ^[0-9]{12}$ ]] || { echo "::error::could not read the AWS account ID"; exit 1; }
-          {
-            echo "### cdk diff (dev): $OUTCOME"
-            echo
-            echo '```'
-            # The account ID stays out of the public comment; keep under GitHub's size limit.
-            sed "s/$account/<account>/g" "$RUNNER_TEMP/diff.txt" | tail -c 60000
-            echo '```'
-          } > "$RUNNER_TEMP/comment.md"
-          gh pr comment "$PR" --edit-last --create-if-none --body-file "$RUNNER_TEMP/comment.md"
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text) node scripts/infra-diff-report.ts
