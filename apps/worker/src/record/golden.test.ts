@@ -45,6 +45,9 @@ const cases: { name: string; code: GoldenCode; language: RecordLanguage }[] = [
   { name: "mar-cancelled-by-rabaed-en", code: "rabaed-cancelled", language: "en" },
   { name: "dar-owner-review-bilingual", code: "owner", language: "bilingual" },
   { name: "dar-owner-review-ar", code: "owner", language: "ar" },
+  // A WIR at Code C with the checklist the code froze, its photos and Snag lines (RP-982).
+  { name: "wir-code-c-en", code: "wir", language: "en" },
+  { name: "wir-code-c-ar", code: "wir", language: "ar" },
 ];
 
 /** A golden record's HTML, with its images. */

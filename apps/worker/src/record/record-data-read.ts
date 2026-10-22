@@ -186,6 +186,7 @@ export function parseRecord(xml: string, photos: PhotoKeys = { keyOf: () => null
             text: textOf(item, "text"),
             answer: textOf(item, "answer"),
             comment: maybe(item, "comment")?.text ?? null,
+            snag: maybe(item, "snag") ? textOf(item, "snag") : null,
             photos: children(item, "photo").map(photoOf),
           })),
         };

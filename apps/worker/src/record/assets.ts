@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { RecordFacts } from "@rabaed/db";
 import { PDFDocument } from "pdf-lib";
 import type { RecordFiles } from "./files.ts";
-import { attachmentFieldKeysOf, isListedDocument } from "./form-content.ts";
+import { attachmentFieldKeysOf, isListedDocument, printedPhotosOf } from "./form-content.ts";
 
 // What the layout needs from the item's Documents (form-engine.md §6, elements 8
 // and 9): the page counts of the shared Documents, and the photos of the Form as
@@ -10,7 +10,7 @@ import { attachmentFieldKeysOf, isListedDocument } from "./form-content.ts";
 // Documents under the item's prefix (ADR 0023). A file it can't read or open
 // is left without a count or an image, never a failed record.
 
-/** A photo larger than this is listed by name and time only, so a record still opens on a phone. */
+/** A photo larger than this is listed by name, time and fingerprint only, so a record still opens on a phone. */
 const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
 /** All the inlined photos together stay under this. */
 const MAX_PHOTOS_TOTAL_BYTES = 40 * 1024 * 1024;
@@ -22,7 +22,10 @@ export interface DocumentAssets {
   readonly pageCounts: ReadonlyMap<string, number | null>;
   /** The data URL of each Form photo, Signature, logo and Stamp by storage key. */
   readonly images: ReadonlyMap<string, string>;
-  /** The SHA-256 (hex) of each inlined image's bytes (photos, Signatures, logos, Stamps) by storage key: the Record Data carries it (RP-155). */
+  /**
+   * The SHA-256 (hex) of each inlined image's bytes (photos, Signatures, logos, Stamps), and of each Form
+   * photo past the limits (RP-982), by storage key: the Record Data carries it (RP-155).
+   */
   readonly fingerprints: ReadonlyMap<string, string>;
 }
 
@@ -71,10 +74,8 @@ export async function formAssets(facts: Pick<RecordFacts, "form" | "documents">,
     else if (d.contentType === "application/pdf") pageCounts.set(d.storageKey, await pdfPages(files, d.storageKey));
     else pageCounts.set(d.storageKey, null);
   }
-  const { images, fingerprints } = await inlinePhotos(
-    facts.documents.filter((d) => !isListedDocument(d, attachmentFields)),
-    files,
-  );
+  // Only the photos the page prints, in the order they were added: Re-produce inlines the same ones, in that order.
+  const { images, fingerprints } = await inlinePhotos(printedPhotosOf(facts), files);
   return { pageCounts, images, fingerprints };
 }
 
@@ -82,6 +83,14 @@ export async function documentAssets(facts: RecordFacts, files: RecordFiles): Pr
   const { pageCounts, images: formImages, fingerprints: formFingerprints } = await formAssets(facts, files);
   const images = new Map(formImages);
   const fingerprints = new Map(formFingerprints);
+  // A photo past the limits prints its name and fingerprint, with no image (RP-982): that of its stored
+  // bytes, streamed (never held in memory), so what the record names is what is stored; none when the
+  // file is gone. A Working Copy prints no fingerprint, so only the record reads them.
+  for (const d of printedPhotosOf(facts)) {
+    if (fingerprints.has(d.storageKey)) continue;
+    const sha256 = await files.sha256(d.storageKey);
+    if (sha256) fingerprints.set(d.storageKey, sha256);
+  }
   // The Signatures the path's events recorded, and the acting Companies' logos and Stamps in force
   // at close (RP-650): stored under members/ and companies/, which the worker may read (ADR 0023).
   // Inlined as the photos are, with their fingerprints, within limits of their own.

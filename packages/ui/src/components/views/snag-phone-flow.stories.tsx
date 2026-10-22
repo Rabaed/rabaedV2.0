@@ -196,7 +196,7 @@ export const Raise: Story = {
   },
 };
 
-/** Raise not offered (two Contractors cover it, until the pick of RP-658): it says so, and offers the Draft instead. */
+/** Raise not offered (no Contractor covers it, say): it says so, and offers the Draft instead. */
 export const RaiseNotOffered: Story = {
   render: (_args, context) => <RaiseStory locale={storyLocale(context)} offered={false} />,
   play: async (context) => {

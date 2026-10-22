@@ -54,9 +54,9 @@ describe("recordProblems", () => {
 
   it("fails a PDF whose seal is not long-term: its store without the revocation data (PAdES B-LT, RP-669)", async () => {
     const pdf = await sealed(await pdfOf(1));
-    const { store, signedLength } = await documentSecurityStore(pdf);
+    const { store, signedLength } = documentSecurityStore(pdf);
     // The seal's own certificates only, as a record sealed before RP-669 holds them.
-    const shortOfLt = await withDss(pdf.slice(0, signedLength), { certificates: store!.certificates.slice(0, 3), ocspResponses: [], crls: [] });
+    const shortOfLt = withDss(pdf.slice(0, signedLength), { certificates: store!.certificates.slice(0, 3), ocspResponses: [], crls: [] });
     expect(await recordProblems(shortOfLt, expectation(), compliant)).toEqual([
       "the seal is not long-term (PAdES B-LT): its Document Security Store holds no revocation data",
     ]);

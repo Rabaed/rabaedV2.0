@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { formatNumber, type Locale } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations, setRequestLocale } from "next-intl/server";
 import { MarkNotificationsRead } from "@/components/mark-notifications-read";
@@ -40,7 +40,7 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
                   <p className="text-sm text-muted">
                     <DocNo value={n.package.number} />
                     {" · "}
-                    {t("packageSubmitted", { company: n.package.companyName[locale], count: n.package.count, n: n.package.count })}
+                    {t("packageSubmitted", { company: n.package.companyName[locale], count: n.package.count, n: formatNumber(n.package.count, locale) })}
                   </p>
                 </div>
               ) : (

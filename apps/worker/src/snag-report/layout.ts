@@ -1,11 +1,12 @@
-import { formatDate, intlLocaleOf, type BilingualText, type Locale, type SnagReportContent, type SnagReportItem } from "@rabaed/domain";
+import { formatDate, formatNumber, stepAgeLabel, type BilingualText, type Locale, type SnagReportContent, type SnagReportItem } from "@rabaed/domain";
 import type { RecordFonts } from "../record/fonts.ts";
 
 // The Snag report's layout (RP-677; ADR 0023): HTML and CSS that the Documental Record's Chromium
 // renderer prints, in one language as the viewer reads (Arabic right to left), with Latin digits and
 // Document Numbers left to right. A plain PDF: not PDF/A-3, not sealed, not a Record. Each item shows
-// its number, Subject, Type, Trade, Location, Stage, who it is with, its Step Age in weeks and its
-// first photo where the viewer sees one. Step Age only; no due date, deadline or "overdue".
+// its number, Subject, Type, Trade, Location, Stage, who it is with, its Step Age in weeks (the
+// domain's `stepAgeLabel`, the words the app shows) and its first photo where the viewer sees one.
+// Step Age only; no due date, deadline or "overdue".
 
 const html = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -31,14 +32,6 @@ const WORDS = {
   page: { en: "page", ar: "صفحة" },
   of: { en: "of", ar: "من" },
 } satisfies Record<string, BilingualText>;
-
-/** "3 weeks" / "3 أسابيع": Latin digits, the plural the language needs. */
-function weeks(n: number, locale: Locale): string {
-  if (locale === "en") return `${n} ${n === 1 ? "week" : "weeks"}`;
-  const form = new Intl.PluralRules(intlLocaleOf(locale)).select(n);
-  const word = form === "one" ? "أسبوع" : form === "two" ? "أسبوعان" : form === "few" ? "أسابيع" : "أسبوعًا";
-  return form === "two" ? word : `${n} ${word}`;
-}
 
 const cssString = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
@@ -70,7 +63,7 @@ export function snagReportHtml(
       ${i.location ? field(word("location"), text(i.location)) : ""}
       ${field(word("stage"), text(i.stage))}
       ${i.with ? field(word("with"), text(i.with)) : ""}
-      ${i.stepAgeWeeks !== null ? field(word("stepAge"), `<bdi lang="${locale}" dir="${dir}">${weeks(i.stepAgeWeeks, locale)}</bdi>`) : ""}
+      ${i.stepAgeWeeks !== null ? field(word("stepAge"), `<bdi lang="${locale}" dir="${dir}">${html(stepAgeLabel(i.stepAgeWeeks, locale))}</bdi>`) : ""}
     </div>
   </div>
   ${photo ? `<img class="photo" src="${html(photo)}" alt="">` : ""}
@@ -115,7 +108,7 @@ body { font-family: ${fonts.family}; font-size: 9pt; line-height: 1.4; }
 <body>
 <div class="top">
   <h1>${html(word("title"))}</h1>
-  <div class="meta">${html(word("project"))}: ${text(content.projectName)} · ${html(word("items"))}: <bdi dir="ltr" class="ltr">${content.items.length}</bdi> · <bdi lang="${locale}" dir="${dir}">${html(formatDate(at, locale, { dateStyle: "medium" }))}</bdi></div>
+  <div class="meta">${html(word("project"))}: ${text(content.projectName)} · ${html(word("items"))}: <bdi dir="ltr" class="ltr">${html(formatNumber(content.items.length, locale))}</bdi> · <bdi lang="${locale}" dir="${dir}">${html(formatDate(at, locale, { dateStyle: "medium" }))}</bdi></div>
 </div>
 ${content.items.map(card).join("\n")}
 ${content.capped ? `<p class="capped">${html(word("capped"))}</p>` : ""}

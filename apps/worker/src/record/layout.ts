@@ -139,9 +139,10 @@ export function recordHtml(
 
   const photo = (p: RecordPhoto) => {
     const image = images.get(p.storageKey);
+    // A photo past the inline limits (assets.ts) prints its fingerprint instead of its picture (RP-982).
     return `<figure class="photo">${image ? `<img src="${image}" alt="">` : '<div class="noimage"></div>'}<figcaption><bdi dir="ltr">${html(p.fileName)}</bdi>${
       p.takenAt ? `<div class="muted">${heading("takenAt")}: ${when(p.takenAt)}</div>` : ""
-    }</figcaption></figure>`;
+    }${!image && p.sha256 ? `<div class="muted fp">${heading("fingerprint")}: ${ltr(p.sha256)}</div>` : ""}</figcaption></figure>`;
   };
 
   /** A table, checklist or photo grid: it takes the whole width. */
@@ -158,6 +159,8 @@ export function recordHtml(
           .map(
             (item) =>
               `<tr><td>${txt(item.text)}${item.comment ? `<div class="muted"><bdi>${html(item.comment)}</bdi></div>` : ""}${
+                item.snag ? `<div class="muted">${txt(item.snag)}</div>` : ""
+              }${
                 item.photos.length > 0 ? `<div class="photos">${item.photos.map(photo).join("")}</div>` : ""
               }</td><td class="answer">${txt(item.answer)}</td></tr>`,
           )
@@ -448,6 +451,7 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 .photo { margin: 0; break-inside: avoid; font-size: 7.5pt; }
 .photo img { width: 100%; max-height: 45mm; object-fit: cover; border: 0.5pt solid #999; display: block; }
 .photo .noimage { height: 20mm; border: 0.5pt dashed #999; }
+.photo .fp { font-size: 6pt; word-break: break-all; }
 .mark { vertical-align: middle; }
 .pre { white-space: pre-line; }
 .logo { display: block; max-height: 12mm; max-width: 40mm; margin-bottom: 1.5mm; }

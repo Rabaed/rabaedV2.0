@@ -1,4 +1,6 @@
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFString } from "pdf-lib";
+import { createHash } from "node:crypto";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFString } from "pdf-lib";
+import { ascii, bufferOf, concat, incrementalUpdate, lastMatch, lastRevision, latin1, resolveAs, type IndirectObject, type Revision, type Update } from "./pdf-revision.ts";
 import {
   asn1js,
   commonNameOf,
@@ -28,84 +30,99 @@ import { tokenCertificates, type TimestampAuthority } from "./timestamp.ts";
 
 /** Room for the CMS: the signer's and the authority's certificates and the token. */
 const CONTENTS_BYTES = 24 * 1024;
+/** As wide as any final byte range of a file under 10 GB. */
 const BYTE_RANGE_PLACEHOLDER = "/ByteRange [ 0 1234567890 1234567890 1234567890 ]";
 
-const latin1 = new TextDecoder("latin1");
-const ascii = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0));
 
-function concat(...parts: Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-}
-
-/** The PDF with an empty seal: its /Contents zeros and a placeholder /ByteRange, written whole (no object streams). */
-async function withSignatureField(pdf: Uint8Array, at: Date): Promise<Uint8Array> {
+/** `pdf` with its last cross-reference a classic table, to append to: as it is, or written once again when it isn't. */
+async function withClassicTable(pdf: Uint8Array): Promise<{ pdf: Uint8Array; revision: Revision }> {
+  const revision = lastRevision(pdf);
+  if (revision) return { pdf, revision };
   const doc = await PDFDocument.load(pdf, { updateMetadata: false });
-  const ctx = doc.context;
-  const byteRange = PDFArray.withContext(ctx);
-  byteRange.push(PDFNumber.of(0));
-  for (let i = 0; i < 3; i++) byteRange.push(PDFName.of("BYTE_RANGE"));
-  const signature = ctx.register(
-    ctx.obj({
-      Type: "Sig",
-      Filter: "Adobe.PPKLite",
-      SubFilter: "ETSI.CAdES.detached",
-      ByteRange: byteRange,
-      Contents: PDFHexString.of("0".repeat(CONTENTS_BYTES * 2)),
-      M: PDFString.fromDate(at),
-      Name: PDFString.of("Rabaed"),
-      Reason: PDFString.of("Documental Record issued electronically through Rabaed"),
-    }),
-  );
-  const page = doc.getPage(0);
-  // Invisible (no area), printable and locked: PDF/A needs no appearance for it.
-  const widget = ctx.register(
-    ctx.obj({
-      Type: "Annot",
-      Subtype: "Widget",
-      FT: "Sig",
-      Rect: [0, 0, 0, 0],
-      V: signature,
-      T: PDFString.of("Rabaed seal"),
-      F: 132,
-      P: page.ref,
-    }),
-  );
-  const annots = page.node.lookupMaybe(PDFName.of("Annots"), PDFArray);
-  if (annots) annots.push(widget);
-  else page.node.set(PDFName.of("Annots"), ctx.obj([widget]));
-  doc.catalog.set(PDFName.of("AcroForm"), ctx.obj({ Fields: [widget], SigFlags: 3 }));
-  const bytes = await doc.save({ useObjectStreams: false, updateFieldAppearances: false });
-  // pdf-lib writes a name; the placeholder has the final range's width.
-  const text = latin1.decode(bytes);
-  const written = /\/ByteRange\s*\[\s*0\s+\/BYTE_RANGE\s+\/BYTE_RANGE\s+\/BYTE_RANGE\s*\]/.exec(text);
-  if (!written) throw new Error("the seal's byte range was not written");
-  if (written[0].length < BYTE_RANGE_PLACEHOLDER.length) throw new Error("the seal's byte range placeholder is too long");
-  const padded = BYTE_RANGE_PLACEHOLDER.padEnd(written[0].length, " ");
-  return concat(bytes.subarray(0, written.index), ascii(padded), bytes.subarray(written.index + written[0].length));
+  const written = await doc.save({ useObjectStreams: false, updateFieldAppearances: false });
+  return { pdf: written, revision: lastRevision(written)! };
 }
 
-interface Placeholder {
-  /** Where `<` of /Contents starts, and just past its `>`. */
+/** The first page of the page tree, and its reference. */
+function firstPage(revision: Revision): { ref: PDFRef; page: PDFDict } {
+  const catalog = resolveAs(revision, revision.root, PDFDict);
+  let ref = catalog.get(PDFName.of("Pages"));
+  for (let depth = 0; depth < 64 && ref instanceof PDFRef; depth++) {
+    const node = resolveAs(revision, ref, PDFDict);
+    if (node.get(PDFName.of("Type")) === PDFName.of("Page")) return { ref, page: node };
+    ref = resolveAs(revision, node.get(PDFName.of("Kids")), PDFArray).get(0);
+  }
+  throw new Error("the PDF has no first page");
+}
+
+interface SignatureUpdate extends Update {
+  /** Where `<` of /Contents is in the whole file, and just past its `>`. */
   readonly contentsStart: number;
   readonly contentsEnd: number;
+  /** Where the /ByteRange placeholder is in the whole file. */
   readonly byteRangeAt: number;
-  readonly byteRangeLength: number;
 }
 
-function findPlaceholder(pdf: Uint8Array): Placeholder {
-  const text = latin1.decode(pdf);
-  const zeros = `<${"0".repeat(CONTENTS_BYTES * 2)}>`;
-  const contentsStart = text.lastIndexOf(zeros);
-  const byteRangeAt = text.lastIndexOf("/ByteRange [ 0 1234567890");
-  if (contentsStart < 0 || byteRangeAt < 0) throw new Error("no seal placeholder");
-  const byteRangeLength = text.indexOf("]", byteRangeAt) + 1 - byteRangeAt;
-  return { contentsStart, contentsEnd: contentsStart + zeros.length, byteRangeAt, byteRangeLength };
+/**
+ * The incremental update that adds an empty seal after `revision` (a file of `length` bytes): an
+ * invisible signature field on the first page, its /Contents zeros and a placeholder /ByteRange.
+ */
+function signatureUpdate(revision: Revision, length: number, at: Date): SignatureUpdate {
+  const ctx = revision.context;
+  const signature = PDFRef.of(revision.largestObjectNumber + 1);
+  const widget = PDFRef.of(revision.largestObjectNumber + 2);
+  const fields = ctx.obj({
+    Type: "Sig",
+    Filter: "Adobe.PPKLite",
+    SubFilter: "ETSI.CAdES.detached",
+    M: PDFString.fromDate(at),
+    Name: PDFString.of("Rabaed"),
+    Reason: PDFString.of("Documental Record issued electronically through Rabaed"),
+  }).toString();
+  if (!fields.startsWith("<<\n")) throw new Error("the seal's dictionary was not written");
+  const head = `<<\n${BYTE_RANGE_PLACEHOLDER}\n/Contents <`;
+  const zeros = "0".repeat(CONTENTS_BYTES * 2);
+  const objects: IndirectObject[] = [{ ref: signature, body: ascii(`${head}${zeros}>\n${fields.slice(3)}`) }];
+
+  const { ref: pageRef, page } = firstPage(revision);
+  // Invisible (no area), printable and locked: PDF/A needs no appearance for it.
+  const widgetDict = ctx.obj({
+    Type: "Annot",
+    Subtype: "Widget",
+    FT: "Sig",
+    Rect: [0, 0, 0, 0],
+    V: signature,
+    T: PDFString.of("Rabaed seal"),
+    F: 132,
+    P: pageRef,
+  });
+  objects.push({ ref: widget, body: ascii(widgetDict.toString()) });
+  const annots = page.get(PDFName.of("Annots"));
+  if (annots instanceof PDFRef) {
+    const array = resolveAs(revision, annots, PDFArray);
+    array.push(widget);
+    objects.push({ ref: annots, body: ascii(array.toString()) });
+  } else {
+    if (annots instanceof PDFArray) annots.push(widget);
+    else page.set(PDFName.of("Annots"), ctx.obj([widget]));
+    objects.push({ ref: pageRef, body: ascii(page.toString()) });
+  }
+  const catalog = resolveAs(revision, revision.root, PDFDict);
+  catalog.set(PDFName.of("AcroForm"), ctx.obj({ Fields: [widget], SigFlags: 3 }));
+  objects.push({ ref: revision.root, body: ascii(catalog.toString()) });
+
+  const update = incrementalUpdate(revision, length, objects);
+  const signatureAt = update.bodyAt[0]!;
+  const contentsStart = signatureAt + head.length - 1;
+  // The body starts `<<\n`, then the placeholder.
+  return { ...update, contentsStart, contentsEnd: contentsStart + zeros.length + 2, byteRangeAt: signatureAt + "<<\n".length };
+}
+
+/** The SHA-256 of `parts`, read where they are. */
+function digestOf(...parts: Uint8Array[]): Uint8Array {
+  const hash = createHash("sha256");
+  for (const part of parts) hash.update(part);
+  return new Uint8Array(hash.digest());
 }
 
 const digestAlgorithm = () => new pkijs.AlgorithmIdentifier({ algorithmId: OID.sha256, algorithmParams: new asn1js.Null() });
@@ -157,75 +174,64 @@ function certificatesOf(cms: Uint8Array): Uint8Array[] {
 /** What the Document Security Store holds: certificates, CRLs and OCSP answers (DER), each written as a stream. */
 type Dss = RevocationData;
 
-/** Appends an incremental update adding the Document Security Store (B-LT): the certificates, OCSP answers and CRLs, as streams. */
-export async function withDss(pdf: Uint8Array, dss: Dss): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
-  const ctx = doc.context;
-  const text = latin1.decode(pdf);
-  const prev = Number(/startxref\s+(\d+)\s+%%EOF\s*$/.exec(text)?.[1]);
-  if (!Number.isFinite(prev)) throw new Error("the sealed PDF has no cross-reference table");
-  const rootRef = ctx.trailerInfo.Root as PDFRef;
-  let next = ctx.largestObjectNumber + 1;
-  const parts: Uint8Array[] = [ascii("\n")];
-  let offset = pdf.length + 1;
-  const offsets: [number, number, number][] = [];
-  const write = (objectNumber: number, generation: number, body: Uint8Array) => {
-    offsets.push([objectNumber, generation, offset]);
-    const head = ascii(`${objectNumber} ${generation} obj\n`);
-    const tail = ascii("\nendobj\n");
-    parts.push(head, body, tail);
-    offset += head.length + body.length + tail.length;
-  };
+/**
+ * The incremental update adding the Document Security Store (B-LT) after `revision`, whose file is
+ * `length` bytes: the certificates, OCSP answers and CRLs, as streams, then the store and the catalog.
+ */
+function dssUpdate(revision: Revision, length: number, dss: Dss): Update {
+  let next = revision.largestObjectNumber + 1;
+  const objects: IndirectObject[] = [];
   const streams = (items: readonly Uint8Array[]) =>
     items.map((der) => {
-      const n = next++;
-      write(n, 0, concat(ascii(`<< /Length ${der.length} >>\nstream\n`), der, ascii("\nendstream")));
-      return `${n} 0 R`;
+      const ref = PDFRef.of(next++);
+      objects.push({ ref, body: concat(ascii(`<< /Length ${der.length} >>\nstream\n`), der, ascii("\nendstream")) });
+      return ref.toString();
     });
   const entries = [
     ["Certs", streams(dss.certificates)],
     ["OCSPs", streams(dss.ocspResponses)],
     ["CRLs", streams(dss.crls)],
   ] as const;
-  const dssRef = next++;
+  const dssRef = PDFRef.of(next++);
   const body = entries.filter(([, refs]) => refs.length > 0).map(([key, refs]) => ` /${key} [${refs.join(" ")}]`);
-  write(dssRef, 0, ascii(`<< /Type /DSS${body.join("")} >>`));
-  const catalog = ctx.lookup(rootRef, PDFDict).clone(ctx);
-  catalog.set(PDFName.of("DSS"), PDFRef.of(dssRef));
-  write(rootRef.objectNumber, rootRef.generationNumber, ascii(catalog.toString()));
-
-  const xrefAt = offset;
-  const lines = ["xref", "0 1", "0000000000 65535 f\r"];
-  for (const [n, g, at] of offsets.toSorted((a, b) => a[0] - b[0])) {
-    lines.push(`${n} 1`, `${String(at).padStart(10, "0")} ${String(g).padStart(5, "0")} n\r`);
-  }
-  const trailer = PDFDict.withContext(ctx);
-  trailer.set(PDFName.of("Size"), PDFNumber.of(next));
-  trailer.set(PDFName.of("Root"), rootRef);
-  if (ctx.trailerInfo.Info) trailer.set(PDFName.of("Info"), ctx.trailerInfo.Info as PDFRef);
-  if (ctx.trailerInfo.ID) trailer.set(PDFName.of("ID"), ctx.trailerInfo.ID as PDFArray);
-  trailer.set(PDFName.of("Prev"), PDFNumber.of(prev));
-  lines.push("trailer", trailer.toString(), "startxref", String(xrefAt), "%%EOF", "");
-  parts.push(ascii(lines.join("\n")));
-  return concat(pdf, ...parts);
+  objects.push({ ref: dssRef, body: ascii(`<< /Type /DSS${body.join("")} >>`) });
+  const catalog = resolveAs(revision, revision.root, PDFDict).clone(revision.context);
+  catalog.set(PDFName.of("DSS"), dssRef);
+  objects.push({ ref: revision.root, body: ascii(catalog.toString()) });
+  return incrementalUpdate(revision, length, objects);
 }
 
-/** Seals `pdf` (a PDF/A-3) at `at`: PAdES B-LT, by `signer`, timestamped by `timestamps`. */
+/** `pdf` with an incremental update adding the Document Security Store (B-LT): the certificates, OCSP answers and CRLs, as streams. */
+export function withDss(pdf: Uint8Array, dss: Dss): Uint8Array {
+  const revision = lastRevision(pdf);
+  if (!revision) throw new Error("the sealed PDF has no cross-reference table");
+  return concat(pdf, dssUpdate(revision, pdf.length, dss).bytes);
+}
+
+/**
+ * Seals `pdf` (a PDF/A-3) at `at`: PAdES B-LT, by `signer`, timestamped by `timestamps`. The
+ * seal and then the Document Security Store are incremental updates after `pdf`, which is never
+ * parsed or written again (RP-1006): its byte ranges are hashed where they are, and the sealed
+ * file is the one copy made of it.
+ */
 export async function sealPdf(pdf: Uint8Array, { signer, timestamps, at }: { signer: SealSigner; timestamps: TimestampAuthority; at: Date }): Promise<Uint8Array> {
-  const prepared = await withSignatureField(pdf, at);
-  const p = findPlaceholder(prepared);
-  const range = [0, p.contentsStart, p.contentsEnd, prepared.length - p.contentsEnd];
-  const rangeText = `/ByteRange [ ${range.join(" ")} ]`.padEnd(p.byteRangeLength, " ");
-  if (rangeText.length !== p.byteRangeLength) throw new Error("the seal's byte range does not fit");
-  const ranged = concat(prepared.subarray(0, p.byteRangeAt), ascii(rangeText), prepared.subarray(p.byteRangeAt + p.byteRangeLength));
-  const digest = await sha256(concat(ranged.subarray(0, p.contentsStart), ranged.subarray(p.contentsEnd)));
+  const base = await withClassicTable(pdf);
+  const update = signatureUpdate(base.revision, base.pdf.length, at);
+  const { bytes, contentsStart, contentsEnd, byteRangeAt } = update;
+  const signedLength = base.pdf.length + bytes.length;
+  const rangeText = `/ByteRange [ ${[0, contentsStart, contentsEnd, signedLength - contentsEnd].join(" ")} ]`.padEnd(BYTE_RANGE_PLACEHOLDER.length, " ");
+  if (rangeText.length !== BYTE_RANGE_PLACEHOLDER.length) throw new Error("the seal's byte range does not fit");
+  // The update's bytes follow the PDF's: an offset in the file, in them.
+  const inUpdate = (offset: number) => offset - base.pdf.length;
+  bytes.set(ascii(rangeText), inUpdate(byteRangeAt));
+  const digest = digestOf(base.pdf, bytes.subarray(0, inUpdate(contentsStart)), bytes.subarray(inUpdate(contentsEnd)));
   const { cms, token } = await cadesSignature(digest, signer, timestamps);
   if (cms.length > CONTENTS_BYTES) throw new Error("the seal's signature is larger than its room");
-  const hex = Buffer.from(cms).toString("hex").padEnd(CONTENTS_BYTES * 2, "0");
-  const signed = concat(ranged.subarray(0, p.contentsStart + 1), ascii(hex), ranged.subarray(p.contentsEnd - 1));
+  bytes.set(ascii(Buffer.from(cms).toString("hex")), inUpdate(contentsStart) + 1);
   // Fetched after the timestamp, so a validator finds it fresher than the time it trusts.
   const [sealing, timestamping] = await Promise.all([signer.revocation(), timestamps.revocation(token)]);
-  return withDss(signed, mergeRevocationData({ certificates: certificatesOf(cms), crls: [], ocspResponses: [] }, sealing, timestamping));
+  const dss = dssUpdate(update.revision, signedLength, mergeRevocationData({ certificates: certificatesOf(cms), crls: [], ocspResponses: [] }, sealing, timestamping));
+  return concat(base.pdf, bytes, dss.bytes);
 }
 
 /**
@@ -235,9 +241,9 @@ export async function sealPdf(pdf: Uint8Array, { signer, timestamps, at }: { sig
  * signed revision (its start, middle and end). For the tests that change one byte at each.
  */
 export function sealTamperOffsets(pdf: Uint8Array): Record<string, number> {
-  const m = /\/ByteRange\s*\[\s*0\s+(\d+)\s+(\d+)\s+(\d+)/.exec(latin1.decode(pdf));
-  if (!m) throw new Error("no seal");
-  const [contentsStart, afterContents, rest] = m.slice(1).map(Number) as [number, number, number];
+  const range = byteRangeOf(pdf);
+  if (!range) throw new Error("no seal");
+  const [, contentsStart, afterContents, rest] = range;
   const signedEnd = afterContents + rest;
   return {
     start: 20,
@@ -294,22 +300,62 @@ const invalid = (problem: string, rest: Partial<SealCheck> = {}): SealCheck => (
   ...rest,
 });
 
-/** The Document Security Store's streams, in its order, or null when the PDF has none. */
-function dssOf(doc: PDFDocument): Dss | null {
-  const dss = doc.catalog.lookupMaybe(PDFName.of("DSS"), PDFDict);
-  if (!dss) return null;
+/** The seal's /ByteRange: its four numbers, the first found that reads. */
+function byteRangeOf(pdf: Uint8Array): [number, number, number, number] | null {
+  const m = lastMatch(pdf, "/ByteRange", /^\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/);
+  return m ? (m.slice(1).map(Number) as [number, number, number, number]) : null;
+}
+
+/** The Document Security Store's streams in the PDF's last revision, in its order, or null when it has none. */
+function dssOf(pdf: Uint8Array): Dss | null {
+  const revision = lastRevision(pdf);
+  if (!revision) return null;
+  const store = resolveAs(revision, revision.root, PDFDict).get(PDFName.of("DSS"));
+  if (!store) return null;
+  const dss = resolveAs(revision, store, PDFDict);
   const streams = (key: string) => {
-    const array = dss.lookupMaybe(PDFName.of(key), PDFArray);
-    return array ? array.asArray().map((_, i) => array.lookup(i, PDFRawStream).contents) : [];
+    const array = dss.get(PDFName.of(key));
+    return array ? resolveAs(revision, array, PDFArray).asArray().map((ref) => resolveAs(revision, ref, PDFRawStream).contents) : [];
   };
   return { certificates: streams("Certs"), ocspResponses: streams("OCSPs"), crls: streams("CRLs") };
 }
 
 /** The sealed PDF's Document Security Store, and the length of the revision it was signed in (before the store's update). */
-export async function documentSecurityStore(pdf: Uint8Array): Promise<{ store: Dss | null; signedLength: number }> {
-  const m = /\/ByteRange\s*\[\s*0\s+\d+\s+(\d+)\s+(\d+)/.exec(latin1.decode(pdf));
-  if (!m) throw new Error("no seal");
-  return { store: dssOf(await PDFDocument.load(pdf, { updateMetadata: false })), signedLength: Number(m[1]) + Number(m[2]) };
+export function documentSecurityStore(pdf: Uint8Array): { store: Dss | null; signedLength: number } {
+  const range = byteRangeOf(pdf);
+  if (!range || range[0] !== 0) throw new Error("no seal");
+  return { store: dssOf(pdf), signedLength: range[2] + range[3] };
+}
+
+/** The signer's certificate among the CMS's, by the issuer and serial number its signer info names. */
+function signerCertificateOf(signed: pkijs.SignedData, signerInfo: pkijs.SignerInfo): pkijs.Certificate | null {
+  const sid = signerInfo.sid as pkijs.IssuerAndSerialNumber;
+  if (!(sid instanceof pkijs.IssuerAndSerialNumber)) return null;
+  const certificates = (signed.certificates ?? []).filter((c): c is pkijs.Certificate => c instanceof pkijs.Certificate);
+  return certificates.find((c) => c.issuer.isEqual(sid.issuer) && c.serialNumber.isEqual(sid.serialNumber)) ?? null;
+}
+
+/**
+ * Whether the CMS signs `digest` (SHA-256 of what the byte range covers): its message-digest
+ * attribute is the digest, and the signer's key signs its signed attributes. What pkijs's
+ * SignedData.verify checks, without a copy of the whole file to hash.
+ */
+async function signsDigest(signed: pkijs.SignedData, digest: Uint8Array): Promise<{ matches: boolean; signer: pkijs.Certificate | null }> {
+  const signerInfo = signed.signerInfos[0];
+  if (!signerInfo?.signedAttrs) throw new Error("the signature has no signed attributes");
+  const signer = signerCertificateOf(signed, signerInfo);
+  const attribute = (type: string) => signerInfo.signedAttrs!.attributes.find((a) => a.type === type);
+  const messageDigest = attribute(OID.messageDigest)?.values[0];
+  const contentType = attribute(OID.contentType)?.values[0];
+  const isData = contentType instanceof asn1js.ObjectIdentifier && contentType.getValue() === OID.data;
+  if (!isData || !(messageDigest instanceof asn1js.OctetString)) throw new Error("the signature's attributes are not a detached CMS's");
+  if (signerInfo.digestAlgorithm.algorithmId !== OID.sha256) throw new Error("the signature is not over SHA-256");
+  if (Buffer.compare(Buffer.from(messageDigest.valueBlock.valueHexView), Buffer.from(digest)) !== 0) return { matches: false, signer };
+  if (!signer) throw new Error("the signer's certificate is not in the signature");
+  const matches = await pkijs
+    .getCrypto(true)
+    .verifyWithPublicKey(signerInfo.signedAttrs.encodedValue, signerInfo.signature, signer.subjectPublicKeyInfo, signerInfo.signatureAlgorithm, "SHA-256");
+  return { matches, signer };
 }
 
 const sameList = (a: readonly Uint8Array[], b: readonly Uint8Array[]) =>
@@ -317,12 +363,11 @@ const sameList = (a: readonly Uint8Array[], b: readonly Uint8Array[]) =>
 
 /** Checks the PDF's seal: what a reader such as Adobe Reader checks, but trusting the certificate it carries. */
 export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
-  const text = latin1.decode(pdf);
-  const m = /\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/.exec(text);
-  if (!m) return invalid("no seal");
-  const [a, b, c, d] = m.slice(1).map(Number) as [number, number, number, number];
+  const range = byteRangeOf(pdf);
+  if (!range) return invalid("no seal");
+  const [a, b, c, d] = range;
   if (a !== 0 || c <= b || c + d > pdf.length || pdf[b] !== 0x3c || pdf[c - 1] !== 0x3e) return invalid("the seal does not cover the file");
-  const subFilter = /\/SubFilter\s*\/([A-Za-z.]+)/.exec(text)?.[1] ?? null;
+  const subFilter = lastMatch(pdf, "/SubFilter", /^\/SubFilter\s*\/([A-Za-z.]+)/)?.[1] ?? null;
   // /Contents is exactly the CMS's DER, then zeros: a byte changed in its padding breaks the seal too.
   const contentsHex = latin1.decode(pdf.subarray(b + 1, c - 1));
   if (contentsHex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(contentsHex)) return invalid("the seal's signature is not hexadecimal", { subFilter });
@@ -333,7 +378,7 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
   const cms = contents.slice(0, read.offset);
   let dss: Dss | null;
   try {
-    dss = dssOf(await PDFDocument.load(pdf, { updateMetadata: false }));
+    dss = dssOf(pdf);
   } catch {
     return invalid("the PDF does not open", { subFilter });
   }
@@ -341,11 +386,10 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
   const dssRevocation = (dss?.crls.length ?? 0) + (dss?.ocspResponses.length ?? 0);
   try {
     const signed = new pkijs.SignedData({ schema: pkijs.ContentInfo.fromBER(toArrayBuffer(cms)).content });
-    const data = concat(pdf.subarray(0, b), pdf.subarray(c, c + d));
-    const ok = await signed.verify({ signer: 0, data: toArrayBuffer(data), checkChain: false, extendedMode: true });
-    const signerCert = ok.signerCertificate ?? null;
-    const name = signerCert ? commonNameOf(signerCert) : null;
-    if (!ok.signatureVerified) return invalid("the signature does not match the file", { signer: name, subFilter, dssCertificates });
+    // Hashed where it is: no copy of what was signed.
+    const signature = await signsDigest(signed, digestOf(pdf.subarray(0, b), pdf.subarray(c, c + d)));
+    const name = signature.signer ? commonNameOf(signature.signer) : null;
+    if (!signature.matches) return invalid("the signature does not match the file", { signer: name, subFilter, dssCertificates });
     const signerInfo = signed.signerInfos[0]!;
     const tokenAttr = signerInfo.unsignedAttrs?.attributes.find((x) => x.type === OID.signatureTimeStampToken);
     if (!tokenAttr) return invalid("no timestamp", { signer: name, subFilter, dssCertificates });
@@ -365,8 +409,9 @@ export async function verifySeal(pdf: Uint8Array): Promise<SealCheck> {
     const chains = certificatesOf(cms);
     let longTerm = false;
     if (c + d < pdf.length) {
-      const expectedFile = dss ? await withDss(pdf.slice(0, c + d), dss) : null;
-      if (!dss || !expectedFile || Buffer.compare(Buffer.from(expectedFile), Buffer.from(pdf)) !== 0) {
+      const signedRevision = dss ? lastRevision(pdf.subarray(0, c + d)) : null;
+      const expectedUpdate = dss && signedRevision ? dssUpdate(signedRevision, c + d, dss).bytes : null;
+      if (!dss || !expectedUpdate || Buffer.compare(bufferOf(expectedUpdate), bufferOf(pdf.subarray(c + d))) !== 0) {
         return invalid("the file was changed after it was sealed", counts);
       }
       // The revocation data must hold, so a byte changed inside it breaks the seal too. Chains of
