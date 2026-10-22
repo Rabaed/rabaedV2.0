@@ -359,7 +359,7 @@
       "code": "Code {code}",
       "createdOn": "أُنشئ في {date}",
       "submittedOn": "قُدِّم في {date}",
-      "openPackage": "فتح الحزمة {number} {company} {name}"
+      "openPackage": "فتح الحزمة \u2066{number}\u2069 {company} {name}"
     },
     "viewSwitch": {
       "view": "طريقة العرض",
@@ -2585,7 +2585,7 @@
       "assignee_unknown_picked": "العضو المختار لم يعد عضواً نشطاً في شركتك في هذا المشروع",
       "assignee_cannot_create": "لا يستطيع {value} إنشاء {type}",
       "assignee_outside_visibility": "لا يغطي {value} {values}",
-      "package_not_open": "الحزمة {value} {status}: الحزم المفتوحة فقط تقبل مسودات جديدة",
+      "package_not_open": "الحزمة \u2066{value}\u2069 {status}: الحزم المفتوحة فقط تقبل مسودات جديدة",
       "package_name_too_long": "الحزمة «{value}» أطول من 200 حرف"
     },
     "rows": {
@@ -2756,7 +2756,7 @@
     },
     "delete": {
       "trigger": "حذف",
-      "title": "حذف {number}؟",
+      "title": "حذف \u2066{number}\u2069؟",
       "description": "تبقى اعتماداتها كما هي، دون حزمة.",
       "confirm": "حذف الحزمة"
     },
@@ -2771,7 +2771,7 @@
       "loading": "جارٍ التحميل…",
       "noResults": "لا توجد اعتمادات مطابقة.",
       "results": "الاعتمادات التي وُجدت",
-      "inOther": "في {number}",
+      "inOther": "في \u2066{number}\u2069",
       "inThis": "في هذه الحزمة",
       "choose": "اختيار {subject}",
       "add": "{count, plural, one {إضافة اعتماد واحد} other {إضافة {n} اعتمادات}}",
@@ -2818,7 +2818,7 @@
     },
     "submit": {
       "trigger": "تقديم الحزمة",
-      "title": "تقديم {number}",
+      "title": "تقديم \u2066{number}\u2069",
       "description": "يُقدَّم كل اعتماد أدناه دفعة واحدة ويأخذ رقم مستنده. الكل أو لا شيء: إن لم يكن أحدها جاهزًا فلا يُقدَّم أي منها.",
       "count": "{count, plural, one {اعتماد واحد للتقديم} other {{n} اعتمادات للتقديم}}",
       "confirm": "تقديم الحزمة",
