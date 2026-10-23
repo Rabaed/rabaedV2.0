@@ -26,4 +26,4 @@ Non-technical product builders need a link to every change and a stable UAT link
 
 ## Consequences
 
-Two hosting stacks now exist (Vercel for dev and UAT, AWS CDK in `packages/infra`), and both must keep deploying the same code. `packages/mailer` gains a SendGrid adapter, and the worker's outbox delivery gains an entry Vercel Cron can call. The seam 2 tests run once against Supabase, to prove the bootstrap creates the roles (the bypass role included) and the RLS policies behave as on RDS. Lane 7 is retired once the product owner's colleague works on the UAT link.
+Vercel becomes the only deployed stack: the UAT deploy replaces `deploy-dev.yml` and the `cdk diff` check, which are retired (product owner, 2026-10-23). The AWS CDK code in `packages/infra` stays in the repo, undeployed, so the production grill can still choose AWS. `packages/mailer` gains a SendGrid adapter, and the worker's outbox delivery gains an entry Vercel Cron can call. The seam 2 tests run once against Supabase, to prove the bootstrap creates the roles (the bypass role included) and the RLS policies behave as on RDS. Lane 7 is retired once the product owner's colleague works on the UAT link.
