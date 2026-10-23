@@ -1,5 +1,5 @@
 import pg from "pg";
-import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
+import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, withDatabaseName, type DatabaseUrls } from "./config.ts";
 import type { RolePasswordMode } from "./task-flags.ts";
 
 const identifier = /^[a-z_][a-z0-9_]*$/;
@@ -12,11 +12,17 @@ function checkIdentifier(name: string): string {
   return name;
 }
 
-function credentialsOf(url: string, expectedRole: string): string {
+/**
+ * The password of a URL that logs in as `role`. Behind Supabase's pooler the
+ * superuser logs in as `<name>.<project ref>`, and so must each role; on a plain
+ * server (and RDS) the login is the role itself.
+ */
+export function passwordOfRole(url: string, role: string, superuserUrl: string): string {
   const u = new URL(url);
   const login = decodeURIComponent(u.username);
-  if (login !== expectedRole) {
-    throw new Error(`Expected the connection URL to use role ${expectedRole}, got ${login || "(none)"}`);
+  const expected = loginFor(role, superuserUrl);
+  if (login !== expected) {
+    throw new Error(`Expected the connection URL to use role ${expected}, got ${login || "(none)"}`);
   }
   return decodeURIComponent(u.password);
 }
@@ -51,10 +57,10 @@ export async function bootstrap(urls: DatabaseUrls, { passwords = "always" }: Bo
     throw new Error("DATABASE_APP_URL, DATABASE_ADMIN_URL and DATABASE_MIGRATOR_URL must name the same database");
   }
   const roles = [
-    { name: MIGRATOR_ROLE, password: credentialsOf(urls.migrator, MIGRATOR_ROLE), bypassRls: false },
-    { name: APP_ROLE, password: credentialsOf(urls.app, APP_ROLE), bypassRls: false },
+    { name: MIGRATOR_ROLE, password: passwordOfRole(urls.migrator, MIGRATOR_ROLE, urls.superuser), bypassRls: false },
+    { name: APP_ROLE, password: passwordOfRole(urls.app, APP_ROLE, urls.superuser), bypassRls: false },
     // ADR 0007: Rabaed Admin uses a separate role that bypasses RLS.
-    { name: ADMIN_ROLE, password: credentialsOf(urls.admin, ADMIN_ROLE), bypassRls: true },
+    { name: ADMIN_ROLE, password: passwordOfRole(urls.admin, ADMIN_ROLE, urls.superuser), bypassRls: true },
   ];
 
   await withClient(urls.superuser, async (client) => {

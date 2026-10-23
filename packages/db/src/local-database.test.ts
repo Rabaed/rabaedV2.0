@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertLocalDatabases } from "./local-database.ts";
+import { assertLocalDatabases, assertResettableDatabases, REMOTE_TEST_HOST_VARIABLE } from "./local-database.ts";
 
 const local = "postgres://rabaed_migrator:pw@localhost:6032/rabaed";
 
@@ -36,5 +36,31 @@ describe("assertLocalDatabases", () => {
     expect(() => assertLocalDatabases(["postgres://u:secret-pw@db.example.com/rabaed"])).toThrow(
       expect.objectContaining({ message: expect.not.stringContaining("secret-pw") }),
     );
+  });
+});
+
+// The Supabase gate (RP-1037) runs seam 2 on a remote server: it names that host,
+// and there only a test database (and seam 2's scratch databases beside it) may be reset.
+describe("assertResettableDatabases", () => {
+  const pooler = "pooler.supabase.com";
+  const on = (db: string, host = pooler) => [`postgres://postgres.ref:pw@${host}:5432/postgres`, `postgres://rabaed_migrator.ref:pw@${host}:5432/${db}`];
+  const named = { [REMOTE_TEST_HOST_VARIABLE]: pooler };
+
+  it("accepts a test database on the host the gate names", () => {
+    expect(() => assertResettableDatabases(on("rabaed_gate_test"), "rabaed_gate_test", named)).not.toThrow();
+    expect(() => assertResettableDatabases(on("rabaed_gate_test_reset"), "rabaed_gate_test_reset", named)).not.toThrow();
+  });
+
+  it("refuses a database there that is not a test database", () => {
+    expect(() => assertResettableDatabases(on("rabaed"), "rabaed", named)).toThrow(/not on this machine/);
+  });
+
+  it("refuses another remote host, and any remote host when none is named", () => {
+    expect(() => assertResettableDatabases(on("rabaed_gate_test", "db.example.com"), "rabaed_gate_test", named)).toThrow(/db\.example\.com is not on this machine/);
+    expect(() => assertResettableDatabases(on("rabaed_gate_test"), "rabaed_gate_test", {})).toThrow(/not on this machine/);
+  });
+
+  it("still accepts local databases", () => {
+    expect(() => assertResettableDatabases([local], "rabaed", {})).not.toThrow();
   });
 });
