@@ -58,6 +58,11 @@ describe("gateUrlsFromEnv", () => {
     expect(urls.appTransaction).toBe(urls.app);
   });
 
+  // The gate drops its database before each run, so it must never name the app's.
+  it("refuses a DATABASE_NAME that doesn't end in _gate", () => {
+    expect(() => gateUrlsFromEnv({ ...supabase, DATABASE_NAME: "rabaed" })).toThrow("DATABASE_NAME must end in _gate: the gate drops and rebuilds it");
+  });
+
   it("names a missing password's variable", () => {
     const { DATABASE_ADMIN_PASSWORD: _omitted, ...rest } = supabase;
     expect(() => gateUrlsFromEnv(rest)).toThrow(/DATABASE_ADMIN_PASSWORD is required/);
@@ -100,6 +105,12 @@ describe("checkDataApiOff", () => {
 
     expect(result).toEqual({ outcome: "off", status: 406 });
     expect(calls).toEqual([{ url: "https://abcdefghijklmnop.supabase.co/rest/v1/", headers: { apikey: key } }]);
+  });
+
+  it("passes on a 2xx too when it is the placeholder schema's empty description: nothing is exposed", async () => {
+    const { fetch } = answering(200, '{"swagger":"2.0","info":{"title":"pg_pgrst_no_exposed_schemas"},"paths":{}}');
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 200 });
   });
 
   it("fails when the REST endpoint answers as an open API", async () => {

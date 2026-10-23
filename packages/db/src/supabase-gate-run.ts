@@ -11,22 +11,28 @@
 // the Data API check is skipped and the probe uses the plain server), optional
 // DATABASE_NAME (default rabaed_gate; locally <the .env database>_gate).
 // Seam 2 also needs the file store its demo seed uploads to (FILE_STORE_*).
+//
+// Roles are cluster-wide: the bootstrap sets the three roles' passwords to the
+// ones given (the `uat` environment's, which UAT's apps use too), and seam 2
+// briefly changes them and creates scratch roles, as it does on every server.
+// Run it when no UAT deploy is in progress.
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { bootstrap } from "./bootstrap.ts";
 import { databaseNameOf } from "./config.ts";
-import { REMOTE_TEST_HOST_VARIABLE } from "./local-database.ts";
+import { REMOTE_TEST_SERVER_VARIABLE, remoteTestServerOf } from "./local-database.ts";
 import { migrate } from "./migrate.ts";
-import { checkBootstrapRole, checkBypassRole, checkDataApiOff, gateUrlsFromEnv, poolerProbe, redactor, type GateUrls } from "./supabase-gate.ts";
+import { checkBootstrapRole, checkBypassRole, checkDataApiOff, dropGateDatabase, gateUrlsFromEnv, poolerProbe, redactor, type GateUrls } from "./supabase-gate.ts";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const projectRef = process.env.SUPABASE_PROJECT_REF || undefined;
 const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || undefined;
 
 const passwordsOf = (urls: GateUrls) => Object.values(urls).map((url) => decodeURIComponent(new URL(url).password));
-// Every secret-looking variable is hidden from the first line on; the role passwords too once the URLs are built.
-const environmentSecrets = Object.entries(process.env).flatMap(([name, value]) => (value && value.length >= 6 && /PASSWORD|_URL$|KEY|TOKEN|SECRET/.test(name) ? [value] : []));
+// The credential variables are hidden from the first line on; the role passwords too once the URLs are built.
+const credential = /^DATABASE_\w+_URL$|PASSWORD|_KEY$|TOKEN|SECRET/;
+const environmentSecrets = Object.entries(process.env).flatMap(([name, value]) => (value && credential.test(name) ? [value] : []));
 let redact = redactor(environmentSecrets);
 
 const say = (line: string) => console.log(redact(line));
@@ -51,6 +57,8 @@ async function step(name: string, run: () => Promise<string | void>): Promise<vo
   } catch (error) {
     say(`✘ ${name}: ${failureOf(error)}`);
     say("Supabase gate failed.");
+    // Exit once stdout has drained, so a piped log keeps the reason.
+    await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
     process.exit(1);
   }
 }
@@ -64,8 +72,8 @@ function seamTwo(urls: GateUrls): Promise<void> {
     DATABASE_APP_URL: urls.app,
     DATABASE_ADMIN_URL: urls.admin,
   };
-  // The reset of the test database refuses a remote host unless named (local-database.ts).
-  if (projectRef) env[REMOTE_TEST_HOST_VARIABLE] = new URL(urls.superuser).hostname;
+  // The reset of the test database refuses a remote server unless named (local-database.ts).
+  if (projectRef) env[REMOTE_TEST_SERVER_VARIABLE] = remoteTestServerOf(urls.superuser);
   return new Promise((resolve, reject) => {
     const child = spawn("pnpm test:seam2", { cwd: repoRoot, env, shell: true, stdio: ["ignore", "pipe", "pipe"] });
     for (const stream of [child.stdout, child.stderr]) createInterface({ input: stream }).on("line", say);
@@ -85,11 +93,12 @@ await step("Read the connections", async () => {
 const gate = urls!;
 
 await step("The bootstrap login may create rabaed_admin with BYPASSRLS", () => checkBootstrapRole(gate.superuser));
+await step("Drop the gate's database from an earlier run", () => dropGateDatabase(gate.superuser, databaseNameOf(gate.migrator)));
 await step("Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", () => bootstrap(gate));
 await step("rabaed_admin bypasses row-level security", () => checkBypassRole(gate.superuser));
 await step("Migrate the schema (every migrations/*.sql)", async () => {
   const { applied } = await migrate(gate.migrator);
-  return applied.length ? `applied ${applied.length}` : "already up to date";
+  return `applied ${applied.length} from empty`;
 });
 await step(projectRef ? "The transaction pooler carries an api call's transaction" : "An api call's transaction (no pooler locally)", async () => {
   const probe = await poolerProbe({ app: gate.appTransaction, admin: gate.adminTransaction });

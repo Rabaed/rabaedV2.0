@@ -2,19 +2,18 @@
 // Run by supabase-gate-run.ts; each step here is testable on its own.
 
 import { sql } from "kysely";
-import pg from "pg";
 import { z } from "zod";
+import { withClient } from "./bootstrap.ts";
 import { createDb, withMember } from "./client.ts";
 import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, loginSuffixOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
 
-async function withClient<T>(url: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
-  const client = new pg.Client({ connectionString: url });
-  await client.connect();
-  try {
-    return await fn(client);
-  } finally {
-    await client.end();
-  }
+// The gate's own database: dropped and rebuilt each run, so every migration applies from empty.
+const gateDatabase = /^[a-z_][a-z0-9_]*_gate$/;
+
+/** Drops the gate's database left by an earlier run, closing its connections. Refuses any other name. */
+export async function dropGateDatabase(superuserUrl: string, database: string): Promise<void> {
+  if (!gateDatabase.test(database)) throw new Error(`Refusing to drop ${database}: the gate's database name ends in _gate`);
+  await withClient(withDatabaseName(superuserUrl, "postgres"), (c) => c.query(`drop database if exists ${database} with (force)`));
 }
 
 /**
@@ -105,6 +104,7 @@ export function gateUrlsFromEnv(source: NodeJS.ProcessEnv = process.env): GateUr
   // Locally the worktree's .env has whole URLs: the gate builds its own database beside theirs.
   const localUrl = source.DATABASE_MIGRATOR_URL;
   const database = source.DATABASE_NAME || (localUrl ? `${databaseNameOf(localUrl)}_gate` : "rabaed_gate");
+  if (!gateDatabase.test(database)) throw new Error("DATABASE_NAME must end in _gate: the gate drops and rebuilds it");
   const roleUrl = (role: string, variable: "MIGRATOR" | "APP" | "ADMIN"): string => {
     const whole = source[`DATABASE_${variable}_URL`];
     const password = source[`DATABASE_${variable}_PASSWORD`] || (whole ? decodeURIComponent(new URL(whole).password) : "");
@@ -192,9 +192,10 @@ export async function checkDataApiOff({
     signal: AbortSignal.timeout(15_000),
   });
   const { status } = response;
-  if (response.ok) return { outcome: "open", status };
   const body = await response.text();
+  // First: at the root PostgREST may describe the placeholder schema, with a 2xx.
   if (body.includes(NO_EXPOSED_SCHEMAS)) return { outcome: "off", status };
+  if (response.ok) return { outcome: "open", status };
   if (status === 401 || status === 403) return { outcome: "key refused", status };
   const code = postgrestCodeOf(body);
   return code ? { outcome: "unexpected", status, code } : { outcome: "unexpected", status };

@@ -110,11 +110,13 @@ export function withDatabaseName(url: string, database: string): string {
 
 /**
  * The suffix a pooler login adds after its role, or undefined. Supabase's
- * pooler (Supavisor) takes `<role>.<project ref>` while the role is `<role>`;
- * a plain Postgres or RDS login has no dot.
+ * pooler (Supavisor, on `*.pooler.supabase.com`) takes `<role>.<project ref>`
+ * while the role is `<role>`; anywhere else a dot is part of the login.
  */
 export function loginSuffixOf(url: string): string | undefined {
-  const login = decodeURIComponent(new URL(url).username);
+  const u = new URL(url);
+  if (!u.hostname.toLowerCase().endsWith(".pooler.supabase.com")) return undefined;
+  const login = decodeURIComponent(u.username);
   const dot = login.indexOf(".");
   return dot > 0 ? login.slice(dot + 1) || undefined : undefined;
 }

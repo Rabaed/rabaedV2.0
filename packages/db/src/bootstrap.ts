@@ -27,7 +27,7 @@ export function passwordOfRole(url: string, role: string, superuserUrl: string):
   return decodeURIComponent(u.password);
 }
 
-async function withClient<T>(url: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
+export async function withClient<T>(url: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {

@@ -2,7 +2,7 @@
 // Under the gate on Supabase these run through its session pooler too.
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ADMIN_ROLE } from "../src/config.ts";
+import { ADMIN_ROLE, loginFor } from "../src/config.ts";
 import { checkBootstrapRole, checkBypassRole, poolerProbe } from "../src/supabase-gate.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
@@ -18,9 +18,10 @@ async function query(url: string, text: string): Promise<void> {
   }
 }
 
-function asUser(url: string, user: string, password: string): string {
+/** The URL logging in as `role`, through Supabase's pooler as `<role>.<project ref>`. */
+function asUser(url: string, role: string, password: string): string {
   const u = new URL(url);
-  u.username = user;
+  u.username = loginFor(role, url);
   u.password = password;
   return u.toString();
 }
