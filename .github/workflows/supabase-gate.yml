@@ -1,0 +1,72 @@
+# The Supabase gate (RP-1037, ADR 0026): proves UAT's Supabase project runs
+# Rabaed as RDS does. `pnpm --filter @rabaed/db gate:supabase` builds a database
+# of its own (rabaed_gate) and checks, stopping at the first failure:
+#   - the bootstrap, rabaed_admin's BYPASSRLS included;
+#   - every migration, from empty;
+#   - an api call's transaction through the transaction pooler (port 6543);
+#   - seam 2 (database RLS), unchanged, on rabaed_gate_test;
+#   - Supabase's Data API is off.
+# Run it by hand on main (Actions > Supabase gate > Run workflow). The secrets
+# live only in the `uat` environment, so nothing runs against Supabase from a
+# laptop. Never run it while a UAT deploy runs: roles are cluster-wide, and the
+# bootstrap resets rabaed_migrator's, rabaed_app's and rabaed_admin's passwords
+# to the `uat` secrets, and seam 2 briefly changes them, so UAT's apps may fail
+# to log in while it runs. If a run stops midway and UAT can't log in, run the
+# gate again: its bootstrap sets the passwords back.
+name: Supabase gate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: supabase-gate
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Supabase gate (environment uat)
+    runs-on: ubuntu-latest
+    environment: uat
+    timeout-minutes: 45
+    # Seam 2's global setup seeds the demo, whose MAR carries a file: the same
+    # local file store as ci.yml's seam 2 job, with its throwaway keys, not R2.
+    services:
+      files:
+        image: rustfs/rustfs:1.0.0
+        env:
+          RUSTFS_ACCESS_KEY: ci-only
+          RUSTFS_SECRET_KEY: ci-only-secret
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "curl -fs http://127.0.0.1:9000/health" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      PROJECT_FILES_BUCKET: rabaed-project-files
+      FILE_STORE_ENDPOINT: http://127.0.0.1:9000
+      FILE_STORE_ACCESS_KEY_ID: ci-only
+      FILE_STORE_SECRET_ACCESS_KEY: ci-only-secret
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Without the project ref the script takes the run for a local one and
+      # skips the Data API check, so a missing variable would pass the gate.
+      - name: The uat environment names the Supabase project
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::Set the variable SUPABASE_PROJECT_REF in the uat environment."
+            exit 1
+          fi
+      # The script prints no password and no full URL; GitHub masks the secrets too.
+      - run: pnpm --filter @rabaed/db gate:supabase
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }} # the session pooler, port 5432
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
