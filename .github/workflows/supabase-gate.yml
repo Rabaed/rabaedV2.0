@@ -27,7 +27,10 @@ jobs:
     name: Supabase gate (environment uat)
     runs-on: ubuntu-latest
     environment: uat
-    timeout-minutes: 45
+    # The runner is in the US and Supabase in Frankfurt: about 0.45 s a query,
+    # so seam 2 alone takes about 4 hours (run 40079800929 hit 45 minutes after
+    # 17 of its 85 files). GitHub stops any job at 360 minutes.
+    timeout-minutes: 330
     # Seam 2's global setup seeds the demo, whose MAR carries a file: the same
     # local file store as ci.yml's seam 2 job, with its throwaway keys, not R2.
     services:
