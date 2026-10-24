@@ -11,7 +11,7 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE } from "./task-flags.ts";
 
 /** The budget, in ms, of each seam test and hook; vitest.config.ts reads it, and runs 180 s without it. */
 export const SEAM_TIMEOUT_VARIABLE = "RABAED_SEAM_TIMEOUT_MS";
-/** Seam 2's budget on Supabase: 30 minutes, which still stops a hung test well inside the job's 330. */
+/** Seam 2's budget on Supabase: 30 minutes, which still stops a hung test well inside the job's 330 (supabase-gate.yml). */
 const SUPABASE_SEAM_TIMEOUT_MS = 30 * 60_000;
 
 // The gate's own database: dropped and rebuilt each run, so every migration applies from empty.
