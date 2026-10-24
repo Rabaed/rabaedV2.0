@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { checkDataApiOff, gateUrlsFromEnv, redactor } from "./supabase-gate.ts";
+import { checkDataApiOff, gateUrlsFromEnv, redactor, seamTwoEnv } from "./supabase-gate.ts";
+
+describe("seamTwoEnv", () => {
+  const urls = gateUrlsFromEnv({
+    DATABASE_SUPERUSER_URL: "postgres://postgres.abcdefghijklmnop:su-pw@aws-1-eu-central-1.pooler.supabase.com:5432/postgres",
+    SUPABASE_PROJECT_REF: "abcdefghijklmnop",
+    DATABASE_MIGRATOR_PASSWORD: "mig-pw",
+    DATABASE_APP_PASSWORD: "app-pw",
+    DATABASE_ADMIN_PASSWORD: "adm-pw",
+  });
+  // A worktree's .env, or a stale variable, must not win over the gate's connections.
+  const base = { DATABASE_MIGRATOR_URL: "postgres://rabaed_migrator:local@localhost:5432/rabaed", DATABASE_ROLE_PASSWORDS: "always", PATH: "/bin" };
+  const env = seamTwoEnv(urls, "abcdefghijklmnop", base);
+
+  it("connects seam 2 as the gate's roles: <role>.<project ref> with the gate's passwords, on the session pooler", () => {
+    expect(env.DATABASE_SUPERUSER_URL).toBe(urls.superuser);
+    expect(env.DATABASE_MIGRATOR_URL).toBe("postgres://rabaed_migrator.abcdefghijklmnop:mig-pw@aws-1-eu-central-1.pooler.supabase.com:5432/rabaed_gate");
+    expect(env.DATABASE_APP_URL).toBe("postgres://rabaed_app.abcdefghijklmnop:app-pw@aws-1-eu-central-1.pooler.supabase.com:5432/rabaed_gate");
+    expect(env.DATABASE_ADMIN_URL).toBe("postgres://rabaed_admin.abcdefghijklmnop:adm-pw@aws-1-eu-central-1.pooler.supabase.com:5432/rabaed_gate");
+    expect(env.PATH).toBe("/bin");
+  });
+
+  // Supavisor caches each role's SCRAM secret: a password set again (even to the same value,
+  // with a new salt) fails the next pooled login with 28P01 until the cache refreshes.
+  it("has seam 2's reset leave the roles' passwords as they are", () => {
+    expect(env.DATABASE_ROLE_PASSWORDS).toBe("on-create");
+  });
+
+  it("names the remote server seam 2 may reset its test database on, only for a Supabase run", () => {
+    expect(env.RABAED_REMOTE_TEST_DATABASE_SERVER).toBe("abcdefghijklmnop@aws-1-eu-central-1.pooler.supabase.com");
+    expect(seamTwoEnv(urls, undefined, {}).RABAED_REMOTE_TEST_DATABASE_SERVER).toBeUndefined();
+  });
+});
 
 describe("redactor", () => {
   it("hides every password it was given, and the credentials of any connection URL, wherever they appear", () => {

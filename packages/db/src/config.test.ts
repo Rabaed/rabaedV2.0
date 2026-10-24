@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv } from "./config.ts";
+import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv, rolePasswordsFromEnv } from "./config.ts";
 
 // In AWS each password is its own secret, injected as its own variable, and
 // the host comes from the database instance; locally .env holds whole URLs.
@@ -69,5 +69,21 @@ describe("database URLs given whole", () => {
   it("are used as they are, and win over parts", () => {
     const url = "postgres://rabaed_app:local@localhost:5432/rabaed";
     expect(appUrlFromEnv({ ...parts, DATABASE_APP_URL: url })).toBe(url);
+  });
+});
+
+// The AWS migration task and the Supabase gate's seam 2 run set DATABASE_ROLE_PASSWORDS=on-create:
+// there something else owns the passwords (rotation; the Supabase pooler's cached secrets).
+describe("rolePasswordsFromEnv", () => {
+  it("is always by default, so changing .env takes effect locally", () => {
+    expect(rolePasswordsFromEnv({})).toBe("always");
+  });
+
+  it("is on-create when the environment says so", () => {
+    expect(rolePasswordsFromEnv({ DATABASE_ROLE_PASSWORDS: "on-create" })).toBe("on-create");
+  });
+
+  it("refuses any other value", () => {
+    expect(() => rolePasswordsFromEnv({ DATABASE_ROLE_PASSWORDS: "never" })).toThrow();
   });
 });
