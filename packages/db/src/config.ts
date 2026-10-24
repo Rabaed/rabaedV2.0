@@ -134,5 +134,5 @@ export function databaseNameOf(url: string): string {
 
 /** How bootstrap treats the roles' passwords, from DATABASE_ROLE_PASSWORDS: 'always' unless it says 'on-create'. */
 export function rolePasswordsFromEnv(source: NodeJS.ProcessEnv = process.env): RolePasswordMode {
-  return z.enum(rolePasswordModes).default("always").parse(source[ROLE_PASSWORDS_FLAG]);
+  return z.enum(rolePasswordModes).default("always").parse(source[ROLE_PASSWORDS_FLAG] || undefined);
 }

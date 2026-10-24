@@ -17,6 +17,8 @@
 // again, even unchanged, re-salts its SCRAM secret, and Supavisor's cached copy
 // then fails pooled logins with 28P01; RP-1037). Seam 2 still briefly changes a
 // role attribute and creates scratch roles. Run it when no UAT deploy is in progress.
+// So after a DATABASE_*_PASSWORD changes in `uat`, the role's password is set to it
+// once by hand (ALTER ROLE as postgres), and Supavisor given a few minutes.
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -47,8 +49,10 @@ const where = (url: string) => {
 function failureOf(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const { code, detail, hint } = error as Error & { code?: string; detail?: string; hint?: string };
-  // The gate sets a role's password only when creating it, so 28P01 means the role kept another one.
-  const passwordHint = code === "28P01" && "rabaed_migrator, rabaed_app or rabaed_admin already exists with another password than its DATABASE_*_PASSWORD: the gate sets a password only when it creates the login.";
+  // 28P01 names the login, not the cause: name the two causes it has had here.
+  const passwordHint =
+    code === "28P01" &&
+    "A password differs from its secret (the gate sets one only when it creates the login), or Supavisor still holds the secret from before a password change: retry in a few minutes.";
   return [error.message, code && `(SQLSTATE ${code})`, detail && `Detail: ${detail}`, hint && `Hint: ${hint}`, passwordHint].filter(Boolean).join(" ");
 }
 

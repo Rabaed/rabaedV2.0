@@ -1,6 +1,6 @@
 import pg from "pg";
 import { bootstrap, type BootstrapOptions } from "./bootstrap.ts";
-import { databaseNameOf, rolePasswordsFromEnv, withDatabaseName, type DatabaseUrls } from "./config.ts";
+import { databaseNameOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
 import { assertResettableDatabases } from "./local-database.ts";
 import { migrate } from "./migrate.ts";
 
@@ -30,9 +30,7 @@ export async function resetDatabase(urls: DatabaseUrls, { notLocal, ...options }
   } finally {
     await client.end();
   }
-  // Unless the caller says, as the environment says (DATABASE_ROLE_PASSWORDS): the Supabase
-  // gate's seam 2 run keeps the passwords, since its pooler caches their secrets (RP-1037).
-  await bootstrap(urls, { ...options, passwords: options.passwords ?? rolePasswordsFromEnv() });
+  await bootstrap(urls, options);
   const { applied } = await migrate(urls.migrator);
   return { database, applied };
 }

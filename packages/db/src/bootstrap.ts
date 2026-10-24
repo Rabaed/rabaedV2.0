@@ -1,5 +1,5 @@
 import pg from "pg";
-import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, withDatabaseName, type DatabaseUrls } from "./config.ts";
+import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, rolePasswordsFromEnv, withDatabaseName, type DatabaseUrls } from "./config.ts";
 import type { RolePasswordMode } from "./task-flags.ts";
 
 const identifier = /^[a-z_][a-z0-9_]*$/;
@@ -42,7 +42,11 @@ export interface BootstrapOptions {
    * `always` (local and tests): set each role's password from its URL every
    * run, so changing .env takes effect. `on-create` (AWS): only when creating
    * the role; after that Secrets Manager rotation owns the password, and a
-   * deploy must not set it back to what its task read at start.
+   * deploy must not set it back to what its task read at start; and on
+   * Supabase, where setting a password again (even unchanged) re-salts its
+   * SCRAM secret and the pooler's cached copy then refuses logins (RP-1037).
+   * Not given: DATABASE_ROLE_PASSWORDS, else `always`. The AWS migration task
+   * and the Supabase gate's seam 2 run set it to `on-create`.
    */
   passwords?: RolePasswordMode;
 }
@@ -51,7 +55,7 @@ export interface BootstrapOptions {
  * Creates the roles and the database. Idempotent; run before migrations.
  * The app role gets no privileges on tables here: migrations grant them.
  */
-export async function bootstrap(urls: DatabaseUrls, { passwords = "always" }: BootstrapOptions = {}): Promise<void> {
+export async function bootstrap(urls: DatabaseUrls, { passwords = rolePasswordsFromEnv() }: BootstrapOptions = {}): Promise<void> {
   const database = checkIdentifier(databaseNameOf(urls.migrator));
   if (databaseNameOf(urls.app) !== database || databaseNameOf(urls.admin) !== database) {
     throw new Error("DATABASE_APP_URL, DATABASE_ADMIN_URL and DATABASE_MIGRATOR_URL must name the same database");

@@ -83,6 +83,10 @@ describe("rolePasswordsFromEnv", () => {
     expect(rolePasswordsFromEnv({ DATABASE_ROLE_PASSWORDS: "on-create" })).toBe("on-create");
   });
 
+  it("reads an empty value (an unset CI variable, a bare .env key) as unset", () => {
+    expect(rolePasswordsFromEnv({ DATABASE_ROLE_PASSWORDS: "" })).toBe("always");
+  });
+
   it("refuses any other value", () => {
     expect(() => rolePasswordsFromEnv({ DATABASE_ROLE_PASSWORDS: "never" })).toThrow();
   });
