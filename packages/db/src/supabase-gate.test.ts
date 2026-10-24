@@ -31,6 +31,13 @@ describe("seamTwoEnv", () => {
     expect(env.RABAED_REMOTE_TEST_DATABASE_SERVER).toBe("abcdefghijklmnop@aws-1-eu-central-1.pooler.supabase.com");
     expect(seamTwoEnv(urls, undefined, {}).RABAED_REMOTE_TEST_DATABASE_SERVER).toBeUndefined();
   });
+
+  // From a US runner to Frankfurt a hook ran past 180 s, and the hook it abandoned, still running,
+  // drained the next describe's outbox rows (run 40079800929, package-rls.test.ts).
+  it("gives each seam 2 test and hook 30 minutes on Supabase, and leaves a local run's budget alone", () => {
+    expect(env.RABAED_SEAM_TIMEOUT_MS).toBe("1800000");
+    expect(seamTwoEnv(urls, undefined, { RABAED_SEAM_TIMEOUT_MS: "5" }).RABAED_SEAM_TIMEOUT_MS).toBeUndefined();
+  });
 });
 
 describe("redactor", () => {
