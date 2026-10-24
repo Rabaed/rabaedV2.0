@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ROLE_PASSWORDS_FLAG, rolePasswordModes, type RolePasswordMode } from "./task-flags.ts";
 
 // The roles every Instance runs with. Their names are fixed because
 // migrations grant to them by name; only their passwords come from the environment.
@@ -129,4 +130,9 @@ export function loginFor(role: string, superuserUrl: string): string {
 
 export function databaseNameOf(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
+}
+
+/** How bootstrap treats the roles' passwords, from DATABASE_ROLE_PASSWORDS: 'always' unless it says 'on-create'. */
+export function rolePasswordsFromEnv(source: NodeJS.ProcessEnv = process.env): RolePasswordMode {
+  return z.enum(rolePasswordModes).default("always").parse(source[ROLE_PASSWORDS_FLAG] || undefined);
 }

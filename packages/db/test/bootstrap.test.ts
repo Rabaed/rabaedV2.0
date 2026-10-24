@@ -51,6 +51,25 @@ describe("bootstrap", () => {
     expect(await canConnect(urls.app)).toBe(true);
     expect(await canConnect(stale.app)).toBe(false);
   });
+
+  // The Supabase gate runs seam 2 with DATABASE_ROLE_PASSWORDS=on-create, so seam 2's reset (which
+  // bootstraps with no mode) never re-salts a role's SCRAM secret: Supavisor caches it, and the
+  // next pooled login then fails with 28P01 (RP-1037).
+  it("with no mode given, takes DATABASE_ROLE_PASSWORDS=on-create from the environment", async () => {
+    const urls = testDatabaseUrls();
+    const stale = { ...urls, app: withPassword(urls.app, "stale-value-from-task-start") };
+    const before = process.env.DATABASE_ROLE_PASSWORDS;
+    process.env.DATABASE_ROLE_PASSWORDS = "on-create";
+    try {
+      await bootstrap(stale);
+    } finally {
+      if (before === undefined) delete process.env.DATABASE_ROLE_PASSWORDS;
+      else process.env.DATABASE_ROLE_PASSWORDS = before;
+    }
+
+    expect(await canConnect(urls.app)).toBe(true);
+    expect(await canConnect(stale.app)).toBe(false);
+  });
 });
 
 // Rabaed Admin runs the customer api's import steps as the app role (RP-960): rabaed_admin may

@@ -6,6 +6,8 @@ import { z } from "zod";
 import { withClient } from "./bootstrap.ts";
 import { createDb, withMember } from "./client.ts";
 import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, loginSuffixOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
+import { REMOTE_TEST_SERVER_VARIABLE, remoteTestServerOf } from "./local-database.ts";
+import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE } from "./task-flags.ts";
 
 // The gate's own database: dropped and rebuilt each run, so every migration applies from empty.
 const gateDatabase = /^[a-z_][a-z0-9_]*_gate$/;
@@ -129,6 +131,29 @@ export function gateUrlsFromEnv(source: NodeJS.ProcessEnv = process.env): GateUr
     appTransaction: viaTransactionPooler(app),
     adminTransaction: viaTransactionPooler(admin),
   };
+}
+
+/**
+ * The environment the gate runs seam 2 in: `base` (the gate's own), with its
+ * connections to the gate's database winning over any .env or stale variable.
+ * Seam 2's reset bootstraps again; it must not set the roles' passwords again:
+ * Supavisor caches each role's SCRAM secret, and a password set anew (a new
+ * salt, even for the same value) fails the next pooled login with 28P01
+ * (Supabase: "password authentication failed" after a password change).
+ */
+export function seamTwoEnv(urls: GateUrls, projectRef: string | undefined, base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...base,
+    DATABASE_SUPERUSER_URL: urls.superuser,
+    DATABASE_MIGRATOR_URL: urls.migrator,
+    DATABASE_APP_URL: urls.app,
+    DATABASE_ADMIN_URL: urls.admin,
+    [ROLE_PASSWORDS_FLAG]: ROLE_PASSWORDS_ON_CREATE,
+  };
+  // The reset of the test database refuses a remote server unless named (local-database.ts).
+  if (projectRef) env[REMOTE_TEST_SERVER_VARIABLE] = remoteTestServerOf(urls.superuser);
+  else delete env[REMOTE_TEST_SERVER_VARIABLE];
+  return env;
 }
 
 const urlCredentials = /\b(postgres(?:ql)?:\/\/)[^@\s/]+@/gi;

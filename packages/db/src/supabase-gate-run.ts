@@ -12,18 +12,21 @@
 // DATABASE_NAME (default rabaed_gate; locally <the .env database>_gate).
 // Seam 2 also needs the file store its demo seed uploads to (FILE_STORE_*).
 //
-// Roles are cluster-wide: the bootstrap sets the three roles' passwords to the
-// ones given (the `uat` environment's, which UAT's apps use too), and seam 2
-// briefly changes them and creates scratch roles, as it does on every server.
-// Run it when no UAT deploy is in progress.
+// Roles are cluster-wide, and UAT's apps use the same three. Neither the gate's
+// bootstrap nor seam 2's sets the password of a role that exists (a password set
+// again, even unchanged, re-salts its SCRAM secret, and Supavisor's cached copy
+// then fails pooled logins with 28P01; RP-1037). Seam 2 still briefly changes a
+// role attribute and creates scratch roles. Run it when no UAT deploy is in progress.
+// So after a DATABASE_*_PASSWORD changes in `uat`, the role's password is set to it
+// once by hand (ALTER ROLE as postgres), and Supavisor given a few minutes.
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { bootstrap } from "./bootstrap.ts";
 import { databaseNameOf } from "./config.ts";
-import { REMOTE_TEST_SERVER_VARIABLE, remoteTestServerOf } from "./local-database.ts";
 import { migrate } from "./migrate.ts";
-import { checkBootstrapRole, checkBypassRole, checkDataApiOff, dropGateDatabase, gateUrlsFromEnv, poolerProbe, redactor, type GateUrls } from "./supabase-gate.ts";
+import { ROLE_PASSWORDS_ON_CREATE } from "./task-flags.ts";
+import { checkBootstrapRole, checkBypassRole, checkDataApiOff, dropGateDatabase, gateUrlsFromEnv, poolerProbe, redactor, seamTwoEnv, type GateUrls } from "./supabase-gate.ts";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const projectRef = process.env.SUPABASE_PROJECT_REF || undefined;
@@ -46,7 +49,11 @@ const where = (url: string) => {
 function failureOf(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const { code, detail, hint } = error as Error & { code?: string; detail?: string; hint?: string };
-  return [error.message, code && `(SQLSTATE ${code})`, detail && `Detail: ${detail}`, hint && `Hint: ${hint}`].filter(Boolean).join(" ");
+  // 28P01 names the login, not the cause: name the two causes it has had here.
+  const passwordHint =
+    code === "28P01" &&
+    "A password differs from its secret (the gate sets one only when it creates the login), or Supavisor still holds the secret from before a password change: retry in a few minutes.";
+  return [error.message, code && `(SQLSTATE ${code})`, detail && `Detail: ${detail}`, hint && `Hint: ${hint}`, passwordHint].filter(Boolean).join(" ");
 }
 
 async function step(name: string, run: () => Promise<string | void>): Promise<void> {
@@ -65,15 +72,7 @@ async function step(name: string, run: () => Promise<string | void>): Promise<vo
 
 /** Seam 2 as CI runs it, against the gate's database (`<DATABASE_NAME>_test`), its output redacted. */
 function seamTwo(urls: GateUrls): Promise<void> {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    DATABASE_SUPERUSER_URL: urls.superuser,
-    DATABASE_MIGRATOR_URL: urls.migrator,
-    DATABASE_APP_URL: urls.app,
-    DATABASE_ADMIN_URL: urls.admin,
-  };
-  // The reset of the test database refuses a remote server unless named (local-database.ts).
-  if (projectRef) env[REMOTE_TEST_SERVER_VARIABLE] = remoteTestServerOf(urls.superuser);
+  const env = seamTwoEnv(urls, projectRef, process.env);
   return new Promise((resolve, reject) => {
     const child = spawn("pnpm test:seam2", { cwd: repoRoot, env, shell: true, stdio: ["ignore", "pipe", "pipe"] });
     for (const stream of [child.stdout, child.stderr]) createInterface({ input: stream }).on("line", say);
@@ -94,7 +93,9 @@ const gate = urls!;
 
 await step("The bootstrap login may create rabaed_admin with BYPASSRLS", () => checkBootstrapRole(gate.superuser));
 await step("Drop the gate's database from an earlier run", () => dropGateDatabase(gate.superuser, databaseNameOf(gate.migrator)));
-await step("Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", () => bootstrap(gate));
+// Passwords only for a role it creates: setting one again re-salts its SCRAM secret, and
+// Supavisor's cached copy then fails the next pooled login (UAT's apps' included) with 28P01.
+await step("Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", () => bootstrap(gate, { passwords: ROLE_PASSWORDS_ON_CREATE }));
 await step("rabaed_admin bypasses row-level security", () => checkBypassRole(gate.superuser));
 await step("Migrate the schema (every migrations/*.sql)", async () => {
   const { applied } = await migrate(gate.migrator);
