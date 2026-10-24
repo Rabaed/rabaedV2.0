@@ -19,7 +19,10 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 // still in flight: one budget for both, with room for load, that still stops a hung test.
 // Under several lanes' verify, 60 s was too tight too: work-item-list-dates.test.ts timed
 // out at 60 s and passed 10/10 alone (RP-949).
-const seamTimeout = 180_000;
+// The Supabase gate gives seam 2 more through RABAED_SEAM_TIMEOUT_MS (packages/db/src/supabase-gate.ts):
+// from a US runner a hook there ran past 180 s, and the timed-out hook, still running, drained
+// the next describe's outbox rows (RP-1037). A CLI --hookTimeout does not reach a project's own.
+const seamTimeout = Number(process.env.RABAED_SEAM_TIMEOUT_MS) || 180_000;
 
 // Vitest's default is a fork per CPU but one, for every run: with several lanes testing at once
 // (5 Mains x 4 lanes, RP-602) that is dozens of forks contending for one machine (RP-607). A
