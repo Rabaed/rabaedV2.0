@@ -65,6 +65,27 @@ function trustsOnly(statements: Statement[], subject: string) {
   expect(Object.keys(statements[0]?.Condition ?? {})).toEqual(["StringEquals"]);
 }
 
+// Every job's `environment:` line, as "<file> <job>: <line>", except the one
+// spelling of uat. Any other spelling (`{ name: uat }`, a `name:` block, an
+// expression) is listed, so it fails unless it is the dev deploy. uat is safe
+// to name: the AWS roles below trust only dev's environment and pull requests,
+// and no AWS environment is called uat (checked below). The uat environment's
+// own secrets are guarded by its deployment-branch rule, not by this test.
+function environmentsOtherThanUat(workflows: readonly (readonly [file: string, source: string])[]): string[] {
+  return workflows.flatMap(([file, source]) => {
+    const lines = source.split(/\r?\n/);
+    return lines.flatMap((line, i) => {
+      if (!/^\s+environment:/.test(line)) return [];
+      if (/^\s+environment: uat\s*(#.*)?$/.test(line)) return [];
+      const job = lines
+        .slice(0, i)
+        .reverse()
+        .find((l) => /^ {2}[\w-]+:\s*$/.test(l));
+      return [`${file} ${job?.trim()} ${line.trim()}`];
+    });
+  });
+}
+
 describe("GitHub Actions access", () => {
   it("trusts GitHub's OIDC issuer, so no AWS keys are stored in GitHub", () => {
     accountTemplate().hasResourceProperties("AWS::IAM::OIDCProvider", {
@@ -80,22 +101,23 @@ describe("GitHub Actions access", () => {
     trustsOnly(role(accountTemplate(), "rabaed-dev-github-deploy").trust, `${repo}:environment:dev`);
   });
 
-  it("only the deploy job of the dev deploy workflow uses the dev environment", () => {
+  it("only the deploy job of the dev deploy workflow names an environment other than uat", () => {
     const dir = new URL("../../../.github/workflows/", import.meta.url);
-    const uses = readdirSync(dir).flatMap((file) => {
-      const lines = readFileSync(new URL(file, dir), "utf8").split("\n");
-      return lines.flatMap((line, i) => {
-        // Any spelling (`environment: dev`, `{ name: dev }`, a `name:` block):
-        // a job naming any environment at all must be this one.
-        if (!/^\s+environment:/.test(line)) return [];
-        const job = lines
-          .slice(0, i)
-          .reverse()
-          .find((l) => /^ {2}[\w-]+:\s*$/.test(l));
-        return [`${file} ${job?.trim()} ${line.trim()}`];
-      });
-    });
-    expect(uses).toEqual(["deploy-dev.yml deploy: environment: dev"]);
+    const workflows = readdirSync(dir).map((file) => [file, readFileSync(new URL(file, dir), "utf8")] as const);
+    expect(environmentsOtherThanUat(workflows)).toEqual(["deploy-dev.yml deploy: environment: dev"]);
+    // uat may be named only while no AWS environment's deploy role trusts it.
+    expect(Object.values(environments).map((config) => config.name)).not.toContain("uat");
+  });
+
+  it("the environment scan lets through only uat, spelled `environment: uat`", () => {
+    const job = (environment: string) => `jobs:\n  gate:\n    runs-on: ubuntu-latest\n    ${environment}\n`;
+    const named = (environment: string) => environmentsOtherThanUat([["x.yml", job(environment)]]);
+    expect(named("environment: uat")).toEqual([]);
+    expect(named("environment: uat # the shared UAT")).toEqual([]);
+    expect(environmentsOtherThanUat([["x.yml", job("environment: uat # CRLF").replaceAll("\n", "\r\n")]])).toEqual([]);
+    for (const other of ["environment: dev", "environment: Dev", "environment: uat-dev", "environment: { name: dev }", "environment:", "environment: ${{ inputs.env }}"]) {
+      expect(named(other), other).toEqual([`x.yml gate: ${other}`]);
+    }
   });
 
   it("the deploy role is capped by the permissions boundary, so the stacks' grants to it cannot exceed it", () => {

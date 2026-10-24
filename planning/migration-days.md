@@ -146,3 +146,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271013 | RP-959 | 51 | register_import_original_hand_over (moved from 20271009: main's RP-976 took it) |
 | 20271014 | RP-1003 | 34 | snag_report_photo_check (moved from 20271012: main took 20271013) |
 | 20271016 | RP-1031 | 33 | raised_from_link_arrival_zero |
+| 20271017 | RP-1039 | 21 | outbox_take_kinds (`app.take_outbox_row` takes a kinds filter) |
+| 20271018 | spec RP-1034 | 21 | review fixes |

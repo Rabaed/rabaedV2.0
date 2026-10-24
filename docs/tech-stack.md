@@ -100,6 +100,8 @@ Dev, demo and UAT run on Vercel with demo data only, so builders get a link to e
 | Files and fonts | Cloudflare R2 |
 | Email | SendGrid, tracking off |
 | Deploy | A GitHub Action on `main`: migrate, deploy, visibility smoke tests. Pull requests without a migration get a preview behind Vercel Authentication |
+| Connections | The apps use Supabase's **transaction pooler** (port 6543): the Member is set per transaction, so a pooled connection carries nothing to the next request. Migrations and the Supabase gate use the **session pooler** (port 5432 on the same host): migrations hold a session advisory lock. Supabase's direct connection is IPv6-only, unreachable from GitHub runners. Pooler logins are `<role>.<project ref>`; the roles are the plain names |
+| Supabase gate | `pnpm --filter @rabaed/db gate:supabase` (RP-1037): bootstrap with the bypass role, every migration, seam 2 unchanged, an api call's transaction through the transaction pooler, and the Data API off (a call with the publishable key, read only by the gate, gets PostgREST's no-exposed-schema answer). Locally it runs against the lane's Postgres and skips the Data API check |
 
 ## CI/CD: GitHub Actions
 

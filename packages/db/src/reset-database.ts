@@ -1,7 +1,7 @@
 import pg from "pg";
 import { bootstrap, type BootstrapOptions } from "./bootstrap.ts";
 import { databaseNameOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
-import { assertLocalDatabases } from "./local-database.ts";
+import { assertResettableDatabases } from "./local-database.ts";
 import { migrate } from "./migrate.ts";
 
 export interface ResetOptions extends BootstrapOptions {
@@ -19,8 +19,9 @@ export interface ResetOptions extends BootstrapOptions {
  * (`passwords: "on-create"`).
  */
 export async function resetDatabase(urls: DatabaseUrls, { notLocal, ...options }: ResetOptions = {}): Promise<{ database: string; applied: string[] }> {
-  if (notLocal !== "demo environment") assertLocalDatabases([urls.superuser, urls.migrator, urls.app, urls.admin]);
   const database = databaseNameOf(urls.migrator);
+  // Also seam 2's test database on the remote server the Supabase gate names (RP-1037).
+  if (notLocal !== "demo environment") assertResettableDatabases([urls.superuser, urls.migrator, urls.app, urls.admin], database);
   if (!/^[a-z_][a-z0-9_]*$/.test(database)) throw new Error(`Unsafe database name: ${database}`);
   const client = new pg.Client({ connectionString: withDatabaseName(urls.superuser, "postgres") });
   await client.connect();
