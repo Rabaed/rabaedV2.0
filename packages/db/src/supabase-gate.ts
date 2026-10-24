@@ -9,6 +9,11 @@ import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, loginSuf
 import { REMOTE_TEST_SERVER_VARIABLE, remoteTestServerOf } from "./local-database.ts";
 import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE } from "./task-flags.ts";
 
+/** The budget, in ms, of each seam test and hook; vitest.config.ts reads it, and runs 180 s without it. */
+export const SEAM_TIMEOUT_VARIABLE = "RABAED_SEAM_TIMEOUT_MS";
+/** Seam 2's budget on Supabase: 30 minutes, which still stops a hung test well inside the job's 330 (supabase-gate.yml). */
+const SUPABASE_SEAM_TIMEOUT_MS = 30 * 60_000;
+
 // The gate's own database: dropped and rebuilt each run, so every migration applies from empty.
 const gateDatabase = /^[a-z_][a-z0-9_]*_gate$/;
 
@@ -153,6 +158,11 @@ export function seamTwoEnv(urls: GateUrls, projectRef: string | undefined, base:
   // The reset of the test database refuses a remote server unless named (local-database.ts).
   if (projectRef) env[REMOTE_TEST_SERVER_VARIABLE] = remoteTestServerOf(urls.superuser);
   else delete env[REMOTE_TEST_SERVER_VARIABLE];
+  // A US runner reaches Frankfurt at about 0.45 s a query, some 50 times slower than a
+  // local run: a hook past 180 s fails, and keeps running beside the next describe
+  // (vitest.config.ts reads this budget).
+  if (projectRef) env[SEAM_TIMEOUT_VARIABLE] = String(SUPABASE_SEAM_TIMEOUT_MS);
+  else delete env[SEAM_TIMEOUT_VARIABLE];
   return env;
 }
 
