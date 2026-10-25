@@ -3,6 +3,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bootstrap } from "../src/bootstrap.ts";
 import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, loginUrl } from "../src/config.ts";
+import { dropLeftoverRoles, freshRoleName } from "../test-support/fresh-role.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
 function withPassword(url: string, password: string): string {
@@ -115,7 +116,10 @@ describe("Rabaed Admin's switch to the app role", () => {
 // deploy after the first bootstraps over the existing roles as that user.
 describe("bootstrap as a user that is not a superuser, like RDS's master user", () => {
   const urls = testDatabaseUrls();
-  const master = "rabaed_test_rds_master";
+  // A new name each run: Supavisor caches a login's SCRAM secret by name, so a role created
+  // again under an old name fails the pooled login with 28P01 (fresh-role.ts, RP-1037).
+  const masterPrefix = "rabaed_test_rds_master";
+  const master = freshRoleName(masterPrefix);
   const masterPassword = "rds-like-master-password";
   // Behind Supabase's pooler the login is <master>.<project ref>, as the superuser's is: the
   // roles' URLs carry that suffix too, and bootstrap checks them against this login.
@@ -123,7 +127,7 @@ describe("bootstrap as a user that is not a superuser, like RDS's master user", 
   const roleNames = `'${MIGRATOR_ROLE}', '${APP_ROLE}', '${ADMIN_ROLE}'`;
 
   beforeAll(async () => {
-    await query(urls.superuser, `drop role if exists ${master}`);
+    await dropLeftoverRoles(urls.superuser, masterPrefix);
     await query(urls.superuser, `create role ${master} login createrole createdb password '${masterPassword}'`);
     await query(urls.superuser, `grant ${MIGRATOR_ROLE}, ${APP_ROLE}, ${ADMIN_ROLE} to ${master} with admin option`);
   });

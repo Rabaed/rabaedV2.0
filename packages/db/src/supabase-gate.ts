@@ -181,31 +181,53 @@ const projectRefPattern = /^[a-z0-9]{10,40}$/;
 // schema exposed (Supabase's troubleshooting guide), so its refusals name it.
 const NO_EXPOSED_SCHEMAS = "pg_pgrst_no_exposed_schemas";
 
+// The table the probe asks for: one every Rabaed database has. Not the OpenAPI root
+// /rest/v1/, which Supabase refuses to a publishable or anon key whether the Data API
+// is on or off (changelog 42949); a table path is what any client key may ask for.
+const PROBE_PATH = "rest/v1/company";
+const PROBE_QUERY = "select=id&limit=1";
+
+// PostgreSQL's "insufficient privilege": PostgREST answers it 401 to the anon role a
+// publishable key runs as, so a 401 that carries it came from the database, not the gateway.
+const INSUFFICIENT_PRIVILEGE = "42501";
+
 export type DataApiCheck =
   /** Passes: the call with the key got the Data-API-off answer. */
   | { outcome: "off"; status: number }
-  /** Fails: a 2xx, the API answers. */
+  /** Fails: a 2xx, the table answered. */
   | { outcome: "open"; status: number }
+  /** Fails: PostgREST reached the database, whose grants refused the key's role: the Data API is on. */
+  | { outcome: "on"; status: number; code: string; message?: string }
   /** Fails: the gateway refused the key, which says nothing about the Data API. */
-  | { outcome: "key refused"; status: number }
+  | { outcome: "key refused"; status: number; message?: string }
   /** Fails: some other answer; `code` is PostgREST's error code when it gave one. */
-  | { outcome: "unexpected"; status: number; code?: string }
+  | { outcome: "unexpected"; status: number; code?: string; message?: string }
   | { outcome: "skipped" };
 
-function postgrestCodeOf(body: string): string | undefined {
+// Room for a PostgREST or gateway message; more is noise in the gate's log.
+const MESSAGE_LIMIT = 200;
+
+/** The answer's code and message (PostgREST's JSON, or the gateway's text), the key hidden, the message one short line. */
+function answerOf(body: string, publishableKey: string): { code?: string; message?: string } {
+  let code: string | undefined;
+  let message = body;
   try {
-    const code = (JSON.parse(body) as { code?: unknown }).code;
-    return typeof code === "string" ? code : undefined;
+    const parsed = JSON.parse(body) as { code?: unknown; message?: unknown };
+    if (typeof parsed.code === "string") code = parsed.code;
+    if (typeof parsed.message === "string") message = parsed.message;
   } catch {
-    return undefined;
+    // Not JSON: the text itself.
   }
+  const line = message.split(publishableKey).join("***").replace(/\s+/g, " ").trim().slice(0, MESSAGE_LIMIT);
+  return { ...(code ? { code } : {}), ...(line ? { message: line } : {}) };
 }
 
 /**
  * ADR 0026: the Data API is off, so no table is reachable around our api. The
- * call carries Supabase's publishable key, since without a key the gateway
- * answers 401 whether the Data API is on or off; it passes only on PostgREST's
- * answer that no schema is exposed.
+ * call asks for a table with Supabase's publishable key (without a key the
+ * gateway answers 401 whether the Data API is on or off), on the `apikey`
+ * header alone, as Supabase's docs say. It passes only on an answer naming the
+ * placeholder schema Supabase exposes with the Data API off.
  */
 export async function checkDataApiOff({
   projectRef,
@@ -219,19 +241,37 @@ export async function checkDataApiOff({
   if (!projectRef) return { outcome: "skipped" };
   if (!projectRefPattern.test(projectRef)) throw new Error("SUPABASE_PROJECT_REF must be a bare project ref (lowercase letters and digits)");
   if (!publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
-  const response = await fetch(`https://${projectRef}.supabase.co/rest/v1/`, {
+  const response = await fetch(`https://${projectRef}.supabase.co/${PROBE_PATH}?${PROBE_QUERY}`, {
     headers: { apikey: publishableKey },
     redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   });
   const { status } = response;
   const body = await response.text();
-  // First: at the root PostgREST may describe the placeholder schema, with a 2xx.
-  if (body.includes(NO_EXPOSED_SCHEMAS)) return { outcome: "off", status };
+  // A table that answers is open, whatever its rows say.
   if (response.ok) return { outcome: "open", status };
-  if (status === 401 || status === 403) return { outcome: "key refused", status };
-  const code = postgrestCodeOf(body);
-  return code ? { outcome: "unexpected", status, code } : { outcome: "unexpected", status };
+  if (body.includes(NO_EXPOSED_SCHEMAS)) return { outcome: "off", status };
+  const { code, message } = answerOf(body, publishableKey);
+  const said = message ? { message } : {};
+  if (code === INSUFFICIENT_PRIVILEGE) return { outcome: "on", status, code, ...said };
+  if ((status === 401 || status === 403) && !code) return { outcome: "key refused", status, ...said };
+  return { outcome: "unexpected", status, ...(code ? { code } : {}), ...said };
+}
+
+/** What the gate says when the Data API check fails. */
+function dataApiFailure(result: Exclude<DataApiCheck, { outcome: "off" | "skipped" }>): string {
+  switch (result.outcome) {
+    case "open":
+      return `${PROBE_PATH}answered ${result.status}: the Data API is on, a way to the tables around the api`;
+    case "on":
+      return `${PROBE_PATH}answered ${result.status} (${result.code}${result.message ? `: ${result.message}` : ""}): the Data API is on and reached the database, whose grants refused the login the publishable key runs as`;
+    case "key refused":
+      return `${PROBE_PATH}refused the publishable key (${result.status}${result.message ? `: ${result.message}` : ""}), which proves nothing about the Data API: check the SUPABASE_PUBLISHABLE_KEY secret`;
+    case "unexpected": {
+      const said = [result.code, result.message].filter(Boolean).join(": ");
+      return `${PROBE_PATH}answered ${result.status}${said ? ` (${said})` : ""}, not the Data-API-off answer (no schema exposed)`;
+    }
+  }
 }
 
 /** A step of the gate. One that keeps going fails the gate but lets the steps after it run, so one run shows their results too. */
@@ -324,18 +364,9 @@ export function gateSteps({
       keepsGoing: true,
       run: async () => {
         const result = await checkDataApiOff({ projectRef, publishableKey, fetch });
-        switch (result.outcome) {
-          case "skipped":
-            return "skipped: no SUPABASE_PROJECT_REF (a local run)";
-          case "off":
-            return `rest/v1/ with the publishable key answered ${result.status}: no schema exposed`;
-          case "open":
-            throw new Error(`rest/v1/ answered ${result.status}: the Data API is on, a way to the tables around the api`);
-          case "key refused":
-            throw new Error(`rest/v1/ refused the publishable key (${result.status}), which proves nothing about the Data API: check SUPABASE_PUBLISHABLE_KEY`);
-          case "unexpected":
-            throw new Error(`rest/v1/ answered ${result.status}${result.code ? ` (${result.code})` : ""}, not the Data-API-off answer (no schema exposed)`);
-        }
+        if (result.outcome === "skipped") return "skipped: no SUPABASE_PROJECT_REF (a local run)";
+        if (result.outcome === "off") return `${PROBE_PATH} with the publishable key answered ${result.status}: no schema exposed`;
+        throw new Error(dataApiFailure(result));
       },
     },
     { name: "Seam 2", run: () => seamTwo(gate()) },

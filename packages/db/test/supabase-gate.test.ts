@@ -4,6 +4,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ADMIN_ROLE, loginUrl } from "../src/config.ts";
 import { checkBootstrapRole, checkBypassRole, poolerProbe } from "../src/supabase-gate.ts";
+import { dropLeftoverRoles, freshRoleName } from "../test-support/fresh-role.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
@@ -19,8 +20,14 @@ async function query(url: string, text: string): Promise<void> {
 }
 
 describe("checkBootstrapRole", () => {
-  const plain = "rabaed_test_gate_no_bypass";
-  beforeAll(() => query(urls.superuser, `drop role if exists ${plain}; create role ${plain} login createrole createdb password 'gate-test-pw'`));
+  // A new name each run: Supavisor caches a login's SCRAM secret by name, so a role created
+  // again under an old name fails the pooled login with 28P01 (fresh-role.ts, RP-1037).
+  const prefix = "rabaed_test_gate_no_bypass";
+  const plain = freshRoleName(prefix);
+  beforeAll(async () => {
+    await dropLeftoverRoles(urls.superuser, prefix);
+    await query(urls.superuser, `create role ${plain} login createrole createdb password 'gate-test-pw'`);
+  });
   afterAll(() => query(urls.superuser, `drop role if exists ${plain}`));
 
   it("passes for a role that may create a role with BYPASSRLS", async () => {
