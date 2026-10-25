@@ -426,10 +426,29 @@ describe("gateSteps", () => {
     expect(await runGateSteps(steps, () => undefined, String)).toEqual([]);
   });
 
-  it("refuses a SUPABASE_GATE_ONLY it doesn't know, naming the one it does", () => {
-    expect(() => gateSteps({ env: { ...env, SUPABASE_GATE_ONLY: "seam-2" }, seamTwo: () => Promise.resolve(), onUrls: () => "read" })).toThrow(
-      'SUPABASE_GATE_ONLY is "seam-2": the gate knows only "data-api" (unset runs the whole gate)',
-    );
+  // A failed step, so the gate's own log says it, rather than a stack trace from the top level.
+  it("refuses a SUPABASE_GATE_ONLY it doesn't know as its one failed step, naming the one it knows", async () => {
+    const steps = gateSteps({ env: { ...env, SUPABASE_GATE_ONLY: "seam-2" }, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+    const said: string[] = [];
+
+    expect(await runGateSteps(steps, (line) => said.push(line), (error) => (error as Error).message)).toEqual(["Read SUPABASE_GATE_ONLY"]);
+    expect(said).toContain('✘ Read SUPABASE_GATE_ONLY: SUPABASE_GATE_ONLY is "seam-2": the gate knows only "data-api" (unset runs the whole gate)');
+  });
+
+  // The Data API check keeps going, so a setting it refuses must still stop the gate before the database is built.
+  it("stops at reading the connections on a project ref that is not a bare Supabase ref", async () => {
+    const steps = gateSteps({ env: { ...env, SUPABASE_PROJECT_REF: "My-Ref" }, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+
+    await expect(steps.find((s) => s.name === "Read the connections")!.run()).rejects.toThrow(/SUPABASE_PROJECT_REF must be a bare project ref/);
+  });
+
+  it("waits out PostgREST's schema-cache reload with the wait it is given", async () => {
+    const { fetch } = answeringInTurn([503, schemaCacheLoading], [406, dataApiOffBody]);
+    const waits: number[] = [];
+    const [step] = gateSteps({ env, fetch, sleep: async (ms) => void waits.push(ms), seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+
+    await expect(step!.run()).resolves.toBe("rest/v1/company with the publishable key answered 406: no schema exposed");
+    expect(waits).toHaveLength(1);
   });
 
   it("fails, not skips, the Data-API-only run without SUPABASE_PROJECT_REF, since it would then check nothing", async () => {

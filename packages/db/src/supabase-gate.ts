@@ -219,17 +219,28 @@ export type DataApiCheck =
 // Room for a PostgREST or gateway message; more is noise in the gate's log.
 const MESSAGE_LIMIT = 200;
 
-/** The answer's code and message (PostgREST's JSON, or the gateway's text), the key hidden, the message one short line. */
-function answerOf(body: string, publishableKey: string): { code?: string; message?: string } {
-  let code: string | undefined;
-  let message = body;
+/** An answer as the check reads it: PostgREST's JSON fields, or (`json` false) the gateway's text. */
+interface Answer {
+  ok: boolean;
+  status: number;
+  json: boolean;
+  code?: string;
+  message?: string;
+  hint?: string;
+}
+
+function answerFrom(ok: boolean, status: number, body: string): Answer {
+  const text = (value: unknown) => (typeof value === "string" ? value : undefined);
   try {
-    const parsed = JSON.parse(body) as { code?: unknown; message?: unknown };
-    if (typeof parsed.code === "string") code = parsed.code;
-    message = typeof parsed.message === "string" ? parsed.message : "";
+    const parsed = (JSON.parse(body) ?? {}) as { code?: unknown; message?: unknown; hint?: unknown };
+    return { ok, status, json: true, code: text(parsed.code), message: text(parsed.message), hint: text(parsed.hint) };
   } catch {
-    // Not JSON: the text itself.
+    return { ok, status, json: false, message: body };
   }
+}
+
+/** The answer's code and message, the key hidden, the message one short line. */
+function saidIn({ code, message = "" }: Answer, publishableKey: string): { code?: string; message?: string } {
   const line = message.split(publishableKey).join("***").replace(/\s+/g, " ").trim().slice(0, MESSAGE_LIMIT);
   return { ...(code ? { code } : {}), ...(line ? { message: line } : {}) };
 }
@@ -241,16 +252,14 @@ function answerOf(body: string, publishableKey: string): { code?: string; messag
  * only schema exposed, in its hint ("Only the following schemas are exposed: ...") or, in
  * older PostgREST, its message ("The schema must be one of the following: ...").
  */
-function isDataApiOffAnswer(status: number, body: string): boolean {
-  if (status !== 406) return false;
-  let parsed: { code?: unknown; message?: unknown; hint?: unknown };
-  try {
-    parsed = (JSON.parse(body) ?? {}) as typeof parsed;
-  } catch {
-    return false;
-  }
-  const names = (text: unknown) => typeof text === "string" && text.includes(NO_EXPOSED_SCHEMAS);
-  return parsed.code === "PGRST106" && (names(parsed.hint) || names(parsed.message));
+function isDataApiOffAnswer({ status, json, code, message, hint }: Answer): boolean {
+  return status === 406 && json && code === "PGRST106" && [hint, message].some((text) => text?.includes(NO_EXPOSED_SCHEMAS));
+}
+
+/** The Supabase settings the Data API check needs, checked before it calls anywhere. Refuses a ref that would send the call elsewhere. */
+function checkSupabaseSettings(projectRef: string, publishableKey: string | undefined): asserts publishableKey is string {
+  if (!projectRefPattern.test(projectRef)) throw new Error("SUPABASE_PROJECT_REF must be a bare project ref (lowercase letters and digits)");
+  if (!publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
 }
 
 /**
@@ -273,27 +282,26 @@ export async function checkDataApiOff({
   sleep?: (ms: number) => Promise<void>;
 }): Promise<DataApiCheck> {
   if (!projectRef) return { outcome: "skipped" };
-  if (!projectRefPattern.test(projectRef)) throw new Error("SUPABASE_PROJECT_REF must be a bare project ref (lowercase letters and digits)");
-  if (!publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
-  const ask = async () => {
+  checkSupabaseSettings(projectRef, publishableKey);
+  const ask = async (): Promise<Answer> => {
     const response = await fetch(`https://${projectRef}.supabase.co/${PROBE_PATH}?${PROBE_QUERY}`, {
       headers: { apikey: publishableKey },
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
-    return { ok: response.ok, status: response.status, body: await response.text() };
+    return answerFrom(response.ok, response.status, await response.text());
   };
   let answer = await ask();
   for (const wait of SCHEMA_CACHE_WAITS_MS) {
-    if (answer.ok || answerOf(answer.body, publishableKey).code !== SCHEMA_CACHE_NOT_LOADED) break;
+    if (answer.ok || answer.code !== SCHEMA_CACHE_NOT_LOADED) break;
     await sleep(wait);
     answer = await ask();
   }
-  const { status, body } = answer;
+  const { status } = answer;
   // A table that answers is open, whatever its rows say.
   if (answer.ok) return { outcome: "open", status };
-  if (isDataApiOffAnswer(status, body)) return { outcome: "off", status };
-  const { code, message } = answerOf(body, publishableKey);
+  if (isDataApiOffAnswer(answer)) return { outcome: "off", status };
+  const { code, message } = saidIn(answer, publishableKey);
   const said = message ? { message } : {};
   if (code && ANSWERED_FROM_EXPOSED_SCHEMA.has(code)) return { outcome: "on", status, code, ...said };
   if ((status === 401 || status === 403) && (!code || jwtError.test(code))) return { outcome: "key refused", status, ...(code ? { code } : {}), ...said };
@@ -348,12 +356,15 @@ const DATA_API_ONLY = "data-api";
 /** The gate's steps, in order (supabase-gate-run.ts runs them), from the environment `env`. */
 export function gateSteps({
   fetch,
+  sleep,
   seamTwo,
   onUrls,
   env = process.env,
 }: {
   env?: NodeJS.ProcessEnv;
   fetch?: Fetch;
+  /** The Data API check's wait while PostgREST loads its schema cache. */
+  sleep?: (ms: number) => Promise<void>;
   /** Seam 2 as CI runs it, against the gate's database. */
   seamTwo: (urls: GateUrls) => Promise<void>;
   /** Given the connections once read, so the log can hide their passwords. */
@@ -362,8 +373,10 @@ export function gateSteps({
   const projectRef = env.SUPABASE_PROJECT_REF || undefined;
   const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || undefined;
   const only = env[GATE_ONLY_VARIABLE] || undefined;
+  // A failed step, not a throw, so the gate's log names it like any other failure.
   if (only && only !== DATA_API_ONLY) {
-    throw new Error(`${GATE_ONLY_VARIABLE} is "${only}": the gate knows only "${DATA_API_ONLY}" (unset runs the whole gate)`);
+    const refusal = `${GATE_ONLY_VARIABLE} is "${only}": the gate knows only "${DATA_API_ONLY}" (unset runs the whole gate)`;
+    return [{ name: `Read ${GATE_ONLY_VARIABLE}`, run: () => Promise.reject(new Error(refusal)) }];
   }
   let urls: GateUrls | undefined;
   const gate = (): GateUrls => {
@@ -379,7 +392,7 @@ export function gateSteps({
     run: async () => {
       // A run that checks only this must not pass by skipping it.
       if (only && (!projectRef || !publishableKey)) throw new Error(`${GATE_ONLY_VARIABLE}=${DATA_API_ONLY} needs SUPABASE_PROJECT_REF and SUPABASE_PUBLISHABLE_KEY`);
-      const result = await checkDataApiOff({ projectRef, publishableKey, fetch });
+      const result = await checkDataApiOff({ projectRef, publishableKey, fetch, sleep });
       if (result.outcome === "skipped") return "skipped: no SUPABASE_PROJECT_REF (a local run)";
       if (result.outcome === "off") return `${PROBE_PATH} with the publishable key answered ${result.status}: no schema exposed`;
       throw new Error(dataApiFailure(result));
@@ -391,9 +404,9 @@ export function gateSteps({
     {
       name: "Read the connections",
       run: async () => {
+        // The Data API check refused these too, but keeps going: this stops the gate in seconds, not after seam 2.
+        if (projectRef) checkSupabaseSettings(projectRef, publishableKey);
         urls = gateUrlsFromEnv(env);
-        // Checked again here: the Data API check keeps going, so this stops the gate in seconds, not after seam 2.
-        if (projectRef && !publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
         return onUrls(urls);
       },
     },
