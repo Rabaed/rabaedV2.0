@@ -190,15 +190,44 @@ describe("checkDataApiOff", () => {
     expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "key refused", status: 403, message: "Forbidden" });
   });
 
-  it("fails on any other answer, naming its PostgREST code and message, since it is not the Data-API-off answer", async () => {
+  // PostgREST serves Supabase's `postgres` database, which need not have Rabaed's tables.
+  it("fails as on when PostgREST looked for the table in an exposed schema (PGRST205)", async () => {
     const { fetch } = answering(404, '{"code":"PGRST205","details":null,"hint":null,"message":"Could not find the table \'public.company\' in the schema cache"}');
 
     expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({
-      outcome: "unexpected",
+      outcome: "on",
       status: 404,
       code: "PGRST205",
       message: "Could not find the table 'public.company' in the schema cache",
     });
+  });
+
+  it("fails as key refused when PostgREST refuses the key's JWT (PGRST3xx)", async () => {
+    const { fetch } = answering(401, '{"code":"PGRST301","message":"No suitable key or wrong key type"}');
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({
+      outcome: "key refused",
+      status: 401,
+      code: "PGRST301",
+      message: "No suitable key or wrong key type",
+    });
+  });
+
+  it("fails on any other answer, naming its PostgREST code and message, since it is not the Data-API-off answer", async () => {
+    const { fetch } = answering(503, '{"code":"PGRST002","message":"Could not query the database for the schema cache. Retrying."}');
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({
+      outcome: "unexpected",
+      status: 503,
+      code: "PGRST002",
+      message: "Could not query the database for the schema cache. Retrying.",
+    });
+  });
+
+  it("reports no message when PostgREST's answer has none, rather than its raw body", async () => {
+    const { fetch } = answering(500, '{"code":"XX000","details":"a long detail","hint":null}');
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "unexpected", status: 500, code: "XX000" });
   });
 
   it("never repeats the key in the message it reports, and keeps the message short", async () => {
@@ -326,7 +355,7 @@ describe("gateSteps", () => {
     const step = gateSteps({ env, fetch, seamTwo: () => Promise.resolve(), onUrls: () => "read" }).find((s) => s.name === "Supabase's Data API is off")!;
 
     await expect(step.run()).rejects.toThrow(
-      "rest/v1/company answered 401 (42501: permission denied for table company): the Data API is on and reached the database, whose grants refused the login the publishable key runs as",
+      "rest/v1/company answered 401 (42501: permission denied for table company): the Data API is on, PostgREST answering from an exposed schema",
     );
   });
 

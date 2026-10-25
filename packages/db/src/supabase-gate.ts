@@ -187,19 +187,23 @@ const NO_EXPOSED_SCHEMAS = "pg_pgrst_no_exposed_schemas";
 const PROBE_PATH = "rest/v1/company";
 const PROBE_QUERY = "select=id&limit=1";
 
-// PostgreSQL's "insufficient privilege": PostgREST answers it 401 to the anon role a
-// publishable key runs as, so a 401 that carries it came from the database, not the gateway.
-const INSUFFICIENT_PRIVILEGE = "42501";
+// PostgREST answers from an exposed schema: the Data API is on. 42501, PostgreSQL's
+// "insufficient privilege", which PostgREST answers 401 to the anon login a publishable
+// key runs as (so that 401 came from the database, not the gateway); PGRST205, no such
+// table in the schema it serves (Supabase's `postgres` database need not have ours).
+const ANSWERED_FROM_EXPOSED_SCHEMA = new Set(["42501", "PGRST205"]);
+// PostgREST's JWT errors (PGRST3xx): the key, as the gateway passed it on, was refused.
+const jwtError = /^PGRST3\d\d$/;
 
 export type DataApiCheck =
   /** Passes: the call with the key got the Data-API-off answer. */
   | { outcome: "off"; status: number }
   /** Fails: a 2xx, the table answered. */
   | { outcome: "open"; status: number }
-  /** Fails: PostgREST reached the database, whose grants refused the key's role: the Data API is on. */
+  /** Fails: PostgREST answered from an exposed schema, though not with rows: the Data API is on. */
   | { outcome: "on"; status: number; code: string; message?: string }
-  /** Fails: the gateway refused the key, which says nothing about the Data API. */
-  | { outcome: "key refused"; status: number; message?: string }
+  /** Fails: the gateway (or PostgREST, as a JWT) refused the key, which says nothing about the Data API. */
+  | { outcome: "key refused"; status: number; code?: string; message?: string }
   /** Fails: some other answer; `code` is PostgREST's error code when it gave one. */
   | { outcome: "unexpected"; status: number; code?: string; message?: string }
   | { outcome: "skipped" };
@@ -214,7 +218,7 @@ function answerOf(body: string, publishableKey: string): { code?: string; messag
   try {
     const parsed = JSON.parse(body) as { code?: unknown; message?: unknown };
     if (typeof parsed.code === "string") code = parsed.code;
-    if (typeof parsed.message === "string") message = parsed.message;
+    message = typeof parsed.message === "string" ? parsed.message : "";
   } catch {
     // Not JSON: the text itself.
   }
@@ -253,24 +257,22 @@ export async function checkDataApiOff({
   if (body.includes(NO_EXPOSED_SCHEMAS)) return { outcome: "off", status };
   const { code, message } = answerOf(body, publishableKey);
   const said = message ? { message } : {};
-  if (code === INSUFFICIENT_PRIVILEGE) return { outcome: "on", status, code, ...said };
-  if ((status === 401 || status === 403) && !code) return { outcome: "key refused", status, ...said };
+  if (code && ANSWERED_FROM_EXPOSED_SCHEMA.has(code)) return { outcome: "on", status, code, ...said };
+  if ((status === 401 || status === 403) && (!code || jwtError.test(code))) return { outcome: "key refused", status, ...(code ? { code } : {}), ...said };
   return { outcome: "unexpected", status, ...(code ? { code } : {}), ...said };
 }
 
 /** What the gate says when the Data API check fails. */
 function dataApiFailure(result: Exclude<DataApiCheck, { outcome: "off" | "skipped" }>): string {
+  if (result.outcome === "open") return `${PROBE_PATH} answered ${result.status}: the Data API is on, a way to the tables around the api`;
+  const said = [result.code, result.message].filter(Boolean).join(": ");
   switch (result.outcome) {
-    case "open":
-      return `${PROBE_PATH}answered ${result.status}: the Data API is on, a way to the tables around the api`;
     case "on":
-      return `${PROBE_PATH}answered ${result.status} (${result.code}${result.message ? `: ${result.message}` : ""}): the Data API is on and reached the database, whose grants refused the login the publishable key runs as`;
+      return `${PROBE_PATH} answered ${result.status} (${said}): the Data API is on, PostgREST answering from an exposed schema`;
     case "key refused":
-      return `${PROBE_PATH}refused the publishable key (${result.status}${result.message ? `: ${result.message}` : ""}), which proves nothing about the Data API: check the SUPABASE_PUBLISHABLE_KEY secret`;
-    case "unexpected": {
-      const said = [result.code, result.message].filter(Boolean).join(": ");
-      return `${PROBE_PATH}answered ${result.status}${said ? ` (${said})` : ""}, not the Data-API-off answer (no schema exposed)`;
-    }
+      return `${PROBE_PATH} refused the publishable key (${[result.status, said].filter(Boolean).join(": ")}), which proves nothing about the Data API: check the SUPABASE_PUBLISHABLE_KEY secret`;
+    case "unexpected":
+      return `${PROBE_PATH} answered ${result.status}${said ? ` (${said})` : ""}, not the Data-API-off answer (no schema exposed)`;
   }
 }
 
