@@ -13,6 +13,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { isLocalHost } from "@rabaed/db";
 import type { SignedUrl } from "@rabaed/domain";
 import { z } from "zod";
 
@@ -72,6 +73,7 @@ export function fileStoreSettingsFromEnv(source: NodeJS.ProcessEnv = process.env
       FILE_STORE_ENDPOINT: z.url().optional(),
       FILE_STORE_ACCESS_KEY_ID: z.string().min(1).optional(),
       FILE_STORE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+      FILE_STORE_REGION: z.string().min(1).optional(),
       AWS_REGION: z.string().min(1).optional(),
     })
     .parse(source);
@@ -85,14 +87,27 @@ export function fileStoreSettingsFromEnv(source: NodeJS.ProcessEnv = process.env
   return {
     bucket: env.PROJECT_FILES_BUCKET,
     endpoint: env.FILE_STORE_ENDPOINT,
-    region: env.AWS_REGION ?? "us-east-1",
+    // R2 signs with `auto` (FILE_STORE_REGION in the uat environment); the local store takes any.
+    region: env.FILE_STORE_REGION ?? env.AWS_REGION ?? "us-east-1",
     credentials: { accessKeyId: env.FILE_STORE_ACCESS_KEY_ID, secretAccessKey: env.FILE_STORE_SECRET_ACCESS_KEY },
   };
 }
 
-function clientFor(settings: FileStoreSettings): S3Client {
+/**
+ * The S3 client for the files bucket. Checksums only where an operation
+ * requires one: by default the SDK adds `x-amz-checksum-mode` to a signed GET
+ * and would have a PutObject carry a CRC the browser never computes. Cloudflare
+ * R2 implements CRC-32 only as a composite checksum and CRC-64/NVME only as a
+ * full-object one, and treats `us-east-1` or an empty region as `auto`
+ * (https://developers.cloudflare.com/r2/api/s3/api/, "Checksum types" and
+ * "Bucket region"); its presigned uploads sign Content-Type and the browser
+ * sends exactly that (https://developers.cloudflare.com/r2/api/s3/presigned-urls/).
+ */
+export function fileStoreClient(settings: FileStoreSettings): S3Client {
   return new S3Client({
     region: settings.region,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     ...(settings.endpoint ? { endpoint: settings.endpoint, forcePathStyle: true, credentials: settings.credentials } : {}),
   });
 }
@@ -105,7 +120,7 @@ export function contentDisposition(fileName: string, contentType: string): strin
 }
 
 export function createFileStore(settings: FileStoreSettings): FileStore {
-  const s3 = clientFor(settings);
+  const s3 = fileStoreClient(settings);
   const expiresAt = (signedAt: Date) => new Date(signedAt.getTime() + SIGNED_URL_TTL_SECONDS * 1000).toISOString();
   /** The stored object's body, or null when there is none at that key. */
   const getObjectBody = async (key: string) => {
@@ -187,13 +202,24 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
 }
 
 /**
- * Local and CI only: creates the bucket if it isn't there, and lets browsers
- * upload to it from any origin (the local web runs on a lane's own host). In
- * AWS the storage stack owns the bucket and its CORS rules.
+ * Whether the store is the one in Docker on this machine (local, CI): its
+ * endpoint's host is this machine, by the rule the database resets use
+ * (packages/db local-database.ts). R2 and AWS are never local.
  */
-export async function ensureLocalBucket(settings: FileStoreSettings): Promise<void> {
-  if (!settings.endpoint) throw new Error("ensureLocalBucket is for the local store only");
-  const s3 = clientFor(settings);
+export function isLocalFileStore(settings: FileStoreSettings): boolean {
+  if (!settings.endpoint) return false;
+  return isLocalHost(new URL(settings.endpoint).hostname);
+}
+
+/**
+ * Local and CI only: creates the bucket if it isn't there, and lets browsers
+ * upload to it from any origin (the local web runs on a lane's own host).
+ * Anywhere else it touches nothing and returns false: in AWS the storage stack
+ * owns the bucket and its CORS rules, on R2 (UAT) the bucket is made by hand
+ * and its CORS names the UAT web origin only (cli/r2-cors.ts), never `*`.
+ */
+export async function ensureLocalBucket(settings: FileStoreSettings, s3: S3Client = fileStoreClient(settings)): Promise<boolean> {
+  if (!isLocalFileStore(settings)) return false;
   try {
     await s3.send(new HeadBucketCommand({ Bucket: settings.bucket }));
   } catch {
@@ -207,6 +233,7 @@ export async function ensureLocalBucket(settings: FileStoreSettings): Promise<vo
       },
     }),
   );
+  return true;
 }
 
 /** Stands in where no store is configured (the demo seed); any use is a bug. */
