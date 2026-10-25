@@ -125,6 +125,19 @@ function answering(status: number, body = "") {
   return { calls, fetch };
 }
 
+/** Answers each call with the next [status, body], the last one again once they run out. */
+function answeringInTurn(...answers: [number, string][]) {
+  const calls: Call[] = [];
+  const fetch = async (url: string | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), headers: { ...(init?.headers as Record<string, string> | undefined) } });
+    const [status, body] = answers[Math.min(calls.length, answers.length) - 1]!;
+    return new Response(body, { status });
+  };
+  return { calls, fetch };
+}
+
+const schemaCacheLoading = '{"code":"PGRST002","details":null,"hint":null,"message":"Could not query the database for the schema cache. Retrying."}';
+
 // With the Data API off, Supabase keeps PostgREST running with only a placeholder schema
 // exposed; its answer names that schema. (PostgREST's PGRST106 shape.)
 const dataApiOffBody = JSON.stringify({
@@ -153,10 +166,24 @@ describe("checkDataApiOff", () => {
     expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 406 });
   });
 
-  it("passes on PostgreSQL's own refusal of the placeholder schema too", async () => {
-    const { fetch } = answering(400, '{"code":"3F000","details":null,"hint":null,"message":"schema \\"pg_pgrst_no_exposed_schemas\\" does not exist"}');
+  it("passes on PostgREST's older wording of PGRST106 naming the placeholder schema too", async () => {
+    const { fetch } = answering(406, '{"code":"PGRST106","details":null,"hint":null,"message":"The schema must be one of the following: pg_pgrst_no_exposed_schemas"}');
 
-    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 400 });
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 406 });
+  });
+
+  // Only the documented answer passes: PGRST106, 406, naming the placeholder schema. Any other
+  // answer that merely mentions the placeholder is not it.
+  it.each([
+    ["PostgreSQL's refusal of the placeholder (3F000)", 400, '{"code":"3F000","message":"schema \\"pg_pgrst_no_exposed_schemas\\" does not exist"}'],
+    ["a 5xx naming the placeholder", 503, '{"code":"PGRST000","message":"pg_pgrst_no_exposed_schemas"}'],
+    ["PGRST106 on another status", 400, dataApiOffBody],
+    ["PGRST106 naming another schema", 406, '{"code":"PGRST106","hint":"Only the following schemas are exposed: api","message":"Invalid schema: public"}'],
+    ["a page that is not PostgREST's JSON", 502, "<html>pg_pgrst_no_exposed_schemas</html>"],
+  ])("fails as unexpected on %s", async (_case, status, body) => {
+    const { fetch } = answering(status, body);
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toMatchObject({ outcome: "unexpected", status });
   });
 
   it("fails on a 2xx, even with no rows: the table answered, so the Data API is on", async () => {
@@ -214,14 +241,48 @@ describe("checkDataApiOff", () => {
   });
 
   it("fails on any other answer, naming its PostgREST code and message, since it is not the Data-API-off answer", async () => {
-    const { fetch } = answering(503, '{"code":"PGRST002","message":"Could not query the database for the schema cache. Retrying."}');
+    const { fetch } = answering(500, '{"code":"XX000","message":"internal error"}');
 
     expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({
       outcome: "unexpected",
-      status: 503,
-      code: "PGRST002",
-      message: "Could not query the database for the schema cache. Retrying.",
+      status: 500,
+      code: "XX000",
+      message: "internal error",
     });
+  });
+
+  // PostgREST answers PGRST002 while it (re)builds its schema cache; asked right after the
+  // migrations' DDL, run 40234606464 got it.
+  it("asks again while PostgREST is still loading its schema cache (PGRST002), then judges the answer", async () => {
+    const { calls, fetch } = answeringInTurn([503, schemaCacheLoading], [406, dataApiOffBody]);
+    const waits: number[] = [];
+
+    const result = await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async (ms) => void waits.push(ms) });
+
+    expect(result).toEqual({ outcome: "off", status: 406 });
+    expect(calls).toHaveLength(2);
+    expect(waits).toHaveLength(1);
+  });
+
+  it("fails as unexpected, naming PGRST002, when the schema cache is still not loaded after six asks over two minutes", async () => {
+    const { calls, fetch } = answering(503, schemaCacheLoading);
+    const waits: number[] = [];
+
+    const result = await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async (ms) => void waits.push(ms) });
+
+    expect(result).toEqual({ outcome: "unexpected", status: 503, code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." });
+    expect(calls).toHaveLength(6);
+    expect(waits.reduce((a, b) => a + b, 0)).toBe(120_000);
+  });
+
+  it("judges every other answer at once, without asking again", async () => {
+    const { calls, fetch } = answering(404, '{"code":"PGRST205","message":"Could not find the table"}');
+    const waits: number[] = [];
+
+    await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async (ms) => void waits.push(ms) });
+
+    expect(calls).toHaveLength(1);
+    expect(waits).toEqual([]);
   });
 
   it("reports no message when PostgREST's answer has none, rather than its raw body", async () => {
@@ -308,7 +369,7 @@ describe("runGateSteps", () => {
   });
 });
 
-// A seam 2 failure must not hide the Data API's answer: it is checked first, and its failure lets seam 2 run.
+// A later failure must not hide the Data API's answer: it is checked first, and its failure lets the rest run.
 describe("gateSteps", () => {
   const env = {
     DATABASE_SUPERUSER_URL: `postgres://postgres.${ref}:su-pw@aws-1-eu-central-1.pooler.supabase.com:5432/postgres`,
@@ -319,10 +380,13 @@ describe("gateSteps", () => {
     DATABASE_ADMIN_PASSWORD: "adm-pw",
   };
 
-  it("builds the database, then checks the Data API, then runs seam 2; only the Data API check keeps going", () => {
+  // Run 40234606464: asked right after 212 migrations, PostgREST was still reloading its schema
+  // cache (PGRST002). The check needs no database, so it runs before any DDL.
+  it("checks the Data API first, then builds the database and runs seam 2; only the Data API check keeps going", () => {
     const steps = gateSteps({ env, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
 
     expect(steps.map((s) => [s.name, !!s.keepsGoing])).toEqual([
+      ["Supabase's Data API is off", true],
       ["Read the connections", false],
       ["The bootstrap login may create rabaed_admin with BYPASSRLS", false],
       ["Drop the gate's database from an earlier run", false],
@@ -330,7 +394,6 @@ describe("gateSteps", () => {
       ["rabaed_admin bypasses row-level security", false],
       ["Migrate the schema (every migrations/*.sql)", false],
       ["The transaction pooler carries an api call's transaction", false],
-      ["Supabase's Data API is off", true],
       ["Seam 2", false],
     ]);
   });
@@ -339,15 +402,41 @@ describe("gateSteps", () => {
     const { fetch } = answering(200, '[{"id":"00000000-0000-4000-8000-000000000001"}]');
     const seamTwoRanAs: string[] = [];
     const steps = gateSteps({ env, fetch, seamTwo: async (urls) => void seamTwoRanAs.push(urls.migrator), onUrls: () => "read" });
-    const dataApi = steps.findIndex((s) => s.name === "Supabase's Data API is off");
+    const named = (name: string) => steps.find((s) => s.name === name)!;
     const said: string[] = [];
 
-    // The connections, then (no database here) the steps from the Data API on.
-    const failed = await runGateSteps([steps[0]!, ...steps.slice(dataApi)], (line) => said.push(line), (error) => (error as Error).message);
+    // No database here: the Data API check, the connections, then seam 2.
+    const failed = await runGateSteps(
+      [named("Supabase's Data API is off"), named("Read the connections"), named("Seam 2")],
+      (line) => said.push(line),
+      (error) => (error as Error).message,
+    );
 
     expect(failed).toEqual(["Supabase's Data API is off"]);
     expect(seamTwoRanAs).toEqual([`postgres://rabaed_migrator.${ref}:mig-pw@aws-1-eu-central-1.pooler.supabase.com:5432/rabaed_gate`]);
     expect(said).toContain("✘ Supabase's Data API is off: rest/v1/company answered 200: the Data API is on, a way to the tables around the api");
+  });
+
+  // Minutes instead of hours: one run that asks only whether the Data API is off.
+  it("runs only the Data API check when SUPABASE_GATE_ONLY is data-api", async () => {
+    const { fetch } = answering(406, dataApiOffBody);
+    const steps = gateSteps({ env: { ...env, SUPABASE_GATE_ONLY: "data-api" }, fetch, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+
+    expect(steps.map((s) => s.name)).toEqual(["Supabase's Data API is off"]);
+    expect(await runGateSteps(steps, () => undefined, String)).toEqual([]);
+  });
+
+  it("refuses a SUPABASE_GATE_ONLY it doesn't know, naming the one it does", () => {
+    expect(() => gateSteps({ env: { ...env, SUPABASE_GATE_ONLY: "seam-2" }, seamTwo: () => Promise.resolve(), onUrls: () => "read" })).toThrow(
+      'SUPABASE_GATE_ONLY is "seam-2": the gate knows only "data-api" (unset runs the whole gate)',
+    );
+  });
+
+  it("fails, not skips, the Data-API-only run without SUPABASE_PROJECT_REF, since it would then check nothing", async () => {
+    const { SUPABASE_PROJECT_REF: _omitted, ...local } = env;
+    const [step] = gateSteps({ env: { ...local, SUPABASE_GATE_ONLY: "data-api" }, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+
+    await expect(step!.run()).rejects.toThrow("SUPABASE_GATE_ONLY=data-api needs SUPABASE_PROJECT_REF and SUPABASE_PUBLISHABLE_KEY");
   });
 
   it("names PostgREST's code and message when the Data API is on but grants refuse the key's role", async () => {
