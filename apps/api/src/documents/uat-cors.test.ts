@@ -9,8 +9,9 @@ describe("the UAT files bucket's CORS", () => {
     ]);
   });
 
-  it("takes the origin with a trailing slash, as a browser never sends one", () => {
+  it("takes the origin with a trailing slash or capitals, as a browser sends it: without them", () => {
     expect(uatCorsRules("https://rabaed-uat.vercel.app/")[0]!.AllowedOrigins).toEqual(["https://rabaed-uat.vercel.app"]);
+    expect(uatCorsRules("https://Rabaed-UAT.vercel.app")[0]!.AllowedOrigins).toEqual(["https://rabaed-uat.vercel.app"]);
   });
 
   it.each([

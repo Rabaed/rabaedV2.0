@@ -57,7 +57,8 @@ export function projectFilesFromEnv(source: NodeJS.ProcessEnv = process.env): S3
     bucket: env.PROJECT_FILES_BUCKET,
     endpoint: env.FILE_STORE_ENDPOINT,
     // R2 signs with `auto` (FILE_STORE_REGION in the uat environment); the local store takes any.
-    region: env.FILE_STORE_REGION ?? env.AWS_REGION ?? "us-east-1",
+    // Never AWS_REGION here: Vercel sets it to its own region, which R2 would not sign for.
+    region: env.FILE_STORE_REGION ?? "us-east-1",
     credentials: { accessKeyId: env.FILE_STORE_ACCESS_KEY_ID, secretAccessKey: env.FILE_STORE_SECRET_ACCESS_KEY },
   };
 }

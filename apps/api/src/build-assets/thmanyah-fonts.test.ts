@@ -94,20 +94,32 @@ describe("the fonts bucket's settings", () => {
 });
 
 describe("a font object without credentials", () => {
-  const settings = { bucket: "rabaed-uat-build-assets", endpoint: "https://0123456789abcdef.r2.cloudflarestorage.com" };
+  const key = "fonts/thmanyah/thmanyahsans-regular.woff2";
+  const s3Api = "https://0123456789abcdef.r2.cloudflarestorage.com/rabaed-uat-build-assets";
+  const publicUrl = "https://pub-0123456789abcdef.r2.dev";
 
-  it("is private when an unsigned GET is refused", async () => {
+  it("is private when an unsigned GET is refused at the S3 address and at every public address the bucket could have", async () => {
     const asked: { url: string; headers: unknown }[] = [];
     const fetchStub = async (url: string | URL | Request, init?: RequestInit) => {
       asked.push({ url: String(url), headers: init?.headers });
-      return new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
+      return new Response("<Error><Code>AccessDenied</Code></Error>", { status: url.toString().includes("r2.dev") ? 404 : 403 });
     };
-    expect(await fontStaysPrivate(settings, "fonts/thmanyah/thmanyahsans-regular.woff2", fetchStub as typeof fetch)).toEqual({ private: true, status: 403 });
-    expect(asked).toEqual([{ url: "https://0123456789abcdef.r2.cloudflarestorage.com/rabaed-uat-build-assets/fonts/thmanyah/thmanyahsans-regular.woff2", headers: undefined }]);
+    expect(await fontStaysPrivate([s3Api, `${publicUrl}/`], key, fetchStub as typeof fetch)).toEqual({
+      private: true,
+      answers: [
+        { url: `${s3Api}/${key}`, status: 403 },
+        { url: `${publicUrl}/${key}`, status: 404 },
+      ],
+    });
+    expect(asked.map((a) => a.headers)).toEqual([undefined, undefined]);
   });
 
-  it("is public when an unsigned GET succeeds", async () => {
-    const fetchStub = async () => new Response("font bytes", { status: 200 });
-    expect(await fontStaysPrivate(settings, "fonts/thmanyah/thmanyahsans-regular.woff2", fetchStub as typeof fetch)).toEqual({ private: false, status: 200 });
+  it("is public when any address serves it", async () => {
+    const fetchStub = async (url: string | URL | Request) => new Response("font bytes", { status: url.toString().includes("r2.dev") ? 200 : 403 });
+    expect((await fontStaysPrivate([s3Api, publicUrl], key, fetchStub as typeof fetch)).private).toBe(false);
+  });
+
+  it("needs an address to ask", async () => {
+    await expect(fontStaysPrivate([], key)).rejects.toThrow(/address/);
   });
 });

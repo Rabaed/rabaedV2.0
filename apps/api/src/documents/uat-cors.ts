@@ -9,7 +9,7 @@ import { GetBucketCorsCommand, PutBucketCorsCommand, type CORSRule, type S3Clien
 
 /** `origin` exactly as a browser sends it (`https://host`), else throws naming the rule. */
 function webOrigin(origin: string): string {
-  const given = origin.trim().replace(/\/$/, "");
+  const given = origin.trim().replace(/\/$/, "").toLowerCase();
   const refuse = (why: string): never => {
     throw new Error(`The UAT web origin must be one https origin (https://host), ${why}; got ${JSON.stringify(origin)}`);
   };

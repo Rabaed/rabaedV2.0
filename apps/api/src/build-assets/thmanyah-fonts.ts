@@ -83,17 +83,25 @@ export async function fetchThmanyahFonts({
 
 /**
  * Whether the font under `key` stays private: an unsigned GET of it (no key, no
- * signature) must not succeed. The UAT workflow calls this after a fetch
- * (RP-1043's acceptance: "a font object without credentials is refused").
+ * signature) must be refused (4xx or 5xx; a redirect counts as served) at every one of `bases`. R2's S3 address refuses every
+ * unsigned request, public bucket or not, so the bucket's public addresses (its
+ * r2.dev URL, a custom domain) are the ones that tell: pass them too. The UAT
+ * workflow calls this after a fetch (RP-1041's acceptance: "a font object
+ * without credentials is refused").
  */
 export async function fontStaysPrivate(
-  settings: Pick<FileStoreSettings, "bucket" | "endpoint">,
+  bases: readonly string[],
   key: string,
   fetchFn: typeof fetch = fetch,
-): Promise<{ private: boolean; status: number }> {
-  if (!settings.endpoint) throw new Error("fontStaysPrivate needs the store's endpoint");
-  const url = new URL(`${encodeURIComponent(settings.bucket)}/${key.split("/").map(encodeURIComponent).join("/")}`, `${settings.endpoint.replace(/\/$/, "")}/`);
-  const response = await fetchFn(url.href);
-  await response.body?.cancel();
-  return { private: !response.ok, status: response.status };
+): Promise<{ private: boolean; answers: { url: string; status: number }[] }> {
+  if (bases.length === 0) throw new Error("fontStaysPrivate needs an address to ask");
+  const path = key.split("/").map(encodeURIComponent).join("/");
+  const answers: { url: string; status: number }[] = [];
+  for (const base of bases) {
+    const url = `${base.replace(/\/+$/, "")}/${path}`;
+    const response = await fetchFn(url, { redirect: "manual" });
+    await response.body?.cancel();
+    answers.push({ url, status: response.status });
+  }
+  return { private: answers.every((a) => a.status >= 400), answers };
 }

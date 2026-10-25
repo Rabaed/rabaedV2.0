@@ -19,6 +19,11 @@ describe("the file store's settings", () => {
     });
   });
 
+  it("with an endpoint, signs for FILE_STORE_REGION, never the platform's AWS_REGION (R2 wants auto)", () => {
+    expect(fileStoreSettingsFromEnv({ ...local, AWS_REGION: "eu-central-1" }).region).toBe("us-east-1");
+    expect(fileStoreSettingsFromEnv({ ...local, AWS_REGION: "eu-central-1", FILE_STORE_REGION: "auto" }).region).toBe("auto");
+  });
+
   it("locally, never fall back to the machine's AWS credentials", () => {
     expect(() => fileStoreSettingsFromEnv({ ...local, FILE_STORE_SECRET_ACCESS_KEY: undefined })).toThrow(/FILE_STORE_SECRET_ACCESS_KEY/);
   });

@@ -23,6 +23,10 @@ describe("the worker's Project files bucket", () => {
     });
   });
 
+  it("with an endpoint, never the platform's AWS_REGION", () => {
+    expect(projectFilesFromEnv({ ...local, AWS_REGION: "eu-central-1" }).region).toBe("us-east-1");
+  });
+
   it("in AWS, the task's region", () => {
     expect(projectFilesFromEnv({ PROJECT_FILES_BUCKET: "rabaed-dev-files", AWS_REGION: "me-central-1", FILE_STORE_REGION: "auto" })).toEqual({
       bucket: "rabaed-dev-files",
