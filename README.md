@@ -157,7 +157,7 @@ Several worktrees in one lane (a spec's implementer subagents) share its Postgre
 | `apps/api` | Fastify with zod validation. |
 | `apps/worker` | Outbox processor (in-app notifications, from RP-195; immediate notification emails, RP-357, linking to `WEB_URL`). |
 | `packages/domain` | Shared rules and types, no I/O. |
-| `packages/mailer` | Email: `send({ to, template, locale, values })`, with the templates in English and Arabic (RTL, Latin digits). Amazon SES in AWS; locally and in CI, Mailpit (`MAIL_CATCHER_URL`). |
+| `packages/mailer` | Email: `send({ to, template, locale, values })`, with the templates in English and Arabic (RTL, Latin digits). Amazon SES in AWS; SendGrid on Vercel (`SENDGRID_API_KEY`, tracking off, ADR 0026); locally and in CI, Mailpit (`MAIL_CATCHER_URL`). |
 | `packages/db` | Kysely, the migration runner, role bootstrap and `withMember`. Migrations are plain SQL in `packages/db/migrations`, named `YYYYMMDDHHMMSS_what.sql`. |
 | `packages/infra` | AWS CDK (TypeScript). One entry per environment in `src/config.ts` (name, region, GitHub repository, budget); dev is `eu-central-1`. `pnpm --filter @rabaed/infra cdk synth` prints the templates. |
 
