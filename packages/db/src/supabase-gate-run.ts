@@ -1,9 +1,10 @@
 // The Supabase gate (RP-1037, ADR 0026): `pnpm --filter @rabaed/db gate:supabase`.
 // Builds a database of its own on the server DATABASE_SUPERUSER_URL reaches and
 // proves it runs Rabaed as RDS does: the bootstrap (the bypass role included),
-// every migration, seam 2 unchanged, what the apps do per request through the
-// transaction pooler, and Supabase's Data API off. Stops at the first step that
-// fails, naming it. Prints no password and no full URL.
+// every migration, what the apps do per request through the transaction pooler,
+// Supabase's Data API off, and seam 2 unchanged. Stops at the first step that
+// fails, naming it, except the Data API check: seam 2 still runs after it fails,
+// and the gate then fails, so one run shows both. Prints no password and no full URL.
 //
 // Env: DATABASE_SUPERUSER_URL (Supabase: the session pooler, port 5432),
 // DATABASE_MIGRATOR_PASSWORD, DATABASE_APP_PASSWORD, DATABASE_ADMIN_PASSWORD,
@@ -22,15 +23,11 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { bootstrap } from "./bootstrap.ts";
 import { databaseNameOf } from "./config.ts";
-import { migrate } from "./migrate.ts";
-import { ROLE_PASSWORDS_ON_CREATE } from "./task-flags.ts";
-import { checkBootstrapRole, checkBypassRole, checkDataApiOff, dropGateDatabase, gateUrlsFromEnv, poolerProbe, redactor, seamTwoEnv, type GateUrls } from "./supabase-gate.ts";
+import { gateSteps, redactor, runGateSteps, seamTwoEnv, type GateUrls } from "./supabase-gate.ts";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const projectRef = process.env.SUPABASE_PROJECT_REF || undefined;
-const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || undefined;
 
 const passwordsOf = (urls: GateUrls) => Object.values(urls).map((url) => decodeURIComponent(new URL(url).password));
 // The credential variables are hidden from the first line on; the role passwords too once the URLs are built.
@@ -56,20 +53,6 @@ function failureOf(error: unknown): string {
   return [error.message, code && `(SQLSTATE ${code})`, detail && `Detail: ${detail}`, hint && `Hint: ${hint}`, passwordHint].filter(Boolean).join(" ");
 }
 
-async function step(name: string, run: () => Promise<string | void>): Promise<void> {
-  say(`▶ ${name}`);
-  try {
-    const detail = await run();
-    say(`✔ ${name}${detail ? `: ${detail}` : ""}`);
-  } catch (error) {
-    say(`✘ ${name}: ${failureOf(error)}`);
-    say("Supabase gate failed.");
-    // Exit once stdout has drained, so a piped log keeps the reason.
-    await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
-    process.exit(1);
-  }
-}
-
 /** Seam 2 as CI runs it, against the gate's database (`<DATABASE_NAME>_test`), its output redacted. */
 function seamTwo(urls: GateUrls): Promise<void> {
   const env = seamTwoEnv(urls, projectRef, process.env);
@@ -81,49 +64,20 @@ function seamTwo(urls: GateUrls): Promise<void> {
   });
 }
 
-let urls: GateUrls | undefined;
-await step("Read the connections", async () => {
-  urls = gateUrlsFromEnv();
-  // Checked first, so a missing key fails in seconds, not after seam 2.
-  if (projectRef && !publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
-  redact = redactor([...environmentSecrets, ...passwordsOf(urls)]);
-  return `session ${where(urls.migrator)}, transaction ${where(urls.appTransaction)}`;
+const steps = gateSteps({
+  seamTwo,
+  onUrls: (urls) => {
+    redact = redactor([...environmentSecrets, ...passwordsOf(urls)]);
+    return `session ${where(urls.migrator)}, transaction ${where(urls.appTransaction)}`;
+  },
 });
-const gate = urls!;
-
-await step("The bootstrap login may create rabaed_admin with BYPASSRLS", () => checkBootstrapRole(gate.superuser));
-await step("Drop the gate's database from an earlier run", () => dropGateDatabase(gate.superuser, databaseNameOf(gate.migrator)));
-// Passwords only for a role it creates: setting one again re-salts its SCRAM secret, and
-// Supavisor's cached copy then fails the next pooled login (UAT's apps' included) with 28P01.
-await step("Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", () => bootstrap(gate, { passwords: ROLE_PASSWORDS_ON_CREATE }));
-await step("rabaed_admin bypasses row-level security", () => checkBypassRole(gate.superuser));
-await step("Migrate the schema (every migrations/*.sql)", async () => {
-  const { applied } = await migrate(gate.migrator);
-  return `applied ${applied.length} from empty`;
-});
-await step(projectRef ? "The transaction pooler carries an api call's transaction" : "An api call's transaction (no pooler locally)", async () => {
-  const probe = await poolerProbe({ app: gate.appTransaction, admin: gate.adminTransaction });
-  const problems = [
-    !probe.memberSeen && "the Member set in the transaction was not seen by its parameterised query",
-    probe.memberAfterCommit !== null && "the Member outlived its transaction",
-    probe.adminSwitchedTo !== "rabaed_app" && `set local role ran as ${probe.adminSwitchedTo || "(nothing)"}, not rabaed_app`,
-  ].filter(Boolean);
-  if (problems.length) throw new Error(problems.join("; "));
-});
-await step("Seam 2", () => seamTwo(gate));
-await step("Supabase's Data API is off", async () => {
-  const result = await checkDataApiOff({ projectRef, publishableKey });
-  switch (result.outcome) {
-    case "skipped":
-      return "skipped: no SUPABASE_PROJECT_REF (a local run)";
-    case "off":
-      return `rest/v1/ with the publishable key answered ${result.status}: no schema exposed`;
-    case "open":
-      throw new Error(`rest/v1/ answered ${result.status}: the Data API is on, a way to the tables around the api`);
-    case "key refused":
-      throw new Error(`rest/v1/ refused the publishable key (${result.status}), which proves nothing about the Data API: check SUPABASE_PUBLISHABLE_KEY`);
-    case "unexpected":
-      throw new Error(`rest/v1/ answered ${result.status}${result.code ? ` (${result.code})` : ""}, not the Data-API-off answer (no schema exposed)`);
-  }
-});
-say("Supabase gate passed.");
+const failed = await runGateSteps(steps, say, failureOf);
+if (!failed.length) {
+  say("Supabase gate passed.");
+} else {
+  // Named again here: a failed Data API check is hours of seam 2 output above.
+  say(`Supabase gate failed: ${failed.join("; ")}.`);
+  // Exit once stdout has drained, so a piped log keeps the reason.
+  await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
+  process.exit(1);
+}

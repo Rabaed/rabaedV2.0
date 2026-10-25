@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv, rolePasswordsFromEnv } from "./config.ts";
+import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv, loginUrl, rolePasswordsFromEnv } from "./config.ts";
+
+describe("loginUrl", () => {
+  it("behind Supabase's pooler, logs in as <role>.<project ref>, as the URL's own login does", () => {
+    expect(loginUrl("postgres://postgres.abcdefghijklmnop:su@aws-0-eu-central-1.pooler.supabase.com:5432/postgres", "rabaed_test_rds_master", "m@ster")).toBe(
+      "postgres://rabaed_test_rds_master.abcdefghijklmnop:m%40ster@aws-0-eu-central-1.pooler.supabase.com:5432/postgres",
+    );
+  });
+
+  it("on a plain server, logs in as the role itself", () => {
+    expect(loginUrl("postgres://postgres:su@localhost:5432/postgres", "rabaed_test_rds_master", "m@ster")).toBe(
+      "postgres://rabaed_test_rds_master:m%40ster@localhost:5432/postgres",
+    );
+  });
+});
 
 // In AWS each password is its own secret, injected as its own variable, and
 // the host comes from the database instance; locally .env holds whole URLs.

@@ -128,6 +128,14 @@ export function loginFor(role: string, superuserUrl: string): string {
   return suffix ? `${role}.${suffix}` : role;
 }
 
+/** `url` logging in as `role` with `password`, keeping the pooler suffix `url`'s login has (see `loginFor`). */
+export function loginUrl(url: string, role: string, password: string): string {
+  const u = new URL(url);
+  u.username = encodeURIComponent(loginFor(role, url));
+  u.password = encodeURIComponent(password);
+  return u.toString();
+}
+
 export function databaseNameOf(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
 }
