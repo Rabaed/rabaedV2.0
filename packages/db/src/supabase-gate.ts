@@ -3,10 +3,11 @@
 
 import { sql } from "kysely";
 import { z } from "zod";
-import { withClient } from "./bootstrap.ts";
+import { bootstrap, withClient } from "./bootstrap.ts";
 import { createDb, withMember } from "./client.ts";
-import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginFor, loginSuffixOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
+import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, loginSuffixOf, loginUrl, withDatabaseName, type DatabaseUrls } from "./config.ts";
 import { REMOTE_TEST_SERVER_VARIABLE, remoteTestServerOf } from "./local-database.ts";
+import { migrate } from "./migrate.ts";
 import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE } from "./task-flags.ts";
 
 /** The budget, in ms, of each seam test and hook; vitest.config.ts reads it, and runs 180 s without it. */
@@ -116,10 +117,7 @@ export function gateUrlsFromEnv(source: NodeJS.ProcessEnv = process.env): GateUr
     const whole = source[`DATABASE_${variable}_URL`];
     const password = source[`DATABASE_${variable}_PASSWORD`] || (whole ? decodeURIComponent(new URL(whole).password) : "");
     if (!password) throw new Error(`DATABASE_${variable}_PASSWORD is required`);
-    const u = new URL(withDatabaseName(superuser, database));
-    u.username = encodeURIComponent(loginFor(role, superuser));
-    u.password = encodeURIComponent(password);
-    return u.toString();
+    return loginUrl(withDatabaseName(superuser, database), role, password);
   };
   const viaTransactionPooler = (url: string): string => {
     const u = new URL(url);
@@ -234,4 +232,112 @@ export async function checkDataApiOff({
   if (status === 401 || status === 403) return { outcome: "key refused", status };
   const code = postgrestCodeOf(body);
   return code ? { outcome: "unexpected", status, code } : { outcome: "unexpected", status };
+}
+
+/** A step of the gate. One that keeps going fails the gate but lets the steps after it run, so one run shows their results too. */
+export interface GateStep {
+  name: string;
+  run: () => Promise<string | void>;
+  keepsGoing?: boolean;
+}
+
+/**
+ * Runs the steps in order, saying each one's result; stops at a failed step unless it keeps going.
+ * Returns the names of the steps that failed, in order: none when the gate passed.
+ */
+export async function runGateSteps(steps: readonly GateStep[], say: (line: string) => void, failureOf: (error: unknown) => string): Promise<string[]> {
+  const failed: string[] = [];
+  for (const { name, run, keepsGoing } of steps) {
+    say(`▶ ${name}`);
+    try {
+      const detail = await run();
+      say(`✔ ${name}${detail ? `: ${detail}` : ""}`);
+    } catch (error) {
+      say(`✘ ${name}: ${failureOf(error)}`);
+      failed.push(name);
+      if (!keepsGoing) break;
+    }
+  }
+  return failed;
+}
+
+/** The gate's steps, in order (supabase-gate-run.ts runs them), from the environment `env`. */
+export function gateSteps({
+  fetch,
+  seamTwo,
+  onUrls,
+  env = process.env,
+}: {
+  env?: NodeJS.ProcessEnv;
+  fetch?: Fetch;
+  /** Seam 2 as CI runs it, against the gate's database. */
+  seamTwo: (urls: GateUrls) => Promise<void>;
+  /** Given the connections once read, so the log can hide their passwords. */
+  onUrls: (urls: GateUrls) => string;
+}): GateStep[] {
+  const projectRef = env.SUPABASE_PROJECT_REF || undefined;
+  const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || undefined;
+  let urls: GateUrls | undefined;
+  const gate = (): GateUrls => {
+    if (!urls) throw new Error("The connections were not read");
+    return urls;
+  };
+  return [
+    {
+      name: "Read the connections",
+      run: async () => {
+        urls = gateUrlsFromEnv(env);
+        // Checked first, so a missing key fails in seconds, not after seam 2.
+        if (projectRef && !publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
+        return onUrls(urls);
+      },
+    },
+    { name: "The bootstrap login may create rabaed_admin with BYPASSRLS", run: () => checkBootstrapRole(gate().superuser) },
+    { name: "Drop the gate's database from an earlier run", run: () => dropGateDatabase(gate().superuser, databaseNameOf(gate().migrator)) },
+    // Passwords only for a role it creates: setting one again re-salts its SCRAM secret, and
+    // Supavisor's cached copy then fails the next pooled login (UAT's apps' included) with 28P01.
+    { name: "Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", run: () => bootstrap(gate(), { passwords: ROLE_PASSWORDS_ON_CREATE }) },
+    { name: "rabaed_admin bypasses row-level security", run: () => checkBypassRole(gate().superuser) },
+    {
+      name: "Migrate the schema (every migrations/*.sql)",
+      run: async () => {
+        const { applied } = await migrate(gate().migrator);
+        return `applied ${applied.length} from empty`;
+      },
+    },
+    {
+      name: projectRef ? "The transaction pooler carries an api call's transaction" : "An api call's transaction (no pooler locally)",
+      run: async () => {
+        const probe = await poolerProbe({ app: gate().appTransaction, admin: gate().adminTransaction });
+        const problems = [
+          !probe.memberSeen && "the Member set in the transaction was not seen by its parameterised query",
+          probe.memberAfterCommit !== null && "the Member outlived its transaction",
+          probe.adminSwitchedTo !== "rabaed_app" && `set local role ran as ${probe.adminSwitchedTo || "(nothing)"}, not rabaed_app`,
+        ].filter(Boolean);
+        if (problems.length) throw new Error(problems.join("; "));
+      },
+    },
+    // Before seam 2, which takes hours on Supabase and may fail: its failure must not hide this answer,
+    // and this one's lets seam 2 run, so one run shows both.
+    {
+      name: "Supabase's Data API is off",
+      keepsGoing: true,
+      run: async () => {
+        const result = await checkDataApiOff({ projectRef, publishableKey, fetch });
+        switch (result.outcome) {
+          case "skipped":
+            return "skipped: no SUPABASE_PROJECT_REF (a local run)";
+          case "off":
+            return `rest/v1/ with the publishable key answered ${result.status}: no schema exposed`;
+          case "open":
+            throw new Error(`rest/v1/ answered ${result.status}: the Data API is on, a way to the tables around the api`);
+          case "key refused":
+            throw new Error(`rest/v1/ refused the publishable key (${result.status}), which proves nothing about the Data API: check SUPABASE_PUBLISHABLE_KEY`);
+          case "unexpected":
+            throw new Error(`rest/v1/ answered ${result.status}${result.code ? ` (${result.code})` : ""}, not the Data-API-off answer (no schema exposed)`);
+        }
+      },
+    },
+    { name: "Seam 2", run: () => seamTwo(gate()) },
+  ];
 }

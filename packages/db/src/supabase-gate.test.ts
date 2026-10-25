@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDataApiOff, gateUrlsFromEnv, redactor, seamTwoEnv } from "./supabase-gate.ts";
+import { checkDataApiOff, gateSteps, gateUrlsFromEnv, redactor, runGateSteps, seamTwoEnv } from "./supabase-gate.ts";
 
 describe("seamTwoEnv", () => {
   const urls = gateUrlsFromEnv({
@@ -192,3 +192,91 @@ describe("checkDataApiOff", () => {
     await expect(checkDataApiOff({ projectRef: "evil.example.com/x", publishableKey: key, fetch })).rejects.toThrow(/SUPABASE_PROJECT_REF/);
   });
 });
+
+describe("runGateSteps", () => {
+  const failing = (message: string) => () => Promise.reject(new Error(message));
+
+  it("stops at a failed step, naming it", async () => {
+    const said: string[] = [];
+    let ranAfter = false;
+
+    const failed = await runGateSteps(
+      [
+        { name: "First", run: () => Promise.resolve("fine") },
+        { name: "Second", run: failing("broke") },
+        { name: "Third", run: async () => void (ranAfter = true) },
+      ],
+      (line) => said.push(line),
+      (error) => (error as Error).message,
+    );
+
+    expect(failed).toEqual(["Second"]);
+    expect(ranAfter).toBe(false);
+    expect(said).toEqual(["▶ First", "✔ First: fine", "▶ Second", "✘ Second: broke"]);
+  });
+
+  it("runs the steps after a failed step that keeps going, and names every failure", async () => {
+    const said: string[] = [];
+
+    const failed = await runGateSteps(
+      [
+        { name: "Checked early", run: failing("refused"), keepsGoing: true },
+        { name: "Later", run: () => Promise.resolve() },
+        { name: "Last", run: failing("broke too") },
+      ],
+      (line) => said.push(line),
+      (error) => (error as Error).message,
+    );
+
+    expect(failed).toEqual(["Checked early", "Last"]);
+    expect(said).toEqual(["▶ Checked early", "✘ Checked early: refused", "▶ Later", "✔ Later", "▶ Last", "✘ Last: broke too"]);
+  });
+
+  it("names no failure when every step passes", async () => {
+    expect(await runGateSteps([{ name: "Only", run: () => Promise.resolve() }], () => undefined, String)).toEqual([]);
+  });
+});
+
+// A seam 2 failure must not hide the Data API's answer: it is checked first, and its failure lets seam 2 run.
+describe("gateSteps", () => {
+  const env = {
+    DATABASE_SUPERUSER_URL: `postgres://postgres.${ref}:su-pw@aws-1-eu-central-1.pooler.supabase.com:5432/postgres`,
+    SUPABASE_PROJECT_REF: ref,
+    SUPABASE_PUBLISHABLE_KEY: key,
+    DATABASE_MIGRATOR_PASSWORD: "mig-pw",
+    DATABASE_APP_PASSWORD: "app-pw",
+    DATABASE_ADMIN_PASSWORD: "adm-pw",
+  };
+
+  it("builds the database, then checks the Data API, then runs seam 2; only the Data API check keeps going", () => {
+    const steps = gateSteps({ env, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+
+    expect(steps.map((s) => [s.name, !!s.keepsGoing])).toEqual([
+      ["Read the connections", false],
+      ["The bootstrap login may create rabaed_admin with BYPASSRLS", false],
+      ["Drop the gate's database from an earlier run", false],
+      ["Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", false],
+      ["rabaed_admin bypasses row-level security", false],
+      ["Migrate the schema (every migrations/*.sql)", false],
+      ["The transaction pooler carries an api call's transaction", false],
+      ["Supabase's Data API is off", true],
+      ["Seam 2", false],
+    ]);
+  });
+
+  it("still runs seam 2 when the Data API is on, and fails the gate naming the Data API", async () => {
+    const { fetch } = answering(200, '{"swagger":"2.0","paths":{"/project":{}}}');
+    const seamTwoRanAs: string[] = [];
+    const steps = gateSteps({ env, fetch, seamTwo: async (urls) => void seamTwoRanAs.push(urls.migrator), onUrls: () => "read" });
+    const dataApi = steps.findIndex((s) => s.name === "Supabase's Data API is off");
+    const said: string[] = [];
+
+    // The connections, then (no database here) the steps from the Data API on.
+    const failed = await runGateSteps([steps[0]!, ...steps.slice(dataApi)], (line) => said.push(line), (error) => (error as Error).message);
+
+    expect(failed).toEqual(["Supabase's Data API is off"]);
+    expect(seamTwoRanAs).toEqual([`postgres://rabaed_migrator.${ref}:mig-pw@aws-1-eu-central-1.pooler.supabase.com:5432/rabaed_gate`]);
+    expect(said).toContain("✘ Supabase's Data API is off: rest/v1/ answered 200: the Data API is on, a way to the tables around the api");
+  });
+});
+

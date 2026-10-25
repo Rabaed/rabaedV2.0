@@ -2,18 +2,12 @@
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bootstrap } from "../src/bootstrap.ts";
-import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE } from "../src/config.ts";
+import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, loginUrl } from "../src/config.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
 function withPassword(url: string, password: string): string {
   const u = new URL(url);
   u.password = encodeURIComponent(password);
-  return u.toString();
-}
-
-function asUser(url: string, user: string, password: string): string {
-  const u = new URL(withPassword(url, password));
-  u.username = user;
   return u.toString();
 }
 
@@ -123,7 +117,9 @@ describe("bootstrap as a user that is not a superuser, like RDS's master user", 
   const urls = testDatabaseUrls();
   const master = "rabaed_test_rds_master";
   const masterPassword = "rds-like-master-password";
-  const asMaster = { ...urls, superuser: asUser(urls.superuser, master, masterPassword) };
+  // Behind Supabase's pooler the login is <master>.<project ref>, as the superuser's is: the
+  // roles' URLs carry that suffix too, and bootstrap checks them against this login.
+  const asMaster = { ...urls, superuser: loginUrl(urls.superuser, master, masterPassword) };
   const roleNames = `'${MIGRATOR_ROLE}', '${APP_ROLE}', '${ADMIN_ROLE}'`;
 
   beforeAll(async () => {

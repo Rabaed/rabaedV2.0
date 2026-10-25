@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { passwordOfRole } from "./bootstrap.ts";
+import { loginUrl } from "./config.ts";
 
 const local = "postgres://postgres:su@localhost:5432/postgres";
 const supabase = "postgres://postgres.abcdefghijklmnop:su@aws-0-eu-central-1.pooler.supabase.com:5432/postgres";
@@ -35,5 +36,13 @@ describe("passwordOfRole", () => {
     expect(() => passwordOfRole("postgres://rabaed_app.abcdefghijklmnop:pw@localhost:5432/rabaed", "rabaed_app", local)).toThrow(
       /got rabaed_app\.abcdefghijklmnop/,
     );
+  });
+});
+
+// Seam 2 bootstraps as a login of its own that is not a superuser, like RDS's master user (RP-1037).
+describe("passwordOfRole as another bootstrap login", () => {
+  it("behind the pooler, takes the roles' <role>.<ref> URLs when bootstrapping as loginUrl's <login>.<ref>", () => {
+    const master = loginUrl(supabase, "rabaed_test_rds_master", "m@ster");
+    expect(passwordOfRole("postgres://rabaed_migrator.abcdefghijklmnop:pw@aws-0-eu-central-1.pooler.supabase.com:5432/rabaed", "rabaed_migrator", master)).toBe("pw");
   });
 });
