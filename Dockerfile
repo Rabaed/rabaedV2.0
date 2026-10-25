@@ -18,6 +18,13 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch --store-dir=/
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --offline --frozen-lockfile --store-dir=/pnpm/store
 
+# The licensed Thmanyah fonts, never in the repo or the build context: the
+# deploy workflow passes them with `--build-context fonts=<folder>` (holding
+# thmanyah/*.woff2; on UAT `packages/ui/fonts`, filled by
+# `pnpm --filter @rabaed/api fonts:fetch`). Without them this stage is empty and
+# Arabic falls back to IBM Plex Sans Arabic (packages/ui/src/fonts/arabic-font.ts).
+FROM scratch AS fonts
+
 # api and worker run their TypeScript through tsx, as in development.
 # RDS requires TLS; the CA bundle lets them verify the database's certificate.
 FROM deps AS node-service
@@ -51,14 +58,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends default-jre-hea
     && rm -rf /var/lib/apt/lists/*
 COPY --from=verapdf /opt/verapdf /opt/verapdf
 ENV VERAPDF=cli VERAPDF_PATH=/opt/verapdf/verapdf
+# The UAT Records image (ADR 0026, RP-1041) bakes the Thmanyah fonts in when the build is given
+# them (see the fonts stage); RECORD_FONTS_DIR=/opt/record-fonts/thmanyah on that container makes the
+# local signer's records use them. Without them the folder is empty and records use IBM Plex.
+COPY --from=fonts / /opt/record-fonts/
 USER node
 CMD ["./node_modules/.bin/tsx", "src/main.ts"]
-
-# The licensed Thmanyah fonts, never in the repo or the build context: the
-# deploy workflow passes them with `--build-context fonts=<folder>` (holding
-# thmanyah/*.woff2). Without them this stage is empty and Arabic falls back to
-# IBM Plex Sans Arabic (packages/ui/src/fonts/arabic-font.ts).
-FROM scratch AS fonts
 
 # Rabaed Admin (ADR 0010): its own image and service, never the customer api's. Its
 # Workflows page (RP-443) is the builder from @rabaed/ui, built into apps/admin/dist and
