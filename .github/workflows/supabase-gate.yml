@@ -1,21 +1,32 @@
 # The Supabase gate (RP-1037, ADR 0026): proves UAT's Supabase project runs
-# Rabaed as RDS does. `pnpm --filter @rabaed/db gate:supabase` builds a database
-# of its own (rabaed_gate) and checks, stopping at the first failure:
+# Rabaed as RDS does. `pnpm --filter @rabaed/db gate:supabase` first checks that
+# Supabase's Data API is off (it needs no database), then builds a database of
+# its own (rabaed_gate) and checks, stopping at the first failure:
 #   - the bootstrap, rabaed_admin's BYPASSRLS included;
 #   - every migration, from empty;
 #   - an api call's transaction through the transaction pooler (port 6543);
-#   - seam 2 (database RLS), unchanged, on rabaed_gate_test;
-#   - Supabase's Data API is off.
-# Run it by hand on main (Actions > Supabase gate > Run workflow). The secrets
-# live only in the `uat` environment, so nothing runs against Supabase from a
-# laptop. Never run it while a UAT deploy runs: roles are cluster-wide, and the
-# bootstrap resets rabaed_migrator's, rabaed_app's and rabaed_admin's passwords
-# to the `uat` secrets, and seam 2 briefly changes them, so UAT's apps may fail
-# to log in while it runs. If a run stops midway and UAT can't log in, run the
-# gate again: its bootstrap sets the passwords back.
+#   - seam 2 (database RLS), unchanged, on rabaed_gate_test.
+# A failed Data API check does not stop it: the gate keeps going and fails at
+# the end, so one run shows both answers.
+# Run it by hand on main (Actions > Supabase gate > Run workflow). Its input
+# `only` picks what runs: `all` (the default) the whole gate, about 4 hours;
+# `data-api` only the Data API check, in minutes, without seam 2's file store.
+# The secrets live only in the `uat` environment, so nothing runs against
+# Supabase from a laptop. Never run the whole gate while a UAT deploy runs:
+# roles are cluster-wide, and the bootstrap resets rabaed_migrator's,
+# rabaed_app's and rabaed_admin's passwords to the `uat` secrets, and seam 2
+# briefly changes them, so UAT's apps may fail to log in while it runs. If a
+# run stops midway and UAT can't log in, run the gate again: its bootstrap sets
+# the passwords back. (`data-api` touches no role and no database.)
 name: Supabase gate
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "all: the whole gate (hours); data-api: only the Data API check (minutes)"
+        type: choice
+        options: [all, data-api]
+        default: all
 permissions:
   contents: read
 concurrency:
@@ -33,9 +44,10 @@ jobs:
     timeout-minutes: 330
     # Seam 2's global setup seeds the demo, whose MAR carries a file: the same
     # local file store as ci.yml's seam 2 job, with its throwaway keys, not R2.
+    # An empty image skips the service: the data-api run has no seam 2.
     services:
       files:
-        image: rustfs/rustfs:1.0.0
+        image: ${{ inputs.only != 'data-api' && 'rustfs/rustfs:1.0.0' || '' }}
         env:
           RUSTFS_ACCESS_KEY: ci-only
           RUSTFS_SECRET_KEY: ci-only-secret
@@ -65,8 +77,10 @@ jobs:
             exit 1
           fi
       # The script prints no password and no full URL; GitHub masks the secrets too.
+      # SUPABASE_GATE_ONLY empty runs the whole gate; data-api only the Data API check.
       - run: pnpm --filter @rabaed/db gate:supabase
         env:
+          SUPABASE_GATE_ONLY: ${{ inputs.only == 'data-api' && 'data-api' || '' }}
           DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }} # the session pooler, port 5432
           DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
           DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
