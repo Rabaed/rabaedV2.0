@@ -106,12 +106,17 @@ describe("mailerFromEnv", () => {
     expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", SENDGRID_API_KEY: "SG.test-key-not-real" }).transport).toBe("sendgrid");
   });
 
-  it("takes an empty SENDGRID_API_KEY (as .env.example has it) for no key", () => {
-    expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "" }).transport).toBe("catcher");
+  it.each(["", "  "])("takes a blank SENDGRID_API_KEY (%j; .env.example leaves it empty) for no key", (key) => {
+    expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: key }).transport).toBe("catcher");
   });
 
-  it.each([{ MAIL_SES_CONFIGURATION_SET: "rabaed-dev" }, { MAIL_CATCHER_URL: "http://127.0.0.1:8025" }])("refuses SendGrid together with %o", (other) => {
-    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", SENDGRID_API_KEY: "SG.test-key-not-real", ...other })).toThrow(/not two/);
+  it.each([
+    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", SENDGRID_API_KEY: "SG.test-key-not-real" },
+    { MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" },
+    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025" },
+    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" },
+  ])("refuses more than one transport: %o", (transports) => {
+    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", ...transports })).toThrow(/not two/);
   });
 
   describe("through a stubbed SendGrid", () => {

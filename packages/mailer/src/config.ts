@@ -26,8 +26,8 @@ export function mailerFromEnv(source: NodeJS.ProcessEnv = process.env): Configur
       MAIL_FROM: z.email(),
       MAIL_SES_CONFIGURATION_SET: z.string().min(1).optional(),
       MAIL_CATCHER_URL: z.url().optional(),
-      // .env.example leaves it empty: no key.
-      SENDGRID_API_KEY: z.preprocess((key) => (key === "" ? undefined : key), z.string().optional()),
+      // .env.example leaves it empty: a blank key is no key.
+      SENDGRID_API_KEY: z.preprocess((key) => (typeof key === "string" && key.trim() === "" ? undefined : key), z.string().optional()),
     })
     .parse(source);
   const chosen: { name: ConfiguredMailer["transport"]; build: () => MailTransport }[] = [];
