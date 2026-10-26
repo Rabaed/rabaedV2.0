@@ -109,13 +109,13 @@ export function outboxCronFromEnv(db: Db, source: NodeJS.ProcessEnv = process.en
   };
 }
 
-const digest = (value: string) => createHash("sha256").update(value, "utf8").digest();
+const sha256 = (value: string) => createHash("sha256").update(value, "utf8").digest();
 
 /** Whether `authorization` is exactly `Bearer <secret>`, compared in constant time; never with no secret. */
 export function isCronCall(authorization: string | undefined, secret: string | undefined): boolean {
   if (!secret || authorization === undefined) return false;
   // Digests of both: equal lengths, so the comparison says nothing about the secret's length.
-  return timingSafeEqual(digest(authorization), digest(`Bearer ${secret}`));
+  return timingSafeEqual(sha256(authorization), sha256(`Bearer ${secret}`));
 }
 
 const cronResponse = z.object({

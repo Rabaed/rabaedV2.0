@@ -15,3 +15,12 @@ describe("web", () => {
     expect(readFileSync(new URL("../app/robots.txt", import.meta.url), "utf8")).toBe("User-agent: *\nDisallow: /\n");
   });
 });
+
+// The fonts key is never in a Vercel project (ADR 0026): the UAT deploy Action fetches
+// the Thmanyah fonts on its runner before `vercel build`; a preview Vercel builds keeps IBM Plex.
+describe("web's vercel.json", () => {
+  it("builds without fetching the fonts", () => {
+    const vercel = JSON.parse(readFileSync(new URL("../../vercel.json", import.meta.url), "utf8")) as { buildCommand: string };
+    expect(vercel.buildCommand).toBe("pnpm run build");
+  });
+});

@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { fetchThmanyahFonts, fontsBucketFromEnv, fontStaysPrivate, THMANYAH_FONTS_DIR } from "./thmanyah-fonts.ts";
+import { fetchThmanyahFonts, fontsBucketFromEnv, THMANYAH_FONTS_DIR } from "./thmanyah-fonts.ts";
 
 /** A store holding `objects` (key → bytes) that answers ListObjectsV2 and GetObject, and records the keys asked for. */
 function store(objects: Record<string, string>) {
@@ -90,36 +90,5 @@ describe("the fonts bucket's settings", () => {
     for (const name of Object.keys(uat).filter((n) => n !== "FILE_STORE_REGION")) {
       expect(fontsBucketFromEnv({ ...uat, [name]: undefined })).toBeNull();
     }
-  });
-});
-
-describe("a font object without credentials", () => {
-  const key = "fonts/thmanyah/thmanyahsans-regular.woff2";
-  const s3Api = "https://0123456789abcdef.r2.cloudflarestorage.com/rabaed-uat-build-assets";
-  const publicUrl = "https://pub-0123456789abcdef.r2.dev";
-
-  it("is private when an unsigned GET is refused at the S3 address and at every public address the bucket could have", async () => {
-    const asked: { url: string; headers: unknown }[] = [];
-    const fetchStub = async (url: string | URL | Request, init?: RequestInit) => {
-      asked.push({ url: String(url), headers: init?.headers });
-      return new Response("<Error><Code>AccessDenied</Code></Error>", { status: url.toString().includes("r2.dev") ? 404 : 403 });
-    };
-    expect(await fontStaysPrivate([s3Api, `${publicUrl}/`], key, fetchStub as typeof fetch)).toEqual({
-      private: true,
-      answers: [
-        { url: `${s3Api}/${key}`, status: 403 },
-        { url: `${publicUrl}/${key}`, status: 404 },
-      ],
-    });
-    expect(asked.map((a) => a.headers)).toEqual([undefined, undefined]);
-  });
-
-  it("is public when any address serves it", async () => {
-    const fetchStub = async (url: string | URL | Request) => new Response("font bytes", { status: url.toString().includes("r2.dev") ? 200 : 403 });
-    expect((await fontStaysPrivate([s3Api, publicUrl], key, fetchStub as typeof fetch)).private).toBe(false);
-  });
-
-  it("needs an address to ask", async () => {
-    await expect(fontStaysPrivate([], key)).rejects.toThrow(/address/);
   });
 });

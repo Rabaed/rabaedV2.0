@@ -34,3 +34,12 @@ describe("Rabaed Admin responses", () => {
     expect(existsSync(new URL("../public/sitemap.xml", import.meta.url))).toBe(false);
   });
 });
+
+// The fonts key is never in a Vercel project (ADR 0026): the UAT deploy Action fetches
+// the Thmanyah fonts on its runner before `vercel build`; a preview Vercel builds keeps IBM Plex.
+describe("Rabaed Admin's vercel.json", () => {
+  it("builds without fetching the fonts", () => {
+    const vercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { buildCommand: string };
+    expect(vercel.buildCommand).toBe("pnpm run build");
+  });
+});

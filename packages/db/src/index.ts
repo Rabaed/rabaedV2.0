@@ -8,6 +8,7 @@ export * from "./documental-record-face.ts";
 export * from "./local-database.ts";
 export * from "./migrate.ts";
 export * from "./numbering.ts";
+export * from "./object-store.ts";
 export * from "./outbox.ts";
 export * from "./reset-database.ts";
 export * from "./scheduled-jobs.ts";

@@ -13,9 +13,8 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { isLocalHost } from "@rabaed/db";
+import { isLocalHost, objectStoreClientConfig, objectStoreFromEnv, PROJECT_FILES_ENV, type ObjectStoreSettings } from "@rabaed/db";
 import type { SignedUrl } from "@rabaed/domain";
-import { z } from "zod";
 
 // Where Documents' files live: object storage that only the api signs URLs for
 // (ADR 0007; RP-210). In AWS it is the Project files bucket, reached with the
@@ -51,66 +50,22 @@ export interface FileStore {
   remove(key: string): Promise<void>;
 }
 
-export interface FileStoreSettings {
-  bucket: string;
-  /** Local and CI only: the S3-compatible store's address. Unset in AWS. */
-  endpoint?: string;
-  region: string;
-  /** Local and CI only, with `endpoint`: never the default AWS credential chain. */
-  credentials?: { accessKeyId: string; secretAccessKey: string };
-}
+/** Where the files bucket is (packages/db object-store.ts). */
+export type FileStoreSettings = ObjectStoreSettings;
 
 /**
  * The file store the environment sets up. In AWS the api task gets
- * PROJECT_FILES_BUCKET and its region; locally and in CI also
- * FILE_STORE_ENDPOINT with the local store's placeholder keys (.env.example,
- * ci.yml). A local endpoint never takes AWS credentials from the machine.
+ * PROJECT_FILES_BUCKET and its region; locally, in CI and on the UAT also
+ * FILE_STORE_ENDPOINT with the store's keys (.env.example, ci.yml). An
+ * endpoint never takes AWS credentials from the machine.
  */
 export function fileStoreSettingsFromEnv(source: NodeJS.ProcessEnv = process.env): FileStoreSettings {
-  const env = z
-    .object({
-      PROJECT_FILES_BUCKET: z.string().min(3),
-      FILE_STORE_ENDPOINT: z.url().optional(),
-      FILE_STORE_ACCESS_KEY_ID: z.string().min(1).optional(),
-      FILE_STORE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-      FILE_STORE_REGION: z.string().min(1).optional(),
-      AWS_REGION: z.string().min(1).optional(),
-    })
-    .parse(source);
-  if (!env.FILE_STORE_ENDPOINT) {
-    if (!env.AWS_REGION) throw new Error("No file store: set FILE_STORE_ENDPOINT (local, CI) or run in AWS (AWS_REGION)");
-    return { bucket: env.PROJECT_FILES_BUCKET, region: env.AWS_REGION };
-  }
-  if (!env.FILE_STORE_ACCESS_KEY_ID || !env.FILE_STORE_SECRET_ACCESS_KEY) {
-    throw new Error("FILE_STORE_ENDPOINT needs FILE_STORE_ACCESS_KEY_ID and FILE_STORE_SECRET_ACCESS_KEY (the local store's)");
-  }
-  return {
-    bucket: env.PROJECT_FILES_BUCKET,
-    endpoint: env.FILE_STORE_ENDPOINT,
-    // R2 signs with `auto` (FILE_STORE_REGION in the uat environment); the local store takes any.
-    // Never AWS_REGION here: Vercel sets it to its own region, which R2 would not sign for.
-    region: env.FILE_STORE_REGION ?? "us-east-1",
-    credentials: { accessKeyId: env.FILE_STORE_ACCESS_KEY_ID, secretAccessKey: env.FILE_STORE_SECRET_ACCESS_KEY },
-  };
+  return objectStoreFromEnv(source, PROJECT_FILES_ENV);
 }
 
-/**
- * The S3 client for the files bucket. Checksums only where an operation
- * requires one: by default the SDK adds `x-amz-checksum-mode` to a signed GET
- * and would have a PutObject carry a CRC the browser never computes. Cloudflare
- * R2 implements CRC-32 only as a composite checksum and CRC-64/NVME only as a
- * full-object one, and treats `us-east-1` or an empty region as `auto`
- * (https://developers.cloudflare.com/r2/api/s3/api/, "Checksum types" and
- * "Bucket region"); its presigned uploads sign Content-Type and the browser
- * sends exactly that (https://developers.cloudflare.com/r2/api/s3/presigned-urls/).
- */
+/** The S3 client for the files bucket: checksums only where an operation requires one (objectStoreClientConfig says why). */
 export function fileStoreClient(settings: FileStoreSettings): S3Client {
-  return new S3Client({
-    region: settings.region,
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    responseChecksumValidation: "WHEN_REQUIRED",
-    ...(settings.endpoint ? { endpoint: settings.endpoint, forcePathStyle: true, credentials: settings.credentials } : {}),
-  });
+  return new S3Client(objectStoreClientConfig(settings));
 }
 
 /** `inline` for what browsers show safely (PDFs, images), `attachment` for the rest; RFC 6266 file name. */

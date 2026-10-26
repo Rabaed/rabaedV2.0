@@ -45,11 +45,35 @@ export function sendgridTransport({ apiKey, fetch: send, timeoutMs = SEND_TIMEOU
         },
       }),
     });
-    // A throw leaves the outbox row to be tried again. The reason is SendGrid's,
-    // with the key cut out should it ever be echoed back.
+    // A throw leaves the outbox row to be tried again, and its message lands in
+    // outbox.last_error: the status and SendGrid's error messages only, never
+    // the raw answer (it may quote the recipient), with the key cut out should
+    // it ever be echoed back.
     if (!response.ok) {
-      const reason = (await response.text()).replaceAll(apiKey, "[SENDGRID_API_KEY]");
-      throw new Error(`SendGrid refused the email: ${response.status} ${reason}`);
+      const reason = sendgridReason(await response.text()).replaceAll(apiKey, "[SENDGRID_API_KEY]");
+      const message = `SendGrid refused the email: ${response.status}${reason ? ` ${reason}` : ""}`;
+      throw new Error(message.length > MAX_REASON_LENGTH ? `${message.slice(0, MAX_REASON_LENGTH - 1)}…` : message);
     }
   };
+}
+
+/** Long enough for a few of SendGrid's errors; outbox.last_error stays short. */
+const MAX_REASON_LENGTH = 500;
+
+/** SendGrid's `errors[]` as `field: message` (`message` alone without a field), or "" for any other answer. */
+function sendgridReason(answer: string): string {
+  let errors: unknown;
+  try {
+    errors = (JSON.parse(answer) as { errors?: unknown }).errors;
+  } catch {
+    return "";
+  }
+  if (!Array.isArray(errors)) return "";
+  return errors
+    .map((e: { message?: unknown; field?: unknown }) => {
+      if (typeof e?.message !== "string") return "";
+      return typeof e.field === "string" && e.field !== "" ? `${e.field}: ${e.message}` : e.message;
+    })
+    .filter((s) => s !== "")
+    .join("; ");
 }

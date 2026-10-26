@@ -2,16 +2,18 @@ import { GetObjectCommand, ListObjectsV2Command, type S3Client } from "@aws-sdk/
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
-import type { FileStoreSettings } from "../documents/file-store.ts";
+import { objectStoreFromEnv, type ObjectStoreEnvNames, type ObjectStoreSettings } from "@rabaed/db";
 
-// The licensed Thmanyah Sans files for the web and Admin builds on Vercel (ADR
-// 0026, RP-1041). They sit in the private build assets bucket on R2, read at
-// build time with a read-only key, and are written only to the git-ignored
-// folder prepareArabicFont reads (packages/ui/src/fonts/arabic-font.ts). The
-// licence forbids redistributing them (CLAUDE.md): never committed, never in a
-// public bucket. Without them Arabic falls back to IBM Plex Sans Arabic, as in
-// deploy-dev.yml. It lives in the api because the api has the S3 client.
+// The licensed Thmanyah Sans files for the UAT web and Admin builds (ADR 0026,
+// RP-1041). They sit in the build assets bucket on R2, which has no public URL
+// (no r2.dev, no custom domain), so they are private by construction. The UAT
+// deploy Action fetches them on its runner with a read-only key before
+// `vercel build` (RP-1043); no Vercel project ever holds that key, so a PR
+// preview Vercel builds itself keeps the fallback. They are written only to the
+// git-ignored folder prepareArabicFont reads (packages/ui/src/fonts/arabic-font.ts).
+// The licence forbids redistributing them (CLAUDE.md): never committed. Without
+// them Arabic falls back to IBM Plex Sans Arabic, as in deploy-dev.yml. It
+// lives in the api because the api has the S3 client.
 
 /** Where the fonts sit in the build assets bucket (as packages/infra FONTS_PREFIX and the worker's THMANYAH_PREFIX). */
 export const THMANYAH_PREFIX = "fonts/thmanyah/";
@@ -22,28 +24,18 @@ export const THMANYAH_FONTS_DIR = fileURLToPath(new URL("../../../../packages/ui
 /** The weights the font switch takes, by the same name rule (packages/ui arabic-font.ts). */
 const thmanyahSansFile = /^thmanyahsans-(light|regular|medium|bold|black)\.woff2$/i;
 
+/** The build assets bucket and its read-only fonts key: only the UAT deploy Action's runner has them, never a Vercel project. */
+const FONTS_ENV: ObjectStoreEnvNames = { bucket: "BUILD_ASSETS_BUCKET", accessKeyId: "FONTS_ACCESS_KEY_ID", secretAccessKey: "FONTS_SECRET_ACCESS_KEY" };
+const FONTS_ENV_NAMES = [FONTS_ENV.bucket, FONTS_ENV.accessKeyId, FONTS_ENV.secretAccessKey];
+
 /**
  * The private build assets bucket with the read-only fonts key, or null when
  * the environment doesn't give all of it (a build that falls back to IBM Plex).
  * Never the files bucket's key.
  */
-export function fontsBucketFromEnv(source: NodeJS.ProcessEnv = process.env): FileStoreSettings | null {
-  const env = z
-    .object({
-      FILE_STORE_ENDPOINT: z.url().optional(),
-      FILE_STORE_REGION: z.string().min(1).optional(),
-      BUILD_ASSETS_BUCKET: z.string().min(3).optional(),
-      FONTS_ACCESS_KEY_ID: z.string().min(1).optional(),
-      FONTS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-    })
-    .parse(source);
-  if (!env.FILE_STORE_ENDPOINT || !env.BUILD_ASSETS_BUCKET || !env.FONTS_ACCESS_KEY_ID || !env.FONTS_SECRET_ACCESS_KEY) return null;
-  return {
-    bucket: env.BUILD_ASSETS_BUCKET,
-    endpoint: env.FILE_STORE_ENDPOINT,
-    region: env.FILE_STORE_REGION ?? "us-east-1",
-    credentials: { accessKeyId: env.FONTS_ACCESS_KEY_ID, secretAccessKey: env.FONTS_SECRET_ACCESS_KEY },
-  };
+export function fontsBucketFromEnv(source: NodeJS.ProcessEnv = process.env): ObjectStoreSettings | null {
+  if (!source.FILE_STORE_ENDPOINT || !FONTS_ENV_NAMES.every((name) => source[name])) return null;
+  return objectStoreFromEnv(source, FONTS_ENV);
 }
 
 /**
@@ -79,29 +71,4 @@ export async function fetchThmanyahFonts({
     names.push(name);
   }
   return names;
-}
-
-/**
- * Whether the font under `key` stays private: an unsigned GET of it (no key, no
- * signature) must be refused (4xx or 5xx; a redirect counts as served) at every one of `bases`. R2's S3 address refuses every
- * unsigned request, public bucket or not, so the bucket's public addresses (its
- * r2.dev URL, a custom domain) are the ones that tell: pass them too. The UAT
- * workflow calls this after a fetch (RP-1041's acceptance: "a font object
- * without credentials is refused").
- */
-export async function fontStaysPrivate(
-  bases: readonly string[],
-  key: string,
-  fetchFn: typeof fetch = fetch,
-): Promise<{ private: boolean; answers: { url: string; status: number }[] }> {
-  if (bases.length === 0) throw new Error("fontStaysPrivate needs an address to ask");
-  const path = key.split("/").map(encodeURIComponent).join("/");
-  const answers: { url: string; status: number }[] = [];
-  for (const base of bases) {
-    const url = `${base.replace(/\/+$/, "")}/${path}`;
-    const response = await fetchFn(url, { redirect: "manual" });
-    await response.body?.cancel();
-    answers.push({ url, status: response.status });
-  }
-  return { private: answers.every((a) => a.status >= 400), answers };
 }

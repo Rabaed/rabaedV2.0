@@ -24,6 +24,16 @@ const email: OutgoingEmail = {
   html: '<a href="https://uat.rabaed.test/ar/accept-invitation#token=abc">Accept</a>',
 };
 
+/** The error a send throws when SendGrid answers `status` with `answer`. */
+async function refusal(status: number, answer: string): Promise<Error> {
+  try {
+    await sendgridTransport({ apiKey, fetch: stubSendGrid(status, answer).fetch })(email);
+  } catch (thrown) {
+    return thrown as Error;
+  }
+  throw new Error("a refused email must throw");
+}
+
 describe("sendgridTransport", () => {
   it("posts one message to SendGrid's Mail Send API with the key, the sender, the recipient, the subject, both bodies and the template as a category", async () => {
     const sendgrid = stubSendGrid();
@@ -71,6 +81,37 @@ describe("sendgridTransport", () => {
     expect(error.message).toContain(String(status));
     expect(error.message).toContain("verified Sender Identity");
     expect(error.message).not.toContain(apiKey);
+  });
+
+  // The reason lands in outbox.last_error: SendGrid's error messages and their fields only.
+  it("says each of SendGrid's errors with its field, and nothing else of the answer", async () => {
+    const answer = JSON.stringify({
+      errors: [
+        { message: "Does not contain a valid address.", field: "personalizations.0.to.0.email", help: "https://sendgrid.com/docs/x" },
+        { message: "The subject is required.", field: null },
+      ],
+      echoed: { to: "engineer@rabaed.test" },
+    });
+    const error = await refusal(400, answer);
+    expect(error.message).toBe(
+      "SendGrid refused the email: 400 personalizations.0.to.0.email: Does not contain a valid address.; The subject is required.",
+    );
+  });
+
+  it.each([
+    ["an answer that isn't JSON", "Bad Request for engineer@rabaed.test"],
+    ["JSON with no errors list", '{"to":"engineer@rabaed.test"}'],
+    ["an empty answer", ""],
+  ])("says only the status for %s, never the answer itself", async (_kind, answer) => {
+    const error = await refusal(502, answer);
+    expect(error.message).toBe("SendGrid refused the email: 502");
+  });
+
+  it("keeps the reason short however long SendGrid's errors are", async () => {
+    const answer = JSON.stringify({ errors: Array.from({ length: 50 }, () => ({ message: "x".repeat(200) })) });
+    const error = await refusal(400, answer);
+    expect(error.message.length).toBeLessThanOrEqual(500);
+    expect(error.message).toMatch(/…$/);
   });
 
   it("gives up on a send SendGrid never answers, so a cron pass ends inside its time (RP-1039)", async () => {

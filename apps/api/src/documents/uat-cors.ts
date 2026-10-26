@@ -1,11 +1,31 @@
 import { GetBucketCorsCommand, PutBucketCorsCommand, type CORSRule, type S3Client } from "@aws-sdk/client-s3";
+import { objectStoreFromEnv, type ObjectStoreEnvNames, type ObjectStoreSettings } from "@rabaed/db";
+import { isLocalFileStore } from "./file-store.ts";
 
 // The UAT files bucket's CORS on Cloudflare R2 (ADR 0026, RP-1041): browsers
 // PUT a Document to a URL the api signed and GET it back, from the UAT web
 // origin only. The rules match the AWS storage stack's
-// (packages/infra/src/storage-stack.ts) but name one origin, never `*`. Set
-// by cli/r2-cors.ts from the UAT workflow; the api itself never touches R2's
-// bucket or CORS (ensureLocalBucket is local only).
+// (packages/infra/src/storage-stack.ts) but name one origin, never `*`. The
+// owner sets them once in the Cloudflare dashboard; cli/r2-cors.ts is an
+// optional way to do it, with an R2 admin key of its own. The app's key
+// (FILE_STORE_ACCESS_KEY_ID) is Object Read & Write only, and the api itself
+// never touches R2's bucket or CORS (ensureLocalBucket is local only).
+
+/** The R2 admin key's names: given to whoever runs cli/r2-cors.ts, never to an app or a Vercel project. */
+const R2_ADMIN_ENV: ObjectStoreEnvNames = {
+  bucket: "PROJECT_FILES_BUCKET",
+  accessKeyId: "R2_ADMIN_ACCESS_KEY_ID",
+  secretAccessKey: "R2_ADMIN_SECRET_ACCESS_KEY",
+};
+
+/** The UAT files bucket on R2 with the R2 admin key; throws when only the app's key is given, or the store isn't R2. */
+export function r2AdminFromEnv(source: NodeJS.ProcessEnv = process.env): ObjectStoreSettings {
+  const settings = objectStoreFromEnv(source, R2_ADMIN_ENV);
+  if (!settings.endpoint || isLocalFileStore(settings)) {
+    throw new Error("FILE_STORE_ENDPOINT must be R2's S3 address (the uat environment's), not AWS or the local store");
+  }
+  return settings;
+}
 
 /** `origin` exactly as a browser sends it (`https://host`), else throws naming the rule. */
 function webOrigin(origin: string): string {
@@ -36,13 +56,13 @@ export async function applyUatCors(client: S3Client, bucket: string, origin: str
   const rules = uatCorsRules(origin);
   await client.send(new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: { CORSRules: rules } }));
   const read = (await client.send(new GetBucketCorsCommand({ Bucket: bucket }))).CORSRules ?? [];
-  const same = (r: CORSRule) => ({
+  const comparable = (r: CORSRule) => ({
     origins: r.AllowedOrigins ?? [],
     methods: [...(r.AllowedMethods ?? [])].sort(),
     headers: (r.AllowedHeaders ?? []).map((h) => h.toLowerCase()),
     maxAge: r.MaxAgeSeconds,
   });
-  if (JSON.stringify(read.map(same)) !== JSON.stringify(rules.map(same))) {
+  if (JSON.stringify(read.map(comparable)) !== JSON.stringify(rules.map(comparable))) {
     throw new Error(`The bucket's CORS read back differs from what was set: ${JSON.stringify(read)}`);
   }
   return read;

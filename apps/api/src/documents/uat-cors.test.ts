@@ -1,6 +1,6 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
-import { applyUatCors, uatCorsRules } from "./uat-cors.ts";
+import { applyUatCors, r2AdminFromEnv, uatCorsRules } from "./uat-cors.ts";
 
 describe("the UAT files bucket's CORS", () => {
   it("lets only the UAT web origin PUT and GET, with its content type, for ten minutes", () => {
@@ -47,5 +47,36 @@ describe("the UAT files bucket's CORS", () => {
   it("fails when the bucket reads back other rules", async () => {
     const client = { send: async () => ({ CORSRules: [{ AllowedOrigins: ["*"], AllowedMethods: ["GET"] }] }) } as unknown as S3Client;
     await expect(applyUatCors(client, "rabaed-uat-files", "https://rabaed-uat.vercel.app")).rejects.toThrow(/read back/);
+  });
+});
+
+describe("the key the UAT CORS is set with", () => {
+  const uat = {
+    PROJECT_FILES_BUCKET: "rabaed-uat-files",
+    FILE_STORE_ENDPOINT: "https://0123456789abcdef.r2.cloudflarestorage.com",
+    FILE_STORE_REGION: "auto",
+    FILE_STORE_ACCESS_KEY_ID: "files-id",
+    FILE_STORE_SECRET_ACCESS_KEY: "files-secret",
+  };
+
+  it("is the R2 admin key, never the app's", () => {
+    expect(r2AdminFromEnv({ ...uat, R2_ADMIN_ACCESS_KEY_ID: "admin-id", R2_ADMIN_SECRET_ACCESS_KEY: "admin-secret" })).toEqual({
+      bucket: "rabaed-uat-files",
+      endpoint: "https://0123456789abcdef.r2.cloudflarestorage.com",
+      region: "auto",
+      credentials: { accessKeyId: "admin-id", secretAccessKey: "admin-secret" },
+    });
+  });
+
+  it("refuses to run with only the app's key", () => {
+    expect(() => r2AdminFromEnv(uat)).toThrow(/R2_ADMIN_ACCESS_KEY_ID and R2_ADMIN_SECRET_ACCESS_KEY/);
+    expect(() => r2AdminFromEnv({ ...uat, R2_ADMIN_ACCESS_KEY_ID: "admin-id" })).toThrow(/R2_ADMIN_SECRET_ACCESS_KEY/);
+  });
+
+  it.each([
+    ["the local store", { FILE_STORE_ENDPOINT: "http://127.0.0.1:9000" }],
+    ["AWS", { FILE_STORE_ENDPOINT: undefined, AWS_REGION: "me-central-1" }],
+  ])("refuses %s", (_where, env) => {
+    expect(() => r2AdminFromEnv({ ...uat, R2_ADMIN_ACCESS_KEY_ID: "admin-id", R2_ADMIN_SECRET_ACCESS_KEY: "admin-secret", ...env })).toThrow(/R2's S3 address/);
   });
 });

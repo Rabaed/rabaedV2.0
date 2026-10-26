@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { GetObjectCommand, ListObjectsV2Command, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { z } from "zod";
+import { objectStoreClientConfig, objectStoreFromEnv, PROJECT_FILES_ENV, type ObjectStoreSettings } from "@rabaed/db";
 
 // Where the worker keeps a record's files: the Project files bucket, under the
 // item's own prefix (ADR 0007), the same store the api signs Document links for
@@ -16,51 +16,17 @@ export interface RecordFiles {
   sha256(key: string): Promise<string | null>;
 }
 
-export interface S3Settings {
-  readonly bucket: string;
-  readonly region: string;
-  /** Local and CI only: the S3-compatible store's address and its placeholder keys. */
-  readonly endpoint?: string;
-  readonly credentials?: { accessKeyId: string; secretAccessKey: string };
-}
+/** Where a bucket is (packages/db object-store.ts). */
+export type S3Settings = ObjectStoreSettings;
 
-/** Checksums only where an operation requires one, as the api's client (apps/api file-store.ts `fileStoreClient`, R2's checksum support cited there). */
+/** Checksums only where an operation requires one, as the api's client (packages/db `objectStoreClientConfig` says why). */
 export function s3Client(settings: S3Settings): S3Client {
-  return new S3Client({
-    region: settings.region,
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    responseChecksumValidation: "WHEN_REQUIRED",
-    ...(settings.endpoint ? { endpoint: settings.endpoint, forcePathStyle: true, credentials: settings.credentials } : {}),
-  });
+  return new S3Client(objectStoreClientConfig(settings));
 }
 
-/** The Project files bucket from the environment: PROJECT_FILES_BUCKET, and FILE_STORE_* locally. */
+/** The Project files bucket from the environment: PROJECT_FILES_BUCKET, and FILE_STORE_* locally and on the UAT. */
 export function projectFilesFromEnv(source: NodeJS.ProcessEnv = process.env): S3Settings {
-  const env = z
-    .object({
-      PROJECT_FILES_BUCKET: z.string().min(3),
-      FILE_STORE_ENDPOINT: z.url().optional(),
-      FILE_STORE_ACCESS_KEY_ID: z.string().min(1).optional(),
-      FILE_STORE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-      FILE_STORE_REGION: z.string().min(1).optional(),
-      AWS_REGION: z.string().min(1).optional(),
-    })
-    .parse(source);
-  if (!env.FILE_STORE_ENDPOINT) {
-    if (!env.AWS_REGION) throw new Error("No file store: set FILE_STORE_ENDPOINT (local, CI) or run in AWS (AWS_REGION)");
-    return { bucket: env.PROJECT_FILES_BUCKET, region: env.AWS_REGION };
-  }
-  if (!env.FILE_STORE_ACCESS_KEY_ID || !env.FILE_STORE_SECRET_ACCESS_KEY) {
-    throw new Error("FILE_STORE_ENDPOINT needs FILE_STORE_ACCESS_KEY_ID and FILE_STORE_SECRET_ACCESS_KEY (the local store's)");
-  }
-  return {
-    bucket: env.PROJECT_FILES_BUCKET,
-    endpoint: env.FILE_STORE_ENDPOINT,
-    // R2 signs with `auto` (FILE_STORE_REGION in the uat environment); the local store takes any.
-    // Never AWS_REGION here: Vercel sets it to its own region, which R2 would not sign for.
-    region: env.FILE_STORE_REGION ?? "us-east-1",
-    credentials: { accessKeyId: env.FILE_STORE_ACCESS_KEY_ID, secretAccessKey: env.FILE_STORE_SECRET_ACCESS_KEY },
-  };
+  return objectStoreFromEnv(source, PROJECT_FILES_ENV);
 }
 
 const notFound = (error: unknown) =>
