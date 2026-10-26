@@ -1,0 +1,58 @@
+# Reset UAT (RP-1043, ADR 0026): by hand only. Drops UAT's database, migrates it
+# again from empty and seeds the demo (scripts/uat-deploy.ts demo reset, as
+# deploy-dev.yml's reset_demo did). UAT keeps its data between deploys; this is
+# the way back to the demo as seeded. Everything made on UAT since is lost.
+# Run it on main: Actions > Reset UAT > Run workflow, typing `reset uat`.
+# Role passwords are kept (DATABASE_ROLE_PASSWORDS=on-create): the apps keep
+# logging in through Supavisor. Rotating a DATABASE_*_PASSWORD in `uat` needs a
+# one-off ALTER ROLE as postgres first (RP-1043 comment 14538).
+name: Reset UAT
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type `reset uat` to drop everything in UAT's database and seed the demo again
+        required: true
+        type: string
+permissions:
+  contents: read
+# Shared with Deploy UAT and the Supabase gate: never two at once on UAT's database.
+concurrency:
+  group: uat-database
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    name: Reset UAT (environment uat)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: uat
+    timeout-minutes: 30
+    steps:
+      # The input reaches the script through env only (scripts/check-workflows.ts, rule 5).
+      - name: Confirm
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "reset uat" ]; then
+            echo "::error::Type exactly \`reset uat\` to reset UAT; nothing was changed."
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Drop, migrate and seed the demo
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+        run: |
+          node scripts/uat-deploy.ts demo reset
+          echo "### UAT's demo was seeded again" >> "$GITHUB_STEP_SUMMARY"

@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { environmentConfig, environments, resourceNames, serviceNames, shellVariables, type EnvironmentConfig } from "../src/config.ts";
+import { environments, resourceNames, serviceNames, shellVariables, type EnvironmentConfig } from "../src/config.ts";
 import { resourcesOfType, synthesise } from "./support.ts";
 
 // ADR 0005: every Instance runs the same code. An environment's names come
@@ -64,22 +64,9 @@ describe("names for the workflows and the setup wizard", () => {
     expect(() => execFileSync(process.execPath, [script, "nowhere"], { stdio: "pipe" })).toThrow(/Unknown environment "nowhere"/);
   });
 
-  // GitHub reads no `env` in a job's `environment`, so the deploy job names it
-  // itself; the deploy role trusts only that environment. The AWS deploy is
-  // retired (ADR 0026, RP-1043): these hold while its workflows remain.
-  it.skipIf(!existsSync(repoFile(".github/workflows/deploy-dev.yml")))("the deploy job runs in the GitHub environment of the environment it deploys", () => {
-    const workflow = readFileSync(repoFile(".github/workflows/deploy-dev.yml"), "utf8");
-    const deployed = workflow.match(/^ {2}RABAED_ENV: (\S+)\r?$/m)?.[1];
-    expect(deployed).toBeDefined();
-    expect(workflow.match(/^ {4}environment: (\S+)\r?$/m)?.[1]).toBe(resourceNames(environmentConfig(deployed!)).githubEnvironment);
-  });
-
   // Only the one input that picks the environment (RABAED_ENV) may say which it is.
-  it.each([
-    ...[".github/workflows/deploy-dev.yml", ".github/workflows/infra-diff.yml"].filter((retired) => existsSync(repoFile(retired))),
-    "packages/infra/scripts/setup-aws-account.sh",
-    "packages/infra/scripts/run-task.sh",
-  ])("%s spells no environment's names itself", (file) => {
+  // (deploy-dev.yml and infra-diff.yml, which ran these, are retired: ADR 0026, RP-1043.)
+  it.each(["packages/infra/scripts/setup-aws-account.sh", "packages/infra/scripts/run-task.sh"])("%s spells no environment's names itself", (file) => {
     const text = readFileSync(repoFile(file), "utf8");
     expect(text.match(/.*(?:[rR]abaed[-/]dev\b|env=dev\b|[rR]abaed[-/]\$\{?RABAED_ENV|STACK_PREFIX).*/g) ?? []).toEqual([]);
   });

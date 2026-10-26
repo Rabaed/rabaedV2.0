@@ -211,7 +211,7 @@ Every stack, role, repository and parameter name comes from `src/config.ts` (`st
 
 ## Dev environment on AWS
 
-Every merge to `main` that passes CI is deployed to dev by `.github/workflows/deploy-dev.yml`. The workflow's summary shows the address; open `/en/health` there to see the API and database status and the deployed commit.
+**Not deployed** (ADR 0026, RP-1043): dev, demo and UAT run on Vercel, deployed by `.github/workflows/deploy-uat.yml`; `deploy-dev.yml` and the `cdk diff (dev)` check (`infra-diff.yml`) are retired. The AWS code below stays in the repo, undeployed, for the production decision; this section describes how it ran.
 
 | Stack | What it holds |
 |---|---|
@@ -362,7 +362,7 @@ select funcname, calls, total_time, self_time from pg_stat_user_functions where 
 
 The test database is recreated on every run (`prepareTestDatabase`), so the stats cover the last run only. An existing lane database picks the setting up after `docker compose up -d db` (the container is recreated; the data volume stays). CI's service containers are left as they are.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16, the mailer against Mailpit, and the infra assertions, on each pull request (once per push to its branch), on every push to `main` and in the merge queue; `secret-scan.yml` runs gitleaks (default rules plus `.gitleaks.toml`) and `scripts/check-no-fonts.ts` over a pull request's own commits, a queue entry's, or `main`'s history, so a finding on one branch fails only that branch's checks, and nightly over every branch (not a required check: a red run means a secret on a public branch, to rotate, not just delete; RP-678); `infra-diff.yml` writes `cdk diff` to a pull request's job summary once the AWS account is set up, and comments only when the pull request itself changes an IAM or stateful resource (RP-1018); `deploy-dev.yml` deploys `main` to dev after CI passes. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16, the mailer against Mailpit, and the infra assertions, on each pull request (once per push to its branch), on every push to `main` and in the merge queue; `secret-scan.yml` runs gitleaks (default rules plus `.gitleaks.toml`) and `scripts/check-no-fonts.ts` over a pull request's own commits, a queue entry's, or `main`'s history, so a finding on one branch fails only that branch's checks, and nightly over every branch (not a required check: a red run means a secret on a public branch, to rotate, not just delete; RP-678); `deploy-uat.yml` deploys each merge to `main` to UAT on Vercel (migrate, api and Admin, their smoke, web, its smoke), and `reset-uat.yml` seeds UAT's demo again by hand (ADR 0026). For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
 
 ## Secrets
 

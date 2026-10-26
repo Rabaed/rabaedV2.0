@@ -73,6 +73,8 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 
 ## Cloud: AWS
 
+**Not deployed** ([ADR 0026](adr/0026-dev-and-uat-run-on-vercel.md)): dev, demo and UAT run on Vercel (below); `deploy-dev.yml` and the `cdk diff (dev)` check are retired. The CDK code stays in `packages/infra`, undeployed, so the production decision can still choose AWS.
+
 All defined as code with **AWS CDK 2** in TypeScript. The region is a parameter, so the same code serves the standard Instance and, later, the KSA Instance ([ADR 0005](adr/0005-two-independent-instances-inside-and-outside-ksa.md)). Dev runs in **Frankfurt (eu-central-1)** and holds demo data only.
 
 | | Choice |
@@ -109,11 +111,11 @@ Dev, demo and UAT run on Vercel with demo data only, so builders get a link to e
 |---|---|
 | `ci.yml` | Lint (including the rule against logging an error's message), typecheck, unit tests, seam 1 (the API as a Member), seam 2 (database RLS, and every `security definer` function sets `search_path` and is written in plpgsql), story tests, infra assertions, mail, web build, web image start, and on pull requests that no existing migration was changed |
 | `secret-scan.yml` | gitleaks; refuses font files |
-| `infra-diff.yml` | Runs `cdk diff` against dev on each PR, using a read-only role, and writes it to the job summary; comments on the PR only when the PR itself changes an IAM or stateful resource (RP-1018) |
-| `deploy-dev.yml` | On merge to `main`: build and push images → migrate → deploy → smoke tests (including the visibility checks in the cloud); serialised; rolls back on smoke failure |
+| `deploy-uat.yml` | On merge to `main`, in environment `uat`: migrate Supabase (session pooler, role passwords set only on create) and seed the demo if missing → the api's and Admin's Vercel settings and Sensitive variables, build on the runner, prebuilt deploy → smoke the api (version, database, visibility asked of the api, no Admin on its address) and Admin → fetch the fonts on the runner, deploy web → smoke web (visibility through web, fonts, no Admin on the customer address) → one authorised outbox cron call; stops at the first failure; one at a time with the Supabase gate and Reset UAT (RP-1043, `scripts/uat-deploy.ts`). Previews: Vercel's own, from Git, of web and the api only, skipped for a branch with a migration main lacks (`scripts/vercel-preview-gate.ts`) |
+| `reset-uat.yml` | By hand, typing `reset uat`: drops UAT's database, migrates it from empty and seeds the demo (RP-1043) |
 | `update-screenshots.yml` | Refreshes story screenshot baselines on a PR that touches stories or `packages/ui/src` (or carries the label), and adds new stories' baselines after CI, with least privilege |
 
-GitHub reaches AWS through **OIDC only**: no stored AWS keys. The deploy role is trusted only by the deploy job on `main`, and deploys run under a least-privilege execution policy, not AdministratorAccess. Third-party actions are pinned to commit SHAs (Dependabot updates them).
+GitHub reaches Vercel and Supabase only from jobs in environment `uat`, whose secrets exist nowhere else. (While AWS was deployed it reached AWS through **OIDC only**, no stored AWS keys, the deploy role trusted only by the deploy job on `main`, under a least-privilege execution policy.) Third-party actions are pinned to commit SHAs (Dependabot updates them).
 
 ## Testing approach
 

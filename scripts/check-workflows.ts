@@ -14,8 +14,8 @@ import { parseDocument } from "yaml";
 //     repository's own branches: its `if`, or the `if` of a job it needs,
 //     compares the head repository with github.repository. Fork code never
 //     meets a write token. workflow_run is the preferred home for such jobs.
-//     A pull_request job with the same guard is also accepted (infra-diff.yml
-//     needs an OIDC token and pull-requests: write): GitHub gives a fork's
+//     A pull_request job with the same guard is also accepted (as the retired
+//     infra-diff.yml was, for an OIDC token and pull-requests: write): GitHub gives a fork's
 //     pull_request run a read-only token and no OIDC token anyway, and the
 //     guard stops the job running for forks at all, so fork code never meets
 //     a write token there either. Only pull_request_target is banned.

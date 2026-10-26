@@ -1,0 +1,260 @@
+# The UAT deploy (RP-1043, ADR 0026): every merge to main reaches UAT on Vercel,
+# stopping at the first failure:
+#   1. migrate UAT's Supabase database over the session pooler, then seed the demo
+#      unless it is there;
+#   2. apply the api's and Rabaed Admin's Vercel settings and Sensitive variables,
+#      then build and deploy them;
+#   3. smoke the api (its version and database, visibility asked of the api itself,
+#      none of Admin on the api's address) and Admin (through its protection bypass
+#      while it has Password Protection): a failure stops here, before web;
+#   4. build and deploy web, with the Thmanyah fonts fetched on the runner;
+#   5. smoke web (the visibility check through web, the fonts, no Admin on the
+#      customer address), then one authorised call to the outbox cron.
+# Vercel's own Git deploy of main is off (`git.deploymentEnabled` in each
+# vercel.json) and the preview gate skips anything but a preview
+# (scripts/vercel-preview-gate.ts), so this is the only way to production: a
+# migration always lands before the code that needs it. Pull requests without a
+# migration get Vercel previews of web and the api (never Admin's), behind Vercel
+# Authentication.
+#
+# The secrets live only in the `uat` environment. Builds run on the runner
+# (`vercel build`, then `vercel deploy --prebuilt`): Vercel decrypts Sensitive
+# variables only in its own builds and at runtime, and the read-only fonts key
+# must never be a Vercel variable (it would reach the functions), so the runner
+# fetches the fonts itself. scripts/uat-deploy.ts prints no secret.
+#
+# Owner setup (once): environment `uat` holds the secrets and variables named in
+# the steps below; the three Vercel projects exist (their ids are variables); the
+# R2 CORS rule is set in Cloudflare's dashboard (PR #418).
+name: Deploy UAT
+on:
+  push:
+    branches: [main]
+  # Redeploy main by hand (Actions > Deploy UAT > Run workflow).
+  workflow_dispatch:
+permissions:
+  contents: read
+# One run at a time against UAT's database, shared with the Supabase gate and
+# Reset UAT (roles are cluster-wide), never cancelled half way. A newer merge
+# waits; if several wait, only the newest runs (GitHub cancels the older pending one).
+concurrency:
+  group: uat-database
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy UAT (environment uat)
+    # The environment's deployment-branch rule admits main only; this says so too.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: uat
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ github.sha }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # Optional; UAT's database is rabaed_uat otherwise.
+      DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_WEB_PROJECT_ID: ${{ vars.VERCEL_WEB_PROJECT_ID }}
+      VERCEL_API_PROJECT_ID: ${{ vars.VERCEL_API_PROJECT_ID }}
+      VERCEL_ADMIN_PROJECT_ID: ${{ vars.VERCEL_ADMIN_PROJECT_ID }}
+      # The three projects' production addresses (https://….vercel.app, no trailing slash).
+      UAT_WEB_URL: ${{ vars.UAT_WEB_URL }}
+      UAT_API_URL: ${{ vars.UAT_API_URL }}
+      UAT_ADMIN_URL: ${{ vars.UAT_ADMIN_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      # Names only: a missing value stops the deploy before anything changes.
+      - name: The uat environment has what the deploy needs
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FILE_STORE_ACCESS_KEY_ID: ${{ secrets.FILE_STORE_ACCESS_KEY_ID }}
+          FILE_STORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_STORE_SECRET_ACCESS_KEY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+        run: |
+          missing=""
+          for name in DATABASE_SUPERUSER_URL DATABASE_MIGRATOR_PASSWORD DATABASE_APP_PASSWORD DATABASE_ADMIN_PASSWORD DEMO_PASSWORD \
+            VERCEL_TOKEN CRON_SECRET FILE_STORE_ACCESS_KEY_ID FILE_STORE_SECRET_ACCESS_KEY SENDGRID_API_KEY \
+            SUPABASE_PROJECT_REF VERCEL_ORG_ID VERCEL_WEB_PROJECT_ID VERCEL_API_PROJECT_ID VERCEL_ADMIN_PROJECT_ID \
+            UAT_WEB_URL UAT_API_URL UAT_ADMIN_URL FILE_STORE_ENDPOINT PROJECT_FILES_BUCKET MAIL_FROM; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Set these in the uat environment:$missing"
+            exit 1
+          fi
+
+      # The session pooler (DATABASE_SUPERUSER_URL, port 5432): migrations hold a
+      # session advisory lock. Role passwords are set only when a role is created
+      # (DATABASE_ROLE_PASSWORDS=on-create, set by the script): Supavisor caches each
+      # role's SCRAM secret, so re-setting them every deploy would lock the apps out.
+      - name: Migrate UAT's database
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+        run: node scripts/uat-deploy.ts migrate
+
+      # UAT keeps its data between deploys; Reset UAT seeds it again by hand.
+      - name: Seed the demo unless it is there
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+        run: node scripts/uat-deploy.ts demo ensure
+
+      - name: Vercel CLI
+        run: npm install --global vercel@63.1.2
+
+      # The api: its settings and variables (Vercel REST API), then a build on the
+      # runner and a prebuilt production deploy (Vercel docs, vercel build and
+      # vercel deploy). VERCEL_ORG_ID and VERCEL_PROJECT_ID pick the project.
+      - name: "api: settings and variables"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          FILE_STORE_ACCESS_KEY_ID: ${{ secrets.FILE_STORE_ACCESS_KEY_ID }}
+          FILE_STORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_STORE_SECRET_ACCESS_KEY }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: node scripts/uat-deploy.ts project api
+      - name: "api: build and deploy"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_API_PROJECT_ID }}
+        run: |
+          rm -rf .vercel
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+      # Read-only key, read on the runner only: never a Vercel variable. Into the
+      # git-ignored packages/ui/fonts/thmanyah/, which Admin's and web's builds read.
+      # None there: a warning, and IBM Plex Sans Arabic.
+      - name: Thmanyah fonts
+        id: fonts
+        env:
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          FILE_STORE_REGION: auto
+          BUILD_ASSETS_BUCKET: ${{ vars.BUILD_ASSETS_BUCKET }}
+          FONTS_ACCESS_KEY_ID: ${{ secrets.FONTS_ACCESS_KEY_ID }}
+          FONTS_SECRET_ACCESS_KEY: ${{ secrets.FONTS_SECRET_ACCESS_KEY }}
+        run: |
+          pnpm --filter @rabaed/api fonts:fetch
+          # Names in any case, as the font switch accepts them (packages/ui/src/fonts/arabic-font.ts).
+          shopt -s nocaseglob
+          if compgen -G "packages/ui/fonts/thmanyah/thmanyahsans-*.woff2" >/dev/null; then
+            echo "arabic_font=Thmanyah Sans" >> "$GITHUB_OUTPUT"
+          else
+            echo "arabic_font=IBM Plex Sans Arabic" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Admin's Password Protection awaits the owner's yes or no ($20 a month): applied
+      # only while the secret ADMIN_VERCEL_PASSWORD is set, otherwise left as it is,
+      # with a notice. The smokes then reach Admin plainly.
+      - name: "Admin: settings and variables"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ADMIN_VERCEL_PASSWORD: ${{ secrets.ADMIN_VERCEL_PASSWORD }}
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+        run: node scripts/uat-deploy.ts project admin
+      - name: "Admin: build and deploy"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_ADMIN_PROJECT_ID }}
+        run: |
+          rm -rf .vercel
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+      # Seam 1's visibility check against the deployed api, before web is deployed.
+      # While Admin sits behind Password Protection, the smoke passes it with Admin's
+      # Protection Bypass for Automation secret (masked before anything can print it)
+      # and checks Admin refuses a request without it.
+      - name: Smoke the api and Admin
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ADMIN_VERCEL_PASSWORD: ${{ secrets.ADMIN_VERCEL_PASSWORD }}
+          SMOKE_DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+        run: |
+          bypass=""
+          if [ -n "$ADMIN_VERCEL_PASSWORD" ]; then
+            bypass=$(node scripts/uat-deploy.ts bypass admin)
+            echo "::add-mask::$bypass"
+          fi
+          SMOKE_API_URL="$UAT_API_URL" SMOKE_ADMIN_URL="$UAT_ADMIN_URL" SMOKE_ADMIN_BYPASS="$bypass" SMOKE_VERSION="$VERSION" \
+            pnpm --filter @rabaed/infra smoke
+
+      - name: "web: settings and variables"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: node scripts/uat-deploy.ts project web
+      - name: "web: build and deploy"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_WEB_PROJECT_ID }}
+        run: |
+          rm -rf .vercel
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+          rm -rf .vercel packages/ui/fonts/thmanyah
+
+      # As a browser would: web and the api run this commit, Arabic is in the font
+      # web was built with, visibility holds through web's proxy, and the customer
+      # address serves none of Rabaed Admin.
+      - name: Smoke web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ADMIN_VERCEL_PASSWORD: ${{ secrets.ADMIN_VERCEL_PASSWORD }}
+          SMOKE_DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          ARABIC_FONT: ${{ steps.fonts.outputs.arabic_font }}
+        run: |
+          bypass=""
+          if [ -n "$ADMIN_VERCEL_PASSWORD" ]; then
+            bypass=$(node scripts/uat-deploy.ts bypass admin)
+            echo "::add-mask::$bypass"
+          fi
+          SMOKE_URL="$UAT_WEB_URL" SMOKE_ADMIN_URL="$UAT_ADMIN_URL" SMOKE_ADMIN_BYPASS="$bypass" SMOKE_VERSION="$VERSION" SMOKE_ARABIC_FONT="$ARABIC_FONT" \
+            pnpm --filter @rabaed/infra smoke
+
+      # One pass of the outbox, as Vercel Cron calls it every minute (RP-1039):
+      # it must answer 200 to the bearer secret. It prints the pass's counts only.
+      - name: Smoke the outbox cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            --header "Authorization: Bearer $CRON_SECRET" "$UAT_API_URL/internal/cron/outbox"
+          echo
+          echo "### Deployed \`${VERSION:0:7}\` to $UAT_WEB_URL" >> "$GITHUB_STEP_SUMMARY"
