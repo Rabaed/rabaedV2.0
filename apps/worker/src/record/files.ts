@@ -24,9 +24,12 @@ export interface S3Settings {
   readonly credentials?: { accessKeyId: string; secretAccessKey: string };
 }
 
+/** Checksums only where an operation requires one, as the api's client (apps/api file-store.ts `fileStoreClient`, R2's checksum support cited there). */
 export function s3Client(settings: S3Settings): S3Client {
   return new S3Client({
     region: settings.region,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     ...(settings.endpoint ? { endpoint: settings.endpoint, forcePathStyle: true, credentials: settings.credentials } : {}),
   });
 }
@@ -39,6 +42,7 @@ export function projectFilesFromEnv(source: NodeJS.ProcessEnv = process.env): S3
       FILE_STORE_ENDPOINT: z.url().optional(),
       FILE_STORE_ACCESS_KEY_ID: z.string().min(1).optional(),
       FILE_STORE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+      FILE_STORE_REGION: z.string().min(1).optional(),
       AWS_REGION: z.string().min(1).optional(),
     })
     .parse(source);
@@ -52,7 +56,9 @@ export function projectFilesFromEnv(source: NodeJS.ProcessEnv = process.env): S3
   return {
     bucket: env.PROJECT_FILES_BUCKET,
     endpoint: env.FILE_STORE_ENDPOINT,
-    region: env.AWS_REGION ?? "us-east-1",
+    // R2 signs with `auto` (FILE_STORE_REGION in the uat environment); the local store takes any.
+    // Never AWS_REGION here: Vercel sets it to its own region, which R2 would not sign for.
+    region: env.FILE_STORE_REGION ?? "us-east-1",
     credentials: { accessKeyId: env.FILE_STORE_ACCESS_KEY_ID, secretAccessKey: env.FILE_STORE_SECRET_ACCESS_KEY },
   };
 }
