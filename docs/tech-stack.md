@@ -101,7 +101,49 @@ Dev, demo and UAT run on Vercel with demo data only, so builders get a link to e
 | Email | SendGrid, tracking off |
 | Deploy | A GitHub Action on `main`: migrate, deploy, visibility smoke tests. Pull requests without a migration get a preview behind Vercel Authentication |
 | Connections | The apps use Supabase's **transaction pooler** (port 6543): the Member is set per transaction, so a pooled connection carries nothing to the next request. Migrations and the Supabase gate use the **session pooler** (port 5432 on the same host): migrations hold a session advisory lock. Supabase's direct connection is IPv6-only, unreachable from GitHub runners. Pooler logins are `<role>.<project ref>`; the roles are the plain names |
+| Projects | `vercel.json` in `apps/web`, `apps/api` and `apps/admin` (RP-1038, below): `fra1`, the pnpm workspace installed from the repo, Vercel's own Git deploy of `main` off (the Action is the only way to production; pull-request previews stay on), `X-Robots-Tag: noindex` and a `robots.txt` that disallows everything, no sitemap |
 | Supabase gate | `pnpm --filter @rabaed/db gate:supabase` (RP-1037): bootstrap with the bypass role, every migration, seam 2 unchanged, an api call's transaction through the transaction pooler, and the Data API off (a call with the publishable key, read only by the gate, gets PostgREST's no-exposed-schema answer). Locally it runs against the lane's Postgres and skips the Data API check |
+
+### The three Vercel projects (RP-1038)
+
+**How api and Admin run.** Each is one Node function, `api/index.ts` in its app: it builds the Fastify app once per instance (`fastifyHandler`, `apps/api/src/vercel.ts`) and hands it every request unchanged; `vercel.json` rewrites every path to it. There is no `listen`, no outbox report on a timer and no signal handler there, and the api never creates its bucket (`src/server.ts` keeps all of that for local runs). Vercel's Node builder compiles each TypeScript file it traces to `.js`, but leaves `.ts` import paths and the workspace packages' `exports` (`./src/index.ts`) pointing at `.ts` files it renamed, so the function would not load. So `includeFiles` ships the TypeScript sources of the app and the workspace packages it reaches, and Node runs them itself: `NODE_OPTIONS=--experimental-transform-types` (transform, not strip-only, because some classes use parameter properties). `src/vercel-entry.test.ts` in both apps loads the entry that way and checks nothing keeps the process alive. Admin's function also ships `dist/**` (built by `vite build`, its project's build command) and `src/pages/**`, which `routes/pages.ts` reads at start. `public/robots.txt` is each project's only static file (an empty output directory is refused).
+
+**Pool size.** `DATABASE_POOL_MAX` overrides a process's pool size (`poolMaxFromEnv`, `packages/db`): each Vercel instance holds its own small pool on the transaction pooler.
+
+**Client address in Admin** (the new-device alert): Admin trusts one proxy hop, as behind the AWS load balancer. Vercel overwrites `X-Forwarded-For` with the client's address and forwards none a client wrote (Vercel docs, Request headers), so the one hop it adds is read the same way; no setting is needed.
+
+**Project settings the deploy workflow applies** (RP-1043; `PATCH https://api.vercel.com/v9/projects/{idOrName}?teamId=$VERCEL_ORG_ID`, Vercel REST API "Update an existing project"). The rest is in each `vercel.json`.
+
+| Project | `rootDirectory` | `framework` | Also |
+|---|---|---|---|
+| web | `apps/web` | `nextjs` | |
+| api | `apps/api` | `null` (Other: not Vercel's Fastify preset, which would pick `src/app.ts` as the entry) | |
+| Admin | `apps/admin` | `null` | `passwordProtection: { deploymentType: "all", password }` |
+
+All three: `nodeVersion: "24.x"`, `sourceFilesOutsideRootDirectory: true`, `serverlessFunctionRegion: "fra1"`, and `ssoProtection: { deploymentType: "preview" }` (Vercel Authentication on previews, ADR 0026). Admin's password covers `all`, its production `*.vercel.app` address included (`prod_deployment_urls_and_all_previews` would leave the production domain open). **Password Protection costs $20 a month per protected project on Pro** (Vercel docs, Password Protection, 2026-09); the legacy Advanced Deployment Protection package ($150 a month per team) is not needed. The password is a new secret in environment `uat`. The smoke reaches Admin with the header `x-vercel-protection-bypass` and the project's Protection Bypass for Automation secret (all plans; it bypasses Password Protection and Vercel Authentication).
+
+**Environment variables**, every one Sensitive (ADR 0026). _uat_ means built from the GitHub environment `uat`'s secrets; the rest are plain values or `uat` variables. The anon, publishable and service keys go into no project, and only Admin gets an admin-role connection.
+
+| Variable | web | api | Admin | Source |
+|---|---|---|---|---|
+| `API_URL` | the api's production URL | | | |
+| `APP_VERSION` | ✓ | ✓ | ✓ | the commit SHA |
+| `NODE_OPTIONS` | | `--experimental-transform-types` | `--experimental-transform-types` | |
+| `NODEJS_HELPERS` | | `0` | `0` | hands Fastify the request as Node gave it |
+| `DATABASE_APP_URL` | | ✓ | | _uat_: login `rabaed_app.<project ref>`, `DATABASE_APP_PASSWORD`, `DATABASE_POOLER_HOST` port 6543 (transaction pooler), as the gate's `appTransaction` |
+| `DATABASE_ADMIN_URL` | | | ✓ | _uat_: as above with `rabaed_admin` and `DATABASE_ADMIN_PASSWORD` |
+| `DATABASE_POOL_MAX` | | `2` | `2` | |
+| `SESSION_COOKIE_SECURE` | | `true` | `true` | cookies stay host-only, Secure; SameSite as locally (Lax for the api, Strict for Admin) |
+| `SESSION_TTL_HOURS`, `INVITATION_TTL_HOURS`, `DOCUMENT_MAX_MB`, `DOCUMENT_CONTENT_TYPES` | | optional | `INVITATION_TTL_HOURS` optional | defaults otherwise |
+| `PROJECT_FILES_BUCKET`, `FILE_STORE_ENDPOINT` | | ✓ | | `uat` variables (R2, RP-1041) |
+| `FILE_STORE_ACCESS_KEY_ID`, `FILE_STORE_SECRET_ACCESS_KEY` | | ✓ | | _uat_ (R2 read-write key) |
+| `AWS_REGION` | | `auto` | | R2's region (RP-1041) |
+| `WEB_URL` | | | ✓ | web's production URL: invitation links |
+| `MAIL_FROM` | | | ✓ | `uat` variable |
+| `SENDGRID_API_KEY` | | | ✓ | _uat_ (RP-1040) |
+| `FONTS_ACCESS_KEY_ID`, `FONTS_SECRET_ACCESS_KEY`, `BUILD_ASSETS_BUCKET` | build | | build | _uat_: the Thmanyah fonts read at build time |
+
+`CRON_SECRET` goes to the project that serves the outbox delivery (RP-1039). Never in any project: `DATABASE_SUPERUSER_URL`, `DATABASE_MIGRATOR_PASSWORD` (the deploy's migrate step only), `VERCEL_TOKEN`, Supabase's keys.
 
 ## CI/CD: GitHub Actions
 

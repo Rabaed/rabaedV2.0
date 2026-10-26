@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv, loginUrl, rolePasswordsFromEnv } from "./config.ts";
+import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv, loginUrl, poolMaxFromEnv, rolePasswordsFromEnv } from "./config.ts";
 
 describe("loginUrl", () => {
   it("behind Supabase's pooler, logs in as <role>.<project ref>, as the URL's own login does", () => {
@@ -103,5 +103,21 @@ describe("rolePasswordsFromEnv", () => {
 
   it("refuses any other value", () => {
     expect(() => rolePasswordsFromEnv({ DATABASE_ROLE_PASSWORDS: "never" })).toThrow();
+  });
+});
+
+describe("poolMaxFromEnv", () => {
+  it("is the process's own size when DATABASE_POOL_MAX is not set", () => {
+    expect(poolMaxFromEnv({}, 4)).toBe(4);
+    expect(poolMaxFromEnv({}, undefined)).toBeUndefined();
+  });
+
+  it("takes DATABASE_POOL_MAX over it: a Vercel instance keeps a few connections on the transaction pooler", () => {
+    expect(poolMaxFromEnv({ DATABASE_POOL_MAX: "2" }, 4)).toBe(2);
+    expect(poolMaxFromEnv({ DATABASE_POOL_MAX: "3" }, undefined)).toBe(3);
+  });
+
+  it("refuses a size that is not a whole number of one or more", () => {
+    for (const value of ["0", "-1", "1.5", "two", ""]) expect(() => poolMaxFromEnv({ DATABASE_POOL_MAX: value }, 4)).toThrow();
   });
 });

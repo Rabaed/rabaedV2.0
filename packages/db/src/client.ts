@@ -1,7 +1,7 @@
 import { Kysely, PostgresDialect, sql, type PostgresPool, type Transaction } from "kysely";
 import pg from "pg";
 import { parseIntoClientConfig } from "pg-connection-string";
-import { connectionFromEnv } from "./config.ts";
+import { connectionFromEnv, poolMaxFromEnv } from "./config.ts";
 import { connectWithRetry, rotatingPassword, type RotatingPassword } from "./rotating-password.ts";
 import type { Database } from "./schema.ts";
 import { secretPassword } from "./secret-password.ts";
@@ -57,7 +57,7 @@ export function createDb(connectionString: string, options: CreateDbOptions = {}
 /** How api and worker open the database as the app or admin role: from the URL, or with the password in Secrets Manager. */
 export function createDbFromEnv(role: "app" | "admin", options: Omit<CreateDbOptions, "password"> = {}): Db {
   const { url, passwordSecret } = connectionFromEnv(role);
-  return createDb(url, { ...options, password: passwordSecret ? rotatingPassword(secretPassword(passwordSecret)) : undefined });
+  return createDb(url, { ...options, max: poolMaxFromEnv(process.env, options.max), password: passwordSecret ? rotatingPassword(secretPassword(passwordSecret)) : undefined });
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

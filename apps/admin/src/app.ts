@@ -86,15 +86,19 @@ const securityHeaders = {
   "referrer-policy": "no-referrer",
   "cross-origin-opener-policy": "same-origin",
   "cross-origin-resource-policy": "same-origin",
+  // Never in a search engine (ADR 0026).
+  "x-robots-tag": "noindex",
 };
 
 export async function buildAdminApp({ db, config, mailer, now = () => new Date(), logger = true, onRoute }: AdminAppOptions): Promise<FastifyInstance> {
   await dummyHash();
-  // Only the load balancer reaches the service (network stack). Trusting one
-  // hop takes the address it saw, not one a client wrote into X-Forwarded-For.
+  // Only one proxy reaches the service: the load balancer in AWS (network stack), or
+  // Vercel, which overwrites X-Forwarded-For with the client's address and forwards
+  // no address a client wrote (docs/tech-stack.md › Dev and UAT). Trusting one hop
+  // takes the address that proxy saw. Locally there is none, and the header is unset.
   const app = Fastify({
     logger: logger && { serializers: { req: (request: FastifyRequest) => ({ method: request.method, path: request.url.split("?")[0] }) } },
-    // The immediate peer (hop 0) is the load balancer; nothing before it is trusted.
+    // The immediate peer (hop 0) is that proxy; nothing before it is trusted.
     trustProxy: (_address: string, hop: number) => hop === 0,
   }).withTypeProvider<ZodTypeProvider>();
   if (onRoute) app.addHook("onRoute", onRoute);

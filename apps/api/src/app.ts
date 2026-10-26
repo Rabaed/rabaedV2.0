@@ -110,6 +110,11 @@ export async function buildApp({
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);
 
+  // Dev and UAT are noindex (ADR 0026); the api is never a page to index anywhere.
+  app.addHook("onSend", async (_request, reply) => {
+    reply.header("x-robots-tag", "noindex");
+  });
+
   app.decorateRequest("principal", null);
   app.decorateRequest("sessionToken", null);
   // Signed in before anything else (RP-452): a caller who isn't gets 401 here, in
