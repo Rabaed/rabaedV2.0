@@ -1,9 +1,10 @@
 import { checkAppRole } from "./app-role-check.ts";
 import { createDbFromEnv } from "./client.ts";
 
-// Run in AWS after every deploy (the migration task with this command, see
-// .github/workflows/deploy-dev.yml): connects as rabaed_app and exits 1 if it
-// can get round row-level security or rewrite the audit trail.
+// Run after every UAT deploy's migrations (scripts/uat-deploy.ts app-role-check,
+// .github/workflows/deploy-uat.yml; in AWS, the migration task ran it): connects
+// as rabaed_app and exits 1 if it can get round row-level security or rewrite the
+// audit trail.
 const db = createDbFromEnv("app", { max: 1 });
 try {
   const failures = await checkAppRole(db);

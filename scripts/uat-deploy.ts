@@ -8,9 +8,11 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } fro
 // reset-uat.yml with environment `uat`'s secrets and variables. It prints no secret.
 //
 //   node scripts/uat-deploy.ts migrate            bootstrap and migrate UAT's database (session pooler)
+//   node scripts/uat-deploy.ts app-role-check     as rabaed_app: RLS applies, the audit trail can't be rewritten (packages/db/src/check-app-role.ts)
 //   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again
 //   node scripts/uat-deploy.ts project <web|api|admin>   apply the project's settings and Sensitive variables
-//   node scripts/uat-deploy.ts bypass admin       print Admin's Protection Bypass for Automation secret (mask it first)
+//   node scripts/uat-deploy.ts bypass admin       print Admin's Protection Bypass for Automation secret while it has
+//                                                 Password Protection, else an empty line (mask it first)
 //
 // Connections are built as the Supabase gate builds them (packages/db/src/supabase-gate.ts):
 // every role logs in to Supabase's pooler as `<role>.<project ref>`; migrations and the demo
@@ -55,8 +57,30 @@ export interface UatDatabase {
   adminTransaction: string;
 }
 
-/** UAT's connections, from DATABASE_SUPERUSER_URL (the session pooler), the roles' passwords and SUPABASE_PROJECT_REF. */
+type Role = "MIGRATOR" | "APP" | "ADMIN";
+const roleName: Record<Role, string> = { MIGRATOR: MIGRATOR_ROLE, APP: APP_ROLE, ADMIN: ADMIN_ROLE };
+
+/**
+ * One role's connection to UAT's database: over the session pooler (`DATABASE_SUPERUSER_URL`'s
+ * host and port) or the transaction pooler (port 6543), with `DATABASE_<ROLE>_PASSWORD` only,
+ * so a step building one project's variables needs no other role's password.
+ */
+export function uatRoleUrl(env: NodeJS.ProcessEnv, role: Role, pooler: "session" | "transaction"): string {
+  const { superuser, database } = uatServer(env);
+  const url = new URL(loginUrl(withDatabaseName(superuser, database), roleName[role], required(env, `DATABASE_${role}_PASSWORD`)));
+  if (pooler === "transaction") url.port = TRANSACTION_POOLER_PORT;
+  return url.toString();
+}
+
+/** All of UAT's connections, from DATABASE_SUPERUSER_URL (the session pooler), the roles' passwords and SUPABASE_PROJECT_REF. */
 export function uatDatabase(env: NodeJS.ProcessEnv): UatDatabase {
+  const { superuser } = uatServer(env);
+  const session = { superuser, migrator: uatRoleUrl(env, "MIGRATOR", "session"), app: uatRoleUrl(env, "APP", "session"), admin: uatRoleUrl(env, "ADMIN", "session") };
+  return { session, appTransaction: uatRoleUrl(env, "APP", "transaction"), adminTransaction: uatRoleUrl(env, "ADMIN", "transaction") };
+}
+
+/** The checked superuser URL (Supabase's session pooler, this project) and UAT's database name. */
+function uatServer(env: NodeJS.ProcessEnv): { superuser: string; database: string } {
   const superuser = required(env, "DATABASE_SUPERUSER_URL");
   if (!URL.canParse(superuser)) throw new Error("DATABASE_SUPERUSER_URL must be a URL");
   const host = new URL(superuser);
@@ -66,14 +90,7 @@ export function uatDatabase(env: NodeJS.ProcessEnv): UatDatabase {
   const database = env.DATABASE_NAME || UAT_DATABASE;
   // The gate drops `*_gate` and seam 2 resets `*_test`: UAT's data must never be either.
   if (!/^[a-z_][a-z0-9_]*$/.test(database) || /_(gate|test)(_|$)/.test(database)) throw new Error("DATABASE_NAME must be a plain name, neither the gate's (*_gate) nor a test database (*_test)");
-  const role = (name: string, variable: "MIGRATOR" | "APP" | "ADMIN") => loginUrl(withDatabaseName(superuser, database), name, required(env, `DATABASE_${variable}_PASSWORD`));
-  const transaction = (url: string) => {
-    const u = new URL(url);
-    u.port = TRANSACTION_POOLER_PORT;
-    return u.toString();
-  };
-  const session = { superuser, migrator: role(MIGRATOR_ROLE, "MIGRATOR"), app: role(APP_ROLE, "APP"), admin: role(ADMIN_ROLE, "ADMIN") };
-  return { session, appTransaction: transaction(session.app), adminTransaction: transaction(session.admin) };
+  return { superuser, database };
 }
 
 /** The deploy's secrets a migration or demo command never needs. */
@@ -137,7 +154,7 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
     web: () => ({ API_URL: httpsUrl(env, "UAT_API_URL") }),
     api: () => ({
       ...functions,
-      DATABASE_APP_URL: uatDatabase(env).appTransaction,
+      DATABASE_APP_URL: uatRoleUrl(env, "APP", "transaction"),
       DATABASE_POOL_MAX: "2",
       SESSION_COOKIE_SECURE: "true",
       PROJECT_FILES_BUCKET: required(env, "PROJECT_FILES_BUCKET"),
@@ -148,7 +165,7 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
       ...mail(),
       CRON_SECRET: required(env, "CRON_SECRET"),
     }),
-    admin: () => ({ ...functions, DATABASE_ADMIN_URL: uatDatabase(env).adminTransaction, DATABASE_POOL_MAX: "2", SESSION_COOKIE_SECURE: "true", ...mail() }),
+    admin: () => ({ ...functions, DATABASE_ADMIN_URL: uatRoleUrl(env, "ADMIN", "transaction"), DATABASE_POOL_MAX: "2", SESSION_COOKIE_SECURE: "true", ...mail() }),
   };
   // Previews of web and the api run a branch's code against UAT (ADR 0026), as the gate
   // allows. Admin has none (vercel-preview-gate.ts), and nothing of its may reach one: it
@@ -201,13 +218,18 @@ type Bypasses = Record<string, { scope?: string }> | undefined;
 const automationSecret = (bypasses: Bypasses) => Object.entries(bypasses ?? {}).find(([, value]) => value.scope === "automation-bypass")?.[0];
 
 /**
- * The project's Protection Bypass for Automation secret, generated if it has none (Vercel
- * REST API, "Update Protection Bypass for Automation"). The smoke sends it to Admin as
- * `x-vercel-protection-bypass`, past Password Protection.
+ * While the project has Password Protection, its Protection Bypass for Automation secret,
+ * generated if it has none (Vercel REST API, "Update Protection Bypass for Automation");
+ * without protection, "". The smoke sends it to Admin as `x-vercel-protection-bypass`,
+ * past Password Protection, and then checks Admin refuses a request without it. It
+ * follows Vercel's state, not ADMIN_VERCEL_PASSWORD: an empty secret leaves an earlier
+ * protection in place.
  */
 export async function automationBypass(project: ProjectName, env: NodeJS.ProcessEnv, fetch: typeof globalThis.fetch = globalThis.fetch): Promise<string> {
   const id = projectId(project, env);
-  const found = automationSecret((await vercelCall(env, fetch, "GET", `/v9/projects/${encodeURIComponent(id)}`, `GET project ${id}`)).protectionBypass as Bypasses);
+  const current = await vercelCall(env, fetch, "GET", `/v9/projects/${encodeURIComponent(id)}`, `GET project ${id}`);
+  if (!current.passwordProtection) return "";
+  const found = automationSecret(current.protectionBypass as Bypasses);
   if (found) return found;
   // eslint-disable-next-line rabaed/no-avoid-terms -- `note` is the Vercel API's field: the bypass's label in Vercel's dashboard
   const made = await vercelCall(env, fetch, "PATCH", `/v1/projects/${encodeURIComponent(id)}/protection-bypass`, `a protection bypass for ${id}`, { generate: { note: "deploy-uat.yml smoke (RP-1043)" } });
@@ -230,6 +252,7 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
 async function main([command, argument]: string[]): Promise<void> {
   const env = process.env;
   if (command === "migrate") return run("pnpm", ["--filter", "@rabaed/db", "setup"], commandEnv(env));
+  if (command === "app-role-check") return run("pnpm", ["--filter", "@rabaed/db", "exec", "tsx", "src/check-app-role.ts"], commandEnv(env));
   if (command === "demo") {
     if (argument !== "ensure" && argument !== "reset") throw new Error("demo ensure|reset");
     return run("pnpm", ["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", argument], commandEnv(env));
@@ -241,7 +264,7 @@ async function main([command, argument]: string[]): Promise<void> {
     return console.log(`uat-deploy: ${argument}'s settings and variables applied`);
   }
   if (command === "bypass") return void process.stdout.write(`${await automationBypass(project(argument), env)}\n`);
-  throw new Error("Usage: node scripts/uat-deploy.ts migrate | demo ensure|reset | project <web|api|admin> | bypass admin");
+  throw new Error("Usage: node scripts/uat-deploy.ts migrate | app-role-check | demo ensure|reset | project <web|api|admin> | bypass admin");
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {

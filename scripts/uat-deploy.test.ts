@@ -184,8 +184,13 @@ describe("the three Vercel projects' environment variables", () => {
     }
   });
 
-  it("need only what the project itself gets (web's step has no mail or database secret)", () => {
+  // Each workflow step passes only its project's secrets: the api's never holds the
+  // bypass role's password, nor Admin's the app role's; neither holds the migrator's.
+  it("need only what the project itself gets", () => {
     expect(projectEnv("web", { UAT_API_URL: env.UAT_API_URL }, version).map((v) => v.key)).toEqual(["APP_VERSION", "API_URL"]);
+    const without = (...names: string[]) => Object.fromEntries(Object.entries(env).filter(([name]) => !names.includes(name)));
+    expect(projectEnv("api", without("DATABASE_ADMIN_PASSWORD", "DATABASE_MIGRATOR_PASSWORD"), version)).toEqual(projectEnv("api", env, version));
+    expect(projectEnv("admin", without("DATABASE_APP_PASSWORD", "DATABASE_MIGRATOR_PASSWORD"), version)).toEqual(projectEnv("admin", env, version));
   });
 
   it("refuse a missing value, naming it", () => {
@@ -241,16 +246,28 @@ describe("applyProject", () => {
 
 describe("automationBypass", () => {
   const secret = "x".repeat(32);
+  const protectedAdmin = { passwordProtection: { deploymentType: "all" } };
 
-  it("returns Admin's Protection Bypass for Automation secret", async () => {
-    const api = vercel(() => ({ status: 200, body: { id: "prj_admin", protectionBypass: { other: { scope: "integration-automation-bypass" }, [secret]: { scope: "automation-bypass", createdAt: 1 } } } }));
+  it("returns Admin's Protection Bypass for Automation secret while Admin has Password Protection", async () => {
+    const api = vercel(() => ({
+      status: 200,
+      body: { id: "prj_admin", ...protectedAdmin, protectionBypass: { other: { scope: "integration-automation-bypass" }, [secret]: { scope: "automation-bypass", createdAt: 1 } } },
+    }));
     expect(await automationBypass("admin", env, api.fetch)).toBe(secret);
     expect(api.calls.map((c) => `${c.method} ${c.url}`)).toEqual(["GET https://api.vercel.com/v9/projects/prj_admin?teamId=team_123"]);
   });
 
-  it("generates one when the project has none", async () => {
+  // The smoke follows Admin's protection as Vercel has it, not the secret: an empty
+  // ADMIN_VERCEL_PASSWORD leaves an earlier protection in place.
+  it("returns nothing while Admin has no Password Protection, so the smoke reaches it plainly", async () => {
+    const api = vercel(() => ({ status: 200, body: { id: "prj_admin", passwordProtection: null, protectionBypass: { [secret]: { scope: "automation-bypass" } } } }));
+    expect(await automationBypass("admin", env, api.fetch)).toBe("");
+    expect(api.calls).toHaveLength(1);
+  });
+
+  it("generates one when the protected project has none", async () => {
     const api = vercel((method) =>
-      method === "GET" ? { status: 200, body: { id: "prj_admin" } } : { status: 200, body: { protectionBypass: { [secret]: { scope: "automation-bypass", createdAt: 2 } } } },
+      method === "GET" ? { status: 200, body: { id: "prj_admin", ...protectedAdmin } } : { status: 200, body: { protectionBypass: { [secret]: { scope: "automation-bypass", createdAt: 2 } } } },
     );
     expect(await automationBypass("admin", env, api.fetch)).toBe(secret);
     expect(api.calls[1]).toMatchObject({ method: "PATCH", url: "https://api.vercel.com/v1/projects/prj_admin/protection-bypass?teamId=team_123", body: { generate: { note: "deploy-uat.yml smoke (RP-1043)" } } });
