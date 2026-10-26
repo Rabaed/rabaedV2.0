@@ -7,18 +7,20 @@
 #   3. smoke those deployments: the api (its version and database, visibility
 #      asked of the api itself, none of Admin on its address) and Admin (through
 #      its protection bypass while it has Password Protection); a failure stops
-#      here, with production unchanged; then make them live (`vercel promote`);
+#      here, with production unchanged, before web; then make them live
+#      (`vercel promote`);
 #   4. the same for web, with the Thmanyah fonts fetched on the runner: deploy,
 #      smoke (visibility through web, the fonts, no Admin on the customer
-#      address), make live;
+#      address), make live; a failure here leaves the new api and Admin live
+#      behind the old web (ADR 0026's order: api and Admin, then web);
 #   5. one authorised call to the outbox cron on the live api.
 # Vercel's own Git deploy of main is off (`git.deploymentEnabled` in each
 # vercel.json) and the preview gate skips anything but a preview
 # (scripts/vercel-preview-gate.ts), so this is the only way to production: a
 # migration always lands before the code that needs it. Pull requests without a
 # migration get Vercel previews of web and the api (never Admin's), behind Vercel
-# Authentication. A migration is not rolled back; code that fails its smoke never
-# goes live.
+# Authentication. A migration is not rolled back; a deployment that fails its own
+# smoke never goes live.
 #
 # The secrets live only in the `uat` environment, and each step gets only those
 # it uses. Builds run on the runner (`vercel build`, then `vercel deploy
@@ -101,6 +103,17 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
+      # Again here: this job may have waited in the group, or be a re-run of its own.
+      - name: This commit is still main's head
+        env:
+          REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          head=$(git ls-remote "$REPOSITORY" refs/heads/main | cut -f1)
+          if [[ "$head" != "$VERSION" ]]; then
+            echo "::error::main is at ${head:0:7}; ${VERSION:0:7} is not deployed over it (its own run deploys it)."
+            exit 1
+          fi
+
       # Names only: a missing value stops the deploy before anything changes.
       # ADMIN_VERCEL_PASSWORD is optional while the owner decides on Admin's protection.
       - name: The uat environment has what the deploy needs
@@ -135,33 +148,20 @@ jobs:
       # session advisory lock. Role passwords are set only when a role is created
       # (DATABASE_ROLE_PASSWORDS=on-create, set by the script): Supavisor caches each
       # role's SCRAM secret, so re-setting them every deploy would lock the apps out.
-      - name: Migrate UAT's database
-        env:
-          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
-          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
-          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
-          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
-        run: node scripts/uat-deploy.ts migrate
-
-      # As rabaed_app: it cannot bypass row-level security or rewrite the audit
-      # trail (packages/db/src/app-role-check.ts), whatever the migrations did.
-      - name: App role check
-        env:
-          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
-          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
-          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
-          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
-        run: node scripts/uat-deploy.ts app-role-check
-
-      # UAT keeps its data between deploys; Reset UAT seeds it again by hand.
-      - name: Seed the demo unless it is there
+      # Then, as rabaed_app: it cannot bypass row-level security or rewrite the audit
+      # trail (packages/db/src/app-role-check.ts), whatever the migrations did. Then
+      # the demo, unless it is there: UAT keeps its data between deploys.
+      - name: Migrate UAT's database, check the app role, seed the demo if missing
         env:
           DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
           DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
           DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
           DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
-        run: node scripts/uat-deploy.ts demo ensure
+        run: |
+          node scripts/uat-deploy.ts migrate
+          node scripts/uat-deploy.ts app-role-check
+          node scripts/uat-deploy.ts demo ensure
 
       - name: Vercel CLI
         run: npm install --global vercel@63.1.2
@@ -192,7 +192,9 @@ jobs:
           rm -rf .vercel
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           vercel build --prod --token="$VERCEL_TOKEN"
-          echo "url=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")" >> "$GITHUB_OUTPUT"
+          # Its own line, so a failed deploy fails the step (bash -e).
+          url=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
       # Read-only key, read on the runner only: never a Vercel variable. Into the
       # git-ignored packages/ui/fonts/thmanyah/, which Admin's and web's builds read.
@@ -212,6 +214,7 @@ jobs:
           if compgen -G "packages/ui/fonts/thmanyah/thmanyahsans-*.woff2" >/dev/null; then
             echo "arabic_font=Thmanyah Sans" >> "$GITHUB_OUTPUT"
           else
+            echo "::warning::No Thmanyah fonts fetched (BUILD_ASSETS_BUCKET and the FONTS_* key in uat); Arabic falls back to IBM Plex Sans Arabic."
             echo "arabic_font=IBM Plex Sans Arabic" >> "$GITHUB_OUTPUT"
           fi
 
@@ -236,7 +239,8 @@ jobs:
           rm -rf .vercel
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           vercel build --prod --token="$VERCEL_TOKEN"
-          echo "url=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")" >> "$GITHUB_OUTPUT"
+          url=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
       # Seam 1's visibility check against the new api deployment, before anything
       # goes live. While Admin has Password Protection, the smoke passes it with
@@ -276,7 +280,9 @@ jobs:
           rm -rf .vercel
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           vercel build --prod --token="$VERCEL_TOKEN"
-          echo "url=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")" >> "$GITHUB_OUTPUT"
+          # Its own line, so a failed deploy fails the step (bash -e).
+          url=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
           rm -rf .vercel packages/ui/fonts/thmanyah
 
       # As a browser would, on the new web deployment (which calls the live api):
