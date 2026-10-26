@@ -7,9 +7,9 @@ import { objectStoreFromEnv, type ObjectStoreEnvNames, type ObjectStoreSettings 
 // The licensed Thmanyah Sans files for the UAT web and Admin builds (ADR 0026,
 // RP-1041). They sit in the build assets bucket on R2, which has no public URL
 // (no r2.dev, no custom domain), so they are private by construction. The UAT
-// deploy Action fetches them on its runner with a read-only key before
-// `vercel build` (RP-1043); no Vercel project ever holds that key, so a PR
-// preview Vercel builds itself keeps the fallback. They are written only to the
+// deploy Action is to fetch them on its runner with a read-only key before
+// `vercel build` (RP-1043 builds that step); no Vercel project ever holds that
+// key, so a PR preview Vercel builds itself keeps the fallback. They are written only to the
 // git-ignored folder prepareArabicFont reads (packages/ui/src/fonts/arabic-font.ts).
 // The licence forbids redistributing them (CLAUDE.md): never committed. Without
 // them Arabic falls back to IBM Plex Sans Arabic, as in deploy-dev.yml. It
@@ -26,7 +26,6 @@ const thmanyahSansFile = /^thmanyahsans-(light|regular|medium|bold|black)\.woff2
 
 /** The build assets bucket and its read-only fonts key: only the UAT deploy Action's runner has them, never a Vercel project. */
 const FONTS_ENV: ObjectStoreEnvNames = { bucket: "BUILD_ASSETS_BUCKET", accessKeyId: "FONTS_ACCESS_KEY_ID", secretAccessKey: "FONTS_SECRET_ACCESS_KEY" };
-const FONTS_ENV_NAMES = [FONTS_ENV.bucket, FONTS_ENV.accessKeyId, FONTS_ENV.secretAccessKey];
 
 /**
  * The private build assets bucket with the read-only fonts key, or null when
@@ -34,7 +33,7 @@ const FONTS_ENV_NAMES = [FONTS_ENV.bucket, FONTS_ENV.accessKeyId, FONTS_ENV.secr
  * Never the files bucket's key.
  */
 export function fontsBucketFromEnv(source: NodeJS.ProcessEnv = process.env): ObjectStoreSettings | null {
-  if (!source.FILE_STORE_ENDPOINT || !FONTS_ENV_NAMES.every((name) => source[name])) return null;
+  if (!source.FILE_STORE_ENDPOINT || !Object.values(FONTS_ENV).every((name) => source[name])) return null;
   return objectStoreFromEnv(source, FONTS_ENV);
 }
 

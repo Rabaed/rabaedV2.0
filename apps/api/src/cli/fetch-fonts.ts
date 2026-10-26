@@ -1,6 +1,6 @@
 // Fetches the licensed Thmanyah fonts for the UAT web and Admin builds (RP-1041, ADR 0026), into the
-// git-ignored packages/ui/fonts/thmanyah/ that prepareArabicFont reads. The UAT deploy Action runs it
-// on its runner before `vercel build` (RP-1043); no Vercel project runs it or holds its key:
+// git-ignored packages/ui/fonts/thmanyah/ that prepareArabicFont reads. The UAT deploy Action is to run it
+// on its runner before `vercel build` (RP-1043 builds that); no Vercel project runs it or holds its key:
 //   pnpm --filter @rabaed/api fonts:fetch      fetch; warn and keep IBM Plex when there are none
 // Reads FILE_STORE_ENDPOINT, FILE_STORE_REGION (auto), BUILD_ASSETS_BUCKET and the read-only
 // FONTS_ACCESS_KEY_ID / FONTS_SECRET_ACCESS_KEY. Without them it warns and leaves the fallback.
