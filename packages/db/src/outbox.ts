@@ -185,6 +185,15 @@ export interface ProcessOutboxOptions {
   retryDelayMs?: (attempts: number) => number;
   /** Rows to take in this run at most. */
   limit?: number;
+  /**
+   * The kinds this run takes (RP-1039); rows of any other kind are left as they are,
+   * for another consumer. Every kind when left out; none when empty.
+   */
+  kinds?: readonly string[];
+  /** No row is taken once this many milliseconds have passed since the run began (a cron pass's budget); a row being run is finished. */
+  timeBudgetMs?: number;
+  /** The current time in milliseconds, for `timeBudgetMs`; tests move it. */
+  nowMs?: () => number;
 }
 
 export interface OutboxRun {
@@ -210,8 +219,11 @@ const backoff = (attempts: number) => Math.min(30_000 * 2 ** (attempts - 1), 3_6
 /** Processes the due outbox rows, one transaction each. `db` connects as the app role, with no Member set. */
 export async function processOutbox(db: Db, options: ProcessOutboxOptions = {}): Promise<OutboxRun> {
   const handlers = { ...defaultHandlers, ...options.handlers };
-  const { maxAttempts = 8, retryDelayMs = backoff, limit = 100 } = options;
+  const { maxAttempts = 8, retryDelayMs = backoff, limit = 100, kinds, timeBudgetMs, nowMs = Date.now } = options;
   const run: OutboxRun = { processed: 0, failed: 0, dead: 0 };
+  const startedAt = nowMs();
+  // Null takes every kind (app.take_outbox_row).
+  const kindList = kinds ? [...kinds] : null;
 
   // How long each attempt holds its row back, by attempt number: once taken, the row is
   // due again after this unless the attempt succeeds, or fails and says when.
@@ -226,11 +238,12 @@ export async function processOutbox(db: Db, options: ProcessOutboxOptions = {}):
   };
 
   for (let i = 0; i < limit; i++) {
+    if (timeBudgetMs !== undefined && nowMs() - startedAt >= timeBudgetMs) break;
     // The attempt is counted, and committed, before the handler runs: a worker that
     // dies in the handler has still spent it (RP-958).
     const taken = await db.transaction().execute(async (trx) => {
       const { rows } = await sql<OutboxRow & { dead: boolean }>`
-        select * from app.take_outbox_row(${maxAttempts}::integer, ${retryAfterMs}::integer[])
+        select * from app.take_outbox_row(${maxAttempts}::integer, ${retryAfterMs}::integer[], ${kindList}::text[])
       `.execute(trx);
       return rows[0];
     });

@@ -8,28 +8,32 @@
 #   - Supabase's Data API is off.
 # Run it by hand on main (Actions > Supabase gate > Run workflow). The secrets
 # live only in the `uat` environment, so nothing runs against Supabase from a
-# laptop. Never run it while a UAT deploy runs: roles are cluster-wide, and the
-# bootstrap resets rabaed_migrator's, rabaed_app's and rabaed_admin's passwords
-# to the `uat` secrets, and seam 2 briefly changes them, so UAT's apps may fail
-# to log in while it runs. If a run stops midway and UAT can't log in, run the
-# gate again: its bootstrap sets the passwords back.
+# laptop. It never runs beside a UAT deploy or reset (one concurrency group,
+# uat-database): roles are cluster-wide, and the gate and its seam 2 create and
+# drop roles and databases on UAT's server. Its bootstrap sets rabaed_migrator's,
+# rabaed_app's and rabaed_admin's passwords only when it creates them (on-create:
+# Supavisor caches each role's SCRAM secret), so it never changes UAT's logins;
+# a role whose password must change takes a one-off ALTER ROLE as postgres
+# (RP-1043 comment 14538).
 name: Supabase gate
 on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: supabase-gate
-  cancel-in-progress: false
 
 jobs:
   gate:
     name: Supabase gate (environment uat)
+    # Shared with Deploy UAT and Reset UAT. GitHub keeps one pending run per group:
+    # a newer one cancels a waiting one, whichever of the three it is.
+    concurrency:
+      group: uat-database
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: uat
     # The runner is in the US and Supabase in Frankfurt: about 0.45 s a query,
-    # so seam 2 alone takes about 4 hours (run 40079800929 hit 45 minutes after
-    # 17 of its 85 files). GitHub stops any job at 360 minutes.
+    # so a full run takes about 1 hour 40 minutes (run 40079800929 hit 45 minutes
+    # after 17 of seam 2's 85 files). GitHub stops any job at 360 minutes.
     timeout-minutes: 330
     # Seam 2's global setup seeds the demo, whose MAR carries a file: the same
     # local file store as ci.yml's seam 2 job, with its throwaway keys, not R2.

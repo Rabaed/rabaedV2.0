@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { z } from "zod";
 import { filesUnder, projectFilesFromEnv, s3Client, s3RecordFiles } from "./files.ts";
@@ -18,6 +20,9 @@ import { localTimestampAuthority, rfc3161TimestampAuthority, type TimestampAutho
 // - `local` (development and CI): a fresh in-memory test key, the timestamp
 //   stand-in and the free fallback font, so nothing calls AWS. Refused outright
 //   on ECS (the worker does not start), so AWS never seals with a test key.
+//   RECORD_FONTS_DIR (the UAT Records image, ADR 0026) names a folder of
+//   Thmanyah files baked in at build time from the private R2 bucket; unset or
+//   empty, the fallback font.
 // Unset, the worker starts but every record job fails, saying so.
 
 /** Where Rabaed's sealing certificate (PEM, its chain after it) is kept in the build assets bucket. */
@@ -34,7 +39,14 @@ const env = z.object({
   PDF_SEALING_KEY_ID: z.string().min(1).optional(),
   TIMESTAMP_AUTHORITY_URL: z.url().optional(),
   CHROMIUM_PATH: z.string().min(1).optional(),
+  RECORD_FONTS_DIR: z.string().min(1).optional(),
 });
+
+/** Every file in dir by name (thmanyahFonts keeps the Thmanyah ones), or none when it isn't there. */
+function filesIn(dir: string): Map<string, Uint8Array> {
+  if (!existsSync(dir)) return new Map();
+  return new Map(readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => [e.name, readFileSync(join(dir, e.name))]));
+}
 
 /** Every PEM certificate in `pem`, in order, as DER. */
 function certificatesOf(pem: string): Uint8Array[] {
@@ -81,7 +93,7 @@ export function recordSealingFromEnv(source: NodeJS.ProcessEnv = process.env): P
     return rfc3161TimestampAuthority(settings.TIMESTAMP_AUTHORITY_URL);
   });
   const fonts = once<RecordFonts>(async () => {
-    if (mode === "local") return fallbackFonts();
+    if (mode === "local") return settings.RECORD_FONTS_DIR ? thmanyahFonts(filesIn(settings.RECORD_FONTS_DIR)) : fallbackFonts();
     if (mode !== "kms") throw unset();
     const { bucket, client } = assets();
     return thmanyahFonts(await filesUnder(client, bucket, THMANYAH_PREFIX));

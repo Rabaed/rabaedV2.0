@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./jobs": "./src/jobs.ts",
     "./record": "./src/record/index.ts",
     "./snag-report": "./src/snag-report/index.ts"
   },

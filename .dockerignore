@@ -14,7 +14,7 @@ secrets/
 **/*.tsbuildinfo
 *.log
 
-# Licensed fonts reach only the web build, through its own build context (Dockerfile).
+# Licensed fonts reach only the builds given them, through their own build context (Dockerfile fonts stage).
 packages/ui/fonts/
 packages/ui/src/styles/arabic-font.css
 
