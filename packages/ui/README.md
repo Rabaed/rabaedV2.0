@@ -68,7 +68,7 @@ Three layers, all in `src/tokens/`:
 2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4`, `shadow-colour` (the tint of every shadow) and so on, mapped to palette colours. The only layer a theme changes. Four themes (owner decision 2026-10-11): Grey and Warm, each Light and Dark (`grey-light`, `grey-dark`, `warm-light`, `warm-dark`), from the kit's exact sets; `<html data-theme="grey|warm" data-mode="light|dark|system">` picks one, and Mode `system` follows the device (`prefers-color-scheme`). No Theme on the page is Grey, Light. A translucent role (a dark tint, the sidebar's hover) is `#rrggbbaa`; `tokens.test.ts` checks every text and control pair in all four, laid on what it sits on. A fill (`primary`, `danger`) carries white text; text in a hue reads its `-fg` role (`text-brand-fg`, `text-danger-fg`). Stories take a theme with `parameters: themed("warm-dark")` (`src/storybook/theme.ts`); `Shell/Themes` shows the shell around Home, the Kanban, the List and Settings in all four.
 3. **Component usage**: components use Tailwind classes for semantic roles (`bg-primary`, `text-muted`). The Tailwind theme exposes semantic roles only, so the base palette is unreachable from a class.
 
-`src/styles/tokens.css` is generated. After editing `src/tokens/`, run `pnpm --filter @rabaed/ui tokens`; a unit test fails if you forget. Another unit test keeps every text/background pair at WCAG AA contrast.
+`src/styles/tokens.css` is generated. After editing `src/tokens/`, run `pnpm --filter @rabaed/ui run tokens`; a unit test fails if you forget. Another unit test keeps every text/background pair at WCAG AA contrast.
 
 ## Fonts
 

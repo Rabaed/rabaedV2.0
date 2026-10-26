@@ -97,7 +97,7 @@ describe("dockerRunArgs", () => {
     const script = args.at(-1) ?? "";
     expect(args.slice(-3, -1)).toEqual(["bash", "-c"]);
     expect(script).toContain("pnpm install --frozen-lockfile");
-    expect(script).toMatch(/pnpm --filter @rabaed\/ui test:stories '--update=new'$/);
+    expect(script).toMatch(/pnpm --filter @rabaed\/ui run test:stories '--update=new'$/);
   });
 
   it("quotes an argument that has a quote or a space", () => {

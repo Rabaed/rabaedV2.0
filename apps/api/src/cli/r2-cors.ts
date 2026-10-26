@@ -1,7 +1,7 @@
 // Optional (RP-1041, ADR 0026): sets the UAT files bucket's CORS on Cloudflare R2 to the UAT web
 // origin only. The usual way is a one-off owner step in the Cloudflare dashboard (docs/tech-stack.md,
 // Files row; the exact JSON is in PR #418's body); this does the same with an R2 admin key:
-//   pnpm --filter @rabaed/api r2:cors --origin https://<uat web host>
+//   pnpm --filter @rabaed/api run r2:cors --origin https://<uat web host>
 // Reads PROJECT_FILES_BUCKET, FILE_STORE_ENDPOINT, FILE_STORE_REGION (auto) and the admin key,
 // R2_ADMIN_ACCESS_KEY_ID and R2_ADMIN_SECRET_ACCESS_KEY: never the app's FILE_STORE_* key (Object
 // Read & Write only), and the admin key is never given to an app or a Vercel project. Prints the

@@ -82,7 +82,7 @@ export interface RunOptions {
 /** The arguments for `docker run`. */
 export function dockerRunArgs({ root, image, workspaces, vitestArgs }: RunOptions): string[] {
   const mounts = [[root, "/work"], ...[rootFolder, ...workspaces].map((folder) => [volumeName(root, folder), `/work/${folder === rootFolder ? "" : `${folder}/`}node_modules`])];
-  const script = ["apt-get update -qq && apt-get install -y -qq fonts-dejavu-core", "corepack enable","pnpm install --frozen-lockfile", ["pnpm --filter @rabaed/ui test:stories", ...vitestArgs.map(shellQuote)].join(" ")].join(" && ");
+  const script = ["apt-get update -qq && apt-get install -y -qq fonts-dejavu-core", "corepack enable","pnpm install --frozen-lockfile", ["pnpm --filter @rabaed/ui run test:stories", ...vitestArgs.map(shellQuote)].join(" ")].join(" && ");
   return [
     "run",
     "--rm",
