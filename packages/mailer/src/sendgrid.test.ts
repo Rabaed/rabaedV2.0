@@ -73,6 +73,13 @@ describe("sendgridTransport", () => {
     expect(error.message).not.toContain(apiKey);
   });
 
+  it("gives up on a send SendGrid never answers, so a cron pass ends inside its time (RP-1039)", async () => {
+    // Answers only when the request is aborted, as fetch does.
+    const hanging = ((_url: string | URL | Request, init?: RequestInit) =>
+      new Promise((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason)))) as typeof globalThis.fetch;
+    await expect(sendgridTransport({ apiKey, fetch: hanging, timeoutMs: 20 })(email)).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
   it("does not echo the key when SendGrid's answer contains it", async () => {
     const sendgrid = stubSendGrid(401, `{"errors":[{"message":"bad key ${apiKey}"}]}`);
     await expect(sendgridTransport({ apiKey, fetch: sendgrid.fetch })(email)).rejects.toThrow(

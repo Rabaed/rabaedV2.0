@@ -96,7 +96,7 @@ Dev, demo and UAT run on Vercel with demo data only, so builders get a link to e
 |---|---|
 | Apps | Three Vercel projects in Frankfurt: web, api (Fastify unchanged) and Admin (alone holds the bypass role) |
 | Database | Supabase in Frankfurt as plain PostgreSQL 16: Data API off, no Supabase Auth or Storage, no anon or service keys |
-| Background work | Vercel Cron delivers the outbox; Documental Records run on an always-on container in Frankfurt with a UAT test signer |
+| Background work | Vercel Cron delivers the outbox (RP-1039, below); Documental Records run on an always-on container in Frankfurt with a UAT test signer |
 | Files | Cloudflare R2, through the same S3 client as local RustFS: `FILE_STORE_ENDPOINT` is R2's S3 address and `FILE_STORE_REGION=auto`; checksums only where an operation requires one, so a browser's PUT to a signed URL works (RP-1041). Only the api signs URLs, for 5 minutes; keys stay Project-prefixed (ADR 0007). The app never creates the bucket or sets its CORS (`ensureLocalBucket` acts only on a store on this machine): the UAT workflow sets CORS to the UAT web origin only, PUT and GET, `content-type`, 10 minutes (`pnpm --filter @rabaed/api r2:cors --origin <url>`, refuses `*`) |
 | Fonts | Thmanyah Sans sits in a private R2 bucket (`BUILD_ASSETS_BUCKET`), read at build time with a read-only key (`FONTS_ACCESS_KEY_ID`, `FONTS_SECRET_ACCESS_KEY`) into the git-ignored `packages/ui/fonts/thmanyah/` before the web and Admin builds (`pnpm --filter @rabaed/api fonts:fetch`; `--check-private [--public-url <url>]` also fails unless an unsigned GET of a font is refused at R2's S3 address and at each public address named: the S3 address alone refuses unsigned requests even for a public bucket). The Records image takes the same folder as its `fonts` build context (Dockerfile) and, with `RECORD_FONTS_DIR=/opt/record-fonts/thmanyah`, prints Records in Thmanyah; that image goes to a private registry only (the licence). None there: a warning, and IBM Plex Sans Arabic |
 | Email | SendGrid, tracking off |
@@ -140,13 +140,16 @@ All three: `nodeVersion: "24.x"`, `sourceFilesOutsideRootDirectory: true`, `serv
 | `FILE_STORE_ENDPOINT` | build | ✓ | build | `uat` variable: R2's S3 address |
 | `FILE_STORE_ACCESS_KEY_ID`, `FILE_STORE_SECRET_ACCESS_KEY` | | ✓ | | _uat_ (R2 read-write key) |
 | `FILE_STORE_REGION` | `auto` (build) | `auto` | `auto` (build) | R2's region (RP-1041); never `AWS_REGION`, which Vercel sets to its own |
-| `WEB_URL` | | | ✓ | web's production URL: invitation links |
-| `MAIL_FROM` | | | ✓ | `uat` variable |
-| `SENDGRID_API_KEY` | | | ✓ | _uat_ (Mail Send only); no `MAIL_CATCHER_URL` or `MAIL_SES_CONFIGURATION_SET` beside it |
+| `WEB_URL` | | ✓ | ✓ | web's production URL: invitation links (Admin), and the links in notification emails, digests and Step Age reports (the api's cron pass, RP-1039) |
+| `MAIL_FROM` | | ✓ | ✓ | `uat` variable |
+| `SENDGRID_API_KEY` | | ✓ | ✓ | _uat_ (Mail Send only); no `MAIL_CATCHER_URL` or `MAIL_SES_CONFIGURATION_SET` beside it |
+| `CRON_SECRET` | | ✓ | | _uat_: random, 16 characters or more (a shorter one counts as none); Vercel Cron sends it as `Authorization: Bearer …` (RP-1039) |
 | `FONTS_ACCESS_KEY_ID`, `FONTS_SECRET_ACCESS_KEY` | build | | build | _uat_ (R2 read-only): web's and Admin's build commands run `fonts:fetch` first. A Vercel variable reaches the functions too; this key reads only the fonts bucket |
 | `BUILD_ASSETS_BUCKET` | build | | build | `uat` variable |
 
-`CRON_SECRET` goes to the project that serves the outbox delivery (RP-1039). Never in any project: `DATABASE_SUPERUSER_URL`, `DATABASE_MIGRATOR_PASSWORD` (the deploy's migrate step only), `VERCEL_TOKEN`, Supabase's keys.
+**The outbox on Vercel (RP-1039).** There is no always-on worker: Vercel Cron calls `GET /internal/cron/outbox` on the api **every minute** (`crons` in `apps/api/vercel.json`, `* * * * *`). Vercel runs crons on production deployments only, and a schedule more often than once a day needs the **Pro plan** (Hobby allows once a day, within the hour, and refuses the deploy otherwise; Vercel docs, Cron Jobs › Usage & Pricing, 2026-07). Each call runs one pass (`apps/api/src/cron/outbox-cron.ts`): the scheduled jobs that are due (the daily digest, the weekly Step Age report, the import clean-up; each run claimed in the database, so a duplicate or late call runs nothing twice), then one `processOutbox` run of the kinds the api delivers, `notification`, `email`, `digest`, `step_age_report` and `record_ready`, at most 100 rows and no new row after 40 s, so it ends inside the function's 60 s (a SendGrid send gives up after 10 s and its row is retried). The Documental Record kinds (`documental_record`, `documental_record_reproduce`, `working_copy`, `snag_report`) are never taken there: they stay due, attempts unspent, for the Records container (RP-1042, parked). Two overlapping passes never take one row twice (`app.take_outbox_row` skips locked rows), and Vercel does not retry a failed call: the next minute's pass picks up. The route refuses with 401, running nothing, any call without the right bearer (compared in constant time, never logged), and every call when `CRON_SECRET` is unset; it answers with counts only. The emails are re-checked against what the recipient may see at send time, as on AWS. Locally the worker's loop delivers every kind, as before.
+
+Never in any project: `DATABASE_SUPERUSER_URL`, `DATABASE_MIGRATOR_PASSWORD` (the deploy's migrate step only), `VERCEL_TOKEN`, Supabase's keys.
 
 ## CI/CD: GitHub Actions
 

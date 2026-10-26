@@ -8,9 +8,10 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,
-      "includeFiles": "{src/**/*.ts,../../packages/auth/src/**/*.ts,../../packages/db/src/**/*.ts,../../packages/domain/src/**/*.ts}"
+      "includeFiles": "{src/**/*.ts,../worker/src/jobs.ts,../../packages/auth/src/**/*.ts,../../packages/db/src/**/*.ts,../../packages/domain/src/**/*.ts,../../packages/mailer/src/**/*.ts}"
     }
   },
+  "crons": [{ "path": "/internal/cron/outbox", "schedule": "* * * * *" }],
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "headers": [{ "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }],
   "git": { "deploymentEnabled": { "main": false } }

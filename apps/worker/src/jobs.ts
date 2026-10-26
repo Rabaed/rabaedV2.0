@@ -11,7 +11,8 @@ import {
 import { notificationDigestMessage, notificationMessage, stepAgeReportMessage, type Mailer } from "@rabaed/mailer";
 
 // What the worker does besides delivering in-app notifications: its scheduled
-// jobs, and the outbox handlers that send what they and delivery queue.
+// jobs, and the outbox handlers that send what they and delivery queue. On
+// Vercel the api's cron pass runs these too (RP-1039, apps/api/src/cron/outbox-cron.ts).
 //
 // To add a scheduled job: give it a schedule in @rabaed/domain (schedule.ts), a
 // ScheduledJob (@rabaed/db scheduled-jobs.ts) whose `run` writes outbox rows of

@@ -9,6 +9,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import type { ApiConfig } from "./config.ts";
+import { outboxCronRoutes, type OutboxCron } from "./cron/outbox-cron.ts";
 import { noFileStore, type FileStore } from "./documents/file-store.ts";
 import { HttpError, notFound, notSignedIn } from "./http-error.ts";
 import { resolveSession, type Principal, type Session } from "./identity/sessions.ts";
@@ -79,6 +80,8 @@ export interface AppOptions {
   logger?: boolean | "errors";
   /** Sees every route as it is registered; test/sign-in-first.test.ts lists them this way. */
   onRoute?: (route: RouteOptions) => void;
+  /** The outbox pass Vercel Cron calls (RP-1039), and its secret; left out, the route refuses every call (locally the worker delivers). */
+  cron?: OutboxCron;
 }
 
 /** What route plugins get from the app. */
@@ -100,6 +103,7 @@ export async function buildApp({
   now = () => new Date(),
   logger = true,
   onRoute,
+  cron,
 }: AppOptions): Promise<FastifyInstance> {
   await dummyHash();
   const app = Fastify({
@@ -165,6 +169,7 @@ export async function buildApp({
   };
 
   await app.register(healthRoutes(context));
+  await app.register(outboxCronRoutes(cron));
   await app.register(sessionRoutes(context));
   await app.register(companyRoutes(context));
   await app.register(memberRoutes(context));
