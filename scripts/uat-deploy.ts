@@ -112,30 +112,30 @@ export function commandEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   };
 }
 
-/** The project's settings, for PATCH /v9/projects/{id}; the rest is in its vercel.json. */
+/**
+ * The project's settings, for PATCH /v9/projects/{id}, in the order `applyProject` sends
+ * them, one per request; the rest is in its vercel.json.
+ */
 export function projectSettings(project: ProjectName, env: NodeJS.ProcessEnv): Record<string, unknown> {
-  const common = {
+  // Run in the Root Directory, so the path climbs to the repository's. The gate builds
+  // no preview of Admin (it holds the bypass role).
+  const gate = `node ../../scripts/vercel-preview-gate.ts${project === "admin" ? " admin" : ""}`;
+  const settings: Record<string, unknown> = {
     nodeVersion: "24.x",
     sourceFilesOutsideRootDirectory: true,
+    rootDirectory: `apps/${project}`,
+    framework: project === "web" ? "nextjs" : null,
+    commandForIgnoringBuildStep: gate,
     serverlessFunctionRegion: "fra1",
     // Vercel Authentication on previews (ADR 0026).
     ssoProtection: { deploymentType: "preview" },
-    // Run in the Root Directory, so the path climbs to the repository's.
-    commandForIgnoringBuildStep: "node ../../scripts/vercel-preview-gate.ts",
   };
-  if (project === "web") return { ...common, rootDirectory: "apps/web", framework: "nextjs" };
-  if (project === "api") return { ...common, rootDirectory: "apps/api", framework: null };
-  // The gate builds no preview of Admin (it holds the bypass role). Password Protection
-  // (`all`: the production *.vercel.app address too) awaits the owner's yes or no: with
-  // no ADMIN_VERCEL_PASSWORD the setting is left as it is, neither applied nor removed.
+  // Admin's Password Protection (`all`: the production *.vercel.app address too) awaits
+  // the owner's yes or no: with no ADMIN_VERCEL_PASSWORD the setting is left as it is,
+  // neither applied nor removed.
   const password = env.ADMIN_VERCEL_PASSWORD;
-  return {
-    ...common,
-    commandForIgnoringBuildStep: `${common.commandForIgnoringBuildStep} admin`,
-    rootDirectory: "apps/admin",
-    framework: null,
-    ...(password ? { passwordProtection: { deploymentType: "all", password } } : {}),
-  };
+  if (project === "admin" && password) settings.passwordProtection = { deploymentType: "all", password };
+  return settings;
 }
 
 export interface ProjectVariable {
@@ -182,8 +182,10 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
 
 const VERCEL_API = "https://api.vercel.com";
 
-/** A Vercel REST API call for the team; fails on a refusal with Vercel's code and message only. */
-async function vercelCall(env: NodeJS.ProcessEnv, fetch: typeof globalThis.fetch, method: string, path: string, what: string, body?: unknown, query: Record<string, string> = {}) {
+type VercelAnswer = { error?: { code?: string; message?: string } } & Record<string, unknown>;
+
+/** A Vercel REST API request for the team: its status and JSON answer, refused or not. */
+async function vercelRequest(env: NodeJS.ProcessEnv, fetch: typeof globalThis.fetch, method: string, path: string, body?: unknown, query: Record<string, string> = {}) {
   const url = new URL(path, VERCEL_API);
   for (const [name, value] of Object.entries({ ...query, teamId: required(env, "VERCEL_ORG_ID") })) url.searchParams.set(name, value);
   const res = await fetch(url, {
@@ -192,26 +194,64 @@ async function vercelCall(env: NodeJS.ProcessEnv, fetch: typeof globalThis.fetch
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
   });
-  const answer = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } } & Record<string, unknown>;
-  if (!res.ok) throw new Error(`Vercel refused ${what}: ${res.status} ${answer.error?.code ?? ""}: ${answer.error?.message ?? ""}`.replace(/ +:/, ":"));
+  const answer = (await res.json().catch(() => ({}))) as VercelAnswer;
+  return { ok: res.ok, answer, refusal: refusalText(String(res.status), answer.error) };
+}
+
+/** Vercel's refusal as "<status> <code>: <message>", leaving out what it did not say. */
+const refusalText = (status: string, error: { code?: string; message?: string } | undefined) =>
+  [status, error?.code].filter(Boolean).join(" ") + (error?.message ? `: ${error.message}` : "");
+
+/** A Vercel REST API call for the team; fails on a refusal with Vercel's code and message only. */
+async function vercelCall(env: NodeJS.ProcessEnv, fetch: typeof globalThis.fetch, method: string, path: string, what: string, body?: unknown, query: Record<string, string> = {}) {
+  const { ok, answer, refusal } = await vercelRequest(env, fetch, method, path, body, query);
+  if (!ok) throw new Error(`Vercel refused ${what}: ${refusal}`);
   return answer;
 }
 
 const projectId = (project: ProjectName, env: NodeJS.ProcessEnv) => required(env, `VERCEL_${project.toUpperCase()}_PROJECT_ID`);
 
-/** Applies the project's settings, then upserts its variables. */
-export async function applyProject(project: ProjectName, env: NodeJS.ProcessEnv, version: string, fetch: typeof globalThis.fetch = globalThis.fetch): Promise<void> {
+/**
+ * Applies the project's settings one per PATCH, so a setting Vercel refuses names itself
+ * and the others still apply (Deploy UAT run 40395859131 got one 403 for them all), then
+ * upserts its variables. Logs one line per setting; after trying every one, fails naming
+ * each refusal with Vercel's status, code and message, never a value. The variables wait
+ * for every setting: with ssoProtection refused, previews would hold the secrets openly.
+ */
+export async function applyProject(
+  project: ProjectName,
+  env: NodeJS.ProcessEnv,
+  version: string,
+  fetch: typeof globalThis.fetch = globalThis.fetch,
+  log: (line: string) => void = console.log,
+): Promise<void> {
   const id = projectId(project, env);
   const settings = projectSettings(project, env);
   const variables = projectEnv(project, env, version);
-  await vercelCall(env, fetch, "PATCH", `/v9/projects/${encodeURIComponent(id)}`, `PATCH project ${id}`, settings);
-  const saved = (await vercelCall(env, fetch, "POST", `/v10/projects/${encodeURIComponent(id)}/env`, `the variables of ${id}`, variables, { upsert: "true" })) as {
-    failed?: { error?: { code?: string; message?: string; key?: string } }[];
-  };
-  const failed = saved.failed ?? [];
-  if (failed.length > 0) {
-    throw new Error(failed.map(({ error }) => `Vercel did not save ${error?.key ?? "a variable"} on ${id}: ${error?.code ?? ""}: ${error?.message ?? ""}`).join("; "));
+  // Missing, they would fail every request below one by one.
+  required(env, "VERCEL_TOKEN");
+  required(env, "VERCEL_ORG_ID");
+  const path = `/v9/projects/${encodeURIComponent(id)}`;
+  // Should Vercel quote a value back, Admin's password is the one a setting carries.
+  const password = env.ADMIN_VERCEL_PASSWORD;
+  const hide = (text: string) => (password ? text.split(password).join("***") : text);
+  const refused: string[] = [];
+  for (const [field, value] of Object.entries(settings)) {
+    const refusal = await vercelRequest(env, fetch, "PATCH", path, { [field]: value }).then(
+      ({ ok, refusal }) => (ok ? undefined : hide(refusal)),
+      (error: unknown) => `no answer (${hide((error as Error).message)})`,
+    );
+    log(`${id} ${field}: ${refusal === undefined ? "applied" : `refused (${refusal})`}`);
+    if (refusal !== undefined) refused.push(`Vercel refused ${field} on ${id}: ${refusal}`);
   }
+  if (refused.length > 0) {
+    log(`${id} variables: not sent, a setting was refused`);
+    throw new Error(refused.join("; "));
+  }
+  const saved = await vercelRequest(env, fetch, "POST", `/v10/projects/${encodeURIComponent(id)}/env`, variables, { upsert: "true" });
+  if (!saved.ok) throw new Error(`Vercel refused the variables of ${id}: ${saved.refusal}`);
+  const failed = (saved.answer as { failed?: { error?: { code?: string; message?: string; key?: string } }[] }).failed ?? [];
+  if (failed.length > 0) throw new Error(failed.map(({ error }) => `Vercel did not save ${error?.key ?? "a variable"} on ${id}: ${refusalText("", error)}`).join("; "));
 }
 
 type Bypasses = Record<string, { scope?: string }> | undefined;

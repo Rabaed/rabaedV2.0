@@ -214,21 +214,108 @@ function vercel(answer: (method: string, url: URL, body: unknown) => { status: n
 }
 
 describe("applyProject", () => {
-  it("patches the project's settings, then upserts its variables, for the team, with the token", async () => {
-    const api = vercel((method) => ({ status: method === "POST" ? 201 : 200, body: method === "POST" ? { created: [], failed: [] } : {} }));
-    await applyProject("admin", env, version, api.fetch);
-    expect(api.calls.map((c) => `${c.method} ${c.url}`)).toEqual([
-      "PATCH https://api.vercel.com/v9/projects/prj_admin?teamId=team_123",
-      "POST https://api.vercel.com/v10/projects/prj_admin/env?upsert=true&teamId=team_123",
-    ]);
+  const saved = (method: string) => ({ status: method === "POST" ? 201 : 200, body: method === "POST" ? { created: [], failed: [] } : {} });
+  const patch = "PATCH https://api.vercel.com/v9/projects/prj_admin?teamId=team_123";
+
+  // Deploy UAT run 40395859131: one combined PATCH was refused whole (403), naming no field.
+  it("patches each setting alone, in a fixed order, then upserts its variables, for the team, with the token", async () => {
+    const api = vercel(saved);
+    const lines: string[] = [];
+    await applyProject("admin", env, version, api.fetch, (line) => lines.push(line));
+    expect(api.calls.map((c) => `${c.method} ${c.url}`)).toEqual([...Array(8).fill(patch), "POST https://api.vercel.com/v10/projects/prj_admin/env?upsert=true&teamId=team_123"]);
     expect(api.calls.every((c) => c.authorization === "Bearer vercel-token-secret")).toBe(true);
-    expect(api.calls[0]?.body).toEqual(projectSettings("admin", env));
-    expect(api.calls[1]?.body).toEqual(projectEnv("admin", env, version));
+    expect(api.calls.slice(0, 8).map((c) => c.body)).toEqual([
+      { nodeVersion: "24.x" },
+      { sourceFilesOutsideRootDirectory: true },
+      { rootDirectory: "apps/admin" },
+      { framework: null },
+      { commandForIgnoringBuildStep: "node ../../scripts/vercel-preview-gate.ts admin" },
+      { serverlessFunctionRegion: "fra1" },
+      { ssoProtection: { deploymentType: "preview" } },
+      { passwordProtection: { deploymentType: "all", password: "admin-vercel-password" } },
+    ]);
+    expect(api.calls[8]?.body).toEqual(projectEnv("admin", env, version));
+    expect(lines).toEqual([
+      "prj_admin nodeVersion: applied",
+      "prj_admin sourceFilesOutsideRootDirectory: applied",
+      "prj_admin rootDirectory: applied",
+      "prj_admin framework: applied",
+      "prj_admin commandForIgnoringBuildStep: applied",
+      "prj_admin serverlessFunctionRegion: applied",
+      "prj_admin ssoProtection: applied",
+      "prj_admin passwordProtection: applied",
+    ]);
   });
 
-  it("fails on Vercel's refusal, with its code and message and no value", async () => {
-    const api = vercel(() => ({ status: 403, body: { error: { code: "forbidden", message: "Not authorized" } } }));
-    await expect(applyProject("api", env, version, api.fetch)).rejects.toThrow("Vercel refused PATCH project prj_api: 403 forbidden: Not authorized");
+  it("skips Admin's Password Protection when ADMIN_VERCEL_PASSWORD is empty", async () => {
+    const api = vercel(saved);
+    await applyProject("admin", { ...env, ADMIN_VERCEL_PASSWORD: "" }, version, api.fetch, () => {});
+    expect(api.calls.some((c) => "passwordProtection" in (c.body as object))).toBe(false);
+    expect(api.calls).toHaveLength(8);
+  });
+
+  const forbidden = { status: 403, body: { error: { code: "forbidden", message: "Not authorized" } } };
+  const refusing =
+    (...fields: string[]) =>
+    (method: string, _url: URL, body: unknown) =>
+      method === "PATCH" && fields.includes(Object.keys(body as object)[0]!) ? forbidden : saved(method);
+
+  // The variables (secrets, some for previews) wait for every setting: a refused
+  // ssoProtection would leave previews open to them.
+  it("still applies the other settings when Vercel refuses one, sends no variables, then fails naming it", async () => {
+    const api = vercel(refusing("ssoProtection"));
+    const lines: string[] = [];
+    await expect(applyProject("api", env, version, api.fetch, (line) => lines.push(line))).rejects.toThrow(
+      /^Vercel refused ssoProtection on prj_api: 403 forbidden: Not authorized$/,
+    );
+    expect(api.calls.map((c) => c.method)).toEqual(Array(7).fill("PATCH"));
+    expect(lines).toContain("prj_api ssoProtection: refused (403 forbidden: Not authorized)");
+    expect(lines).toContain("prj_api variables: not sent, a setting was refused");
+    expect(lines.filter((line) => line.endsWith(": applied"))).toHaveLength(6);
+  });
+
+  it("goes on past a setting whose request fails, and names it", async () => {
+    const api = vercel(refusing("nodeVersion"));
+    const failing = (async (input: string | URL, init?: RequestInit) => {
+      if (String(init?.body).includes("framework")) throw new TypeError("fetch failed");
+      return api.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    await expect(applyProject("web", env, version, failing, () => {})).rejects.toThrow(
+      "Vercel refused nodeVersion on prj_web: 403 forbidden: Not authorized; Vercel refused framework on prj_web: no answer (fetch failed)",
+    );
+    expect(api.calls.filter((c) => c.method === "PATCH")).toHaveLength(6);
+  });
+
+  it("hides Admin's password should Vercel quote it back", async () => {
+    const api = vercel((method, _url, body) =>
+      "passwordProtection" in (body as object) ? { status: 400, body: { error: { code: "bad_request", message: "weak password admin-vercel-password" } } } : saved(method),
+    );
+    const lines: string[] = [];
+    const error = await applyProject("admin", env, version, api.fetch, (line) => lines.push(line)).catch((e: unknown) => e as Error);
+    expect((error as Error).message).toBe("Vercel refused passwordProtection on prj_admin: 400 bad_request: weak password ***");
+    expect(lines.join("\n")).not.toContain("admin-vercel-password");
+  });
+
+  it("names every setting Vercel refuses", async () => {
+    const api = vercel(refusing("serverlessFunctionRegion", "passwordProtection"));
+    await expect(applyProject("admin", env, version, api.fetch, () => {})).rejects.toThrow(
+      "Vercel refused serverlessFunctionRegion on prj_admin: 403 forbidden: Not authorized; Vercel refused passwordProtection on prj_admin: 403 forbidden: Not authorized",
+    );
+  });
+
+  it("names the variables when Vercel refuses their request", async () => {
+    const api = vercel((method) => (method === "POST" ? forbidden : saved(method)));
+    await expect(applyProject("web", env, version, api.fetch, () => {})).rejects.toThrow(/^Vercel refused the variables of prj_web: 403 forbidden: Not authorized$/);
+  });
+
+  it("prints and fails with no secret or value", async () => {
+    const api = vercel(() => forbidden);
+    const lines: string[] = [];
+    const error = await applyProject("admin", env, version, api.fetch, (line) => lines.push(line)).catch((e: unknown) => e as Error);
+    const said = [...lines, (error as Error).message].join("\n");
+    expect(said).toContain("passwordProtection");
+    for (const name of ["VERCEL_TOKEN", "ADMIN_VERCEL_PASSWORD", "DATABASE_ADMIN_PASSWORD", "SENDGRID_API_KEY"]) expect(said, name).not.toContain(env[name]!);
+    expect(said).not.toMatch(/secret|apps\/admin|fra1/);
   });
 
   it("fails when a variable was not saved, naming the variable", async () => {
@@ -240,7 +327,9 @@ describe("applyProject", () => {
 
   it("needs the token, the team and the project's id", async () => {
     await expect(applyProject("web", { ...env, VERCEL_WEB_PROJECT_ID: "" }, version, vercel().fetch)).rejects.toThrow("VERCEL_WEB_PROJECT_ID is required");
-    await expect(applyProject("web", { ...env, VERCEL_TOKEN: undefined }, version, vercel().fetch)).rejects.toThrow("VERCEL_TOKEN is required");
+    const api = vercel();
+    await expect(applyProject("web", { ...env, VERCEL_TOKEN: undefined }, version, api.fetch, () => {})).rejects.toThrow(/^VERCEL_TOKEN is required/);
+    expect(api.calls).toEqual([]);
   });
 });
 
