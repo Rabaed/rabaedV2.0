@@ -207,7 +207,7 @@ describe("generated tokens.css", () => {
     }
   });
 
-  it("is up to date with src/tokens (run `pnpm --filter @rabaed/ui tokens`)", () => {
+  it("is up to date with src/tokens (run `pnpm --filter @rabaed/ui run tokens`)", () => {
     const committed = readFileSync(new URL("../styles/tokens.css", import.meta.url), "utf8");
     expect(committed).toBe(css);
   });

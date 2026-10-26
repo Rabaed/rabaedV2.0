@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyProject, automationBypass, PROJECTS, projectEnv, projectSettings, commandEnv, uatDatabase, type ProjectName } from "./uat-deploy.ts";
+import { applyProject, automationBypass, PROJECTS, projectEnv, projectSettings, commandEnv, pnpmCommand, uatDatabase, type ProjectName } from "./uat-deploy.ts";
 
 // The UAT deploy's helper (ADR 0026, RP-1043), run by deploy-uat.yml and reset-uat.yml
 // with environment `uat`'s secrets and variables. These values stand in for them.
@@ -241,6 +241,31 @@ describe("applyProject", () => {
   it("needs the token, the team and the project's id", async () => {
     await expect(applyProject("web", { ...env, VERCEL_WEB_PROJECT_ID: "" }, version, vercel().fetch)).rejects.toThrow("VERCEL_WEB_PROJECT_ID is required");
     await expect(applyProject("web", { ...env, VERCEL_TOKEN: undefined }, version, vercel().fetch)).rejects.toThrow("VERCEL_TOKEN is required");
+  });
+});
+
+describe("the pnpm commands the deploy runs", () => {
+  it("runs db's setup, the app role check and the demo CLI", () => {
+    expect(pnpmCommand("migrate")).toEqual(["--filter", "@rabaed/db", "run", "setup"]);
+    expect(pnpmCommand("app-role-check")).toEqual(["--filter", "@rabaed/db", "exec", "tsx", "src/check-app-role.ts"]);
+    expect(pnpmCommand("demo", "ensure")).toEqual(["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", "ensure"]);
+    expect(pnpmCommand("demo", "reset")).toEqual(["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", "reset"]);
+  });
+
+  // `pnpm --filter @rabaed/db setup` ran pnpm's own `setup`, which refused the
+  // --recursive that --filter implies (Deploy UAT run 40388707146): a package's
+  // script goes through `run`, a binary through `exec`.
+  it("names `run` or `exec` after the package, so no pnpm built-in shadows a script", () => {
+    for (const [command, argument] of [["migrate"], ["app-role-check"], ["demo", "ensure"], ["demo", "reset"]] as const) {
+      const [filter, , word] = pnpmCommand(command, argument) ?? [];
+      expect(filter).toBe("--filter");
+      expect(["run", "exec"]).toContain(word);
+    }
+  });
+
+  it("has none for another command, and refuses another demo argument", () => {
+    expect(pnpmCommand("project", "web")).toBeUndefined();
+    expect(() => pnpmCommand("demo", "drop")).toThrow("demo ensure|reset");
   });
 });
 

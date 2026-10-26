@@ -1,4 +1,4 @@
-// The Supabase gate (RP-1037, ADR 0026): `pnpm --filter @rabaed/db gate:supabase`.
+// The Supabase gate (RP-1037, ADR 0026): `pnpm --filter @rabaed/db run gate:supabase`.
 // Builds a database of its own on the server DATABASE_SUPERUSER_URL reaches and
 // proves it runs Rabaed as RDS does: the bootstrap (the bypass role included),
 // every migration, what the apps do per request through the transaction pooler,

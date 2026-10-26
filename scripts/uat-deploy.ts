@@ -96,7 +96,7 @@ function uatServer(env: NodeJS.ProcessEnv): { superuser: string; database: strin
 /** The deploy's secrets a migration or demo command never needs. */
 const NOT_FOR_COMMANDS = ["VERCEL_TOKEN", "ADMIN_VERCEL_PASSWORD", "SENDGRID_API_KEY", "CRON_SECRET", "SUPABASE_PUBLISHABLE_KEY", "FONTS_ACCESS_KEY_ID", "FONTS_SECRET_ACCESS_KEY", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_SECRET_ACCESS_KEY"];
 
-/** The environment `pnpm --filter @rabaed/db setup` and the demo command run in: UAT's session-pooler URLs, on-create passwords, a demo environment. */
+/** The environment `pnpm --filter @rabaed/db run setup` and the demo command run in: UAT's session-pooler URLs, on-create passwords, a demo environment. */
 export function commandEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const { session } = uatDatabase(env);
   const command: NodeJS.ProcessEnv = { ...env };
@@ -249,14 +249,25 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed`);
 }
 
-async function main([command, argument]: string[]): Promise<void> {
-  const env = process.env;
-  if (command === "migrate") return run("pnpm", ["--filter", "@rabaed/db", "setup"], commandEnv(env));
-  if (command === "app-role-check") return run("pnpm", ["--filter", "@rabaed/db", "exec", "tsx", "src/check-app-role.ts"], commandEnv(env));
+/**
+ * pnpm's arguments for `migrate`, `app-role-check` and `demo ensure|reset`. A package's
+ * script goes through `run`, a binary through `exec`: without `run`, db's `setup` ran
+ * pnpm's own `setup`, which refuses the --recursive that --filter implies.
+ */
+export function pnpmCommand(command: string | undefined, argument?: string): string[] | undefined {
+  if (command === "migrate") return ["--filter", "@rabaed/db", "run", "setup"];
+  if (command === "app-role-check") return ["--filter", "@rabaed/db", "exec", "tsx", "src/check-app-role.ts"];
   if (command === "demo") {
     if (argument !== "ensure" && argument !== "reset") throw new Error("demo ensure|reset");
-    return run("pnpm", ["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", argument], commandEnv(env));
+    return ["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", argument];
   }
+  return undefined;
+}
+
+async function main([command, argument]: string[]): Promise<void> {
+  const env = process.env;
+  const pnpmArgs = pnpmCommand(command, argument);
+  if (pnpmArgs) return run("pnpm", pnpmArgs, commandEnv(env));
   if (command === "project") {
     await applyProject(project(argument), env, required(env, "VERSION"));
     // A GitHub Actions notice: Admin is not behind Password Protection from this deploy.

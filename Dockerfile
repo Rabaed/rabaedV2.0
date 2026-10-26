@@ -21,7 +21,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --offline -
 # The licensed Thmanyah fonts, never in the repo or the build context: the
 # deploy workflow passes them with `--build-context fonts=<folder>` (holding
 # thmanyah/*.woff2; on UAT `packages/ui/fonts`, filled by
-# `pnpm --filter @rabaed/api fonts:fetch`). Without them this stage is empty and
+# `pnpm --filter @rabaed/api run fonts:fetch`). Without them this stage is empty and
 # Arabic falls back to IBM Plex Sans Arabic (packages/ui/src/fonts/arabic-font.ts).
 FROM scratch AS fonts
 
@@ -70,7 +70,7 @@ CMD ["./node_modules/.bin/tsx", "src/main.ts"]
 # served from /assets; Arabic uses the licensed fonts only when the deploy supplies them.
 FROM deps AS admin-build
 COPY --from=fonts / packages/ui/fonts/
-RUN pnpm --filter @rabaed/admin build
+RUN pnpm --filter @rabaed/admin run build
 
 FROM node-service AS admin
 COPY --from=admin-build --chown=node:node /app/apps/admin/dist /app/apps/admin/dist
@@ -80,7 +80,7 @@ CMD ["./node_modules/.bin/tsx", "src/server.ts"]
 
 FROM deps AS web-build
 COPY --from=fonts / packages/ui/fonts/
-RUN pnpm --filter @rabaed/web build
+RUN pnpm --filter @rabaed/web run build
 
 FROM web-build AS web
 ENV NODE_ENV=production
