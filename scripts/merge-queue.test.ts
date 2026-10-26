@@ -66,7 +66,7 @@ describe("a workflow that runs on both push and pull_request", () => {
   });
 
   it.each(both)("%s runs on push only for main: a PR branch gets one run per push, its pull_request run", (file) => {
-    // main keeps its push run, which deploy-dev.yml follows. A push run on a
+    // main keeps its push run. A push run on a
     // queue branch would also share ci.yml's concurrency group and cancel the queue's run.
     expect(workflow(file).on.push).toEqual({ branches: ["main"] });
   });

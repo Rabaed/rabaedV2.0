@@ -1,6 +1,6 @@
 name: CI
 on:
-  # Push only on main (deploy-dev.yml follows it): a PR branch gets one run per
+  # Push only on main (main's own check): a PR branch gets one run per
   # push, its pull_request run (RP-395). Merge queue branches run on
   # merge_group below; a push run there would cancel the queue's run (RP-394).
   push:

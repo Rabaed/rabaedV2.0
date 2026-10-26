@@ -10,6 +10,11 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
 const hostOf = (url: string) => (parse(url).host ?? "").toLowerCase();
 
+/** Whether `host` (a URL's hostname, IPv6 with or without brackets) is this machine: the same rule the database checks use. */
+export function isLocalHost(host: string): boolean {
+  return LOCAL_HOSTS.has(host.toLowerCase());
+}
+
 /** Throws unless every URL's host is this machine. The message names the host, never the URL (it holds a password). */
 export function assertLocalDatabases(urls: readonly string[]): void {
   for (const url of urls) if (!LOCAL_HOSTS.has(hostOf(url))) refuse(hostOf(url));

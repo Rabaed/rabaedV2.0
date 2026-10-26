@@ -14,8 +14,10 @@ const env = z
 
 const db = createDbFromEnv("app");
 const fileStoreSettings = fileStoreSettingsFromEnv();
-// Locally the store in Docker starts empty; in AWS the storage stack made the bucket.
-if (fileStoreSettings.endpoint) await ensureLocalBucket(fileStoreSettings);
+// Locally the store in Docker starts empty; in AWS the storage stack made the bucket, on R2
+// (UAT) it was made by hand with its CORS limited to the web origin: ensureLocalBucket touches
+// only a store on this machine.
+await ensureLocalBucket(fileStoreSettings);
 const app = await buildApp({ db, config: apiConfigFromEnv(), files: createFileStore(fileStoreSettings) });
 // For the outbox alarms, measured in the database whether or not the worker runs.
 // Every minute: the outbox alarms' 5-minute periods each need a few reports.

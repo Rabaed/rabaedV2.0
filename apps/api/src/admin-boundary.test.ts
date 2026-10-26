@@ -59,9 +59,12 @@ const code = (file: string) =>
 const rel = (file: string) => relative(root, file).replaceAll("\\", "/");
 
 describe("the customer api and Rabaed Admin", () => {
-  const loaded = [...reachable(join(api, "server.ts"))].map(rel);
+  // What runs: the local server, and the Vercel Function (ADR 0026).
+  const loaded = [...new Set([...reachable(join(api, "server.ts")), ...reachable(join(root, "apps/api/api/index.ts"))])].map(rel);
 
-  it("finds what the api server loads (the check itself works)", () => {
+  it("finds what the api server and its Vercel Function load (the check itself works)", () => {
+    expect(loaded).toContain("apps/api/api/index.ts");
+    expect(loaded).toContain("apps/api/src/vercel.ts");
     expect(loaded).toContain("apps/api/src/app.ts");
     expect(loaded).toContain("packages/db/src/client.ts");
     expect(loaded).toContain("packages/auth/src/password.ts");

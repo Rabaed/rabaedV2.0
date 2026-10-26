@@ -146,6 +146,90 @@ describe("a failure recorded late", () => {
   });
 });
 
+/** A row of `kind` due before every other row; returns its id. */
+async function firstInLineOf(kind: string): Promise<string> {
+  const { rows } = await sql<{ id: string }>`
+    insert into outbox (kind, project_id, payload, available_at)
+    values (${kind}, ${await ownProject()}::uuid, '{"test": "RP-1039"}', ${headOfLine})
+    returning id
+  `.execute(migrator);
+  return rows[0]!.id;
+}
+
+// RP-1039: the api's cron pass on Vercel takes only the kinds it handles; the
+// Documental Record kinds stay for the Records container.
+describe("a pass for some kinds", () => {
+  it("leaves a row of another kind as it was: not taken, no attempt spent, still due", async () => {
+    const email = await firstInLineOf("email");
+    const record = await firstInLineOf("documental_record");
+    const ran: string[] = [];
+    const run = await processOutbox(worker, {
+      limit: 1,
+      kinds: ["email"],
+      handlers: { email: async (_trx, row) => void ran.push(row.id) },
+    });
+    expect(run).toEqual({ processed: 1, failed: 0, dead: 0 });
+    expect(ran).toEqual([email]);
+    expect(await rowOf(record)).toMatchObject({ attempts: 0, due: true, processed_at: null, dead_at: null, last_error: null });
+    // Out of the way of later tests.
+    await sql`update outbox set dead_at = now() where id = ${record}::uuid`.execute(migrator);
+  });
+
+  it("takes nothing when it lists no kind", async () => {
+    const id = await firstInLineOf("notification");
+    expect(await processOutbox(worker, { limit: 1, kinds: [] })).toEqual({ processed: 0, failed: 0, dead: 0 });
+    expect(await rowOf(id)).toMatchObject({ attempts: 0, due: true });
+    await sql`update outbox set dead_at = now() where id = ${id}::uuid`.execute(migrator);
+  });
+
+  it("takes no row once its time budget is spent, and finishes the one it was running", async () => {
+    const second = await firstInLineOf("email");
+    const first = await firstInLineOf("email");
+    let clock = 0;
+    const ran: string[] = [];
+    const run = await processOutbox(worker, {
+      limit: 10,
+      kinds: ["email"],
+      timeBudgetMs: 1000,
+      nowMs: () => clock,
+      handlers: {
+        email: async (_trx, row) => {
+          ran.push(row.id);
+          clock += 1000;
+        },
+      },
+    });
+    expect(run).toEqual({ processed: 1, failed: 0, dead: 0 });
+    expect(ran).toEqual([first]);
+    expect(await rowOf(second)).toMatchObject({ attempts: 0, due: true });
+    await sql`update outbox set dead_at = now() where id = ${second}::uuid`.execute(migrator);
+  });
+
+  it("never delivers a row twice when two passes overlap", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) ids.push(await firstInLineOf("email"));
+    const delivered: string[] = [];
+    const pass = () =>
+      processOutbox(worker, {
+        // Together the two passes take exactly the six rows, which are first in line.
+        limit: 3,
+        kinds: ["email"],
+        handlers: {
+          email: async (_trx, row) => {
+            delivered.push(row.id);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          },
+        },
+      });
+    const runs = await Promise.all([pass(), pass()]);
+    expect(runs).toEqual([
+      { processed: 3, failed: 0, dead: 0 },
+      { processed: 3, failed: 0, dead: 0 },
+    ]);
+    expect([...delivered].sort()).toEqual([...ids].sort());
+  });
+});
+
 describe("a row being run", () => {
   it("is not taken by another worker, even when its backoff has passed", async () => {
     const id = await firstInLine();

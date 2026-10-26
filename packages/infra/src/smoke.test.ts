@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_PATHS, smokeTest, VISIBILITY_CHECK_PEOPLE, visibilityCheck } from "./smoke.ts";
+import { ADMIN_PATHS, apiSmokeTest, smokeRunFromEnv, smokeTest, VISIBILITY_CHECK_PEOPLE, visibilityCheck } from "./smoke.ts";
 
 const url = "https://rabaed-dev-123.eu-central-1.elb.amazonaws.com";
 const version = "4f2a9c1e";
@@ -48,6 +48,17 @@ function deployment(overrides: Record<string, Route> = {}): typeof fetch {
 describe("smoke test", () => {
   it("passes when the deployed version is up, on HTTPS, with its database", async () => {
     expect(await smokeTest({ url, version, fetch: deployment() })).toEqual([]);
+  });
+
+  // Vercel upgrades HTTP with a 308 (ADR 0026); the AWS load balancer answered 301.
+  it("accepts a 308 redirect to HTTPS, as Vercel answers", async () => {
+    const vercel = deployment({ "http://rabaed-dev-123.eu-central-1.elb.amazonaws.com/en/health": { status: 308, location: `${url}/en/health` } });
+    expect(await smokeTest({ url, version, fetch: vercel })).toEqual([]);
+  });
+
+  it("fails on a temporary redirect to HTTPS", async () => {
+    const temporary = deployment({ "http://rabaed-dev-123.eu-central-1.elb.amazonaws.com/en/health": { status: 307, location: `${url}/en/health` } });
+    expect(await smokeTest({ url, version, fetch: temporary })).toEqual([expect.stringContaining("HTTP does not redirect to HTTPS: answered 307")]);
   });
 
   it("fails when HTTP is served instead of redirected to HTTPS", async () => {
@@ -163,17 +174,30 @@ describe("visibility check", () => {
 
   type Who = keyof typeof people;
   /** What each person may read, as the api answers it; `leak` lets a case break one rule. */
-  function api({ leak, badPassword = false, twrItems = [twrItem] }: { leak?: { who: Who; path: string }; badPassword?: boolean; twrItems?: string[] } = {}) {
+  // `prefix`: where the Member API is: web's /api/v1 proxy, or the api's own /v1 (which
+  // also answers /health with `health`). Paths below are written as web's.
+  function api({
+    leak,
+    badPassword = false,
+    twrItems = [twrItem],
+    prefix = "/api/v1",
+    health = { status: "ok", database: "ok", version },
+  }: { leak?: { who: Who; path: string }; badPassword?: boolean; twrItems?: string[]; prefix?: string; health?: unknown } = {}) {
     const own: Record<Who, { project: string; code: string; items: string[] }> = {
       hafiz: { project: twr, code: "TWR", items: twrItems },
       nasser: { project: jcv, code: "JCV", items: [jcvItem] },
     };
     const signedOut: Who[] = [];
     const fetcher = (async (input: string | URL, init: RequestInit = {}) => {
-      const path = new URL(String(input)).pathname;
+      const asked = new URL(String(input)).pathname;
       const method = init.method ?? "GET";
       const json = (status: number, body?: unknown, headers: Record<string, string> = {}) =>
         new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+      if (prefix === "/v1" && asked === "/health") return json(200, health);
+      if (!asked.startsWith(`${prefix}/`)) return json(404, { error: "not_found" });
+      const path = `/api/v1${asked.slice(prefix.length)}`;
+      // As the api: an unknown route is 404 for everyone, before the sign-in check.
+      if (!/^\/api\/v1\/(session|projects(\/[^/]+(\/work-items)?)?|work-items\/[^/]+)$/.test(path)) return json(404, { error: "not_found" });
       if (path === "/api/v1/session" && method === "POST") {
         const { email, password: given } = JSON.parse(String(init.body));
         const who = (Object.keys(people) as Who[]).find((w) => people[w] === email);
@@ -200,6 +224,60 @@ describe("visibility check", () => {
     }) as typeof fetch;
     return { fetcher, signedOut };
   }
+
+  // RP-1043: on Vercel the api is deployed and checked before web, so the check
+  // also runs against the api's own address, where the Member API is /v1.
+  it("checks the api directly, through its own /v1", async () => {
+    const apiUrl = "https://rabaed-uat-api.vercel.app";
+    const { fetcher, signedOut } = api({ prefix: "/v1" });
+    expect(await visibilityCheck({ url: apiUrl, password, memberApi: "/v1", fetch: fetcher })).toEqual([]);
+    expect(signedOut.sort()).toEqual(["hafiz", "nasser"]);
+    const leaking = api({ prefix: "/v1", leak: { who: "nasser", path: `/api/v1/work-items/${twrItem}` } }).fetcher;
+    expect(await visibilityCheck({ url: apiUrl, password, memberApi: "/v1", fetch: leaking })).toEqual([`${people.nasser}: /v1/work-items/${twrItem} answered 200, expected 404`]);
+  });
+
+  describe("the api smoke (before web is deployed)", () => {
+    const apiUrl = "https://rabaed-uat-api.vercel.app";
+
+    it("passes when the api runs the deployed version with its database, and visibility holds", async () => {
+      expect(await apiSmokeTest({ apiUrl, version, demoPassword: password, fetch: api({ prefix: "/v1" }).fetcher })).toEqual([]);
+    });
+
+    it("fails when the api runs another version or cannot reach its database", async () => {
+      const stale = api({ prefix: "/v1", health: { status: "degraded", database: "unavailable", version: "0ld" } }).fetcher;
+      expect(await apiSmokeTest({ apiUrl, version, demoPassword: password, fetch: stale })).toEqual([`api runs 0ld, expected ${version}`, "api's database: unavailable"]);
+    });
+
+    it("fails when visibility does not hold on the api", async () => {
+      const leaking = api({ prefix: "/v1", leak: { who: "hafiz", path: `/api/v1/projects/${jcv}` } }).fetcher;
+      expect(await apiSmokeTest({ apiUrl, version, demoPassword: password, fetch: leaking })).toEqual([`${people.hafiz}: /v1/projects/${jcv} answered 200, expected 404`]);
+    });
+
+    // The api has its own public address on Vercel: none of Admin's routes may answer there.
+    it.each([
+      ["POST", "/v1/sign-in"],
+      ["POST", "/admin/v1/session"],
+      ["GET", "/assets/admin.js"],
+    ])("fails when the api's own address answers %s %s", async (method, path) => {
+      const member = api({ prefix: "/v1" }).fetcher;
+      const serving = (async (input: string | URL, init: RequestInit = {}) =>
+        new URL(String(input)).pathname === path ? new Response("{}", { status: 401 }) : member(input, init)) as typeof fetch;
+      expect(await apiSmokeTest({ apiUrl, version, demoPassword: password, fetch: serving })).toEqual([`the api answered ${method} ${path} with 401: it must not serve Rabaed Admin`]);
+    });
+
+    it("checks Rabaed Admin too, through its protection bypass", async () => {
+      const adminUrl = "https://rabaed-uat-admin.vercel.app";
+      const bypass = "b".repeat(32);
+      const member = api({ prefix: "/v1" }).fetcher;
+      const both = (async (input: string | URL, init: RequestInit = {}) => {
+        if (!String(input).startsWith(adminUrl)) return member(input, init);
+        if (new Headers(init.headers).get("x-vercel-protection-bypass") !== bypass) return new Response("Password required", { status: 401 });
+        return Response.json({ status: "ok", database: "ok", version });
+      }) as typeof fetch;
+      expect(await apiSmokeTest({ apiUrl, adminUrl, adminBypass: bypass, version, demoPassword: password, fetch: both })).toEqual([]);
+      expect(await apiSmokeTest({ apiUrl, adminUrl, version, demoPassword: password, fetch: both })).toEqual([`${adminUrl}/health answered 401`]);
+    });
+  });
 
   it("passes when each gets 404 on the other's Project and Work Items, and signs both out", async () => {
     const { fetcher, signedOut } = api();
@@ -285,9 +363,79 @@ describe("Rabaed Admin checks", () => {
     },
   );
 
+  // On Vercel, Admin sits behind Password Protection; the smoke passes it with the
+  // project's Protection Bypass for Automation secret (ADR 0026, RP-1043).
+  it("reach a password-protected Rabaed Admin with the protection bypass header, sent to Admin only", async () => {
+    const bypass = "a".repeat(32);
+    const open = customer();
+    const sentBypassTo: string[] = [];
+    const protectedAdmin = (async (input: string | URL, init: RequestInit = {}) => {
+      const given = new Headers(init.headers).get("x-vercel-protection-bypass");
+      if (given) sentBypassTo.push(new URL(String(input)).origin);
+      if (String(input).startsWith(adminUrl) && given !== bypass) return new Response("Password required", { status: 401 });
+      return open(input, init);
+    }) as typeof fetch;
+    expect(await smokeTest({ url, adminUrl, adminBypass: bypass, version, fetch: protectedAdmin })).toEqual([]);
+    expect(sentBypassTo).toEqual([adminUrl]);
+    expect(await smokeTest({ url, adminUrl, version, fetch: protectedAdmin })).toEqual([`${adminUrl}/health answered 401`]);
+  });
+
+  // Given a bypass, Admin is meant to be protected: a request without it must be refused.
+  it("fail when a protected Rabaed Admin answers without its password", async () => {
+    const failures = await smokeTest({ url, adminUrl, adminBypass: "a".repeat(32), version, fetch: customer() });
+    expect(failures).toEqual([`Rabaed Admin answered ${adminUrl}/health with 200 without its password: Password Protection is off`]);
+  });
+
   it("accept a redirect for a page path (web adds the language), but never a 2xx", async () => {
     const page = ADMIN_PATHS.find((p) => !p.path.startsWith("/api/"))!;
     const redirected = customer({ [`${url}${page.path}`]: { status: 307, location: `/en${page.path}` } });
     expect(await smokeTest({ url, adminUrl, version, fetch: redirected })).toEqual([]);
+  });
+});
+
+describe("the smoke's environment (bin/smoke.ts)", () => {
+  it("checks web, as after every deploy, given SMOKE_URL", () => {
+    expect(
+      smokeRunFromEnv({
+        SMOKE_URL: "https://rabaed-uat.vercel.app",
+        SMOKE_VERSION: version,
+        SMOKE_ADMIN_URL: "https://rabaed-uat-admin.vercel.app",
+        SMOKE_ADMIN_BYPASS: "c".repeat(32),
+        SMOKE_ARABIC_FONT: "Thmanyah Sans",
+        SMOKE_DEMO_PASSWORD: "a-demo-password-16+",
+      }),
+    ).toEqual({
+      stage: "web",
+      options: {
+        url: "https://rabaed-uat.vercel.app",
+        version,
+        adminUrl: "https://rabaed-uat-admin.vercel.app",
+        adminBypass: "c".repeat(32),
+        arabicFont: "Thmanyah Sans",
+        demoPassword: "a-demo-password-16+",
+      },
+    });
+  });
+
+  it("leaves out what is blank", () => {
+    expect(smokeRunFromEnv({ SMOKE_URL: "https://x.example", SMOKE_VERSION: version, SMOKE_ADMIN_URL: "", SMOKE_ADMIN_BYPASS: "" })).toEqual({
+      stage: "web",
+      options: { url: "https://x.example", version },
+    });
+  });
+
+  it("checks the api before web, given SMOKE_API_URL and the demo password", () => {
+    expect(
+      smokeRunFromEnv({ SMOKE_API_URL: "https://rabaed-uat-api.vercel.app", SMOKE_VERSION: version, SMOKE_DEMO_PASSWORD: "a-demo-password-16+", SMOKE_ADMIN_URL: "https://a.example" }),
+    ).toEqual({ stage: "api", options: { apiUrl: "https://rabaed-uat-api.vercel.app", version, demoPassword: "a-demo-password-16+", adminUrl: "https://a.example" } });
+  });
+
+  it.each([
+    ["no address", { SMOKE_VERSION: version }, "Set SMOKE_URL (web) or SMOKE_API_URL (the api, before web), and SMOKE_VERSION"],
+    ["no version", { SMOKE_URL: "https://x.example" }, "Set SMOKE_URL (web) or SMOKE_API_URL (the api, before web), and SMOKE_VERSION"],
+    ["both addresses", { SMOKE_URL: "https://x.example", SMOKE_API_URL: "https://y.example", SMOKE_VERSION: version }, "Set SMOKE_URL or SMOKE_API_URL, not both"],
+    ["the api without the demo password", { SMOKE_API_URL: "https://y.example", SMOKE_VERSION: version }, "SMOKE_API_URL needs SMOKE_DEMO_PASSWORD: the api's smoke is the visibility check"],
+  ])("refuses %s", (_name, env, error) => {
+    expect(smokeRunFromEnv(env)).toEqual({ error });
   });
 });

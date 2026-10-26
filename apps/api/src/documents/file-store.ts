@@ -13,8 +13,8 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { isLocalHost, objectStoreClientConfig, objectStoreFromEnv, PROJECT_FILES_ENV, type ObjectStoreSettings } from "@rabaed/db";
 import type { SignedUrl } from "@rabaed/domain";
-import { z } from "zod";
 
 // Where Documents' files live: object storage that only the api signs URLs for
 // (ADR 0007; RP-210). In AWS it is the Project files bucket, reached with the
@@ -50,51 +50,22 @@ export interface FileStore {
   remove(key: string): Promise<void>;
 }
 
-export interface FileStoreSettings {
-  bucket: string;
-  /** Local and CI only: the S3-compatible store's address. Unset in AWS. */
-  endpoint?: string;
-  region: string;
-  /** Local and CI only, with `endpoint`: never the default AWS credential chain. */
-  credentials?: { accessKeyId: string; secretAccessKey: string };
-}
+/** Where the files bucket is (packages/db object-store.ts). */
+export type FileStoreSettings = ObjectStoreSettings;
 
 /**
  * The file store the environment sets up. In AWS the api task gets
- * PROJECT_FILES_BUCKET and its region; locally and in CI also
- * FILE_STORE_ENDPOINT with the local store's placeholder keys (.env.example,
- * ci.yml). A local endpoint never takes AWS credentials from the machine.
+ * PROJECT_FILES_BUCKET and its region; locally, in CI and on the UAT also
+ * FILE_STORE_ENDPOINT with the store's keys (.env.example, ci.yml). An
+ * endpoint never takes AWS credentials from the machine.
  */
 export function fileStoreSettingsFromEnv(source: NodeJS.ProcessEnv = process.env): FileStoreSettings {
-  const env = z
-    .object({
-      PROJECT_FILES_BUCKET: z.string().min(3),
-      FILE_STORE_ENDPOINT: z.url().optional(),
-      FILE_STORE_ACCESS_KEY_ID: z.string().min(1).optional(),
-      FILE_STORE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-      AWS_REGION: z.string().min(1).optional(),
-    })
-    .parse(source);
-  if (!env.FILE_STORE_ENDPOINT) {
-    if (!env.AWS_REGION) throw new Error("No file store: set FILE_STORE_ENDPOINT (local, CI) or run in AWS (AWS_REGION)");
-    return { bucket: env.PROJECT_FILES_BUCKET, region: env.AWS_REGION };
-  }
-  if (!env.FILE_STORE_ACCESS_KEY_ID || !env.FILE_STORE_SECRET_ACCESS_KEY) {
-    throw new Error("FILE_STORE_ENDPOINT needs FILE_STORE_ACCESS_KEY_ID and FILE_STORE_SECRET_ACCESS_KEY (the local store's)");
-  }
-  return {
-    bucket: env.PROJECT_FILES_BUCKET,
-    endpoint: env.FILE_STORE_ENDPOINT,
-    region: env.AWS_REGION ?? "us-east-1",
-    credentials: { accessKeyId: env.FILE_STORE_ACCESS_KEY_ID, secretAccessKey: env.FILE_STORE_SECRET_ACCESS_KEY },
-  };
+  return objectStoreFromEnv(source, PROJECT_FILES_ENV);
 }
 
-function clientFor(settings: FileStoreSettings): S3Client {
-  return new S3Client({
-    region: settings.region,
-    ...(settings.endpoint ? { endpoint: settings.endpoint, forcePathStyle: true, credentials: settings.credentials } : {}),
-  });
+/** The S3 client for the files bucket: checksums only where an operation requires one (objectStoreClientConfig says why). */
+export function fileStoreClient(settings: FileStoreSettings): S3Client {
+  return new S3Client(objectStoreClientConfig(settings));
 }
 
 /** `inline` for what browsers show safely (PDFs, images), `attachment` for the rest; RFC 6266 file name. */
@@ -105,7 +76,7 @@ export function contentDisposition(fileName: string, contentType: string): strin
 }
 
 export function createFileStore(settings: FileStoreSettings): FileStore {
-  const s3 = clientFor(settings);
+  const s3 = fileStoreClient(settings);
   const expiresAt = (signedAt: Date) => new Date(signedAt.getTime() + SIGNED_URL_TTL_SECONDS * 1000).toISOString();
   /** The stored object's body, or null when there is none at that key. */
   const getObjectBody = async (key: string) => {
@@ -187,13 +158,24 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
 }
 
 /**
- * Local and CI only: creates the bucket if it isn't there, and lets browsers
- * upload to it from any origin (the local web runs on a lane's own host). In
- * AWS the storage stack owns the bucket and its CORS rules.
+ * Whether the store is the one in Docker on this machine (local, CI): its
+ * endpoint's host is this machine, by the rule the database resets use
+ * (packages/db local-database.ts). R2 and AWS are never local.
  */
-export async function ensureLocalBucket(settings: FileStoreSettings): Promise<void> {
-  if (!settings.endpoint) throw new Error("ensureLocalBucket is for the local store only");
-  const s3 = clientFor(settings);
+export function isLocalFileStore(settings: FileStoreSettings): boolean {
+  if (!settings.endpoint) return false;
+  return isLocalHost(new URL(settings.endpoint).hostname);
+}
+
+/**
+ * Local and CI only: creates the bucket if it isn't there, and lets browsers
+ * upload to it from any origin (the local web runs on a lane's own host).
+ * Anywhere else it touches nothing and returns false: in AWS the storage stack
+ * owns the bucket and its CORS rules, on R2 (UAT) the bucket is made by hand
+ * and its CORS names the UAT web origin only (cli/r2-cors.ts), never `*`.
+ */
+export async function ensureLocalBucket(settings: FileStoreSettings, s3: S3Client = fileStoreClient(settings)): Promise<boolean> {
+  if (!isLocalFileStore(settings)) return false;
   try {
     await s3.send(new HeadBucketCommand({ Bucket: settings.bucket }));
   } catch {
@@ -207,6 +189,7 @@ export async function ensureLocalBucket(settings: FileStoreSettings): Promise<vo
       },
     }),
   );
+  return true;
 }
 
 /** Stands in where no store is configured (the demo seed); any use is a bug. */

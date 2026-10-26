@@ -2,9 +2,10 @@
 // Builds a database of its own on the server DATABASE_SUPERUSER_URL reaches and
 // proves it runs Rabaed as RDS does: the bootstrap (the bypass role included),
 // every migration, what the apps do per request through the transaction pooler,
-// Supabase's Data API off, and seam 2 unchanged. Stops at the first step that
-// fails, naming it, except the Data API check: seam 2 still runs after it fails,
-// and the gate then fails, so one run shows both. Prints no password and no full URL.
+// Supabase's Data API off, and seam 2 unchanged. Checks the Data API first, then
+// stops at the first step that fails, naming it; a failed Data API check lets the
+// rest run, and the gate then fails, so one run shows both. Prints no password and
+// no full URL. SUPABASE_GATE_ONLY=data-api runs only the Data API check.
 //
 // Env: DATABASE_SUPERUSER_URL (Supabase: the session pooler, port 5432),
 // DATABASE_MIGRATOR_PASSWORD, DATABASE_APP_PASSWORD, DATABASE_ADMIN_PASSWORD,

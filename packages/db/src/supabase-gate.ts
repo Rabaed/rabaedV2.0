@@ -195,6 +195,14 @@ const ANSWERED_FROM_EXPOSED_SCHEMA = new Set(["42501", "PGRST205"]);
 // PostgREST's JWT errors (PGRST3xx): the key, as the gateway passed it on, was refused.
 const jwtError = /^PGRST3\d\d$/;
 
+// PGRST002 (503): PostgREST could not build its schema cache, and says it is retrying
+// (https://docs.postgrest.org/en/v12/references/errors.html, "Group 2 - Schema Cache").
+// It rebuilds the cache after DDL, so the check asks again: six asks over two minutes.
+// Supabase's troubleshooting guide also gives a lasting cause, an exposed schema that is
+// missing, so a PGRST002 still there after the waits fails as unexpected.
+const SCHEMA_CACHE_NOT_LOADED = "PGRST002";
+const SCHEMA_CACHE_WAITS_MS = [5_000, 10_000, 20_000, 40_000, 45_000];
+
 export type DataApiCheck =
   /** Passes: the call with the key got the Data-API-off answer. */
   | { outcome: "off"; status: number }
@@ -211,19 +219,47 @@ export type DataApiCheck =
 // Room for a PostgREST or gateway message; more is noise in the gate's log.
 const MESSAGE_LIMIT = 200;
 
-/** The answer's code and message (PostgREST's JSON, or the gateway's text), the key hidden, the message one short line. */
-function answerOf(body: string, publishableKey: string): { code?: string; message?: string } {
-  let code: string | undefined;
-  let message = body;
+/** An answer as the check reads it: PostgREST's JSON fields, or (`json` false) the gateway's text. */
+interface Answer {
+  ok: boolean;
+  status: number;
+  json: boolean;
+  code?: string;
+  message?: string;
+  hint?: string;
+}
+
+function answerFrom(ok: boolean, status: number, body: string): Answer {
+  const text = (value: unknown) => (typeof value === "string" ? value : undefined);
   try {
-    const parsed = JSON.parse(body) as { code?: unknown; message?: unknown };
-    if (typeof parsed.code === "string") code = parsed.code;
-    message = typeof parsed.message === "string" ? parsed.message : "";
+    const parsed = (JSON.parse(body) ?? {}) as { code?: unknown; message?: unknown; hint?: unknown };
+    return { ok, status, json: true, code: text(parsed.code), message: text(parsed.message), hint: text(parsed.hint) };
   } catch {
-    // Not JSON: the text itself.
+    return { ok, status, json: false, message: body };
   }
+}
+
+/** The answer's code and message, the key hidden, the message one short line. */
+function saidIn({ code, message = "" }: Answer, publishableKey: string): { code?: string; message?: string } {
   const line = message.split(publishableKey).join("***").replace(/\s+/g, " ").trim().slice(0, MESSAGE_LIMIT);
   return { ...(code ? { code } : {}), ...(line ? { message: line } : {}) };
+}
+
+/**
+ * The Data-API-off answer, and only it: PostgREST's PGRST106, 406, "the schema specified
+ * ... is not present in the db-schemas configuration"
+ * (https://docs.postgrest.org/en/v12/references/errors.html), naming the placeholder as the
+ * only schema exposed, in its hint ("Only the following schemas are exposed: ...") or, in
+ * older PostgREST, its message ("The schema must be one of the following: ...").
+ */
+function isDataApiOffAnswer({ status, json, code, message, hint }: Answer): boolean {
+  return status === 406 && json && code === "PGRST106" && [hint, message].some((text) => text?.includes(NO_EXPOSED_SCHEMAS));
+}
+
+/** The Supabase settings the Data API check needs, checked before it calls anywhere. Refuses a ref that would send the call elsewhere. */
+function checkSupabaseSettings(projectRef: string, publishableKey: string | undefined): asserts publishableKey is string {
+  if (!projectRefPattern.test(projectRef)) throw new Error("SUPABASE_PROJECT_REF must be a bare project ref (lowercase letters and digits)");
+  if (!publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
 }
 
 /**
@@ -237,25 +273,35 @@ export async function checkDataApiOff({
   projectRef,
   publishableKey,
   fetch = globalThis.fetch,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }: {
   projectRef: string | undefined;
   publishableKey?: string;
   fetch?: Fetch;
+  /** Waits between asks while PostgREST loads its schema cache; tests pass one that doesn't wait. */
+  sleep?: (ms: number) => Promise<void>;
 }): Promise<DataApiCheck> {
   if (!projectRef) return { outcome: "skipped" };
-  if (!projectRefPattern.test(projectRef)) throw new Error("SUPABASE_PROJECT_REF must be a bare project ref (lowercase letters and digits)");
-  if (!publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
-  const response = await fetch(`https://${projectRef}.supabase.co/${PROBE_PATH}?${PROBE_QUERY}`, {
-    headers: { apikey: publishableKey },
-    redirect: "manual",
-    signal: AbortSignal.timeout(15_000),
-  });
-  const { status } = response;
-  const body = await response.text();
+  checkSupabaseSettings(projectRef, publishableKey);
+  const ask = async (): Promise<Answer> => {
+    const response = await fetch(`https://${projectRef}.supabase.co/${PROBE_PATH}?${PROBE_QUERY}`, {
+      headers: { apikey: publishableKey },
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    });
+    return answerFrom(response.ok, response.status, await response.text());
+  };
+  let answer = await ask();
+  for (const wait of SCHEMA_CACHE_WAITS_MS) {
+    if (answer.ok || answer.code !== SCHEMA_CACHE_NOT_LOADED) break;
+    await sleep(wait);
+    answer = await ask();
+  }
+  const { status } = answer;
   // A table that answers is open, whatever its rows say.
-  if (response.ok) return { outcome: "open", status };
-  if (body.includes(NO_EXPOSED_SCHEMAS)) return { outcome: "off", status };
-  const { code, message } = answerOf(body, publishableKey);
+  if (answer.ok) return { outcome: "open", status };
+  if (isDataApiOffAnswer(answer)) return { outcome: "off", status };
+  const { code, message } = saidIn(answer, publishableKey);
   const said = message ? { message } : {};
   if (code && ANSWERED_FROM_EXPOSED_SCHEMA.has(code)) return { outcome: "on", status, code, ...said };
   if ((status === 401 || status === 403) && (!code || jwtError.test(code))) return { outcome: "key refused", status, ...(code ? { code } : {}), ...said };
@@ -303,15 +349,22 @@ export async function runGateSteps(steps: readonly GateStep[], say: (line: strin
   return failed;
 }
 
+/** Set to `data-api`, the gate runs only the Data API check: minutes, not seam 2's hours. Unset: the whole gate. */
+export const GATE_ONLY_VARIABLE = "SUPABASE_GATE_ONLY";
+const DATA_API_ONLY = "data-api";
+
 /** The gate's steps, in order (supabase-gate-run.ts runs them), from the environment `env`. */
 export function gateSteps({
   fetch,
+  sleep,
   seamTwo,
   onUrls,
   env = process.env,
 }: {
   env?: NodeJS.ProcessEnv;
   fetch?: Fetch;
+  /** The Data API check's wait while PostgREST loads its schema cache. */
+  sleep?: (ms: number) => Promise<void>;
   /** Seam 2 as CI runs it, against the gate's database. */
   seamTwo: (urls: GateUrls) => Promise<void>;
   /** Given the connections once read, so the log can hide their passwords. */
@@ -319,18 +372,41 @@ export function gateSteps({
 }): GateStep[] {
   const projectRef = env.SUPABASE_PROJECT_REF || undefined;
   const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || undefined;
+  const only = env[GATE_ONLY_VARIABLE] || undefined;
+  // A failed step, not a throw, so the gate's log names it like any other failure.
+  if (only && only !== DATA_API_ONLY) {
+    const refusal = `${GATE_ONLY_VARIABLE} is "${only}": the gate knows only "${DATA_API_ONLY}" (unset runs the whole gate)`;
+    return [{ name: `Read ${GATE_ONLY_VARIABLE}`, run: () => Promise.reject(new Error(refusal)) }];
+  }
   let urls: GateUrls | undefined;
   const gate = (): GateUrls => {
     if (!urls) throw new Error("The connections were not read");
     return urls;
   };
+  // First: it needs no database, and asked after the migrations' DDL it met PostgREST still
+  // reloading its schema cache (run 40234606464, PGRST002). It keeps going, so its failure
+  // hides no later step's answer and one run shows both.
+  const dataApiOff: GateStep = {
+    name: "Supabase's Data API is off",
+    keepsGoing: true,
+    run: async () => {
+      // A run that checks only this must not pass by skipping it.
+      if (only && (!projectRef || !publishableKey)) throw new Error(`${GATE_ONLY_VARIABLE}=${DATA_API_ONLY} needs SUPABASE_PROJECT_REF and SUPABASE_PUBLISHABLE_KEY`);
+      const result = await checkDataApiOff({ projectRef, publishableKey, fetch, sleep });
+      if (result.outcome === "skipped") return "skipped: no SUPABASE_PROJECT_REF (a local run)";
+      if (result.outcome === "off") return `${PROBE_PATH} with the publishable key answered ${result.status}: no schema exposed`;
+      throw new Error(dataApiFailure(result));
+    },
+  };
+  if (only) return [dataApiOff];
   return [
+    dataApiOff,
     {
       name: "Read the connections",
       run: async () => {
+        // The Data API check refused these too, but keeps going: this stops the gate in seconds, not after seam 2.
+        if (projectRef) checkSupabaseSettings(projectRef, publishableKey);
         urls = gateUrlsFromEnv(env);
-        // Checked first, so a missing key fails in seconds, not after seam 2.
-        if (projectRef && !publishableKey) throw new Error("SUPABASE_PUBLISHABLE_KEY is required when SUPABASE_PROJECT_REF is set");
         return onUrls(urls);
       },
     },
@@ -357,18 +433,6 @@ export function gateSteps({
           probe.adminSwitchedTo !== "rabaed_app" && `set local role ran as ${probe.adminSwitchedTo || "(nothing)"}, not rabaed_app`,
         ].filter(Boolean);
         if (problems.length) throw new Error(problems.join("; "));
-      },
-    },
-    // Before seam 2, which takes hours on Supabase and may fail: its failure must not hide this answer,
-    // and this one's lets seam 2 run, so one run shows both.
-    {
-      name: "Supabase's Data API is off",
-      keepsGoing: true,
-      run: async () => {
-        const result = await checkDataApiOff({ projectRef, publishableKey, fetch });
-        if (result.outcome === "skipped") return "skipped: no SUPABASE_PROJECT_REF (a local run)";
-        if (result.outcome === "off") return `${PROBE_PATH} with the publishable key answered ${result.status}: no schema exposed`;
-        throw new Error(dataApiFailure(result));
       },
     },
     { name: "Seam 2", run: () => seamTwo(gate()) },

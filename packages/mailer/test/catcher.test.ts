@@ -32,7 +32,7 @@ async function caught(to: string): Promise<CaughtMessage[]> {
 const recipient = () => `test-${randomUUID()}@rabaed.test`;
 
 describe("the mailer, against the local catcher", () => {
-  const mailer = mailerFromEnv({ ...process.env, MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: undefined });
+  const mailer = mailerFromEnv({ ...process.env, MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: undefined, SENDGRID_API_KEY: undefined });
 
   it("chooses the catcher, never SES, when MAIL_CATCHER_URL is set", () => {
     expect(mailer.transport).toBe("catcher");
