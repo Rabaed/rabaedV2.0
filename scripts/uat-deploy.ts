@@ -108,13 +108,16 @@ export function projectSettings(project: ProjectName, env: NodeJS.ProcessEnv): R
   };
   if (project === "web") return { ...common, rootDirectory: "apps/web", framework: "nextjs" };
   if (project === "api") return { ...common, rootDirectory: "apps/api", framework: null };
-  // `all`: the production *.vercel.app address too. The gate builds no preview of Admin (it holds the bypass role).
+  // The gate builds no preview of Admin (it holds the bypass role). Password Protection
+  // (`all`: the production *.vercel.app address too) awaits the owner's yes or no: with
+  // no ADMIN_VERCEL_PASSWORD the setting is left as it is, neither applied nor removed.
+  const password = env.ADMIN_VERCEL_PASSWORD;
   return {
     ...common,
     commandForIgnoringBuildStep: `${common.commandForIgnoringBuildStep} admin`,
     rootDirectory: "apps/admin",
     framework: null,
-    passwordProtection: { deploymentType: "all", password: required(env, "ADMIN_VERCEL_PASSWORD") },
+    ...(password ? { passwordProtection: { deploymentType: "all", password } } : {}),
   };
 }
 
@@ -128,7 +131,8 @@ export interface ProjectVariable {
 /** The project's variables, every one Sensitive; `version` (the commit) goes to production only. */
 export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version: string): ProjectVariable[] {
   const functions = { NODE_OPTIONS: "--experimental-transform-types", NODEJS_HELPERS: "0" };
-  const mail = { WEB_URL: httpsUrl(env, "UAT_WEB_URL"), MAIL_FROM: required(env, "MAIL_FROM"), SENDGRID_API_KEY: required(env, "SENDGRID_API_KEY") };
+  // Read only for the project that gets them: each workflow step passes its project's secrets alone.
+  const mail = () => ({ WEB_URL: httpsUrl(env, "UAT_WEB_URL"), MAIL_FROM: required(env, "MAIL_FROM"), SENDGRID_API_KEY: required(env, "SENDGRID_API_KEY") });
   const values: Record<ProjectName, () => Record<string, string>> = {
     web: () => ({ API_URL: httpsUrl(env, "UAT_API_URL") }),
     api: () => ({
@@ -141,10 +145,10 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
       FILE_STORE_ACCESS_KEY_ID: required(env, "FILE_STORE_ACCESS_KEY_ID"),
       FILE_STORE_SECRET_ACCESS_KEY: required(env, "FILE_STORE_SECRET_ACCESS_KEY"),
       FILE_STORE_REGION: "auto",
-      ...mail,
+      ...mail(),
       CRON_SECRET: required(env, "CRON_SECRET"),
     }),
-    admin: () => ({ ...functions, DATABASE_ADMIN_URL: uatDatabase(env).adminTransaction, DATABASE_POOL_MAX: "2", SESSION_COOKIE_SECURE: "true", ...mail }),
+    admin: () => ({ ...functions, DATABASE_ADMIN_URL: uatDatabase(env).adminTransaction, DATABASE_POOL_MAX: "2", SESSION_COOKIE_SECURE: "true", ...mail() }),
   };
   // Previews of web and the api run a branch's code against UAT (ADR 0026), as the gate
   // allows. Admin has none (vercel-preview-gate.ts), and nothing of its may reach one: it
@@ -232,6 +236,8 @@ async function main([command, argument]: string[]): Promise<void> {
   }
   if (command === "project") {
     await applyProject(project(argument), env, required(env, "VERSION"));
+    // A GitHub Actions notice: Admin is not behind Password Protection from this deploy.
+    if (argument === "admin" && !env.ADMIN_VERCEL_PASSWORD) console.log("::notice::ADMIN_VERCEL_PASSWORD is empty: Rabaed Admin's Password Protection was not applied (left as it is in Vercel).");
     return console.log(`uat-deploy: ${argument}'s settings and variables applied`);
   }
   if (command === "bypass") return void process.stdout.write(`${await automationBypass(project(argument), env)}\n`);

@@ -8,7 +8,8 @@ import { apiSmokeTest, smokeRunFromEnv, smokeTest, type SmokeRun } from "../src/
 // Usage, the api before web is deployed (UAT on Vercel, RP-1043):
 //   SMOKE_API_URL=https://… SMOKE_VERSION=<commit> SMOKE_DEMO_PASSWORD=… [SMOKE_ADMIN_URL=https://…] [SMOKE_ADMIN_BYPASS=…] tsx bin/smoke.ts
 // It checks the api's version and database, and visibility asked of the api itself.
-// SMOKE_ADMIN_BYPASS is Admin's Vercel Protection Bypass for Automation secret, sent to Admin only.
+// SMOKE_ADMIN_BYPASS is Admin's Vercel Protection Bypass for Automation secret, sent to Admin only;
+// set only while Admin is behind Password Protection, it also checks Admin refuses a request without it.
 // Retries for a few minutes, since new targets take a moment to turn healthy.
 const run = smokeRunFromEnv(process.env);
 if ("error" in run) {

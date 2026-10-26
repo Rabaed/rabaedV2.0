@@ -108,8 +108,12 @@ describe("the three Vercel projects' settings", () => {
     });
   });
 
-  it("refuse Admin without its password, rather than leave it open", () => {
-    expect(() => projectSettings("admin", { ...env, ADMIN_VERCEL_PASSWORD: "" })).toThrow("ADMIN_VERCEL_PASSWORD is required");
+  // The owner has yet to decide on Admin's Password Protection ($20 a month): without
+  // the secret, the setting is left as it is, neither applied nor removed.
+  it("leave Admin's Password Protection alone when ADMIN_VERCEL_PASSWORD is empty", () => {
+    const settings = projectSettings("admin", { ...env, ADMIN_VERCEL_PASSWORD: "" });
+    expect(settings).not.toHaveProperty("passwordProtection");
+    expect(settings).toMatchObject({ rootDirectory: "apps/admin", commandForIgnoringBuildStep: "node ../../scripts/vercel-preview-gate.ts admin" });
   });
 });
 
@@ -178,6 +182,10 @@ describe("the three Vercel projects' environment variables", () => {
       }
       expect(sent(project)).not.toContain("superuser-secret");
     }
+  });
+
+  it("need only what the project itself gets (web's step has no mail or database secret)", () => {
+    expect(projectEnv("web", { UAT_API_URL: env.UAT_API_URL }, version).map((v) => v.key)).toEqual(["APP_VERSION", "API_URL"]);
   });
 
   it("refuse a missing value, naming it", () => {

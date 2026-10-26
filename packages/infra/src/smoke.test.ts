@@ -380,6 +380,12 @@ describe("Rabaed Admin checks", () => {
     expect(await smokeTest({ url, adminUrl, version, fetch: protectedAdmin })).toEqual([`${adminUrl}/health answered 401`]);
   });
 
+  // Given a bypass, Admin is meant to be protected: a request without it must be refused.
+  it("fail when a protected Rabaed Admin answers without its password", async () => {
+    const failures = await smokeTest({ url, adminUrl, adminBypass: "a".repeat(32), version, fetch: customer() });
+    expect(failures).toEqual([`Rabaed Admin answered ${adminUrl}/health with 200 without its password: Password Protection is off`]);
+  });
+
   it("accept a redirect for a page path (web adds the language), but never a 2xx", async () => {
     const page = ADMIN_PATHS.find((p) => !p.path.startsWith("/api/"))!;
     const redirected = customer({ [`${url}${page.path}`]: { status: 307, location: `/en${page.path}` } });

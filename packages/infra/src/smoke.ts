@@ -68,7 +68,7 @@ export async function smokeTest({ url, adminUrl, adminBypass, version, arabicFon
   if (demoPassword) await check("visibility", () => visibilityCheck({ url, password: demoPassword, fetch: get }));
 
   if (adminUrl) {
-    await check("Rabaed Admin health", () => healthCheck({ url: adminUrl, who: "Rabaed Admin", version, headers: bypassHeader(adminBypass), fetch: get }));
+    await check("Rabaed Admin health", () => adminCheck({ adminUrl, adminBypass, version, fetch: get }));
     await check("no Rabaed Admin on the customer address", async () => {
       const found: string[] = [];
       for (const { method, path } of ADMIN_PATHS) {
@@ -99,6 +99,20 @@ function collector() {
 
 /** Admin's Vercel Protection Bypass for Automation header, sent to Admin alone (it sits behind Password Protection). */
 const bypassHeader = (secret: string | undefined): Record<string, string> => (secret ? { "x-vercel-protection-bypass": secret } : {});
+
+/**
+ * Rabaed Admin's health. Given a bypass, Admin is behind Vercel's Password Protection:
+ * the check passes it with the header, and a request without it must be refused
+ * (Vercel answers 401). Without one (protection not yet decided), plain requests.
+ */
+async function adminCheck({ adminUrl, adminBypass, version, fetch: get }: { adminUrl: string; adminBypass?: string; version: string; fetch: typeof fetch }): Promise<string[]> {
+  const found = await healthCheck({ url: adminUrl, who: "Rabaed Admin", version, headers: bypassHeader(adminBypass), fetch: get });
+  if (!adminBypass) return found;
+  const health = new URL("/health", adminUrl).toString();
+  const plain = await get(health, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
+  if (plain.status !== 401 && plain.status !== 403) found.push(`Rabaed Admin answered ${health} with ${plain.status} without its password: Password Protection is off`);
+  return found;
+}
 
 /** `url`'s /health (the api's or Rabaed Admin's) answers 200 with the deployed version and its database. */
 async function healthCheck({ url, who, version, headers = {}, fetch: get }: { url: string; who: string; version: string; headers?: Record<string, string>; fetch: typeof fetch }): Promise<string[]> {
@@ -199,7 +213,7 @@ export async function apiSmokeTest({ apiUrl, version, demoPassword, adminUrl, ad
     }
     return found;
   });
-  if (adminUrl) await check("Rabaed Admin health", () => healthCheck({ url: adminUrl, who: "Rabaed Admin", version, headers: bypassHeader(adminBypass), fetch: get }));
+  if (adminUrl) await check("Rabaed Admin health", () => adminCheck({ adminUrl, adminBypass, version, fetch: get }));
   return failures;
 }
 
