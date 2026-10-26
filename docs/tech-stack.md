@@ -136,13 +136,15 @@ All three: `nodeVersion: "24.x"`, `sourceFilesOutsideRootDirectory: true`, `serv
 | `DATABASE_POOL_MAX` | | `2` | `2` | |
 | `SESSION_COOKIE_SECURE` | | `true` | `true` | cookies stay host-only, Secure; SameSite as locally (Lax for the api, Strict for Admin) |
 | `SESSION_TTL_HOURS`, `INVITATION_TTL_HOURS`, `DOCUMENT_MAX_MB`, `DOCUMENT_CONTENT_TYPES` | | optional | `INVITATION_TTL_HOURS` optional | defaults otherwise |
-| `PROJECT_FILES_BUCKET`, `FILE_STORE_ENDPOINT` | | ✓ | | `uat` variables (R2, RP-1041) |
+| `PROJECT_FILES_BUCKET` | | ✓ | | `uat` variable (R2, RP-1041) |
+| `FILE_STORE_ENDPOINT` | build | ✓ | build | `uat` variable: R2's S3 address |
 | `FILE_STORE_ACCESS_KEY_ID`, `FILE_STORE_SECRET_ACCESS_KEY` | | ✓ | | _uat_ (R2 read-write key) |
-| `AWS_REGION` | | `auto` | | R2's region (RP-1041) |
+| `FILE_STORE_REGION` | `auto` (build) | `auto` | `auto` (build) | R2's region (RP-1041); never `AWS_REGION`, which Vercel sets to its own |
 | `WEB_URL` | | | ✓ | web's production URL: invitation links |
 | `MAIL_FROM` | | | ✓ | `uat` variable |
-| `SENDGRID_API_KEY` | | | ✓ | _uat_; read once RP-1040 adds the SendGrid transport (until then the mailer wants `MAIL_SES_CONFIGURATION_SET` or `MAIL_CATCHER_URL`, and Admin fails only at its first email) |
-| `FONTS_ACCESS_KEY_ID`, `FONTS_SECRET_ACCESS_KEY`, `BUILD_ASSETS_BUCKET` | build | | build | _uat_: the Thmanyah fonts read at build time |
+| `SENDGRID_API_KEY` | | | ✓ | _uat_ (Mail Send only); no `MAIL_CATCHER_URL` or `MAIL_SES_CONFIGURATION_SET` beside it |
+| `FONTS_ACCESS_KEY_ID`, `FONTS_SECRET_ACCESS_KEY` | build | | build | _uat_ (R2 read-only): web's and Admin's build commands run `fonts:fetch` first. A Vercel variable reaches the functions too; this key reads only the fonts bucket |
+| `BUILD_ASSETS_BUCKET` | build | | build | `uat` variable |
 
 `CRON_SECRET` goes to the project that serves the outbox delivery (RP-1039). Never in any project: `DATABASE_SUPERUSER_URL`, `DATABASE_MIGRATOR_PASSWORD` (the deploy's migrate step only), `VERCEL_TOKEN`, Supabase's keys.
 

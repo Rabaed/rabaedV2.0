@@ -3,6 +3,6 @@
   "framework": "nextjs",
   "regions": ["fra1"],
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm run build",
+  "buildCommand": "pnpm --filter @rabaed/api fonts:fetch && pnpm run build",
   "git": { "deploymentEnabled": { "main": false } }
 }
