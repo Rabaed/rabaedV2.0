@@ -33,14 +33,7 @@ interface Health {
 /** Runs every check and returns what failed; empty means the deploy is good. */
 export async function smokeTest({ url, adminUrl, adminBypass, version, arabicFont, demoPassword, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
   const base = new URL(url);
-  const failures: string[] = [];
-  const check = async (name: string, run: () => Promise<string[]>) => {
-    try {
-      failures.push(...(await run()));
-    } catch (error) {
-      failures.push(`${name}: ${(error as Error).message}`);
-    }
-  };
+  const { check, failures } = collector();
   const request = (path: string, init?: RequestInit) => get(new URL(path, base).toString(), { ...init, signal: AbortSignal.timeout(10_000) });
 
   await check("HTTP redirect", async () => {
@@ -75,7 +68,7 @@ export async function smokeTest({ url, adminUrl, adminBypass, version, arabicFon
   if (demoPassword) await check("visibility", () => visibilityCheck({ url, password: demoPassword, fetch: get }));
 
   if (adminUrl) {
-    await check("Rabaed Admin health", () => adminHealthCheck({ adminUrl, adminBypass, version, fetch: get }));
+    await check("Rabaed Admin health", () => healthCheck({ url: adminUrl, who: "Rabaed Admin", version, headers: bypassHeader(adminBypass), fetch: get }));
     await check("no Rabaed Admin on the customer address", async () => {
       const found: string[] = [];
       for (const { method, path } of ADMIN_PATHS) {
@@ -91,16 +84,31 @@ export async function smokeTest({ url, adminUrl, adminBypass, version, arabicFon
   return failures;
 }
 
-/** Rabaed Admin answers /health with the deployed version and its database; the bypass header goes to Admin alone. */
-async function adminHealthCheck({ adminUrl, adminBypass, version, fetch: get }: { adminUrl: string; adminBypass?: string; version: string; fetch: typeof fetch }): Promise<string[]> {
-  const health = new URL("/health", adminUrl).toString();
-  const headers: Record<string, string> = adminBypass ? { "x-vercel-protection-bypass": adminBypass } : {};
+/** Runs named checks, collecting what each found; a check that throws is reported by its name, not thrown. */
+function collector() {
+  const failures: string[] = [];
+  const check = async (name: string, run: () => Promise<string[]>) => {
+    try {
+      failures.push(...(await run()));
+    } catch (error) {
+      failures.push(`${name}: ${(error as Error).message}`);
+    }
+  };
+  return { check, failures };
+}
+
+/** Admin's Vercel Protection Bypass for Automation header, sent to Admin alone (it sits behind Password Protection). */
+const bypassHeader = (secret: string | undefined): Record<string, string> => (secret ? { "x-vercel-protection-bypass": secret } : {});
+
+/** `url`'s /health (the api's or Rabaed Admin's) answers 200 with the deployed version and its database. */
+async function healthCheck({ url, who, version, headers = {}, fetch: get }: { url: string; who: string; version: string; headers?: Record<string, string>; fetch: typeof fetch }): Promise<string[]> {
+  const health = new URL("/health", url).toString();
   const res = await get(health, { headers, signal: AbortSignal.timeout(10_000) });
   if (res.status !== 200) return [`${health} answered ${res.status}`];
   const body = (await res.json()) as { version?: string; database?: string };
   const found: string[] = [];
-  if (body.version !== version) found.push(`Rabaed Admin runs ${body.version}, expected ${version}`);
-  if (body.database !== "ok") found.push(`Rabaed Admin's database: ${body.database}`);
+  if (body.version !== version) found.push(`${who} runs ${body.version}, expected ${version}`);
+  if (body.database !== "ok") found.push(`${who}'s database: ${body.database}`);
   return found;
 }
 
@@ -174,29 +182,24 @@ export interface ApiSmokeTestOptions {
 /**
  * The checks that run once the api and Rabaed Admin are deployed and before web
  * is (RP-1043): the api runs this version with its database, visibility holds
- * when asked of the api directly, and Admin answers. Empty means web may follow.
+ * when asked of the api directly, the api's own public address serves none of
+ * Rabaed Admin, and Admin answers. Empty means web may follow.
  */
 export async function apiSmokeTest({ apiUrl, version, demoPassword, adminUrl, adminBypass, fetch: get = fetch }: ApiSmokeTestOptions): Promise<string[]> {
-  const failures: string[] = [];
-  const check = async (name: string, run: () => Promise<string[]>) => {
-    try {
-      failures.push(...(await run()));
-    } catch (error) {
-      failures.push(`${name}: ${(error as Error).message}`);
-    }
-  };
-  await check("api health", async () => {
-    const health = new URL("/health", apiUrl).toString();
-    const res = await get(health, { signal: AbortSignal.timeout(10_000) });
-    const body = (await res.json().catch(() => ({}))) as { version?: string; database?: string };
+  const { check, failures } = collector();
+  await check("api health", () => healthCheck({ url: apiUrl, who: "api", version, fetch: get }));
+  await check("visibility", () => visibilityCheck({ url: apiUrl, password: demoPassword, memberApi: "/v1", fetch: get }));
+  await check("no Rabaed Admin on the api's address", async () => {
     const found: string[] = [];
-    if (res.status !== 200 && res.status !== 503) return [`${health} answered ${res.status}`];
-    if (body.version !== version) found.push(`api runs ${body.version}, expected ${version}`);
-    if (body.database !== "ok") found.push(`api's database: ${body.database}`);
+    for (const { method, path: onWeb } of ADMIN_PATHS) {
+      // Web's /api/... is the api's /...; the api answers a route it doesn't serve with 404 before any sign-in check.
+      const path = onWeb.replace(/^\/api\//, "/");
+      const res = await get(new URL(path, apiUrl).toString(), { method, redirect: "manual", headers: { "content-type": "application/json" }, body: method === "POST" ? "{}" : undefined, signal: AbortSignal.timeout(10_000) });
+      if (res.status !== 404) found.push(`the api answered ${method} ${path} with ${res.status}: it must not serve Rabaed Admin`);
+    }
     return found;
   });
-  await check("visibility", () => visibilityCheck({ url: apiUrl, password: demoPassword, memberApi: "/v1", fetch: get }));
-  if (adminUrl) await check("Rabaed Admin health", () => adminHealthCheck({ adminUrl, adminBypass, version, fetch: get }));
+  if (adminUrl) await check("Rabaed Admin health", () => healthCheck({ url: adminUrl, who: "Rabaed Admin", version, headers: bypassHeader(adminBypass), fetch: get }));
   return failures;
 }
 

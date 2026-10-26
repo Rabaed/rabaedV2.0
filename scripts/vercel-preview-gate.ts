@@ -7,15 +7,18 @@ import { resolve } from "node:path";
 // gets no preview: the migration is seen on UAT after merge, through deploy-uat.yml.
 //
 // The deploy workflow sets it as each project's `commandForIgnoringBuildStep`:
-//   node ../../scripts/vercel-preview-gate.ts
+//   node ../../scripts/vercel-preview-gate.ts [admin]
 // Vercel runs it before the install, in the project's Root Directory, in a clone ten
 // commits deep, with the system variables (VERCEL_ENV, VERCEL_GIT_REPO_OWNER,
 // VERCEL_GIT_REPO_SLUG). Exit 1 builds, exit 0 skips the build (Vercel docs, Project
 // settings › Ignored Build Step). Plain Node: no dependencies, since nothing is installed yet.
 //
-// Production always builds: deploy-uat.yml migrates UAT before it deploys. Where the
-// gate cannot tell (main can't be fetched), a preview is skipped, never built against a
-// schema it didn't migrate.
+// Only previews build here. Production is deployed by deploy-uat.yml alone, prebuilt
+// (which never runs this step), after it migrates UAT; a production build Vercel starts
+// itself would go live before the migrations. Rabaed Admin gets no previews: it holds the
+// bypass role (ADR 0010), which no branch's unreviewed code may run with. Where the gate
+// cannot tell (main can't be fetched, the gate itself fails), a preview is skipped, never
+// built against a schema it didn't migrate.
 
 export const MIGRATIONS_DIR = "packages/db/migrations/";
 
@@ -37,9 +40,10 @@ export interface GateDecision {
 }
 
 /* eslint-disable rabaed/no-avoid-terms -- "migration" here is a database migration (packages/db/migrations), as in the build log */
-/** Whether Vercel builds this deployment; `notOnMain` is migrationsNotOnMain for the clone, given main's remote. */
-export function previewGate(env: NodeJS.ProcessEnv, notOnMain: (remote: string) => string[]): GateDecision {
-  if (env.VERCEL_ENV === "production") return { build: true, reason: "a production deployment: the deploy workflow migrated UAT first" };
+/** Whether Vercel builds this deployment of `project`; `notOnMain` is migrationsNotOnMain for the clone, given main's remote. */
+export function previewGate(env: NodeJS.ProcessEnv, notOnMain: (remote: string) => string[], project?: string): GateDecision {
+  if (env.VERCEL_ENV !== "preview") return { build: false, reason: "not a preview: production is deployed only by deploy-uat.yml, after it migrates UAT" };
+  if (project === "admin") return { build: false, reason: "no preview: Rabaed Admin holds the bypass role (ADR 0010), so only deploy-uat.yml deploys it" };
   const cannotTell = (why: string): GateDecision => ({ build: false, reason: `no preview: cannot tell whether this branch adds a migration (${why})` });
   const { VERCEL_GIT_REPO_OWNER: owner, VERCEL_GIT_REPO_SLUG: slug } = env;
   if (!owner || !slug) return cannotTell("VERCEL_GIT_REPO_OWNER and VERCEL_GIT_REPO_SLUG unset");
@@ -58,7 +62,13 @@ export function previewGate(env: NodeJS.ProcessEnv, notOnMain: (remote: string) 
 /* eslint-enable rabaed/no-avoid-terms */
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
-  const { build, reason } = previewGate(process.env, (remote) => migrationsNotOnMain(process.cwd(), remote));
-  console.log(`vercel-preview-gate: ${reason}`);
-  process.exit(build ? 1 : 0);
+  let decision: GateDecision;
+  try {
+    decision = previewGate(process.env, (remote) => migrationsNotOnMain(process.cwd(), remote), process.argv[2]);
+  } catch (error) {
+    // Node exits 1 on an uncaught error, which Vercel reads as "build".
+    decision = { build: false, reason: `no preview: the gate failed (${(error as Error).message})` };
+  }
+  console.log(`vercel-preview-gate: ${decision.reason}`);
+  process.exit(decision.build ? 1 : 0);
 }

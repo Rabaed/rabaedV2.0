@@ -196,6 +196,8 @@ describe("visibility check", () => {
       if (prefix === "/v1" && asked === "/health") return json(200, health);
       if (!asked.startsWith(`${prefix}/`)) return json(404, { error: "not_found" });
       const path = `/api/v1${asked.slice(prefix.length)}`;
+      // As the api: an unknown route is 404 for everyone, before the sign-in check.
+      if (!/^\/api\/v1\/(session|projects(\/[^/]+(\/work-items)?)?|work-items\/[^/]+)$/.test(path)) return json(404, { error: "not_found" });
       if (path === "/api/v1/session" && method === "POST") {
         const { email, password: given } = JSON.parse(String(init.body));
         const who = (Object.keys(people) as Who[]).find((w) => people[w] === email);
@@ -249,6 +251,18 @@ describe("visibility check", () => {
     it("fails when visibility does not hold on the api", async () => {
       const leaking = api({ prefix: "/v1", leak: { who: "hafiz", path: `/api/v1/projects/${jcv}` } }).fetcher;
       expect(await apiSmokeTest({ apiUrl, version, demoPassword: password, fetch: leaking })).toEqual([`${people.hafiz}: /v1/projects/${jcv} answered 200, expected 404`]);
+    });
+
+    // The api has its own public address on Vercel: none of Admin's routes may answer there.
+    it.each([
+      ["POST", "/v1/sign-in"],
+      ["POST", "/admin/v1/session"],
+      ["GET", "/assets/admin.js"],
+    ])("fails when the api's own address answers %s %s", async (method, path) => {
+      const member = api({ prefix: "/v1" }).fetcher;
+      const serving = (async (input: string | URL, init: RequestInit = {}) =>
+        new URL(String(input)).pathname === path ? new Response("{}", { status: 401 }) : member(input, init)) as typeof fetch;
+      expect(await apiSmokeTest({ apiUrl, version, demoPassword: password, fetch: serving })).toEqual([`the api answered ${method} ${path} with 401: it must not serve Rabaed Admin`]);
     });
 
     it("checks Rabaed Admin too, through its protection bypass", async () => {

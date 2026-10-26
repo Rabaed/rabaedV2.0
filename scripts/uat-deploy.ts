@@ -108,8 +108,14 @@ export function projectSettings(project: ProjectName, env: NodeJS.ProcessEnv): R
   };
   if (project === "web") return { ...common, rootDirectory: "apps/web", framework: "nextjs" };
   if (project === "api") return { ...common, rootDirectory: "apps/api", framework: null };
-  // `all`: the production *.vercel.app address too.
-  return { ...common, rootDirectory: "apps/admin", framework: null, passwordProtection: { deploymentType: "all", password: required(env, "ADMIN_VERCEL_PASSWORD") } };
+  // `all`: the production *.vercel.app address too. The gate builds no preview of Admin (it holds the bypass role).
+  return {
+    ...common,
+    commandForIgnoringBuildStep: `${common.commandForIgnoringBuildStep} admin`,
+    rootDirectory: "apps/admin",
+    framework: null,
+    passwordProtection: { deploymentType: "all", password: required(env, "ADMIN_VERCEL_PASSWORD") },
+  };
 }
 
 export interface ProjectVariable {
@@ -140,8 +146,17 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
     }),
     admin: () => ({ ...functions, DATABASE_ADMIN_URL: uatDatabase(env).adminTransaction, DATABASE_POOL_MAX: "2", SESSION_COOKIE_SECURE: "true", ...mail }),
   };
+  // Previews of web and the api run a branch's code against UAT (ADR 0026), as the gate
+  // allows. Admin has none (vercel-preview-gate.ts), and nothing of its may reach one: it
+  // holds the bypass role (ADR 0010). The cron secret is production's: Vercel runs crons
+  // on production only. Web's previews call the api's production address, since an api
+  // preview sits behind Vercel Authentication.
+  const productionOnly = (key: string) => project === "admin" || key === "CRON_SECRET";
   const sensitive = (key: string, value: string, target: ProjectVariable["target"]): ProjectVariable => ({ key, value, type: "sensitive", target });
-  return [sensitive("APP_VERSION", version, ["production"]), ...Object.entries(values[project]()).map(([key, value]) => sensitive(key, value, ["production", "preview"]))];
+  return [
+    sensitive("APP_VERSION", version, ["production"]),
+    ...Object.entries(values[project]()).map(([key, value]) => sensitive(key, value, productionOnly(key) ? ["production"] : ["production", "preview"])),
+  ];
 }
 
 const VERCEL_API = "https://api.vercel.com";

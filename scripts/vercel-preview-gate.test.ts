@@ -82,8 +82,15 @@ describe("migrationsNotOnMain, from a one-commit-deep clone", () => {
 describe("previewGate", () => {
   const preview = { VERCEL_ENV: "preview", VERCEL_GIT_REPO_OWNER: "Rabaed", VERCEL_GIT_REPO_SLUG: "rabaedV2.0" };
 
-  it("builds production: the deploy workflow migrated first", () => {
-    expect(previewGate({ VERCEL_ENV: "production" }, () => ["packages/db/migrations/x.sql"])).toEqual({ build: true, reason: "a production deployment: the deploy workflow migrated UAT first" });
+  // deploy-uat.yml deploys production prebuilt, which never runs this step; a production
+  // build Vercel starts itself (its Git deploy turned back on, a dashboard redeploy) would
+  // go live before the migrations, so it is skipped.
+  it.each([["production"], [undefined]])("skips anything but a preview (VERCEL_ENV %s)", (vercelEnv) => {
+    expect(previewGate({ ...preview, VERCEL_ENV: vercelEnv }, () => [])).toEqual({ build: false, reason: "not a preview: production is deployed only by deploy-uat.yml, after it migrates UAT" });
+  });
+
+  it("skips every preview of Rabaed Admin, which holds the bypass role", () => {
+    expect(previewGate(preview, () => [], "admin")).toEqual({ build: false, reason: "no preview: Rabaed Admin holds the bypass role (ADR 0010), so only deploy-uat.yml deploys it" });
   });
 
   it("builds a preview whose branch adds no migration, asking main of the repository Vercel cloned", () => {
@@ -97,6 +104,20 @@ describe("previewGate", () => {
       build: false,
       reason: "no preview: this branch has a migration main lacks (packages/db/migrations/20270201000000_new.sql), and previews run against UAT's database; it is seen on UAT after merge",
     });
+  });
+
+  it("exits 0 (skip) when the gate itself fails, rather than let Vercel build", () => {
+    const script = join(dirname(import.meta.filename), "vercel-preview-gate.ts");
+    const run = (cwd: string, env: NodeJS.ProcessEnv) => {
+      try {
+        execFileSync(process.execPath, [script], { cwd, env: { ...process.env, ...env }, stdio: "pipe" });
+        return 0;
+      } catch (error) {
+        return (error as { status: number }).status;
+      }
+    };
+    // Not a Git checkout: git itself fails.
+    expect(run(tmpdir(), preview)).toBe(0);
   });
 
   it("skips a preview when it cannot tell, rather than run against a schema it didn't migrate", () => {

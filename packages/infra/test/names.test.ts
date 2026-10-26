@@ -75,11 +75,11 @@ describe("names for the workflows and the setup wizard", () => {
   });
 
   // Only the one input that picks the environment (RABAED_ENV) may say which it is.
-  it.each(
-    [".github/workflows/deploy-dev.yml", ".github/workflows/infra-diff.yml", "packages/infra/scripts/setup-aws-account.sh", "packages/infra/scripts/run-task.sh"].filter((file) =>
-      existsSync(repoFile(file)),
-    ),
-  )("%s spells no environment's names itself", (file) => {
+  it.each([
+    ...[".github/workflows/deploy-dev.yml", ".github/workflows/infra-diff.yml"].filter((retired) => existsSync(repoFile(retired))),
+    "packages/infra/scripts/setup-aws-account.sh",
+    "packages/infra/scripts/run-task.sh",
+  ])("%s spells no environment's names itself", (file) => {
     const text = readFileSync(repoFile(file), "utf8");
     expect(text.match(/.*(?:[rR]abaed[-/]dev\b|env=dev\b|[rR]abaed[-/]\$\{?RABAED_ENV|STACK_PREFIX).*/g) ?? []).toEqual([]);
   });

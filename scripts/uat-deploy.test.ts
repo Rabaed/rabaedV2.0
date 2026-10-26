@@ -101,6 +101,7 @@ describe("the three Vercel projects' settings", () => {
     expect(projectSettings("api", env)).toEqual({ ...common, rootDirectory: "apps/api", framework: null });
     expect(projectSettings("admin", env)).toEqual({
       ...common,
+      commandForIgnoringBuildStep: "node ../../scripts/vercel-preview-gate.ts admin",
       rootDirectory: "apps/admin",
       framework: null,
       passwordProtection: { deploymentType: "all", password: "admin-vercel-password" },
@@ -113,11 +114,15 @@ describe("the three Vercel projects' settings", () => {
 });
 
 describe("the three Vercel projects' environment variables", () => {
-  it("are every one Sensitive, for production and previews; the commit for production only", () => {
+  // Previews of web and the api run a branch's code against UAT (ADR 0026); Admin has no
+  // previews, and nothing of its reaches one. The commit and the cron secret are production's
+  // (Vercel runs crons on production only).
+  it("are every one Sensitive; previews get web's and the api's, but the commit, the cron secret and all of Admin's", () => {
+    const productionOnly = (project: ProjectName, key: string) => project === "admin" || key === "APP_VERSION" || key === "CRON_SECRET";
     for (const project of PROJECTS) {
       for (const variable of projectEnv(project, env, version)) {
         expect(variable.type, `${project} ${variable.key}`).toBe("sensitive");
-        expect(variable.target, `${project} ${variable.key}`).toEqual(variable.key === "APP_VERSION" ? ["production"] : ["production", "preview"]);
+        expect(variable.target, `${project} ${variable.key}`).toEqual(productionOnly(project, variable.key) ? ["production"] : ["production", "preview"]);
       }
     }
   });
