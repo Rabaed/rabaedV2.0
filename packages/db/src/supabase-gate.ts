@@ -97,6 +97,15 @@ function required(source: NodeJS.ProcessEnv, name: string): string {
   return z.string().min(1, `${name} is required`).parse(source[name] ?? "");
 }
 
+/** The gate's own database: DATABASE_NAME, else rabaed_gate (locally <the .env database>_gate). */
+function gateDatabaseNameOf(source: NodeJS.ProcessEnv): string {
+  // Locally the worktree's .env has whole URLs: the gate builds its own database beside theirs.
+  const localUrl = source.DATABASE_MIGRATOR_URL;
+  const database = source.DATABASE_NAME || (localUrl ? `${databaseNameOf(localUrl)}_gate` : "rabaed_gate");
+  if (!gateDatabase.test(database)) throw new Error("DATABASE_NAME must end in _gate: the gate drops and rebuilds it");
+  return database;
+}
+
 /**
  * The gate's connections. Every role reaches the server `DATABASE_SUPERUSER_URL`
  * reaches (on Supabase the session pooler, since the direct connection is
@@ -109,10 +118,7 @@ export function gateUrlsFromEnv(source: NodeJS.ProcessEnv = process.env): GateUr
   if (projectRef && suffix && suffix !== projectRef) {
     throw new Error("DATABASE_SUPERUSER_URL logs in to another project than SUPABASE_PROJECT_REF");
   }
-  // Locally the worktree's .env has whole URLs: the gate builds its own database beside theirs.
-  const localUrl = source.DATABASE_MIGRATOR_URL;
-  const database = source.DATABASE_NAME || (localUrl ? `${databaseNameOf(localUrl)}_gate` : "rabaed_gate");
-  if (!gateDatabase.test(database)) throw new Error("DATABASE_NAME must end in _gate: the gate drops and rebuilds it");
+  const database = gateDatabaseNameOf(source);
   const roleUrl = (role: string, variable: "MIGRATOR" | "APP" | "ADMIN"): string => {
     const whole = source[`DATABASE_${variable}_URL`];
     const password = source[`DATABASE_${variable}_PASSWORD`] || (whole ? decodeURIComponent(new URL(whole).password) : "");
@@ -178,7 +184,8 @@ type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 const projectRefPattern = /^[a-z0-9]{10,40}$/;
 
 // With the Data API off, Supabase keeps PostgREST running with only this placeholder
-// schema exposed (Supabase's troubleshooting guide), so its refusals name it.
+// schema exposed, and the schema doesn't exist ("schema pg_pgrst_no_exposed_schemas
+// does not exist", https://supabase.com/docs/guides/troubleshooting/schema-pg_pgrst_no_exposed_schemas-does-not-exist).
 const NO_EXPOSED_SCHEMAS = "pg_pgrst_no_exposed_schemas";
 
 // The table the probe asks for: one every Rabaed database has. Not the OpenAPI root
@@ -197,15 +204,25 @@ const jwtError = /^PGRST3\d\d$/;
 
 // PGRST002 (503): PostgREST could not build its schema cache, and says it is retrying
 // (https://docs.postgrest.org/en/v12/references/errors.html, "Group 2 - Schema Cache").
-// It rebuilds the cache after DDL, so the check asks again: six asks over two minutes.
-// Supabase's troubleshooting guide also gives a lasting cause, an exposed schema that is
-// missing, so a PGRST002 still there after the waits fails as unexpected.
+// A passing cause: it rebuilds the cache after DDL, so the check asks again, six asks over
+// two minutes, and judges a PGRST002 that changes by what it changes into. A lasting one,
+// which Supabase's guide gives: a schema PostgREST is told to expose doesn't exist
+// (https://supabase.com/docs/guides/troubleshooting/postgrest-error-pgrst002-could-not-query-the-database-for-the-schema-cache-c396e9).
+// With the Data API off that schema is the placeholder, which doesn't exist (above), so
+// PostgREST never loads a cache and answers every call so: a 503 PGRST002 through the
+// whole window is the Data-API-off answer (data-api-only run 40382032283; the owner,
+// 2026-10-26). The database-side check (checkSupabaseRolesHoldNothing) backs it up.
 const SCHEMA_CACHE_NOT_LOADED = "PGRST002";
 const SCHEMA_CACHE_WAITS_MS = [5_000, 10_000, 20_000, 40_000, 45_000];
+const SCHEMA_CACHE_ASKS = SCHEMA_CACHE_WAITS_MS.length + 1;
+const SCHEMA_CACHE_WINDOW_S = SCHEMA_CACHE_WAITS_MS.reduce((a, b) => a + b, 0) / 1000;
 
 export type DataApiCheck =
-  /** Passes: the call with the key got the Data-API-off answer. */
-  | { outcome: "off"; status: number }
+  /**
+   * Passes: the call with the key got a Data-API-off answer: PGRST106 naming the
+   * placeholder, or PGRST002 on every ask (no schema for PostgREST to serve).
+   */
+  | { outcome: "off"; status: number; code: "PGRST106" | "PGRST002" }
   /** Fails: a 2xx, the table answered. */
   | { outcome: "open"; status: number }
   /** Fails: PostgREST answered from an exposed schema, though not with rows: the Data API is on. */
@@ -246,14 +263,19 @@ function saidIn({ code, message = "" }: Answer, publishableKey: string): { code?
 }
 
 /**
- * The Data-API-off answer, and only it: PostgREST's PGRST106, 406, "the schema specified
+ * The placeholder's refusal: PostgREST's PGRST106, 406, "the schema specified
  * ... is not present in the db-schemas configuration"
  * (https://docs.postgrest.org/en/v12/references/errors.html), naming the placeholder as the
  * only schema exposed, in its hint ("Only the following schemas are exposed: ...") or, in
  * older PostgREST, its message ("The schema must be one of the following: ...").
  */
-function isDataApiOffAnswer({ status, json, code, message, hint }: Answer): boolean {
+function namesThePlaceholder({ status, json, code, message, hint }: Answer): boolean {
   return status === 406 && json && code === "PGRST106" && [hint, message].some((text) => text?.includes(NO_EXPOSED_SCHEMAS));
+}
+
+/** PostgREST's 503 PGRST002, the cache not loaded; checkDataApiOff asks until it changes or the window ends. */
+function isSchemaCacheNotLoaded({ status, json, code }: Answer): boolean {
+  return status === 503 && json && code === SCHEMA_CACHE_NOT_LOADED;
 }
 
 /** The Supabase settings the Data API check needs, checked before it calls anywhere. Refuses a ref that would send the call elsewhere. */
@@ -266,8 +288,10 @@ function checkSupabaseSettings(projectRef: string, publishableKey: string | unde
  * ADR 0026: the Data API is off, so no table is reachable around our api. The
  * call asks for a table with Supabase's publishable key (without a key the
  * gateway answers 401 whether the Data API is on or off), on the `apikey`
- * header alone, as Supabase's docs say. It passes only on an answer naming the
- * placeholder schema Supabase exposes with the Data API off.
+ * header alone, as Supabase's docs say. It passes only on a Data-API-off answer:
+ * one naming the placeholder schema Supabase exposes with the Data API off, or
+ * PGRST002 through the whole retry window, PostgREST unable to load that schema.
+ * Any 2xx, 42501 or PGRST205 fails as on; 401/403 from the gateway as key refused.
  */
 export async function checkDataApiOff({
   projectRef,
@@ -300,7 +324,9 @@ export async function checkDataApiOff({
   const { status } = answer;
   // A table that answers is open, whatever its rows say.
   if (answer.ok) return { outcome: "open", status };
-  if (isDataApiOffAnswer(answer)) return { outcome: "off", status };
+  if (namesThePlaceholder(answer)) return { outcome: "off", status, code: "PGRST106" };
+  // Still PGRST002 after every ask (the loop stops at any other answer): no schema to serve.
+  if (isSchemaCacheNotLoaded(answer)) return { outcome: "off", status, code: SCHEMA_CACHE_NOT_LOADED };
   const { code, message } = saidIn(answer, publishableKey);
   const said = message ? { message } : {};
   if (code && ANSWERED_FROM_EXPOSED_SCHEMA.has(code)) return { outcome: "on", status, code, ...said };
@@ -318,8 +344,165 @@ function dataApiFailure(result: Exclude<DataApiCheck, { outcome: "off" | "skippe
     case "key refused":
       return `${PROBE_PATH} refused the publishable key (${[result.status, said].filter(Boolean).join(": ")}), which proves nothing about the Data API: check the SUPABASE_PUBLISHABLE_KEY secret`;
     case "unexpected":
-      return `${PROBE_PATH} answered ${result.status}${said ? ` (${said})` : ""}, not the Data-API-off answer (no schema exposed)`;
+      return `${PROBE_PATH} answered ${result.status}${said ? ` (${said})` : ""}, not a Data-API-off answer (no schema exposed)`;
   }
+}
+
+/** The roles Supabase's PostgREST runs a call as: `anon` (a publishable key) and `authenticated` (a signed-in user's JWT). */
+export const SUPABASE_API_ROLES = ["anon", "authenticated"] as const;
+/** Rabaed's schemas: the tables in `public`, the functions in `app` (migrations/). */
+export const RABAED_SCHEMAS = ["public", "app"] as const;
+/** UAT's database (scripts/uat-deploy.ts), when the `uat` variable DATABASE_NAME doesn't name another. */
+const UAT_DATABASE = "rabaed_uat";
+// The roles that own Rabaed's objects: a relation one of them owns is Rabaed's.
+const RABAED_ROLES = [MIGRATOR_ROLE, APP_ROLE, ADMIN_ROLE];
+
+/** A privilege a Supabase API role holds on one of Rabaed's objects, directly or through PUBLIC. */
+export interface RolePrivilege {
+  database: string;
+  role: string;
+  privilege: string;
+  /** table, view, materialized view, foreign table, sequence, function, procedure, aggregate, schema or database. */
+  kind: string;
+  object: string;
+}
+
+export type SupabaseRolesCheck =
+  /** Neither role exists: not a Supabase server (a local Postgres). */
+  | { outcome: "skipped" }
+  | {
+      outcome: "checked";
+      /** The Supabase API roles the server has. */
+      roles: string[];
+      /** The Rabaed databases read: the named ones that exist, then any other rabaed_migrator owns. */
+      checked: string[];
+      /** The named databases that don't exist. */
+      missing: string[];
+      /** Every privilege found: the check fails on any. */
+      privileges: RolePrivilege[];
+      /** Rabaed's relations in the `postgres` database, which Supabase's PostgREST serves: the check fails on any. */
+      tablesInPostgres: string[];
+    };
+
+// has_*_privilege counts grants to PUBLIC and to roles the API role belongs to. SELECT,
+// INSERT, UPDATE and REFERENCES go through has_any_column_privilege, which also sees a
+// grant on a single column. Extensions' objects (pg_trgm's, in public) are not Rabaed's.
+const PRIVILEGES_HELD = `
+  with roles as (select unnest($1::text[]) as role),
+  relations as (
+    select c.oid, c.relkind, format('%I.%I', n.nspname, c.relname) as object
+    from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = any($2::text[]) and c.relkind in ('r', 'p', 'v', 'm', 'f', 'S')
+      and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_class'::regclass and d.objid = c.oid and d.deptype = 'e')
+  ),
+  functions as (
+    select p.oid, p.prokind, format('%I.%I(%s)', n.nspname, p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)) as object
+    from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = any($2::text[])
+      and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
+  )
+  select r.role, x.privilege,
+         case o.relkind when 'S' then 'sequence' when 'v' then 'view' when 'm' then 'materialized view' when 'f' then 'foreign table' else 'table' end as kind,
+         o.object
+  from roles r cross join relations o
+  cross join lateral unnest(case when o.relkind = 'S' then array['USAGE', 'SELECT', 'UPDATE']
+                                 else array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] end) as x(privilege)
+  where case when o.relkind = 'S' then pg_catalog.has_sequence_privilege(r.role, o.oid, x.privilege)
+             when x.privilege in ('SELECT', 'INSERT', 'UPDATE', 'REFERENCES') then pg_catalog.has_any_column_privilege(r.role, o.oid, x.privilege)
+             else pg_catalog.has_table_privilege(r.role, o.oid, x.privilege) end
+  union all
+  select r.role, 'EXECUTE', case f.prokind when 'p' then 'procedure' when 'a' then 'aggregate' else 'function' end, f.object
+  from roles r cross join functions f
+  where pg_catalog.has_function_privilege(r.role, f.oid, 'EXECUTE')
+  union all
+  select r.role, x.privilege, 'schema', pg_catalog.quote_ident(n.nspname)
+  from roles r cross join pg_catalog.pg_namespace n cross join unnest(array['USAGE', 'CREATE']) as x(privilege)
+  where n.nspname = any($2::text[]) and pg_catalog.has_schema_privilege(r.role, n.oid, x.privilege)
+  union all
+  select r.role, x.privilege, 'database', pg_catalog.current_database()::text
+  from roles r cross join unnest(array['CONNECT', 'CREATE', 'TEMPORARY']) as x(privilege)
+  where pg_catalog.has_database_privilege(r.role, pg_catalog.current_database(), x.privilege)
+  order by 4, 1, 2`;
+
+/**
+ * ADR 0026, behind the Data API being off: Supabase's API roles hold no privilege
+ * on any of Rabaed's objects in `databases` (those that exist) or in any other
+ * database rabaed_migrator owns (UAT's under another DATABASE_NAME), so even a
+ * Data API switched back on, or pointed at a Rabaed database, reaches nothing; and
+ * the `postgres` database, the one PostgREST serves, holds no Rabaed relation.
+ * Reads the catalogue as the `superuserUrl`'s login; creates and changes nothing.
+ */
+export async function checkSupabaseRolesHoldNothing(superuserUrl: string, databases: readonly string[]): Promise<SupabaseRolesCheck> {
+  const { roles, found, tablesInPostgres } = await withClient(withDatabaseName(superuserUrl, "postgres"), async (c) => {
+    const roles = (await c.query<{ name: string }>("select rolname as name from pg_catalog.pg_roles where rolname = any($1::text[]) order by 1", [SUPABASE_API_ROLES])).rows;
+    const found = (
+      await c.query<{ name: string }>(
+        `select datname as name from pg_catalog.pg_database
+         where datname = any($1::text[]) or (pg_catalog.pg_get_userbyid(datdba) = $2 and datallowconn and not datistemplate)
+         order by 1`,
+        [databases, MIGRATOR_ROLE],
+      )
+    ).rows;
+    const tables = await c.query<{ name: string }>(
+      `select format('%I.%I', n.nspname, c.relname) as name
+       from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+       where c.relkind in ('r', 'p', 'v', 'm', 'f') and pg_catalog.pg_get_userbyid(c.relowner) = any($1::text[])
+       order by 1`,
+      [RABAED_ROLES],
+    );
+    return { roles: roles.map((r) => r.name), found: found.map((d) => d.name), tablesInPostgres: tables.rows.map((t) => t.name) };
+  });
+  if (!roles.length) return { outcome: "skipped" };
+  // The named ones first, in their order, then the others rabaed_migrator owns.
+  const candidates = [...databases.filter((d) => found.includes(d)), ...found.filter((d) => !databases.includes(d))];
+  const read = await Promise.all(
+    candidates.map(async (database) => {
+      try {
+        const { rows } = await withClient(withDatabaseName(superuserUrl, database), (c) =>
+          c.query<Omit<RolePrivilege, "database">>(PRIVILEGES_HELD, [roles, RABAED_SCHEMAS]),
+        );
+        return { database, privileges: rows.map((row) => ({ database, ...row })) };
+      } catch (error) {
+        // Dropped since it was listed (a seam 2 reset): as missing as one never there.
+        if ((error as { code?: string }).code === "3D000") return { database, privileges: undefined };
+        throw error;
+      }
+    }),
+  );
+  const checked = read.filter((r) => r.privileges).map((r) => r.database);
+  return {
+    outcome: "checked",
+    roles,
+    checked,
+    missing: databases.filter((d) => !checked.includes(d)),
+    privileges: read.flatMap((r) => r.privileges ?? []),
+    tablesInPostgres,
+  };
+}
+
+// Enough to act on; a role granted everything would otherwise fill the log.
+const FINDINGS_SHOWN = 20;
+
+/** What the gate says of the Supabase roles' check: its detail when it passes; it throws, naming every finding, when it fails. */
+function supabaseRolesSaid(result: SupabaseRolesCheck): string {
+  if (result.outcome === "skipped") return `skipped: this server has no ${SUPABASE_API_ROLES.join(" or ")} (not Supabase)`;
+  const findings = [
+    ...result.privileges.map(({ database, role, privilege, kind, object }) => `${role} holds ${privilege} on ${kind} ${object} (${database})`),
+    ...result.tablesInPostgres.map((table) => `the postgres database, the one PostgREST serves, has Rabaed's ${table}`),
+  ];
+  if (findings.length) {
+    const more = findings.length - FINDINGS_SHOWN;
+    throw new Error([...findings.slice(0, FINDINGS_SHOWN), ...(more > 0 ? [`and ${more} more`] : [])].join("; "));
+  }
+  // A check that read nothing proves nothing.
+  if (!result.checked.length) throw new Error(`no Rabaed database on this server to read: ${result.missing.join(", ")} don't exist`);
+  return [
+    `${result.roles.join(", ")} hold no privilege in ${result.checked.join(", ")}`,
+    result.missing.length && `skipped ${result.missing.join(", ")} (no such database)`,
+    "no Rabaed table in the postgres database",
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 /** A step of the gate. One that keeps going fails the gate but lets the steps after it run, so one run shows their results too. */
@@ -349,7 +532,7 @@ export async function runGateSteps(steps: readonly GateStep[], say: (line: strin
   return failed;
 }
 
-/** Set to `data-api`, the gate runs only the Data API check: minutes, not seam 2's hours. Unset: the whole gate. */
+/** Set to `data-api`, the gate runs only the Data API check and the Supabase roles' check: minutes, not seam 2's hours. Unset: the whole gate. */
 export const GATE_ONLY_VARIABLE = "SUPABASE_GATE_ONLY";
 const DATA_API_ONLY = "data-api";
 
@@ -357,12 +540,15 @@ const DATA_API_ONLY = "data-api";
 export function gateSteps({
   fetch,
   sleep,
+  supabaseRoles = checkSupabaseRolesHoldNothing,
   seamTwo,
   onUrls,
   env = process.env,
 }: {
   env?: NodeJS.ProcessEnv;
   fetch?: Fetch;
+  /** The Supabase roles' check (checkSupabaseRolesHoldNothing); tests pass a stub. */
+  supabaseRoles?: (superuserUrl: string, databases: readonly string[]) => Promise<SupabaseRolesCheck>;
   /** The Data API check's wait while PostgREST loads its schema cache. */
   sleep?: (ms: number) => Promise<void>;
   /** Seam 2 as CI runs it, against the gate's database. */
@@ -394,11 +580,27 @@ export function gateSteps({
       if (only && (!projectRef || !publishableKey)) throw new Error(`${GATE_ONLY_VARIABLE}=${DATA_API_ONLY} needs SUPABASE_PROJECT_REF and SUPABASE_PUBLISHABLE_KEY`);
       const result = await checkDataApiOff({ projectRef, publishableKey, fetch, sleep });
       if (result.outcome === "skipped") return "skipped: no SUPABASE_PROJECT_REF (a local run)";
+      if (result.outcome === "off" && result.code === SCHEMA_CACHE_NOT_LOADED) {
+        return `${PROBE_PATH} with the publishable key answered ${result.status} ${result.code} on all ${SCHEMA_CACHE_ASKS} asks over ${SCHEMA_CACHE_WINDOW_S} s: PostgREST has no schema to serve (the placeholder doesn't exist)`;
+      }
       if (result.outcome === "off") return `${PROBE_PATH} with the publishable key answered ${result.status}: no schema exposed`;
       throw new Error(dataApiFailure(result));
     },
   };
-  if (only) return [dataApiOff];
+  // Read-only, so in both modes; it keeps going, as the Data API check does. In the whole gate,
+  // after the migrations, so it reads the grants they just made in the gate's database; UAT's
+  // has what its last deploy applied, and the test database what an earlier seam 2 left.
+  const supabaseRolesHoldNothing: GateStep = {
+    name: "Supabase's anon and authenticated hold no privilege on Rabaed's objects",
+    keepsGoing: true,
+    run: async () => {
+      const superuser = z.url().parse(required(env, "DATABASE_SUPERUSER_URL"), { error: () => "DATABASE_SUPERUSER_URL must be a URL" });
+      const own = gateDatabaseNameOf(env);
+      // The gate's database, the test database its seam 2 leaves, and UAT's (any other rabaed_migrator owns too).
+      return supabaseRolesSaid(await supabaseRoles(superuser, [own, `${own}_test`, UAT_DATABASE]));
+    },
+  };
+  if (only) return [dataApiOff, supabaseRolesHoldNothing];
   return [
     dataApiOff,
     {
@@ -423,6 +625,7 @@ export function gateSteps({
         return `applied ${applied.length} from empty`;
       },
     },
+    supabaseRolesHoldNothing,
     {
       name: projectRef ? "The transaction pooler carries an api call's transaction" : "An api call's transaction (no pooler locally)",
       run: async () => {

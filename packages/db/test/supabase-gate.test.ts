@@ -2,8 +2,8 @@
 // Under the gate on Supabase these run through its session pooler too.
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ADMIN_ROLE, loginUrl } from "../src/config.ts";
-import { checkBootstrapRole, checkBypassRole, poolerProbe } from "../src/supabase-gate.ts";
+import { ADMIN_ROLE, databaseNameOf, loginUrl } from "../src/config.ts";
+import { checkBootstrapRole, checkBypassRole, checkSupabaseRolesHoldNothing, poolerProbe, SUPABASE_API_ROLES } from "../src/supabase-gate.ts";
 import { dropLeftoverRoles, freshRoleName } from "../test-support/fresh-role.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
@@ -44,6 +44,79 @@ describe("checkBootstrapRole", () => {
 describe("checkBypassRole", () => {
   it("passes when rabaed_admin bypasses row-level security", async () => {
     await expect(checkBypassRole(urls.superuser)).resolves.toBeUndefined();
+  });
+});
+
+describe("checkSupabaseRolesHoldNothing", () => {
+  // The check names Supabase's roles, so a fresh name can't stand in (fresh-role.ts): on Supabase
+  // they exist; on a local Postgres this creates them, and drops only those it created.
+  const database = databaseNameOf(urls.migrator);
+  const absent = "rabaed_no_such_database_gate";
+  const created: string[] = [];
+  const check = () => checkSupabaseRolesHoldNothing(urls.superuser, [database, absent]);
+  // Only this database's findings: a shared server has other Rabaed databases, which the check reads too.
+  const heldHere = async () => {
+    const result = await check();
+    return result.outcome === "checked" ? result.privileges.filter((p) => p.database === database) : undefined;
+  };
+  beforeAll(async () => {
+    const client = new pg.Client({ connectionString: urls.superuser });
+    await client.connect();
+    try {
+      const { rows } = await client.query<{ name: string }>("select rolname as name from pg_roles where rolname = any($1::text[])", [SUPABASE_API_ROLES]);
+      for (const role of SUPABASE_API_ROLES.filter((r) => !rows.some((row) => row.name === r))) {
+        await client.query(`create role ${role} nologin`);
+        created.push(role);
+      }
+    } finally {
+      await client.end();
+    }
+  });
+  afterAll(async () => {
+    // The tests revoke what they grant; again here, so a failed one leaves no grant or role behind.
+    await query(urls.migrator, "revoke all on company from anon, authenticated, public");
+    await query(urls.migrator, "revoke all on function app.current_member_id() from public");
+    for (const role of created) await query(urls.superuser, `drop role if exists ${role}`);
+  });
+
+  async function whileGranted(grant: string, revoke: string, fn: () => Promise<void>): Promise<void> {
+    await query(urls.migrator, grant);
+    try {
+      await fn();
+    } finally {
+      await query(urls.migrator, revoke);
+    }
+  }
+
+  it("passes when anon and authenticated hold nothing, and skips a database that doesn't exist, saying so", async () => {
+    const result = await check();
+
+    expect(result).toMatchObject({ outcome: "checked", roles: ["anon", "authenticated"], missing: [absent] });
+    expect(result.outcome === "checked" && result.checked[0]).toBe(database);
+    expect(await heldHere()).toEqual([]);
+  });
+
+  it("finds a privilege granted to anon, naming the role, privilege, object and database, and passes once it is revoked", async () => {
+    await whileGranted("grant select on company to anon", "revoke select on company from anon", async () => {
+      expect(await heldHere()).toEqual([{ database, role: "anon", privilege: "SELECT", kind: "table", object: "public.company" }]);
+    });
+    expect(await heldHere()).toEqual([]);
+  });
+
+  it("finds a grant on a single column", async () => {
+    await whileGranted("grant select (id) on company to authenticated", "revoke select (id) on company from authenticated", async () => {
+      expect(await heldHere()).toEqual([{ database, role: "authenticated", privilege: "SELECT", kind: "table", object: "public.company" }]);
+    });
+  });
+
+  // anon and authenticated inherit whatever PUBLIC may do.
+  it("finds a privilege both roles hold through PUBLIC", async () => {
+    await whileGranted("grant execute on function app.current_member_id() to public", "revoke execute on function app.current_member_id() from public", async () => {
+      expect(await heldHere()).toEqual([
+        { database, role: "anon", privilege: "EXECUTE", kind: "function", object: "app.current_member_id()" },
+        { database, role: "authenticated", privilege: "EXECUTE", kind: "function", object: "app.current_member_id()" },
+      ]);
+    });
   });
 });
 
