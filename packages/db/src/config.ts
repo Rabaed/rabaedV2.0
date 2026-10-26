@@ -87,12 +87,12 @@ export function connectionFromEnv(role: keyof typeof secretVariable, source: Nod
 
 /**
  * How many connections one process's pool may hold: DATABASE_POOL_MAX when set,
- * else the process's own size. On Vercel every instance has its own pool on
+ * else `fallback`, the process's own size. On Vercel every instance has its own pool on
  * Supabase's transaction pooler, so each keeps only a few (ADR 0026).
  */
-export function poolMaxFromEnv(source: NodeJS.ProcessEnv, size: number | undefined): number | undefined {
+export function poolMaxFromEnv(source: NodeJS.ProcessEnv, fallback: number | undefined): number | undefined {
   const value = source.DATABASE_POOL_MAX;
-  if (value === undefined) return size;
+  if (value === undefined) return fallback;
   return z.string().regex(/^[1-9][0-9]*$/, "DATABASE_POOL_MAX is a whole number of one or more").transform(Number).parse(value);
 }
 

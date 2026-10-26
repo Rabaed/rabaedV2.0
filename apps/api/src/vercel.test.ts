@@ -12,7 +12,7 @@ async function serve(handler: NodeHandler): Promise<string> {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 afterEach(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  if (server) await new Promise((resolve) => server!.close(resolve));
   server = undefined;
 });
 

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import Fastify from "fastify";
@@ -12,11 +13,16 @@ async function serve(handler: NodeHandler): Promise<string> {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 afterEach(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  if (server) await new Promise((resolve) => server!.close(resolve));
   server = undefined;
 });
 
 describe("fastifyHandler", () => {
+  it("is the api's handler, copied (Rabaed Admin may not call the api's code), and stays the same", () => {
+    const code = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8").replace(/\/\*\*[\s\S]*?\*\//g, "");
+    expect(code("./vercel.ts")).toBe(code("../../api/src/vercel.ts"));
+  });
+
   it("hands each request to the Fastify app, path, method, body and cookies unchanged", async () => {
     const url = await serve(
       fastifyHandler(async () => {
