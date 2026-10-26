@@ -101,10 +101,12 @@ describe("GitHub Actions access", () => {
     trustsOnly(role(accountTemplate(), "rabaed-dev-github-deploy").trust, `${repo}:environment:dev`);
   });
 
-  it("only the deploy job of the dev deploy workflow names an environment other than uat", () => {
+  // deploy-dev.yml is retired for the UAT deploy (ADR 0026, RP-1043): until it
+  // is deleted, its deploy job is the one job that may name another environment.
+  it("no workflow names an environment other than uat, but the dev deploy's job while it remains", () => {
     const dir = new URL("../../../.github/workflows/", import.meta.url);
     const workflows = readdirSync(dir).map((file) => [file, readFileSync(new URL(file, dir), "utf8")] as const);
-    expect(environmentsOtherThanUat(workflows)).toEqual(["deploy-dev.yml deploy: environment: dev"]);
+    expect(environmentsOtherThanUat(workflows).filter((found) => found !== "deploy-dev.yml deploy: environment: dev")).toEqual([]);
     // uat may be named only while no AWS environment's deploy role trusts it.
     expect(Object.values(environments).map((config) => config.name)).not.toContain("uat");
   });

@@ -8,8 +8,10 @@
 export interface SmokeTestOptions {
   /** The environment's HTTPS address, e.g. `https://<load balancer>`. */
   readonly url: string;
-  /** Rabaed Admin's own HTTPS address (its own load balancer). */
+  /** Rabaed Admin's own HTTPS address (its own load balancer, or its Vercel project). */
   readonly adminUrl?: string;
+  /** Admin's Vercel Protection Bypass for Automation secret, sent to Admin only (it sits behind Password Protection). */
+  readonly adminBypass?: string;
   /** The commit that was just deployed; web and the api must both report it. */
   readonly version: string;
   /**
@@ -29,7 +31,7 @@ interface Health {
 }
 
 /** Runs every check and returns what failed; empty means the deploy is good. */
-export async function smokeTest({ url, adminUrl, version, arabicFont, demoPassword, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
+export async function smokeTest({ url, adminUrl, adminBypass, version, arabicFont, demoPassword, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
   const base = new URL(url);
   const failures: string[] = [];
   const check = async (name: string, run: () => Promise<string[]>) => {
@@ -46,7 +48,8 @@ export async function smokeTest({ url, adminUrl, version, arabicFont, demoPasswo
     http.protocol = "http:";
     const res = await get(http.toString(), { redirect: "manual", signal: AbortSignal.timeout(10_000) });
     const location = res.headers.get("location") ?? "";
-    const redirected = res.status === 301 && new URL(location, http).protocol === "https:" && new URL(location, http).hostname === base.hostname;
+    // Permanent: 301 from the AWS load balancer, 308 from Vercel.
+    const redirected = (res.status === 301 || res.status === 308) && new URL(location, http).protocol === "https:" && new URL(location, http).hostname === base.hostname;
     return redirected ? [] : [`HTTP does not redirect to HTTPS: answered ${res.status} ${location}`.trim()];
   });
 
@@ -72,16 +75,7 @@ export async function smokeTest({ url, adminUrl, version, arabicFont, demoPasswo
   if (demoPassword) await check("visibility", () => visibilityCheck({ url, password: demoPassword, fetch: get }));
 
   if (adminUrl) {
-    await check("Rabaed Admin health", async () => {
-      const health = new URL("/health", adminUrl).toString();
-      const res = await get(health, { signal: AbortSignal.timeout(10_000) });
-      if (res.status !== 200) return [`${health} answered ${res.status}`];
-      const body = (await res.json()) as { version?: string; database?: string };
-      const found: string[] = [];
-      if (body.version !== version) found.push(`Rabaed Admin runs ${body.version}, expected ${version}`);
-      if (body.database !== "ok") found.push(`Rabaed Admin's database: ${body.database}`);
-      return found;
-    });
+    await check("Rabaed Admin health", () => adminHealthCheck({ adminUrl, adminBypass, version, fetch: get }));
     await check("no Rabaed Admin on the customer address", async () => {
       const found: string[] = [];
       for (const { method, path } of ADMIN_PATHS) {
@@ -95,6 +89,41 @@ export async function smokeTest({ url, adminUrl, version, arabicFont, demoPasswo
   }
 
   return failures;
+}
+
+/** Rabaed Admin answers /health with the deployed version and its database; the bypass header goes to Admin alone. */
+async function adminHealthCheck({ adminUrl, adminBypass, version, fetch: get }: { adminUrl: string; adminBypass?: string; version: string; fetch: typeof fetch }): Promise<string[]> {
+  const health = new URL("/health", adminUrl).toString();
+  const headers: Record<string, string> = adminBypass ? { "x-vercel-protection-bypass": adminBypass } : {};
+  const res = await get(health, { headers, signal: AbortSignal.timeout(10_000) });
+  if (res.status !== 200) return [`${health} answered ${res.status}`];
+  const body = (await res.json()) as { version?: string; database?: string };
+  const found: string[] = [];
+  if (body.version !== version) found.push(`Rabaed Admin runs ${body.version}, expected ${version}`);
+  if (body.database !== "ok") found.push(`Rabaed Admin's database: ${body.database}`);
+  return found;
+}
+
+export type SmokeRun = { stage: "web"; options: Omit<SmokeTestOptions, "fetch"> } | { stage: "api"; options: Omit<ApiSmokeTestOptions, "fetch"> } | { error: string };
+
+/**
+ * What bin/smoke.ts runs, from its environment: web's smoke given SMOKE_URL (after
+ * every deploy), or the api's given SMOKE_API_URL (on Vercel, before web is deployed).
+ * Blank values count as unset.
+ */
+export function smokeRunFromEnv(env: NodeJS.ProcessEnv): SmokeRun {
+  const read = (name: string) => env[name] || undefined;
+  const url = read("SMOKE_URL");
+  const apiUrl = read("SMOKE_API_URL");
+  const version = read("SMOKE_VERSION");
+  if ((!url && !apiUrl) || !version) return { error: "Set SMOKE_URL (web) or SMOKE_API_URL (the api, before web), and SMOKE_VERSION" };
+  if (url && apiUrl) return { error: "Set SMOKE_URL or SMOKE_API_URL, not both" };
+  const defined = <T extends object>(options: T): T => Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined)) as T;
+  const admin = { adminUrl: read("SMOKE_ADMIN_URL"), adminBypass: read("SMOKE_ADMIN_BYPASS") };
+  const demoPassword = read("SMOKE_DEMO_PASSWORD");
+  if (url) return { stage: "web", options: defined({ url, version, ...admin, arabicFont: read("SMOKE_ARABIC_FONT"), demoPassword }) };
+  if (!demoPassword) return { error: "SMOKE_API_URL needs SMOKE_DEMO_PASSWORD: the api's smoke is the visibility check" };
+  return { stage: "api", options: defined({ apiUrl: apiUrl!, version, demoPassword, ...admin }) };
 }
 
 /**
@@ -130,17 +159,70 @@ interface SignedIn {
   signOut(): Promise<void>;
 }
 
+export interface ApiSmokeTestOptions {
+  /** The api's own HTTPS address (its Vercel project), where the Member API is /v1. */
+  readonly apiUrl: string;
+  /** The commit that was just deployed; the api (and Admin, if given) must report it. */
+  readonly version: string;
+  /** The demo people's password: the visibility check runs on the api itself. */
+  readonly demoPassword: string;
+  readonly adminUrl?: string;
+  readonly adminBypass?: string;
+  readonly fetch?: typeof fetch;
+}
+
+/**
+ * The checks that run once the api and Rabaed Admin are deployed and before web
+ * is (RP-1043): the api runs this version with its database, visibility holds
+ * when asked of the api directly, and Admin answers. Empty means web may follow.
+ */
+export async function apiSmokeTest({ apiUrl, version, demoPassword, adminUrl, adminBypass, fetch: get = fetch }: ApiSmokeTestOptions): Promise<string[]> {
+  const failures: string[] = [];
+  const check = async (name: string, run: () => Promise<string[]>) => {
+    try {
+      failures.push(...(await run()));
+    } catch (error) {
+      failures.push(`${name}: ${(error as Error).message}`);
+    }
+  };
+  await check("api health", async () => {
+    const health = new URL("/health", apiUrl).toString();
+    const res = await get(health, { signal: AbortSignal.timeout(10_000) });
+    const body = (await res.json().catch(() => ({}))) as { version?: string; database?: string };
+    const found: string[] = [];
+    if (res.status !== 200 && res.status !== 503) return [`${health} answered ${res.status}`];
+    if (body.version !== version) found.push(`api runs ${body.version}, expected ${version}`);
+    if (body.database !== "ok") found.push(`api's database: ${body.database}`);
+    return found;
+  });
+  await check("visibility", () => visibilityCheck({ url: apiUrl, password: demoPassword, memberApi: "/v1", fetch: get }));
+  if (adminUrl) await check("Rabaed Admin health", () => adminHealthCheck({ adminUrl, adminBypass, version, fetch: get }));
+  return failures;
+}
+
 /**
  * Each of two Members of different Projects gets 404 on the other's Project,
  * its Work Item list and its Work Items, and never sees it listed: visibility
- * holds on the deployed infrastructure, through web's /api/v1 proxy.
+ * holds on the deployed infrastructure, through web's /api/v1 proxy, or
+ * (`memberApi: "/v1"`) asked of the api itself.
  */
-export async function visibilityCheck({ url, password, fetch: get = fetch }: { url: string; password: string; fetch?: typeof fetch }): Promise<string[]> {
+export async function visibilityCheck({
+  url,
+  password,
+  memberApi = "/api/v1",
+  fetch: get = fetch,
+}: {
+  url: string;
+  password: string;
+  /** Where the Member API is on `url`: web's proxy (`/api/v1`) or the api's own (`/v1`). */
+  memberApi?: "/api/v1" | "/v1";
+  fetch?: typeof fetch;
+}): Promise<string[]> {
   const base = new URL(url);
   const call = (path: string, init: RequestInit = {}) => get(new URL(path, base).toString(), { ...init, signal: AbortSignal.timeout(10_000) });
 
   const signIn = async (email: string): Promise<SignedIn | string> => {
-    const res = await call("/api/v1/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+    const res = await call(`${memberApi}/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
     const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).find((c) => c?.startsWith("rabaed_session="));
     if (res.status >= 300 || !cookie) return `sign-in as ${email} answered ${res.status}`;
     const headers = { cookie };
@@ -148,7 +230,7 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
       email,
       get: (path) => call(path, { headers }),
       // Best effort: a failed sign-out must not hide what the check found.
-      signOut: async () => void (await call("/api/v1/session", { method: "DELETE", headers }).catch(() => undefined)),
+      signOut: async () => void (await call(`${memberApi}/session`, { method: "DELETE", headers }).catch(() => undefined)),
     };
   };
 
@@ -162,9 +244,9 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
 
   try {
     const failures: string[] = [];
-    const projects = async (who: SignedIn) => ((await (await who.get("/api/v1/projects")).json()) as { projects: { id: string; code: string }[] }).projects;
+    const projects = async (who: SignedIn) => ((await (await who.get(`${memberApi}/projects`)).json()) as { projects: { id: string; code: string }[] }).projects;
     const items = async (who: SignedIn, projectId: string) =>
-      ((await (await who.get(`/api/v1/projects/${projectId}/work-items`)).json()) as { items: { id: string }[] }).items.map((i) => i.id);
+      ((await (await who.get(`${memberApi}/projects/${projectId}/work-items`)).json()) as { items: { id: string }[] }).items.map((i) => i.id);
     const notFound = async (who: SignedIn, path: string) => {
       const res = await who.get(path);
       if (res.status !== 404) failures.push(`${who.email}: ${path} answered ${res.status}, expected 404`);
@@ -179,15 +261,15 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
 
     const jcvItems = await items(nasser, jcv.id);
     if (jcvItems.length === 0) failures.push("Jeddah Corniche Villas has no Work Item to check");
-    await notFound(hafiz, `/api/v1/projects/${jcv.id}`);
-    await notFound(hafiz, `/api/v1/projects/${jcv.id}/work-items`);
-    for (const id of jcvItems) await notFound(hafiz, `/api/v1/work-items/${id}`);
+    await notFound(hafiz, `${memberApi}/projects/${jcv.id}`);
+    await notFound(hafiz, `${memberApi}/projects/${jcv.id}/work-items`);
+    for (const id of jcvItems) await notFound(hafiz, `${memberApi}/work-items/${id}`);
 
     const twrItems = (await items(hafiz, twr.id)).slice(0, MAX_ITEMS_CHECKED);
     if (twrItems.length === 0) failures.push("Riyadh Gate Tower has no Work Item to check");
-    await notFound(nasser, `/api/v1/projects/${twr.id}`);
-    await notFound(nasser, `/api/v1/projects/${twr.id}/work-items`);
-    for (const id of twrItems) await notFound(nasser, `/api/v1/work-items/${id}`);
+    await notFound(nasser, `${memberApi}/projects/${twr.id}`);
+    await notFound(nasser, `${memberApi}/projects/${twr.id}/work-items`);
+    for (const id of twrItems) await notFound(nasser, `${memberApi}/work-items/${id}`);
     return failures;
   } finally {
     await Promise.all([hafiz.signOut(), nasser.signOut()]);
