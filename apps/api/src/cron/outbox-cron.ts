@@ -31,6 +31,9 @@ export const CRON_OUTBOX_PATH = "/internal/cron/outbox";
 /** The kinds the cron pass takes: everything but the Documental Record jobs, which need the Records container. */
 export const CRON_OUTBOX_KINDS = ["notification", "email", "digest", "step_age_report", "record_ready"] as const;
 
+/** The kinds left for the Records container (RP-1042): Chromium and the signer. With CRON_OUTBOX_KINDS, every outbox kind (a test checks). */
+export const RECORDS_CONTAINER_KINDS = ["documental_record", "documental_record_reproduce", "working_copy", "snag_report"] as const;
+
 /** Rows one pass takes at most; the rest wait for the next minute. */
 export const CRON_OUTBOX_LIMIT = 100;
 
@@ -71,6 +74,8 @@ export function outboxCronPass(db: Db, options: OutboxCronPassOptions): OutboxCr
   const { handlers, nowMs = Date.now, runScheduledJobs = runScheduledJobsInDb, processOutbox = processOutboxInDb } = options;
   return async (onJobFailed) => {
     const startedAt = nowMs();
+    // Not cut short: each job is one transaction that only queues outbox rows. A slow one
+    // leaves the outbox less of the budget (none at worst); the next minute's pass sends them.
     const runs = await runScheduledJobs(db, options.scheduledJobs);
     for (const run of runs) if (run.outcome === "failed") onJobFailed?.(run);
     const outbox = await processOutbox(db, {

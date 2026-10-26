@@ -3,7 +3,9 @@ import { createDb, type OutboxRun, type ProcessOutboxOptions, type ScheduledJob 
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../app.ts";
 import { apiConfigFromEnv } from "../config.ts";
-import { CRON_OUTBOX_PATH, outboxCronFromEnv, outboxCronPass, type OutboxCron } from "./outbox-cron.ts";
+import { fileURLToPath } from "node:url";
+import { latestKinds, repoMigrations } from "../../../../scripts/check-leak-channels.ts";
+import { CRON_OUTBOX_KINDS, CRON_OUTBOX_PATH, outboxCronFromEnv, outboxCronPass, RECORDS_CONTAINER_KINDS, type OutboxCron } from "./outbox-cron.ts";
 
 // RP-1039: on Vercel the outbox is delivered by Vercel Cron calling the api once a
 // minute with `Authorization: Bearer <CRON_SECRET>` (Vercel docs, Managing Cron Jobs).
@@ -65,6 +67,17 @@ describe("the outbox cron route", () => {
       expect((await call(app, authorization)).statusCode).toBe(401);
     }
     expect(passes).toBe(before);
+  });
+});
+
+describe("the cron kinds", () => {
+  it("with the Records container's, are every kind the outbox allows, so no new kind goes undelivered on Vercel", () => {
+    const repo = fileURLToPath(new URL("../../../../", import.meta.url));
+    const allowed = latestKinds(repoMigrations(repo))
+      .filter((k) => k.table === "outbox")
+      .map((k) => k.kind);
+    expect(allowed.length).toBeGreaterThan(0);
+    expect([...CRON_OUTBOX_KINDS, ...RECORDS_CONTAINER_KINDS].sort()).toEqual(allowed.sort());
   });
 });
 
