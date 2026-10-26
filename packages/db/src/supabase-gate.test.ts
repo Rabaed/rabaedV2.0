@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDataApiOff, gateSteps, gateUrlsFromEnv, redactor, runGateSteps, seamTwoEnv } from "./supabase-gate.ts";
+import { checkDataApiOff, gateSteps, gateUrlsFromEnv, redactor, runGateSteps, seamTwoEnv, type SupabaseRolesCheck } from "./supabase-gate.ts";
 
 describe("seamTwoEnv", () => {
   const urls = gateUrlsFromEnv({
@@ -163,13 +163,13 @@ describe("checkDataApiOff", () => {
   it("passes when the answer names the placeholder schema Supabase exposes with the Data API off", async () => {
     const { fetch } = answering(406, dataApiOffBody);
 
-    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 406 });
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 406, code: "PGRST106" });
   });
 
   it("passes on PostgREST's older wording of PGRST106 naming the placeholder schema too", async () => {
     const { fetch } = answering(406, '{"code":"PGRST106","details":null,"hint":null,"message":"The schema must be one of the following: pg_pgrst_no_exposed_schemas"}');
 
-    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 406 });
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch })).toEqual({ outcome: "off", status: 406, code: "PGRST106" });
   });
 
   // Only the documented answer passes: PGRST106, 406, naming the placeholder schema. Any other
@@ -259,20 +259,46 @@ describe("checkDataApiOff", () => {
 
     const result = await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async (ms) => void waits.push(ms) });
 
-    expect(result).toEqual({ outcome: "off", status: 406 });
+    expect(result).toEqual({ outcome: "off", status: 406, code: "PGRST106" });
     expect(calls).toHaveLength(2);
     expect(waits).toHaveLength(1);
   });
 
-  it("fails as unexpected, naming PGRST002, when the schema cache is still not loaded after six asks over two minutes", async () => {
+  // With the Data API off, PostgREST is pointed at the placeholder schema, which doesn't exist, so it
+  // never builds its schema cache and answers PGRST002 to every call (data-api-only run 40382032283).
+  it("passes when PGRST002 (503) persists through all six asks over two minutes: no schema for PostgREST to serve", async () => {
     const { calls, fetch } = answering(503, schemaCacheLoading);
     const waits: number[] = [];
 
     const result = await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async (ms) => void waits.push(ms) });
 
-    expect(result).toEqual({ outcome: "unexpected", status: 503, code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." });
+    expect(result).toEqual({ outcome: "off", status: 503, code: "PGRST002" });
     expect(calls).toHaveLength(6);
     expect(waits.reduce((a, b) => a + b, 0)).toBe(120_000);
+  });
+
+  it("fails as unexpected on a PGRST002 that persists on another status than 503", async () => {
+    const { fetch } = answering(500, schemaCacheLoading);
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async () => undefined })).toMatchObject({
+      outcome: "unexpected",
+      status: 500,
+      code: "PGRST002",
+    });
+  });
+
+  // A PGRST002 that turns into another answer was a reload: what it turned into is the answer.
+  it.each([
+    ["open, on a 2xx", [200, "[]"], { outcome: "open", status: 200 }],
+    ["on, on 42501", [401, '{"code":"42501","message":"permission denied for table company"}'], { outcome: "on", status: 401, code: "42501" }],
+    ["on, on PGRST205", [404, '{"code":"PGRST205","message":"Could not find the table"}'], { outcome: "on", status: 404, code: "PGRST205" }],
+    ["key refused, on a 401 from the gateway", [401, '{"message":"Invalid API key"}'], { outcome: "key refused", status: 401 }],
+    ["unexpected, on any other answer", [500, '{"code":"XX000","message":"internal error"}'], { outcome: "unexpected", status: 500, code: "XX000" }],
+  ] as const)("judges a PGRST002 that changes as what it changes into: %s", async (_case, [status, body], expected) => {
+    const { calls, fetch } = answeringInTurn([503, schemaCacheLoading], [503, schemaCacheLoading], [status, body]);
+
+    expect(await checkDataApiOff({ projectRef: ref, publishableKey: key, fetch, sleep: async () => undefined })).toMatchObject(expected);
+    expect(calls).toHaveLength(3);
   });
 
   it("judges every other answer at once, without asking again", async () => {
@@ -369,6 +395,16 @@ describe("runGateSteps", () => {
   });
 });
 
+const rolesStep = "Supabase's anon and authenticated hold no privilege on Rabaed's objects";
+const holdingNothing: SupabaseRolesCheck = {
+  outcome: "checked",
+  roles: ["anon", "authenticated"],
+  checked: ["rabaed_gate", "rabaed_gate_test", "rabaed_uat"],
+  missing: [],
+  privileges: [],
+  tablesInPostgres: [],
+};
+
 // A later failure must not hide the Data API's answer: it is checked first, and its failure lets the rest run.
 describe("gateSteps", () => {
   const env = {
@@ -393,6 +429,7 @@ describe("gateSteps", () => {
       ["Bootstrap (rabaed_migrator, rabaed_app, rabaed_admin with BYPASSRLS)", false],
       ["rabaed_admin bypasses row-level security", false],
       ["Migrate the schema (every migrations/*.sql)", false],
+      ["Supabase's anon and authenticated hold no privilege on Rabaed's objects", true],
       ["The transaction pooler carries an api call's transaction", false],
       ["Seam 2", false],
     ]);
@@ -417,13 +454,85 @@ describe("gateSteps", () => {
     expect(said).toContain("✘ Supabase's Data API is off: rest/v1/company answered 200: the Data API is on, a way to the tables around the api");
   });
 
-  // Minutes instead of hours: one run that asks only whether the Data API is off.
-  it("runs only the Data API check when SUPABASE_GATE_ONLY is data-api", async () => {
+  // Minutes instead of hours: one run that asks only whether the Data API is off, and whether
+  // the roles it would serve as could reach anything of Rabaed's if it were on.
+  it("runs only the Data API check and the Supabase roles' check when SUPABASE_GATE_ONLY is data-api", async () => {
     const { fetch } = answering(406, dataApiOffBody);
-    const steps = gateSteps({ env: { ...env, SUPABASE_GATE_ONLY: "data-api" }, fetch, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+    const asked: [string, readonly string[]][] = [];
+    const steps = gateSteps({
+      env: { ...env, SUPABASE_GATE_ONLY: "data-api" },
+      fetch,
+      supabaseRoles: async (url, databases) => (asked.push([url, databases]), holdingNothing),
+      seamTwo: () => Promise.resolve(),
+      onUrls: () => "read",
+    });
 
-    expect(steps.map((s) => s.name)).toEqual(["Supabase's Data API is off"]);
+    expect(steps.map((s) => s.name)).toEqual(["Supabase's Data API is off", "Supabase's anon and authenticated hold no privilege on Rabaed's objects"]);
     expect(await runGateSteps(steps, () => undefined, String)).toEqual([]);
+    // The gate's database, the one its seam 2 leaves, and UAT's, on the superuser URL's server.
+    expect(asked).toEqual([[env.DATABASE_SUPERUSER_URL, ["rabaed_gate", "rabaed_gate_test", "rabaed_uat"]]]);
+  });
+
+  it("passes the gate's DATABASE_NAME to the Supabase roles' check", async () => {
+    const asked: (readonly string[])[] = [];
+    const step = gateSteps({
+      env: { ...env, DATABASE_NAME: "other_gate" },
+      supabaseRoles: async (_url, databases) => (asked.push(databases), holdingNothing),
+      seamTwo: () => Promise.resolve(),
+      onUrls: () => "read",
+    }).find((s) => s.name === rolesStep)!;
+
+    await step.run();
+
+    expect(asked).toEqual([["other_gate", "other_gate_test", "rabaed_uat"]]);
+  });
+
+  const rolesStepWith = (result: SupabaseRolesCheck) =>
+    gateSteps({ env, supabaseRoles: async () => result, seamTwo: () => Promise.resolve(), onUrls: () => "read" }).find((s) => s.name === rolesStep)!;
+
+  it("says which databases it checked, which don't exist, and that the postgres database has no Rabaed table", async () => {
+    await expect(rolesStepWith({ ...holdingNothing, checked: ["rabaed_gate"], missing: ["rabaed_gate_test", "rabaed_uat"] }).run()).resolves.toBe(
+      "anon, authenticated hold no privilege in rabaed_gate; skipped rabaed_gate_test, rabaed_uat (no such database); no Rabaed table in the postgres database",
+    );
+  });
+
+  it("fails when it found no Rabaed database to read, since it then proved nothing", async () => {
+    await expect(rolesStepWith({ ...holdingNothing, checked: [], missing: ["rabaed_gate", "rabaed_gate_test", "rabaed_uat"] }).run()).rejects.toThrow(
+      "no Rabaed database on this server to read: rabaed_gate, rabaed_gate_test, rabaed_uat don't exist",
+    );
+  });
+
+  it("fails naming each role, privilege, object and database it found", async () => {
+    const step = rolesStepWith({
+      ...holdingNothing,
+      privileges: [
+        { database: "rabaed_uat", role: "anon", privilege: "SELECT", kind: "table", object: "public.company" },
+        { database: "rabaed_gate", role: "authenticated", privilege: "EXECUTE", kind: "function", object: "app.current_member_id()" },
+      ],
+    });
+
+    await expect(step.run()).rejects.toThrow(
+      "anon holds SELECT on table public.company (rabaed_uat); authenticated holds EXECUTE on function app.current_member_id() (rabaed_gate)",
+    );
+  });
+
+  it("fails when the postgres database, the one PostgREST serves, has a Rabaed table", async () => {
+    await expect(rolesStepWith({ ...holdingNothing, tablesInPostgres: ["public.company"] }).run()).rejects.toThrow(
+      "the postgres database, the one PostgREST serves, has Rabaed's public.company",
+    );
+  });
+
+  it("names the first 20 findings and counts the rest", async () => {
+    const privileges = Array.from({ length: 25 }, (_, i) => ({ database: "rabaed_gate", role: "anon", privilege: "SELECT", kind: "table", object: `public.t${i}` }));
+    const failure = await rolesStepWith({ ...holdingNothing, privileges }).run().catch((error: Error) => error.message);
+
+    expect(failure).toContain("public.t19 (rabaed_gate); and 5 more");
+    expect(failure).not.toContain("public.t20");
+  });
+
+  // A local Postgres has no Supabase roles, so the check runs green there.
+  it("passes, saying so, on a server without Supabase's roles", async () => {
+    await expect(rolesStepWith({ outcome: "skipped" }).run()).resolves.toBe("skipped: this server has no anon or authenticated (not Supabase)");
   });
 
   // A failed step, so the gate's own log says it, rather than a stack trace from the top level.
@@ -449,6 +558,15 @@ describe("gateSteps", () => {
 
     await expect(step!.run()).resolves.toBe("rest/v1/company with the publishable key answered 406: no schema exposed");
     expect(waits).toHaveLength(1);
+  });
+
+  it("says the steady PGRST002 is what passed, and over how long", async () => {
+    const { fetch } = answering(503, schemaCacheLoading);
+    const [step] = gateSteps({ env, fetch, sleep: async () => undefined, seamTwo: () => Promise.resolve(), onUrls: () => "read" });
+
+    await expect(step!.run()).resolves.toBe(
+      "rest/v1/company with the publishable key answered 503 PGRST002 on all 6 asks over 120 s: PostgREST has no schema to serve (the placeholder doesn't exist)",
+    );
   });
 
   it("fails, not skips, the Data-API-only run without SUPABASE_PROJECT_REF, since it would then check nothing", async () => {
