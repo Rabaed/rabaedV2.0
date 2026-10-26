@@ -1,8 +1,6 @@
-import { createDbFromEnv } from "@rabaed/db";
-import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import { z } from "zod";
 import { buildAdminApp } from "./app.ts";
-import { adminConfigFromEnv } from "./config.ts";
+import { adminAppOptionsFromEnv } from "./from-env.ts";
 
 const env = z
   .object({
@@ -11,16 +9,12 @@ const env = z
   })
   .parse(process.env);
 
-// Rabaed Admin connects as rabaed_admin only (ADR 0010).
-const db = createDbFromEnv("admin", { max: 4 });
-// Built at the first email, so an environment whose sender isn't verified yet still starts.
-let mailer: Mailer | undefined;
-const lazyMailer: Mailer = { send: (message) => (mailer ??= mailerFromEnv()).send(message) };
-const app = await buildAdminApp({ db, config: adminConfigFromEnv(), mailer: lazyMailer });
+const options = adminAppOptionsFromEnv();
+const app = await buildAdminApp(options);
 
 const shutdown = async () => {
   await app.close();
-  await db.destroy();
+  await options.db.destroy();
   process.exit(0);
 };
 process.once("SIGINT", shutdown);

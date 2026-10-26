@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { recordSealingFromEnv } from "./from-env.ts";
 import { LOCAL_SEAL_NAME } from "./signer.ts";
@@ -29,6 +32,21 @@ describe("RECORD_SEALING", () => {
     const sealing = recordSealingFromEnv({ RECORD_SEALING: "kms", ...ecs, FILE_STORE_ENDPOINT: "http://127.0.0.1:9000" });
     await expect(sealing.signer()).rejects.toThrow("PDF_SEALING_KEY_ID is not set");
     await expect(sealing.timestamps()).rejects.toThrow("TIMESTAMP_AUTHORITY_URL is not set");
+  });
+
+  it("local: the free fallback font, unless RECORD_FONTS_DIR names the Thmanyah files baked into the Records image (UAT)", async () => {
+    expect((await recordSealingFromEnv({ RECORD_SEALING: "local" }).fonts()).family).toBe("Record Sans");
+    const dir = mkdtempSync(join(tmpdir(), "rabaed-record-fonts-"));
+    try {
+      expect((await recordSealingFromEnv({ RECORD_SEALING: "local", RECORD_FONTS_DIR: dir }).fonts()).family).toBe("Record Sans");
+      writeFileSync(join(dir, "thmanyahsans-regular.woff2"), "not really a font");
+      writeFileSync(join(dir, "README.txt"), "ignored");
+      const fonts = await recordSealingFromEnv({ RECORD_SEALING: "local", RECORD_FONTS_DIR: dir }).fonts();
+      expect(fonts.family).toBe("'Record Thmanyah', 'Record Sans'");
+      expect(fonts.css).toContain(`font-weight: 400; src: url(data:font/woff2;base64,${Buffer.from("not really a font").toString("base64")})`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("refuses any other value", () => {

@@ -311,6 +311,8 @@ step "If asked, enable R2 (it needs a payment method; this use stays in the free
 step "Create bucket → name rabaed-uat-files → Location: Automatic, hint Western Europe → Create."
 step "Create bucket → name rabaed-uat-build-assets → same location → Create."
 step "Leave both PRIVATE: no public access, no custom domain."
+step "Open rabaed-uat-files → Settings → CORS Policy → Add: paste the JSON from PR #418's body, naming the UAT web origin (https://<web host>, never *)."
+note "The app's key never sets CORS (docs/tech-stack.md, Files row)."
 step "On your computer, make a folder fonts/thmanyah/ holding the five thmanyahsans-*.woff2 files."
 step "Open rabaed-uat-build-assets → Objects → Upload → drag the whole \"fonts\" folder."
 note "The result must be fonts/thmanyah/thmanyahsans-regular.woff2 and so on. Stage 7 checks it."

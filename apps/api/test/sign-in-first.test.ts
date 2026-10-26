@@ -15,6 +15,8 @@ import { testConfig } from "./support/harness.ts";
 /** The routes anyone may call, by "METHOD /url", each with why. HEAD follows its GET. */
 const PUBLIC: Record<string, string> = {
   "GET /health": "the load balancer and ECS ask it; it says only whether the database answers",
+  "GET /internal/cron/outbox":
+    "Vercel Cron has no session: the route answers 401 itself, in onRequest, to every call without the CRON_SECRET bearer (RP-1039)",
   "POST /v1/session": "sign-in: the caller has no session yet",
   "DELETE /v1/session": "sign-out: ends whatever session the browser has, and is a no-op without one",
   "POST /v1/invitations/accept": "an invited Member sets a password and signs in; the invitation token is the credential",

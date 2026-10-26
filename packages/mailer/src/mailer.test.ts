@@ -1,5 +1,5 @@
 import type { SendEmailCommand } from "@aws-sdk/client-sesv2";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { catcherTransport } from "./catcher.ts";
 import { mailerFromEnv } from "./config.ts";
 import { createMailer, notificationDigestMessage, notificationMessage, type OutgoingEmail } from "./mailer.ts";
@@ -100,5 +100,48 @@ describe("mailerFromEnv", () => {
     ).toThrow();
     expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test" })).toThrow();
     expect(() => mailerFromEnv({ MAIL_CATCHER_URL: "http://127.0.0.1:8025" })).toThrow();
+  });
+
+  it("uses SendGrid when its API key is given (the UAT on Vercel, ADR 0026)", () => {
+    expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", SENDGRID_API_KEY: "SG.test-key-not-real" }).transport).toBe("sendgrid");
+  });
+
+  it.each(["", "  "])("takes a blank SENDGRID_API_KEY (%j; .env.example leaves it empty) for no key", (key) => {
+    expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: key }).transport).toBe("catcher");
+  });
+
+  it.each([
+    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", SENDGRID_API_KEY: "SG.test-key-not-real" },
+    { MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" },
+    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025" },
+    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" },
+  ])("refuses more than one transport: %o", (transports) => {
+    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", ...transports })).toThrow(/not two/);
+  });
+
+  describe("through a stubbed SendGrid", () => {
+    afterEach(() => void vi.unstubAllGlobals());
+
+    it("sends an Arabic invitation with its link as written and tracking off", async () => {
+      const payloads: { content: { value: string }[]; tracking_settings: unknown }[] = [];
+      vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+        payloads.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 202 });
+      });
+      const mailer = mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", SENDGRID_API_KEY: "SG.test-key-not-real" });
+      const link = "https://uat.rabaed.test/ar/accept-invitation#token=abc";
+      await mailer.send({ to: "pm@rabaed.test", template: "invitation", locale: "ar", values: { companyName: "شركة البناء", link } });
+
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0]!.content.map(({ value }) => value)).toEqual([
+        renderEmail("invitation", "ar", { companyName: "شركة البناء", link }).text,
+        expect.stringContaining(`href="${link}"`),
+      ]);
+      expect(payloads[0]!.tracking_settings).toEqual({
+        click_tracking: { enable: false, enable_text: false },
+        open_tracking: { enable: false },
+        subscription_tracking: { enable: false },
+      });
+    });
   });
 });

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "regions": ["fra1"],
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 300,
+      "includeFiles": "{dist/**,src/**,../api/src/**/*.ts,../../packages/auth/src/**/*.ts,../../packages/db/src/**/*.ts,../../packages/domain/src/**/*.ts,../../packages/mailer/src/**/*.ts}"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "headers": [{ "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }],
+  "git": { "deploymentEnabled": { "main": false } }
+}

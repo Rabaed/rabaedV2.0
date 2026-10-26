@@ -10,6 +10,10 @@ const config: NextConfig = {
   // Dev only: each worktree is opened at laneN.localhost:<port> (see README), which Next
   // treats as a different origin from plain localhost.
   allowedDevOrigins: ["*.localhost"],
+  // Dev and UAT are noindex (ADR 0026); src/app/robots.txt turns crawlers away too.
+  async headers() {
+    return [{ source: "/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] }];
+  },
 };
 
 export default function nextConfig(phase: string): NextConfig {
