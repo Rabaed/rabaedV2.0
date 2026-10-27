@@ -36,12 +36,13 @@ let copied: string[] | undefined;
 const COPIES = Number(process.env.RABAED_SCALE_COPIES ?? 60);
 
 /**
- * The most each read may take, the fastest of three. On a lane, at 2,500 items, Home and the Lists answer in 0.2 to
+ * The most each read may take, the fastest of three, at 2,500 items. On a lane Home and the Lists answer in 0.2 to
  * 0.8 s and the Kanban in about 1.3 s, where the Transitions of each of the 244 cards its viewer picked up cost most;
- * before RP-1050 they took 6 to 19 s at 858 items. The bound leaves room for a slower CI runner and still fails at once
- * if a read goes back to checking each item many times over.
+ * a CI runner takes 2.5 to 3 times as long (Lists 0.5 to 0.7 s, Home 1.7 to 2.4 s, Kanban 3.7 to 4.1 s). Before
+ * RP-1050 these reads took 6 to 19 s at 858 items, a third of this size. Each bound leaves room for a slow runner and
+ * still fails at once if a read goes back to checking each item many times over.
  */
-const READ_BOUND_MS = 3000;
+const READ_BOUND_MS = { home: 6000, submittals: 3000, kanban: 10_000, snags: 3000 } as const;
 
 /**
  * Copies every work item of `projectId` `copies` times, as the superuser with the triggers off: each copy
@@ -208,7 +209,7 @@ describe(`one Project of a few thousand work items (RP-1050)`, () => {
     ["C1's PM", () => at.c1Pm],
     ["K1's manager", () => at.k1Manager],
   ] as const) {
-    it(`answers Home, the Submittals List and Kanban and the Snag List for ${who} in under ${READ_BOUND_MS / 1000} s`, async () => {
+    it(`answers Home, the Submittals List and Kanban and the Snag List for ${who} within READ_BOUND_MS`, async () => {
       const by = caller();
       const base = `/v1/projects/${at.projectId}/modules`;
       const times = {
@@ -218,7 +219,7 @@ describe(`one Project of a few thousand work items (RP-1050)`, () => {
         snags: await fastest(async () => (await ok(by.get(`${base}/snag_list/work-items`), 200)).json() as WorkItemList),
       };
       console.log(`RP-1050 reads, ${who}, ms:`, JSON.stringify(times));
-      for (const ms of Object.values(times)) expect(ms).toBeLessThan(READ_BOUND_MS);
+      for (const read of Object.keys(times) as (keyof typeof times)[]) expect({ read, ms: times[read] < READ_BOUND_MS[read] }).toEqual({ read, ms: true });
     });
   }
 
