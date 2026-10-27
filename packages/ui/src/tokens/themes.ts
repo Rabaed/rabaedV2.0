@@ -70,6 +70,11 @@ export const greyLight = {
   "sidebar-current": "tomato-16",
   "sidebar-current-text": "white",
 
+  // The sign-in brand panel: the same near-black in every theme and mode (owner's design, RP-1057).
+  hero: "hero-ink",
+  "hero-text": "hero-text",
+  "hero-muted": "hero-muted",
+
   // Text
   text: "slate-900",
   "text-secondary": "slate-800",
