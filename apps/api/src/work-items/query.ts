@@ -231,6 +231,10 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
   `;
 }
 
+/** The scope's items as app.work_items_seen gives them, or only `ids` of them (their Revision chains read whole). */
+const itemsSeen = (scope: QueryScope, allRevisions: boolean, ids: readonly string[] | null = null) =>
+  sql`app.work_items_seen(${scope.projectId}::uuid, ${modulesOf(scope)}::text[], ${allRevisions}::boolean, ${ids}::uuid[])`;
+
 /** Per transaction, the temporary table each scope's visible rows were read into (`seenRows`). */
 const seenTables = new WeakMap<Trx, Map<string, string>>();
 
@@ -250,10 +254,7 @@ async function seenRows(trx: Trx, scope: QueryScope, allRevisions: boolean): Pro
     // The function's rows first, analyzed, so the joins to the Project's Stages, outcomes and values are planned for
     // as many rows as it gave, not once per row.
     const seen = sql.id(`${table}_items`);
-    await sql`
-      create temporary table ${seen} on commit drop as
-      select * from app.work_items_seen(${scope.projectId}::uuid, ${modulesOf(scope)}::text[], ${allRevisions}::boolean)
-    `.execute(trx);
+    await sql`create temporary table ${seen} on commit drop as select * from ${itemsSeen(scope, allRevisions)}`.execute(trx);
     await sql`analyze ${seen}`.execute(trx);
     await sql`create temporary table ${sql.id(table)} on commit drop as ${visibleRows(seen)}`.execute(trx);
     tables.set(key, table);
@@ -871,8 +872,9 @@ export function exportWorkItems(
  */
 export async function workItemRowsById(trx: Trx, scope: QueryScope, ids: readonly string[], now: Date): Promise<Map<string, WorkItemRow>> {
   if (ids.length === 0) return new Map();
+  // Only these items, not the scope's every Revision (RP-1050): a Package page reads a few.
   const { rows } = await sql<Row>`
-    with r as (${await seenRows(trx, scope, true)})
+    with r as (${visibleRows(itemsSeen(scope, true, ids))})
     select r.*, ${holderColumns}
     from r
     ${holderJoins}
@@ -893,10 +895,14 @@ export async function listRowsAmong(trx: Trx, scope: QueryScope, ids: readonly s
     select r.*, ${holderColumns}
     from r
     ${holderJoins}
-    where r.id = any(${ids}::uuid[]) and ${matching(workItemQuery.parse({}), now, scope)}
+    where ${listRowAmong(ids, now, scope)}
   `.execute(trx);
   return rows.map((r) => toRow(r, now));
 }
+
+/** A row of `visibleRows` (as `r`) among `ids` that the List's default read lists. */
+const listRowAmong = (ids: readonly string[], now: Date, scope: QueryScope) =>
+  sql`r.id = any(${ids}::uuid[]) and ${matching(workItemQuery.parse({}), now, scope)}`;
 
 /** `listRowsAmong`'s rows, with only what Home orders them by (byNewestWaiting), as the row gives it. */
 export async function listKeysAmong(
@@ -910,7 +916,7 @@ export async function listKeysAmong(
     with r as (${await seenRows(trx, scope, false)})
     select r.id, r.title, r.step_entered_at
     from r
-    where r.id = any(${ids}::uuid[]) and ${matching(workItemQuery.parse({}), now, scope)}
+    where ${listRowAmong(ids, now, scope)}
   `.execute(trx);
   return rows.map((r) => ({ id: r.id, title: r.title, stepEnteredAt: r.step_entered_at?.toISOString() ?? null }));
 }

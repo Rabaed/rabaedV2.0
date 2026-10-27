@@ -4,7 +4,7 @@
 -- work item query read asked app.sees_work_item about eleven times: once for row-level security, then again inside
 -- each per-row helper it called (app.step_as_seen, app.work_item_holder, app.work_item_creation_date,
 -- app.with_owner_review, app.latest_visible_revision, app.revision_chain), each of which checks the item it is given.
--- Each check built the reader's whole Trade and Location coverage, by recursion over the grants, for each of the
+-- Each check built every Trade and Location value the reader's grants reach, by recursion over the grants, for each of the
 -- item's values. And a read of an item's events, assignments or values checked every work item in the database
 -- (section 6). Nothing here changes who sees what:
 --
@@ -47,8 +47,8 @@ create or replace function app.current_participant_ids() returns setof uuid
   $$;
 
 -- 2. ------------------------------------------------------------------------------------------------------------
--- From 20270611000000_raiser_step_holder.sql. The Member and Company once; app.current_project_ids folded in; each
--- value's coverage by one walk up from it (the values as it arrived the same way as the live ones).
+-- From 20270611000000_raiser_step_holder.sql. The Member and Company once; app.current_project_ids folded in; whether
+-- each value is granted by one walk up from it (the values as it arrived the same way as the live ones).
 create or replace function app.sees_work_item(p_work_item_id uuid) returns boolean
   language plpgsql stable security definer
   set search_path = pg_catalog, public
@@ -225,6 +225,7 @@ create function app.work_item_creation_date_unchecked(p_work_item_id uuid, p_par
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
+    #variable_conflict use_column
     begin
       return (
         select w.numbered_at from work_item w
@@ -238,6 +239,7 @@ create or replace function app.work_item_creation_date(p_work_item_id uuid) retu
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
+    #variable_conflict use_column
     begin
       if not app.sees_work_item(p_work_item_id) then
         return null;
@@ -251,6 +253,7 @@ create function app.with_owner_review_unchecked(p_work_item_id uuid, p_participa
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
+    #variable_conflict use_column
     begin
       if exists (
         select 1
@@ -282,6 +285,7 @@ create or replace function app.with_owner_review(p_work_item_id uuid) returns js
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
+    #variable_conflict use_column
     begin
       if not app.sees_work_item(p_work_item_id) then
         return null;
@@ -311,7 +315,9 @@ revoke all on function app.with_owner_review_unchecked(uuid, uuid[]) from public
 -- * the holder's and the raiser's Company by name, which app.work_item_companies gives everyone who sees the item (a
 --   Participant holding or raising it is always one of its Companies); the holder's even where "Owner review" is read
 --   in its place, which the caller leaves out there.
-create function app.work_items_seen(p_project_id uuid, p_module_keys text[], p_all_revisions boolean)
+-- With p_work_item_ids, only those of them (a Package page's few items): their chains are still read whole, so the
+-- latest Revision and Code C are as for the whole scope.
+create function app.work_items_seen(p_project_id uuid, p_module_keys text[], p_all_revisions boolean, p_work_item_ids uuid[] default null)
   returns table(
     id uuid, project_id uuid, work_item_type_id uuid, title text, document_number text, revision_no integer,
     outcome text, paper_ref text, submitted_at timestamptz, raised_by_participant_id uuid, closed_at timestamptz,
@@ -333,13 +339,15 @@ create function app.work_items_seen(p_project_id uuid, p_module_keys text[], p_a
           from work_item w
           join work_item_type t on t.id = w.work_item_type_id
           where w.project_id = p_project_id and t.module_key = any(p_module_keys)
+            and (p_work_item_ids is null or w.root_id in (select o.root_id from work_item o where o.id = any(p_work_item_ids)))
         ), checked as materialized (
           select s.* from scoped s where app.sees_work_item(s.id)
         ), seen as materialized (
           select c.id, c.root_id from checked c
-          where p_all_revisions or not exists (
-            select 1 from checked o
-            where o.root_id = c.root_id and o.revision_no > c.revision_no and o.discarded_at is null)
+          where (p_work_item_ids is null or c.id = any(p_work_item_ids))
+            and (p_all_revisions or not exists (
+              select 1 from checked o
+              where o.root_id = c.root_id and o.revision_no > c.revision_no and o.discarded_at is null))
         ), code_c as (
           select distinct o.root_id from checked o
           where o.discarded_at is null and o.outcome is not null
@@ -385,8 +393,8 @@ create function app.work_items_seen(p_project_id uuid, p_module_keys text[], p_a
     end
   $$;
 
-revoke all on function app.work_items_seen(uuid, text[], boolean) from public;
-grant execute on function app.work_items_seen(uuid, text[], boolean) to rabaed_app;
+revoke all on function app.work_items_seen(uuid, text[], boolean, uuid[]) from public;
+grant execute on function app.work_items_seen(uuid, text[], boolean, uuid[]) to rabaed_app;
 
 -- 5. ------------------------------------------------------------------------------------------------------------
 -- The items of Projects p_project_ids waiting on the reader (app.need_my_action is 'waiting'), the latest Revision of
