@@ -23,6 +23,7 @@
 --    checking each item once. The work item query reads its rows from it.
 -- 5. app.work_items_waiting_on_me: the Need My Action items, from the reader's own open assignments.
 -- 6. The policies that read an item's rows through work_item ask for each row's item, not for every item.
+-- 7. Indexes for a Project's own outcomes and Stages.
 
 -- 1. ------------------------------------------------------------------------------------------------------------
 -- From 20261108000000_plpgsql_definer_helpers.sql: the Company and the authorized Company as variables.
@@ -480,3 +481,11 @@ alter policy member_reads_work_item_links on work_item_link
 
 alter policy member_reads_work_item_checklists on work_item_checklist
   using (app.sees_work_item(work_item_id));
+
+-- 7. ------------------------------------------------------------------------------------------------------------
+-- A Project's own outcomes and Stages, looked up by Project. Their only indexes are partial (`where owner_kind =
+-- 'project'`), which a lookup by project_id alone (app.outcome_offers, the List's outcome bar and join,
+-- app.need_my_action's Stage) can't use, so each scanned every Project's rows: 102,000 outcomes after one seam-1 run,
+-- and every Project on the platform in production.
+create index outcome_project_type_code_idx on outcome (project_id, work_item_type_id, code);
+create index stage_project_module_key_idx on stage (project_id, module_key, key);
