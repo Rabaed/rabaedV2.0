@@ -71,12 +71,24 @@ describe("recordPath", () => {
     expect(labels(path)).toEqual(["T5", "T6"]);
   });
 
+  // OBS and SNG take Resume (On Hold → In Progress) as a `return`: it gives nothing back, so the hold stays on the record.
+  it("keeps the move a Resume follows, which brought the item On Hold", () => {
+    const path = recordPath([
+      t(1, "send", "draft", "open"),
+      t(2, "send", "open", "on_hold"),
+      t(3, "return", "on_hold", "in_progress"),
+      t(4, "send", "in_progress", "verify"),
+      t(5, "close", "verify", "closed"),
+    ]);
+    expect(labels(path)).toEqual(["T1", "T2", "T4", "T5"]);
+  });
+
   it("never carries a Return, even when the item closes right after it", () => {
     const path = recordPath([t(1, "send", "draft", "review"), t(2, "return", "review", "draft"), t(3, "cancel", "draft", "cancelled")]);
     expect(path.map((p) => p.kind)).not.toContain("return");
     expect(labels(path)).toEqual(["T3"]);
-    // A Return into a Step the item never left before still never shows, nor the send it gave back (RP-1053).
-    expect(labels(recordPath([t(1, "send", "a", "b"), t(2, "return", "b", "c"), t(3, "close", "c", "done")]))).toEqual(["T3"]);
+    // A Return into a Step the item never left before still never shows.
+    expect(labels(recordPath([t(1, "send", "a", "b"), t(2, "return", "b", "c"), t(3, "close", "c", "done")]))).toEqual(["T1", "T3"]);
   });
 
   it("leaves out a Send Back, such as a Code the Owner sent back, and the Code it gave back", () => {

@@ -232,27 +232,25 @@ const GIVES_BACK = new Set(["return", "send_back"]);
 
 /**
  * The Transitions on the item's path to its outcome (V7). A Return or a Send
- * Back is never on it, and neither is the Transition it gave back: the one that
- * brought the item to the Step it gives back from, with all after it, wherever
- * the give-back leads (the Rabaed Default MAR Returns to the Contractor
- * Engineer's Step, not the Draft; RP-1053). A loop that comes back to a Step
- * the item left before drops the work around it too, so each Step appears
- * once, as the item last left it, and the first entry, "Prepared", is the
- * raiser's last send, the one not given back.
+ * Back is never on it, whatever follows. It also makes a loop that comes back
+ * to a Step the item left before; the work around it, up to the Step it left
+ * again, is left out too, so each Step appears once, as the item last left it.
+ * A loop also closes when the item comes back to the Step a Return or Send Back
+ * left, wherever that one led: the Rabaed Default MAR Returns to the Contractor
+ * Engineer's Step, and the engineer sends it again from there (RP-1053). So the
+ * first entry, "Prepared", is the raiser's last send, never a Returned one.
  */
 export function recordPath(transitions: readonly TransitionFact[]): TransitionFact[] {
   const path: TransitionFact[] = [];
   for (const t of transitions) {
-    if (GIVES_BACK.has(t.kind)) {
-      const given = path.findLastIndex((p) => p.toStepId === t.fromStepId);
-      if (given >= 0) path.length = given;
-      continue;
-    }
-    const back = path.findIndex((p) => p.fromStepId === t.fromStepId);
-    if (back >= 0) path.length = back;
+    const givenBack = GIVES_BACK.has(t.kind) ? -1 : path.findLastIndex((p) => GIVES_BACK.has(p.kind) && p.fromStepId === t.toStepId);
+    const returnedSend = path.findLastIndex((p, i) => i < givenBack && p.toStepId === t.toStepId);
+    if (returnedSend >= 0) path.length = returnedSend;
+    const leftBefore = path.findIndex((p) => p.fromStepId === t.fromStepId);
+    if (leftBefore >= 0) path.length = leftBefore;
     path.push(t);
   }
-  return path;
+  return path.filter((t) => !GIVES_BACK.has(t.kind));
 }
 
 const CANCELLED = { ar: "ملغى", en: "Cancelled" };

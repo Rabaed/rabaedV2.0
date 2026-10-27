@@ -422,9 +422,10 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
       where e.work_item_id = ${id}::uuid and e.type in ('transition', 'issue_code') order by e.seq
     `.execute(migrator);
     expect(rows.map((r) => r.key)).toEqual(["send_for_review", "return", "send_for_review_again", "submit", "send_to_manager", "approve_a"]);
-    expect(firstAt).toBe(rows[2]!.at);
+    const taken = (key: string) => rows.find((r) => r.key === key)!;
+    expect(firstAt).toBe(taken("send_for_review_again").at);
     // The Returned send and the Return itself are off the record.
-    for (const off of [rows[0]!, rows[1]!]) expect(xml, off.key).not.toContain(off.at);
+    for (const off of [taken("send_for_review"), taken("return")]) expect(xml, off.key).not.toContain(off.at);
     expect([...xml.matchAll(/<transition n="\d+"/g)]).toHaveLength(4);
   });
 
