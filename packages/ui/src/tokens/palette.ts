@@ -109,6 +109,10 @@ export const palette = {
 
   // The navy sidebar (the kit's shell.css `.rs` --sb-*): Theme 1, Grey, in Light and Dark. Its hover,
   // press and current item are the kit's translucent overlays (#rrggbbaa), laid on the sidebar.
+  // The sign-in brand panel, as the rabaedapp.com hero (owner's design, RP-1057).
+  "hero-ink": "#14161c",
+  "hero-text": "#edeef3",
+  "hero-muted": "#9aa0b4",
   "navy-sidebar": "#131b2e",
   "navy-sidebar-card": "#1b2438",
   "navy-sidebar-divider": "#232d44",
