@@ -31,6 +31,12 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     expect(resolveRole(greyLight, "brand-ink")).toBe("#3d405b");
   });
 
+  it("keep the sign-in brand panel the design's near-black in all four (RP-1057)", () => {
+    for (const theme of Object.values(themes)) {
+      expect([resolveRole(theme, "hero"), resolveRole(theme, "hero-text"), resolveRole(theme, "hero-muted")]).toEqual(["#14161c", "#edeef3", "#9aa0b4"]);
+    }
+  });
+
   it("map every role to a colour in the base palette, in all four", () => {
     for (const theme of Object.values(themes)) {
       expect(Object.keys(theme).sort()).toEqual(Object.keys(greyLight).sort());
@@ -113,6 +119,11 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     ["sidebar-text", "sidebar-press"],
     ["sidebar-label", "sidebar-card"],
     ["sidebar-current-text", "sidebar-current"],
+    // The sign-in brand panel (RP-1057).
+    ["hero-text", "hero"],
+    ["hero-muted", "hero"],
+    // Its tomato tagline is small text.
+    ["brand", "hero"],
   ];
 
   // Form control boundaries must be visible too (1.4.11), unlike decorative borders.
