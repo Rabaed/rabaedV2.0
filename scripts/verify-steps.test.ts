@@ -36,15 +36,22 @@ describe("startFrom", () => {
   const codeOnly = selectSteps(["scripts/verify.ts"]);
 
   it("starts at the named step and lists the steps before it as not run", () => {
-    expect(startFrom(codeOnly, "test:seam1")).toEqual({ steps: [{ name: "test:seam1", script: "test:seam1" }, { name: "test:seam2", script: "test:seam2" }], notRun: ["lint", "typecheck", "test:unit"] });
+    expect(startFrom(codeOnly, "test:seam1")).toEqual({
+      steps: [{ name: "test:seam1", script: "test:seam1" }, { name: "test:seam2", script: "test:seam2" }],
+      from: { step: "test:seam1", notRun: ["lint", "typecheck", "test:unit"] },
+    });
   });
 
-  it("runs every step, with nothing listed as not run, from the first step", () => {
-    expect(startFrom(codeOnly, "lint")).toEqual({ steps: codeOnly.steps, notRun: [] });
+  it("is a complete run, with no --from on its last line, from the first step this diff runs", () => {
+    expect(startFrom(codeOnly, "lint")).toEqual({ steps: codeOnly.steps });
+    const done = startFrom(codeOnly, "lint");
+    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["lint"], ...("from" in done ? { from: done.from } : {}) })).toBe("pnpm verify passed on abc1234: lint.");
   });
 
-  it("refuses a step this diff does not run, with the reason it is skipped", () => {
-    expect(startFrom(codeOnly, "test:stories")).toEqual({ error: "pnpm verify does not run test:stories for this branch (nothing changed in packages/ui or apps/web), so it cannot start there." });
+  it("refuses a step this diff does not run, with the reason it is skipped and the steps it does run", () => {
+    expect(startFrom(codeOnly, "test:stories")).toEqual({
+      error: "pnpm verify does not run test:stories for this branch (nothing changed in packages/ui or apps/web), so it cannot start there. It runs: lint, typecheck, test:unit, test:seam1, test:seam2.",
+    });
   });
 });
 
@@ -229,6 +236,11 @@ describe("failureEnd", () => {
       expect(failureEnd("test:seam1", output, answers)).toEqual([expect.stringMatching(terminationLine)]);
     }
     expect(loadFailure("test:seam1", `${testTimedOut}${terminated}`)).toBeUndefined();
+  });
+
+  it("names --from in the stop line of a resumed run, so it never reads as a whole run", () => {
+    expect(failureEnd("lint", "", true, "pnpm verify --from lint")).toEqual(["pnpm verify --from lint stopped at lint."]);
+    expect(failureEnd("test:seam1", `${testTimedOut}${terminated}`, true, "pnpm verify --from seam1")[0]).toMatch(/^pnpm verify --from seam1 stopped at test:seam1: Postgres was terminated/);
   });
 
   it("gives only the plain stop line for a real failure while Postgres answers, or for a step that is not a seam suite", () => {

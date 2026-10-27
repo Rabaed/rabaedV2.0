@@ -7,7 +7,7 @@ import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
-import { failureEnd, finalLine, isSeamStep, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
+import { failureEnd, finalLine, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
 import { isRunning } from "./worktrees-stale.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
@@ -31,14 +31,9 @@ if (!options.ok) {
   console.error(options.message);
   process.exit(1);
 }
-let log: ((text: string) => void) | undefined;
-try {
-  log = options.log === undefined ? undefined : openLog(resolve(root, options.log));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-}
-const out = verifyOutput({ stdout: (text) => console.log(text), stderr: (text) => console.error(text), ...(log ? { log } : {}) });
+const terminal = { stdout: (text: string) => console.log(text), stderr: (text: string) => console.error(text) };
+// To the terminal until the log is open: a refused run must not empty the log of the run that holds the lock.
+let out = verifyOutput(terminal);
 
 /** Stops before the first step: `message`, then the last line saying so. */
 function stopEarly(message: string, code = 1): never {
@@ -52,10 +47,21 @@ function stopEarly(message: string, code = 1): never {
 const lock = lockFile(root);
 const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, isRunning);
 if (!taken.acquired) stopEarly(`${taken.message} Let it finish; if that pid is not a verify run, delete ${lock}.`);
-if (taken.tookOver) out.info(`verify ${taken.tookOver}`);
 process.on("exit", () => releaseLock(lock, process.pid));
-process.on("SIGINT", () => process.exit(130));
-process.on("SIGTERM", () => process.exit(143));
+// A last line for an interrupted run too, so a background run's notification still says how it ended.
+const interrupted = (signal: string, code: number) => () => {
+  out.end([`pnpm verify stopped: interrupted (${signal}).`], true);
+  process.exit(code);
+};
+process.on("SIGINT", interrupted("SIGINT", 130));
+process.on("SIGTERM", interrupted("SIGTERM", 143));
+
+try {
+  if (options.log !== undefined) out = verifyOutput({ ...terminal, log: openLog(resolve(root, options.log)) });
+} catch (error) {
+  stopEarly(error instanceof Error ? error.message : String(error));
+}
+if (taken.tookOver) out.info(`verify ${taken.tookOver}`);
 
 // Rule 3 before anything runs (RP-993): root shared files (the lockfile, say) beside code
 // showed only at `pnpm queue`, by the same rule, after the whole branch was built. A warning,
@@ -103,10 +109,10 @@ const changed = [...diff.stdout.split("\n"), ...untracked.stdout.split("\n")].fi
 const selected = selectSteps(changed);
 for (const { name, reason } of selected.skipped) out.info(`skip ${name}: ${reason}`);
 // `--from` (RP-1019): the steps before it are left out, and the last line names them.
-const resumed = options.from === undefined ? undefined : startFrom(selected, options.from);
-if (resumed && "error" in resumed) stopEarly(resumed.error);
-const steps = resumed ? resumed.steps : selected.steps;
-const from = resumed && resumed.notRun.length > 0 && options.from ? { step: options.from, notRun: resumed.notRun } : undefined;
+const resumed = options.from === undefined ? selected : startFrom(selected, options.from);
+if ("error" in resumed) stopEarly(resumed.error);
+const { steps } = resumed;
+const from = "from" in resumed ? resumed.from : undefined;
 for (const name of from?.notRun ?? []) out.info(`skip ${name}: before --from ${from?.step}`);
 
 const passed: string[] = [];
@@ -139,7 +145,7 @@ for (const { name, script } of steps) {
   // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
   // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).
   const answers = isSeamStep(name) ? await postgresAnswers() : true;
-  out.end(failureEnd(name, outcome.output, answers), true);
+  out.end(failureEnd(name, outcome.output, answers, runCommand(from)), true);
   process.exit(outcome.status);
 }
 const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();

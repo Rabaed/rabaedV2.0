@@ -1,12 +1,12 @@
 import { parseArgs } from "node:util";
-import { stepNames } from "./verify-steps.ts";
+import { stepNames, type StepName } from "./verify-steps.ts";
 
 // `pnpm verify`'s flags (RP-1019). `--from <step>` resumes at a named step after a late failure, instead of
 // running every step before it again; `--log <file>` sends the whole output to a file and prints only the
 // final line, so a background run reports verify's own result and exit code (a pipe through tail or grep
 // hid both, RP-631).
 
-export type VerifyOptions = { ok: true; from?: string; log?: string } | { ok: false; message: string };
+export type VerifyOptions = { ok: true; from?: StepName; log?: string } | { ok: false; message: string };
 
 const usage = "Usage: pnpm verify [--from <step>] [--log <file>]";
 const valid = `Valid steps: ${stepNames.join(", ")}.`;

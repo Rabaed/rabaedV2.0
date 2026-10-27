@@ -13,8 +13,8 @@ export type VerifyOutput = {
   info: (text: string) => void;
   /** A problem or warning. */
   error: (text: string) => void;
-  /** Everything a step's run printed: kept in the log only. */
-  stepOutput: (step: string, output: string) => void;
+  /** Everything one run of a step printed, under the command that ran it (`pnpm test:seam1 a.test.ts`): kept in the log only. */
+  stepOutput: (command: string, output: string) => void;
   /** The end of the run, whose last line is the final line: `pnpm verify passed on …` or `pnpm verify stopped …`. */
   end: (lines: string[], failed: boolean) => void;
 };
@@ -33,7 +33,7 @@ export function verifyOutput({ stdout, stderr, log }: Sinks): VerifyOutput {
   return {
     info: log,
     error: log,
-    stepOutput: (step, output) => log(`--- what ${step} printed ---\n${output.trimEnd()}`),
+    stepOutput: (command, output) => log(`--- what ${command} printed ---\n${output.trimEnd()}`),
     end: (lines) => {
       for (const line of lines) log(`\n${line}`);
       const last = lines.at(-1);

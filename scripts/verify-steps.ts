@@ -10,14 +10,21 @@ const storyFolders = ["packages/ui/", "apps/web/"];
 
 /** Every step `pnpm verify` can run, in run order: the names `--from` takes (RP-1019). */
 export const stepNames = ["check:migrations", "lint", "typecheck", "test:unit", "test:seam1", "test:seam2", "test:stories"] as const;
+export type StepName = (typeof stepNames)[number];
+
+/** The steps a diff runs, in run order, and the ones it leaves out with why. */
+export type Selection = { steps: Step[]; skipped: Skipped[] };
+
+/** Where a run resumed with `--from` started, and the steps before it that it did not run. */
+export type From = { step: StepName; notRun: string[] };
 
 /** The steps for the files changed against origin/main, in run order, and the steps left out. */
-export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skipped[] } {
+export function selectSteps(changed: string[]): Selection {
   const files = changed.map((file) => file.replaceAll("\\", "/"));
   const migrationChanged = files.some((file) => file.startsWith(`${migrationsDir}/`));
   const uiChanged = files.some((file) => storyFolders.some((folder) => file.startsWith(folder)));
   // Why a step does not run for this diff; the others always run.
-  const skipReason: Partial<Record<(typeof stepNames)[number], string>> = {
+  const skipReason: Partial<Record<StepName, string>> = {
     // eslint-disable-next-line rabaed/no-avoid-terms -- the database-schema migration files, named as the check script names them.
     ...(migrationChanged ? {} : { "check:migrations": "no migration changed against origin/main" }),
     ...(uiChanged ? {} : { "test:stories": "nothing changed in packages/ui or apps/web" }),
@@ -34,17 +41,22 @@ export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skippe
 }
 
 /**
- * The steps from `from` on (`pnpm verify --from`, RP-1019), and the ones before it, which this run leaves out.
- * An error when this diff does not run that step at all, naming why.
+ * The steps from `step` on (`pnpm verify --from`, RP-1019), with the `From` that names the ones left out; none when
+ * nothing before it runs for this diff, as that is a complete run. An error when this diff does not run that step.
  */
-export function startFrom({ steps, skipped }: { steps: Step[]; skipped: Skipped[] }, from: string): { steps: Step[]; notRun: string[] } | { error: string } {
-  const start = steps.findIndex((step) => step.name === from);
+export function startFrom({ steps, skipped }: Selection, step: StepName): { steps: Step[]; from?: From } | { error: string } {
+  const start = steps.findIndex(({ name }) => name === step);
   if (start === -1) {
-    const reason = skipped.find((step) => step.name === from)?.reason;
-    return { error: `pnpm verify does not run ${from} for this branch${reason ? ` (${reason})` : ""}, so it cannot start there.` };
+    const reason = skipped.find(({ name }) => name === step)?.reason;
+    const runs = steps.map(({ name }) => name).join(", ");
+    return { error: `pnpm verify does not run ${step} for this branch${reason ? ` (${reason})` : ""}, so it cannot start there. It runs: ${runs}.` };
   }
-  return { steps: steps.slice(start), notRun: steps.slice(0, start).map((step) => step.name) };
+  if (start === 0) return { steps };
+  return { steps: steps.slice(start), from: { step, notRun: steps.slice(0, start).map(({ name }) => name) } };
 }
+
+/** How the last line names the run: `pnpm verify`, or `pnpm verify --from <step>` for a resumed one. */
+export const runCommand = (from?: From): string => (from ? `pnpm verify --from ${from.step}` : "pnpm verify");
 
 /** Whether `step` is a seam suite: the steps that run against the lane's Postgres, get a re-run of timed-out files (RP-979) and can see it terminated (RP-994). */
 export const isSeamStep = (step: string): boolean => step.startsWith("test:seam");
@@ -54,8 +66,8 @@ export const isSeamStep = (step: string): boolean => step.startsWith("test:seam"
  * changes (RP-563). After `--from` (RP-1019) it starts `pnpm verify --from <step>` and names the steps it did not run,
  * so it never reads as a full pass: `pnpm queue` looks for `pnpm verify passed on <sha>:` only.
  */
-export function finalLine({ sha, dirty, steps, from }: { sha: string; dirty: boolean; steps: string[]; from?: { step: string; notRun: string[] } }): string {
-  const command = from ? `pnpm verify --from ${from.step}` : "pnpm verify";
+export function finalLine({ sha, dirty, steps, from }: { sha: string; dirty: boolean; steps: string[]; from?: From }): string {
+  const command = runCommand(from);
   const notRun = from ? ` Not run: ${from.notRun.join(", ")}, so this is not a complete run.` : "";
   return `${command} passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.${notRun}`;
 }
@@ -131,10 +143,10 @@ export function loadFailure(step: string, output: string): string | undefined {
  * What `pnpm verify` prints after a failed step's tail, ending with the line naming where it stopped.
  * For a seam step whose output holds a 57P01 error line, or whose Postgres no longer answers (`postgresAnswers`
  * false), that last line says Postgres was terminated (RP-994), and no load note comes before it:
- * timeouts against a terminated Postgres are not machine load.
+ * timeouts against a terminated Postgres are not machine load. `command` is how the run is named (`runCommand`).
  */
-export function failureEnd(step: string, output: string, postgresAnswers: boolean): string[] {
-  const stopped = `pnpm verify stopped at ${step}`;
+export function failureEnd(step: string, output: string, postgresAnswers: boolean, command = "pnpm verify"): string[] {
+  const stopped = `${command} stopped at ${step}`;
   if (!isSeamStep(step)) return [`${stopped}.`];
   const evidence = postgresTerminated(output) ? "57P01" : postgresAnswers ? undefined : "it no longer answers";
   if (evidence) return [`${stopped}: Postgres was terminated (${evidence}), Docker may have stopped. Restart it (${startServices}) and run pnpm verify again.`];
