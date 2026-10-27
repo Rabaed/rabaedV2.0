@@ -8,31 +8,56 @@ export type Skipped = { name: string; reason: string };
 
 const storyFolders = ["packages/ui/", "apps/web/"];
 
-const step = (name: string): Step => ({ name, script: name });
+/** Every step `pnpm verify` can run, in run order: the names `--from` takes (RP-1019). */
+export const stepNames = ["check:migrations", "lint", "typecheck", "test:unit", "test:seam1", "test:seam2", "test:stories"] as const;
 
 /** The steps for the files changed against origin/main, in run order, and the steps left out. */
 export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skipped[] } {
   const files = changed.map((file) => file.replaceAll("\\", "/"));
   const migrationChanged = files.some((file) => file.startsWith(`${migrationsDir}/`));
   const uiChanged = files.some((file) => storyFolders.some((folder) => file.startsWith(folder)));
+  // Why a step does not run for this diff; the others always run.
+  const skipReason: Partial<Record<(typeof stepNames)[number], string>> = {
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the database-schema migration files, named as the check script names them.
+    ...(migrationChanged ? {} : { "check:migrations": "no migration changed against origin/main" }),
+    ...(uiChanged ? {} : { "test:stories": "nothing changed in packages/ui or apps/web" }),
+  };
 
   const steps: Step[] = [];
   const skipped: Skipped[] = [];
-  if (migrationChanged) steps.push(step("check:migrations"));
-  // eslint-disable-next-line rabaed/no-avoid-terms -- the database-schema migration files, named as the check script names them.
-  else skipped.push({ name: "check:migrations", reason: "no migration changed against origin/main" });
-  steps.push(step("lint"), step("typecheck"), step("test:unit"), step("test:seam1"), step("test:seam2"));
-  if (uiChanged) steps.push(step("test:stories"));
-  else skipped.push({ name: "test:stories", reason: "nothing changed in packages/ui or apps/web" });
+  for (const name of stepNames) {
+    const reason = skipReason[name];
+    if (reason) skipped.push({ name, reason });
+    else steps.push({ name, script: name });
+  }
   return { steps, skipped };
+}
+
+/**
+ * The steps from `from` on (`pnpm verify --from`, RP-1019), and the ones before it, which this run leaves out.
+ * An error when this diff does not run that step at all, naming why.
+ */
+export function startFrom({ steps, skipped }: { steps: Step[]; skipped: Skipped[] }, from: string): { steps: Step[]; notRun: string[] } | { error: string } {
+  const start = steps.findIndex((step) => step.name === from);
+  if (start === -1) {
+    const reason = skipped.find((step) => step.name === from)?.reason;
+    return { error: `pnpm verify does not run ${from} for this branch${reason ? ` (${reason})` : ""}, so it cannot start there.` };
+  }
+  return { steps: steps.slice(start), notRun: steps.slice(0, start).map((step) => step.name) };
 }
 
 /** Whether `step` is a seam suite: the steps that run against the lane's Postgres, get a re-run of timed-out files (RP-979) and can see it terminated (RP-994). */
 export const isSeamStep = (step: string): boolean => step.startsWith("test:seam");
 
-/** The line `pnpm verify` ends with when every step passed: the verified commit, "dirty" if the tree has uncommitted changes (RP-563). */
-export function finalLine({ sha, dirty, steps }: { sha: string; dirty: boolean; steps: string[] }): string {
-  return `pnpm verify passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.`;
+/**
+ * The line `pnpm verify` ends with when every step passed: the verified commit, "dirty" if the tree has uncommitted
+ * changes (RP-563). After `--from` (RP-1019) it starts `pnpm verify --from <step>` and names the steps it did not run,
+ * so it never reads as a full pass: `pnpm queue` looks for `pnpm verify passed on <sha>:` only.
+ */
+export function finalLine({ sha, dirty, steps, from }: { sha: string; dirty: boolean; steps: string[]; from?: { step: string; notRun: string[] } }): string {
+  const command = from ? `pnpm verify --from ${from.step}` : "pnpm verify";
+  const notRun = from ? ` Not run: ${from.notRun.join(", ")}, so this is not a complete run.` : "";
+  return `${command} passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.${notRun}`;
 }
 
 // A seam step that fails only on timeouts or a worker that never started (RP-607): what

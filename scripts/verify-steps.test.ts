@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { failureEnd, finalLine, isSeamStep, loadFailure, runStep, selectSteps, tail, type StepRun } from "./verify-steps.ts";
+import { failureEnd, finalLine, isSeamStep, loadFailure, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
 
@@ -32,6 +32,22 @@ describe("selectSteps", () => {
   });
 });
 
+describe("startFrom", () => {
+  const codeOnly = selectSteps(["scripts/verify.ts"]);
+
+  it("starts at the named step and lists the steps before it as not run", () => {
+    expect(startFrom(codeOnly, "test:seam1")).toEqual({ steps: [{ name: "test:seam1", script: "test:seam1" }, { name: "test:seam2", script: "test:seam2" }], notRun: ["lint", "typecheck", "test:unit"] });
+  });
+
+  it("runs every step, with nothing listed as not run, from the first step", () => {
+    expect(startFrom(codeOnly, "lint")).toEqual({ steps: codeOnly.steps, notRun: [] });
+  });
+
+  it("refuses a step this diff does not run, with the reason it is skipped", () => {
+    expect(startFrom(codeOnly, "test:stories")).toEqual({ error: "pnpm verify does not run test:stories for this branch (nothing changed in packages/ui or apps/web), so it cannot start there." });
+  });
+});
+
 describe("tail", () => {
   it("keeps the last lines only", () => {
     expect(tail("a\nb\nc\nd\n", 2)).toBe("c\nd");
@@ -59,6 +75,12 @@ describe("finalLine", () => {
 
   it("says dirty when the tree has uncommitted changes", () => {
     expect(finalLine({ sha: "abc1234", dirty: true, steps })).toBe("pnpm verify passed on abc1234 (dirty: uncommitted changes): lint, typecheck.");
+  });
+
+  it("after --from, names where it started and the steps it did not run, so a partial run never reads as a full pass", () => {
+    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["test:seam1", "test:seam2"], from: { step: "test:seam1", notRun: ["lint", "typecheck", "test:unit"] } })).toBe(
+      "pnpm verify --from test:seam1 passed on abc1234: test:seam1, test:seam2. Not run: lint, typecheck, test:unit, so this is not a complete run.",
+    );
   });
 });
 
