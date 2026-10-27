@@ -1,0 +1,45 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Resolve without a resolution note is refused",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"resolution_note\",\"code\":\"required\"}],\"error\":\"invalid_action_form\"}"
+    },
+    {
+      "text": "Resolved: Mohammed (the raiser) holds Verify",
+      "ok": true,
+      "detail": "resolved pickUp=true"
+    },
+    {
+      "text": "Mohammed is offered Return to Open and Close",
+      "ok": true,
+      "detail": "close, return_to_open"
+    },
+    {
+      "text": "Return to Open with a reason is taken",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "It is back with TMC, Open",
+      "ok": true,
+      "detail": "open {\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":{\"en\":\"Hafiz Hamdan\",\"ar\":\"حافظ حمدان\"},\"pool\":null}"
+    },
+    {
+      "text": "Mohammed's Close ends the Snag",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "Mohammed's history holds only shared moves (no Start work, pick-ups)",
+      "ok": true,
+      "detail": "Raise > Resolve > Return to Open > Resolve > Close"
+    }
+  ],
+  "screenshots": [
+    "evidence/SNG-04-1-closed-snag-as-mohammed.jpg"
+  ],
+  "notes": "After the Return: Hafiz holds it? pickUp=false, holder=Hafiz Hamdan; transitions start_work,put_on_hold,resolve\nTMC reads: Raise > Resolve > Return to Open. DCL read before the second Resolve: Raise > Resolve > Return to Open.",
+  "ranAt": "2026-10-27T18:04:57.579Z"
+}

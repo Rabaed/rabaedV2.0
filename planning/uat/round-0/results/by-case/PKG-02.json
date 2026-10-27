@@ -1,0 +1,32 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The new Package page shows its PKG number beside TMC's name, Open, with no submittals",
+      "ok": true,
+      "detail": "PKG-038; Submittals PKG-038 Package PKG-038 Owned by TC TMC Constructions Open UAT PKG-02 first 184405 Rename Delete Add items PROGRESS 0/0  0 of 0 closed  0 Still open "
+    },
+    {
+      "text": "A second Package is the next number",
+      "ok": true,
+      "detail": "PKG-039"
+    },
+    {
+      "text": "Beta Build's Packages are numbered from their own count (its first is PKG-001), never counting TMC's",
+      "ok": true,
+      "detail": "PKG-002; Beta had 1"
+    },
+    {
+      "text": "In Arabic the number is left to right",
+      "ok": true,
+      "detail": "ltr|ltr"
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-02-1-new-package-dialog.jpg",
+    "evidence/PKG-02-2-package-page.jpg",
+    "evidence/PKG-02-3-package-page-arabic.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:54:10.364Z"
+}

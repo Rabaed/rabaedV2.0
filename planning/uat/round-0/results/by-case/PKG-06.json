@@ -1,0 +1,62 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "A Package of unsent items is Open",
+      "ok": true
+    },
+    {
+      "text": "Submit Package submits all 4",
+      "ok": true,
+      "detail": "200 {\"submitted\":[{\"id\":\"fc9b0aab-4947-483d-87c1-f70cf0459324\",\"documentNumber\":\"TWR-MAR-01-0283\",\"title"
+    },
+    {
+      "text": "In Progress as soon as anything is submitted",
+      "ok": true
+    },
+    {
+      "text": "Mohammed closes the items at A, B, C and D",
+      "ok": true,
+      "detail": "204  | 204  | 204  | 204 "
+    },
+    {
+      "text": "With a Code C waiting for its Revision the Package is still In Progress",
+      "ok": true
+    },
+    {
+      "text": "A Revision of the Code C item is created",
+      "ok": true,
+      "detail": "201"
+    },
+    {
+      "text": "The Revision joins the Package by itself and the Package stays In Progress",
+      "ok": true,
+      "detail": "in_progress 4 items"
+    },
+    {
+      "text": "The Revision closes at A",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Done: every latest submittal has closed at A, B or D",
+      "ok": true,
+      "detail": "done"
+    },
+    {
+      "text": "A replacement for the Code D item joins and puts the Package back In Progress",
+      "ok": true,
+      "detail": "201 in_progress"
+    },
+    {
+      "text": "The word is In Progress or Done, never Closed",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-06-1-package-in-progress-again.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:55:34.582Z"
+}

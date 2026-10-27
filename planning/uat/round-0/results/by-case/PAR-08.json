@@ -1,0 +1,39 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Layla adds Sara to the Project as a Project Member",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "With the Position Engineer",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Narrowing Sara to one Trade saves",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "A Trade DCL does not cover is rejected (a Member never covers more than the Participant)",
+      "ok": true,
+      "detail": "422 {\"error\":\"exceeds_participant\"}"
+    },
+    {
+      "text": "Sara's grant is unchanged by the rejection",
+      "ok": true
+    },
+    {
+      "text": "Layla reads DCL's Project Members of UATP",
+      "ok": true,
+      "detail": "200"
+    }
+  ],
+  "screenshots": [
+    "evidence/PAR-08-1-layla-uatp-participant.jpg"
+  ],
+  "notes": "The Test Case's Mechanical-only narrowing is done on UATP with the Trades its Participant covers there; Sara's grant on Tower is untouched.",
+  "ranAt": "2026-10-27T18:03:50.715Z"
+}

@@ -1,0 +1,26 @@
+{
+  "status": "error",
+  "checks": [
+    {
+      "text": "Ali and Mohammed both get the shared item (200)",
+      "ok": true,
+      "detail": "200/200"
+    },
+    {
+      "text": "Both get the same content",
+      "ok": true
+    },
+    {
+      "text": "No Step, no person, no Internal Note in it",
+      "ok": true,
+      "detail": "{\"id\":\"ca1a273f-c71a-4824-90c2-07e0504a9198\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 181006\",\"documentNum"
+    },
+    {
+      "text": "A Draft has nothing shared: the plain 404",
+      "ok": true
+    }
+  ],
+  "screenshots": [],
+  "notes": "Script error: locator.click: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('table').first().getByRole('button', { name: 'More for UAT SUB-18 download 181006' })\u001b[22m | ",
+  "ranAt": "2026-10-27T18:10:29.556Z"
+}

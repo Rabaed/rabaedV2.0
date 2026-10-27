@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "A link to a TMC id is refused uniformly (like a made-up id) and names nothing",
+      "ok": true,
+      "detail": "422 {\"error\":\"target_not_found\"}"
+    },
+    {
+      "text": "A Form saved with a hidden reference is refused like a made-up one, naming nothing",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"related_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"} / 422 {\"fields\":[{\"key\":\"related_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "Yousef's Member choices are himself only; Participant choices only his own Company and the Host Company by name (V15)",
+      "ok": true,
+      "detail": "members 1; participants Beta Build, TMC Constructions"
+    },
+    {
+      "text": "A refusal of a bad answer names nothing of another item or Company",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"manufacturer\",\"code\":\"wrong_type\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "A Link page opened by a TMC Link id is 404, like a made-up id",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "A Transition on a TMC item is 404 like a made-up id",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "Yousef's own Draft page holds no name of the TMC item",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-59-1-yousef-own-draft.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:45:07.595Z"
+}

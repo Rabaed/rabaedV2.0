@@ -1,0 +1,153 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Home: the language button reloads the same page in Arabic",
+      "ok": true,
+      "detail": "/en -> /ar"
+    },
+    {
+      "text": "Home: it is right to left (dir=rtl, lang=ar)",
+      "ok": true,
+      "detail": "rtl/ar"
+    },
+    {
+      "text": "Home: English is left to right",
+      "ok": true,
+      "detail": "ltr/en"
+    },
+    {
+      "text": "Home: nothing scrolls sideways in either language",
+      "ok": true,
+      "detail": "en 1366/1366, ar 1366/1366"
+    },
+    {
+      "text": "Home: the sidebar sits on the right in Arabic",
+      "ok": true,
+      "detail": "sidebar centre 1235 of 1366"
+    },
+    {
+      "text": "Home: the switch back returns to the same page in English",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en"
+    },
+    {
+      "text": "Home: opening /ar directly gives the same RTL page",
+      "ok": true,
+      "detail": "rtl 1366/1366"
+    },
+    {
+      "text": "List: the language button reloads the same page in Arabic",
+      "ok": true,
+      "detail": "/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items -> /ar/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items"
+    },
+    {
+      "text": "List: it is right to left (dir=rtl, lang=ar)",
+      "ok": true,
+      "detail": "rtl/ar"
+    },
+    {
+      "text": "List: English is left to right",
+      "ok": true,
+      "detail": "ltr/en"
+    },
+    {
+      "text": "List: nothing scrolls sideways in either language",
+      "ok": true,
+      "detail": "en 1366/1366, ar 1366/1366"
+    },
+    {
+      "text": "List: the table is right to left in Arabic",
+      "ok": true,
+      "detail": "rtl"
+    },
+    {
+      "text": "List: the switch back returns to the same page in English",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items"
+    },
+    {
+      "text": "List: opening /ar directly gives the same RTL page",
+      "ok": true,
+      "detail": "rtl 1366/1366"
+    },
+    {
+      "text": "Kanban: the language button reloads the same page in Arabic",
+      "ok": true,
+      "detail": "/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=kanban -> /ar/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=kanban"
+    },
+    {
+      "text": "Kanban: it is right to left (dir=rtl, lang=ar)",
+      "ok": true,
+      "detail": "rtl/ar"
+    },
+    {
+      "text": "Kanban: English is left to right",
+      "ok": true,
+      "detail": "ltr/en"
+    },
+    {
+      "text": "Kanban: nothing scrolls sideways in either language",
+      "ok": true,
+      "detail": "en 1366/1366, ar 1366/1366"
+    },
+    {
+      "text": "Kanban: the switch back returns to the same page in English",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=kanban"
+    },
+    {
+      "text": "Kanban: opening /ar directly gives the same RTL page",
+      "ok": true,
+      "detail": "rtl 1366/1366"
+    },
+    {
+      "text": "item: the language button reloads the same page in Arabic",
+      "ok": true,
+      "detail": "/en/work-items/e4aaaf29-7e0a-4b53-8334-275f65bc920b -> /ar/work-items/e4aaaf29-7e0a-4b53-8334-275f65bc920b"
+    },
+    {
+      "text": "item: it is right to left (dir=rtl, lang=ar)",
+      "ok": true,
+      "detail": "rtl/ar"
+    },
+    {
+      "text": "item: English is left to right",
+      "ok": true,
+      "detail": "ltr/en"
+    },
+    {
+      "text": "item: nothing scrolls sideways in either language",
+      "ok": true,
+      "detail": "en 1366/1366, ar 1366/1366"
+    },
+    {
+      "text": "item: the switch back returns to the same page in English",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/work-items/e4aaaf29-7e0a-4b53-8334-275f65bc920b"
+    },
+    {
+      "text": "item: opening /ar directly gives the same RTL page",
+      "ok": true,
+      "detail": "rtl 1366/1366"
+    },
+    {
+      "text": "Kanban: the column order mirrors (first column on the left in English, on the right in Arabic)",
+      "ok": true,
+      "detail": "en 451,2131, ar 915,-765"
+    },
+    {
+      "text": "Faisal: Arabic to English on Home keeps the page and is left to right",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en"
+    }
+  ],
+  "screenshots": [
+    "evidence/I18N-01-1-home-ar.jpg",
+    "evidence/I18N-01-2-list-ar.jpg",
+    "evidence/I18N-01-3-kanban-ar.jpg",
+    "evidence/I18N-01-4-faisal-home-en.jpg"
+  ],
+  "notes": "Hafiz's Kanban showed the not-found page although the api answers 200 (3-4 s, 680 KB): a lane problem noted in the report; the column order is checked as Faisal below.\nArrows and breadcrumbs mirroring and 'nothing cut off' are judged from the screenshots (home-ar, list-ar, kanban-ar); the script checks direction, sidebar side, column order and sideways scroll.",
+  "ranAt": "2026-10-22T19:20:30.241Z"
+}

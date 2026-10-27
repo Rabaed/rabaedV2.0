@@ -1,0 +1,37 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "a MAR Draft with Description empty is created through the api",
+      "ok": true,
+      "detail": "201 {\"id\":\"40ff0330-0ecc-4368-86c6-bfc6f50219a1\"}"
+    },
+    {
+      "text": "field labels and section titles are Arabic (تفاصيل المادة, الوصف)",
+      "ok": true,
+      "detail": "الاعتمادات UAT I18N-04 empty 185101 تنزيل PDF قيد المراقبة مسودة سير العمل: UAT FX-SB MAR Send Back (Comment only) · الإصدار 1 عرض سير العمل إرسال للمراجعة إلغاء الموضوع UAT I18N-04 empty 185101 رقم ا"
+    },
+    {
+      "text": "the values typed in English stay as typed (UAT Maker)",
+      "ok": true,
+      "detail": "UAT Maker |  |  |  |  |  |  |  |  |  | "
+    },
+    {
+      "text": "the missing-fields message is shown, in Arabic",
+      "ok": true,
+      "detail": "أكمل النموذج أولاً: الحقول المطلوب تصحيحها محددة فيه. | 3 حقول تحتاج إلى مراجعتك:\n\nالمورّد المعتمد\nالوصف\nنشرة البيانات (PDF) | صحّح هذه الحقول:\n\nالمورّد المعتمد\nالوصف\nنشرة البيانات (PDF) | "
+    },
+    {
+      "text": "the item stays in Draft (nothing sent)",
+      "ok": true,
+      "detail": "draft"
+    }
+  ],
+  "screenshots": [
+    "evidence/I18N-04-1-form-ar.jpg",
+    "evidence/I18N-04-2-send-for-review-ar.jpg",
+    "evidence/I18N-04-3-missing-fields-ar.jpg"
+  ],
+  "notes": "Alert text read: أكمل النموذج أولاً: الحقول المطلوب تصحيحها محددة فيه. | 3 حقول تحتاج إلى مراجعتك:\n\nالمورّد المعتمد\nالوصف\nنشرة البيانات (PDF) | صحّح هذه الحقول:\n\nالمورّد المعتمد\nالوصف\nنشرة البيانات (PDF) | ",
+  "ranAt": "2026-10-22T18:51:08.051Z"
+}

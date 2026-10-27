@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The item runs the Assign to Workflow",
+      "ok": true,
+      "detail": "{\"name\":{\"en\":\"UAT WF-17 assign 182632\",\"ar\":\"UAT WF-17 assign 182632\"},\"versionNo\":1}"
+    },
+    {
+      "text": "Hafiz is offered only TMC Members who may hold the Contractor PM Step",
+      "ok": true,
+      "detail": "offered: Ali Sonour"
+    },
+    {
+      "text": "A pick it could not have offered is refused like a made-up one",
+      "ok": true,
+      "detail": "Ahmed id: 422 {\"error\":\"assignee_not_offered\"} | fake: 422 {\"error\":\"assignee_not_offered\"} (Ahmed id read: no)"
+    },
+    {
+      "text": "Ali's Submit offers no DCL person by name (the Consultant is one Participant)",
+      "ok": true,
+      "detail": "offered on Submit: nothing"
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-17-1-ali-submit-offers.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:26:37.418Z"
+}

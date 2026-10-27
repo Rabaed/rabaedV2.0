@@ -1,0 +1,52 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Faisal (Al Waha, Tower 1) sees and watches the Submitted item",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "Faisal's bell gets an entry",
+      "ok": true
+    },
+    {
+      "text": "Faisal gets an email",
+      "ok": true
+    },
+    {
+      "text": "the email is in Arabic, right to left",
+      "ok": true,
+      "detail": "⁦TWR-MAR-01-0301⁩ · UAT NOT-10 arabic 185729 · السجل جاهز للتنزيل"
+    },
+    {
+      "text": "the email has Latin digits only",
+      "ok": true,
+      "detail": "⁦TWR-MAR-01-0301⁩ · UAT NOT-10 arabic 185729 · السجل جاهز للتنزيل"
+    },
+    {
+      "text": "the Document Number is isolated left to right in the email",
+      "ok": true,
+      "detail": "⁦TWR-MAR-01-0301⁩ · UAT NOT-10 arabic 185729 · السجل جاهز للتنزيل"
+    },
+    {
+      "text": "the bell entry is Arabic with Latin digits",
+      "ok": true,
+      "detail": "UAT NOT-10 arabic 185729 TWR-MAR-01-0301 · السجل جاهز للتنزيل 22‏/10‏/2026، 9:57 م غير مقروء"
+    },
+    {
+      "text": "the page is right to left",
+      "ok": true
+    },
+    {
+      "text": "Faisal's settings are restored",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/NOT-10-1-faisal-bell-ar.jpg",
+    "evidence/NOT-10-2-faisal-email-ar.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:57:37.213Z"
+}

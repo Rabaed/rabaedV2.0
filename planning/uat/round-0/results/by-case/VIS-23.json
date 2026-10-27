@@ -1,0 +1,75 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Setup: Sara covers Electrical for this case (restored afterwards)",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "DCL reads the pool names (Ahmed and Sara) while nobody has picked it up",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"},\"memberName\":null,\"pool\":{\"names\":[{\"en\":\"Ahmed bin Said\",\"ar\":\"أحمد بن سعيد\"},{\"en\":\"Sara\",\"ar\":\"سارة\"}]}}"
+    },
+    {
+      "text": "Ali reads With Design Consultants LLC in the item, List and Kanban, never the pool names",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "text": "Ali's history and Activity Feed hold no DCL person, Step or Pick up event",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Ahmed picks it up",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "Sara (DCL) now reads Ahmed as the holder",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"},\"memberName\":{\"en\":\"Ahmed bin Said\",\"ar\":\"أحمد بن سعيد\"},\"pool\":null}"
+    },
+    {
+      "text": "Ali reads the same after the Pick up: With Design Consultants, no holder, no Pick up event",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Notifications of TMC name no DCL pool, holder or Pick up",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Mohammed issues Code B",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Mohammed finds the Comment",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "text": "Mohammed reads TMC by name only for the Comment (no TMC pool names, no holder)",
+      "ok": true,
+      "detail": "\"heldBy\":{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":null,\"pool\":null}"
+    },
+    {
+      "text": "and the List row says only With TMC Constructions",
+      "ok": true,
+      "detail": "{\"kind\":\"company\",\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}}"
+    },
+    {
+      "text": "Sara's Visibility is restored to Mechanical only (FX-K1M kept)",
+      "ok": true,
+      "detail": "204"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-23-1-ali-item-with-dcl.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:31:42.781Z"
+}

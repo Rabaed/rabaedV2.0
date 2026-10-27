@@ -1,0 +1,43 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Rows assigned to Hafiz and Ali by email are good",
+      "ok": true,
+      "detail": " | "
+    },
+    {
+      "text": "An email of another Company's Member or nobody is assignee_unknown, telling nothing of who they are",
+      "ok": true,
+      "detail": "assignee_unknown | assignee_unknown"
+    },
+    {
+      "text": "A row with no assignee is the importer's",
+      "ok": true
+    },
+    {
+      "text": "A default Member picks the assignee of the rows the column leaves empty",
+      "ok": true,
+      "detail": "201 {\"id\":\"6cb2db3c-a2d8-47d8-8b7a-8773db028a31\",\"fileName\":\"assign2.xlsx\",\"status\":\"previewed\",\"runBy\":{\"id\":\"c39da5c9-86d8"
+    },
+    {
+      "text": "Confirm creates only the good rows (3)",
+      "ok": true,
+      "detail": "200 {\"rowsCreated\":3}"
+    },
+    {
+      "text": "Ali's row is a Draft held by Ali",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":{\"en\":\"Ali Sonour\",\"ar\":\"علي سنور\"},\"pool\":null}"
+    },
+    {
+      "text": "Nobody is notified of the import, the assignee included",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/IMP-10-1-assigned-rows.jpg"
+  ],
+  "notes": "An assignee who cannot create the Type was not exercised: every TMC Member who may be assigned here may raise a MAR.",
+  "ranAt": "2026-10-22T18:46:32.372Z"
+}

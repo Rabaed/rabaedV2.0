@@ -1,0 +1,33 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The seeded control panel and the Submitted item are offered",
+      "ok": true,
+      "detail": "{\"links\":[{\"id\":\"4ad0ad71-e989-424a-a94a-e623d28cdf63\",\"documentNumber\":\"TWR-MAR-01-0172\",\"subject\":\"UAT FRM-05 control panel submitted 182932\"},{\"id\":\"a0179c3c-4331-4617-8fcc-03dfb14d6b01\",\"documentNumber\":\"TWR-MAR-01-0054\",\"subject\":\"UAT VIS-09 Control panel Tower 2\"},{\"id\":\"e4aaaf29-7e0a-4b53-833"
+    },
+    {
+      "text": "No Draft of Hafiz's own, nothing in internal review, nothing of Beta Build",
+      "ok": true
+    },
+    {
+      "text": "The Form's picker offers the same: no own Draft, internal or Beta Build item",
+      "ok": true
+    },
+    {
+      "text": "A saved id that could not be offered is refused like a made-up one",
+      "ok": true,
+      "detail": "own draft: 422 {\"fields\":[{\"key\":\"related_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"} | made-up: 422 {\"fields\":[{\"key\":\"related_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "Beta Build's item id is refused the same way",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"related_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"}"
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-05-1-related-submittals-search.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:29:37.460Z"
+}

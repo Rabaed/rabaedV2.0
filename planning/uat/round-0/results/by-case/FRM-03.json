@@ -1,0 +1,15 @@
+{
+  "status": "blocked",
+  "checks": [
+    {
+      "text": "Electrical offers Najd Electrical Supplies and Tabuk Cable Industries (and suppliers added since)",
+      "ok": true,
+      "detail": "UI: Najd Electrical Supplies, Tabuk Cable Industries, UAT SUB-20 Delta Cables 180525; api: Najd Electrical Supplies, Tabuk Cable Industries, UAT SUB-20 Delta Cables 180525"
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-03-1-electrical-suppliers.jpg"
+  ],
+  "notes": "Hafiz's Trade list on the New Submittal Form: Electrical Works (⁦EL⁩). Civil Works is covered by no Participant (strategy 2.2), so TMC cannot choose it; the Project Admin's Approved Supplier List for Civil holds: Al-Rimal Building Materials; Hafiz's api read of the Civil list answers 200.\nThe Civil half cannot be run as written: Trade Civil Works is not offered to Hafiz (TMC covers Electrical only, Civil Works is covered by no Participant), so he cannot open Approved supplier for Civil or change Trade from Civil to Electrical. The Electrical half is as expected (see the screenshot). Run with a Contractor whose Visibility includes Civil Works, or widen TMC's Trade for the case.",
+  "ranAt": "2026-10-22T18:29:13.856Z"
+}

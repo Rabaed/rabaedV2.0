@@ -20,3 +20,13 @@ keywords = ["base64"]
 description = "RP-157: a made-up verification token in the verification test"
 targetRules = ["generic-api-key"]
 paths = ['''^apps/api/test/verification\.test\.ts$''']
+
+# RP-1048's UAT case FRM-09 once held a made-up Screen key as a literal
+# (`key: "uat_frm09_denied"`, commit f2bb3777d); it was never a secret, and the case
+# now builds it at run time. Only the default generic-api-key rule, only that value.
+[[allowlists]]
+description = "RP-1048: a made-up Screen key in the UAT case FRM-09"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexes = ['''uat_frm09_denied''']
+paths = ['''^planning/uat/round-0/cases/FRM\.ts$''']

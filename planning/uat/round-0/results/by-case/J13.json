@@ -1,0 +1,176 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "[PAR-02] Saeed invites a new Member by email",
+      "ok": true,
+      "detail": "201 {\"memberId\":\"3f22d4cf-d210-4c43-8dfe-2925252f9dbf\",\"invitation\":{\"token\":\"nlJL40o36QABza8_s5zTvxQuOu"
+    },
+    {
+      "text": "[PAR-02] The Member appears as invited",
+      "ok": true,
+      "detail": "\"invited\""
+    },
+    {
+      "text": "[PAR-02] Hand-over 1: the invitation email arrives in Mailpit (the Test Case: follow the link from the email)",
+      "ok": false,
+      "detail": "0 mails to uat.j13.1793124960190@tmc.demo.rabaed.test after 10 s. The invite answer carries the one-time token and the api says 'email delivery comes later' (packages/domain member.ts); the journey went on with that token"
+    },
+    {
+      "text": "[PAR-02][VIS] Layla (DCL) does not list the invited Member",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-02] Hand-over 2: the new Member sets a password and lands signed in on the app",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en"
+    },
+    {
+      "text": "[PAR-02] The new Member belongs to TMC (and is active)",
+      "ok": true,
+      "detail": "\"UAT J13 Leaver 60190\""
+    },
+    {
+      "text": "[PAR-02][VIS] On no Project yet: the new Member sees none (the J7 Project is the plain 404 for them)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-08] Saeed (Authorized Person) adds the new Member to the J7 Project",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] With the Position Engineer",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] Saeed himself takes the Positions Engineer and Project Manager (the Member who can take over)",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] Both are granted all Trades and Locations (a Project Member starts with none)",
+      "ok": true,
+      "detail": "204 204"
+    },
+    {
+      "text": "[PAR-08] The new Member now sees the J7 Project",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-08][VIS] Hand-over 3: TMC's Project Members list is read by TMC only: Yousef (Beta Build) and Layla (DCL) get the plain 404 for it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[SUB-01] The new Member raises a MAR Draft in the J7 Project (their Step: the Draft)",
+      "ok": true,
+      "detail": "201 {\"id\":\"e9f6aec8-d189-4362-8008-56e211ea3a0e\"}"
+    },
+    {
+      "text": "[SUB-01] They hold it at the Draft Step, and it runs the J8 Workflow",
+      "ok": true,
+      "detail": "[\"UAT J13 Leaver 60190\",\"UAT J8 MAR Workflow 754656\",\"draft\"]"
+    },
+    {
+      "text": "[VIS] Hand-over 4: Saeed sees the Draft (TMC); Yousef (Beta Build) and Layla (DCL) get the plain 404 for it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS] Saeed opens the Draft's page (not the not-found page)",
+      "ok": true,
+      "detail": "Submittals UAT J13 leaver Draft 60190 Download PDF Watch Draft Workflow: UAT J8 "
+    },
+    {
+      "text": "[PAR-09] Deactivating without a Handover is refused 409 handover_needed and nothing changes",
+      "ok": true,
+      "detail": "409 {\"handovers\":[{\"assignmentId\":\"5664aa2e-5f85-4d9b-9da9-fd7515bc73f0\",\"project\":{\"id\":\"3f863a0c-5934-4965-b65b-ab514c382d3d\",\"name\":{\"ar\":\"UAT J7 Project 695367 "
+    },
+    {
+      "text": "[PAR-09] The Handover lists the Draft: Project, 'No number yet', Subject, Step",
+      "ok": true,
+      "detail": "{\"assignmentId\":\"5664aa2e-5f85-4d9b-9da9-fd7515bc73f0\",\"project\":{\"id\":\"3f863a0c-5934-4965-b65b-ab514c382d3d\",\"name\":{\"ar\":\"UAT J7 Project 695367 (ع)\",\"en\":\"UAT J7 Project 695367\"}},\"step\":{\"ar\":\"مسودة\",\"en\":\"Draft\"},\"item\":{\"id\":\"e9f6aec8-d189-4362-8008-56e211ea3a0e\",\"documentNumber\":null,\"title\":\""
+    },
+    {
+      "text": "[PAR-09][VIS] The candidates are TMC's own Members only, Saeed pre-filled as the single one; nothing of another Company is in the list",
+      "ok": true,
+      "detail": "Saeed Al Qahtani"
+    },
+    {
+      "text": "[PAR-09][VIS] Only the Authorized Person has the Handover: Hafiz (plain TMC Member) cannot deactivate (refused, nothing named)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-09] Hand-over 5: the Handover dialog names the Draft, its Step and the J7 Project, with Saeed as the new holder",
+      "ok": true,
+      "detail": "Hand over UAT J13 Leaver 60190's Steps UAT J13 Leaver 60190 holds these. Choose who takes each one before UAT J13 Leaver 60190 is deactivated. UAT J7 Project 695367 · No number yet UAT J13 leaver Draft 60190 Draft New holder Saeed Al Qahtani Cancel Hand over a"
+    },
+    {
+      "text": "[PAR-09][VIS] The dialog names no person or Company outside TMC",
+      "ok": true,
+      "detail": "Hand over UAT J13 Leaver 60190's Steps UAT J13 Leaver 60190 holds these. Choose who takes each one before UAT J13 Leaver"
+    },
+    {
+      "text": "[PAR-09] The Member is deactivated",
+      "ok": true,
+      "detail": "\"deactivated\""
+    },
+    {
+      "text": "[PAR-09] Their Draft moved to Saeed (TMC Member), still at the Draft Step",
+      "ok": true,
+      "detail": "[\"Saeed Al Qahtani\",\"draft\"]"
+    },
+    {
+      "text": "[PAR-09] The history says it was handed over because they were deactivated",
+      "ok": true,
+      "detail": "[{\"seq\":1,\"type\":\"assigned\",\"at\":\"2026-10-27T18:17:17.145Z\",\"audience\":\"internal\",\"by\":{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":{\"en\":\"Saeed Al Qahtani\",\"ar\":\"س"
+    },
+    {
+      "text": "[PAR-09][VIS] Hand-over 6: the Draft stays TMC's own: Yousef and Layla still get the plain 404",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-02] The deactivated Member can no longer sign in (refused, 401)",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "text": "[PAR-02] Their open session is ended at once (the api answers 401)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-09] Saeed removes them from the J7 Project (they hold no Step now)",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-09] They no longer appear among TMC's Project Members of the Project",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-09][VIS] Nobody of another Company reads them: Layla's Members list and Yousef's J7 view hold no trace",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "screenshots": [
+    "evidence/J13-1-1-saeed-members-invited.jpg",
+    "evidence/J13-2-2-new-member-signed-in.jpg",
+    "evidence/J13-3-3-saeed-tmc-project-members.jpg",
+    "evidence/J13-4-4-saeed-leaver-draft.jpg",
+    "evidence/J13-5-5-handover-dialog.jpg",
+    "evidence/J13-6-6-saeed-members-deactivated.jpg",
+    "evidence/J13-7-7-saeed-after-removal.jpg"
+  ],
+  "notes": "The new Member uat.j13.1793124960190@tmc.demo.rabaed.test stays deactivated; its test password is in planning/uat/round-0/.sessions/j13-test-password.txt (git-ignored) and was never printed. The Draft \"UAT J13 leaver Draft\" now belongs to Saeed.",
+  "ranAt": "2026-10-27T18:17:26.991Z"
+}

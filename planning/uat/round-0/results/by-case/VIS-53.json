@@ -1,0 +1,77 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Positive control: Ali (TMC) holds the Draft",
+      "ok": true
+    },
+    {
+      "text": "Yousef sees nothing of it as a Draft: not by id, history or Workflow map, no row",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Mohammed (DCL) does not read the Draft",
+      "ok": true
+    },
+    {
+      "text": "Yousef sees nothing of it after the Raise: not by id, history or Workflow map, no row",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "From the Raise Mohammed reads it as informed, read-only (docs/visibility.md RP-625-1; the Test Case text predates it)",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Ali takes start_work",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Yousef sees nothing of it after start_work: not by id, history or Workflow map, no row",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Ali takes resolve_in_progress",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Yousef sees nothing of it after resolve_in_progress: not by id, history or Workflow map, no row",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Ali takes close",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Yousef sees nothing of it after close: not by id, history or Workflow map, no row",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "It is Closed, held by TMC from Draft to Closed",
+      "ok": true
+    },
+    {
+      "text": "Mohammed's history holds only the shared moves (Raise, Resolve, Close), never In Progress",
+      "ok": true,
+      "detail": "Raise, Resolve, Close"
+    },
+    {
+      "text": "Yousef: the Snag by id is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-53-1-yousef-own-snag-by-id.jpg"
+  ],
+  "notes": "The Test Case says the Consultant never sees a Contractor's Snag on itself; the later spec (RP-625-1, docs/visibility.md) informs the Consultant from the Raise, read-only. The product follows the spec, so this is checked against it: the Test Case needs a text fix.",
+  "ranAt": "2026-10-22T19:43:02.347Z"
+}

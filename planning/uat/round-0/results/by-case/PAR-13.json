@@ -1,0 +1,31 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Layla (Authorized Person) sees each Project DCL takes part in: name, code, number, Host Company, own role",
+      "ok": true,
+      "detail": "{\"id\":\"610920e9-b84e-4a3d-83c1-622d50f7c5e5\",\"project\":{\"id\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"projectNumber\":1,\"code\":\"TWR\",\"name\":{\"en\":\"Riyadh Gate Tower – Phase 2\",\"ar\":\"برج بوابة الرياض – المرحلة 2\"}},\"hostCompany\":{\"legalName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}},\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}}}"
+    },
+    {
+      "text": "...and her own Company's Project Members there, never another Participant",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Pending invitations are listed (none now, or by Project name, Host Company and role only)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Hafiz (a plain Member) opens Company Projects read-only (V15: every Member of a Participant sees it; design: 'other Members see it read-only')",
+      "ok": false,
+      "detail": "api 403 {\"error\":\"forbidden\"}; page ended at http://lane7.localhost:3700/en"
+    }
+  ],
+  "screenshots": [
+    "evidence/PAR-13-1-hafiz-company-projects.jpg",
+    "evidence/PAR-13-2-layla-company-projects.jpg"
+  ],
+  "notes": "FAIL (PAR-13 Hafiz): steps: sign in as Hafiz (TMC Engineer, not an Authorized Person), open /en/participants (Company Projects). Expected: V15 first bullet, GLOSSARY Company Projects and design/prompts/participants.md: every Member of a Participant sees their Company Projects (other Members read-only): Project name, code, number, Host Company, own role and own Project Members. Actual: Hafiz is sent to Home. Screenshot: evidence/PAR-13-1-hafiz-company-projects.jpg (Home, no Company Projects page).\nHafiz: GET /v1/participants answers 403 and /en/participants redirects a non-Authorized Person to Home, so only the Authorized Person has a Company Projects page. docs/visibility.md V15 first bullet and design/prompts/participants.md say other Members see it read-only.",
+  "ranAt": "2026-10-27T18:04:50.330Z"
+}

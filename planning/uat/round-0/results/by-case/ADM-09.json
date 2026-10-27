@@ -1,0 +1,28 @@
+{
+  "status": "manual",
+  "checks": [
+    {
+      "text": "Admin pages (/workflows, /records) are not served on the web port",
+      "ok": true,
+      "detail": "404, 404"
+    },
+    {
+      "text": "a Company app URL (/en/projects) is not served on the Admin port",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "the two have different addresses",
+      "ok": true,
+      "detail": "lane7.localhost:3700 vs 127.0.0.1:4750"
+    },
+    {
+      "text": "the Company app's cookie does not open Admin",
+      "ok": true,
+      "detail": "401"
+    }
+  ],
+  "screenshots": [],
+  "notes": "The no-session parts passed by script. A person still signs out of one and checks the other stays signed in (needs an Engineer session: Rabaed Admin sign-in needs the Engineer password and code: run by a person).",
+  "ranAt": "2026-10-22T18:48:46.626Z"
+}

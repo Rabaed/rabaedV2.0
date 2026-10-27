@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Locations nest Zone > Tower > Floor",
+      "ok": true,
+      "detail": "Main Zone (⁦MZ⁩) | — Tower 1 (⁦T1⁩) | — — Tower 1 Floor 01 (⁦T1F01⁩) | — — Tower 1 Floor 02 (⁦T1F02⁩) | — — Tower 1 Floor 03 (⁦T1F03⁩) | — Tower 2 (⁦T2⁩) | — — Tower 2 Floor 01 (⁦T2F01⁩)"
+    },
+    {
+      "text": "Scopes wait for a Trade",
+      "ok": true
+    },
+    {
+      "text": "Scopes of the chosen Trade are offered (Lighting, Emergency lighting, Power distribution)",
+      "ok": true,
+      "detail": "Lighting, Power distribution ,"
+    },
+    {
+      "text": "Trade and Location are Built-in Fields and required in the Form",
+      "ok": true,
+      "detail": "[[\"trade\",\"trade\",true],[\"location\",\"location\",true],[\"scopes\",\"scopes\",false]]"
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-04-1-location-tree.jpg",
+    "evidence/FRM-04-2-scopes-of-trade.jpg"
+  ],
+  "notes": "Step 3 (remove Trade from the Form view): no Form builder or Form view editor exists in the web app yet (no Forms page under Project Settings), so it could not be tried; only the published Form's required Built-in Fields were read.",
+  "ranAt": "2026-10-22T18:29:20.781Z"
+}

@@ -1,0 +1,115 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "hafiz: history, Activity Feed and bell show no change at all before the Code",
+      "ok": true,
+      "detail": "identical"
+    },
+    {
+      "text": "ali: history, Activity Feed and bell show no change at all before the Code",
+      "ok": true,
+      "detail": "identical"
+    },
+    {
+      "text": "faisal: history, Activity Feed and bell show no change at all before the Code",
+      "ok": true,
+      "detail": "identical"
+    },
+    {
+      "text": "Mohammed issues Code C with Remarks, a verification note and an Internal Note",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "hafiz reads the Code, Remarks and that Mohammed issued it",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"},\"memberName\":{\"en\":\"Mohammed Al Shamsi\",\"ar\":\"محمد الشامسي\"}}"
+    },
+    {
+      "text": "hafiz reads the final verification",
+      "ok": true
+    },
+    {
+      "text": "hafiz never reads Ahmed's reply, a Recommended Code, an internal_answers entry or a DCL Internal Note",
+      "ok": true,
+      "detail": "leaked:  "
+    },
+    {
+      "text": "hafiz's history numbering has no gap",
+      "ok": true,
+      "detail": "1,2,3,4,5"
+    },
+    {
+      "text": "ali reads the Code, Remarks and that Mohammed issued it",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"},\"memberName\":{\"en\":\"Mohammed Al Shamsi\",\"ar\":\"محمد الشامسي\"}}"
+    },
+    {
+      "text": "ali reads the final verification",
+      "ok": true
+    },
+    {
+      "text": "ali never reads Ahmed's reply, a Recommended Code, an internal_answers entry or a DCL Internal Note",
+      "ok": true,
+      "detail": "leaked:  "
+    },
+    {
+      "text": "ali's history numbering has no gap",
+      "ok": true,
+      "detail": "1,2,3,4,5"
+    },
+    {
+      "text": "faisal reads the Code, Remarks and that Mohammed issued it",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"},\"memberName\":{\"en\":\"Mohammed Al Shamsi\",\"ar\":\"محمد الشامسي\"}}"
+    },
+    {
+      "text": "faisal reads the final verification",
+      "ok": true
+    },
+    {
+      "text": "faisal never reads Ahmed's reply, a Recommended Code, an internal_answers entry or a DCL Internal Note",
+      "ok": true,
+      "detail": "leaked:  "
+    },
+    {
+      "text": "faisal's history numbering has no gap",
+      "ok": true,
+      "detail": "1,2"
+    },
+    {
+      "text": "Faisal (K1's Submit is shared) never reads TMC's Internal Note",
+      "ok": true
+    },
+    {
+      "text": "ahmed (DCL) sees the Submit but never TMC's Internal Note",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed (DCL) reads all of its own: Ahmed's reply, Recommended Code and Internal Notes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "mohammed (DCL) sees the Submit but never TMC's Internal Note",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "mohammed (DCL) reads all of its own: Ahmed's reply, Recommended Code and Internal Notes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Hafiz's item page holds none of DCL's internal text",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-04-1-hafiz-item-after-code.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:08:52.584Z"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "A MAR raised after binding runs the new Workflow at Version 1",
+      "ok": true,
+      "detail": "{\"name\":{\"en\":\"UAT WF-06 new Version 182431\",\"ar\":\"UAT WF-06 new Version 182431\"},\"versionNo\":1}"
+    },
+    {
+      "text": "A second Version publishes",
+      "ok": true,
+      "detail": "200 {\"versionNo\":2,\"warnings\":[]}"
+    },
+    {
+      "text": "The new MAR runs Version 2",
+      "ok": true,
+      "detail": "{\"name\":{\"en\":\"UAT WF-06 new Version 182431\",\"ar\":\"UAT WF-06 new Version 182431\"},\"versionNo\":2}"
+    },
+    {
+      "text": "The older item keeps Version 1",
+      "ok": true,
+      "detail": "{\"name\":{\"en\":\"UAT WF-06 new Version 182431\",\"ar\":\"UAT WF-06 new Version 182431\"},\"versionNo\":1}"
+    },
+    {
+      "text": "The older item shows a notice that a later Version exists",
+      "ok": true,
+      "detail": "UAT WF-06 new Version 182431 · Version 1 This item runs on Version 1. The workflow was updated to Version 2. Map Steps Send for Review Return Send for Review Submit Cancel Cancel Cancel Send Back DRAFT INTERNAL REVIEW PENDING APPROVAL OUTCOME Consult"
+    },
+    {
+      "text": "The Project's MAR binding is as it was (the FX-SB Comment only copy)",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only); exceptions 0"
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-06-1-older-item-notice.jpg"
+  ],
+  "notes": "Bound as an exception for the TMC Participant for a few seconds, not as the Project's MAR Workflow, so the other agents' MAR binding was never switched; it was removed afterwards.",
+  "ranAt": "2026-10-22T18:24:39.435Z"
+}

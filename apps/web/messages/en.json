@@ -62,8 +62,12 @@
     "noActivity": "Nothing has happened on the items you can see yet.",
     "yourProjects": "Your Projects",
     "viewAll": "View all",
-    "noProjects": "You are not on any Project yet.",
-    "unavailable": "Home couldn't be loaded. Try again."
+    "noProjects": "You are not on any Project yet."
+  },
+  "readFailed": {
+    "title": "This page couldn't be loaded",
+    "body": "It took too long or something went wrong on our side. Try again in a moment.",
+    "tryAgain": "Try again"
   },
   "projectTabs": {
     "label": "Project",

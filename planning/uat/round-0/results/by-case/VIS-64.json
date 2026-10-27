@@ -1,0 +1,54 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Positive control: Hafiz sees the Tower item and the Tower Project",
+      "ok": true
+    },
+    {
+      "text": "Nasser's Projects page lists JCV only (not Tower)",
+      "ok": true,
+      "detail": "JCV"
+    },
+    {
+      "text": "Nasser's Home counts, activity and notifications hold nothing of Tower",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "His search (JCV List) finds none of Tower's items",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Tower's item and Project are 404 for him in every channel (never 403)",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Hafiz's Projects page lists Tower only (not JCV)",
+      "ok": true,
+      "detail": "TWR"
+    },
+    {
+      "text": "Hafiz gets 404 for the JCV Project and its item, and his Home holds nothing of JCV",
+      "ok": true,
+      "detail": "404 404"
+    },
+    {
+      "text": "Both URLs (item and Project) give the one not-found page",
+      "ok": true,
+      "detail": "404 404"
+    },
+    {
+      "text": "Hafiz: the JCV Project URL is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-64-1-nasser-tower-project-url.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:46:36.467Z"
+}

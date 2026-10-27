@@ -1,0 +1,7 @@
+{
+  "status": "not-run",
+  "checks": [],
+  "screenshots": [],
+  "notes": "not built: there is no Project close control (no ticket in the five epics). The worker's quiet for a closed Project is covered by apps/api/test/closed-project-quiet.test.ts only.",
+  "ranAt": "2026-10-22T18:57:37.225Z"
+}

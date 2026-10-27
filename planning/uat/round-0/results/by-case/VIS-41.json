@@ -1,0 +1,7 @@
+{
+  "status": "manual",
+  "checks": [],
+  "screenshots": [],
+  "notes": "Not run by script: the Handover list is read by taking Deactivate on a Member, and a refusal that went through would deactivate a seeded Member (Hafiz or Mohammed) for every other Part. Steps for a person on a clean seed: 1) Hafiz holds two Tower 2 MARs at Contractor Engineer; Mohammed holds one at DCL review. 2) Saeed (TMC Authorized Person, not a Project Member) opens Members and Deactivates Hafiz and reads the Handover list. 3) Saeed picks Omar. 4) Saeed tries to Deactivate Mohammed. 5) Layla Deactivates Mohammed. Expected: Saeed lists only TMC Steps and Members; as he sees none of these items, each is 'An item at <Step> on <Project>' with no Subject, Document Number or item id; Omar is the candidate; after the pick Omar sees and edits both. Deactivating Mohammed is 404 for Saeed. For Layla the refusal (Mohammed is the only Manager) names only DCL's own Step and the Project.",
+  "ranAt": "2026-10-22T19:37:09.053Z"
+}

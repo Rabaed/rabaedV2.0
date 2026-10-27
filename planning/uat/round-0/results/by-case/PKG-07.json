@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Package is In Progress",
+      "ok": true
+    },
+    {
+      "text": "Adding a submittal to an In Progress Package works",
+      "ok": true
+    },
+    {
+      "text": "Removing one is refused",
+      "ok": true
+    },
+    {
+      "text": "The page offers no remove button, and Rename works",
+      "ok": true
+    },
+    {
+      "text": "Rename is saved",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-07-1-in-progress-package.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:55:46.783Z"
+}

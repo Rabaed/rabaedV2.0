@@ -1,0 +1,33 @@
+{
+  "status": "manual",
+  "checks": [
+    {
+      "text": "Rabaed Admin's sign-in page loads on its own address (port 4750)",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Admin's api refuses a request with no session (401)",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "text": "a wrong code with no sign-in under way is refused and sets no session",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "text": "the Company app's session (Hafiz) does not open Admin (401)",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "text": "... nor does a Project Admin's (Saeed) open Admin's Workflows (401)",
+      "ok": true,
+      "detail": "401"
+    }
+  ],
+  "screenshots": [],
+  "notes": "Rabaed Admin sign-in needs the Engineer password and code: run by a person. Steps: 1) open http://127.0.0.1:4750/ 2) enter the Engineer's email and password 3) read the 6-digit code from Mailpit (127.0.0.1:8725) 4) enter a wrong code (refused), request codes repeatedly (limit message), then the right code. Expected: session cookie that is not the Company app's. Script found, without a session: the page loads, a wrong code is refused with no cookie, and the Company app's sessions get 401 at Admin.",
+  "ranAt": "2026-10-22T18:48:46.340Z"
+}

@@ -1,0 +1,38 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Links hold TWR-MAR-01-0001 with its Subject",
+      "ok": true,
+      "detail": "{\"links\":[{\"id\":\"f8105b32-e167-4f86-a571-d5963d34410e\",\"kind\":\"relies_on\",\"fieldKey\":\"related_submittals\",\"documentNumber\":\"TWR-MAR-01-0001\",\"subject\":\"Exit signage – Tower 1\",\"workItemId\":\"6a5e6ff3-d85c-46b0-811d-ac0ca1794ceb\"},{\"id\":\"06d89674-cc14-4d03-a643-975eb45444c2\",\"kind\":\"related\",\"fieldKey"
+    },
+    {
+      "text": "The page shows the number and Subject of the linked item",
+      "ok": true
+    },
+    {
+      "text": "The Document Number is left to right",
+      "ok": true
+    },
+    {
+      "text": "A Link opens the other item",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/work-items/e4aaaf29-7e0a-4b53-8334-275f65bc920b"
+    },
+    {
+      "text": "A Submitted (closed) item cannot be changed",
+      "ok": true
+    },
+    {
+      "text": "Linked from on the exit signs lists the control panel",
+      "ok": true,
+      "detail": "{\"items\":[{\"documentNumber\":\"TWR-MAR-01-0002\",\"subject\":\"Emergency lighting control panel – Tower 2\",\"workItemId\":\"e4aaaf29-7e0a-4b53-8334-275f65bc920b\"}]}"
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-19-1-control-panel-links.jpg",
+    "evidence/SUB-19-2-linked-item.jpg"
+  ],
+  "notes": "'Linking notifies nobody' is not checked here (no notification differences read).",
+  "ranAt": "2026-10-27T18:10:54.495Z"
+}

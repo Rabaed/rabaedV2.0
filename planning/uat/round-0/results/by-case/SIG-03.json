@@ -1,0 +1,74 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "the record is made",
+      "ok": true
+    },
+    {
+      "text": "title block: Type name and code, Subject, Project, Document Number",
+      "ok": true,
+      "detail": "TWR-MAR-01-0318"
+    },
+    {
+      "text": "the outcome with its date",
+      "ok": true
+    },
+    {
+      "text": "the Verification Code and the verification link",
+      "ok": true,
+      "detail": "HWH8-DB58"
+    },
+    {
+      "text": "the approval flow lists Prepared",
+      "ok": true
+    },
+    {
+      "text": "the approval flow lists Submit",
+      "ok": true
+    },
+    {
+      "text": "the approval flow lists Send to Manager",
+      "ok": true
+    },
+    {
+      "text": "the approval flow lists Approve",
+      "ok": true
+    },
+    {
+      "text": "each Transition shows Member, Positions and Company",
+      "ok": true
+    },
+    {
+      "text": "the date and time are Riyadh time",
+      "ok": true,
+      "detail": "Oct 22, 2026, 10:05 PM"
+    },
+    {
+      "text": "each Transition prints its content hash (64 hex characters)",
+      "ok": true,
+      "detail": "5 hashes found"
+    },
+    {
+      "text": "Arabic and English both print",
+      "ok": true
+    },
+    {
+      "text": "Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "every page is footed Issued electronically through Rabaed, the Verification Code, page X of Y",
+      "ok": true,
+      "detail": "6 pages: true,true,true,true,true,true"
+    },
+    {
+      "text": "the Document Number is whole (not split by spaces)",
+      "ok": true,
+      "detail": "TWR-MAR-01-0318"
+    }
+  ],
+  "screenshots": [],
+  "notes": "Record of TWR-MAR-01-0318, 6 pages, code HWH8-DB58. Page 1 and the Form body are read in SIG-08; the layout of Arabic lines against the Document Number is for the eye.",
+  "ranAt": "2026-10-22T19:05:35.787Z"
+}

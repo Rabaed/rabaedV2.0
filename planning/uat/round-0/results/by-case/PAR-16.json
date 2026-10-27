@@ -1,0 +1,7 @@
+{
+  "status": "blocked",
+  "checks": [],
+  "screenshots": [],
+  "notes": "Needs FX-OW: UAT Owner Co is onboarded in Rabaed Admin (ADM-02: password plus an emailed code of the Rabaed Engineer, done by a person), then Saeed invites CR 9999000005 as Owner on Riyadh Gate Tower and Reem UAT accepts, grants Electrical and Mechanical and adds Sami UAT as PM. Fixture status: manual (results/fixtures.json).",
+  "ranAt": "2026-10-27T18:05:34.959Z"
+}

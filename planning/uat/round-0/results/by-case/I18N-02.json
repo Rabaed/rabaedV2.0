@@ -1,0 +1,66 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Home (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "Notifications (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "Projects (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "Dashboard (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "Dashboard: figures are shown in Latin digits",
+      "ok": true
+    },
+    {
+      "text": "Submittals List (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "Kanban (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "Activity (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "a closed item (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "an item (Arabic): Latin digits only",
+      "ok": true
+    },
+    {
+      "text": "a time is shown in Riyadh time, a date is Gregorian",
+      "ok": true,
+      "detail": "22‏/10‏/2026، 9:48 م for 2026-10-22T18:48:06.994Z (Riyadh 9:48 PM)"
+    },
+    {
+      "text": "an Arabic email of Faisal (from NOT-10) has Latin digits only",
+      "ok": true,
+      "detail": "⁦TWR-MAR-01-0114⁩ · UAT NOT-10 arabic 181415 · السجل جاهز للتنزيل"
+    },
+    {
+      "text": "the record PDF has Latin digits only",
+      "ok": true,
+      "detail": "6503 characters read"
+    }
+  ],
+  "screenshots": [
+    "evidence/I18N-02-1-dashboard-ar.jpg",
+    "evidence/I18N-02-2-notifications-ar.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:50:34.906Z"
+}

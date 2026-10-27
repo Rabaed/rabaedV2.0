@@ -1,0 +1,81 @@
+{
+  "status": "manual",
+  "checks": [
+    {
+      "text": "the three records (A, C, D) are made",
+      "ok": true
+    },
+    {
+      "text": "A: one Signature card per Transition on the path (4)",
+      "ok": true,
+      "detail": "5 Signature words"
+    },
+    {
+      "text": "A: the Stamp of every acting Company (TMC and DCL)",
+      "ok": true
+    },
+    {
+      "text": "A: an internal reviewer's card says Reviewed with no Code",
+      "ok": true
+    },
+    {
+      "text": "A: the Disclaimer card prints",
+      "ok": true
+    },
+    {
+      "text": "C: one Signature card per Transition on the path (4)",
+      "ok": true,
+      "detail": "5 Signature words"
+    },
+    {
+      "text": "C: the Stamp of every acting Company (TMC and DCL)",
+      "ok": true
+    },
+    {
+      "text": "C: an internal reviewer's card says Reviewed with no Code",
+      "ok": true
+    },
+    {
+      "text": "C: the Disclaimer card prints",
+      "ok": true
+    },
+    {
+      "text": "D: one Signature card per Transition on the path (4)",
+      "ok": true,
+      "detail": "5 Signature words"
+    },
+    {
+      "text": "D: the Stamp of every acting Company (TMC and DCL)",
+      "ok": true
+    },
+    {
+      "text": "D: an internal reviewer's card says Reviewed with no Code",
+      "ok": true
+    },
+    {
+      "text": "D: the Disclaimer card prints",
+      "ok": true
+    },
+    {
+      "text": "C: Review Comments are shown (numbered) from Remarks",
+      "ok": true
+    },
+    {
+      "text": "C: a Next step card with Revision n+1",
+      "ok": true,
+      "detail": "Next step ﺔ ﻴ ﻟ ﺎ ﺘ ﻟ ا ة ﻮ ﻄ ﺨ ﻟ ا ءات ﺎ ﺸ ﻧ ﻺ ﻟ يس إم يت ﻦ ﻣ ، 1 ﺔ ﻌ ﺟ ا ﺮ ﻤ ﻟ ا Revision 1, by TMC Constructions Stam"
+    },
+    {
+      "text": "D: a Next step card saying a new submittal replaces this one",
+      "ok": true,
+      "detail": "Next step ﺔ ﻴ ﻟ ﺎ ﺘ ﻟ ا ة ﻮ ﻄ ﺨ ﻟ ا ﺪ ﻳ ﺪ ﺟ ﻢ ﻳ ﺪ ﻘ ﺗ ﻪ ﻠ ﺤ ﻣ ﻞ ﺤ ﻳ A new submittal replaces this one Stamps م ﺎ ﺘ ﺧ ﻷ ا"
+    },
+    {
+      "text": "A: no Next step card",
+      "ok": true
+    }
+  ],
+  "screenshots": [],
+  "notes": "The Disclaimer prints the placeholder \"‹Disclaimer: the owner's text to come›\" in English and Arabic: documented as a placeholder until the owner supplies the text (form-engine.md section 6, RP-151).\nA person reads the Signature cards, Stamps and ending pages by eye (Signature images as they were then, Stamp images, wording of the Next step cards in Arabic). The script found a card per Transition, both Companies' Stamps, Review Comments, the Next step text for C and D, the Reviewed card and the Disclaimer placeholder.",
+  "ranAt": "2026-10-22T19:08:18.404Z"
+}

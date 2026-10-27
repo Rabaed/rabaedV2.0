@@ -1,0 +1,25 @@
+{
+  "status": "manual",
+  "checks": [
+    {
+      "text": "the record is made",
+      "ok": true
+    },
+    {
+      "text": "the PDF carries a signature dictionary with a byte range (a seal)",
+      "ok": true
+    },
+    {
+      "text": "the seal holds a CMS signature value (not empty)",
+      "ok": true,
+      "detail": "4210 bytes"
+    },
+    {
+      "text": "the PDF has the Record Data attached (PDF/A-3)",
+      "ok": true
+    }
+  ],
+  "screenshots": [],
+  "notes": "A person opens the PDF in Adobe Reader: the seal present and intact, signer unverified (RECORD_SEALING=local), and a copy with one changed byte shows the seal broken. The script found the signature dictionary, byte range and CMS value in place.",
+  "ranAt": "2026-10-22T19:07:06.224Z"
+}

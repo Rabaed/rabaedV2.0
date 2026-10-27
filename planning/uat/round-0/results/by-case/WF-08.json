@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Binding it for Beta Build is refused because the name holds the Participant's name",
+      "ok": true,
+      "detail": "422 {\"error\":\"workflow_name_names_participant\"}"
+    },
+    {
+      "text": "The renamed Workflow binds",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Yousef's new MAR runs the exception Workflow",
+      "ok": true,
+      "detail": "{\"name\":{\"en\":\"UAT WF-08 MARs, short route 182453\",\"ar\":\"UAT WF-08 MARs, short route 182453\"},\"versionNo\":1}"
+    },
+    {
+      "text": "TMC's new MAR does not",
+      "ok": true,
+      "detail": "{\"name\":{\"en\":\"UAT FX-SB MAR Send Back (Comment only)\",\"ar\":\"UAT FX-SB MAR Send Back (Comment only)\"},\"versionNo\":1}"
+    },
+    {
+      "text": "TMC's Members learn of no exception or Participant (the settings read lists none for Ali)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Nothing TMC reads names Beta Build",
+      "ok": true
+    },
+    {
+      "text": "The exception is removed again; the Project's MAR binding is as it was",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only)"
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-08-1-exception-listed-for-admin.jpg"
+  ],
+  "notes": "Yousef's own settings read lists 1 exception(s).",
+  "ranAt": "2026-10-22T18:24:57.108Z"
+}

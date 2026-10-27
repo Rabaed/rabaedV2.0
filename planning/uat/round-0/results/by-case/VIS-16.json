@@ -1,0 +1,45 @@
+{
+  "status": "blocked",
+  "checks": [
+    {
+      "text": "TMC (Hafiz) sees the Creation Date and the Submission Date",
+      "ok": true,
+      "detail": "{\"c\":\"2026-10-27T18:19:45.706Z\",\"s\":\"2026-10-27T18:19:49.318Z\"}"
+    },
+    {
+      "text": "DCL (Ahmed) sees only the Submission Date, no Creation Date in the List row",
+      "ok": true,
+      "detail": "{\"c\":null,\"s\":\"2026-10-27T18:19:49.318Z\"}"
+    },
+    {
+      "text": "On the item page TMC reads both dates; DCL reads no Creation Date",
+      "ok": true,
+      "detail": "{\"h\":\"2026-10-27T18:19:45.706Z\",\"a\":null}"
+    },
+    {
+      "text": "No Creation Date of TMC anywhere in DCL's reads of the item",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Un-numbered Drafts come last in Hafiz's List",
+      "ok": true,
+      "detail": "678 rows, first Draft at 478"
+    },
+    {
+      "text": "The un-numbered Drafts are ordered by Subject",
+      "ok": true,
+      "detail": "Emergency lighting – Tower 2 | UAT FRM-01 form 182850 | UAT FRM-02 no Datasheet 182902 | UAT FRM-02 no Datasheet 183059 | UAT FRM-02 no Datasheet 183131 | UAT FRM-02 no Description 182902"
+    },
+    {
+      "text": "Ids carry no time: item ids are random (version 4), not time-ordered",
+      "ok": true,
+      "detail": "4,4,4"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-16-1-ahmed-item-dates.jpg"
+  ],
+  "notes": "The checks above passed (dates by Company, no time in ids, Draft order). The rest needs the AGE fixture (RP-922, pnpm uat:age, not in this worktree): answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date.",
+  "ranAt": "2026-10-27T18:21:18.879Z"
+}

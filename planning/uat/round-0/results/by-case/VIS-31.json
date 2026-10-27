@@ -1,0 +1,84 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz reads TMC's own Participant and the Host Company name only",
+      "ok": true,
+      "detail": "[\"TMC Constructions\"]"
+    },
+    {
+      "text": "Ahmed reads DCL's own Participant with Host Company TMC; neither lists the others",
+      "ok": true,
+      "detail": "[\"Design Consultants LLC\"]"
+    },
+    {
+      "text": "Hafiz and Ahmed read no order number of a Participant",
+      "ok": true
+    },
+    {
+      "text": "Saeed (Project Admin) reads every Participant, with their order numbers",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "text": "hafiz's Company Projects read is refused as a non-Authorized Person (and lists no other Participant)",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "text": "hafiz's Numbering read names no other Company",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "hafiz: the counters are 404",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "ahmed's Company Projects read is refused as a non-Authorized Person (and lists no other Participant)",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "text": "ahmed's Numbering read names no other Company",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed: the counters are 404",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "The Project Admin reads the counters (positive control)",
+      "ok": true
+    },
+    {
+      "text": "hafiz's Numbering page names no other Company and shows no order number",
+      "ok": true,
+      "detail": "Rabaed TMC Constructions Home Projects MY COMPANY Company Profile Members Library HH Hafiz Hamdan TMC Constructions R Riyadh Gate Tower – Phase 2 Host Company: "
+    },
+    {
+      "text": "hafiz's Numbering page shows No code yet for the own Participant",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed's Numbering page names no other Company and shows no order number",
+      "ok": true,
+      "detail": "Rabaed Design Consultants LLC Home Projects MY COMPANY Company Profile Members Library AB Ahmed bin Said Design Consultants LLC R Riyadh Gate Tower – Phase 2 Ho"
+    },
+    {
+      "text": "ahmed's Numbering page shows No code yet for the own Participant",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-31-1-hafiz-numbering.jpg",
+    "evidence/VIS-31-2-ahmed-numbering.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:34:22.658Z"
+}

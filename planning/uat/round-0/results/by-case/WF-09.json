@@ -1,0 +1,28 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Both FX-SB copies exist (Comment only, Edit the Form)",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only) | UAT FX-SB MAR Send Back (Edit the Form)"
+    },
+    {
+      "text": "UAT FX-SB MAR Send Back (Comment only): published with a Send Back from Consultant Engineer to the Draft Step",
+      "ok": true,
+      "detail": "{\"key\":\"send_back_to_draft\",\"label\":{\"en\":\"Send Back\",\"ar\":\"إعادة للمقاول\"},\"kind\":\"send_back\",\"from\":\"consultant_engineer\",\"to\":\"draft\",\"outcome\":null,\"permission\":\"review\",\"actionForm\":null}"
+    },
+    {
+      "text": "UAT FX-SB MAR Send Back (Edit the Form): published with a Send Back from Consultant Engineer to the Draft Step",
+      "ok": true,
+      "detail": "{\"key\":\"send_back_to_draft\",\"label\":{\"en\":\"Send Back\",\"ar\":\"إعادة للمقاول\"},\"kind\":\"send_back\",\"from\":\"consultant_engineer\",\"to\":\"draft\",\"outcome\":null,\"permission\":\"review\",\"actionForm\":null}"
+    },
+    {
+      "text": "One copy says After a Send Back: comment, the other edit_form",
+      "ok": true,
+      "detail": "comment,edit_form"
+    }
+  ],
+  "screenshots": [],
+  "notes": "The fixture was built by the harness through the api (fixtures-sb.ts); the builder canvas steps themselves are the manual WF-04.",
+  "ranAt": "2026-10-22T18:24:58.183Z"
+}

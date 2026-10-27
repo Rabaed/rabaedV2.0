@@ -1,0 +1,40 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Only the item closed at Code A is offered (not C, not open, not the Draft)",
+      "ok": true,
+      "detail": "UAT INS-04 closedA 184405"
+    },
+    {
+      "text": "A saved pick of the Code A item is accepted",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "A saved id of an item closed at C is refused like an unknown option",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"approved_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "A saved id of an item still open is refused like an unknown option",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"approved_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "A saved id of an item a Draft is refused like an unknown option",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"approved_submittals\",\"code\":\"unknown_option\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "A made-up id gets the same answer",
+      "ok": true,
+      "detail": "422"
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-04-1-wir-with-approved-submittal.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:48:04.331Z"
+}

@@ -1,0 +1,73 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Saeed reads Tower's Required links setting (WIR Approved submittals among them)",
+      "ok": true,
+      "detail": "[\"MAR/related_submittals\",\"WIR/approved_submittals\"]"
+    },
+    {
+      "text": "Saeed turns Approved submittals required on for Tower",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "Nasser does the same on JCV",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "ali reads which links Tower requires (on), and nothing of who set it or when",
+      "ok": true,
+      "detail": "{\"type\":\"WIR\",\"typeName\":{\"en\":\"Work Inspection Request\",\"ar\":\"طلب معاينة أعمال\"},\"key\":\"approved_submittals\",\"label\":{\"en\":\"Approved submittals\",\"ar\":\"الاعتمادات الموافق عليها\"},\"requiredByForm\":false,\"required\":true}"
+    },
+    {
+      "text": "ali cannot change it: the plain 404",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "hafiz reads which links Tower requires (on), and nothing of who set it or when",
+      "ok": true,
+      "detail": "{\"type\":\"WIR\",\"typeName\":{\"en\":\"Work Inspection Request\",\"ar\":\"طلب معاينة أعمال\"},\"key\":\"approved_submittals\",\"label\":{\"en\":\"Approved submittals\",\"ar\":\"الاعتمادات الموافق عليها\"},\"requiredByForm\":false,\"required\":true}"
+    },
+    {
+      "text": "hafiz cannot change it: the plain 404",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "ahmed reads which links Tower requires (on), and nothing of who set it or when",
+      "ok": true,
+      "detail": "{\"type\":\"WIR\",\"typeName\":{\"en\":\"Work Inspection Request\",\"ar\":\"طلب معاينة أعمال\"},\"key\":\"approved_submittals\",\"label\":{\"en\":\"Approved submittals\",\"ar\":\"الاعتمادات الموافق عليها\"},\"requiredByForm\":false,\"required\":true}"
+    },
+    {
+      "text": "ahmed cannot change it: the plain 404",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Nobody reads the other Project's setting: Nasser on Tower and Hafiz on JCV get 404",
+      "ok": true,
+      "detail": "404 404"
+    },
+    {
+      "text": "Tower's setting is still on after the attempts",
+      "ok": true
+    },
+    {
+      "text": "Omar (Tower 2 only), not covering the MAR's Location, reads its Document Number and Subject only",
+      "ok": true,
+      "detail": "{\"id\":\"9d091d13-a323-469c-b951-dce11390abf8\",\"kind\":\"relies_on\",\"fieldKey\":\"approved_submittals\",\"documentNumber\":\"TWR-MAR-01-0384\",\"subject\":\"UAT VIS-47 approved MAR T1 13118\",\"workItemId\":null}"
+    },
+    {
+      "text": "He cannot open it (404)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-47-1-omar-wir-with-hidden-link.jpg"
+  ],
+  "notes": "Step 4 adapted: DCL covers every Location, so Ahmed sees every Tower item. The Member who cannot see the Code A MAR is Omar (Tower 2 only), reading a Tower 2 WIR that names a Tower 1 MAR. The Project Admin's id read is not checked (Saeed is not a Project Member).",
+  "ranAt": "2026-10-22T19:40:24.860Z"
+}

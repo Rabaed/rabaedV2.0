@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Both worksheets are listed",
+      "ok": true,
+      "detail": "{\"sheets\":[{\"name\":\"Cover\",\"rows\":1},{\"name\":\"Register\",\"rows\":6}],\"sheet\":\"Cover\",\"headerRow\":1,\"top\":[{\"rowNo\":1,\"cells\":[\"This sheet is not the register\"]}],"
+    },
+    {
+      "text": "With the sheet and header row 4 the headings are Subject, Type, Trade and 3 rows lie below",
+      "ok": true,
+      "detail": "Subject,Type,Trade 3"
+    },
+    {
+      "text": "The preview shows the first rows, title rows included for picking the header",
+      "ok": true,
+      "detail": "7 rows"
+    },
+    {
+      "text": "Rows above the header are skipped: the import holds the 3 rows below it",
+      "ok": true,
+      "detail": "201 3 rows"
+    },
+    {
+      "text": "An empty header row is refused with its own answer",
+      "ok": true,
+      "detail": "422 {\"headerRow\":3,\"error\":\"empty_header_row\"}"
+    },
+    {
+      "text": "A header row the sheet doesn't have is refused with its own answer, different from the empty row's",
+      "ok": true,
+      "detail": "422 {\"headerRow\":99,\"rows\":7,\"error\":\"header_row_not_found\"}"
+    },
+    {
+      "text": "The page lets Hafiz choose the worksheet and the header row",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/IMP-02-1-sheet-and-header-row.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:44:25.606Z"
+}

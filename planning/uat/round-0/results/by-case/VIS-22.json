@@ -1,0 +1,70 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Mohammed issues Code B on the TMC MAR",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "A mail reaches Hafiz (positive control)",
+      "ok": true,
+      "detail": "⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 · Record ready to download | ⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 · Code B | ⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 · Submit"
+    },
+    {
+      "text": "The mail's subject holds the Document Number, the Subject and Code B",
+      "ok": false,
+      "detail": "⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 · Record ready to download"
+    },
+    {
+      "text": "The mail names Design Consultants as a Company and the final signer as the one person",
+      "ok": false,
+      "detail": "⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 · Record ready to download ⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 Record ready to download Open it on Rabaed: http://lane7.localhost:3700/en/work-items/3c8f8758-84e0-439e-b775-f321c26f9e5b You choose which emails you get in your notifi"
+    },
+    {
+      "text": "The mail names no DCL internal step, Ahmed, Recommended Code or Internal Note",
+      "ok": true,
+      "detail": "⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 · Record ready to download ⁦TWR-MAR-01-0370⁩ · UAT VIS-22 mail MAR 04173 Record ready to download Open it on Rabaed: http://lane7.localhost:3700/en/work-items/3c8f8758-84e0-439e-b775-f321c26f9e5b You choose which emails you get in your notifi"
+    },
+    {
+      "text": "yousef gets no email about it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "yousef gets no bell entry about it",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "yousef sees nothing of it",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "sara gets no email about it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "sara gets no bell entry about it",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "sara sees nothing of it",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Hafiz's bell holds the Code entry",
+      "ok": true,
+      "detail": "[[\"record_ready\",null],[\"watched_event\",\"B\"],[\"watched_event\",null]]"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-22-1-hafiz-notifications.jpg"
+  ],
+  "notes": "Hafiz's Items I watch email setting (default: daily digest) was set to immediate for this case and restored afterwards.",
+  "ranAt": "2026-10-22T19:30:39.133Z"
+}
