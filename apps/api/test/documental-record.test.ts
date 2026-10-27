@@ -61,6 +61,8 @@ const INTERNAL_NOTE = "Internal note never printed";
 const RETURN_REASON = "Secret return reason";
 /** A test Type whose Draft may be Cancelled (the test Workflow's `withCancel`). */
 const CANCELLABLE = "RECCN";
+/** A test Type whose Return goes to the Contractor Engineer's Step, as the Rabaed Default MAR's does (the test Workflow's `engineerStep`). */
+const RETURNS_TO_ENGINEER = "RECEN";
 const cancellableSchema = {
   sections: [
     { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
@@ -168,6 +170,7 @@ beforeAll(async () => {
     onboard(OR_NAME),
     onboard("Record Second Contractor"),
     addSendBackType(migrator, CANCELLABLE, { en: "Cancellable record", ar: "سجل قابل للإلغاء" }, cancellableSchema, { withCancel: true }),
+    addSendBackType(migrator, RETURNS_TO_ENGINEER, { en: "Returned to the engineer", ar: "معاد إلى المهندس" }, cancellableSchema, { engineerStep: true }),
   ]);
   k1 = onboardedK1;
   at = await buildTower(api, { c1, k1 }, "REC");
@@ -200,11 +203,12 @@ beforeAll(async () => {
   // Every item the read-only tests share is closed here at once, then the worker runs once
   // (one Chromium start, one sealer), so a loaded machine pays for the setup one time.
   const signer = signerMember;
-  const [approved, codeC, cancelled, signed] = await Promise.all([
+  const [approved, codeC, cancelled, signed, returnedToEngineer] = await Promise.all([
     closedAt("approve_a"),
     closedAt("revise_c", "Cable ladders"),
     cancelledAtDraft(),
     closedBy(signer.caller, "Cable tray covers"),
+    closedAfterReturnToEngineer(),
   ]);
   // What the first test says about the moment before the worker has run.
   const beforeWorker = {
@@ -215,7 +219,7 @@ beforeAll(async () => {
   // Before the record is made, K1 makes her an Engineer instead.
   await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${signer.id}/positions`, { positions: ["engineer"] }));
   await drainOutbox(worker, { documental_record: handler });
-  shared = { approved, codeC, cancelled, signed, beforeWorker };
+  shared = { approved, codeC, cancelled, signed, returnedToEngineer, beforeWorker };
 }, 240_000);
 
 interface Shared {
@@ -223,6 +227,7 @@ interface Shared {
   codeC: string;
   cancelled: string;
   signed: string;
+  returnedToEngineer: string;
   beforeWorker: { outcome: unknown; jobs: unknown; link: Awaited<ReturnType<typeof downloadLink>> };
 }
 let shared: Shared;
@@ -239,6 +244,33 @@ async function cancelledAtDraft(): Promise<string> {
   );
   const id = res.json().id as string;
   await take(c1Engineer, id, "cancel");
+  return id;
+}
+
+/**
+ * An item the C1 engineer sends, the C1 PM Returns to the engineer's own Step (never the Draft), the
+ * engineer sends again, the C1 PM Submits, K1's engineer sends to the manager and K1's PM issues Code A.
+ */
+async function closedAfterReturnToEngineer(): Promise<string> {
+  const res = await ok(
+    c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+      type: RETURNS_TO_ENGINEER,
+      title: "Cable tray supports",
+      answers: { model: "CT-200", trade: at.electrical, location: at.buildingA },
+    }),
+    201,
+  );
+  const id = res.json().id as string;
+  await take(c1Engineer, id, "send_for_review");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "return");
+  await take(c1Engineer, id, "send_for_review_again");
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(c1Pm, id, "submit");
+  await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Engineer, id, "send_to_manager");
+  await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Pm, id, "approve_a");
   return id;
 }
 
@@ -376,6 +408,24 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
     expect(rows).toHaveLength(2);
     expect(firstAt).toBe(rows[1]!.at);
     expect(xml).not.toContain(rows[0]!.at);
+  });
+
+  // RP-1053 (UAT SIG-04): the Rabaed Default MAR Returns to the Contractor Engineer's Step, and the
+  // engineer sends again from there with send_for_review_again; Prepared is that send, not the Returned one.
+  it("dates Prepared at the send again when the Return went to the engineer's Step, not the Draft (RP-1053)", async () => {
+    const id = shared.returnedToEngineer;
+    const xml = new TextDecoder().decode((await attachedFiles((await download(c1Pm, id)).bytes))[0]!.bytes);
+    const firstAt = /<transition n="1" at="([^"]+)"/.exec(xml)![1]!;
+    const { rows } = await sql<{ key: string; at: string }>`
+      select tr.key, app.iso_utc(e.created_at) as at
+      from work_item_event e join workflow_transition tr on tr.id = e.transition_id
+      where e.work_item_id = ${id}::uuid and e.type in ('transition', 'issue_code') order by e.seq
+    `.execute(migrator);
+    expect(rows.map((r) => r.key)).toEqual(["send_for_review", "return", "send_for_review_again", "submit", "send_to_manager", "approve_a"]);
+    expect(firstAt).toBe(rows[2]!.at);
+    // The Returned send and the Return itself are off the record.
+    for (const off of [rows[0]!, rows[1]!]) expect(xml, off.key).not.toContain(off.at);
+    expect([...xml.matchAll(/<transition n="\d+"/g)]).toHaveLength(4);
   });
 
   it("validates as PDF/A-3: our own rules, and veraPDF's (the checks before publishing ran it)", async () => {

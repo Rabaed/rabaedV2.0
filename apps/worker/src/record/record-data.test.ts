@@ -45,12 +45,38 @@ describe("recordPath", () => {
     expect(labels(path)).toEqual(["T3", "T4", "T5"]);
   });
 
+  // RP-1053: the Rabaed Default MAR Returns to the Contractor Engineer's Step, never the Draft,
+  // and the engineer sends it again from there; the Returned send is still off the record.
+  it("leaves out a send that was Returned to another Step: Prepared is the send again (RP-1053)", () => {
+    const path = recordPath([
+      t(1, "send", "draft", "internal_review"),
+      t(2, "return", "internal_review", "contractor_engineer"),
+      t(3, "send", "contractor_engineer", "internal_review"),
+      t(4, "submit", "internal_review", "consultant_engineer"),
+      t(5, "send", "consultant_engineer", "consultant_manager"),
+      t(6, "close", "consultant_manager", "approved"),
+    ]);
+    expect(labels(path)).toEqual(["T3", "T4", "T5", "T6"]);
+  });
+
+  it("leaves out each Returned send when an item is Returned twice", () => {
+    const path = recordPath([
+      t(1, "send", "draft", "internal_review"),
+      t(2, "return", "internal_review", "contractor_engineer"),
+      t(3, "send", "contractor_engineer", "internal_review"),
+      t(4, "return", "internal_review", "contractor_engineer"),
+      t(5, "send", "contractor_engineer", "internal_review"),
+      t(6, "submit", "internal_review", "consultant_engineer"),
+    ]);
+    expect(labels(path)).toEqual(["T5", "T6"]);
+  });
+
   it("never carries a Return, even when the item closes right after it", () => {
     const path = recordPath([t(1, "send", "draft", "review"), t(2, "return", "review", "draft"), t(3, "cancel", "draft", "cancelled")]);
     expect(path.map((p) => p.kind)).not.toContain("return");
     expect(labels(path)).toEqual(["T3"]);
-    // A Return into a Step the item never left before still never shows.
-    expect(labels(recordPath([t(1, "send", "a", "b"), t(2, "return", "b", "c"), t(3, "close", "c", "done")]))).toEqual(["T1", "T3"]);
+    // A Return into a Step the item never left before still never shows, nor the send it gave back (RP-1053).
+    expect(labels(recordPath([t(1, "send", "a", "b"), t(2, "return", "b", "c"), t(3, "close", "c", "done")]))).toEqual(["T3"]);
   });
 
   it("leaves out a Send Back, such as a Code the Owner sent back, and the Code it gave back", () => {
