@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "not built: Participant withdrawal, Project close and Signatory Access (RP-614) are not built (no route in apps/api). Steps for later: 1) Remove a signing engineer from the Project. 2) Withdraw DCL. 3) Close the Project. Expected (E2): the removed Member keeps the Project name and the records they signed; DCL's Authorized Person sees only the records DCL Members signed; open items of a withdrawn Participant are Cancelled; a closed Project is read-only with E2 records available.",
-  "ranAt": "2026-10-22T19:45:57.636Z"
+  "ranAt": "2026-10-27T20:22:35.009Z"
 }

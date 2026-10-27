@@ -1,36 +1,13 @@
 {
-  "status": "pass",
+  "status": "fail",
   "checks": [
     {
-      "text": "The view toggle's Packages opens the Packages view in the URL",
-      "ok": true,
-      "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=packages"
-    },
-    {
-      "text": "Three columns Open, In Progress and Done",
-      "ok": true
-    },
-    {
-      "text": "A New Package button is offered to TMC",
-      "ok": true
-    },
-    {
-      "text": "Search by PKG number or name is offered",
-      "ok": true
-    },
-    {
-      "text": "Filters by Trade and owning Company are offered",
-      "ok": true
-    },
-    {
-      "text": "Each column carries a count equal to the Packages the api gives Ali",
-      "ok": true,
-      "detail": "Open 27, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, In Progress 21, In Progress 0, In Progress 0, In Progress 3, In Progress 0, In Progress 2, In Progress 0, In Progress 0, In Progress 0, In Progress 0, In Progress 4, In Progress 2, In Progress 0, In Progress 2, In Progress 0, In Progress 0, In Progress 0, In Progress 4, In Progress 0, In Progress 2, In Progress 0, In Progress 0, Done 2, Done 1, Done 1 vs {\"open\":27,\"prog\":21,\"done\":2}"
+      "text": "Ali's Submittals page opens, with its view toggle (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
+      "ok": false,
+      "detail": "the page answered with the not-found page; the api answers the same read for the same person"
     }
   ],
-  "screenshots": [
-    "evidence/PKG-01-1-packages-board.jpg"
-  ],
-  "notes": "Board by api: {\"open\":27,\"prog\":21,\"done\":2}",
-  "ranAt": "2026-10-22T19:17:37.584Z"
+  "screenshots": [],
+  "notes": "Ali's Packages view opens: the not-found page again (RP-1049); not checked.\nBoard by api: 73 Packages; the page checks need the page.",
+  "ranAt": "2026-10-27T19:20:37.022Z"
 }

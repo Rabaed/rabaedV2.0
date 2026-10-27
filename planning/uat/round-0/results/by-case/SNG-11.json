@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "hafiz: the header shows the number, the Type and the Stage",
@@ -35,8 +35,8 @@
     },
     {
       "text": "A Comment's page has the Raised from card naming the MAR and its Code",
-      "ok": false,
-      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. | Projects"
+      "ok": true,
+      "detail": "Snag List | Comment | TWR-CMT-03-0001 | UAT SNG-06 comment one: add the emergency duration | Download PDF | Watch | Open | 1 week at this step | Workflow: Comment · Version 2 | View workflow | Pick up | RAISED FROM | TWR-MAR"
     }
   ],
   "screenshots": [
@@ -45,5 +45,5 @@
     "evidence/SNG-11-3-comment-raised-from.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:09:27.322Z"
+  "ranAt": "2026-10-27T19:05:26.508Z"
 }

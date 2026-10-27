@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Drag and drop on the builder canvas needs a person. Steps: as Saeed open a copy (Settings > Workflows > Duplicate and edit); drag a Step from the palette into a Stage band; connect two Steps by dragging from a dot; Ctrl+Z and Ctrl+Shift+Z; Auto-layout; switch Curved and Orthogonal; select a Transition and edit its labels (EN and AR), kind and Screen. Expected: edits autosave a moment later; the kind follows the publish checks; a connection onto empty canvas adds a New step; Auto-layout arranges Steps by route inside each Stage band; the arrow style is kept per viewer.",
-  "ranAt": "2026-10-22T18:24:20.158Z"
+  "ranAt": "2026-10-27T18:24:40.803Z"
 }

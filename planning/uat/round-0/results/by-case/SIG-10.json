@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "needs a Company with no Stamp: every seeded Company has one, there is no remove, and clearing TMC's would stop every other tester. Use UAT Owner Co from ADM-02 (manual) or a person on a spare lane. Checked only that TMC's items say stampRequired false while its Stamp is in place.",
-  "ranAt": "2026-10-22T19:07:52.588Z"
+  "ranAt": "2026-10-27T18:51:30.701Z"
 }

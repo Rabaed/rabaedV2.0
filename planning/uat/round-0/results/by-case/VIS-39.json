@@ -4,7 +4,7 @@
     {
       "text": "Hafiz's three MARs are numbered in TMC's series, one after another",
       "ok": true,
-      "detail": "TWR-MAR-01-0377, TWR-MAR-01-0378, TWR-MAR-01-0379"
+      "detail": "TWR-MAR-01-0620, TWR-MAR-01-0621, TWR-MAR-01-0622"
     },
     {
       "text": "hafiz: the example is built from their own Participant with no code and no order number; the counters are 404",
@@ -24,7 +24,7 @@
     {
       "text": "The Project Admin reads the counters (TMC's MAR counter is there; Beta Build has issued none, see the note)",
       "ok": true,
-      "detail": "{\"counters\":[{\"counterKey\":\"TWR-CMT-03\",\"lastValue\":61,\"startingNumber\":null,\"issued\":true},{\"counterKey\":\"TWR-DAR-01\",\"lastValue\":13,\"startingNumber\":null,\"iss"
+      "detail": "{\"counters\":[{\"counterKey\":\"TWR-CMT-03\",\"lastValue\":102,\"startingNumber\":null,\"issued\":true},{\"counterKey\":\"TWR-DAR-01\",\"lastValue\":24,\"startingNumber\":null,\"is"
     },
     {
       "text": "Version history names its saver only to the Project Admin; others read 'A Project Admin'",
@@ -46,5 +46,5 @@
     "evidence/VIS-39-1-yousef-numbering.jpg"
   ],
   "notes": "Yousef's send for review was refused (409 {\"error\":\"no_step_pool\"}): Beta Build has no Project Manager to hold the next Step, so Beta Build cannot number items on this Project; the independent counters are compared through Beta Build's Participant series and the Project Admin's counters.\nThe part that accepts the shared-counter warning (both Companies then share one count) is not run: it would change the Project's numbering pattern for every other Part running on the same Project. Steps for a person on a clean seed: 1) Saeed saves a pattern without the Participant Code and accepts the warning. 2) Hafiz and Yousef each raise a MAR. Expected: both draw from one count (gaps in each Company's numbers). The refusal, the independent counters, the examples and the 404 counters were proven above.",
-  "ranAt": "2026-10-22T19:36:17.006Z"
+  "ranAt": "2026-10-27T20:06:57.510Z"
 }

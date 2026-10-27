@@ -61,9 +61,28 @@ defineCase("I18N-01", async (t) => {
     ["item", itemPath],
   ];
   const { page } = await pageAs("hafiz", { locale: "en" });
+  // Home takes about 19 s on this data (known Bug RP-1049): wait for it.
+  page.setDefaultNavigationTimeout(60_000);
+  page.setDefaultTimeout(45_000);
+  let bugSeen = false;
   for (const [name, path] of places) {
     await go(page, path, "en");
     await settle(page);
+    // An item page that answers 200 through the api must open: one retry for a slow moment of the shared lane.
+    if (name === "item" && (await page.getByTestId("not-found").count()) > 0) {
+      await go(page, path, "en");
+      await settle(page, 1500);
+    }
+    // Known Bug RP-1049 / RP-1050: the not-found page replaces the List and Kanban for TMC people. One fail, then carry on.
+    if (name === "List" || name === "Kanban") await page.getByTestId("not-found").or(name === "List" ? page.getByRole("table").first() : page.getByRole("main").locator("h2").nth(1)).first().waitFor({ timeout: 40_000 }).catch(() => undefined);
+    const notLoaded = (name === "List" && (await page.getByRole("table").count()) === 0) || (name === "Kanban" && (await page.getByRole("main").locator("h2").count()) < 2);
+    if ((await page.getByTestId("not-found").count()) > 0 || notLoaded) {
+      if (!bugSeen) c.check(`${name}: the page opens for Hafiz (not the not-found page)`, false, "the not-found page (or no table within 40 s) shows although the api answers 200 for him: known Bug RP-1049/RP-1050 (not filed again); the Submittals List and Kanban were not read as Hafiz");
+      else t.note(`${name}: also the not-found page (RP-1049/RP-1050).`);
+      bugSeen = true;
+      await t.shot(page, `${name.toLowerCase()}-not-found`);
+      continue;
+    }
     const en = await overflowOf(page);
     const urlEn = new URL(page.url());
     await switchLanguage(page, "ar", /Hafiz Hamdan/);
@@ -84,26 +103,36 @@ defineCase("I18N-01", async (t) => {
       await t.shot(page, "kanban-ar");
     }
     if (name === "List") {
-      const dirs = await page.getByRole("table").first().evaluate((el) => getComputedStyle(el).direction);
-      c.check("List: the table is right to left in Arabic", dirs === "rtl", dirs);
+      // Known Bug RP-1049 / RP-1050: the not-found page replaces the List for TMC people; one fail, then carry on.
+      if ((await page.getByTestId("not-found").count()) > 0) c.check("List: the table is right to left in Arabic", false, "Hafiz's Submittals List shows the not-found page although the api answers 200 for him: known Bug RP-1049/RP-1050 (not filed again)");
+      else {
+        const dirs = await page.getByRole("table").first().evaluate((el) => getComputedStyle(el).direction);
+        c.check("List: the table is right to left in Arabic", dirs === "rtl", dirs);
+      }
       await t.shot(page, "list-ar");
     }
     await switchLanguage(page, "en", /حافظ حمدان/);
     c.check(`${name}: the switch back returns to the same page in English`, new URL(page.url()).pathname === urlEn.pathname && new URL(page.url()).search === urlEn.search, page.url());
+    if (name === "Home") continue; // opened directly in /ar as Faisal below (Home is slow, RP-1049)
     await go(page, path, "ar"); // directly
     const direct = await overflowOf(page);
     c.check(`${name}: opening /ar directly gives the same RTL page`, direct.dir === "rtl" && direct.scroll <= direct.inner + 1, `${direct.dir} ${direct.scroll}/${direct.inner}`);
   }
   // Kanban column order, as Faisal (Arabic first).
   const fk = await pageAs("faisal", { locale: "ar" });
+  fk.page.setDefaultNavigationTimeout(60_000);
+  fk.page.setDefaultTimeout(45_000);
   await go(fk.page, `/projects/${projectId}/work-items?view=kanban`, "ar");
   await settle(fk.page, 800);
-  const kAr = await columnEdges(fk.page);
+  const kAr = await columnEdges(fk.page).catch((e: unknown) => String(e));
   await switchLanguage(fk.page, "en", /فيصل العتيبي/);
-  const kEn = await columnEdges(fk.page);
-  c.check("Kanban: the column order mirrors (first column on the left in English, on the right in Arabic)", kEn[0] < kEn[1] && kAr[0] > kAr[1], `en ${kEn}, ar ${kAr}`);
+  const kEn = await columnEdges(fk.page).catch((e: unknown) => String(e));
+  if (typeof kAr === "string" || typeof kEn === "string") t.note("Kanban column order not read: Faisal's Kanban also shows the not-found page (the known Bug RP-1049/RP-1050, one fail per case: see the List check above); the mirror check needs the Bug fixed.");
+  else c.check("Kanban: the column order mirrors (first column on the left in English, on the right in Arabic)", kEn[0] < kEn[1] && kAr[0] > kAr[1], `en ${kEn}, ar ${kAr}`);
   // Faisal's side: an Arabic first user switches the other way on Home.
   const fa = await pageAs("faisal", { locale: "ar" });
+  fa.page.setDefaultNavigationTimeout(60_000);
+  fa.page.setDefaultTimeout(45_000);
   await go(fa.page, "/", "ar");
   await settle(fa.page);
   await switchLanguage(fa.page, "en", /فيصل العتيبي/);
@@ -294,6 +323,7 @@ defineCase("I18N-05", async (t) => {
     c.check(`${who}: can switch to English`, new URL(ar.page.url()).pathname.startsWith("/en"), ar.page.url());
     await ar.context.close();
   }
+  t.note("FAIL (I18N-05): steps: sign in as Faisal (or Noura) with the browser language set to English (the harness's demo session; a Playwright context with locale en-US) and open the site root. Expected (Test Case I18N-05; strategy 5.11 'Their language is Arabic from sign-in (locale set at onboarding)'; CLAUDE.md 'Arabic and English from day one'): the app opens in Arabic for an Arabic-first Member. Actual: it opens /en, and Faisal's and Noura's stored language ar only sets the language of their emails; with an Arabic browser it opens /ar. Screenshot: evidence/I18N-05-1-faisal-english-browser.jpg.");
   t.note("Sign-in itself needs a password, so the harness uses each person's demo session. The app opens in the browser's language (the URL decides; next-intl negotiates it): the Member's stored language 'ar' only sets the language of their emails (apps/web/src/lib/browser-locale.ts, data-model member_notification_preference). The plan's expectation 'Arabic from sign-in' holds only for an Arabic browser.");
 });
 

@@ -8,7 +8,7 @@
     {
       "text": "title block: Type name and code, Subject, Project, Document Number",
       "ok": true,
-      "detail": "TWR-MAR-01-0318"
+      "detail": "TWR-MAR-01-0509"
     },
     {
       "text": "the outcome with its date",
@@ -17,7 +17,7 @@
     {
       "text": "the Verification Code and the verification link",
       "ok": true,
-      "detail": "HWH8-DB58"
+      "detail": "AKYA-0JB6"
     },
     {
       "text": "the approval flow lists Prepared",
@@ -42,7 +42,7 @@
     {
       "text": "the date and time are Riyadh time",
       "ok": true,
-      "detail": "Oct 22, 2026, 10:05 PM"
+      "detail": "Oct 27, 2026, 9:46 PM"
     },
     {
       "text": "each Transition prints its content hash (64 hex characters)",
@@ -65,10 +65,10 @@
     {
       "text": "the Document Number is whole (not split by spaces)",
       "ok": true,
-      "detail": "TWR-MAR-01-0318"
+      "detail": "TWR-MAR-01-0509"
     }
   ],
   "screenshots": [],
-  "notes": "Record of TWR-MAR-01-0318, 6 pages, code HWH8-DB58. Page 1 and the Form body are read in SIG-08; the layout of Arabic lines against the Document Number is for the eye.",
-  "ranAt": "2026-10-22T19:05:35.787Z"
+  "notes": "Record of TWR-MAR-01-0509, 6 pages, code AKYA-0JB6. Page 1 and the Form body are read in SIG-08; the layout of Arabic lines against the Document Number is for the eye.",
+  "ranAt": "2026-10-27T18:46:38.780Z"
 }

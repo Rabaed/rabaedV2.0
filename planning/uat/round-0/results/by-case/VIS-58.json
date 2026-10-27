@@ -4,7 +4,7 @@
     {
       "text": "Setup: a TMC Submitted item and a TMC Comment exist",
       "ok": true,
-      "detail": "6663b9fd-7294-4b40-bce6-224db0b20f92"
+      "detail": "f95719a6-ac90-455c-a30d-f34116252cef"
     },
     {
       "text": "Ids are random: version 4 (no time, no order)",
@@ -61,5 +61,5 @@
     "evidence/VIS-58-1-nasser-tmc-item.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:44:52.925Z"
+  "ranAt": "2026-10-27T20:20:51.110Z"
 }

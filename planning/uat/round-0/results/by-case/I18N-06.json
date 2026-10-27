@@ -49,7 +49,7 @@
     {
       "text": "an item: a table wider than the screen scrolls inside its own area",
       "ok": true,
-      "detail": "[{\"wide\":false,\"scroller\":true}]"
+      "detail": "[]"
     },
     {
       "text": "Settings: the page does not scroll sideways at 375",
@@ -79,6 +79,6 @@
     "evidence/I18N-06-4-drawer-375.jpg",
     "evidence/I18N-06-5-workflow-builder-375.jpg"
   ],
-  "notes": "UX recommendations (do not fail this case): Projects: 3 controls under 44 px (e.g. All, Active, Closed); Projects: text cut off: Show; an item: 1 controls under 44 px (e.g. Submittals); an item: text cut off: Items; Settings: 2 controls under 44 px (e.g. INPUT, INPUT)",
-  "ranAt": "2026-10-22T18:52:11.021Z"
+  "notes": "UX recommendations (do not fail this case): Settings: 2 controls under 44 px (e.g. INPUT, INPUT)",
+  "ranAt": "2026-10-27T18:50:25.572Z"
 }

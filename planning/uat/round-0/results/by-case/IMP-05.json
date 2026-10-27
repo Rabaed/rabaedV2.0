@@ -1,5 +1,5 @@
 {
-  "status": "pass",
+  "status": "fail",
   "checks": [
     {
       "text": "The preview has 8 ready and 2 left out",
@@ -19,13 +19,14 @@
       "ok": true
     },
     {
-      "text": "The Submittals List shows them as No number yet",
-      "ok": true
+      "text": "The Submittals List opens with the imported Drafts (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
+      "ok": false,
+      "detail": "the page answered with the not-found page; the api answers the same read for the same person"
     }
   ],
   "screenshots": [
     "evidence/IMP-05-1-eight-drafts.jpg"
   ],
   "notes": "After a Required links change the confirm answered 200 {\"rowsCreated\":1}\nThat change does not count as a change the preview depends on; 'Something in the Project changed' (previewOutdated) was not provoked.",
-  "ranAt": "2026-10-22T18:45:08.919Z"
+  "ranAt": "2026-10-27T19:09:30.290Z"
 }

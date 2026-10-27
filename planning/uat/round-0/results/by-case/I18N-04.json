@@ -4,12 +4,12 @@
     {
       "text": "a MAR Draft with Description empty is created through the api",
       "ok": true,
-      "detail": "201 {\"id\":\"40ff0330-0ecc-4368-86c6-bfc6f50219a1\"}"
+      "detail": "201 {\"id\":\"472f7540-808c-4f50-8946-7e4c72ccd1ad\"}"
     },
     {
       "text": "field labels and section titles are Arabic (تفاصيل المادة, الوصف)",
       "ok": true,
-      "detail": "الاعتمادات UAT I18N-04 empty 185101 تنزيل PDF قيد المراقبة مسودة سير العمل: UAT FX-SB MAR Send Back (Comment only) · الإصدار 1 عرض سير العمل إرسال للمراجعة إلغاء الموضوع UAT I18N-04 empty 185101 رقم ا"
+      "detail": "الاعتمادات UAT I18N-04 empty 184842 تنزيل PDF قيد المراقبة مسودة سير العمل: UAT FX-SB MAR Send Back (Comment only) · الإصدار 1 عرض سير العمل إرسال للمراجعة إلغاء الموضوع UAT I18N-04 empty 184842 رقم ا"
     },
     {
       "text": "the values typed in English stay as typed (UAT Maker)",
@@ -33,5 +33,5 @@
     "evidence/I18N-04-3-missing-fields-ar.jpg"
   ],
   "notes": "Alert text read: أكمل النموذج أولاً: الحقول المطلوب تصحيحها محددة فيه. | 3 حقول تحتاج إلى مراجعتك:\n\nالمورّد المعتمد\nالوصف\nنشرة البيانات (PDF) | صحّح هذه الحقول:\n\nالمورّد المعتمد\nالوصف\nنشرة البيانات (PDF) | ",
-  "ranAt": "2026-10-22T18:51:08.051Z"
+  "ranAt": "2026-10-27T18:48:50.402Z"
 }

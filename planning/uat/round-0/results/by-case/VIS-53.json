@@ -73,5 +73,5 @@
     "evidence/VIS-53-1-yousef-own-snag-by-id.jpg"
   ],
   "notes": "The Test Case says the Consultant never sees a Contractor's Snag on itself; the later spec (RP-625-1, docs/visibility.md) informs the Consultant from the Raise, read-only. The product follows the spec, so this is checked against it: the Test Case needs a text fix.",
-  "ranAt": "2026-10-22T19:43:02.347Z"
+  "ranAt": "2026-10-27T20:17:04.849Z"
 }

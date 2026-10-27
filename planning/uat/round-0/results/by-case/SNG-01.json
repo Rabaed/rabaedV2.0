@@ -2,14 +2,32 @@
   "status": "fail",
   "checks": [
     {
-      "text": "Ali's Snag List page opens",
+      "text": "Ali's Snag List page opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
       "ok": false,
-      "detail": "The page shows the not-found page although the api answers 200 for the same read in 4760 ms (draft:0 open:111 in_progress:9 on_hold:0 resolved:6 closed:10); the web app gives up on an api read after 3000 ms (apps/web/src/lib/session.ts apiGet) and shows not found."
+      "detail": "The page shows the not-found page although the api answers 200 for the same read in 8848 ms (draft:0 open:153 in_progress:14 on_hold:0 resolved:9 closed:22); the web app gives up on an api read after 3000 ms (apps/web/src/lib/session.ts apiGet) and shows not found."
+    },
+    {
+      "text": "By api: Ali's Snag List holds the new Snag, under the Open Stage",
+      "ok": true,
+      "detail": "open (found by its Subject; 50 items on the first page of 50)"
+    },
+    {
+      "text": "By api: Ali does not see another Company's Draft in the List",
+      "ok": true
+    },
+    {
+      "text": "Positive control: TMC sees the Snag by api",
+      "ok": true
+    },
+    {
+      "text": "Beta Build's Yousef does not see it in his api Snag List",
+      "ok": true,
+      "detail": "5 items for Yousef"
     }
   ],
   "screenshots": [
     "evidence/SNG-01-1-snag-list-not-found.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:02:51.117Z"
+  "ranAt": "2026-10-27T19:09:51.128Z"
 }

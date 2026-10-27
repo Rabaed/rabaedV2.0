@@ -120,35 +120,33 @@ defineCase("VIS-42", async (t) => {
   const id = await submittedMar(crew, subject, { location: "T2F01" });
   await createMar(crew, `UAT VIS-42 TMC Draft ${String(Date.now()).slice(-5)}`, { location: "T2F01" });
   await sleep(500);
-  const y = await home("yousef");
-  const yAll = new Set((await listAll(await crew.as("yousef"), pid, "")).map((r) => r.id));
-  const yMods = await Promise.all(["snag_list", "inspections"].map(async (m) => (await listAll(await crew.as("yousef"), pid, "", m)).map((r) => r.id)));
-  yMods.flat().forEach((i) => yAll.add(i));
+  for (const who of ["yousef", "hafiz", "mohammed", "faisal"]) await crew.as(who);
+  const homes = Object.fromEntries(await Promise.all(["yousef", "hafiz", "mohammed", "faisal"].map(async (who) => [who, await home(who)] as const)));
+  const yApi = await crew.as("yousef");
+  const yLists = await Promise.all(["", "snag_list", "inspections"].map(async (m) => (await listAll(yApi, pid, "", m)).map((r) => r.id)));
+  const yAll = new Set(yLists.flat());
+  const y = homes.yousef;
   t.check("Yousef's Home shows 0 of 4+ weeks and 0 waiting with others", y.counts.longAtStep === 0 && y.counts.waitingWithOthers === 0, JSON.stringify(y.counts));
   t.check("Yousef's Home has no row and no activity of TMC (every row is an item he sees)", [...y.needsMyAction, ...y.activity].every((r: any) => yAll.has(r.workItem?.id ?? r.id)) && !JSON.stringify(y).includes(subject), `${y.needsMyAction.length} rows, ${y.activity.length} activity`);
-  t.check("TMC appears for Yousef only as the Host Company on the Project card", y.projects.length === 1 && y.projects[0].hostCompany.legalName.en === "TMC Constructions", JSON.stringify(y.projects.map((p: any) => p.hostCompany.legalName.en)));
-  t.check("Yousef's Project card Need My Action equals his Home count", y.projects[0].needMyAction === y.counts.needMyAction, `${y.projects[0].needMyAction} / ${y.counts.needMyAction}`);
-  const h = await home("hafiz");
+  t.check("TMC appears for Yousef only as the Host Company on each Project card (other UAT journeys added Projects he belongs to)", y.projects.length >= 1 && y.projects.every((p: any) => p.hostCompany.legalName.en === "TMC Constructions") && y.projects.some((p: any) => p.id === pid), JSON.stringify(y.projects.map((p: any) => p.hostCompany.legalName.en)));
+  t.check("Yousef's Project card Need My Action equals his Home count", y.projects.reduce((n: number, p: any) => n + p.needMyAction, 0) === y.counts.needMyAction && y.projects.find((p: any) => p.id === pid).needMyAction === y.counts.needMyAction, `${y.projects.map((p: any) => p.needMyAction).join("+")} / ${y.counts.needMyAction}`);
+  const h = homes.hafiz;
   t.check("Hafiz's Drafts never appear in Need My Action", h.needsMyAction.every((r: any) => r.stage?.key !== "draft"), h.needsMyAction.filter((r: any) => r.stage?.key === "draft").length + " drafts");
-  t.check("Hafiz's Project card equals his Home count", h.projects[0].needMyAction === h.counts.needMyAction, `${h.projects[0].needMyAction} / ${h.counts.needMyAction}`);
+  t.check("Hafiz's Project card equals his Home count", h.projects.reduce((n: number, p: any) => n + p.needMyAction, 0) === h.counts.needMyAction, `${h.projects[0].needMyAction} / ${h.counts.needMyAction}`);
   const hafiz = await crew.as("hafiz");
-  const waiting = async () => {
-    let n = 0;
-    for (const m of ["", "snag_list", "inspections"]) n += (await listAll(hafiz, pid, "raisedByMe=true&heldBy=others", m)).filter((r) => r.stage.key !== "draft").length;
-    return n;
-  };
+  const waitingFor = async (api: typeof hafiz) => (await Promise.all(["", "snag_list", "inspections"].map(async (m) => (await listOf(api, pid, "raisedByMe=true&heldBy=others", m)).stages.filter((s) => s.key !== "draft").reduce((a, s) => a + s.count, 0)))).reduce((a, b) => a + b, 0);
+  const waiting = () => waitingFor(hafiz);
   const w = await waiting();
   t.check("Hafiz's 'Waiting with others' counts his own items others hold (not Drafts, closed or Sent Back)", Math.abs(w - h.counts.waitingWithOthers) <= 3 && h.counts.waitingWithOthers > 0, `home ${h.counts.waitingWithOthers}, lists ${w}`);
   for (const who of ["mohammed", "faisal"]) {
-    const x = await home(who);
+    const x = homes[who as "mohammed" | "faisal"];
     const api = await crew.as(who);
-    let n = 0;
-    for (const m of ["", "snag_list", "inspections"]) n += (await listAll(api, pid, "raisedByMe=true&heldBy=others", m)).filter((r) => r.stage.key !== "draft").length;
-    const subs = (await listAll(api, pid, "raisedByMe=true&heldBy=others")).length;
+    const n = await waitingFor(api);
+    const subs = (await listOf(api, pid, "raisedByMe=true&heldBy=others")).stages.reduce((a, s) => a + s.count, 0);
     t.check(`${who}: no Submittal of theirs waits with others; Home's count equals their own lists across Modules (DCL's own Snags and Comments held by TMC count for DCL)`, subs === 0 && Math.abs(n - x.counts.waitingWithOthers) <= 3, `home ${x.counts.waitingWithOthers}, lists ${n}, submittals ${subs}`);
   }
-  const m = await home("mohammed");
-  t.check("DCL's card count equals its Home count", m.projects[0].needMyAction === m.counts.needMyAction, `${m.projects[0].needMyAction} / ${m.counts.needMyAction}`);
+  const m = homes.mohammed;
+  t.check("DCL's card count equals its Home count", m.projects.reduce((n: number, p: any) => n + p.needMyAction, 0) === m.counts.needMyAction, `${m.projects[0].needMyAction} / ${m.counts.needMyAction}`);
   const { context, page } = await pageAs("yousef");
   try {
     await page.goto(`${webUrl}/en`, { waitUntil: "networkidle" });

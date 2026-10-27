@@ -41,5 +41,5 @@
     "evidence/SNG-04-1-closed-snag-as-mohammed.jpg"
   ],
   "notes": "After the Return: Hafiz holds it? pickUp=false, holder=Hafiz Hamdan; transitions start_work,put_on_hold,resolve\nTMC reads: Raise > Resolve > Return to Open. DCL read before the second Resolve: Raise > Resolve > Return to Open.",
-  "ranAt": "2026-10-27T18:04:57.579Z"
+  "ranAt": "2026-10-27T19:00:46.848Z"
 }

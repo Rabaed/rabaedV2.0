@@ -1,8 +1,9 @@
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { Api, go, mailTo, notFoundFor, openProject, settle } from "../harness/helpers.ts";
+import { Api, mailTo, notFoundFor, openProject, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
-import { addToPackage, makePackage, runTag, submitPackage, team, type Json, type Team } from "../harness/helpers-sng.ts";
+import { addToPackage, listReadable, makePackage, runTag, submitPackage, team, type Json, type Team } from "../harness/helpers-sng.ts";
+import { goRetry as go } from "../harness/helpers-sng.ts";
 
 // Part PKG: Packages (RP-588). TMC covers Electrical only in the seed, so a Package of Electrical and
 // Mechanical items (PKG-10, PKG-12) cannot be built by TMC: those cases run on Electrical items, and
@@ -62,9 +63,18 @@ defineCase("PKG-01", async (t) => {
   const projectId = await openProject(page);
   await go(page, `/projects/${projectId}/work-items`);
   await settle(page);
-  await page.getByRole("link", { name: "Packages" }).first().click();
-  await settle(page, 900);
-  t.check("The view toggle's Packages opens the Packages view in the URL", /view=packages/.test(page.url()), page.url());
+  if (await listReadable(t, page, "Ali's Submittals page opens, with its view toggle")) {
+    await page.getByRole("link", { name: "Packages" }).first().click();
+    await settle(page, 900);
+    t.check("The view toggle's Packages opens the Packages view in the URL", /view=packages/.test(page.url()), page.url());
+  } else {
+    await go(page, `/projects/${projectId}/work-items?view=packages`);
+    await settle(page, 900);
+  }
+  if (!(await listReadable(t, page, "Ali's Packages view opens"))) {
+    t.note(`Board by api: ${(((await tm.api.ali!.get(`/projects/${tm.projectId}/packages`)).body as Json).packages as Json[]).length} Packages; the page checks need the page.`);
+    return;
+  }
   const text = await page.getByRole("main").innerText();
   t.check("Three columns Open, In Progress and Done", /Open/.test(text) && /In Progress/.test(text) && /Done/.test(text));
   t.check("A New Package button is offered to TMC", (await page.getByRole("button", { name: /New Package/ }).count()) > 0 || (await page.getByRole("link", { name: /New Package/ }).count()) > 0);
@@ -80,6 +90,7 @@ defineCase("PKG-01", async (t) => {
   const { page: d } = await pageAs("ali");
   await go(d, `/projects/${projectId}/work-items?view=packages`);
   await settle(d);
+  if (!(await listReadable(t, d, "Ali's Packages view opens for the column counts"))) return;
   const cols = await d.getByRole("main").innerText();
   const m = [...cols.matchAll(/(Open|In Progress|Done)\s*(\d+)/g)].map((x) => `${x[1]} ${x[2]}`);
   t.check("Each column carries a count equal to the Packages the api gives Ali", m.length >= 3 && m.some((x) => x === `Open ${counts.open}`) && m.some((x) => x === `In Progress ${counts.prog}`) && m.some((x) => x === `Done ${counts.done}`), `${m.join(", ")} vs ${JSON.stringify(counts)}`);
@@ -91,18 +102,25 @@ defineCase("PKG-02", async (t) => {
   const projectId = await openProject(page);
   await go(page, `/projects/${projectId}/work-items?view=packages`);
   await settle(page);
+  const boardOk = await listReadable(t, page, "Ali's Packages board opens, with its New Package button");
   const before = ((await tm.api.ali!.get(`/projects/${tm.projectId}/packages`)).body as Json).packages as Json[];
   const mine = before.filter((p) => p.owner.companyName.en === "TMC Constructions");
   const next = Math.max(0, ...mine.map((p) => Number(String(p.number).slice(4)))) + 1;
-  await page.getByRole("button", { name: /New Package/ }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor({ state: "visible" });
-  await dialog.getByLabel(/Name \(English\)/).fill(`UAT PKG-02 first ${tag}`);
-  await dialog.getByLabel(/Name \(Arabic\)/).fill(`UAT PKG-02 الأولى ${tag}`);
-  await t.shot(page, "new-package-dialog");
-  await dialog.getByRole("button", { name: /^Create/ }).click();
-  await settle(page, 1500);
-  await page.waitForURL(/\/packages\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
+  if (boardOk) {
+    await page.getByRole("button", { name: /New Package/ }).first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.waitFor({ state: "visible" });
+    await dialog.getByLabel(/Name \(English\)/).fill(`UAT PKG-02 first ${tag}`);
+    await dialog.getByLabel(/Name \(Arabic\)/).fill(`UAT PKG-02 الأولى ${tag}`);
+    await t.shot(page, "new-package-dialog");
+    await dialog.getByRole("button", { name: /^Create/ }).click();
+    await settle(page, 1500);
+    await page.waitForURL(/\/packages\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
+  } else {
+    const made = await makePackage(tm.api.ali!, tm, `UAT PKG-02 first ${tag}`);
+    await go(page, `/packages/${made.id}`);
+    await settle(page);
+  }
   const text = await page.getByRole("main").innerText();
   const expected = `PKG-${String(next).padStart(3, "0")}`;
   t.check("The new Package page shows its PKG number beside TMC's name, Open, with no submittals", text.includes(expected) && /TMC Constructions/.test(text) && /Open/.test(text) && /No submittals in this Package yet/.test(text), `${expected}; ${text.replaceAll("\n", " ").slice(0, 160)}`);
@@ -310,11 +328,11 @@ defineCase("PKG-08", async (t) => {
   await go(page, `/projects/${tm.projectId}/work-items?packageId=${p.id}`);
   await settle(page);
   const text = await page.getByRole("main").innerText();
-  t.check("The List rows show the chip PKG number with the name", text.includes(p.number) && !text.includes("UAT PKG-08 loose"), text.replaceAll("\n", " ").slice(0, 160));
+  if (await listReadable(t, page, "The Package-filtered Submittals List opens")) t.check("The List rows show the chip PKG number with the name", text.includes(p.number) && !text.includes("UAT PKG-08 loose"), text.replaceAll("\n", " ").slice(0, 160));
   await t.shot(page, "list-filtered-by-package");
   await go(page, `/projects/${tm.projectId}/work-items?view=kanban&packageId=${p.id}`);
   await settle(page);
-  t.check("The Kanban cards show the chip", (await page.getByRole("main").innerText()).includes(p.number));
+  if (await listReadable(t, page, "The Package-filtered Kanban opens")) t.check("The Kanban cards show the chip", (await page.getByRole("main").innerText()).includes(p.number));
   await go(page, `/work-items/${p.items[0]}`);
   await settle(page);
   const link = page.getByRole("main").getByRole("link", { name: new RegExp(p.number) }).first();
@@ -433,7 +451,7 @@ defineCase("PKG-12", async (t) => {
   const { page } = await pageAs("ahmed");
   await go(page, `/projects/${tm.projectId}/work-items?view=packages`);
   await settle(page);
-  t.check("Ahmed's board shows it by number and Company name only", (await page.getByRole("main").innerText()).includes(p.number));
+  if (await listReadable(t, page, "Ahmed's Packages board opens")) t.check("Ahmed's board shows it by number and Company name only", (await page.getByRole("main").innerText()).includes(p.number));
   await t.shot(page, "ahmed-packages-board");
   const ps = await pageAs("sara");
   await go(ps.page, `/projects/${tm.projectId}/work-items?view=packages`);

@@ -1,8 +1,9 @@
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { Api, go, notFoundFor, openProject, settle, takeTransition } from "../harness/helpers.ts";
+import { Api, notFoundFor, openProject, settle, takeTransition } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
-import { act, createSnagItem, keysOf, moduleItems, mustAct, runTag, team, upload, testPhoto, type Json, type Team } from "../harness/helpers-sng.ts";
+import { act, createSnagItem, findByTitle, isNotFoundPage, keysOf, moduleItems, mustAct, RP1049, runTag, team, upload, testPhoto, type Json, type Team } from "../harness/helpers-sng.ts";
+import { goRetry as go } from "../harness/helpers-sng.ts";
 
 // Part SNG: the Snag List (RP-28). Items are made through the api as the people do; the pages are
 // opened and read as the person would, and the checks pair every refusal with who does see it.
@@ -41,9 +42,17 @@ defineCase("SNG-01", async (t) => {
   const took = Date.now() - t0;
   await go(page, `/projects/${projectId}/snag-list`);
   await settle(page);
-  if ((await page.getByTestId("not-found").count()) > 0 || /We can.t find this page/.test(await page.getByRole("main").innerText())) {
-    t.check("Ali's Snag List page opens", false, `The page shows the not-found page although the api answers 200 for the same read in ${took} ms (${((apiRead.body as Json).stages as Json[]).map((x) => x.key + ":" + x.count).join(" ")}); the web app gives up on an api read after 3000 ms (apps/web/src/lib/session.ts apiGet) and shows not found.`);
+  if (await isNotFoundPage(page)) {
+    t.check(`Ali's Snag List page opens (${RP1049})`, false, `The page shows the not-found page although the api answers 200 for the same read in ${took} ms (${((apiRead.body as Json).stages as Json[]).map((x) => x.key + ":" + x.count).join(" ")}); the web app gives up on an api read after 3000 ms (apps/web/src/lib/session.ts apiGet) and shows not found.`);
     await t.shot(page, "snag-list-not-found");
+    // The rest of the story, by the api the page reads.
+    const rows = (await moduleItems(tm.api.ali!, projectId, "snag_list", "pageSize=50")) as Json[];
+    const found = await findByTitle(tm.api.ali!, projectId, "snag_list", title);
+    t.check("By api: Ali's Snag List holds the new Snag, under the Open Stage", found?.id === id && found.stage.key === "open", `${found?.stage?.key ?? "not found"} (found by its Subject; ${rows.length} items on the first page of 50)`);
+    t.check("By api: Ali does not see another Company's Draft in the List", !rows.some((i) => i.raiserCompanyName?.en !== "TMC Constructions" && i.stage.key === "draft"));
+    t.check("Positive control: TMC sees the Snag by api", (await status(tm.api.ali!, id)) === 200);
+    const yApiOnly = await moduleItems(tm.api.yousef!, projectId, "snag_list");
+    t.check("Beta Build's Yousef does not see it in his api Snag List", !yApiOnly.some((i) => i.id === id), `${yApiOnly.length} items for Yousef`);
     return;
   }
   const main = page.getByRole("main");
@@ -264,11 +273,16 @@ defineCase("SNG-07", async (t) => {
   const { page } = await pageAs("ali");
   await go(page, `/projects/${tm.projectId}/snag-list?q=SNG-07`);
   await settle(page);
-  await page.getByRole("main").getByRole("button", { name: /^New/ }).first().click();
-  await settle(page, 600);
-  const menu = (await page.locator("[data-radix-popper-content-wrapper]").first().innerText()).replaceAll("\n", " | ");
-  t.check("The New menu lists Snag and no Comment", /Snag/.test(menu) && !/Comment/.test(menu), menu);
-  await t.shot(page, "new-menu");
+  if (await isNotFoundPage(page)) {
+    t.check(`Ali's Snag List page opens, with its New menu (${RP1049})`, false, "the Snag List page shows the not-found page, so its New menu cannot be opened; the api's raisable types above are what the menu lists");
+    await t.shot(page, "snag-list-not-found");
+  } else {
+    await page.getByRole("main").getByRole("button", { name: /^New/ }).first().click();
+    await settle(page, 600);
+    const menu = (await page.locator("[data-radix-popper-content-wrapper]").first().innerText()).replaceAll("\n", " | ");
+    t.check("The New menu lists Snag and no Comment", /Snag/.test(menu) && !/Comment/.test(menu), menu);
+    await t.shot(page, "new-menu");
+  }
   const cmt = await go(page, `/projects/${tm.projectId}/work-items/new?module=snag_list&type=CMT`);
   t.note(`Opening New with type=CMT by URL answers ${cmt}; the page: ${(await page.getByRole("main").innerText()).replace(/\n+/g, " | ").slice(0, 160)}`);
 });
@@ -339,9 +353,14 @@ defineCase("SNG-10", async (t) => {
   await go(page, `/projects/${tm.projectId}/snag-list?q=SNG-10`);
   await settle(page);
   const text = await page.getByRole("main").innerText();
-  t.check("The Type chips show Site Observation and Question to Contractor", /Site Observation/.test(text) && /Question to Contractor/.test(text));
+  if (await isNotFoundPage(page)) {
+    t.check(`Mohammed's Snag List page opens, with its Type chips (${RP1049})`, false, "the Snag List page shows the not-found page, so the chips cannot be read; the Types themselves are checked above by api");
+    await t.shot(page, "snag-list-not-found");
+  } else {
+    t.check("The Type chips show Site Observation and Question to Contractor", /Site Observation/.test(text) && /Question to Contractor/.test(text));
+    await t.shot(page, "type-chips");
+  }
   t.check("Nothing is called Violation", !/violation/i.test(text) && !/violation/i.test(JSON.stringify([dO, dQ])));
-  await t.shot(page, "type-chips");
 });
 
 defineCase("SNG-11", async (t) => {
@@ -363,10 +382,17 @@ defineCase("SNG-11", async (t) => {
   const cm = (await moduleItems(tm.api.ali!, tm.projectId, "snag_list", "pageSize=50")).find((c) => c.type?.code === "CMT");
   if (cm) {
     const { page } = await pageAs("ali");
-    await go(page, `/work-items/${cm.id}`);
-    await settle(page);
-    const text = await page.getByRole("main").innerText();
-    t.check("A Comment's page has the Raised from card naming the MAR and its Code", /Raised from/i.test(text) && /TWR-MAR/.test(text), text.slice(0, 200).replaceAll("\n", " | "));
+    let text = "";
+    // The item page gives up on a slow read after 3 s (RP-1049): open it again before it counts.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await go(page, `/work-items/${cm.id}`);
+      await settle(page);
+      text = await page.getByRole("main").innerText();
+      if (!(await isNotFoundPage(page))) break;
+      t.note(`The Comment's page came up as the not-found page at attempt ${attempt} although the api answers 200 for Ali.`);
+      await page.waitForTimeout(2000);
+    }
+    t.check(`A Comment's page has the Raised from card naming the MAR and its Code${(await isNotFoundPage(page)) ? ` (${RP1049})` : ""}`, /Raised from/i.test(text) && /TWR-MAR/.test(text), text.slice(0, 200).replaceAll("\n", " | "));
     await t.shot(page, "comment-raised-from");
   } else t.note("No Comment in Ali's List to read the Raised from card on.");
 });
@@ -379,6 +405,15 @@ defineCase("SNG-12", async (t) => {
   const { page } = await pageAs("ali");
   await go(page, `/projects/${tm.projectId}/snag-list?q=${tag}`);
   await settle(page);
+  if (await isNotFoundPage(page)) {
+    t.check(`Ali's Snag List page opens, to select the three Snags and Reassign them (${RP1049})`, false, "the Snag List page shows the not-found page, so the checkboxes, the Reassign dialog and the Excel export cannot be reached; the checks left are the api's");
+    await t.shot(page, "snag-list-not-found");
+    const cand0 = await tm.api.ali!.post(`/projects/${tm.projectId}/snag-list/reassign-candidates`, { ids });
+    t.check("By api: Ali may reassign all three of TMC's Snags", (cand0.body as Json)?.reassignable === 3, cand0.text.slice(0, 120));
+    const cand1 = await tm.api.mohammed!.post(`/projects/${tm.projectId}/snag-list/reassign-candidates`, { ids });
+    t.check("Design Consultants can reassign none of TMC's Snags", (cand1.body as Json)?.reassignable === 0, cand1.text.slice(0, 120));
+    return;
+  }
   for (const s of subjects) await page.getByRole("checkbox", { name: `Select ${s}` }).check();
   await t.shot(page, "three-selected");
   await page.getByRole("button", { name: "Reassign" }).first().click();
@@ -415,7 +450,7 @@ defineCase("SNG-13", async (t) => {
   await go(page, `/projects/${tm.projectId}/snag-list`);
   await settle(page);
   const text = await page.locator("main").innerText();
-  const listOk = t.check("At 375 px the Snag List opens with cards and no horizontal scroll", (await page.getByTestId("not-found").count()) === 0 && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && text.length > 0);
+  const listOk = t.check(`At 375 px the Snag List opens with cards and no horizontal scroll${(await isNotFoundPage(page)) ? ` (${RP1049})` : ""}`, !(await isNotFoundPage(page)) && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && text.length > 0);
   await t.shot(page, "phone-list");
   await go(page, `/projects/${tm.projectId}/snag-list/new?type=SNG`);
   await settle(page);
@@ -468,6 +503,11 @@ defineCase("SNG-15", async (t) => {
   await go(page, `/projects/${tm.projectId}/snag-list?q=UAT%20SNG-12%20bulk`);
   await settle(page);
   const visible = (await moduleItems(tm.api.ali!, tm.projectId, "snag_list", "q=UAT%20SNG-12%20bulk&pageSize=50")).length;
+  if (await isNotFoundPage(page)) {
+    t.check(`Ali's Snag List page opens, to export the PDF (${RP1049})`, false, "the Snag List page shows the not-found page, so Export PDF cannot be reached");
+    await t.shot(page, "snag-list-not-found");
+    return;
+  }
   await page.getByRole("button", { name: "Export PDF" }).click();
   const link = page.getByRole("button", { name: /Download the Snag List PDF/ }).or(page.getByRole("link", { name: /Download the Snag List PDF/ })).first();
   await link.waitFor({ state: "visible", timeout: 90000 });

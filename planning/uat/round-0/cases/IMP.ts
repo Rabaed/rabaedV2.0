@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { Api, go, settle } from "../harness/helpers.ts";
+import { Api, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 import { registerMatchKey } from "../../../../packages/domain/src/register-import-match.ts";
-import { addToPackage, bilingual, makeCsv, makePackage, makeXlsx, mustAct, regFile, runTag, submitPackage, team, writeData, type Json, type Team } from "../harness/helpers-sng.ts";
+import { addToPackage, bilingual, listReadable, makeCsv, makePackage, makeXlsx, mustAct, regFile, runTag, submitPackage, team, writeData, type Json, type Team } from "../harness/helpers-sng.ts";
+import { goRetry as go } from "../harness/helpers-sng.ts";
 
 // Part IMP: Submittal Register Import (RP-589). Registers are small made-up files under fixtures-data.
 // The wizard is driven in the browser where a Test Case is about what the page says; the rest goes
@@ -179,7 +180,7 @@ defineCase("IMP-05", async (t) => {
   await go(page, `/projects/${tm.projectId}/work-items?q=${encodeURIComponent(`IMP-05 ${tag}`)}`);
   await settle(page);
   const list = await page.getByRole("main").innerText();
-  t.check("The Submittals List shows them as No number yet", (list.match(/No number yet/g) ?? []).length >= 8);
+  if (await listReadable(t, page, "The Submittals List opens with the imported Drafts")) t.check("The Submittals List shows them as No number yet", (list.match(/No number yet/g) ?? []).length >= 8);
   await t.shot(page, "eight-drafts");
   // A change in the Project after the preview.
   const p2 = await preview(hafiz, tm, "again.xlsx", xlsx([HEAD, row(1, "IMP-05 outdated")]));

@@ -24,18 +24,19 @@ const stagesOf = async (crew: Crew, who: string) => JSON.stringify(stageCounts(a
 defineCase("VIS-01", async (t) => {
   const crew = await Crew.start();
   const subject = "UAT VIS-01 Draft";
+  const yCounts = async () => { const [stages, home] = await Promise.all([stagesOf(crew, "yousef"), homeCounts(crew, "yousef")]); return { stages, home }; };
   const observers = ["yousef", "ahmed", "sara", "mohammed", "faisal", "noura"];
-  const yBefore = { stages: await stagesOf(crew, "yousef"), home: await homeCounts(crew, "yousef") };
+  const yBefore = await yCounts();
   const id = await createMar(crew, subject, { trade: "EL", location: "T1F01" });
   await expectVisible(t, crew, "hafiz", id, subject, "(his Draft)");
-  for (const o of observers) await expectHidden(t, crew, o, id, subject, "as a Draft");
-  const yMid = { stages: await stagesOf(crew, "yousef"), home: await homeCounts(crew, "yousef") };
+  await Promise.all(observers.map((o) => expectHidden(t, crew, o, id, subject, "as a Draft")));
+  const yMid = await yCounts();
   t.check("Yousef's List stage counts and Home counts are unchanged by the Draft", yBefore.stages === yMid.stages && yBefore.home === yMid.home, `${yBefore.stages} / ${yMid.stages}; ${yBefore.home} / ${yMid.home}`);
   await sendForReview(crew, id);
   await expectVisible(t, crew, "hafiz", id, subject, "(sent for review)");
   await expectVisible(t, crew, "ali", id, subject, "(he holds it in internal review)");
-  for (const o of observers) await expectHidden(t, crew, o, id, subject, "in TMC internal review");
-  const yAfter = { stages: await stagesOf(crew, "yousef"), home: await homeCounts(crew, "yousef") };
+  await Promise.all(observers.map((o) => expectHidden(t, crew, o, id, subject, "in TMC internal review")));
+  const yAfter = await yCounts();
   t.check("Yousef's counts are still unchanged after the send for review", yBefore.stages === yAfter.stages && yBefore.home === yAfter.home, `${yBefore.stages} / ${yAfter.stages}`);
   const { context, page } = await pageAs("yousef");
   try {

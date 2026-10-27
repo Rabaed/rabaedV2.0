@@ -14,7 +14,7 @@
     {
       "text": "Yousef's new MAR runs the exception Workflow",
       "ok": true,
-      "detail": "{\"name\":{\"en\":\"UAT WF-08 MARs, short route 182453\",\"ar\":\"UAT WF-08 MARs, short route 182453\"},\"versionNo\":1}"
+      "detail": "{\"name\":{\"en\":\"UAT WF-08 MARs, short route 182551\",\"ar\":\"UAT WF-08 MARs, short route 182551\"},\"versionNo\":1}"
     },
     {
       "text": "TMC's new MAR does not",
@@ -40,5 +40,5 @@
     "evidence/WF-08-1-exception-listed-for-admin.jpg"
   ],
   "notes": "Yousef's own settings read lists 1 exception(s).",
-  "ranAt": "2026-10-22T18:24:57.108Z"
+  "ranAt": "2026-10-27T18:26:04.526Z"
 }

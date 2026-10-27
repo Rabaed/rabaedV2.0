@@ -58,7 +58,7 @@
     {
       "text": "language Arabic: the email comes in Arabic",
       "ok": true,
-      "detail": "⁦TWR-MAR-01-0282⁩ · UAT NOT-04 arabic 185441 · وصلك في مدير مشروع المقاول"
+      "detail": "⁦TWR-MAR-01-0474⁩ · UAT NOT-04 arabic 183107 · وصلك في مدير مشروع المقاول"
     },
     {
       "text": "... with Latin digits and the Document Number left to right",
@@ -75,5 +75,5 @@
     "evidence/NOT-04-3-profile-after.jpg"
   ],
   "notes": "Ali's profile has no the Weekly Step Age report row: the row shows only for a Member who holds Assign on a Project, and no demo person does (receivesWeeklyReport is false for all 13), so the 4th group of the expected result could not be seen. Its help text 'Emailed on Sunday mornings.' is in the app messages (apps/web/messages/en.json). Not a product defect: a seed gap; a person must give a Position Assign to see the row.",
-  "ranAt": "2026-10-22T18:55:15.308Z"
+  "ranAt": "2026-10-27T18:31:51.282Z"
 }

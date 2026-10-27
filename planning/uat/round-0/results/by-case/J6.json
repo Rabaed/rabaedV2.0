@@ -1,0 +1,237 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "[VIS-01] Hand-over 1, a DAR Draft: yousef gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a DAR Draft: mohammed gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a DAR Draft: noura gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a DAR Draft: faisal gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[SUB-04] Hand-over 2, Hafiz to Ali: the DAR is numbered and Ali holds it",
+      "ok": true
+    },
+    {
+      "text": "[VIS-01] Hand-over 2: yousef gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 2: mohammed gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 2: noura gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 2: faisal gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[SUB-21] Hand-over 3, Ali to DCL: mohammed reads no TMC Return, Internal Note or TMC person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-02] Hand-over 3 (Tower 2): noura (positive control) reads it",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "[VIS-02] Hand-over 3: noura reads it as oversight only (no move offered, no pick up)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "[VIS-02] Hand-over 3: noura reads no internal move, note or person of either Company",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-02] Hand-over 3 (Faisal covers Tower 1 only; Beta Build covers Tower 2 but is the rival Contractor): faisal gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-02] Hand-over 3 (Faisal covers Tower 1 only; Beta Build covers Tower 2 but is the rival Contractor): yousef gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[SUB-21] Mohammed is offered the Recommendation of a Code",
+      "ok": true,
+      "detail": "recommend_a,recommend_b,recommend_c,recommend_d"
+    },
+    {
+      "text": "[VIS-24] Hand-over 4, Mohammed to the Owner review: TMC reads With Owner review, no Company or person",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Owner review\",\"ar\":\"مراجعة المالك\"},\"memberName\":null,\"pool\":null}"
+    },
+    {
+      "text": "[SUB-21] Noura holds the Owner's review and is offered Confirm and Send Back",
+      "ok": true,
+      "detail": "confirm_d,owner_send_back"
+    },
+    {
+      "text": "[VIS-24] Noura reads the Recommended Code D",
+      "ok": true,
+      "detail": "Submittals UAT J6 Cable schedule 183820 Download PDF Watch Pending Approval 1 week at this step Workflow: 1→1 Contractor PM → Consultant PM → Owner review · Version 1 View workflow Confirm Send Back S"
+    },
+    {
+      "text": "[VIS-24] TMC's page reads With Owner review and no Code",
+      "ok": true,
+      "detail": "Submittals UAT J6 Cable schedule 183820 Download PDF Watching Pending Approval 1 week at this step Workflow: 1→1 Contractor PM → Consultant PM → Owner review · "
+    },
+    {
+      "text": "[VIS-24] Hand-over 4: ali reads no DCL internal move, Recommended Code, verification note or DCL person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-24] Hand-over 4: hafiz reads no DCL internal move, Recommended Code, verification note or DCL person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-24] TMC reads no outcome yet",
+      "ok": true
+    },
+    {
+      "text": "[VIS-24] Hand-over 4: yousef gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-24] Hand-over 4: faisal gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[VIS-24] Hand-over 5, Noura sends the Recommendation back to DCL",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[VIS-24] The Send Back reaches DCL only: TMC still reads With Owner review or DCL, no Code, no reason",
+      "ok": true,
+      "detail": "Submittals UAT J6 Cable schedule 183820 Download PDF Watching Pending Approval 1 week at this step Workflow: 1→1 Contractor PM → Consultant PM → Owner review · "
+    },
+    {
+      "text": "[VIS-24] Hand-over 5: ali reads no DCL internal move, Recommended Code, verification note or DCL person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-24] Hand-over 5: hafiz reads no DCL internal move, Recommended Code, verification note or DCL person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-24] Hand-over 6, DCL recommends again: TMC reads With Owner review and still no Code",
+      "ok": true,
+      "detail": "Submittals UAT J6 Cable schedule 183820 Download PDF Watching Pending Approval 1 week at this step Workflow: 1→1 Contractor PM → Consultant PM → Owner review · "
+    },
+    {
+      "text": "[SUB-21] Hand-over 7, Noura confirms the Code",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[SUB-21] The DAR closes Approved at Code A for TMC",
+      "ok": true,
+      "detail": "A/approved"
+    },
+    {
+      "text": "[VIS-24] TMC reads the confirmed Code A",
+      "ok": true,
+      "detail": "Submittals UAT J6 Cable schedule 183820 Record being prepared Watching Approved Workflow: 1→1 Contractor PM → Consultant PM → Owner review · Version 1 View work"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: ali reads \"Noura Al Harbi\" only inside the Code event",
+      "ok": true,
+      "detail": "1 in the history, 1 in the Code event"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: ali reads no DCL internal move, Recommended Code, verification note or DCL person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: hafiz reads \"Noura Al Harbi\" only inside the Code event",
+      "ok": true,
+      "detail": "1 in the history, 1 in the Code event"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: hafiz reads no DCL internal move, Recommended Code, verification note or DCL person",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS-24] TMC's history never holds the recommendation that was sent back (no Code D)",
+      "ok": true,
+      "detail": "[{\"seq\":1,\"type\":\"transition\",\"at\":\"2026-10-27T18:38:20.752Z\",\"audience\":\"internal\",\"by\":{\"companyName\":{\"en\":\"TMC Const"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: noura (positive control) reads it",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: mohammed (positive control) reads it",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: faisal gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-24] Hand-over 7: yousef gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-58] yousef opens the item URL and gets the not-found page",
+      "ok": true,
+      "detail": "http 404, marker true"
+    },
+    {
+      "text": "[SUB-23] ali's Submittals List search for the Subject shows the DAR",
+      "ok": false,
+      "detail": "The List page shows the not-found page, although the api answers (known Bug RP-1049: the web gives up at 3 s)."
+    }
+  ],
+  "screenshots": [
+    "evidence/J6-1-ali-holds-dar.jpg",
+    "evidence/J6-2-mohammed-receives-dar.jpg",
+    "evidence/J6-3-noura-owner-review.jpg",
+    "evidence/J6-4-ali-with-owner-review.jpg",
+    "evidence/J6-5-mohammed-gets-send-back.jpg",
+    "evidence/J6-6-ali-unchanged-after-send-back.jpg",
+    "evidence/J6-7-ali-with-owner-review-again.jpg",
+    "evidence/J6-8-ali-reads-confirmed-code.jpg",
+    "evidence/J6-9-yousef-not-found-dar.jpg",
+    "evidence/J6-10-ali-list.jpg"
+  ],
+  "notes": "Journey took 81 s.",
+  "ranAt": "2026-10-27T18:39:41.186Z"
+}

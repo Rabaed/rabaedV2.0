@@ -43,12 +43,12 @@
     {
       "text": "The sent-back item is still offered in Mohammed's Link search",
       "ok": true,
-      "detail": "{\"links\":[{\"id\":\"fda8ca95-c22c-426c-9c9a-03f11f6155b7\",\"documentNumber\":\"TWR-MAR-01-0437\",\"subject\":\"UAT VIS-14 Sent Back MAR\"},{\"id\":\"9fee2652-da5b-4"
+      "detail": "{\"links\":[{\"id\":\"dd60be63-49bb-4a35-8b4e-43d7f9b494be\",\"documentNumber\":\"TWR-MAR-01-0601\",\"subject\":\"UAT VIS-14 Sent Back MAR\"},{\"id\":\"fda8ca95-c22c-4"
     },
     {
       "text": "The sent-back item is still in Linked from of X, with the same number and Subject",
       "ok": true,
-      "detail": "{\"items\":[{\"documentNumber\":\"TWR-MAR-01-0437\",\"subject\":\"UAT VIS-14 Sent Back MAR\",\"workItemId\":\"fda8ca95-c22c-426c-9c9a-03f11f6155b7\"}]}"
+      "detail": "{\"items\":[{\"documentNumber\":\"TWR-MAR-01-0601\",\"subject\":\"UAT VIS-14 Sent Back MAR\",\"workItemId\":\"dd60be63-49bb-4a35-8b4e-43d7f9b494be\"}]}"
     },
     {
       "text": "mohammed's bell shows no change of the item while it is with the raiser",
@@ -75,5 +75,5 @@
     "evidence/VIS-14-1-mohammed-item-while-sent-back.jpg"
   ],
   "notes": "UAT Owner PM observer not covered: FX-OW is not applied. Faisal covers Tower 1 only (FX-OR) and the item is at Tower 1.",
-  "ranAt": "2026-10-27T18:18:18.524Z"
+  "ranAt": "2026-10-27T19:47:07.539Z"
 }

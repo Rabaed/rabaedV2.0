@@ -4,7 +4,7 @@
     {
       "text": "Saeed reads the Versions newest first with Change Notes",
       "ok": true,
-      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-22T18:24:43.507Z\",\"changeNote\":\"UAT WF-07 first note\",\"running\":0}]"
+      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-27T18:25:34.265Z\",\"changeNote\":\"UAT WF-07 first note\",\"running\":0}]"
     },
     {
       "text": "The running figure is present (counts only items the reader sees)",
@@ -13,12 +13,12 @@
     {
       "text": "Saeed sees the Change Notes",
       "ok": true,
-      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-22T18:24:43.507Z\",\"changeNote\":\"UAT WF-07 first note\",\"running\":0}]"
+      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-27T18:25:34.265Z\",\"changeNote\":\"UAT WF-07 first note\",\"running\":0}]"
     },
     {
       "text": "Hafiz sees the Versions but no Change Note",
       "ok": true,
-      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-22T18:24:43.507Z\",\"changeNote\":null,\"running\":0}]"
+      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-27T18:25:34.265Z\",\"changeNote\":null,\"running\":0}]"
     },
     {
       "text": "The Versions page lists the published Versions with their Change Notes",
@@ -30,5 +30,5 @@
     "evidence/WF-07-1-versions-page.jpg"
   ],
   "notes": "Second Version publish answered 422 {\"problems\":[{\"code\":\"cancel_not_by_raiser\",\"transition\":\"uat_extra_cancel\",\"severity\":\"error\",\"message\":{\"en\":\"\\\"Cancel here\\\" is a Cancel, which only the raiser's own Steps offer.\",\"ar\":\"\\\"Cancel he\nNo Compare control was found on the Versions page by role or text.",
-  "ranAt": "2026-10-22T18:24:45.451Z"
+  "ranAt": "2026-10-27T18:25:36.674Z"
 }

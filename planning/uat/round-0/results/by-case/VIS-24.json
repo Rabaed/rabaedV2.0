@@ -59,12 +59,12 @@
     {
       "text": "hafiz's bell shows no Code for it",
       "ok": true,
-      "detail": "[{\"id\":\"93baf2fe-a677-452c-9baf-6d9614c25985\",\"kind\":\"watched_event\",\"workItemId\":\"ff934f9f-062e-48d0-8c87-9957a0ffc8de\",\"documentNumber\":\"TWR-DAR-01-0012\",\"title\":\"UAT VIS-24 DAR 04491\",\"step\":null,\""
+      "detail": "[{\"id\":\"b86d8638-db7a-4f7f-9ccb-1b2e3e9888fe\",\"kind\":\"watched_event\",\"workItemId\":\"b82fd4c9-6aeb-402c-bcf2-b3c0e354e64c\",\"documentNumber\":\"TWR-DAR-01-0023\",\"title\":\"UAT VIS-24 DAR 15234\",\"step\":null,\""
     },
     {
       "text": "ali's bell shows no Code for it",
       "ok": true,
-      "detail": "[{\"id\":\"8ab9142a-f44e-43e0-8aa7-0b93d7a0acff\",\"kind\":\"step_reached\",\"workItemId\":\"ff934f9f-062e-48d0-8c87-9957a0ffc8de\",\"documentNumber\":\"TWR-DAR-01-0012\",\"title\":\"UAT VIS-24 DAR 04491\",\"step\":{\"name\""
+      "detail": "[{\"id\":\"ba14d18b-e9de-49fa-ad0f-1581c32e831a\",\"kind\":\"step_reached\",\"workItemId\":\"b82fd4c9-6aeb-402c-bcf2-b3c0e354e64c\",\"documentNumber\":\"TWR-DAR-01-0023\",\"title\":\"UAT VIS-24 DAR 15234\",\"step\":{\"name\""
     },
     {
       "text": "Mohammed and Noura read the Recommended Code (B) in the history",
@@ -119,5 +119,5 @@
     "evidence/VIS-24-1-hafiz-dar-after-confirm.jpg"
   ],
   "notes": "The UAT Owner PM step (reads no Recommended Code until issued) is not covered: FX-OW is not applied. The weekly report is not run (needs the RP-922 job tool).",
-  "ranAt": "2026-10-22T19:32:40.198Z"
+  "ranAt": "2026-10-27T20:01:56.221Z"
 }

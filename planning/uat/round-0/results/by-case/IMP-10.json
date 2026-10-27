@@ -18,7 +18,7 @@
     {
       "text": "A default Member picks the assignee of the rows the column leaves empty",
       "ok": true,
-      "detail": "201 {\"id\":\"6cb2db3c-a2d8-47d8-8b7a-8773db028a31\",\"fileName\":\"assign2.xlsx\",\"status\":\"previewed\",\"runBy\":{\"id\":\"c39da5c9-86d8"
+      "detail": "201 {\"id\":\"5290ee77-12d5-4e1a-aae2-be2d9003dde6\",\"fileName\":\"assign2.xlsx\",\"status\":\"previewed\",\"runBy\":{\"id\":\"c39da5c9-86d8"
     },
     {
       "text": "Confirm creates only the good rows (3)",
@@ -39,5 +39,5 @@
     "evidence/IMP-10-1-assigned-rows.jpg"
   ],
   "notes": "An assignee who cannot create the Type was not exercised: every TMC Member who may be assigned here may raise a MAR.",
-  "ranAt": "2026-10-22T18:46:32.372Z"
+  "ranAt": "2026-10-27T19:11:29.265Z"
 }

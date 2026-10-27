@@ -39,7 +39,7 @@
     {
       "text": "Yousef's feed holds only Beta Build items (every entry is an item he sees); none of this one",
       "ok": true,
-      "detail": "6 entries"
+      "detail": "10 entries"
     },
     {
       "text": "No setup changes appear (every entry is an item event)",
@@ -54,5 +54,5 @@
     "evidence/VIS-57-1-ali-activity-feed.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:44:15.550Z"
+  "ranAt": "2026-10-27T20:18:45.452Z"
 }

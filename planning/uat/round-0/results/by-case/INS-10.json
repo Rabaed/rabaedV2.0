@@ -19,7 +19,7 @@
     {
       "text": "Raised from names the WIR and the failed item",
       "ok": true,
-      "detail": "{\"documentNumber\":\"TWR-WIR-01-0039\",\"subject\":\"UAT INS-10 snags 184405\",\"workItemId\":\"0d2b373a-3611-4f72-ba4b-843c2eafbe40\",\"outcome\":{\"code\":\"A\",\"name\":{\"en\":\"Approved\",\"ar\":\"معتمد\"},\"look\":\"a\"},\"checkItem\":{\"key\":\"supports\",\"text\":{\"en\":\""
+      "detail": "{\"documentNumber\":\"TWR-WIR-01-0076\",\"subject\":\"UAT INS-10 snags 185523\",\"workItemId\":\"eee5ce48-7aae-42e0-9f28-e394ecfe1e14\",\"outcome\":{\"code\":\"A\",\"name\":{\"en\":\"Approved\",\"ar\":\"معتمد\"},\"look\":\"a\"},\"checkItem\":{\"key\":\"supports\",\"text\":{\"en\":\""
     },
     {
       "text": "The Consultant (Ahmed) reads the Snag; Beta Build does not",
@@ -30,5 +30,5 @@
     "evidence/INS-10-1-snag-from-failed-item.jpg"
   ],
   "notes": "Manager's pre-selected code: revise_c",
-  "ranAt": "2026-10-22T18:50:47.167Z"
+  "ranAt": "2026-10-27T19:03:27.881Z"
 }

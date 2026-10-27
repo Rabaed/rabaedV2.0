@@ -1,10 +1,10 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "[SUB-21] Setup: TMC's Hafiz, Ali and DCL's Mohammed took a Document Approval Request to the Owner review (it has a Document Number)",
       "ok": true,
-      "detail": "TWR-DAR-01-0017"
+      "detail": "TWR-DAR-01-0018"
     },
     {
       "text": "[I18N-01] Faisal's Submittals List opens in /ar",
@@ -73,8 +73,8 @@
     },
     {
       "text": "[NOT-10][I18N-01] Hand-over 4: Noura's Notifications page is Arabic and right to left",
-      "ok": false,
-      "detail": "الإشعارات تعليم الكل كمقروء UAT J15 Cable schedule 278656 TWR-DAR-01-0017 · وصلك في مراجعة المالك 27‏/10‏/2026، 9:21 م غير مقروء UAT J15 Cable schedule 230083 T"
+      "ok": true,
+      "detail": "الإشعارات تعليم الكل كمقروء UAT J15 Cable schedule 356373 TWR-DAR-01-0018 · وصلك في مراجعة المالك 27‏/10‏/2026، 9:22 م غير مقروء UAT J15 Cable schedule 278656 T"
     },
     {
       "text": "[NOT-10][I18N-02] Latin digits only on it",
@@ -99,7 +99,7 @@
     {
       "text": "[NOT-10] Hand-over 5: Noura's email is in Arabic",
       "ok": true,
-      "detail": "⁦TWR-DAR-01-0017⁩ · UAT J15 Cable schedule 278656 · وصلك في مراجعة المالك"
+      "detail": "⁦TWR-DAR-01-0018⁩ · UAT J15 Cable schedule 356373 · وصلك في مراجعة المالك"
     },
     {
       "text": "[I18N-02] ... with Latin digits only",
@@ -109,12 +109,12 @@
     {
       "text": "[I18N-03] ... and the Document Number whole in it (left to right: in its own dir=ltr or bdi element, or alone)",
       "ok": true,
-      "detail": "<!doctype html>\n<html lang=\"ar\" dir=\"rtl\">\n<head><meta charset=\"utf-8\"><title>⁦TWR-DAR-01-0017⁩ · UAT J15 Cable schedule 278656 · وصلك في م"
+      "detail": "<!doctype html>\n<html lang=\"ar\" dir=\"rtl\">\n<head><meta charset=\"utf-8\"><title>⁦TWR-DAR-01-0018⁩ · UAT J15 Cable schedule 356373 · وصلك في م"
     },
     {
       "text": "[NOT-03][VIS] It names TMC as a Company and no person of TMC",
       "ok": true,
-      "detail": "⁦TWR-DAR-01-0017⁩ · UAT J15 Cable schedule 278656 · وصلك في مراجعة المالك"
+      "detail": "⁦TWR-DAR-01-0018⁩ · UAT J15 Cable schedule 356373 · وصلك في مراجعة المالك"
     }
   ],
   "screenshots": [
@@ -126,6 +126,6 @@
     "evidence/J15-6-6-faisal-notifications-ar.jpg",
     "evidence/J15-7-7-noura-email.jpg"
   ],
-  "notes": "The Request \"UAT J15 Cable schedule 278656\" (TWR-DAR-01-0017) was made by the journey as setup (api) and taken to the Owner review; Noura's Confirm closed it with Code A. Faisal covers Tower 1 only (FX-OR), so he reads his Tower 1 items and (by design) not this Tower 2 one. The Test Case's 'Owner review waiting' items of other journeys were left alone.",
-  "ranAt": "2026-10-27T18:21:54.963Z"
+  "notes": "The Request \"UAT J15 Cable schedule 356373\" (TWR-DAR-01-0018) was made by the journey as setup (api) and taken to the Owner review; Noura's Confirm closed it with Code A. Faisal covers Tower 1 only (FX-OR), so he reads his Tower 1 items and (by design) not this Tower 2 one. The Test Case's 'Owner review waiting' items of other journeys were left alone.",
+  "ranAt": "2026-10-27T18:23:08.385Z"
 }

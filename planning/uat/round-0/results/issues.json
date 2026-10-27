@@ -1,5 +1,10 @@
 [
  { "bug": "RP-1049", "priority": "Highest", "testCase": "SNG-01", "title": "A server-side api read slower than 3 s shows the not-found page: Submittals List, Kanban and Snag List are unreachable for TMC at 858 items (also SUB-27 Home, SNG-13, PKG-08, SMOKE)" },
- { "bug": "RP-1050", "priority": "Highest", "testCase": "SUB-27", "title": "Home takes 18–19 s and the Lists 3–4.4 s at 858 work items: the api reads do not scale to one real Project" },
+ { "bug": "RP-1050", "priority": "Highest", "testCase": "SUB-27", "title": "Home takes 18–19 s and the Lists 3–4.4 s at 858 work items: the api reads do not scale to one real Project (also the Project Dashboard, SUB-26)" },
+ { "bug": "RP-1051", "priority": "High", "testCase": "PAR-13", "title": "A Member who is not the Authorized Person cannot open Company Projects (403; the page sends him Home), against visibility rule V15" },
+ { "bug": "RP-1052", "priority": "High", "testCase": "PAR-02", "title": "Inviting a Member sends no email: the invitee can only join with the token the api returns to the inviter (also journey J13)" },
+ { "bug": "RP-1053", "priority": "High", "testCase": "SIG-04", "title": "Documental Record: \"Prepared\" is dated at the raiser's first send out of Draft, which was Returned, not at the last one (visibility rule V7)" },
+ { "bug": "RP-1056", "priority": "High", "testCase": "INS-06", "title": "Photo annotation (RP-656) is reachable from no page: the tool is built but no web page shows it" },
+ { "bug": "RP-1055", "priority": "Medium", "testCase": "INS-03", "title": "The raw translation key workItems.form.checklistTemplateField.raisesSnag shows on Checklist Templates and the WIR's checklist (also UX-18)" },
  { "bug": "RP-921", "priority": "Medium", "testCase": "SUB-29", "title": "List column headers and the Group by menu use terms the glossary avoids: Status, Discipline, Current owner (also SUB-23)" }
 ]

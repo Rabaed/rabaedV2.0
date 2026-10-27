@@ -4,7 +4,7 @@
     {
       "text": "hafiz lists both copies, the annotated one linked to the original",
       "ok": true,
-      "detail": "[[\"UAT-datasheet.pdf\",null],[\"UAT-VIS-48-photo.jpg\",null],[\"UAT-VIS-48-annotated.jpg\",\"5b010761-f261-45a3-810f-e79f25a1d158\"]]"
+      "detail": "[[\"UAT-datasheet.pdf\",null],[\"UAT-VIS-48-photo.jpg\",null],[\"UAT-VIS-48-annotated.jpg\",\"10318677-db3c-418e-ba47-f7533cf60f08\"]]"
     },
     {
       "text": "hafiz downloads both; the original's bytes are unchanged",
@@ -14,7 +14,7 @@
     {
       "text": "ahmed lists both copies, the annotated one linked to the original",
       "ok": true,
-      "detail": "[[\"UAT-datasheet.pdf\",null],[\"UAT-VIS-48-photo.jpg\",null],[\"UAT-VIS-48-annotated.jpg\",\"5b010761-f261-45a3-810f-e79f25a1d158\"]]"
+      "detail": "[[\"UAT-datasheet.pdf\",null],[\"UAT-VIS-48-photo.jpg\",null],[\"UAT-VIS-48-annotated.jpg\",\"10318677-db3c-418e-ba47-f7533cf60f08\"]]"
     },
     {
       "text": "ahmed downloads both; the original's bytes are unchanged",
@@ -41,5 +41,5 @@
     "evidence/VIS-48-1-yousef-item.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:40:41.413Z"
+  "ranAt": "2026-10-27T20:13:36.330Z"
 }

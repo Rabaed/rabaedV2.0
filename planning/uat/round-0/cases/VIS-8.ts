@@ -45,7 +45,7 @@ defineCase("VIS-46", async (t) => {
       const api = await crew.as(who);
       const row = (await searchRows(api, pid, subject)).find((r) => r.id === wir);
       t.check(`${who} sees the WIR in the Submittals List`, !!row, "");
-      const list = await listOf(api, pid, "type=WIR");
+      const list = await listOf(api, pid, "type=WIR&q=" + encodeURIComponent(subject));
       t.check(`${who}'s Type filter offers WIR and filtering by it finds it`, list.filters.types.some((x: any) => x.code === "WIR") && list.items.some((r) => r.id === wir), "");
       const kan = await api.get(`/projects/${pid}/work-items/kanban?q=${encodeURIComponent(subject)}`);
       t.check(`${who}'s Submittals Kanban holds it`, JSON.stringify((kan.body as any).columns).includes(wir), "");
@@ -60,7 +60,9 @@ defineCase("VIS-46", async (t) => {
       await page.goto(`${webUrl}/en/projects/${pid}/work-items?q=${encodeURIComponent(subject)}`, { waitUntil: "networkidle" });
       await page.waitForTimeout(800);
       await t.shot(page, "hafiz-submittals-with-wir");
-      t.check("Hafiz's Submittals page shows the WIR row", (await page.locator("main").innerText()).includes(subject));
+      const notFoundPage = (await page.getByTestId("not-found").count()) > 0;
+      if (notFoundPage) t.note("Steps: Saeed turns Inside the Submittals tab on; Hafiz opens the Submittals List searched for the WIR. Expected (docs/visibility.md, Inspections inside Submittals): the WIR row shows. Actual: the not-found page for Hafiz on his own List (Bug RP-1049, load over 3 s); the api List, Kanban and by-id reads for Hafiz show the WIR, so visibility is correct. Screenshot evidence/VIS-46-1-hafiz-submittals-with-wir.jpg.");
+      t.check("Hafiz's Submittals page shows the WIR row", (await page.locator("main").innerText()).includes(subject), notFoundPage ? "the page shows the not-found page for Hafiz on his own List: Bug RP-1049 (the web gives up at 3 s), not a visibility result; the api answer above shows the WIR" : "page loaded without the row");
     } finally {
       await context.close();
     }

@@ -14,7 +14,7 @@
     {
       "text": "Faisal's drop-down lists the original only",
       "ok": true,
-      "detail": "[{\"id\":\"d9939adb-02a4-48f0-ae28-0cc859d3aba9\",\"documentNumber\":\"TWR-MAR-01-0432\",\"revisionNo\":0}]"
+      "detail": "[{\"id\":\"65ed16ce-ae08-40c0-8c59-17dc6ae5da7b\",\"documentNumber\":\"TWR-MAR-01-0598\",\"revisionNo\":0}]"
     },
     {
       "text": "Faisal: the original has no Link to Rev 1 and no Linked from naming it",
@@ -38,7 +38,7 @@
     {
       "text": "Noura's drop-down lists Rev 1 only",
       "ok": true,
-      "detail": "[{\"id\":\"55a677ed-5556-4971-8e6e-55ba6cdd0c52\",\"documentNumber\":\"TWR-MAR-01-0432 Rev 1\",\"revisionNo\":1}]"
+      "detail": "[{\"id\":\"1e852bc5-8750-4cf0-9cc5-5da56fc1949c\",\"documentNumber\":\"TWR-MAR-01-0598 Rev 1\",\"revisionNo\":1}]"
     },
     {
       "text": "Noura gets 404 for the original",
@@ -64,5 +64,5 @@
     "evidence/VIS-13-1-noura-original-by-id.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:17:10.438Z"
+  "ranAt": "2026-10-27T19:46:13.427Z"
 }

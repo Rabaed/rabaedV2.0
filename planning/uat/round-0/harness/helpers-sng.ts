@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { round } from "./browser.ts";
-import { Api } from "./helpers.ts";
+import { Api, go } from "./helpers.ts";
 import * as H from "./helpers-sub.ts";
 import { detail, exifJpeg, team, upload, type Json, type Team } from "./helpers-sub.ts";
 
@@ -169,4 +169,44 @@ export async function marAnswersFor(tm: Team, trade: "Electrical Works" | "Mecha
   const base = await H.marAnswers(tm);
   const supplier = trade === "Electrical Works" ? base.supplier : undefined;
   return { ...base, ...(supplier ? {} : {}), trade: tm.d.trade(trade), ...over };
+}
+
+// ---- RP-1049 ----
+
+/** Whether the page in front of `page` is the plain not-found page. */
+export async function isNotFoundPage(page: import("playwright").Page): Promise<boolean> {
+  return (await page.getByTestId("not-found").count()) > 0 || /We can.t find this page/.test(await page.locator("body").innerText());
+}
+
+/** The text a check carries when a page a person may read comes up as the not-found page (RP-1049, RP-1050). */
+export const RP1049 = "RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person";
+
+/** `go`, opened again (up to 3 times) when the page does not settle in time: the demo is slow while several runs share it. */
+export async function goRetry(page: import("playwright").Page, path: string, locale: "en" | "ar" = "en"): Promise<number | undefined> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await go(page, path, locale);
+    } catch (e) {
+      last = e;
+      await page.waitForTimeout(2000);
+    }
+  }
+  throw last;
+}
+
+const reportedNotFound = new WeakSet<object>();
+
+/**
+ * Whether a List-like page (Submittals, Inspections, Snag List, Kanban, Packages filtered) opened. When it came up as the
+ * not-found page the first time in a case, that is recorded as one failed check naming RP-1049; later ones in the same case
+ * are only noted, so the rest of the story carries on. Returns false then: the caller skips the checks that read the page.
+ */
+export async function listReadable(t: import("./case.ts").CaseApi, page: import("playwright").Page, what: string): Promise<boolean> {
+  if (!(await isNotFoundPage(page))) return true;
+  if (!reportedNotFound.has(t)) {
+    reportedNotFound.add(t);
+    t.check(`${what} (${RP1049})`, false, "the page answered with the not-found page; the api answers the same read for the same person");
+  } else t.note(`${what}: the not-found page again (RP-1049); not checked.`);
+  return false;
 }

@@ -4,17 +4,17 @@
     {
       "text": "Saeed (Project Admin) creates a Checklist Template",
       "ok": true,
-      "detail": "201 {\"id\":\"990ff355-c6fc-4752-8d4e-7b2b99fa62c5\"}"
+      "detail": "201 {\"id\":\"f105f42d-9f63-4654-b12d-6fac6dd825fd\"}"
     },
     {
       "text": "Nasser keeps a Template on JCV",
       "ok": true,
-      "detail": "201 {\"id\":\"dc014a84-55f1-445a-8231-ff0c8266acca\"}"
+      "detail": "201 {\"id\":\"5fbb8193-3c32-43d3-9500-b855f3091016\"}"
     },
     {
       "text": "saeed reads Tower's templates (and never JCV's)",
       "ok": true,
-      "detail": "11"
+      "detail": "22"
     },
     {
       "text": "saeed reads nothing of who wrote or retired a template, or when",
@@ -24,7 +24,7 @@
     {
       "text": "hafiz reads Tower's templates (and never JCV's)",
       "ok": true,
-      "detail": "11"
+      "detail": "22"
     },
     {
       "text": "hafiz reads nothing of who wrote or retired a template, or when",
@@ -34,7 +34,7 @@
     {
       "text": "ahmed reads Tower's templates (and never JCV's)",
       "ok": true,
-      "detail": "11"
+      "detail": "22"
     },
     {
       "text": "ahmed reads nothing of who wrote or retired a template, or when",
@@ -44,7 +44,7 @@
     {
       "text": "ali reads Tower's templates (and never JCV's)",
       "ok": true,
-      "detail": "11"
+      "detail": "22"
     },
     {
       "text": "ali reads nothing of who wrote or retired a template, or when",
@@ -114,5 +114,5 @@
     "evidence/VIS-55-1-ali-templates-read-only.jpg"
   ],
   "notes": "The UAT template was retired at the end (UAT Part leftovers: its WIR keeps its copy).",
-  "ranAt": "2026-10-22T19:43:22.232Z"
+  "ranAt": "2026-10-27T20:17:30.808Z"
 }

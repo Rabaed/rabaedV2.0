@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Rabaed Admin sign-in needs the Engineer password and code: run by a person. Steps: add an outcome to a Type's set; publish a Rabaed Default Version using it while the seeded Project lacks it; expect a refusal with a count and the missing outcomes or Stages, no Project or Company named, nothing published, refusal logged.",
-  "ranAt": "2026-10-22T18:48:46.421Z"
+  "ranAt": "2026-10-27T18:41:18.525Z"
 }

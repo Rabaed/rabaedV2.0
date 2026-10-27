@@ -251,6 +251,7 @@ defineCase("J1", async (t) => {
   await takeTransition(s.page("hafiz"), /Send for Review/);
   const again = await H.detail(ali, id);
   s.ck("SUB-05", "Hand-over 4, Hafiz resends: Ali holds it again, same number", again.heldBy?.memberName?.en === "Ali Sonour" && again.documentNumber === number, `${again.heldBy?.memberName?.en}`);
+  await s.open("ali", id, "ali-holds-after-resend");
 
   // 5. Ali Submits with a Cover Note and an Internal Note.
   await takeTransition(s.page("ali"), "Submit", {
@@ -415,13 +416,17 @@ defineCase("J3", async (t) => {
   await s.tmcClean("VIS-04", "Hand-over 5, after Code C", id, ["ali", "hafiz", "faisal"], [w.enote, REC, /internal_answers/], codeText, { signer: "Mohammed Al Shamsi", texts: [w.vnote] });
 
   // Hafiz creates the Revision in the page.
+  await page.waitForTimeout(1500);
   await page.getByRole("main").getByRole("button", { name: "Create Revision" }).first().click();
   const dialog = page.getByRole("dialog");
   if (await dialog.isVisible().catch(() => false)) await dialog.getByRole("button", { name: /Create Revision/ }).last().click();
   await page.waitForURL((u) => /\/work-items\/[0-9a-f-]{36}/.test(u.pathname) && !u.pathname.includes(id), { timeout: 20000 }).catch(() => undefined);
   await settle(page, 800);
   const revId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())?.[1];
-  if (!revId || revId === id) throw new Error(`Create Revision did not open the Revision page (${page.url()})`);
+  if (!revId || revId === id) {
+    await t.shot(page, "create-revision-stuck");
+    throw new Error(`Create Revision did not open the Revision page (${page.url()}): ${flat(await page.locator("body").innerText()).slice(0, 200)}`);
+  }
   const rev = await H.detail(hafiz, revId);
   s.ck("SUB-15", "Hand-over 6, TMC's Revision Draft: Revision 1, no number yet, TMC's answers and the copied Datasheet", rev.revisionNo === 1 && rev.stage.key === "draft" && rev.documentNumber === null && rev.answers.manufacturer === "Philips", `rev ${rev.revisionNo} ${rev.stage.key}`);
   await t.shot(page, "hafiz-revision-draft");
@@ -534,7 +539,7 @@ defineCase("J5", async (t) => {
   s.ck("SUB-20", "Before the SAR the supplier is not on the Approved Supplier List", !(await supplierNames(hafiz)).some((x) => x.name.en === name));
   const id = await H.createItem(hafiz, tm, "SAR", `UAT J5 SAR ${name}`, {
     supplier_name_en: name,
-    supplier_name_ar: "دلتا للكابلات",
+    supplier_name_ar: `دلتا للكابلات ${name.slice(-6)}`,
     commercial_registration_number: "1010000099",
     country_of_origin: "Saudi Arabia",
     proposed_supply: "UAT made-up cables for the Tower 1 risers.",
@@ -591,7 +596,9 @@ defineCase("J5", async (t) => {
   await main.getByLabel("Approved supplier").first().click();
   const options = await hp.getByRole("option").allInnerTexts();
   s.ck("FRM-03", "A new MAR offers the new supplier under Approved supplier (Electrical)", options.some((o) => o.includes(name)), options.join(" | "));
-  await hp.getByRole("option", { name }).first().click();
+  const offeredNow = options.some((o) => o.includes(name));
+  if (offeredNow) await hp.getByRole("option", { name }).first().click();
+  else await hp.keyboard.press("Escape");
   await t.shot(hp, "hafiz-mar-chooses-supplier");
   await main.getByRole("button", { name: "Save Draft" }).click();
   await hp.waitForURL(/\/work-items(\?|$)|\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
@@ -666,7 +673,7 @@ defineCase("J6", async (t) => {
   s.ck("SUB-21", "The DAR closes Approved at Code A for TMC", done.outcome === "A" && done.stage.key === "approved", `${done.outcome}/${done.stage.key}`);
   const finalText = await s.open("ali", id, "ali-reads-confirmed-code");
   s.ck("VIS-24", "TMC reads the confirmed Code A", /Approved/.test(finalText) && !/Rejected/.test(finalText), finalText.slice(0, 160));
-  await s.tmcClean("VIS-24", "Hand-over 7", id, ["ali", "hafiz"], [sendBack, dcl, REC, /Send Back/i, /"outcome":"D"/, /\bReject/], finalText);
+  await s.tmcClean("VIS-24", "Hand-over 7", id, ["ali", "hafiz"], [sendBack, dcl, REC, /Send Back/i, /"outcome":"D"/, /\bReject/], finalText, { signer: "Noura Al Harbi", texts: [] });
   const tmcHist = JSON.stringify(await H.eventsOf(hafiz, id));
   s.ck("VIS-24", "TMC's history never holds the recommendation that was sent back (no Code D)", !/"D"/.test(tmcHist) && !/Reject/.test(tmcHist), tmcHist.slice(0, 120));
   await s.sees("VIS-24", "Hand-over 7", id, ["noura", "mohammed"]);

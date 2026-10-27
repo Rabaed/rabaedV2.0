@@ -1,9 +1,20 @@
 {
-  "status": "error",
-  "checks": [],
-  "screenshots": [
-    "evidence/SUB-23-1-list-headers.jpg"
+  "status": "fail",
+  "checks": [
+    {
+      "text": "The Submittals List opens with search, filters, Need My Action, sort and columns (UI)",
+      "ok": false,
+      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+    },
+    {
+      "text": "(api) Search by Document Number finds exactly that item",
+      "ok": true,
+      "detail": "[\"TWR-MAR-01-0002\"]"
+    }
   ],
-  "notes": "Script error: locator.fill: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('main').getByRole('searchbox')\u001b[22m | ",
-  "ranAt": "2026-10-27T18:12:43.692Z"
+  "screenshots": [
+    "evidence/SUB-23-1-list-not-found.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:58:46.298Z"
 }

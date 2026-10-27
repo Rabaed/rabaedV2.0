@@ -37,5 +37,5 @@
     "evidence/SNG-05-1-own-snag-closed.jpg"
   ],
   "notes": "The Test Case Expected says DCL never sees it and defers informing to SNG-09; judged against RP-625-1 on main: Raise informs the Consultant, so it reads it from the Raise.",
-  "ranAt": "2026-10-27T18:05:48.601Z"
+  "ranAt": "2026-10-27T19:01:33.471Z"
 }

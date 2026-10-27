@@ -4,17 +4,17 @@
     {
       "text": "TMC (Hafiz) sees the Creation Date and the Submission Date",
       "ok": true,
-      "detail": "{\"c\":\"2026-10-27T18:19:45.706Z\",\"s\":\"2026-10-27T18:19:49.318Z\"}"
+      "detail": "{\"c\":\"2026-10-27T19:48:24.756Z\",\"s\":\"2026-10-27T19:48:28.342Z\"}"
     },
     {
       "text": "DCL (Ahmed) sees only the Submission Date, no Creation Date in the List row",
       "ok": true,
-      "detail": "{\"c\":null,\"s\":\"2026-10-27T18:19:49.318Z\"}"
+      "detail": "{\"c\":null,\"s\":\"2026-10-27T19:48:28.342Z\"}"
     },
     {
       "text": "On the item page TMC reads both dates; DCL reads no Creation Date",
       "ok": true,
-      "detail": "{\"h\":\"2026-10-27T18:19:45.706Z\",\"a\":null}"
+      "detail": "{\"h\":\"2026-10-27T19:48:24.756Z\",\"a\":null}"
     },
     {
       "text": "No Creation Date of TMC anywhere in DCL's reads of the item",
@@ -24,12 +24,12 @@
     {
       "text": "Un-numbered Drafts come last in Hafiz's List",
       "ok": true,
-      "detail": "678 rows, first Draft at 478"
+      "detail": "962 rows, first Draft at 660"
     },
     {
       "text": "The un-numbered Drafts are ordered by Subject",
       "ok": true,
-      "detail": "Emergency lighting – Tower 2 | UAT FRM-01 form 182850 | UAT FRM-02 no Datasheet 182902 | UAT FRM-02 no Datasheet 183059 | UAT FRM-02 no Datasheet 183131 | UAT FRM-02 no Description 182902"
+      "detail": "Emergency lighting – Tower 2 | UAT FRM-01 form 182850 | UAT FRM-01 form 184003 | UAT FRM-02 no Datasheet 182902 | UAT FRM-02 no Datasheet 183059 | UAT FRM-02 no Datasheet 183131"
     },
     {
       "text": "Ids carry no time: item ids are random (version 4), not time-ordered",
@@ -41,5 +41,5 @@
     "evidence/VIS-16-1-ahmed-item-dates.jpg"
   ],
   "notes": "The checks above passed (dates by Company, no time in ids, Draft order). The rest needs the AGE fixture (RP-922, pnpm uat:age, not in this worktree): answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date.",
-  "ranAt": "2026-10-27T18:21:18.879Z"
+  "ranAt": "2026-10-27T19:50:43.793Z"
 }

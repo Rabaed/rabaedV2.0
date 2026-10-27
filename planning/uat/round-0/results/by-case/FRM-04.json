@@ -26,5 +26,5 @@
     "evidence/FRM-04-2-scopes-of-trade.jpg"
   ],
   "notes": "Step 3 (remove Trade from the Form view): no Form builder or Form view editor exists in the web app yet (no Forms page under Project Settings), so it could not be tried; only the published Form's required Built-in Fields were read.",
-  "ranAt": "2026-10-22T18:29:20.781Z"
+  "ranAt": "2026-10-27T18:40:59.617Z"
 }

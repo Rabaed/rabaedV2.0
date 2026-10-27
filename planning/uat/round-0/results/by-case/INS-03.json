@@ -8,7 +8,7 @@
     {
       "text": "The Trade's active template is offered, and the other Trade's (Concrete pour) is not",
       "ok": true,
-      "detail": "Cable trays and containment"
+      "detail": "Cable trays and containment | UAT J9 Cable tray checklist 181546 | UAT J9 Cable tray checklist 181748 | UAT J9 Cable tray checklist 181934 | UAT J9 Cable tray checklist 185216"
     },
     {
       "text": "The preview lists the items (3 items, answered by the Consultant on site)",
@@ -40,5 +40,5 @@
     "evidence/INS-03-2-retired-as-picked.jpg"
   ],
   "notes": "Changing the Trade is not possible for Hafiz: Electrical is his only Trade (Civil Works is covered by no Participant), so 'the pick clears on a Trade change' was not exercised; a template of another Trade is refused instead.",
-  "ranAt": "2026-10-22T18:47:43.609Z"
+  "ranAt": "2026-10-27T18:57:14.455Z"
 }

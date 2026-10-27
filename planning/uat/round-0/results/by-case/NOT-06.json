@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "RP-922 UAT test tool not built (no `pnpm uat:run-job`): the 07:00 digest cannot be run on demand",
-  "ranAt": "2026-10-22T18:55:48.659Z"
+  "ranAt": "2026-10-27T18:32:35.528Z"
 }

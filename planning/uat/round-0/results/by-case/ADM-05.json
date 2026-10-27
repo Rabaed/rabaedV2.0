@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Rabaed Admin sign-in needs the Engineer password and code: run by a person. Steps: create an Option List with three levels; edit and retire an option, each with a reason; check the retired option stays where chosen but is not offered.",
-  "ranAt": "2026-10-22T18:48:46.386Z"
+  "ranAt": "2026-10-27T18:41:18.464Z"
 }

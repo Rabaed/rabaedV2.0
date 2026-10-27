@@ -9,12 +9,12 @@
     {
       "text": "Both show in Nasser's list by CR number only, and read the same (same fields, no Company name)",
       "ok": true,
-      "detail": "[{\"id\":\"981ecf07-bbf3-41f8-825c-58850a380547\",\"crNumber\":\"9999000099\",\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}},\"invitedAt\":\"2026-10-22T19:34:28.686Z\"},{\"id\":\"81819f23-d5e6-4b42-8de2-a938969ae0df\",\"crNumber\":\"9999000003\",\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}},\"invitedAt\":\"2026-10-22T19:34:28.667Z\"}]"
+      "detail": "[{\"id\":\"981ecf07-bbf3-41f8-825c-58850a380547\",\"crNumber\":\"9999000099\",\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}},\"invitedAt\":\"2026-10-27T20:04:13.340Z\"},{\"id\":\"81819f23-d5e6-4b42-8de2-a938969ae0df\",\"crNumber\":\"9999000003\",\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}},\"invitedAt\":\"2026-10-27T20:04:13.212Z\"}]"
     },
     {
       "text": "Layla sees only the invitation: Project name, Host Company, offered role",
       "ok": true,
-      "detail": "{\"id\":\"81819f23-d5e6-4b42-8de2-a938969ae0df\",\"project\":{\"name\":{\"en\":\"Jeddah Corniche Villas\",\"ar\":\"فلل كورنيش جدة\"}},\"hostCompany\":{\"legalName\":{\"en\":\"Beta Build\",\"ar\":\"بيتا للبناء\"}},\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}},\"invitedAt\":\"2026-10-22T19:34:28.667Z\"}"
+      "detail": "{\"id\":\"81819f23-d5e6-4b42-8de2-a938969ae0df\",\"project\":{\"name\":{\"en\":\"Jeddah Corniche Villas\",\"ar\":\"فلل كورنيش جدة\"}},\"hostCompany\":{\"legalName\":{\"en\":\"Beta Build\",\"ar\":\"بيتا للبناء\"}},\"projectRole\":{\"baseRole\":\"consultant\",\"name\":{\"en\":\"Consultant\",\"ar\":\"الاستشاري\"}},\"invitedAt\":\"2026-10-27T20:04:13.212Z\"}"
     },
     {
       "text": "Hafiz (TMC) sees the invitation, its Project and the CR numbers nowhere (DCL is on the Tower Project, where it shows by name only)",
@@ -41,5 +41,5 @@
     "evidence/VIS-32-1-layla-company-projects.jpg"
   ],
   "notes": "The UAT Project of the Test Case is Beta Build's own JCV (Nasser is its Project Admin), so no Project is created on TMC's side; DCL is invited to it and the invitations are withdrawn again.",
-  "ranAt": "2026-10-22T19:34:52.091Z"
+  "ranAt": "2026-10-27T20:05:00.414Z"
 }

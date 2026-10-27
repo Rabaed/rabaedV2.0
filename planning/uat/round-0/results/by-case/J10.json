@@ -1,0 +1,124 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "[SNG-02] Ahmed's Draft Snag has its before photo",
+      "ok": true
+    },
+    {
+      "text": "[SNG-09] The Draft is Ahmed's alone: TMC (Hafiz) cannot read it",
+      "ok": true
+    },
+    {
+      "text": "[SNG-02] After Raise the Snag is Open, numbered TWR-SNG-nn-nnnn, and with TMC Constructions (no pick: one Contractor covers Tower 1)",
+      "ok": true,
+      "detail": "open TWR-SNG-03-0094 {\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":null,\"pool\":null}"
+    },
+    {
+      "text": "[SNG-11] Positive control: TMC's Hafiz opens the Snag: number, Open, description and the before photo",
+      "ok": true
+    },
+    {
+      "text": "[SNG-11] No due date, deadline or overdue anywhere on it",
+      "ok": true
+    },
+    {
+      "text": "[VIS] TMC reads the Consultant as Company name only, never a person",
+      "ok": true
+    },
+    {
+      "text": "[SNG-02] The raised Snag: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[SNG-02] The raised Snag: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[SNG-03] After Start work TMC reads In Progress, and a colleague (Ali) may pick it up",
+      "ok": true
+    },
+    {
+      "text": "[SNG-03] Design Consultants still reads Open: TMC's own moves stay inside TMC",
+      "ok": true
+    },
+    {
+      "text": "[SNG-08] The after photo waits with TMC: Design Consultants reads none before the Resolve",
+      "ok": true
+    },
+    {
+      "text": "[SNG-04] After TMC's Resolve Ahmed (the raiser) holds the Verify Step, Resolved",
+      "ok": true,
+      "detail": "resolved pickUp=true"
+    },
+    {
+      "text": "[SNG-08] Ahmed now reads the after photo, frozen, beside the before photo",
+      "ok": true
+    },
+    {
+      "text": "[SNG-03] Ahmed's history holds only the shared moves (Raise, Resolve), none of TMC's Start work or pick-ups",
+      "ok": true,
+      "detail": "Raise > Resolve"
+    },
+    {
+      "text": "[SNG-08] Ahmed's page shows TMC's resolution and the photos, before and after",
+      "ok": true,
+      "detail": "4 images"
+    },
+    {
+      "text": "[SNG-04] The resolved Snag: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[SNG-04] The resolved Snag: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[SNG-04] Ahmed's Return to Open (with a reason) puts it back with TMC, Open",
+      "ok": true,
+      "detail": "open {\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":{\"en\":\"Hafiz Hamdan\",\"ar\":\"حافظ حمدان\"},\"pool\":null}"
+    },
+    {
+      "text": "[SNG-04] TMC's Hafiz sees it Open again, with the Consultant's reason",
+      "ok": true
+    },
+    {
+      "text": "[SNG-04] Ahmed's Close ends the Snag: Closed for him and for TMC",
+      "ok": true
+    },
+    {
+      "text": "[SNG-04] The closed Snag: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[SNG-04] The closed Snag: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[SNG-14] Sara's and Beta Build's api Snag Lists hold none of it",
+      "ok": true
+    },
+    {
+      "text": "[SNG-01] Hafiz's Snag List page lists the closed Snag (RP-1049: with 858 items the page shows the not-found page for TMC people)",
+      "ok": false,
+      "detail": "the Snag List page answered with the not-found page; the api lists the Snag for the same person"
+    }
+  ],
+  "screenshots": [
+    "evidence/J10-1-1-ahmed-raised-snag.jpg",
+    "evidence/J10-2-2-hafiz-receives-snag.jpg",
+    "evidence/J10-3-3-ali-resolves-with-after-photo.jpg",
+    "evidence/J10-4-4-ahmed-verifies.jpg",
+    "evidence/J10-5-5-hafiz-sees-it-returned.jpg",
+    "evidence/J10-6-6-ahmed-closed-snag.jpg",
+    "evidence/J10-7-7-hafiz-snag-list-not-found.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T19:25:07.721Z"
+}

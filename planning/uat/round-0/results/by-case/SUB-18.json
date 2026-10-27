@@ -1,5 +1,5 @@
 {
-  "status": "error",
+  "status": "fail",
   "checks": [
     {
       "text": "Ali and Mohammed both get the shared item (200)",
@@ -13,14 +13,21 @@
     {
       "text": "No Step, no person, no Internal Note in it",
       "ok": true,
-      "detail": "{\"id\":\"ca1a273f-c71a-4824-90c2-07e0504a9198\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 181006\",\"documentNum"
+      "detail": "{\"id\":\"0fdc4e89-0787-485d-94fb-0cff61549480\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 185705\",\"documentNum"
     },
     {
       "text": "A Draft has nothing shared: the plain 404",
       "ok": true
+    },
+    {
+      "text": "The row menu of the Submitted MAR offers Download, a Draft's does not (UI)",
+      "ok": false,
+      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
     }
   ],
-  "screenshots": [],
-  "notes": "Script error: locator.click: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('table').first().getByRole('button', { name: 'More for UAT SUB-18 download 181006' })\u001b[22m | ",
-  "ranAt": "2026-10-27T18:10:29.556Z"
+  "screenshots": [
+    "evidence/SUB-18-1-list-not-found.jpg"
+  ],
+  "notes": "The shared item and the Draft's 404 were read through the api (above); the row menus could not be opened.",
+  "ranAt": "2026-10-27T18:57:18.531Z"
 }

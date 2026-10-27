@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Remarks are required with B",
@@ -23,8 +23,8 @@
     },
     {
       "text": "Three Comment items are in the Snag List, raised by Design Consultants, Open with TMC",
-      "ok": false,
-      "detail": "[[\"UAT SUB-12 comment one\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment two\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment three\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment three\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment two\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment one\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"]]"
+      "ok": true,
+      "detail": "[[\"UAT SUB-12 comment three 185521\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment two 185521\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment one 185521\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"]]"
     }
   ],
   "screenshots": [
@@ -32,5 +32,5 @@
     "evidence/SUB-12-2-snag-list.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:07:02.025Z"
+  "ranAt": "2026-10-27T18:55:39.468Z"
 }

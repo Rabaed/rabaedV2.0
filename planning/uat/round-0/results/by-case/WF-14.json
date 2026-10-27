@@ -4,7 +4,7 @@
     {
       "text": "Save to Library makes a Library copy",
       "ok": true,
-      "detail": "201 {\"id\":\"14ce731b-72de-420b-a61f-25bd2d94dad1\",\"published\":true,\"problems\":[]}"
+      "detail": "201 {\"id\":\"cb1138f6-12b8-4808-b991-0fbd6514580b\",\"published\":true,\"problems\":[]}"
     },
     {
       "text": "The Library lists it",
@@ -14,7 +14,7 @@
     {
       "text": "It has no link to the original (a new id)",
       "ok": true,
-      "detail": "14ce731b-72de-420b-a61f-25bd2d94dad1"
+      "detail": "cb1138f6-12b8-4808-b991-0fbd6514580b"
     },
     {
       "text": "Mark it default for MAR",
@@ -24,12 +24,12 @@
     {
       "text": "A new Project is created",
       "ok": true,
-      "detail": "201 {\"projectId\":\"c4145acb-ee59-4d43-9309-25c0423ab791\",\"projectNumber\":2}"
+      "detail": "201 {\"projectId\":\"e955b1b6-925d-4695-830c-782b15398bdb\",\"projectNumber\":8}"
     },
     {
       "text": "The new Project starts with a copy as its MAR Workflow, bound",
       "ok": true,
-      "detail": "{\"id\":\"4f10ecd8-d3ec-425f-96cd-5eae2946dad6\",\"name\":{\"ar\":\"UAT WF-14 library 182548 (Library)\",\"en\":\"UAT WF-14 library 182548 (Library)\"},\"versionNo\":1,\"source\":\"project_copy\"}"
+      "detail": "{\"id\":\"fd8c6adb-d199-4e5c-bd5b-95690a7f9e1b\",\"name\":{\"ar\":\"UAT WF-14 library 182728 (Library)\",\"en\":\"UAT WF-14 library 182728 (Library)\"},\"versionNo\":1,\"source\":\"project_copy\"}"
     },
     {
       "text": "A plain Member reads the Library",
@@ -50,5 +50,5 @@
     "evidence/WF-14-2-library-as-ali.jpg"
   ],
   "notes": "Cleanup: the Company default for MAR was cleared again after the new Project was made; the new Project and the Library copy stay.",
-  "ranAt": "2026-10-22T18:25:52.873Z"
+  "ranAt": "2026-10-27T18:27:34.764Z"
 }

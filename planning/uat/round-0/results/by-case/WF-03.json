@@ -4,7 +4,7 @@
     {
       "text": "Duplicate makes a Project copy",
       "ok": true,
-      "detail": "{\"id\":\"9b4989d6-e4d8-4241-92d1-269f52324c0c\"}"
+      "detail": "{\"id\":\"c3791839-e3e4-40b4-aa82-e8e2d62a216e\"}"
     },
     {
       "text": "It is a draft Version 1, nothing published",
@@ -19,7 +19,7 @@
     {
       "text": "Project Admins see it among this Project's own Workflows",
       "ok": true,
-      "detail": "UAT FX-SB MAR Send Back (Comment only), UAT FX-SB MAR Send Back (Edit the Form), UAT WF-03 MAR copy 182418"
+      "detail": "UAT FX-SB MAR Send Back (Comment only), UAT FX-SB MAR Send Back (Edit the Form), UAT WF-03 MAR copy 182418, UAT WF-05 validate 182421, UAT WF-06 new Version 182431, UAT WF-07 versions 182443, UAT WF-08 Beta Build MARs 182453, UAT WF-08 MARs, short route 182453, UAT WF-10 author only 182507, UAT WF-14 library 182548, UAT WF-17 assign 182632, UAT probe14 wf, UAT WF-05 validate 182758, UAT WF-05 api note 182811, UAT VIS-26 Tower Workflow 993630, UAT VIS-27 exception route 002739, UAT VIS-28 Library Workflow 018350 on Tower, UAT VIS-29 exception route 025369, UAT VIS-27 exception route 060298, UAT VIS-28 Library Workflow 077053 on Tower, UAT VIS-29 exception route 082971, UAT VIS-26 Tower Workflow 585649, UAT VIS-27 exception route 595876, UAT VIS-28 Library Workflow 613684 on Tower, UAT VIS-29 exception route 620455, UAT WF-03 MAR copy 182438"
     },
     {
       "text": "Ali does not see the unpublished copy",
@@ -39,5 +39,5 @@
     "evidence/WF-03-1-builder-copy.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:24:20.148Z"
+  "ranAt": "2026-10-27T18:24:40.784Z"
 }

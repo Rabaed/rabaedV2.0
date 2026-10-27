@@ -9,7 +9,7 @@
     {
       "text": "Ahmed has one grouped notification for the Package, counting the 3 submittals he sees",
       "ok": true,
-      "detail": "{\"id\":\"9bcc4c0e-be0d-4160-a564-f0627574b7f8\",\"number\":\"PKG-049\",\"name\":{\"en\":\"UAT PKG-10 184405\",\"ar\":\"UAT PKG-10 184405 (ع)\"},\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"count\":3}"
+      "detail": "{\"id\":\"2f25c004-b852-47a8-81ee-39f1b77e65a0\",\"number\":\"PKG-073\",\"name\":{\"en\":\"UAT PKG-10 191200\",\"ar\":\"UAT PKG-10 191200 (ع)\"},\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"count\":3}"
     },
     {
       "text": "There is no separate Step reached notification for those items",
@@ -23,12 +23,12 @@
     {
       "text": "Ahmed's email in Mailpit names the Package number and submittal count",
       "ok": true,
-      "detail": "⁦PKG-049⁩ · UAT PKG-10 184405 · TMC Constructions Submitted 3 submittals"
+      "detail": "⁦PKG-073⁩ · UAT PKG-10 191200 · TMC Constructions Submitted 3 submittals"
     }
   ],
   "screenshots": [
     "evidence/PKG-10-1-ahmed-notifications.jpg"
   ],
   "notes": "TMC covers Electrical only, so a Package with Mechanical items cannot be built by TMC in this seed; Sara's count (n = Mechanical only) is therefore 0 and she gets no notification.",
-  "ranAt": "2026-10-22T18:57:10.517Z"
+  "ranAt": "2026-10-27T19:17:04.969Z"
 }

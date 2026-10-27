@@ -4,7 +4,7 @@
     {
       "text": "Item c still waits at the Consultant Engineer: the bulk Code is refused for all, naming that item and why",
       "ok": true,
-      "detail": "409 {\"stoppedBy\":{\"id\":\"1593aaaf-ad35-40a3-b91d-cdfbda4e132d\",\"documentNumber\":\"TWR-MAR-01-0294\",\"title\":\"UAT PKG-09 184405 item 3\",\"reason\":\"not_waiting\"},\"error\":\"bulk_refused\"}"
+      "detail": "409 {\"stoppedBy\":{\"id\":\"3b070169-b927-4b91-b681-1b4edcdecd8e\",\"documentNumber\":\"TWR-MAR-01-0563\",\"title\":\"UAT PKG-09 191200 item 3\",\"reason\":\"not_waiting\"},\"error\":\"bulk_refused\"}"
     },
     {
       "text": "All or nothing: a and b did not move",
@@ -13,7 +13,7 @@
     {
       "text": "One Action Form applies to two items waiting on Mohammed",
       "ok": true,
-      "detail": "200 {\"taken\":[{\"id\":\"004a6278-5601-4991-a866-850a177cbe0c\",\"documentNumber\":\"TWR-MAR-01-0292\",\"title\":\"UAT PKG-09 184405 item 1\"},{\"id\":\"0c56c366-e1c3-496c-bb1d-053"
+      "detail": "200 {\"taken\":[{\"id\":\"cca8d9b2-f859-4031-89c7-1217154b29a5\",\"documentNumber\":\"TWR-MAR-01-0561\",\"title\":\"UAT PKG-09 191200 item 1\"},{\"id\":\"c46ab5ea-3efb-43b2-8cd8-cb0"
     },
     {
       "text": "Each item is closed at Code A with its own event",
@@ -26,12 +26,12 @@
     {
       "text": "Each gets its own Documental Record (preparing or published)",
       "ok": true,
-      "detail": "preparing / published"
+      "detail": "preparing / preparing"
     }
   ],
   "screenshots": [
     "evidence/PKG-09-1-package-bulk.jpg"
   ],
   "notes": "Not run: the 'DCL Member without a Signature' half needs a fixture (remove a Signature in a profile); Mohammed is the only DCL Manager and the seed's Engineers cannot take a Code, so no Member could be taken in bulk. Mohammed has a Signature.\nThe Package page's own bulk bar (select rows, shared Transitions) was not driven; the bulk call is the api it uses.",
-  "ranAt": "2026-10-22T18:56:47.482Z"
+  "ranAt": "2026-10-27T19:16:34.930Z"
 }

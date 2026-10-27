@@ -230,28 +230,27 @@ const ITEM_PATHS = (id: string) => [
  * `subject` is the unique "UAT <id> ..." Subject. Returns the channels that leaked.
  */
 export async function leakProbe(api: Api, projectId: string, itemId: string, subject: string, extraNeedles: string[] = []): Promise<Probe[]> {
-  const probes: Probe[] = [];
   const needles = [subject, itemId, ...extraNeedles];
+  const jobs: Promise<Probe>[] = [];
   const holds = (text: string) => needles.find((n) => n && text.includes(n));
-  const channel = async (name: string, path: string) => {
+  const channel = async (name: string, path: string): Promise<Probe> => {
     const reply = await api.get(path);
     const hit = holds(reply.text);
-    probes.push({ channel: name, leaked: reply.status === 200 && hit !== undefined, detail: `${reply.status}${hit ? ` contains "${hit}"` : ""}` });
+    return { channel: name, leaked: reply.status === 200 && hit !== undefined, detail: `${reply.status}${hit ? ` contains "${hit}"` : ""}` };
   };
-  await channel("List (all revisions)", `/projects/${projectId}/work-items?pageSize=50&allRevisions=true`);
-  await channel("List search by Subject", `/projects/${projectId}/work-items?pageSize=50&allRevisions=true&q=${encodeURIComponent(subject)}`);
-  await channel("Kanban", `/projects/${projectId}/work-items/kanban`);
-  await channel("Dashboard", `/projects/${projectId}/dashboard`);
-  await channel("Activity Feed", `/projects/${projectId}/activity`);
-  await channel("Bell", `/notifications`);
-  await channel("Home", `/home`);
-  await channel("Link search", `/projects/${projectId}/work-items/link-search?q=${encodeURIComponent(subject)}`);
-  await channel("Export", `/projects/${projectId}/work-items/export?pageSize=50&allRevisions=true`);
+  jobs.push(channel("List (all revisions)", `/projects/${projectId}/work-items?pageSize=50&allRevisions=true`));
+  jobs.push(channel("List search by Subject", `/projects/${projectId}/work-items?pageSize=50&allRevisions=true&q=${encodeURIComponent(subject)}`));
+  jobs.push(channel("Kanban", `/projects/${projectId}/work-items/kanban`));
+  jobs.push(channel("Dashboard", `/projects/${projectId}/dashboard`));
+  jobs.push(channel("Activity Feed", `/projects/${projectId}/activity`));
+  jobs.push(channel("Bell", `/notifications`));
+  jobs.push(channel("Home", `/home`));
+  jobs.push(channel("Link search", `/projects/${projectId}/work-items/link-search?q=${encodeURIComponent(subject)}`));
+  jobs.push(channel("Export", `/projects/${projectId}/work-items/export?pageSize=50&allRevisions=true`));
   for (const p of ITEM_PATHS(itemId)) {
-    const reply = await api.get(p);
-    probes.push({ channel: `GET ${p.replace(itemId, ":id")}`, leaked: reply.status !== 404, detail: `${reply.status}` });
+    jobs.push(api.get(p).then((reply) => ({ channel: `GET ${p.replace(itemId, ":id")}`, leaked: reply.status !== 404, detail: `${reply.status}` })));
   }
-  return probes;
+  return Promise.all(jobs);
 }
 
 export const leaked = (probes: Probe[]) => probes.filter((p) => p.leaked);

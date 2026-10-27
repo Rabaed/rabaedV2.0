@@ -12,7 +12,7 @@
     {
       "text": "An item already in another Package is marked with that Package",
       "ok": true,
-      "detail": "Add submittals  Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added.  Search Trade All Trades UAT IMP-07 184405 item 1 TWR-MAR-"
+      "detail": "Add submittals  Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added.  Search Trade All Trades UAT PKG-03 in review 191200 TWR-M"
     },
     {
       "text": "The item in another Package cannot be picked",
@@ -40,5 +40,5 @@
     "evidence/PKG-03-2-after-add.jpg"
   ],
   "notes": "Hafiz's Draft cannot be added by Ali (not_editable: Ali may not edit it, per app.add_package_item); the Drafts here are Ali's own.",
-  "ranAt": "2026-10-22T18:54:28.893Z"
+  "ranAt": "2026-10-27T19:13:20.137Z"
 }

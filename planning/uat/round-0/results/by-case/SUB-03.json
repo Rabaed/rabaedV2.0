@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "The Items total reads 240",
@@ -21,8 +21,8 @@
     },
     {
       "text": "Save and close returns to the Submittals list",
-      "ok": false,
-      "detail": "http://lane7.localhost:3700/en/work-items/906c6d2b-c1f8-4807-89ea-e34d9199a00c"
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items"
     }
   ],
   "screenshots": [
@@ -30,5 +30,5 @@
     "evidence/SUB-03-2-after-save-and-close.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:02:55.397Z"
+  "ranAt": "2026-10-27T18:54:56.300Z"
 }

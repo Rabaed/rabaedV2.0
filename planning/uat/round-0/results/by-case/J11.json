@@ -1,0 +1,113 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "[IMP-02] The wizard lists both worksheets, with their row counts, and asks which row holds the column headings",
+      "ok": true
+    },
+    {
+      "text": "[IMP-02] With the Register sheet and heading row 3, the rows above are skipped and 5 rows lie below",
+      "ok": true,
+      "detail": "Showing the first 8 rows · 5 rows below the column headings Back Next"
+    },
+    {
+      "text": "[IMP-03] Ref maps to Subject, Item to Type and Discipline is suggested for Trade; Notes is left unmapped",
+      "ok": true,
+      "detail": "Each column of your register and the Rabaed field it fills Column in your register Rabaed field Map field value Ref e.g. UAT J11 191903 Distribution board DB-1 Subject * Item e.g. MAR Type * Discipline e.g. Electrical Works Trade * Suggested from the column heading 100% Notes e.g. Level 1 Don't map this column Tick Map field v"
+    },
+    {
+      "text": "[IMP-04] The preview counts 5 rows checked, 4 ready to import and 1 left out",
+      "ok": true,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings Imports › New import Import register Each good row of your register becomes a Draft raised by you. Nothing is created until you confir"
+    },
+    {
+      "text": "[IMP-04] The bad row (Fire Fighting is not a Trade of the Project) shows its reason on the page",
+      "ok": true,
+      "detail": "rows checked 4 ready to import 1 rows with errors, left out Fix the errors in your register, or in the earlier steps, then validate again; or import the 4 good rows now. Download log Rejected rows (1) Validate again Errors 1 What will be imported 4 Errors Row Subject Errors Where to fix 8 UAT J11 191903 Jockey pump skid Trade ‘Fire Fighting’ not in this Project Fix in your register Map values Back"
+    },
+    {
+      "text": "[IMP-05] Confirming says 4 Drafts created and 1 left out, with links to open the Drafts and to download the rejected rows",
+      "ok": true,
+      "detail": "ntil you confirm. 4 Drafts created UAT-J11-register.xlsx Drafts 4 Left out 1 Open the 4 Drafts Download rejected rows (1) Import another register Rejected rows download as your register's columns plus a “Reasons” column:"
+    },
+    {
+      "text": "[IMP-05] 4 Drafts were created and the Fire Fighting row was not",
+      "ok": true,
+      "detail": "4 created, 5 rows"
+    },
+    {
+      "text": "[IMP-05] Each is a Draft with no number, raised by TMC and held by Ali",
+      "ok": true,
+      "detail": "[[\"draft\",\"Ali Sonour\"],[\"draft\",\"Ali Sonour\"],[\"draft\",\"Ali Sonour\"],[\"draft\",\"Ali Sonour\"]]"
+    },
+    {
+      "text": "[IMP-05] Ali's Submittals api List finds the 4 Drafts by their Subject",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "text": "[IMP-06] The Imports page lists the register by its file name and shows no import time",
+      "ok": true,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings Submittals Imports Your Company's registers imported into this Project, and what each created. Import register Imports Register Import"
+    },
+    {
+      "text": "[IMP-06] Positive control: TMC's colleague (Hafiz) opens the import and reads its rows",
+      "ok": true
+    },
+    {
+      "text": "[IMP-06] The register import: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-06] The register import: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-06] The register import: Mohammed gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-06] The register's file: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-06] The register's file: Mohammed gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-05] An imported Draft: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-05] An imported Draft: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-05] An imported Draft: Mohammed gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[IMP-06] Beta Build's and Sara's Imports pages list nothing of it",
+      "ok": true,
+      "detail": "0 / 0 imports listed"
+    }
+  ],
+  "screenshots": [
+    "evidence/J11-1-1-ali-sheet-and-heading-row.jpg",
+    "evidence/J11-2-2-ali-maps-columns.jpg",
+    "evidence/J11-3-3-ali-preview-with-bad-row.jpg",
+    "evidence/J11-4-4-ali-import-result.jpg",
+    "evidence/J11-5-5-ali-imports-page.jpg",
+    "evidence/J11-6-6-hafiz-reads-the-import.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T19:20:02.463Z"
+}
