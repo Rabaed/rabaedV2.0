@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "The WIR and the submittal both sit at Pending Approval",
@@ -11,14 +11,13 @@
       "detail": "wir pending_approval, mar pending_approval"
     },
     {
-      "text": "The Inspections Kanban opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+      "text": "The Inspections Kanban uses the same Stage column for the WIR",
+      "ok": true
     }
   ],
   "screenshots": [
     "evidence/INS-14-1-kanban-shared-column.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T19:14:56.338Z"
+  "ranAt": "2026-10-27T22:51:41.283Z"
 }

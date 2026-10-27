@@ -1080,7 +1080,7 @@
     "ranAt": "2026-10-27T18:55:39.468Z"
   },
   "SNG-07": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Ali's New offers Snag and not Comment",
@@ -1088,16 +1088,16 @@
         "detail": "OBS, QSN, SNG"
       },
       {
-        "text": "Ali's Snag List page opens, with its New menu (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the Snag List page shows the not-found page, so its New menu cannot be opened; the api's raisable types above are what the menu lists"
+        "text": "The New menu lists Snag and no Comment",
+        "ok": true,
+        "detail": "New | Site Observation | Question to Consultant | Snag"
       }
     ],
     "screenshots": [
-      "evidence/SNG-07-1-snag-list-not-found.jpg"
+      "evidence/SNG-07-1-new-menu.jpg"
     ],
     "notes": "Opening New with type=CMT by URL answers 200; the page: Dashboard | Submittals | Inspections | Snag List | Activity Feed | Settings | Snag List | New Submittal | Type | OBS | Site Observation | QSN | Question to Cons",
-    "ranAt": "2026-10-27T19:03:04.529Z"
+    "ranAt": "2026-10-27T22:52:23.743Z"
   },
   "SUB-13": {
     "status": "pass",
@@ -1227,41 +1227,45 @@
     "ranAt": "2026-10-27T18:08:35.024Z"
   },
   "SUB-16": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "Row menu > Delete shows the confirm and discards the Draft (UI)",
-        "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+        "text": "The confirm says nobody will see the Draft again, Hafiz included, and no number is lost",
+        "ok": true,
+        "detail": "Delete this Draft? Nobody will see “UAT SUB-16 delete 225310” again, you included. It never had a number, so none is lost. Cancel Delete"
       },
       {
-        "text": "Through the api, discard-draft removes the Draft: gone for Hafiz (404)",
-        "ok": true,
-        "detail": "204"
+        "text": "It leaves the list",
+        "ok": true
+      },
+      {
+        "text": "It is gone for Hafiz (404)",
+        "ok": true
       },
       {
         "text": "A numbered item offers no Delete (api: discardDraft false)",
         "ok": true
+      },
+      {
+        "text": "The numbered item's row menu has no Delete",
+        "ok": true,
+        "detail": "Open"
       }
     ],
     "screenshots": [
-      "evidence/SUB-16-1-list-not-found.jpg"
+      "evidence/SUB-16-1-delete-confirm.jpg",
+      "evidence/SUB-16-2-numbered-row-menu.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T18:55:52.505Z"
+    "ranAt": "2026-10-27T22:53:17.072Z"
   },
   "SUB-17": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
-      {
-        "text": "Row menu > Duplicate opens the new Draft (UI)",
-        "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
-      },
       {
         "text": "A new Draft with the Subject and TMC's answers",
         "ok": true,
-        "detail": "draft UAT SUB-17 dup 185618"
+        "detail": "draft UAT SUB-17 dup 225319"
       },
       {
         "text": "TMC's Documents are copied as new files",
@@ -1275,7 +1279,7 @@
       {
         "text": "\"Duplicated from\" shows the original's number to TMC",
         "ok": true,
-        "detail": "{\"workItemId\":\"ccd1324e-2a6b-4c0d-ad9f-a476a126174c\",\"documentNumber\":\"TWR-MAR-01-0530\",\"subject\":\"UAT SUB-17 dup 185618\"}"
+        "detail": "{\"workItemId\":\"57d25f8f-88f9-4b30-bebe-5b5d2d7f4b5e\",\"documentNumber\":\"TWR-MAR-01-0643\",\"subject\":\"UAT SUB-17 dup 225319\"}"
       },
       {
         "text": "DCL cannot see the new Draft (404)",
@@ -1283,11 +1287,10 @@
       }
     ],
     "screenshots": [
-      "evidence/SUB-17-1-list-not-found.jpg",
-      "evidence/SUB-17-2-duplicated-draft.jpg"
+      "evidence/SUB-17-1-duplicated-draft.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T18:56:42.972Z"
+    "ranAt": "2026-10-27T22:53:25.612Z"
   },
   "SNG-08": {
     "status": "pass",
@@ -1359,7 +1362,7 @@
     "ranAt": "2026-10-27T19:04:23.466Z"
   },
   "SNG-10": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Mohammed may raise Site Observation, Question to Contractor and Snag",
@@ -1381,9 +1384,8 @@
         "ok": true
       },
       {
-        "text": "Mohammed's Snag List page opens, with its Type chips (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the Snag List page shows the not-found page, so the chips cannot be read; the Types themselves are checked above by api"
+        "text": "The Type chips show Site Observation and Question to Contractor",
+        "ok": true
       },
       {
         "text": "Nothing is called Violation",
@@ -1391,10 +1393,10 @@
       }
     ],
     "screenshots": [
-      "evidence/SNG-10-1-snag-list-not-found.jpg"
+      "evidence/SNG-10-1-type-chips.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T19:04:49.896Z"
+    "ranAt": "2026-10-27T22:52:32.963Z"
   },
   "SNG-11": {
     "status": "pass",
@@ -1653,36 +1655,43 @@
     "ranAt": "2026-10-27T19:43:24.356Z"
   },
   "SNG-12": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "Ali's Snag List page opens, to select the three Snags and Reassign them (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the Snag List page shows the not-found page, so the checkboxes, the Reassign dialog and the Excel export cannot be reached; the checks left are the api's"
+        "text": "The dialog reports 3 items done",
+        "ok": true,
+        "detail": "3 items done"
       },
       {
-        "text": "By api: Ali may reassign all three of TMC's Snags",
+        "text": "Each Snag is now held by Hafiz, inside TMC",
         "ok": true,
-        "detail": "{\"reassignable\":3,\"members\":[{\"memberId\":\"c39da5c9-86d8-48ee-9684-b46d35ab4109\",\"name\":{\"en\":\"Hafiz Hamdan\",\"ar\":\"حافظ ح"
+        "detail": "Hafiz Hamdan, Hafiz Hamdan, Hafiz Hamdan"
       },
       {
         "text": "Design Consultants can reassign none of TMC's Snags",
         "ok": true,
         "detail": "{\"reassignable\":0,\"members\":[]}"
+      },
+      {
+        "text": "The Excel export is made and exports exactly the visible rows",
+        "ok": true,
+        "detail": "file Snag List.xml; exported 6; rows 6"
       }
     ],
     "screenshots": [
-      "evidence/SNG-12-1-snag-list-not-found.jpg"
+      "evidence/SNG-12-1-three-selected.jpg",
+      "evidence/SNG-12-2-reassign-dialog.jpg",
+      "evidence/SNG-12-3-exported.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T19:05:49.791Z"
+    "ranAt": "2026-10-27T22:52:47.530Z"
   },
   "SNG-13": {
-    "status": "fail",
+    "status": "manual",
     "checks": [
       {
-        "text": "At 375 px the Snag List opens with cards and no horizontal scroll (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false
+        "text": "At 375 px the Snag List opens with cards and no horizontal scroll",
+        "ok": true
       },
       {
         "text": "The camera-first New flow opens (Take a photo / New Snag)",
@@ -1694,8 +1703,8 @@
       "evidence/SNG-13-1-phone-list.jpg",
       "evidence/SNG-13-2-phone-new.jpg"
     ],
-    "notes": "",
-    "ranAt": "2026-10-27T19:06:03.433Z"
+    "notes": "The camera itself (Take photo opens the device camera) and the saved-as-you-go feel are a person's. Automated: the list at 375 px has no horizontal scroll and the New flow page opens.",
+    "ranAt": "2026-10-27T22:52:52.672Z"
   },
   "VIS-09": {
     "status": "pass",
@@ -1869,38 +1878,53 @@
       {
         "text": "No Step, no person, no Internal Note in it",
         "ok": true,
-        "detail": "{\"id\":\"0fdc4e89-0787-485d-94fb-0cff61549480\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 185705\",\"documentNum"
+        "detail": "{\"id\":\"52688fcf-3290-4505-935f-07bfcab5e2e5\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 225328\",\"documentNum"
       },
       {
         "text": "A Draft has nothing shared: the plain 404",
         "ok": true
       },
       {
-        "text": "The row menu of the Submitted MAR offers Download, a Draft's does not (UI)",
+        "text": "The row menu of the Submitted MAR offers Download",
+        "ok": true,
+        "detail": "Open | Duplicate | Download"
+      },
+      {
+        "text": "A Draft offers no Download",
         "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+        "detail": "Open | Edit | Duplicate | Download | Delete"
       }
     ],
     "screenshots": [
-      "evidence/SUB-18-1-list-not-found.jpg"
+      "evidence/SUB-18-1-row-menu-submitted.jpg",
+      "evidence/SUB-18-2-row-menu-draft.jpg"
     ],
-    "notes": "The shared item and the Draft's 404 were read through the api (above); the row menus could not be opened.",
-    "ranAt": "2026-10-27T18:57:18.531Z"
+    "notes": "POST /work-items/<Draft>/working-copy as Hafiz answers 200 {\"status\":\"preparing\"}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.\nThe content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.",
+    "ranAt": "2026-10-27T22:53:36.351Z"
   },
   "SNG-15": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "Ali's Snag List page opens, to export the PDF (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the Snag List page shows the not-found page, so Export PDF cannot be reached"
+        "text": "The PDF is made and offers exactly the Snags Ali sees",
+        "ok": true,
+        "detail": "Download the Snag List PDF (24 items); Ali sees 24"
+      },
+      {
+        "text": "It downloads as a PDF",
+        "ok": true,
+        "detail": "36296 bytes"
+      },
+      {
+        "text": "No Draft of another Company is among what Ali exports",
+        "ok": true
       }
     ],
     "screenshots": [
-      "evidence/SNG-15-1-snag-list-not-found.jpg"
+      "evidence/SNG-15-1-pdf-ready.jpg"
     ],
-    "notes": "",
-    "ranAt": "2026-10-27T19:06:45.748Z"
+    "notes": "Mode is Manual: the PDF's pages, photos and wording still want a person's eye; the count and the bytes are checked here.",
+    "ranAt": "2026-10-27T22:53:00.255Z"
   },
   "SUB-19": {
     "status": "pass",
@@ -2174,21 +2198,88 @@
     "status": "fail",
     "checks": [
       {
-        "text": "The Submittals List opens with search, filters, Need My Action, sort and columns (UI)",
-        "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
-      },
-      {
-        "text": "(api) Search by Document Number finds exactly that item",
+        "text": "Search by Document Number finds exactly that item",
         "ok": true,
         "detail": "[\"TWR-MAR-01-0002\"]"
+      },
+      {
+        "text": "Search \"Exit signage\" shows the api's rows (1)",
+        "ok": true,
+        "detail": "ui 1 rows, api 1"
+      },
+      {
+        "text": "Search \"Electrical\" shows the api's rows (25)",
+        "ok": true,
+        "detail": "ui 25 rows, api 25"
+      },
+      {
+        "text": "Search \"Tower 2 Floor 01\" shows the api's rows (25)",
+        "ok": true,
+        "detail": "ui 25 rows, api 25"
+      },
+      {
+        "text": "Search \"DAR\" shows the api's rows (24)",
+        "ok": true,
+        "detail": "ui 24 rows, api 24"
+      },
+      {
+        "text": "Search finds this case's items, and not the other Company's Drafts (TMC's own Drafts only if Ali's Company)",
+        "ok": true,
+        "detail": "ui 3, api 3: UAT SUB-23 225339 pending; UAT SUB-23 225339 internal; UAT SUB-23 225339 draft"
+      },
+      {
+        "text": "Both Stages are in the filter (URL)",
+        "ok": true,
+        "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?stage=pending_approval%2Cinternal_review"
+      },
+      {
+        "text": "The filtered rows are exactly the api's first page for those Stages",
+        "ok": true,
+        "detail": "ui 25 rows, api 25"
+      },
+      {
+        "text": "Every shown row is in one of the two Stages",
+        "ok": true
+      },
+      {
+        "text": "Need My Action keeps only items waiting on Ali (count equals the api's, no Draft)",
+        "ok": true,
+        "detail": "page 196, api 196"
+      },
+      {
+        "text": "Sort by Title orders the rows by Title",
+        "ok": true,
+        "detail": "cable sizing calculation – tower 1 | cable tray risers – tower 1 | emergency lighting control panel – tower 2 | emergency lighting – tower 2 | exit signage – tower 1"
+      },
+      {
+        "text": "A saved column order comes back after reload",
+        "ok": true,
+        "detail": "put 200; before Submittal No.,Title,Rev,Discipline,Type,Status,Code,Zone,Building,Floor,Current owner,Created; after Submittal No.,Title,Rev,Type,Discipline,Status,Code,Zone,Building,Floor,Current owner,Created"
+      },
+      {
+        "text": "The Group by menu offers \"Stage\" (not Status) and \"With\" (not Current owner)",
+        "ok": false,
+        "detail": "GROUP BY Status Discipline Type Current owner Zone Code"
+      },
+      {
+        "text": "Group by Stage shows the Stage groups with counts",
+        "ok": true,
+        "detail": "Title Rev Discipline Type Status Code Zone Building Floor Current owner Created Pending Approval 4 on this page"
+      },
+      {
+        "text": "The column header for the holder reads \"With\" (never \"Current owner\")",
+        "ok": false,
+        "detail": "headers: Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
       }
     ],
     "screenshots": [
-      "evidence/SUB-23-1-list-not-found.jpg"
+      "evidence/SUB-23-1-list-headers.jpg",
+      "evidence/SUB-23-2-stage-filter.jpg",
+      "evidence/SUB-23-3-group-menu.jpg",
+      "evidence/SUB-23-4-grouped.jpg"
     ],
-    "notes": "",
-    "ranAt": "2026-10-27T18:58:46.298Z"
+    "notes": "Columns > move one > Save as my default was driven through the api (PUT .../list/columns), the layout restored afterwards; the Table settings pop-up itself was not clicked.",
+    "ranAt": "2026-10-27T22:54:22.780Z"
   },
   "SUB-24": {
     "status": "manual",
@@ -2198,44 +2289,74 @@
     "ranAt": "2026-10-27T18:12:43.708Z"
   },
   "SUB-25": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "The Kanban page opens with the Stages as columns, a card, Move to and the filter panel (UI)",
-        "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read. The Kanban page does the same."
+        "text": "Columns are the Stages with counts",
+        "ok": true,
+        "detail": "draft:326, internal_review:139, pending_approval:290, approved:166, revise_resubmit:41, cancelled:13, rejected:18"
       },
       {
-        "text": "A move that is not allowed is not offered (api: Ali's item offers Return, Submit, Cancel)",
+        "text": "Internal Review shows TMC's own Steps (Engineer, PM) with counts",
+        "ok": true,
+        "detail": "[{\"key\":\"contractor_engineer\",\"name\":{\"en\":\"Contractor Engineer\",\"ar\":\"مهندس المقاول\"},\"count\":7},{\"key\":\"internal_review\",\"name\":{\"en\":\"Contractor PM\",\"ar\":\"مدير مشروع المقاول\"},\"count\":132}]"
+      },
+      {
+        "text": "Another Company is one lane by its name",
+        "ok": true
+      },
+      {
+        "text": "A move that is not allowed is not offered (Ali's item offers Return, Submit, Cancel)",
         "ok": true,
         "detail": "return,submit,cancel_review"
       },
       {
-        "text": "Taking the move through the api puts the item in Pending Approval (the Kanban card could not be moved)",
+        "text": "The card is on the board",
+        "ok": true
+      },
+      {
+        "text": "Move to offers only Stages Ali's Step allows (Pending Approval, Cancelled; no Draft, no Approved)",
+        "ok": true,
+        "detail": "To Pending Approval | To Cancelled"
+      },
+      {
+        "text": "Choosing the move opens the same Action Form as the item page (Submit with its Cover Note)",
+        "ok": true,
+        "detail": "Submit\n\nUAT SUB-25 kanban 225425\n\nCover Note\nCover Note\n\nShared: everyone who  ee  thi  item read  it from the Submit on. What only your Company  hould read goe"
+      },
+      {
+        "text": "The card moved after confirm (the item is now Pending Approval)",
+        "ok": true
+      },
+      {
+        "text": "The filter panel offers Owner, Role and Created date",
         "ok": true
       }
     ],
     "screenshots": [
-      "evidence/SUB-25-1-kanban.jpg"
+      "evidence/SUB-25-1-kanban.jpg",
+      "evidence/SUB-25-2-move-menu.jpg",
+      "evidence/SUB-25-3-move-popup.jpg",
+      "evidence/SUB-25-4-kanban-filter.jpg"
     ],
-    "notes": "",
-    "ranAt": "2026-10-27T18:59:28.599Z"
+    "notes": "Drag and drop of a card is not driven by this script; Move to is.\nDrag and drop of a card is not driven by this script; the move itself is covered through Move to / the item page.",
+    "ranAt": "2026-10-27T22:54:37.710Z"
   },
   "SUB-26": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "The Dashboard shows the Type cards (MAR, SAR, DAR)",
-        "ok": false
+        "ok": true
       },
       {
         "text": "The Activity Feed sits on the Dashboard",
-        "ok": false
+        "ok": true
       },
       {
         "text": "The number opens the List with the same filter and the same count",
-        "ok": false,
-        "detail": "The Dashboard page has no Type cards, so there is no number to click (it shows only Project details and Participants; the api dashboard answers with the counts). See screenshot dashboard."
+        "ok": true,
+        "detail": "card Pending 4; list 4; url http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?type=DAR&bucket=pending"
       },
       {
         "text": "The Activity Feed names Companies for others and no Consultant person",
@@ -2243,10 +2364,11 @@
       }
     ],
     "screenshots": [
-      "evidence/SUB-26-1-dashboard.jpg"
+      "evidence/SUB-26-1-dashboard.jpg",
+      "evidence/SUB-26-2-list-from-dashboard-number.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T18:59:49.399Z"
+    "ranAt": "2026-10-27T22:54:42.435Z"
   },
   "SUB-27": {
     "status": "fail",
@@ -2320,17 +2442,17 @@
       {
         "text": "The List header for Stage reads \"Stage\", not \"Status\"",
         "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
       },
       {
         "text": "The List header for Trade reads \"Trade\", not \"Discipline\"",
         "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
       },
       {
         "text": "The List header for the holder reads \"With\", not \"Current owner\"",
         "ok": false,
-        "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
       },
       {
         "text": "The Kanban uses no Status or Current owner wording",
@@ -2341,7 +2463,7 @@
       "evidence/SUB-29-1-list-headers.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T19:04:17.450Z"
+    "ranAt": "2026-10-27T22:55:39.455Z"
   },
   "NOT-01": {
     "status": "pass",
@@ -3211,7 +3333,7 @@
     "ranAt": "2026-10-27T18:59:26.111Z"
   },
   "INS-07": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "The Inspections tab lists the WIR with Stage Pending Approval, in the Submittals List's layout",
@@ -3241,9 +3363,12 @@
         "detail": "0"
       },
       {
-        "text": "The Submittals List page opens with the WIR in it (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+        "text": "The Submittals List page shows the WIR and a WIR type in its Type filter",
+        "ok": true
+      },
+      {
+        "text": "The Submittals Kanban shows it too",
+        "ok": true
       },
       {
         "text": "The Dashboard counts WIRs with the Submittals",
@@ -3259,8 +3384,8 @@
       "evidence/INS-07-2-inspections-kanban.jpg",
       "evidence/INS-07-3-submittals-with-wir.jpg"
     ],
-    "notes": "The Submittals Kanban opens with the WIR in it: the not-found page again (RP-1049); not checked.",
-    "ranAt": "2026-10-27T19:12:04.208Z"
+    "notes": "",
+    "ranAt": "2026-10-27T22:51:26.073Z"
   },
   "INS-08": {
     "status": "pass",
@@ -3800,7 +3925,7 @@
     "ranAt": "2026-10-27T19:06:48.452Z"
   },
   "INS-14": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "The WIR and the submittal both sit at Pending Approval",
@@ -3812,19 +3937,18 @@
         "detail": "wir pending_approval, mar pending_approval"
       },
       {
-        "text": "The Inspections Kanban opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+        "text": "The Inspections Kanban uses the same Stage column for the WIR",
+        "ok": true
       }
     ],
     "screenshots": [
       "evidence/INS-14-1-kanban-shared-column.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T19:14:56.338Z"
+    "ranAt": "2026-10-27T22:51:41.283Z"
   },
   "I18N-01": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Home: the language button reloads the same page in Arabic",
@@ -3857,9 +3981,69 @@
         "detail": "http://lane7.localhost:3700/en"
       },
       {
-        "text": "List: the page opens for Hafiz (not the not-found page)",
-        "ok": false,
-        "detail": "the not-found page (or no table within 40 s) shows although the api answers 200 for him: known Bug RP-1049/RP-1050 (not filed again); the Submittals List and Kanban were not read as Hafiz"
+        "text": "List: the language button reloads the same page in Arabic",
+        "ok": true,
+        "detail": "/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items -> /ar/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items"
+      },
+      {
+        "text": "List: it is right to left (dir=rtl, lang=ar)",
+        "ok": true,
+        "detail": "rtl/ar"
+      },
+      {
+        "text": "List: English is left to right",
+        "ok": true,
+        "detail": "ltr/en"
+      },
+      {
+        "text": "List: nothing scrolls sideways in either language",
+        "ok": true,
+        "detail": "en 1366/1366, ar 1366/1366"
+      },
+      {
+        "text": "List: the table is right to left in Arabic",
+        "ok": true,
+        "detail": "rtl"
+      },
+      {
+        "text": "List: the switch back returns to the same page in English",
+        "ok": true,
+        "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items"
+      },
+      {
+        "text": "List: opening /ar directly gives the same RTL page",
+        "ok": true,
+        "detail": "rtl 1366/1366"
+      },
+      {
+        "text": "Kanban: the language button reloads the same page in Arabic",
+        "ok": true,
+        "detail": "/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=kanban -> /ar/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=kanban"
+      },
+      {
+        "text": "Kanban: it is right to left (dir=rtl, lang=ar)",
+        "ok": true,
+        "detail": "rtl/ar"
+      },
+      {
+        "text": "Kanban: English is left to right",
+        "ok": true,
+        "detail": "ltr/en"
+      },
+      {
+        "text": "Kanban: nothing scrolls sideways in either language",
+        "ok": true,
+        "detail": "en 1366/1366, ar 1366/1366"
+      },
+      {
+        "text": "Kanban: the switch back returns to the same page in English",
+        "ok": true,
+        "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=kanban"
+      },
+      {
+        "text": "Kanban: opening /ar directly gives the same RTL page",
+        "ok": true,
+        "detail": "rtl 1366/1366"
       },
       {
         "text": "item: the language button reloads the same page in Arabic",
@@ -3892,6 +4076,11 @@
         "detail": "rtl 1366/1366"
       },
       {
+        "text": "Kanban: the column order mirrors (first column on the left in English, on the right in Arabic)",
+        "ok": true,
+        "detail": "en 451,2131, ar 915,-765"
+      },
+      {
         "text": "Faisal: Arabic to English on Home keeps the page and is left to right",
         "ok": true,
         "detail": "http://lane7.localhost:3700/en"
@@ -3899,12 +4088,12 @@
     ],
     "screenshots": [
       "evidence/I18N-01-1-home-ar.jpg",
-      "evidence/I18N-01-2-list-not-found.jpg",
-      "evidence/I18N-01-3-kanban-not-found.jpg",
+      "evidence/I18N-01-2-list-ar.jpg",
+      "evidence/I18N-01-3-kanban-ar.jpg",
       "evidence/I18N-01-4-faisal-home-en.jpg"
     ],
-    "notes": "Kanban: also the not-found page (RP-1049/RP-1050).\nKanban column order not read: Faisal's Kanban also shows the not-found page (the known Bug RP-1049/RP-1050, one fail per case: see the List check above); the mirror check needs the Bug fixed.\nArrows and breadcrumbs mirroring and 'nothing cut off' are judged from the screenshots (home-ar, list-ar, kanban-ar); the script checks direction, sidebar side, column order and sideways scroll.",
-    "ranAt": "2026-10-27T19:01:02.747Z"
+    "notes": "Arrows and breadcrumbs mirroring and 'nothing cut off' are judged from the screenshots (home-ar, list-ar, kanban-ar); the script checks direction, sidebar side, column order and sideways scroll.",
+    "ranAt": "2026-10-27T22:50:58.734Z"
   },
   "I18N-02": {
     "status": "pass",
@@ -5902,7 +6091,7 @@
     "ranAt": "2026-10-27T18:41:39.953Z"
   },
   "IMP-05": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "The preview has 8 ready and 2 left out",
@@ -5922,16 +6111,15 @@
         "ok": true
       },
       {
-        "text": "The Submittals List opens with the imported Drafts (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+        "text": "The Submittals List shows them as No number yet",
+        "ok": true
       }
     ],
     "screenshots": [
       "evidence/IMP-05-1-eight-drafts.jpg"
     ],
     "notes": "After a Required links change the confirm answered 200 {\"rowsCreated\":1}\nThat change does not count as a change the preview depends on; 'Something in the Project changed' (previewOutdated) was not provoked.",
-    "ranAt": "2026-10-27T19:09:30.290Z"
+    "ranAt": "2026-10-27T22:51:08.612Z"
   },
   "FRM-07": {
     "status": "pass",
@@ -6937,17 +7125,40 @@
     "ranAt": "2026-10-27T18:46:38.780Z"
   },
   "PKG-01": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "Ali's Submittals page opens, with its view toggle (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+        "text": "The view toggle's Packages opens the Packages view in the URL",
+        "ok": true,
+        "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?view=packages"
+      },
+      {
+        "text": "Three columns Open, In Progress and Done",
+        "ok": true
+      },
+      {
+        "text": "A New Package button is offered to TMC",
+        "ok": true
+      },
+      {
+        "text": "Search by PKG number or name is offered",
+        "ok": true
+      },
+      {
+        "text": "Filters by Trade and owning Company are offered",
+        "ok": true
+      },
+      {
+        "text": "Each column carries a count equal to the Packages the api gives Ali",
+        "ok": true,
+        "detail": "Open 36, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, Open 0, In Progress 31, In Progress 0, In Progress 0, In Progress 3, In Progress 0, In Progress 2, In Progress 0, In Progress 0, In Progress 0, In Progress 0, In Progress 4, In Progress 2, In Progress 0, In Progress 2, In Progress 0, In Progress 0, In Progress 0, In Progress 4, In Progress 0, In Progress 2, In Progress 0, In Progress 0, In Progress 0, In Progress 0, In Progress 0, In Progress 0, In Progress 0, In Progress 4, In Progress 0, In Progress 2, In Progress 0, In Progress 0, Done 6, Done 1, Done 1, Done 3, Done 3, Done 1, Done 3 vs {\"open\":36,\"prog\":31,\"done\":6}"
       }
     ],
-    "screenshots": [],
-    "notes": "Ali's Packages view opens: the not-found page again (RP-1049); not checked.\nBoard by api: 73 Packages; the page checks need the page.",
-    "ranAt": "2026-10-27T19:20:37.022Z"
+    "screenshots": [
+      "evidence/PKG-01-1-packages-board.jpg"
+    ],
+    "notes": "Board by api: {\"open\":36,\"prog\":31,\"done\":6}",
+    "ranAt": "2026-10-27T22:51:50.567Z"
   },
   "SIG-04": {
     "status": "fail",
@@ -7313,7 +7524,7 @@
     "ranAt": "2026-10-27T19:15:10.012Z"
   },
   "PKG-08": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "The Package filter narrows the List to its items",
@@ -7326,9 +7537,13 @@
         "detail": "2"
       },
       {
-        "text": "The Package-filtered Submittals List opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-        "ok": false,
-        "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+        "text": "The List rows show the chip PKG number with the name",
+        "ok": true,
+        "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings Submittals Add Submittal Search Filter 1 Package: PKG-077 TMC Constructions Need My Action Gro"
+      },
+      {
+        "text": "The Kanban cards show the chip",
+        "ok": true
       },
       {
         "text": "The item page shows the chip with the Package name",
@@ -7337,7 +7552,7 @@
       {
         "text": "The chip opens the Package page",
         "ok": true,
-        "detail": "http://lane7.localhost:3700/en/packages/f08bdfd5-e998-4108-b77d-32947df3cb3c"
+        "detail": "http://lane7.localhost:3700/en/packages/5f1fa9eb-6c63-4015-9932-5858dde4c58c"
       },
       {
         "text": "An item in no Package shows no chip, and Package is not a Form field",
@@ -7352,8 +7567,8 @@
       "evidence/PKG-08-1-list-filtered-by-package.jpg",
       "evidence/PKG-08-2-chip-opens-package.jpg"
     ],
-    "notes": "The Package-filtered Kanban opens: the not-found page again (RP-1049); not checked.",
-    "ranAt": "2026-10-27T19:15:55.177Z"
+    "notes": "",
+    "ranAt": "2026-10-27T22:52:01.107Z"
   },
   "VIS-31": {
     "status": "pass",
@@ -8606,7 +8821,7 @@
     "ranAt": "2026-10-27T18:54:11.802Z"
   },
   "VIS-46": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Saeed turns Inside the Submittals tab on",
@@ -8662,8 +8877,8 @@
       },
       {
         "text": "Hafiz's Submittals page shows the WIR row",
-        "ok": false,
-        "detail": "the page shows the not-found page for Hafiz on his own List: Bug RP-1049 (the web gives up at 3 s), not a visibility result; the api answer above shows the WIR"
+        "ok": true,
+        "detail": "page loaded without the row"
       },
       {
         "text": "Yousef: the WIR URL is the plain not-found page",
@@ -8679,8 +8894,8 @@
     "screenshots": [
       "evidence/VIS-46-1-hafiz-submittals-with-wir.jpg"
     ],
-    "notes": "Steps: Saeed turns Inside the Submittals tab on; Hafiz opens the Submittals List searched for the WIR. Expected (docs/visibility.md, Inspections inside Submittals): the WIR row shows. Actual: the not-found page for Hafiz on his own List (Bug RP-1049, load over 3 s); the api List, Kanban and by-id reads for Hafiz show the WIR, so visibility is correct. Screenshot evidence/VIS-46-1-hafiz-submittals-with-wir.jpg.",
-    "ranAt": "2026-10-27T20:12:45.194Z"
+    "notes": "",
+    "ranAt": "2026-10-27T22:55:53.701Z"
   },
   "VIS-47": {
     "status": "pass",

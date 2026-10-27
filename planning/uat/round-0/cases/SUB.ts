@@ -41,6 +41,11 @@ defineCase("SUB-01", async (t) => {
   await settle(page, 800);
   await openList(page, tm.projectId);
   const blocked = await notFound(page);
+  // At ~1,000 items a Draft (no number yet) is not on page 1: find it with the List's Search.
+  if (!blocked && !(await listRows(page)).some((r) => r.subject === subject)) {
+    await page.getByRole("main").getByRole("searchbox").or(page.getByRole("main").getByPlaceholder(/search/i)).first().fill(subject);
+    await settle(page, 800);
+  }
   const row = blocked ? undefined : (await listRows(page)).find((r) => r.subject === subject);
   const why = blocked ? RP1049 : row?.text;
   t.check("The Draft is listed in the Submittals List", !!row, why);
@@ -834,12 +839,14 @@ defineCase("SUB-27", async (t) => {
   let nmaCount = 0;
   let wait = 0;
   for (const m of mods) {
-    nmaCount += sum((await ali.get(`/projects/${tm.projectId}/work-items?module=${m}&needMyAction=true`)).body as H.Json);
+    // The toggle also lists the Member's own Drafts, never counted (docs/data-model.md, app.need_my_action).
+    const nma = (await ali.get(`/projects/${tm.projectId}/work-items?module=${m}&needMyAction=true`)).body as H.Json;
+    nmaCount += (nma.stages as H.Json[]).filter((s) => s.category !== "draft").reduce((n, s) => n + s.count, 0);
     wait += sum((await ali.get(`/projects/${tm.projectId}/work-items?module=${m}&heldBy=others&raisedByMe=true`)).body as H.Json);
   }
   const all = sum((await ali.get(`/projects/${tm.projectId}/work-items`)).body as H.Json);
   const nmaList = (await ali.get(`/projects/${tm.projectId}/work-items?needMyAction=true&pageSize=50&page=1`)).body as H.Json;
-  t.check("The Home api's Need My Action equals the sum of the Project's Need My Action reads", Math.abs(home.counts.needMyAction - nmaCount) <= 3, `home ${home.counts.needMyAction}, Project reads ${nmaCount} (other agents are creating items at the same time)`);
+  t.check("The Home api's Need My Action equals the sum of the Project's Need My Action reads", Math.abs(home.counts.needMyAction - nmaCount) <= 3, `home ${home.counts.needMyAction}, Project reads without own Drafts ${nmaCount} (other agents are creating items at the same time)`);
   t.check("The Home api's Waiting with others equals the Project's reads", Math.abs(home.counts.waitingWithOthers - wait) <= 3, `home ${home.counts.waitingWithOthers}, Project reads ${wait}`);
   t.check("Active Projects is 1 (Ali's only Project)", home.counts.activeProjects === 1);
   t.check("No Draft is counted as Need My Action or listed in it", !(nmaList.items as H.Json[]).some((i) => i.stage.key === "draft") && !(home.needsMyAction as H.Json[]).some((i) => i.stage.key === "draft"));

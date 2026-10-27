@@ -1,24 +1,33 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
-      "text": "Row menu > Delete shows the confirm and discards the Draft (UI)",
-      "ok": false,
-      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+      "text": "The confirm says nobody will see the Draft again, Hafiz included, and no number is lost",
+      "ok": true,
+      "detail": "Delete this Draft? Nobody will see “UAT SUB-16 delete 225310” again, you included. It never had a number, so none is lost. Cancel Delete"
     },
     {
-      "text": "Through the api, discard-draft removes the Draft: gone for Hafiz (404)",
-      "ok": true,
-      "detail": "204"
+      "text": "It leaves the list",
+      "ok": true
+    },
+    {
+      "text": "It is gone for Hafiz (404)",
+      "ok": true
     },
     {
       "text": "A numbered item offers no Delete (api: discardDraft false)",
       "ok": true
+    },
+    {
+      "text": "The numbered item's row menu has no Delete",
+      "ok": true,
+      "detail": "Open"
     }
   ],
   "screenshots": [
-    "evidence/SUB-16-1-list-not-found.jpg"
+    "evidence/SUB-16-1-delete-confirm.jpg",
+    "evidence/SUB-16-2-numbered-row-menu.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:55:52.505Z"
+  "ranAt": "2026-10-27T22:53:17.072Z"
 }

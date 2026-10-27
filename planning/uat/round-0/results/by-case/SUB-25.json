@@ -1,24 +1,54 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
-      "text": "The Kanban page opens with the Stages as columns, a card, Move to and the filter panel (UI)",
-      "ok": false,
-      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read. The Kanban page does the same."
+      "text": "Columns are the Stages with counts",
+      "ok": true,
+      "detail": "draft:326, internal_review:139, pending_approval:290, approved:166, revise_resubmit:41, cancelled:13, rejected:18"
     },
     {
-      "text": "A move that is not allowed is not offered (api: Ali's item offers Return, Submit, Cancel)",
+      "text": "Internal Review shows TMC's own Steps (Engineer, PM) with counts",
+      "ok": true,
+      "detail": "[{\"key\":\"contractor_engineer\",\"name\":{\"en\":\"Contractor Engineer\",\"ar\":\"مهندس المقاول\"},\"count\":7},{\"key\":\"internal_review\",\"name\":{\"en\":\"Contractor PM\",\"ar\":\"مدير مشروع المقاول\"},\"count\":132}]"
+    },
+    {
+      "text": "Another Company is one lane by its name",
+      "ok": true
+    },
+    {
+      "text": "A move that is not allowed is not offered (Ali's item offers Return, Submit, Cancel)",
       "ok": true,
       "detail": "return,submit,cancel_review"
     },
     {
-      "text": "Taking the move through the api puts the item in Pending Approval (the Kanban card could not be moved)",
+      "text": "The card is on the board",
+      "ok": true
+    },
+    {
+      "text": "Move to offers only Stages Ali's Step allows (Pending Approval, Cancelled; no Draft, no Approved)",
+      "ok": true,
+      "detail": "To Pending Approval | To Cancelled"
+    },
+    {
+      "text": "Choosing the move opens the same Action Form as the item page (Submit with its Cover Note)",
+      "ok": true,
+      "detail": "Submit\n\nUAT SUB-25 kanban 225425\n\nCover Note\nCover Note\n\nShared: everyone who  ee  thi  item read  it from the Submit on. What only your Company  hould read goe"
+    },
+    {
+      "text": "The card moved after confirm (the item is now Pending Approval)",
+      "ok": true
+    },
+    {
+      "text": "The filter panel offers Owner, Role and Created date",
       "ok": true
     }
   ],
   "screenshots": [
-    "evidence/SUB-25-1-kanban.jpg"
+    "evidence/SUB-25-1-kanban.jpg",
+    "evidence/SUB-25-2-move-menu.jpg",
+    "evidence/SUB-25-3-move-popup.jpg",
+    "evidence/SUB-25-4-kanban-filter.jpg"
   ],
-  "notes": "",
-  "ranAt": "2026-10-27T18:59:28.599Z"
+  "notes": "Drag and drop of a card is not driven by this script; Move to is.\nDrag and drop of a card is not driven by this script; the move itself is covered through Move to / the item page.",
+  "ranAt": "2026-10-27T22:54:37.710Z"
 }
