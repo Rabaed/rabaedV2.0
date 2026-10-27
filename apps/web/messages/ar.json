@@ -1017,7 +1017,7 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "snagRaised": "عند {answer} تُنشأ ملاحظة"
+        "raisesSnag": "عند {answer} يُنشأ عيب"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
