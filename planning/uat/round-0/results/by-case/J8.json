@@ -1,0 +1,132 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "[WF-03] The J7 Project lists the Rabaed Default MAR Workflow (2→2 route) to duplicate",
+      "ok": true,
+      "detail": "1→1 Contractor PM → Consultant PM | 1→2 Contractor PM → Consultant Engineer → Consultant PM | 2→1 Contractor Engineer → Contractor PM → Consultant PM | 2→2 Contractor Engineer → Contractor PM → Consultant Engineer → Consultant PM | 1→1 Contractor PM → Consultant PM → Owner review | 1→2 Contractor PM → Consultant Engineer → Consultant PM → Owner review | 2→1 Contractor Engineer → Contractor PM → Consultant PM → Owner review | 2→2 Contractor Engineer → Contractor PM → Consultant Engineer → Consultant PM → Owner review"
+    },
+    {
+      "text": "[WF-03] Saeed duplicates it as a Project copy in the J7 Project",
+      "ok": true,
+      "detail": "201 {\"id\":\"70186477-fadd-4628-861b-0090652aa67e\"}"
+    },
+    {
+      "text": "[WF-03] It is a draft, Version 1, nothing published, no link to the original",
+      "ok": true,
+      "detail": "{\"published\":null,\"versionNo\":1}"
+    },
+    {
+      "text": "[WF-03][VIS] Hand-over 1: Saeed lists the draft among the Project's Workflows; Yousef (Beta Build Member) does not see it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[WF-03][VIS] Yousef, Nasser (Beta Build) and Layla (DCL) cannot open the draft: the plain 404 from the api",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[WF-03][VIS] Layla opens the draft's builder URL in the browser: the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent"
+    },
+    {
+      "text": "[WF-04] Saeed edits the draft (renames two Steps): it saves",
+      "ok": true,
+      "detail": "200 {\"versionNo\":1}"
+    },
+    {
+      "text": "[WF-04] The edit reads back from the draft",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[WF-05] Hand-over 2: Validate (button and api) finds no error in the edited Workflow",
+      "ok": true,
+      "detail": "{\"issues\":[],\"problems\":[]}"
+    },
+    {
+      "text": "[WF-05] The Publish pop-up shows what changed and asks for a Change Note",
+      "ok": true,
+      "detail": "Publish v1 THE FIRST VERSION OF THIS WORKFLOW Validation passed Change note* Items already running keep their Version. New items will use v1. Cancel Publish v1"
+    },
+    {
+      "text": "[WF-05] Without a Change Note it does not publish (button off or the pop-up stays)",
+      "ok": true,
+      "detail": "blocked false, open true"
+    },
+    {
+      "text": "[WF-05] With the Change Note it publishes Version 1",
+      "ok": true,
+      "detail": "[1]"
+    },
+    {
+      "text": "[WF-07] Hand-over 3: Saeed reads the Version with its Change Note",
+      "ok": true,
+      "detail": "[{\"versionNo\":1,\"publishedAt\":\"2026-10-27T18:12:52.103Z\",\"changeNote\":\"UAT J8 first Version: Steps renamed\",\"running\":0}]"
+    },
+    {
+      "text": "[WF-07][VIS] Yousef (a Project Member of Beta Build) reads the published Version whole but no Change Note (V20)",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "[WF-07][VIS] Layla and Nasser (not Project Members) get the plain 404 for the Version",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[WF-03] Saeed binds it as the J7 Project's MAR Workflow",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[WF-03] The J7 Project now runs the copy at Version 1 for MAR",
+      "ok": true,
+      "detail": "{\"id\":\"70186477-fadd-4628-861b-0090652aa67e\",\"name\":{\"ar\":\"UAT J8 MAR Workflow 754656 (ع)\",\"en\":\"UAT J8 MAR Workflow 754656\"},\"versionNo\":1,\"source\":\"project_copy\"}"
+    },
+    {
+      "text": "[WF-03][VIS] Hand-over 4: Yousef reads which Workflow the Project runs (V20) - the published copy by name",
+      "ok": true,
+      "detail": "UAT J8 MAR Workflow 754656"
+    },
+    {
+      "text": "[WF-09] Riyadh Gate Tower's MAR binding is unchanged",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only) -> UAT FX-SB MAR Send Back (Comment only)"
+    },
+    {
+      "text": "[WF-14] Saeed saves the Workflow to TMC's Library",
+      "ok": true,
+      "detail": "201 {\"id\":\"9722383b-5b20-4f7f-a0e9-ff35336ab2c2\",\"published\":true,\"problems\":[]}"
+    },
+    {
+      "text": "[WF-14] The Library lists it for Saeed and for Ali (a plain TMC Member reads it)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[WF-14][VIS] Hand-over 5: nobody of another Company reads TMC's Library entry (V18): Layla, Nasser",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[WF-14][VIS] Layla's own Library page does not show TMC's Workflow",
+      "ok": true,
+      "detail": "Library Your Company's own copies. Nobody outside your Company sees them until one is used on a Proj"
+    }
+  ],
+  "screenshots": [
+    "evidence/J8-1-1-saeed-workflows-draft.jpg",
+    "evidence/J8-2-1-layla-draft-404.jpg",
+    "evidence/J8-3-2-builder-validate.jpg",
+    "evidence/J8-4-3-builder-publish-dialog.jpg",
+    "evidence/J8-5-4-saeed-version-page.jpg",
+    "evidence/J8-6-5-saeed-bound.jpg",
+    "evidence/J8-7-6-saeed-library.jpg",
+    "evidence/J8-8-6-layla-library.jpg"
+  ],
+  "notes": "Workflow \"UAT J8 MAR Workflow 754656\" (Project copy, Version 1, bound for MAR in the J7 Project) and its Library copy stay. The canvas drags (WF-04) are a person's; this journey edits the definition the way the builder autosaves it and uses the builder's own Validate and Publish buttons.",
+  "ranAt": "2026-10-27T18:13:10.733Z"
+}

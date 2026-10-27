@@ -1,0 +1,36 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "The Draft is listed in the Submittals List",
+      "ok": false
+    },
+    {
+      "text": "The Draft reads \"No number yet\"",
+      "ok": false
+    },
+    {
+      "text": "No Step Age dots on the Draft row",
+      "ok": false
+    },
+    {
+      "text": "The Draft is in the Drafts Stage with no Step Age (api)",
+      "ok": true,
+      "detail": "{\"stage\":\"draft\",\"age\":null}"
+    },
+    {
+      "text": "It is Hafiz's to edit (Save draft offered)",
+      "ok": true
+    },
+    {
+      "text": "The Description stayed empty (a Draft saves incomplete)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-01-1-new-form-filled.jpg",
+    "evidence/SUB-01-2-list-with-draft.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:02:36.677Z"
+}

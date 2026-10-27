@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Final verification is filled from Ahmed's reply",
+      "ok": true,
+      "detail": "{\"sample_checked\":true,\"matches_specification\":true}"
+    },
+    {
+      "text": "The item closes Approved, Code A, with Remarks left empty",
+      "ok": true,
+      "detail": "A/approved"
+    },
+    {
+      "text": "It accepts no more moves",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Download PDF appears (the record is prepared by the worker)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-11-1-code-a-popup.jpg",
+    "evidence/SUB-11-2-closed-code-a.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:06:35.450Z"
+}

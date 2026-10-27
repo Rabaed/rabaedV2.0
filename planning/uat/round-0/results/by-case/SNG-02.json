@@ -1,0 +1,39 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Snag is Open after the Raise",
+      "ok": true,
+      "detail": "open"
+    },
+    {
+      "text": "It is with TMC Constructions, the one Contractor covering Tower 1",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":null,\"pool\":null}"
+    },
+    {
+      "text": "It has a Document Number of the Snag pattern",
+      "ok": true,
+      "detail": "TWR-SNG-03-0056"
+    },
+    {
+      "text": "Positive control: Ali (TMC) reads it",
+      "ok": true
+    },
+    {
+      "text": "Beta Build (Tower 2 only) gets the plain 404 page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "It is in no Snag List of Beta Build",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SNG-02-1-draft-saved.jpg",
+    "evidence/SNG-02-2-raised.jpg"
+  ],
+  "notes": "Spec now (RP-658-1): with two Contractors covering a Location Raise asks which one; that is SNG-14 on Tower 2. FX-C2 leaves one Contractor on Tower 1.",
+  "ranAt": "2026-10-27T18:03:25.512Z"
+}

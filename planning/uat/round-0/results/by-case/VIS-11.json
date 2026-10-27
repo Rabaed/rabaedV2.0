@@ -1,0 +1,45 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz is offered his Submitted item",
+      "ok": true,
+      "detail": "[\"UAT VIS-11 TMC Submitted\",\"UAT VIS-11 TMC Submitted\",\"UAT VIS-11 TMC Submitted\"]"
+    },
+    {
+      "text": "Hafiz is offered no Draft, nothing in internal review, nothing of Beta Build",
+      "ok": true,
+      "detail": "[\"UAT VIS-11 TMC Submitted\",\"UAT VIS-11 TMC Submitted\",\"UAT VIS-11 TMC Submitted\"]"
+    },
+    {
+      "text": "Hafiz is offered nothing from another Project (Pump room ventilation)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Yousef is never offered TMC's item",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "A Link saved by API to a Beta Build item id is refused like a made-up id",
+      "ok": true,
+      "detail": "422 {\"error\":\"target_not_found\"} / 422 {\"error\":\"target_not_found\"}"
+    },
+    {
+      "text": "A Link to TMC's own item still in internal review is refused too (not Submitted)",
+      "ok": true,
+      "detail": "422"
+    },
+    {
+      "text": "A Link to the Submitted item is saved (positive control)",
+      "ok": true,
+      "detail": "201"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-11-1-hafiz-draft-links.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:14:10.707Z"
+}

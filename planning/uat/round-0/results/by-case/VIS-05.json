@@ -1,0 +1,116 @@
+{
+  "status": "error",
+  "checks": [
+    {
+      "text": "Mohammed issues Code B with three comment rows",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Hafiz (the raiser) sees the three Comments in the Snag List, Open with TMC",
+      "ok": true,
+      "detail": "3 found"
+    },
+    {
+      "text": "A Comment is raised by Design Consultants and held by TMC",
+      "ok": true,
+      "detail": "{\"raisedBy\":{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"}},\"heldBy\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}}"
+    },
+    {
+      "text": "ali sees all three Comments (TMC)",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "text": "mohammed sees all three Comments (the issuer)",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "text": "faisal sees all three Comments (oversight)",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "text": "Yousef: nothing of Comment TWR-CMT-03-0071 in any channel; its id is 404",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Yousef: nothing of Comment TWR-CMT-03-0072 in any channel; its id is 404",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Yousef: nothing of Comment TWR-CMT-03-0073 in any channel; its id is 404",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Yousef's Snag List holds no Comment of this MAR",
+      "ok": true
+    },
+    {
+      "text": "Yousef's Snag List Kanban holds none",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Yousef's Snag List counts are unchanged",
+      "ok": false,
+      "detail": "{\"draft\":0,\"open\":3,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0} / {\"draft\":0,\"open\":4,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0}"
+    },
+    {
+      "text": "yousef sees nothing of it (the MAR)",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "sara sees nothing of it (Mechanical only: the MAR)",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Sara gets 404 for Comment TWR-CMT-03-0071",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Sara gets 404 for Comment TWR-CMT-03-0072",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Sara gets 404 for Comment TWR-CMT-03-0073",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Ali resolves one Comment",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Mohammed closes it",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "ali reads the MAR's Comments line as 2 open / 1 closed",
+      "ok": true,
+      "detail": "{\"type\":{\"code\":\"CMT\",\"name\":{\"en\":\"Comment\",\"ar\":\"ملاحظة\"}},\"open\":2,\"closed\":1}"
+    },
+    {
+      "text": "mohammed reads the MAR's Comments line as 2 open / 1 closed",
+      "ok": true,
+      "detail": "{\"type\":{\"code\":\"CMT\",\"name\":{\"en\":\"Comment\",\"ar\":\"ملاحظة\"}},\"open\":2,\"closed\":1}"
+    },
+    {
+      "text": "Yousef's Snag List counts are still unchanged after the close",
+      "ok": false
+    }
+  ],
+  "screenshots": [],
+  "notes": "Script error: VIS-05 ran over 180 s.",
+  "ranAt": "2026-10-27T18:11:52.639Z"
+}

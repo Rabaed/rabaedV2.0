@@ -1,0 +1,37 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Mohammed may raise Site Observation, Question to Contractor and Snag",
+      "ok": true,
+      "detail": "OBS, QSC, SNG"
+    },
+    {
+      "text": "Each Type has its own Form and Workflow",
+      "ok": true,
+      "detail": "Site Observation / Question to Contractor / Snag"
+    },
+    {
+      "text": "A Question to Contractor has no reviewed item behind it",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "text": "Positive control: TMC reads the Question and the Observation",
+      "ok": true
+    },
+    {
+      "text": "The Type chips show Site Observation and Question to Contractor",
+      "ok": false
+    },
+    {
+      "text": "Nothing is called Violation",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SNG-10-1-type-chips.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:08:37.376Z"
+}

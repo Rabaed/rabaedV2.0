@@ -1,0 +1,45 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Saeed binds Beta Build's MARs to an exception Workflow",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "A Change Note naming Beta Build on an exception Workflow is refused",
+      "ok": true,
+      "detail": "422 {\"error\":\"change_note_names_participant\"}"
+    },
+    {
+      "text": "A neutral Change Note publishes (positive control)",
+      "ok": true,
+      "detail": "200 {\"versionNo\":2,\"warnings\":[]}"
+    },
+    {
+      "text": "The author (Saeed) reads the Change Note",
+      "ok": true,
+      "detail": "200 UAT VIS-29 short route"
+    },
+    {
+      "text": "Non-authors (Ali, Yousef) read no Change Note",
+      "ok": true,
+      "detail": "200/200"
+    },
+    {
+      "text": "Running counts cover only items the reader sees (Yousef counts his own Draft; Saeed does not count Yousef's)",
+      "ok": true,
+      "detail": "yousef 1, saeed 0, ali 0"
+    },
+    {
+      "text": "Ali counts none of Yousef's items on the exception Workflow",
+      "ok": true,
+      "detail": "0"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-29-1-ali-versions-page.jpg"
+  ],
+  "notes": "Hafiz's Draft 8013ab3c-7855-47c6-99c6-b929db0231ce (TMC, default Workflow) and Yousef's Draft 629dc2a0-073b-4ac3-9399-8c36244b1e19 (exception Workflow v2) were raised; Ali's running count for the exception Workflow is 0 (he sees none of Beta Build's items).",
+  "ranAt": "2026-10-22T19:33:52.429Z"
+}

@@ -1,0 +1,26 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Ali (the Submitter) watches from the start: the button reads Watching",
+      "ok": true
+    },
+    {
+      "text": "After Unwatch it reads Watch",
+      "ok": true
+    },
+    {
+      "text": "And back to Watching",
+      "ok": true
+    },
+    {
+      "text": "No page text counts or names other watchers",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-22-1-watching.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:11:59.201Z"
+}

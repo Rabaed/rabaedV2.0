@@ -1,0 +1,35 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Project UATP exists from an earlier run (reused)",
+      "ok": true,
+      "detail": "\"UATP\""
+    },
+    {
+      "text": "It has a Project Number in TMC's own series",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "text": "Saeed is its Project Admin; the Host Company is TMC; his role is Contractor",
+      "ok": true,
+      "detail": "[true,\"TMC Constructions\"]"
+    },
+    {
+      "text": "TMC is its first Participant",
+      "ok": true,
+      "detail": "TMC Constructions,Design Consultants LLC"
+    },
+    {
+      "text": "Nobody else sees it (Hafiz is not on it: 404)",
+      "ok": true,
+      "detail": "404"
+    }
+  ],
+  "screenshots": [
+    "evidence/PAR-04-1-uatp-project.jpg"
+  ],
+  "notes": "Project UATP (UAT PAR-04 Project) is left in place: PAR-05, 06, 08, 10 and 11 work on it.",
+  "ranAt": "2026-10-27T18:03:12.363Z"
+}

@@ -1,0 +1,55 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Positive control: Layla (DCL Authorized Person) reads Ahmed's Visibility",
+      "ok": true
+    },
+    {
+      "text": "hafiz: DCL's Member Visibility by API is 404, like a made-up Member",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "hafiz: the Member Visibility page of DCL is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "Hafiz: the DCL Participant page is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "saeed: DCL's Member Visibility by API is 404, like a made-up Member",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "saeed: the Member Visibility page of DCL is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "Saeed (Project Admin) does see DCL's Participant grant",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Layla (not a Project Member) reads her Participant's Trades and Locations and its Scopes",
+      "ok": true,
+      "detail": "200 200"
+    },
+    {
+      "text": "Layla sees nothing else of the Project (no items, no Project read, no Workflow settings)",
+      "ok": true,
+      "detail": "404 404 404"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-33-1-hafiz-dcl-member-visibility.jpg",
+    "evidence/VIS-33-2-layla-own-participant.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:35:03.873Z"
+}

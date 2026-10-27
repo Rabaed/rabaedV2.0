@@ -1,0 +1,7 @@
+{
+  "status": "blocked",
+  "checks": [],
+  "screenshots": [],
+  "notes": "Cannot be built on this seed through the api: the Snags 'raised from' a source Snag are linked by SQL in the test suite (no api route sets raised_from), and the Mechanical Snag needs a Contractor covering Mechanical (TMC and Beta Build cover Electrical only). Steps for a person once a Mechanical Contractor exists: 1) Mohammed raises a Snag on Tower 1 and two Snags are linked raised from it, one Electrical and one Mechanical. 2) The PM, an Electrical-only TMC engineer and Yousef read the source Snag's Snags line. 3) Mohammed raises a Snag at a Location only Yousef covers. Expected: PM counts 2 open; the Electrical-only engineer counts 1; Yousef counts only Snags he sees. The Comments line of a Code B (a raised-from count by Type) is shown by VIS-05 (2 open / 1 closed).",
+  "ranAt": "2026-10-22T19:43:02.376Z"
+}

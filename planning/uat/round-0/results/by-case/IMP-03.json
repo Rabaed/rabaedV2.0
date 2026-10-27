@@ -1,0 +1,40 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Description to Subject, Type to Type, Discipline to Trade: the preview is good (Notes is ignored)",
+      "ok": true,
+      "detail": "201 {\"id\":\"9b00fad9-1882-49bf-9a37-18e52169d420\",\"fileName\":\"mapped.xlsx\",\"status\":\"previewed\",\"runBy\":{\"id\":\"c39da5c9-86d8-"
+    },
+    {
+      "text": "Validate with Trade unmapped is refused",
+      "ok": true,
+      "detail": "400 {\"error\":\"invalid_request\",\"issues\":[{\"keyword\":\"invalid_union\",\"instancePath\":\"/mapping/trade\",\"sch"
+    },
+    {
+      "text": "One Trade for every row is accepted",
+      "ok": true,
+      "detail": "201"
+    },
+    {
+      "text": "A fixed Type and Trade need no column at all",
+      "ok": true,
+      "detail": "201"
+    },
+    {
+      "text": "Confirmed, it creates the Drafts",
+      "ok": true,
+      "detail": "200 {\"rowsCreated\":2}"
+    },
+    {
+      "text": "The import's page shows the value as fixed for every row",
+      "ok": true,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings Imports fixed2.xlsx Download the original register Imported by Hafiz Hamdan Worksheet Register, column headings in row 1 Subject Descr"
+    }
+  ],
+  "screenshots": [
+    "evidence/IMP-03-1-import-page-fixed-values.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:44:35.353Z"
+}

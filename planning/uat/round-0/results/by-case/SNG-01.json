@@ -1,0 +1,15 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Ali's Snag List page opens",
+      "ok": false,
+      "detail": "The page shows the not-found page although the api answers 200 for the same read in 4760 ms (draft:0 open:111 in_progress:9 on_hold:0 resolved:6 closed:10); the web app gives up on an api read after 3000 ms (apps/web/src/lib/session.ts apiGet) and shows not found."
+    }
+  ],
+  "screenshots": [
+    "evidence/SNG-01-1-snag-list-not-found.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:02:51.117Z"
+}

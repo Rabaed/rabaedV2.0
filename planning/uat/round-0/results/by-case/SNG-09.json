@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Design Consultants cannot read the Draft",
+      "ok": true
+    },
+    {
+      "text": "Positive control: TMC's Ali reads it",
+      "ok": true
+    },
+    {
+      "text": "The named Participant (Design Consultants: Mohammed) reads it from the Raise",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Ahmed (DCL, covering the Trade) reads it too",
+      "ok": true
+    },
+    {
+      "text": "The informed Consultant holds no Step and is offered nothing",
+      "ok": true
+    },
+    {
+      "text": "DCL still reads Open, not TMC's In Progress",
+      "ok": true
+    },
+    {
+      "text": "Beta Build (not informed) gets 404",
+      "ok": true
+    },
+    {
+      "text": "An informed Participant gets no Step reached notification (workflow-engine 5.1): it reads the item, it is not asked to act",
+      "ok": true,
+      "detail": "TWR-SNG-01-0010"
+    }
+  ],
+  "screenshots": [
+    "evidence/SNG-09-1-informed-consultant-view.jpg"
+  ],
+  "notes": "Informed Participants are the Snag Workflow's (RP-625: Raise informs the Consultant), not a field of the New form.",
+  "ranAt": "2026-10-27T18:08:06.416Z"
+}

@@ -1,0 +1,99 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz uploads and previews a register",
+      "ok": true,
+      "detail": "201 {\"id\":\"10e2a04c-e875-431b-932c-baf6945bb6a1\",\"fileName\":\"uat-vis-56-04007.csv\",\"status\":\"previewed\","
+    },
+    {
+      "text": "Before the confirm Ali cannot read the preview (404, like a made-up id)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Hafiz reads it",
+      "ok": true
+    },
+    {
+      "text": "Hafiz confirms",
+      "ok": true,
+      "detail": "200 {\"rowsCreated\":2}"
+    },
+    {
+      "text": "After it every TMC Member reads the import: file name, mapping and rows",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "The import carries no import time in what Ali reads",
+      "ok": true,
+      "detail": "id,fileName,status,runBy,rowsTotal,rowsRejected,rowsCreated,projectId,defaultRaiser,sheet,headerRow,headers,mapping,rows,rowsSuggested,packages,original"
+    },
+    {
+      "text": "yousef: an empty Imports page, 404 for the import, its confirm and its original",
+      "ok": true,
+      "detail": "200 404 404 404"
+    },
+    {
+      "text": "yousef sees none of its Drafts",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "nasser: an empty Imports page, 404 for the import, its confirm and its original",
+      "ok": true,
+      "detail": "404 404 404 404"
+    },
+    {
+      "text": "nasser sees none of its Drafts",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "ahmed: an empty Imports page, 404 for the import, its confirm and its original",
+      "ok": true,
+      "detail": "200 404 404 404"
+    },
+    {
+      "text": "ahmed sees none of its Drafts",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "mohammed: an empty Imports page, 404 for the import, its confirm and its original",
+      "ok": true,
+      "detail": "200 404 404 404"
+    },
+    {
+      "text": "mohammed sees none of its Drafts",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "faisal: an empty Imports page, 404 for the import, its confirm and its original",
+      "ok": true,
+      "detail": "200 404 404 404"
+    },
+    {
+      "text": "faisal sees none of its Drafts",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "Hafiz reads the two imported Drafts (positive control)",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "text": "Yousef: the import's page is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-56-1-yousef-imports-page.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:43:51.513Z"
+}

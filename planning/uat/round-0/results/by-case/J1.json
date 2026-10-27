@@ -1,0 +1,104 @@
+{
+  "status": "error",
+  "checks": [
+    {
+      "text": "[SUB-01] Hand-over 1, a Draft: Hafiz holds it, no Document Number, Drafts Stage",
+      "ok": true
+    },
+    {
+      "text": "[SUB-03] The Form shows the Items total 240 and the Datasheet",
+      "ok": true,
+      "detail": "Total Quantity 240.00 "
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a Draft: yousef gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a Draft: ahmed gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a Draft: faisal gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-01] Hand-over 1, a Draft: noura gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[SUB-04] Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it with no Pick up",
+      "ok": true,
+      "detail": "TWR-MAR-01-0444"
+    },
+    {
+      "text": "[SUB-04] Ali's page reads the number and With Ali Sonour - TMC Constructions",
+      "ok": true
+    },
+    {
+      "text": "[SUB-04] The Document Number is left to right on the page",
+      "ok": true
+    },
+    {
+      "text": "[VIS-01] Hand-over 2, in TMC's Internal Review: yousef gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-01] Hand-over 2, in TMC's Internal Review: ahmed gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-01] Hand-over 2, in TMC's Internal Review: faisal gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[VIS-01] Hand-over 2, in TMC's Internal Review: noura gets the api 404 for the item, its Documents, history and record",
+      "ok": true,
+      "detail": "404 404,404,404"
+    },
+    {
+      "text": "[SUB-05] Hand-over 3, Ali back to Hafiz: the Return stays in Internal Review at the Contractor Engineer Step, same number, never a Draft",
+      "ok": true,
+      "detail": "internal_review/contractor_engineer"
+    },
+    {
+      "text": "[SUB-05] The reason is in TMC's history, marked internal",
+      "ok": true
+    },
+    {
+      "text": "[SUB-05] Hand-over 3, after the Return: yousef gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[SUB-05] Hand-over 3, after the Return: ahmed gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[SUB-05] Hand-over 3, after the Return: faisal gets the api 404",
+      "ok": true,
+      "detail": "404 "
+    },
+    {
+      "text": "[SUB-05] Hand-over 4, Hafiz resends: Ali holds it again, same number",
+      "ok": true,
+      "detail": "Ali Sonour"
+    }
+  ],
+  "screenshots": [
+    "evidence/J1-1-hafiz-new-form.jpg",
+    "evidence/J1-2-hafiz-form-filled.jpg",
+    "evidence/J1-3-ali-holds-after-send.jpg",
+    "evidence/J1-4-hafiz-after-return.jpg"
+  ],
+  "notes": "Script error: locator.click: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('main').getByRole('button', { name: 'Submit', exact: true }).first()\u001b[22m | ",
+  "ranAt": "2026-10-27T18:22:05.443Z"
+}

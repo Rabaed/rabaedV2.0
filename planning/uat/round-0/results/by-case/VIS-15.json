@@ -1,0 +1,124 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Ahmed Sends the Submitted MAR Back",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Mohammed and Faisal still see the sent-back item (positive control)",
+      "ok": true
+    },
+    {
+      "text": "Hafiz's item says it is back with him",
+      "ok": true,
+      "detail": "sentBackForComment false; step draft"
+    },
+    {
+      "text": "Hafiz changes an answer and moves the item to Tower 2 (Edit the Form)",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Hafiz adds a datasheet, a Document and a photo",
+      "ok": true,
+      "detail": "3 uploaded"
+    },
+    {
+      "text": "Hafiz swaps a Link from X to Y",
+      "ok": true,
+      "detail": "204 201"
+    },
+    {
+      "text": "mohammed reads the item exactly as at the Send Back (answers, Documents, Links, Trade, Location, Scopes, history)",
+      "ok": true,
+      "detail": "identical"
+    },
+    {
+      "text": "faisal reads the item exactly as at the Send Back (answers, Documents, Links, Trade, Location, Scopes, history)",
+      "ok": true,
+      "detail": "identical"
+    },
+    {
+      "text": "A new Document is 404 for Mohammed",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "A new Document is 404 for Mohammed",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "A new Document is 404 for Mohammed",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "faisal sees it (Tower 1 as at the Send Back): in the List and 200 by id",
+      "ok": true,
+      "detail": "list has it, by id 200"
+    },
+    {
+      "text": "Noura (Tower 2) does not see the item before the Submit",
+      "ok": true
+    },
+    {
+      "text": "The sent-back item is still offered in Mohammed's Link search",
+      "ok": true,
+      "detail": "{\"links\":[{\"id\":\"284ea3b8-0b3c-4f9b-b2b6-c9d093a4d7a8\",\"documentNumber\":\"TWR-MAR-01-0440\",\"subject\":\"UAT VIS-15 Sent Back MAR\"},{\"id\":\"0b4ca9f5-9c3d-4"
+    },
+    {
+      "text": "The sent-back item is still in Linked from of X, with the same number and Subject",
+      "ok": true,
+      "detail": "{\"items\":[{\"documentNumber\":\"TWR-MAR-01-0440\",\"subject\":\"UAT VIS-15 Sent Back MAR\",\"workItemId\":\"284ea3b8-0b3c-4f9b-b2b6-c9d093a4d7a8\"}]}"
+    },
+    {
+      "text": "mohammed's bell shows no change of the item while it is with the raiser",
+      "ok": true,
+      "detail": "[] / []"
+    },
+    {
+      "text": "faisal's bell shows no change of the item while it is with the raiser",
+      "ok": true,
+      "detail": "[] / []"
+    },
+    {
+      "text": "Hafiz can send the item on again",
+      "ok": true,
+      "detail": "send_for_review"
+    },
+    {
+      "text": "After the new Submit Mohammed reads the new values: Tower 2, the new answer, the three new Documents, Link Y",
+      "ok": true,
+      "detail": "{\"l\":\"T2F01\",\"d\":4,\"links\":[\"UAT VIS-15 linked item Y\"]}"
+    },
+    {
+      "text": "Faisal (Tower 1) loses the item after the Submit",
+      "ok": true
+    },
+    {
+      "text": "noura sees it (Tower 2 after the Submit): in the List and 200 by id",
+      "ok": true,
+      "detail": "list has it, by id 200"
+    },
+    {
+      "text": "Mohammed now downloads the new Document",
+      "ok": true
+    },
+    {
+      "text": "Mohammed now downloads the new Document",
+      "ok": true
+    },
+    {
+      "text": "Mohammed now downloads the new Document",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-15-1-mohammed-item-while-sent-back.jpg"
+  ],
+  "notes": "The MAR was bound to the Edit the Form Workflow copy for this case and switched back to Comment only afterwards. UAT Owner PM not covered: FX-OW is not applied. The checklist photo of the Test Case is a sample_photo here (the MAR Form has no checklist).",
+  "ranAt": "2026-10-27T18:19:37.257Z"
+}

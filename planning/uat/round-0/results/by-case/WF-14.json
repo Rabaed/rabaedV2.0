@@ -1,0 +1,54 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Save to Library makes a Library copy",
+      "ok": true,
+      "detail": "201 {\"id\":\"14ce731b-72de-420b-a61f-25bd2d94dad1\",\"published\":true,\"problems\":[]}"
+    },
+    {
+      "text": "The Library lists it",
+      "ok": true,
+      "detail": "{\"workflows\":[{\"id\":\"14ce731b-72de-420b-a61f-25bd2d94dad1\",\"name\":{\"ar\":\"UAT WF-14 library 182548 (Library)\",\"en\":\"UAT WF-14 library 182548 (Library)\"},\"workItemType\":{\"id\":\"01a164b3-8cf9-7983-baab-e0"
+    },
+    {
+      "text": "It has no link to the original (a new id)",
+      "ok": true,
+      "detail": "14ce731b-72de-420b-a61f-25bd2d94dad1"
+    },
+    {
+      "text": "Mark it default for MAR",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "A new Project is created",
+      "ok": true,
+      "detail": "201 {\"projectId\":\"c4145acb-ee59-4d43-9309-25c0423ab791\",\"projectNumber\":2}"
+    },
+    {
+      "text": "The new Project starts with a copy as its MAR Workflow, bound",
+      "ok": true,
+      "detail": "{\"id\":\"4f10ecd8-d3ec-425f-96cd-5eae2946dad6\",\"name\":{\"ar\":\"UAT WF-14 library 182548 (Library)\",\"en\":\"UAT WF-14 library 182548 (Library)\"},\"versionNo\":1,\"source\":\"project_copy\"}"
+    },
+    {
+      "text": "A plain Member reads the Library",
+      "ok": true
+    },
+    {
+      "text": "Ali sees no save or default control (read-only)",
+      "ok": true
+    },
+    {
+      "text": "Ali cannot save to the Library (Authorized Person only)",
+      "ok": true,
+      "detail": "404"
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-14-1-new-project-workflows.jpg",
+    "evidence/WF-14-2-library-as-ali.jpg"
+  ],
+  "notes": "Cleanup: the Company default for MAR was cleared again after the new Project was made; the new Project and the Library copy stay.",
+  "ranAt": "2026-10-22T18:25:52.873Z"
+}

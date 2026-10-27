@@ -1,0 +1,212 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "[INS-01] Saeed's new Checklist Template is Version 1, active, for Electrical Works, with 2 items",
+      "ok": true,
+      "detail": "[1,\"active\",2]"
+    },
+    {
+      "text": "[INS-03] The item's evidence rules are saved: comment and photo required on Fail",
+      "ok": true,
+      "detail": "{\"key\":\"item_1\",\"text\":{\"en\":\"Supports at the spacing on the drawing\",\"ar\":\"الدعامات على التباعد المبين في المخطط\"},\"answers\":\"pass_fail_na\",\"comment\":\"required_on_negative\",\"photo\":\"required_on_negative\",\"on_negative\":\"create_snag\"}"
+    },
+    {
+      "text": "[INS-03] The editor's preview and the page speak words, with no raw translation key (workItems.form...) on it",
+      "ok": false,
+      "detail": "workItems.form.checklistTemplateField.raisesSnag"
+    },
+    {
+      "text": "[INS-01] Positive control: Ali (TMC) reads the template and cannot change it",
+      "ok": true
+    },
+    {
+      "text": "[INS-03] Hafiz sees the new template's items in the preview (2 items, answered by the Consultant on site)",
+      "ok": true
+    },
+    {
+      "text": "[INS-03] Hafiz's Draft WIR is saved with the picked template copied on it",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[INS-08] A Draft WIR: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-08] A Draft WIR: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-08] A Draft WIR has no Document Number and the Consultant (Ahmed) cannot read it",
+      "ok": true
+    },
+    {
+      "text": "[INS-08] Sent for review, the WIR is numbered TWR-WIR-nn-nnnn and sits in TMC's Internal Review",
+      "ok": true,
+      "detail": "TWR-WIR-01-0061"
+    },
+    {
+      "text": "[INS-08] After Ali's Submit the WIR is at the Consultant Engineer Step with Ahmed, Pending Approval",
+      "ok": true,
+      "detail": "consultant_engineer pending_approval"
+    },
+    {
+      "text": "[INS-08] Positive control: Mohammed (the Consultant's Manager) reads it Pending Approval",
+      "ok": true
+    },
+    {
+      "text": "[INS-09] Ahmed opens the WIR and finds the checklist with all items waiting",
+      "ok": true
+    },
+    {
+      "text": "[INS-08] The Submitted WIR: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-08] The Submitted WIR: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[VIS] TMC's own WIR names the Consultant by Company name only (no Consultant person is named to TMC)",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"},\"memberName\":null,\"pool\":null}"
+    },
+    {
+      "text": "[INS-09] The failed item shows its comment and photo, and a Raise a Snag box ticked by default",
+      "ok": true
+    },
+    {
+      "text": "[INS-09] The answers saved as Ahmed went (the api holds 1 Fail and 1 Pass)",
+      "ok": false,
+      "detail": "{\"item_1\":{\"answer\":\"fail\",\"comment\":\"Spacing too wide on the far run, 2.4 m against 1.5 m.\"},\"item_2\":{\"answer\":\"pass\"}}"
+    },
+    {
+      "text": "[INS-09] The photo is attached to the failed item",
+      "ok": false,
+      "detail": "[[\"inspection_checklist\",\"item_1\"]]"
+    },
+    {
+      "text": "[INS-06] The annotated copy is saved beside the original, linked to it",
+      "ok": true,
+      "detail": "copy dd8c212f-dafa-453d-bd35-ccfa67e1b389"
+    },
+    {
+      "text": "[INS-13] While Ahmed answers, TMC (Hafiz) reads none of the answers, the comment or the photo",
+      "ok": true
+    },
+    {
+      "text": "[INS-13] Ahmed sends it to the Manager with Recommended Code C and an Internal Note",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[INS-11] Mohammed's Code pop-up says the checklist proposes C and names the Snag that will be raised",
+      "ok": true,
+      "detail": "Revise & Resubmit · C Recommended Code: Revise and Resubmit (C) Internal Proposed The checklist proposes Revise & Resubmit · C: an item failed. Checklist · UAT J9 Cable tray checklist 181934 1 Pass / 1 Fail Supports at the spacing on the drawing Fail A Snag is"
+    },
+    {
+      "text": "[INS-13] With the Manager, TMC still reads none of Ahmed's answers, Internal Note or Recommended Code",
+      "ok": true
+    },
+    {
+      "text": "[INS-12] Mohammed issues Code C (revise) and the WIR closes at C",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[INS-10] Exactly one Snag was raised, from the failed item, linked to the WIR",
+      "ok": true,
+      "detail": "1: Supports at the spacing on the drawing"
+    },
+    {
+      "text": "[INS-10] The Snag is Open with TMC, raised for the Contractor by the Consultant",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":null,\"pool\":{\"names\":[{\"en\":\"Ali Sonour\",\"ar\":\"علي سنور\"},{\"en\":\"Hafiz Hamdan\",\"ar\":\"حافظ حمدان\"}]}}"
+    },
+    {
+      "text": "[INS-10] TMC's Hafiz opens the Snag: it shows the WIR number it was raised from",
+      "ok": true
+    },
+    {
+      "text": "[VIS] The Snag page names Design Consultants by Company name only",
+      "ok": true,
+      "detail": "Ahmed bin Said"
+    },
+    {
+      "text": "[INS-10] Positive control: Ahmed reads the Snag too",
+      "ok": true
+    },
+    {
+      "text": "[INS-10] The Snag raised from the WIR: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-10] The Snag raised from the WIR: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-13] After the Code TMC reads the answers, the comment and the checklist photo",
+      "ok": true
+    },
+    {
+      "text": "[INS-13] ... and never Ahmed's Internal Note",
+      "ok": true
+    },
+    {
+      "text": "[INS-13] ... and the checklist photo is TMC's to read",
+      "ok": true
+    },
+    {
+      "text": "[INS-12] The coded WIR: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-12] The coded WIR: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-12] After Code C Hafiz is offered Create Revision, the Manager is not",
+      "ok": true
+    },
+    {
+      "text": "[INS-12] The Revision is a Draft under the same number and copies the same checklist (2 items)",
+      "ok": true,
+      "detail": "draft 2"
+    },
+    {
+      "text": "[INS-12] The Revision is TMC's alone: the Consultant cannot read the Draft Revision",
+      "ok": true
+    },
+    {
+      "text": "[INS-12] The Revision Draft: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    },
+    {
+      "text": "[INS-12] The Revision Draft: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404); api 404"
+    }
+  ],
+  "screenshots": [
+    "evidence/J9-1-1-saeed-template-made.jpg",
+    "evidence/J9-2-debug-before-send.jpg",
+    "evidence/J9-3-2-hafiz-sent-for-review.jpg",
+    "evidence/J9-4-3-ahmed-receives-wir.jpg",
+    "evidence/J9-5-4-ahmed-answers-on-site.jpg",
+    "evidence/J9-6-5-mohammed-codes-wir.jpg",
+    "evidence/J9-7-6-hafiz-snag-from-wir.jpg",
+    "evidence/J9-8-7-hafiz-revision-draft.jpg"
+  ],
+  "notes": "A Checklist Template is the Project's own, read by every Company on it (visibility.md, Checklist Templates), so Yousef and Sara reading it is not a leak; the Beta Build and Sara checks start with the WIR.\nNo page offers the drawing tool: PhotoTool (packages/ui) is mounted on no page, so Open full size is the only photo control on the checklist; the copy was made through the api.",
+  "ranAt": "2026-10-27T18:21:48.187Z"
+}

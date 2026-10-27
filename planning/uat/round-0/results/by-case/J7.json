@@ -1,0 +1,211 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "[PAR-04] Saeed creates the Project (Contractor)",
+      "ok": true,
+      "detail": "201 {\"projectId\":\"3f863a0c-5934-4965-b65b-ab514c382d3d\",\"projectNumber\":7}"
+    },
+    {
+      "text": "[PAR-04] It has a Project Number in TMC's series; Saeed is its Project Admin; the Host Company is TMC",
+      "ok": true,
+      "detail": "[7,true]"
+    },
+    {
+      "text": "[PAR-04][VIS] Hand-over 1: nobody else sees the new Project: Hafiz (TMC), Layla (DCL) and Nasser (Beta Build) all get the plain 404",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-05] Saeed adds two Trades",
+      "ok": true,
+      "detail": "201 201"
+    },
+    {
+      "text": "[PAR-05] Saeed adds a Zone, a Building and a Floor",
+      "ok": true,
+      "detail": "201 201 201"
+    },
+    {
+      "text": "[PAR-05] Saeed adds a Scope and a Sub-scope",
+      "ok": true,
+      "detail": "201 201"
+    },
+    {
+      "text": "[PAR-05] Names read in English and Arabic; the Locations nest Zone > Building > Floor",
+      "ok": true,
+      "detail": "[1,2,3]"
+    },
+    {
+      "text": "[PAR-05] Hand-over 2: the Trades and Locations page shows what Saeed added",
+      "ok": true,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings PROJECT SETTINGS Document Numbering Workflows Screens Stages Outcomes Trades & Locations Appro"
+    },
+    {
+      "text": "[PAR-06] Saeed invites CR 9999000002 as Contractor (202, no body)",
+      "ok": true,
+      "detail": "202 "
+    },
+    {
+      "text": "[PAR-06] Nasser's Company Projects shows the invitation: Project name, Host Company TMC, offered role",
+      "ok": true,
+      "detail": "{\"id\":\"060f3dff-ee0c-437a-9329-4f68105926e1\",\"project\":{\"name\":{\"en\":\"UAT J7 Project 695367\",\"ar\":\"UAT J7 Project 695367 (ع)\"}},\"hostCompany\":{\"legalName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}},\"projectRole\":{\"baseRole\":\"contractor\",\"name\":{\"en\":\"Contractor\",\"ar\":\"المقاول\"}},\"invitedAt\":\"2026-10-27T18:11:46.051Z\"}"
+    },
+    {
+      "text": "[PAR-06][VIS] Hand-over 3: before it is accepted Yousef (Beta Build, not the Authorized Person), Hafiz and Layla see no invitation and no Project",
+      "ok": true,
+      "detail": "Yousef 403"
+    },
+    {
+      "text": "[PAR-06][ADM-04] Saeed reads the pending invitation by CR number only",
+      "ok": true,
+      "detail": "{\"invitations\":[{\"id\":\"060f3dff-ee0c-437a-9329-4f68105926e1\",\"crNumber\":\"9999000002\",\"projectRole\":{\"baseRole\":\"contractor\",\"name\":{\"en\":\"Contractor\",\"ar\":\"المق"
+    },
+    {
+      "text": "[PAR-06] Nasser (Beta Build's Authorized Person) accepts",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-06] Beta Build is now a Participant in the role Contractor",
+      "ok": true,
+      "detail": "{\"baseRole\":\"contractor\",\"name\":{\"en\":\"Contractor\",\"ar\":\"المقاول\"}}"
+    },
+    {
+      "text": "[PAR-06][PAR-13] Hand-over 4: Nasser's Company Projects now lists the Project: code, number, Host Company TMC, own role Contractor",
+      "ok": true,
+      "detail": "{\"id\":\"060f3dff-ee0c-437a-9329-4f68105926e1\",\"project\":{\"id\":\"3f863a0c-5934-4965-b65b-ab514c382d3d\",\"projectNumber\":7,\"code\":\"UJ5367\",\"name\":{\"en\":\"UAT J7 Project 695367\",\"ar\":\"UAT J7 Project 695367 ("
+    },
+    {
+      "text": "[PAR-06][VIS] ...and names no other Company (only TMC as Host Company)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[PAR-07] Saeed grants Beta Build Trade A only, all Locations: it saves",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-07] The grant reads back",
+      "ok": true
+    },
+    {
+      "text": "[PAR-07][VIS] Hand-over 5: Nasser reads his own Company's grant (Trade A only) - the positive control",
+      "ok": true,
+      "detail": "200 {\"visibility\":{\"trade\":{\"isAll\":false,\"valueIds\":[\"8b6894e2-344b-429b-99bb-70151f09a799\"]},\"location"
+    },
+    {
+      "text": "[PAR-07][VIS] Hand-over 5: Nasser, not yet a Project Member, reads only the Trade his Company covers (Trade A, not Trade B) - V16; the Project's own pages are the plain 404 for him",
+      "ok": true,
+      "detail": "covered: UAT J7 Trade A 5367"
+    },
+    {
+      "text": "[PAR-07][VIS] ...and the Scopes under that Trade (positive control)",
+      "ok": true,
+      "detail": "200 {\"scopes\":[{\"id\":\"34c80856-3e55-4ad3-8cd2-2c5ecb050043\",\"tradeId\":\"8b6894e2-344b-429b-99bb-70151f09a799\",\"parentId\":null"
+    },
+    {
+      "text": "[PAR-07][VIS] Nasser cannot widen his own Company's grant (refused)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "[PAR-07][VIS] Nasser cannot read TMC's grant (the plain 404)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "[PAR-07] Saeed also grants TMC itself (the Host Company starts with no coverage on a new Project) all Trades and Locations",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] Nasser adds Yousef to the Project as a Project Member",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] With the Position Engineer",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] Nasser narrows Yousef to Trade A (inside Beta Build's grant): it saves",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-08] A Trade Beta Build does not cover (Trade B) is rejected for Yousef",
+      "ok": true,
+      "detail": "422 {\"error\":\"exceeds_participant\"}"
+    },
+    {
+      "text": "[PAR-08] Yousef's own grant stays inside the Company's (Trade A)",
+      "ok": true,
+      "detail": "{\"isAll\":false,\"valueIds\":[\"8b6894e2-344b-429b-99bb-70151f09a799\"]}"
+    },
+    {
+      "text": "[PAR-08] Yousef now sees the Project in his list",
+      "ok": true,
+      "detail": "5 Projects"
+    },
+    {
+      "text": "[PAR-08][VIS] Hand-over 6: the invited Company's Member reads the Project (200) - and Layla and Hafiz still get the plain 404",
+      "ok": true,
+      "detail": "Trades Yousef reads: 3"
+    },
+    {
+      "text": "[PAR-08][VIS] A Project Member reads all the Project's Trades (V16: every Project Member sees them); his grant narrows what he sees of items, not the Trade list",
+      "ok": true,
+      "detail": "reads 3 Trade(s)"
+    },
+    {
+      "text": "[PAR-13][VIS] Yousef sees his own Participant and the Host Company by name, no other",
+      "ok": true,
+      "detail": "[\"Beta Build\"]"
+    },
+    {
+      "text": "[VIS] Layla (DCL, not invited) opens the Project URL and gets the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent"
+    },
+    {
+      "text": "[PAR-10] Saeed sets Participant Codes for TMC and Beta Build (2 to 6 letters or digits)",
+      "ok": true,
+      "detail": "204 204 "
+    },
+    {
+      "text": "[PAR-10] Saeed saves a pattern Project-Type-Trade-Participant, counted by the Participant Code",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "[PAR-10] The example shows the Project code and the pattern",
+      "ok": true,
+      "detail": "{\"projectCode\":\"UJ5367\",\"tradeCode\":\"GEN\",\"participant\":{\"code\":\"TMJ7\",\"ordinal\":1},\"locationPath\":[\"Z5367\",\"G5367\",\"F5367\"]}"
+    },
+    {
+      "text": "[PAR-10][VIS] Hand-over 7: Nasser (not a Project Admin) cannot change the numbering (refused)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "[PAR-10][VIS] Nasser cannot set TMC's Participant Code (refused, not 204)",
+      "ok": true,
+      "detail": "404"
+    }
+  ],
+  "screenshots": [
+    "evidence/J7-1-1-saeed-project-created.jpg",
+    "evidence/J7-2-2-trades-locations.jpg",
+    "evidence/J7-3-3-nasser-invitation.jpg",
+    "evidence/J7-4-4-saeed-visibility-after-accept.jpg",
+    "evidence/J7-5-5-saeed-grant.jpg",
+    "evidence/J7-6-6-nasser-project-members.jpg",
+    "evidence/J7-7-6-layla-project-404.jpg",
+    "evidence/J7-8-7-saeed-numbering.jpg"
+  ],
+  "notes": "The Project UAT J7 Project 695367 (UJ5367) stays: J8 and J13 work in it. Company onboarding in Rabaed Admin is MANUAL (never scripted: it needs the Engineer's password and an emailed code). Steps for a person: 1) open http://127.0.0.1:4750 and sign in as the Rabaed Engineer (password from the team's secret store, then the 6-digit code from Mailpit http://127.0.0.1:8725). 2) Onboard a Company: legal names EN and AR, CR 9999000005, VAT 399990000000053, an Authorized Person (a made-up .test address), language, a reason. 3) Open the invitation in Mailpit and accept as that person. 4) As Saeed, invite CR 9999000005 on UAT J7 Project 695367 (this journey used Beta Build, already on Rabaed). Expected: the Company is created, the action logged with the reason, the invited Authorized Person accepts like Nasser did above.",
+  "ranAt": "2026-10-27T18:12:31.169Z"
+}

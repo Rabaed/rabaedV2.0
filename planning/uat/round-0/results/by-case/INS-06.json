@@ -1,0 +1,29 @@
+{
+  "status": "manual",
+  "checks": [
+    {
+      "text": "The annotated copy is saved beside the original, marked as annotated from it",
+      "ok": true,
+      "detail": "\"49f54f2c-ddc7-4f9d-b415-8d9b86597cec\""
+    },
+    {
+      "text": "The original's bytes are unchanged and both download",
+      "ok": true
+    },
+    {
+      "text": "After the Submit Ahmed reads both, frozen",
+      "ok": true,
+      "detail": "[[\"photos\",true,false],[\"photos\",true,true]]"
+    },
+    {
+      "text": "A frozen original takes no new copy (refused)",
+      "ok": true,
+      "detail": "400 {\"error\":\"invalid_request\",\"issues\":[{\"keyword\":\"custom\",\"instancePath\":\"/\",\"schemaPath\":\"#//custom\""
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-06-1-annotated-and-original.jpg"
+  ],
+  "notes": "Buttons on the Draft: HHHafiz HamdanTMC Constructions | Collapse sidebar | HHHafiz Hamdan | Download PDF | Watching | View workflow | Send for Review | Cancel | Add | Open gap.jpg full size | Remove gap.jpg | Save and close\nUI: clicking Open full size on the Draft photo showed no annotate screen to the script (hasTool=true); the annotate and Annotated/Original switch need a person.\nThe drawing tool (arrow, text label) and the Annotated/Original switch were not reachable by script; the api rules (copy beside original, bytes unchanged, both download, frozen original takes no copy) all passed.",
+  "ranAt": "2026-10-22T18:48:44.650Z"
+}

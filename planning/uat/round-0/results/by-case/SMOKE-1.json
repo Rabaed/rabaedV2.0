@@ -1,0 +1,24 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Hafiz opens the Project from the Projects page",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f"
+    },
+    {
+      "text": "Hafiz's Submittals List shows rows",
+      "ok": false,
+      "detail": "0 rows"
+    },
+    {
+      "text": "Hafiz sees his own Draft",
+      "ok": false
+    }
+  ],
+  "screenshots": [
+    "evidence/SMOKE-1-1-hafiz-submittals-list.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T17:54:50.400Z"
+}

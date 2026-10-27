@@ -1,0 +1,55 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Inspections tab lists the WIR with Stage Pending Approval, in the Submittals List's layout",
+      "ok": true
+    },
+    {
+      "text": "The Kanban shows the WIR in the Submittals' Stage columns",
+      "ok": true
+    },
+    {
+      "text": "With the setting off, WIRs are not in the Submittals List",
+      "ok": true
+    },
+    {
+      "text": "Saeed turns Inside the Submittals tab on",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "With it on, the WIR appears in the Submittals List for Ali and for Ahmed",
+      "ok": true,
+      "detail": "ali true, ahmed true"
+    },
+    {
+      "text": "Beta Build, who may not see the WIR, finds none",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "The Submittals List page shows the WIR and a WIR type in its Type filter",
+      "ok": true
+    },
+    {
+      "text": "The Submittals Kanban shows it too",
+      "ok": true
+    },
+    {
+      "text": "The Dashboard counts WIRs with the Submittals",
+      "ok": true
+    },
+    {
+      "text": "The setting is back off, as found",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-07-1-inspections-list.jpg",
+    "evidence/INS-07-2-inspections-kanban.jpg",
+    "evidence/INS-07-3-submittals-with-wir.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:49:27.673Z"
+}

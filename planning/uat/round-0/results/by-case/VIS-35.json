@@ -1,0 +1,7 @@
+{
+  "status": "not-run",
+  "checks": [],
+  "screenshots": [],
+  "notes": "not built: the Visibility Gap warning is not in the Visibility pages or the api (no 'gap' text in apps/web or apps/api). Steps for later: DCL covers Mechanical but no DCL Member is granted it; Saeed opens Settings > Visibility (no gap, nothing of DCL's split); Layla opens her warnings (warned that no DCL Project Member covers Mechanical).",
+  "ranAt": "2026-10-22T19:35:20.862Z"
+}

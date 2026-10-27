@@ -1,0 +1,56 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "After Start work TMC reads In Progress",
+      "ok": true,
+      "detail": "in_progress"
+    },
+    {
+      "text": "The send leaves it in TMC's Step Pool: a colleague (Hafiz) may pick it up",
+      "ok": true
+    },
+    {
+      "text": "Design Consultants still reads it Open",
+      "ok": true,
+      "detail": "open"
+    },
+    {
+      "text": "After Put on hold TMC reads On Hold",
+      "ok": true
+    },
+    {
+      "text": "Design Consultants still reads Open",
+      "ok": true
+    },
+    {
+      "text": "Resume work brings it back to In Progress",
+      "ok": true
+    },
+    {
+      "text": "Back to Open is offered and taken inside TMC",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "TMC reads Open again; Mohammed too",
+      "ok": true
+    },
+    {
+      "text": "Mohammed's Step Age counts from when it reached TMC: unchanged by TMC's moves",
+      "ok": true,
+      "detail": "2026-10-27T18:03:44.246Z vs 2026-10-27T18:03:44.246Z"
+    },
+    {
+      "text": "Mohammed's history holds none of TMC's internal moves",
+      "ok": true,
+      "detail": "Raise"
+    }
+  ],
+  "screenshots": [
+    "evidence/SNG-03-1-mohammed-reads-open.jpg",
+    "evidence/SNG-03-2-ali-tmc-view.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:04:11.217Z"
+}

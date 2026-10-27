@@ -1,0 +1,38 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The page lists what stops the Submit, naming the blocking item",
+      "ok": true,
+      "detail": "Submittals PKG-044 Package PKG-044 Owned by TC TMC Constructions Open UAT PKG-05 184405 Rename Delete Add items Not ready  Submit Package is offered once nothing stops it. These stop it now:  Number on submit UAT PKG-05 draft not sent 18440"
+    },
+    {
+      "text": "Submit Package is not offered while something stops it",
+      "ok": true
+    },
+    {
+      "text": "The api refuses, names the blocking item and why",
+      "ok": true,
+      "detail": "409 {\"notReady\":[{\"id\":\"4651ad2c-f11a-454b-b7a8-4c531838f876\",\"documentNumber\":null,\"title\":\"UAT PKG-05 draft not sent 184405\",\"reason\":\"cannot_submit\"}],\"othersNotReady\":false,\"error\":\"package_not_ready\""
+    },
+    {
+      "text": "The good item is still at internal review with Ali",
+      "ok": true
+    },
+    {
+      "text": "With the blocker removed, Submit Package is offered",
+      "ok": true
+    },
+    {
+      "text": "One confirm Submits the item and it gets its own Document Number",
+      "ok": true,
+      "detail": "TWR-MAR-01-0281 consultant_engineer"
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-05-1-not-ready-list.jpg",
+    "evidence/PKG-05-2-submit-confirm.jpg"
+  ],
+  "notes": "Judged against RP-638/RP-974: a Draft not yet sent for review is 'cannot_submit' (it waits at a Step where Ali cannot Submit it); a Draft cannot hold a missing required field past Send for Review, so 'required field Supplier missing' does not arise at Submit Package.",
+  "ranAt": "2026-10-22T18:55:06.126Z"
+}

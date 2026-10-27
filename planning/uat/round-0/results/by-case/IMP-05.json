@@ -1,0 +1,31 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The preview has 8 ready and 2 left out",
+      "ok": true
+    },
+    {
+      "text": "Confirm creates 8 Drafts",
+      "ok": true,
+      "detail": "200 {\"rowsCreated\":8}"
+    },
+    {
+      "text": "Each is a Draft with no number, raised by Hafiz's Company and held by Hafiz",
+      "ok": true
+    },
+    {
+      "text": "The two bad rows were never created",
+      "ok": true
+    },
+    {
+      "text": "The Submittals List shows them as No number yet",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/IMP-05-1-eight-drafts.jpg"
+  ],
+  "notes": "After a Required links change the confirm answered 200 {\"rowsCreated\":1}\nThat change does not count as a change the preview depends on; 'Something in the Project changed' (previewOutdated) was not provoked.",
+  "ranAt": "2026-10-22T18:45:08.919Z"
+}

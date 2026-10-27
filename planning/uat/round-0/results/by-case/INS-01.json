@@ -1,0 +1,53 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The two seeded templates are listed with Version and availability",
+      "ok": true,
+      "detail": "Cable trays and containment v1 active; UAT INS-01 template 181030 v2 retired; UAT INS-03 to retire 181030 v1 retired; UAT INS-05 other template 181030 v1 retired; UAT INS-05 other template 181522 v1 retired; Concrete pour v1 active"
+    },
+    {
+      "text": "Ali reads them and cannot change them (canEdit false)",
+      "ok": true
+    },
+    {
+      "text": "A new template is Version 1 for its Trade, active",
+      "ok": true,
+      "detail": "v1"
+    },
+    {
+      "text": "Saving the edit makes Version 2 with its new items",
+      "ok": true,
+      "detail": "204 v2 3 items"
+    },
+    {
+      "text": "The WIR that copied Version 1 keeps its 2 items",
+      "ok": true,
+      "detail": "[[1,2]]"
+    },
+    {
+      "text": "Ali cannot edit or retire it (the plain 404)",
+      "ok": true,
+      "detail": "404 404"
+    },
+    {
+      "text": "Saeed retires it; it is shown Retired",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "Saeed's Settings page lists the templates per Trade with Version, Active and Retired, and a New button",
+      "ok": true
+    },
+    {
+      "text": "Ali reads the same list without a New button",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-01-1-saeed-templates.jpg",
+    "evidence/INS-01-2-ali-templates-read-only.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:47:10.534Z"
+}

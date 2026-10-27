@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Saeed adds a supplier for Mechanical",
+      "ok": true,
+      "detail": "201 {\"id\":\"0862f853-aa4f-4f6b-9708-8230956562f1\"}"
+    },
+    {
+      "text": "Hafiz reads it: name, Trade, Scope and status",
+      "ok": true,
+      "detail": "{\"id\":\"0862f853-aa4f-4f6b-9708-8230956562f1\",\"name\":{\"en\":\"UAT PAR-12 Mechanical Supplier 53954\",\"ar\":\"UAT PAR-12 Mechanical Supplier 53954 (ع)\"},\"tradeId\":\"2991c0c9-77ef-4b38-8c00-6f04863bf758\",\"scopeId\":null,\"status\":\"approved\"}"
+    },
+    {
+      "text": "Saeed withdraws one",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "The withdrawn one stays listed, as withdrawn",
+      "ok": true,
+      "detail": "\"withdrawn\""
+    },
+    {
+      "text": "The Approved status filter hides it; the withdrawn filter shows it",
+      "ok": true
+    },
+    {
+      "text": "Hafiz cannot add or withdraw (the plain 404)",
+      "ok": true,
+      "detail": "404,404"
+    },
+    {
+      "text": "No source, person or time shows on an entry",
+      "ok": true,
+      "detail": "id,name,tradeId,scopeId,status"
+    }
+  ],
+  "screenshots": [
+    "evidence/PAR-12-1-hafiz-approved-suppliers.jpg"
+  ],
+  "notes": "Both UAT suppliers are left in the list as withdrawn.",
+  "ranAt": "2026-10-27T18:04:31.429Z"
+}

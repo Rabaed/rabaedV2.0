@@ -1,0 +1,34 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The item page names the Workflow and its Version",
+      "ok": true,
+      "detail": "Workflow: UAT FX-SB MAR Send Back (Comment only) · Version 1"
+    },
+    {
+      "text": "The drawer shows the Version the item is pinned to",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only) · Version 1 TWR-MAR-01-0152 Map Steps Send for Review Return Send for Review Submit Cancel Cancel Cancel Send Back DRAFT INTERNAL REVIEW PENDING APPROVAL OUTCOME"
+    },
+    {
+      "text": "Design Consultants is one part marked With Design Consultants LLC",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only) · Version 1 TWR-MAR-01-0152 Map Steps Send for Review Return Send for Review Submit Cancel Cancel Cancel Send Back DRAFT INTERNAL REVIEW PENDING APPROVAL OUTCOME With Design Consultants LLC Pending Approval Current 1 week at this step Draft Contractor · Create "
+    },
+    {
+      "text": "Ali's own Steps are shown one by one and no Consultant Step is named",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only) · Version 1 TWR-MAR-01-0152 Map Steps Send for Review Return Send for Review Submit Cancel Cancel Cancel Send Back DRAFT INTERNAL REVIEW PENDING APPROVAL OUTCOME With Design Consultants LLC Pending Approval Current 1 week at this step Draft Contractor · Create "
+    },
+    {
+      "text": "Ahmed sending to Mohammed changes nothing Ali reads (the workflow read is identical)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-02-1-workflow-drawer-map.jpg"
+  ],
+  "notes": "No map/list switch control found by role in the drawer.",
+  "ranAt": "2026-10-22T18:24:13.712Z"
+}

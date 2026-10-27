@@ -1,0 +1,131 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "[SUB-21] Setup: TMC's Hafiz, Ali and DCL's Mohammed took a Document Approval Request to the Owner review (it has a Document Number)",
+      "ok": true,
+      "detail": "TWR-DAR-01-0017"
+    },
+    {
+      "text": "[I18N-01] Faisal's Submittals List opens in /ar",
+      "ok": true,
+      "detail": "لوحة المعلومات التقديمات الفحوصات قائمة الملاحظات النشاط الإعدادات التقديمات بحث"
+    },
+    {
+      "text": "[I18N-01] Faisal reads items through the api (Tower 1, his coverage)",
+      "ok": true,
+      "detail": "50 rows; locations T1F02,T1F01"
+    },
+    {
+      "text": "[I18N-01] Hand-over 2: Faisal's item page is Arabic and right to left (dir=rtl, lang=ar), nothing scrolls sideways",
+      "ok": true,
+      "detail": "rtl/ar 1366/1366"
+    },
+    {
+      "text": "[I18N-02] Latin digits only on the item page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[I18N-03] The Document Number reads left to right whole",
+      "ok": true,
+      "detail": "3 found; "
+    },
+    {
+      "text": "[VIS] Faisal (Tower 1 only) does not see the Tower 2 Request: plain 404 by id, nothing in his List",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[VIS] Yousef (Beta Build) gets the plain 404 for it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[SUB-21] The Owner review waits for Noura and offers Confirm (Code A)",
+      "ok": true,
+      "detail": "[\"owner_review\",\"Noura Al Harbi\",[\"confirm_a\",\"owner_send_back\"]]"
+    },
+    {
+      "text": "[I18N-01] Hand-over 3: Noura's item page is Arabic, right to left, and shows her Step in Arabic (مراجعة المالك)",
+      "ok": true,
+      "detail": "rtl/ar"
+    },
+    {
+      "text": "[I18N-02][I18N-03] Latin digits only; the Document Number reads left to right whole",
+      "ok": true,
+      "detail": "1 found; "
+    },
+    {
+      "text": "[VIS] The page names TMC and DCL as Companies, never a person of theirs (V14)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[SUB-21] Noura's Confirm issues Code A and closes the item",
+      "ok": true,
+      "detail": "A/approved (page click true)"
+    },
+    {
+      "text": "[I18N-02] After the Confirm the page still shows Latin digits only, RTL",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[NOT-10][I18N-01] Hand-over 4: Noura's Notifications page is Arabic and right to left",
+      "ok": false,
+      "detail": "الإشعارات تعليم الكل كمقروء UAT J15 Cable schedule 278656 TWR-DAR-01-0017 · وصلك في مراجعة المالك 27‏/10‏/2026، 9:21 م غير مقروء UAT J15 Cable schedule 230083 T"
+    },
+    {
+      "text": "[NOT-10][I18N-02] Latin digits only on it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[NOT-01] The bell holds Noura's entries for the Request (Reached you at the Owner review; the record when it closes)",
+      "ok": true,
+      "detail": "step_reached"
+    },
+    {
+      "text": "[NOT-10] Faisal's Notifications page is Arabic, right to left, Latin digits only, Document Numbers whole",
+      "ok": true,
+      "detail": "الإشعارات تعليم الكل كمقروء UAT J9 cable trays Tower 1 181934 TWR-WIR-01-0061 · السجل جاهز للتنزيل 27‏/10‏/2026، 9:21 م غير مقروء UAT J2 com"
+    },
+    {
+      "text": "[VIS] Faisal's bell holds nothing of the Tower 2 Request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[NOT-10] Hand-over 5: Noura's email is in Arabic",
+      "ok": true,
+      "detail": "⁦TWR-DAR-01-0017⁩ · UAT J15 Cable schedule 278656 · وصلك في مراجعة المالك"
+    },
+    {
+      "text": "[I18N-02] ... with Latin digits only",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "[I18N-03] ... and the Document Number whole in it (left to right: in its own dir=ltr or bdi element, or alone)",
+      "ok": true,
+      "detail": "<!doctype html>\n<html lang=\"ar\" dir=\"rtl\">\n<head><meta charset=\"utf-8\"><title>⁦TWR-DAR-01-0017⁩ · UAT J15 Cable schedule 278656 · وصلك في م"
+    },
+    {
+      "text": "[NOT-03][VIS] It names TMC as a Company and no person of TMC",
+      "ok": true,
+      "detail": "⁦TWR-DAR-01-0017⁩ · UAT J15 Cable schedule 278656 · وصلك في مراجعة المالك"
+    }
+  ],
+  "screenshots": [
+    "evidence/J15-1-1-faisal-list-ar.jpg",
+    "evidence/J15-2-2-faisal-item-ar.jpg",
+    "evidence/J15-3-3-noura-owner-review-ar.jpg",
+    "evidence/J15-4-4-noura-after-confirm-ar.jpg",
+    "evidence/J15-5-5-noura-notifications-ar.jpg",
+    "evidence/J15-6-6-faisal-notifications-ar.jpg",
+    "evidence/J15-7-7-noura-email.jpg"
+  ],
+  "notes": "The Request \"UAT J15 Cable schedule 278656\" (TWR-DAR-01-0017) was made by the journey as setup (api) and taken to the Owner review; Noura's Confirm closed it with Code A. Faisal covers Tower 1 only (FX-OR), so he reads his Tower 1 items and (by design) not this Tower 2 one. The Test Case's 'Owner review waiting' items of other journeys were left alone.",
+  "ranAt": "2026-10-27T18:21:54.963Z"
+}

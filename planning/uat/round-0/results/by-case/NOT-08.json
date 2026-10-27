@@ -1,0 +1,37 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz creates Rev 1 of the Code C item",
+      "ok": true,
+      "detail": "201 {\"id\":\"e7766813-bc48-490a-80b0-8364328d364d\"}"
+    },
+    {
+      "text": "no notice about the Revision while it is a Draft (nobody)",
+      "ok": true,
+      "detail": "[[],[],[],[]]"
+    },
+    {
+      "text": "Ali is told once it is numbered and reaches him",
+      "ok": true
+    },
+    {
+      "text": "any Revision notice is dated at or after the send for review",
+      "ok": true,
+      "detail": "0 entries for Hafiz"
+    },
+    {
+      "text": "Ahmed is not told before the Submit",
+      "ok": true
+    },
+    {
+      "text": "Ahmed is told after the Submit",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/NOT-08-1-ahmed-bell-after-submit.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:56:34.578Z"
+}

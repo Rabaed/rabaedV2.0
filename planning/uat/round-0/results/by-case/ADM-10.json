@@ -1,0 +1,7 @@
+{
+  "status": "not-run",
+  "checks": [],
+  "screenshots": [],
+  "notes": "not built: Rabaed Admin has no item commands (companies, numbering, option lists, Workflows, record jobs only), so an Engineer cannot reassign or reset a Step",
+  "ranAt": "2026-10-22T18:48:46.637Z"
+}

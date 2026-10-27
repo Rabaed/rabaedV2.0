@@ -1,0 +1,82 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "ali: Settings > Workflows reads (api 200, canEdit false)",
+      "ok": true,
+      "detail": "canEdit false"
+    },
+    {
+      "text": "ali: the page lists which Workflow MAR runs and its Version",
+      "ok": true,
+      "detail": "{\"id\":\"9e88a4b9-a71c-4b64-a178-f42568031623\",\"name\":{\"ar\":\"UAT FX-SB MAR Send Back (Comment only)\",\"en\":\"UAT FX-SB MAR Send Back (Comment only)\"},\"versionNo\":1,\"source\":\"project_copy\"}"
+    },
+    {
+      "text": "ali: a published Version is read whole with every Company's Steps",
+      "ok": true,
+      "detail": "Draft, Contractor PM, Contractor Engineer, Consultant Engineer, Consultant Manager, Approved, Revise & Resubmit, Rejected, Cancelled"
+    },
+    {
+      "text": "ali: it shows the Returns too",
+      "ok": true
+    },
+    {
+      "text": "ali: cannot open the builder (api refuses)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "ali: sees no draft",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "mohammed: Settings > Workflows reads (api 200, canEdit false)",
+      "ok": true,
+      "detail": "canEdit false"
+    },
+    {
+      "text": "mohammed: the page lists which Workflow MAR runs and its Version",
+      "ok": true,
+      "detail": "{\"id\":\"9e88a4b9-a71c-4b64-a178-f42568031623\",\"name\":{\"ar\":\"UAT FX-SB MAR Send Back (Comment only)\",\"en\":\"UAT FX-SB MAR Send Back (Comment only)\"},\"versionNo\":1,\"source\":\"project_copy\"}"
+    },
+    {
+      "text": "mohammed: a published Version is read whole with every Company's Steps",
+      "ok": true,
+      "detail": "Draft, Contractor PM, Contractor Engineer, Consultant Engineer, Consultant Manager, Approved, Revise & Resubmit, Rejected, Cancelled"
+    },
+    {
+      "text": "mohammed: it shows the Returns too",
+      "ok": true
+    },
+    {
+      "text": "mohammed: cannot open the builder (api refuses)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "mohammed: sees no draft",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "The page opens for Ali with the Types and their Workflow",
+      "ok": true,
+      "detail": "Dashboard | Submittals | Inspections | Snag List | Activity Feed | Settings | PROJECT SETTINGS | Document Numbering | Workflows | Screens | Stages | Outcomes | Trades & Locations | Approved Supplier List | Modules | Required links"
+    },
+    {
+      "text": "Mohammed opens a published Version page (read-only)",
+      "ok": true
+    },
+    {
+      "text": "Ali gets the plain 404 page where the builder would be",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-01-1-workflows-page-ali.jpg",
+    "evidence/WF-01-2-version-page-mohammed.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:23:53.950Z"
+}

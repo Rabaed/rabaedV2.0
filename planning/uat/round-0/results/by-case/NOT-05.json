@@ -1,0 +1,32 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Riyadh Gate Tower is muted in the settings",
+      "ok": true
+    },
+    {
+      "text": "no bell entry for Ali",
+      "ok": true
+    },
+    {
+      "text": "no email for Ali",
+      "ok": true
+    },
+    {
+      "text": "the item still shows as Ali's under Need My Action",
+      "ok": true,
+      "detail": "held by Ali Sonour"
+    },
+    {
+      "text": "Ali's mute is restored (Project not muted)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/NOT-05-1-muted.jpg",
+    "evidence/NOT-05-2-need-my-action.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:55:48.649Z"
+}

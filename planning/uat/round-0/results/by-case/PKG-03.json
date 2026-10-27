@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "TMC's own Drafts and the item in review are offered",
+      "ok": true
+    },
+    {
+      "text": "Beta Build's Draft is never offered",
+      "ok": true
+    },
+    {
+      "text": "An item already in another Package is marked with that Package",
+      "ok": true,
+      "detail": "Add submittals  Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added.  Search Trade All Trades UAT IMP-07 184405 item 1 TWR-MAR-"
+    },
+    {
+      "text": "The item in another Package cannot be picked",
+      "ok": true
+    },
+    {
+      "text": "The two picked items are now in the Package",
+      "ok": true
+    },
+    {
+      "text": "The api refuses an item already in another Package",
+      "ok": true
+    },
+    {
+      "text": "The api refuses Beta Build's item (one answer, not offered)",
+      "ok": true
+    },
+    {
+      "text": "Beta Build cannot add to TMC's Package (the plain 404)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-03-1-add-items-dialog.jpg",
+    "evidence/PKG-03-2-after-add.jpg"
+  ],
+  "notes": "Hafiz's Draft cannot be added by Ali (not_editable: Ali may not edit it, per app.add_package_item); the Drafts here are Ali's own.",
+  "ranAt": "2026-10-22T18:54:28.893Z"
+}

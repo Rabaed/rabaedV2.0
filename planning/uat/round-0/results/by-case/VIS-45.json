@@ -1,0 +1,65 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "yousef reads the Approved Supplier List (name, Trade, Scope, status)",
+      "ok": true,
+      "detail": "200 6"
+    },
+    {
+      "text": "ahmed reads the Approved Supplier List (name, Trade, Scope, status)",
+      "ok": true,
+      "detail": "200 6"
+    },
+    {
+      "text": "saeed reads the Approved Supplier List (name, Trade, Scope, status)",
+      "ok": true,
+      "detail": "200 6"
+    },
+    {
+      "text": "Every entry holds only id, name, Trade, Scope and status: never the SAR, its person, its time or its source",
+      "ok": true,
+      "detail": "id,name,tradeId,scopeId,status"
+    },
+    {
+      "text": "The Tabuk Cable Industries entry (a closed SAR at Code A) is on the list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Yousef raises a MAR choosing the supplier (the answer holds the supplier)",
+      "ok": true,
+      "detail": "\"a97e2422-e955-4f51-a1a6-2c83c78765fd\""
+    },
+    {
+      "text": "His MAR page reads the supplier name",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "layla: read, add and withdraw on the Tower list are all 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "nasser: read, add and withdraw on the Tower list are all 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "Nothing changed on the list",
+      "ok": true
+    },
+    {
+      "text": "Yousef's page shows suppliers and no SAR number, person or time",
+      "ok": true,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings PROJECT SETTINGS Document Numbering Workflows Screens "
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-45-1-yousef-mar-supplier.jpg",
+    "evidence/VIS-45-2-yousef-approved-suppliers.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:39:24.527Z"
+}

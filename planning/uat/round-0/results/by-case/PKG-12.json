@@ -1,0 +1,62 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Positive control: Ali sees the Open Package with its items",
+      "ok": true
+    },
+    {
+      "text": "Yousef: an Open Package of Drafts is not in the board, and its id is the plain 404",
+      "ok": true
+    },
+    {
+      "text": "Ahmed: an Open Package of Drafts is not in the board, and its id is the plain 404",
+      "ok": true
+    },
+    {
+      "text": "Sara: an Open Package of Drafts is not in the board, and its id is the plain 404",
+      "ok": true
+    },
+    {
+      "text": "Yousef opening it in the browser gets the plain 404 page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "Ali Submits the Package",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "After the Submit Ahmed sees the Package with all submittals of his Trades and one status word",
+      "ok": true,
+      "detail": "in_progress {\"total\":2,\"open\":2,\"codes\":{}}"
+    },
+    {
+      "text": "Sara (Mechanical only) sees none of its items, so no Package at all",
+      "ok": true
+    },
+    {
+      "text": "Yousef (another Contractor) still sees nothing",
+      "ok": true
+    },
+    {
+      "text": "Ahmed cannot change it (the plain 404 for rename and add)",
+      "ok": true
+    },
+    {
+      "text": "Ahmed's board shows it by number and Company name only",
+      "ok": true
+    },
+    {
+      "text": "Sara's board does not show it",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-12-1-ahmed-packages-board.jpg",
+    "evidence/PKG-12-2-sara-packages-board.jpg"
+  ],
+  "notes": "TMC covers Electrical only, so the Package has no Mechanical items; Sara's 'only the Mechanical ones and their counts' reads as none, hence no Package. A Mechanical-only counts check needs TMC to cover Mechanical (a fixture).",
+  "ranAt": "2026-10-22T18:57:53.985Z"
+}
