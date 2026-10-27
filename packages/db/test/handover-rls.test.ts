@@ -221,6 +221,10 @@ describe("scenario RP-108-1: a Handover reads and moves only the Authorized Pers
   });
 });
 
+// Also the regression test for RP-550, the seam-2 flake of RP-108-1..3: before RP-552 these reads
+// refused only inside app.handover_participants, and on lane 51 the old body returned [] to this
+// Member with 0 and with 73 pooled Steps in the database. RP-108-2 and -3 flaked too while they
+// read RP-108-1's leftovers (RP-572): every scenario here builds its own items.
 describe("RP-552: the refusal of a non-Authorized-Person never depends on the plan", () => {
   it("refuses a Member of a Company with no Steps at all, for any Member, Participant or none", async () => {
     // A Company that holds no Participant and no assignment: nothing for the planner to evaluate.
