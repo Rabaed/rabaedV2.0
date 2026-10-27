@@ -30,7 +30,10 @@ export type ReactivateResult =
 
 /**
  * Emails an invitation to the invitee (RP-1052): the only place its token goes.
- * Called inside the inviting transaction, so a send that fails invites no one.
+ * Called inside the inviting transaction, so a send that fails invites no one and the
+ * Authorized Person can simply invite again. The rare other way round, a sent email whose
+ * commit then fails, leaves a link that is refused as unknown and no Member: inviting
+ * again works too. An outbox row would have to store the token, which only exists hashed.
  */
 export type SendInvitation = (invitation: InvitationEmail) => Promise<void>;
 

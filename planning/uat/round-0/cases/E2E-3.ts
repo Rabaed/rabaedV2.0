@@ -366,7 +366,6 @@ defineCase("J13", async (t) => {
   const invite = await saeed.post("/members", { email, fullName: { en: fullName, ar: `اختبار ${stamp.slice(-5)}` }, locale: "en" });
   if (!t.check("[PAR-02] Saeed invites a new Member by email", invite.status === 201, `${invite.status} ${invite.text.slice(0, 100)}`)) return;
   const memberId = (invite.body as any).memberId as string;
-  const token = (invite.body as any).invitation?.token as string;
   const asInvited = ((await saeed.get("/members")).body as any).members.find((m: any) => m.id === memberId);
   t.check("[PAR-02] The Member appears as invited", asInvited?.status === "invited", JSON.stringify(asInvited?.status));
   let mails = await mailsAbout(email, "");
@@ -374,7 +373,9 @@ defineCase("J13", async (t) => {
     await sleep(2000);
     mails = await mailsAbout(email, "");
   }
-  t.check("[PAR-02] Hand-over 1: the invitation email arrives in Mailpit (the Test Case: follow the link from the email)", mails.length > 0, `${mails.length} mails to ${email} after 10 s. The invite answer carries the one-time token and the api says 'email delivery comes later' (packages/domain member.ts); the journey went on with that token`);
+  t.check("[PAR-02] Hand-over 1: the invitation email arrives in Mailpit (the Test Case: follow the link from the email)", mails.length > 0, `${mails.length} mails to ${email} after 10 s`);
+  // The one-time token is in the email's link only (RP-1052): the invite answer no longer carries it.
+  const token = /accept-invitation#token=([\w-]+)/.exec(mails[0]?.text ?? "")?.[1] ?? "";
   t.check("[PAR-02][VIS] Layla (DCL) does not list the invited Member", !((await layla.get("/members")).body as any).members.some((m: any) => m.email === email), "");
   await lookClosed(t, "saeed", "/members", "1-saeed-members-invited");
 
