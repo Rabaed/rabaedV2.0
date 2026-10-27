@@ -217,7 +217,6 @@ describe("the Authorized Person of a Participant", () => {
     const add = await plain.post(`/v1/participants/${participantId}/members`, { memberId: consultant.company.authorizedPerson.id });
     expect(add.statusCode).toBe(403);
     expect((await plain.delete(`/v1/participants/${participantId}/members/${member.id}`)).statusCode).toBe(403);
-    expect((await plain.get("/v1/participants")).statusCode).toBe(403);
   });
 });
 
@@ -354,5 +353,36 @@ describe("the Participants of a Project", () => {
       hostCompany: HOST_COMPANY,
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
     });
+  });
+
+  // Scenario RP-1051-1 (V15): every Member of a Participant reads Company Projects, read-only.
+  it("shows a C1 member who is not the Authorized Person C1's Company Projects, only those they are on (scenario RP-1051-1)", async () => {
+    // A second Project C1 takes part in, without this Member: theirs to read only once they are on it.
+    const annex = (await api.createProject(host.caller, { role: "owner" })).id;
+    const annexC1 = await api.addParticipant(host.caller, annex, c1.company, "contractor");
+
+    const res = await c1Member.get("/v1/participants");
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      participants: [
+        {
+          id: ids.c1,
+          project: { id: tower, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
+          hostCompany: HOST_COMPANY,
+          projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+        },
+      ],
+    });
+    // No other Participant, and another Company only as the Host Company's name.
+    for (const other of [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId, annex, annexC1]) expect(res.body).not.toContain(other);
+    // The Authorized Person reads both; their Company's pending invitations stay theirs (ADR 0009).
+    expect((await c1.caller.get("/v1/participants")).json().participants.map((p: { id: string }) => p.id)).toEqual([annexC1, ids.c1]);
+    expect((await c1Member.get("/v1/participant-invitations")).statusCode).toBe(403);
+
+    // A C1 Member on no Project of C1's reads an empty list.
+    const { caller: offProject } = await api.member(c1.caller);
+    const none = await offProject.get("/v1/participants");
+    expect(none.statusCode).toBe(200);
+    expect(none.json()).toEqual({ participants: [] });
   });
 });

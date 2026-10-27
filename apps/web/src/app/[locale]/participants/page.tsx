@@ -5,9 +5,12 @@ import { Link, redirect } from "@/i18n/navigation";
 import { getCompanyInvitations, getCompanyParticipations, getMe } from "@/lib/session";
 
 /**
- * The Authorized Person's view of every Project their Company takes part in,
- * and of the Projects it is invited to: those show only the Project's name, its
- * Host Company and the offered Project Role until accepted (V15, ADR 0009).
+ * Company Projects: every Project the Company takes part in that the Member may
+ * look into (the Authorized Person every one, any other Member those they are a
+ * Project Member of), read-only but for the Authorized Person (V15). Only the
+ * Authorized Person gets the Projects it is invited to: those show only the
+ * Project's name, its Host Company and the offered Project Role until accepted
+ * (ADR 0009).
  */
 export default async function ParticipationsPage({ params }: { params: Promise<{ locale: Locale }> }) {
   const { locale } = await params;
@@ -15,7 +18,6 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
   const t = await getTranslations("participants");
   const [me, list, invited] = await Promise.all([getMe(), getCompanyParticipations(), getCompanyInvitations()]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!me.member.isAuthorizedPerson) return redirect({ href: "/", locale });
 
   return (
     <div className="space-y-6">

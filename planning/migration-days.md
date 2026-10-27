@@ -149,3 +149,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271017 | RP-1039 | 21 | outbox_take_kinds (`app.take_outbox_row` takes a kinds filter) |
 | 20271018 | spec RP-1034 | 21 | review fixes |
 | 20271019 | RP-1050 | 11 | reads_at_scale |
+| 20271020 | RP-1051 | 13 | member_company_projects (`app.company_participants` reads through `app.current_participant_ids`) |

@@ -238,17 +238,15 @@ function toParticipation(r: ParticipationRow): CompanyParticipation {
   };
 }
 
-/** The Authorized Person's Company's Participants, on every Project it takes part in. */
-export function listCompanyParticipations(
-  db: Db,
-  memberId: string,
-): Promise<{ ok: true; participations: CompanyParticipation[] } | Forbidden> {
-  return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx) => {
-      const { rows } = await withHostCompanyName(sql`app.company_participants()`).execute(trx);
-      return { ok: true, participations: rows.map(toParticipation) } as const;
-    }),
-  );
+/**
+ * Company Projects (V15): the Member's own Company's Participants they may look into, the
+ * Authorized Person's on every Project it takes part in, any other Member's on their Projects.
+ */
+export function listCompanyParticipations(db: Db, memberId: string): Promise<CompanyParticipation[]> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await withHostCompanyName(sql`app.company_participants()`).execute(trx);
+    return rows.map(toParticipation);
+  });
 }
 
 /**

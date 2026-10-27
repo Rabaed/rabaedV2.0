@@ -113,7 +113,7 @@ export function getProjectParticipants(projectId: string): Promise<ProjectPartic
   return apiGet<ProjectParticipants>(`/v1/projects/${encodeURIComponent(projectId)}/participants`);
 }
 
-/** The Authorized Person's Company's Participants; null for anyone else. */
+/** The signed-in Member's own Company's Participants they may look into (Company Projects, V15). */
 export function getCompanyParticipations(): Promise<CompanyParticipations | null> {
   return apiGet<CompanyParticipations>("/v1/participants");
 }
