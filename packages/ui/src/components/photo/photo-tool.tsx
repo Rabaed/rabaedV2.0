@@ -7,7 +7,7 @@ import { buttonVariants, IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import type { PhotoAnnotatorLabels } from "./photo-annotator.tsx";
-import { AnnotatedMark, PhotoScreens } from "./photo-screens.tsx";
+import { AnnotatedMark, PhotoScreens, type SaveAnnotated } from "./photo-screens.tsx";
 import type { PhotoViewerLabels } from "./photo-viewer.tsx";
 
 // The one photo tool for every photo in Rabaed (RP-656): an Inspection's check
@@ -57,7 +57,7 @@ export type PhotoToolProps = {
   /** Removes a photo, and its annotated copy with it. */
   onRemove?: (documentId: string) => void;
   /** Stores `image` as the annotated copy of `originalId`; the annotate view closes once it resolves. */
-  onSaveAnnotated?: (originalId: string, image: Blob) => Promise<void> | void;
+  onSaveAnnotated?: SaveAnnotated;
 };
 
 /** A photo input dressed as a button: the camera's, or the gallery's and files'. */

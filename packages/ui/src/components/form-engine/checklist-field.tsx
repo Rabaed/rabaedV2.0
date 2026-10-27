@@ -25,6 +25,7 @@ import { OutsideField, useFieldControl, type FieldControlProps } from "../form/f
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
+import type { SaveAnnotated } from "../photo/photo-screens.tsx";
 import { PhotosField, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
 
 // A Form's `checklist` field (RP-285; form-engine.md §3): the check items, each
@@ -87,7 +88,7 @@ export type ChecklistFieldProps = {
   onOpen?: (documentId: string) => void;
   onRemove?: (itemKey: string, documentId: string) => void;
   /** Stores the annotated copy of a photo, beside it in its item (PhotosField's `onSaveAnnotated`). */
-  onSaveAnnotated?: (originalId: string, image: Blob) => Promise<void>;
+  onSaveAnnotated?: SaveAnnotated;
 };
 
 const answersOf = (value: unknown): ChecklistAnswers => {
@@ -180,7 +181,8 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
     const entry = answers[item.key];
     // The item's photos with their annotated copies; only the originals count.
     const documents = photosOf(item.key);
-    const shown = itemEvidence(item, entry, withAnnotatedCopies(documents).length);
+    const photoCount = withAnnotatedCopies(documents).length;
+    const shown = itemEvidence(item, entry, photoCount);
     const textId = `${id ?? field.key}-${item.key}-text`;
     const itemErrors = errors.filter((e) => e.item === item.key);
     const label = text.evidence(item.text[locale]);
@@ -193,7 +195,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
 
     if (mode === "read") {
       const given = entry?.answer;
-      if (given === undefined && !entry?.comment && documents.length === 0) {
+      if (given === undefined && !entry?.comment && photoCount === 0) {
         return (
           <li key={item.key} className="flex flex-col gap-1 rounded-md border border-border p-3">
             <p className="text-body text-text"><bdi>{item.text[locale]}</bdi></p>
@@ -221,17 +223,8 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
             </p>
           )}
           {entry?.comment && <p className="whitespace-pre-wrap text-body text-text"><bdi>{entry.comment}</bdi></p>}
-          {documents.length > 0 && (
-            <PhotosField
-              field={evidenceField(item)}
-              files={itemFiles}
-              mode="read"
-              locale={locale}
-              labels={text.photosField}
-              label={label}
-              onOpen={onOpen}
-              onSaveAnnotated={onSaveAnnotated}
-            />
+          {photoCount > 0 && (
+            <PhotosField field={evidenceField(item)} files={itemFiles} mode="read" locale={locale} labels={text.photosField} label={label} onOpen={onOpen} />
           )}
         </li>
       );

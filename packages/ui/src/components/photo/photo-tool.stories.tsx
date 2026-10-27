@@ -6,6 +6,7 @@ import ceilingImage from "../../storybook/fixtures/ceiling-photo.svg";
 import sitePhoto from "../../storybook/fixtures/site-photo.svg";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { markColours } from "./annotate-marks.ts";
 import { PhotoAnnotator, type PhotoAnnotatorLabels } from "./photo-annotator.tsx";
@@ -21,38 +22,7 @@ import { PhotoTool, type PhotoToolLabels } from "./photo-tool.tsx";
 
 const isolate = (name: string) => `\u2068${name}\u2069`;
 
-const annotatorLabels: Record<Locale, PhotoAnnotatorLabels> = {
-  en: {
-    title: (name) => `Annotate ${name}`,
-    cancel: "Cancel",
-    undo: "Undo",
-    save: "Save",
-    saving: "Saving…",
-    failed: "The annotated photo wasn't saved. Try again.",
-    canvas: "The photo, to mark up",
-    tools: "Tools",
-    tool: { arrow: "Arrow", rectangle: "Rectangle", circle: "Circle", pen: "Pen", text: "Text" },
-    colours: "Colour",
-    colour: { red: "Red", yellow: "Yellow", blue: "Blue", white: "White", black: "Black" },
-    labelText: "Label text",
-    addLabel: "Add label",
-  },
-  ar: {
-    title: (name) => `تعليم ${isolate(name)}`,
-    cancel: "إلغاء",
-    undo: "تراجع",
-    save: "حفظ",
-    saving: "جارٍ الحفظ…",
-    failed: "لم تُحفظ الصورة المعلَّمة. حاول مرة أخرى.",
-    canvas: "الصورة، للتعليم عليها",
-    tools: "الأدوات",
-    tool: { arrow: "سهم", rectangle: "مستطيل", circle: "دائرة", pen: "قلم", text: "نص" },
-    colours: "اللون",
-    colour: { red: "أحمر", yellow: "أصفر", blue: "أزرق", white: "أبيض", black: "أسود" },
-    labelText: "نص التسمية",
-    addLabel: "إضافة التسمية",
-  },
-};
+const annotatorLabels: Record<Locale, PhotoAnnotatorLabels> = { en: formRendererLabels.en.photos.annotator, ar: formRendererLabels.ar.photos.annotator };
 
 const toolLabels: Record<Locale, PhotoToolLabels> = {
   en: {
@@ -64,7 +34,7 @@ const toolLabels: Record<Locale, PhotoToolLabels> = {
     remove: (name) => `Remove ${name}`,
     annotatedMark: "Annotated",
     full: "This item takes at most 3 photos.",
-    viewer: { close: "Close", show: "Show", annotated: "Annotated", original: "Original", annotate: "Annotate", noImage: "No image to show." },
+    viewer: formRendererLabels.en.photos.viewer,
     annotator: annotatorLabels.en,
   },
   ar: {
@@ -76,7 +46,7 @@ const toolLabels: Record<Locale, PhotoToolLabels> = {
     remove: (name) => `إزالة ${isolate(name)}`,
     annotatedMark: "معلَّمة",
     full: "يقبل هذا البند 3 صور على الأكثر.",
-    viewer: { close: "إغلاق", show: "عرض", annotated: "المعلَّمة", original: "الأصلية", annotate: "تعليم", noImage: "لا توجد صورة لعرضها." },
+    viewer: formRendererLabels.ar.photos.viewer,
     annotator: annotatorLabels.ar,
   },
 };

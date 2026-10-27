@@ -12,6 +12,12 @@ import { PhotoViewer, type PhotoViewerLabels } from "./photo-viewer.tsx";
 // Original once there is a copy; Annotate, where offered, opens the annotate
 // view on the photo shown, and closing it comes back to the viewer.
 
+/**
+ * Stores `image`, drawn in the annotate view, as the annotated copy of photo `originalId`, beside it.
+ * The annotate view closes once it resolves, and keeps its marks if it throws (refused).
+ */
+export type SaveAnnotated = (originalId: string, image: Blob) => Promise<void> | void;
+
 /** The words of the viewer and the annotate view, from the app's messages. */
 export type PhotoScreensLabels = { viewer: PhotoViewerLabels; annotator: PhotoAnnotatorLabels };
 
@@ -27,8 +33,7 @@ export type PhotoScreensProps = {
    */
   canAnnotate: boolean;
   onClose: () => void;
-  /** Stores `image` as the annotated copy of `originalId`; the annotate view closes once it resolves, and stays open with its marks if it throws. */
-  onSaveAnnotated?: (originalId: string, image: Blob) => Promise<void> | void;
+  onSaveAnnotated?: SaveAnnotated;
   /** Where the screens mount (PhotoScreen's `container`). */
   container?: HTMLElement | null;
 };

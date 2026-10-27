@@ -18,6 +18,7 @@ import {
   isUnanswered,
   parseNumberInput,
   isAnnotatedCopy,
+  withAnnotatedCopies,
   scopesFittingTrade,
   toLatinDigits,
   toProjectWallTime,
@@ -57,6 +58,7 @@ import { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "
 import { ChecklistTemplateField, PickedTemplateItems, templateOptions, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
 import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabels } from "./link-question-field.tsx";
 import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
+import type { SaveAnnotated } from "../photo/photo-screens.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
 import { TableInput, TableRead, type TableFieldLabels } from "./table-field.tsx";
 
@@ -224,7 +226,7 @@ export type FormFiles = {
    * Stores `image` as the annotated copy of photo `originalId` (RP-656), in its field and item;
    * throws when refused. Offered on the photos that may change now (`canChange`), never a frozen one.
    */
-  onSaveAnnotated?: (originalId: string, image: Blob) => Promise<void>;
+  onSaveAnnotated?: SaveAnnotated;
 };
 
 /**
@@ -867,14 +869,14 @@ export function FormRenderer({
     }
     if (field.type === "photos") {
       const own = filesOf(files, field);
-      return own && own.documents.length > 0 ? (
+      return own && withAnnotatedCopies(own.documents).length > 0 ? (
         <PhotosField field={field} files={own} mode="read" locale={locale} labels={labels.photos} onOpen={files?.onOpen} />
       ) : null;
     }
     if (field.type === "checklist") {
       const own = checklistFiles(field);
       const answered = typeof value === "object" && value !== null && Object.keys(value).length > 0;
-      return answered || (own && own.documents.length > 0) ? (
+      return answered || (own && withAnnotatedCopies(own.documents).length > 0) ? (
         <ChecklistField field={field} value={value} mode="read" locale={locale} labels={labels.checklist} files={own} onOpen={files?.onOpen} />
       ) : null;
     }

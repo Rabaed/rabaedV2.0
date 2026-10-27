@@ -223,7 +223,6 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"],
 
   return {
     upload,
-    saveAnnotated,
     annotatesIn,
     open,
     remove,

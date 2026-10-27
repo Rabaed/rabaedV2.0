@@ -192,6 +192,26 @@ export const FrozenNotAnnotated: Story = {
   },
 };
 
+/** A HEIC original the browser can't show, with an annotated JPEG copy it can: opened in the page, on the copy. */
+export const HeicWithCopy: Story = {
+  args: {
+    files: {
+      ...files([{ ...facade, fileName: "facade.heic", contentType: "image/heic" }, facadeAnnotated]),
+      imageUrls: { [facadeAnnotated.id]: imageUrls[facadeAnnotated.id]! },
+    },
+  },
+  play: async (context) => {
+    const { args, canvas } = context;
+    const text = words(context);
+    await userEvent.click(canvas.getByRole("button", { name: text.open("facade.heic") }));
+    const viewer = within(await screen.findByRole("dialog", { name: "facade.heic" }));
+    await expect(viewer.getByRole("img")).toHaveAttribute("src", imageUrls[facadeAnnotated.id]);
+    await userEvent.click(viewer.getByRole("radio", { name: text.viewer.original }));
+    await expect(viewer.getByText(text.viewer.noImage)).toBeVisible();
+    await expect(args.files!.onOpen).not.toHaveBeenCalled();
+  },
+};
+
 /** A photo the browser can't show (a HEIC, or its URL not there yet) opens as a file, as before. */
 export const NoImageOpensFile: Story = {
   args: { files: { ...files([facade]), imageUrls: {} } },

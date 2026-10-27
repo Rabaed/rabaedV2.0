@@ -16,7 +16,7 @@ import { buttonVariants, IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { OutsideField, useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
-import { AnnotatedMark, PhotoScreens, type PhotoScreensLabels } from "../photo/photo-screens.tsx";
+import { AnnotatedMark, PhotoScreens, type PhotoScreensLabels, type SaveAnnotated } from "../photo/photo-screens.tsx";
 import type { AttachmentsFieldFiles } from "./attachments-field.tsx";
 
 // A Form's `photos` field (RP-284): its photos as thumbnails, each with when and
@@ -73,11 +73,8 @@ export type PhotosFieldProps = {
   /** Opens a photo as a file: one the browser can't show here (no image URL, a HEIC). */
   onOpen?: (documentId: string) => void;
   onRemove?: (documentId: string) => void;
-  /**
-   * Stores `image` as the annotated copy of photo `originalId`, beside it; throws when refused,
-   * so the annotate view keeps its marks. Without it, nothing is offered to annotate.
-   */
-  onSaveAnnotated?: (originalId: string, image: Blob) => Promise<void>;
+  /** Stores a photo's annotated copy (throws when refused). Without it, nothing is offered to annotate. */
+  onSaveAnnotated?: SaveAnnotated;
 };
 
 /** How many photos the field holds: its originals, an annotated copy counting toward no limit (RP-656). */
@@ -198,7 +195,8 @@ function PhotoInputs({
 
 export function PhotosField({ field, files, mode, locale, labels: text, label, onUpload, onOpen, onRemove, onSaveAnnotated }: PhotosFieldProps) {
   const photos = withAnnotatedCopies(files?.documents ?? []);
-  const canRemove = mode === "edit" && !!files?.canChange;
+  // The photos may change now: removed, and annotated (a frozen one neither).
+  const mayChange = mode === "edit" && !!files?.canChange;
   const [opened, setOpened] = useState<string | null>(null);
   const open = photos.find((p) => p.original.id === opened) ?? null;
   // Inside a modal <dialog> (the Transition pop-up), the photo opens in it (PhotoScreen's container).
@@ -219,14 +217,15 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
           {photos.map(({ original: d, annotated }) => {
             // The thumbnail shows the annotated copy when there is one; the original opens in the page when it can be shown.
             const url = files?.imageUrls?.[annotated?.id ?? d.id];
-            const shown = !!files?.imageUrls?.[d.id];
+            // Opened in the page when the browser can show the photo or its copy (a HEIC original's JPEG copy, say).
+            const browserShows = !!url || !!files?.imageUrls?.[d.id];
             return (
               <li key={d.id} className="flex min-w-0 flex-col gap-1">
                 <div className="relative">
                   <button
                     type="button"
                     aria-label={text.open(d.fileName)}
-                    onClick={() => (shown ? setOpened(d.id) : onOpen?.(d.id))}
+                    onClick={() => (browserShows ? setOpened(d.id) : onOpen?.(d.id))}
                     className={cn(
                       "flex aspect-square w-full items-center justify-center overflow-hidden rounded-md border border-border bg-surface-subtle",
                       focusRing,
@@ -239,7 +238,7 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
                     )}
                   </button>
                   {annotated && <AnnotatedMark text={text.annotatedMark} />}
-                  {canRemove && !d.frozen && (
+                  {mayChange && !d.frozen && (
                     <IconButton
                       label={text.remove(d.fileName)}
                       size="sm"
@@ -270,7 +269,7 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
           photo={open}
           imageUrls={files?.imageUrls}
           labels={text}
-          canAnnotate={canRemove}
+          canAnnotate={mayChange}
           onClose={() => setOpened(null)}
           onSaveAnnotated={onSaveAnnotated}
           container={dialog}
