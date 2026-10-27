@@ -431,12 +431,35 @@
     "apiVersion": "api {version}"
   },
   "signIn": {
-    "title": "Sign in",
-    "email": "Email",
+    "title": "Sign in to Rabaed",
+    "subtitle": "Submittals, inspections and site reports for every Participant on the Project.",
+    "email": "Work email",
+    "emailPlaceholder": "name@company.com",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "submit": "Sign in",
     "invalid": "That email and password don't match.",
-    "unavailable": "Something went wrong. Try again."
+    "unavailable": "Something went wrong. Try again.",
+    "invite": "New to Rabaed? Ask your project admin for an invite.",
+    "copyright": "© {year} Rabaed",
+    "languages": {
+      "en": "English",
+      "ar": "العربية"
+    },
+    "brand": {
+      "tagline": "Construction project operating system",
+      "owner": "Owner",
+      "contractor": "Contractor",
+      "consultant": "Consultant",
+      "sent": "Sent · {time}",
+      "reviewed": "Reviewed · {time}",
+      "approved": "Approved · {time}",
+      "headlineCompanies": "Three companies.",
+      "headlineRecord": "One record.",
+      "headlineAccountability": "Clear accountability.",
+      "lead": "Owner, consultant and contractor on one platform — every step recorded with its date and the Member who took it."
+    }
   },
   "acceptInvitation": {
     "title": "Accept your invitation",

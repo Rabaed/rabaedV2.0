@@ -2,9 +2,16 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Button, Field, Input } from "@rabaed/ui";
+import { Button, Field, Icon, IconButton, Input, type IconName } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
 import { browserLanguage } from "@/lib/browser-locale";
+
+// The owner's design (RP-1057): 46px fields with a leading icon, 11–12px corners.
+const tall = "h-11.5 rounded-md ps-10.5 text-[14.5px]";
+
+function LeadingIcon({ name }: { name: IconName }) {
+  return <Icon name={name} size={18} className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-faint" />;
+}
 
 export function SignInForm() {
   const t = useTranslations("signIn");
@@ -12,6 +19,7 @@ export function SignInForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,19 +47,55 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="max-w-sm space-y-4" noValidate>
-      <Field label={t("email")} id="email" required>
-        <Input name="email" type="email" autoComplete="username" dir="ltr" />
-      </Field>
-      <Field label={t("password")} id="password" required>
-        <Input name="password" type="password" autoComplete="current-password" />
-      </Field>
+    <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       {error && (
-        <p role="alert" className="text-sm text-danger-fg">
-          {error}
+        <p role="alert" className="flex items-start gap-2.5 rounded-md bg-danger-tint px-3.5 py-3 text-sm text-danger-fg">
+          <Icon name="alert-circle" size={18} className="mt-px shrink-0" />
+          <span>{error}</span>
         </p>
       )}
-      <Button type="submit" disabled={pending}>
+      <Field label={t("email")} id="email">
+        <div className="relative">
+          <LeadingIcon name="mail" />
+          <Input
+            name="email"
+            type="email"
+            autoComplete="username"
+            dir="ltr"
+            required
+            placeholder={t("emailPlaceholder")}
+            // An LTR address in an RTL page keeps the icon's side free and reads from the start.
+            className={`${tall} rtl:pe-10.5 rtl:ps-3.5 rtl:text-end`}
+          />
+        </div>
+      </Field>
+      <Field label={t("password")} id="password">
+        <div className="relative">
+          <LeadingIcon name="lock" />
+          <Input
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            className={`${tall} pe-11.5`}
+          />
+          <IconButton
+            label={showPassword ? t("hidePassword") : t("showPassword")}
+            size="sm"
+            className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted"
+            onClick={() => setShowPassword((shown) => !shown)}
+          >
+            <Icon name={showPassword ? "eye-off" : "eye"} size={18} />
+          </IconButton>
+        </div>
+      </Field>
+      <Button
+        type="submit"
+        disabled={pending}
+        aria-busy={pending}
+        className="h-11.5 w-full rounded-md text-[14.5px] font-semibold disabled:bg-primary disabled:text-on-primary disabled:opacity-70"
+      >
+        {pending && <span aria-hidden="true" className="size-4.5 animate-spin rounded-full border-2 border-on-primary/40 border-t-on-primary" />}
         {t("submit")}
       </Button>
     </form>
