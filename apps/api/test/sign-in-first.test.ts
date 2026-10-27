@@ -20,6 +20,8 @@ const PUBLIC: Record<string, string> = {
   "POST /v1/session": "sign-in: the caller has no session yet",
   "DELETE /v1/session": "sign-out: ends whatever session the browser has, and is a no-op without one",
   "POST /v1/invitations/accept": "an invited Member sets a password and signs in; the invitation token is the credential",
+  "POST /v1/password-resets": "a Member who forgot their password asks for a link; the same answer for any email, limited per email and visitor (RP-1058)",
+  "POST /v1/password-resets/complete": "a Member sets a new password from the emailed link; the link's token is the credential (RP-1058)",
   "POST /v1/verification/link":
     "anyone holding a Documental Record checks it by its QR's link (RP-157); it shows only what the record's first page prints",
   "POST /v1/verification/code":

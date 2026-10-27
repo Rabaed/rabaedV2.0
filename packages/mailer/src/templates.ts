@@ -34,6 +34,8 @@ export interface EmailTemplateValues {
   "new-device-sign-in": { when: string; ip: string };
   /** Rabaed Admin: too many failed sign-ins; sign-in is refused for a while. */
   "sign-in-locked": { minutes: number };
+  /** A Member asked to reset their password (RP-1058): the link opens reset-password, once, for `validMinutes`. */
+  "password-reset": { link: string; validMinutes: number };
   /** A Step reached the Member or their Step Pool. */
   "notification-step-reached": NotificationEmailValues;
   /** Something happened on an item the Member watches. */
@@ -160,6 +162,36 @@ const adminTemplates: { [T in AdminTemplate]: Template<EmailTemplateValues[T]> }
           paragraphs: [
             [`After several failed sign-ins to Rabaed Admin, sign-in is locked for ${count} minutes.`],
             ["If it wasn't you, tell the Rabaed team at once."],
+          ],
+          signOff: signOff.en,
+        };
+  },
+};
+
+// A Member's password reset link (RP-1058). It names no Company and no person: whoever asked
+// typed only an email.
+const passwordResetTemplates: { "password-reset": Template<EmailTemplateValues["password-reset"]> } = {
+  "password-reset": (locale, { link, validMinutes }) => {
+    const url = webLink(link);
+    const minutes = formatNumber(validMinutes, locale);
+    return locale === "ar"
+      ? {
+          subject: "إعادة تعيين كلمة المرور في ربائد",
+          paragraphs: [
+            ["طلبت إعادة تعيين كلمة المرور التي تدخل بها إلى ربائد. افتح هذا الرابط لاختيار كلمة مرور جديدة:"],
+            [{ ltr: url, link: true }],
+            [`يعمل الرابط مرة واحدة، لمدة ${minutes} ${arabicMinutes(validMinutes)}. عند تغيير كلمة المرور يُسجَّل خروجك من كل الأجهزة الأخرى.`],
+            ["إن لم تطلب ذلك، تجاهل هذه الرسالة: كلمة المرور الحالية لا تتغير."],
+          ],
+          signOff: signOff.ar,
+        }
+      : {
+          subject: "Reset your Rabaed password",
+          paragraphs: [
+            ["You asked to reset the password you sign in to Rabaed with. Open this link to choose a new one:"],
+            [{ ltr: url, link: true }],
+            [`The link works once, for ${minutes} minutes. Changing your password signs you out on every other device.`],
+            ["If you didn't ask for this, ignore this email: your password stays as it is."],
           ],
           signOff: signOff.en,
         };
@@ -390,6 +422,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
 
 const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = {
   ...adminTemplates,
+  ...passwordResetTemplates,
   ...notificationTemplates,
   ...digestTemplates,
   ...reportTemplates,

@@ -8,7 +8,7 @@ import { endSession, signIn, startSession, type Session } from "../identity/sess
 import { rememberBrowserLanguage } from "../notifications/settings.ts";
 
 /** Sets the new session cookie, ending whatever session the browser had before. */
-async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, session: Session) {
+export async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, session: Session) {
   if (request.sessionToken) await endSession(ctx.db, request.sessionToken, ctx.now());
   ctx.setSessionCookie(reply, session);
 }

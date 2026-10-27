@@ -2,16 +2,10 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Button, Field, Icon, IconButton, Input, type IconName } from "@rabaed/ui";
-import { useRouter } from "@/i18n/navigation";
+import { Field, Icon, IconButton, Input } from "@rabaed/ui";
+import { emailInput, FormAlert, LeadingIcon, SubmitButton, tallInput } from "@/components/sign-in-fields";
+import { Link, useRouter } from "@/i18n/navigation";
 import { browserLanguage } from "@/lib/browser-locale";
-
-// The owner's design (RP-1057): 46px fields with a leading icon, 11–12px corners.
-const tall = "h-11.5 rounded-md ps-10.5 text-[14.5px]";
-
-function LeadingIcon({ name }: { name: IconName }) {
-  return <Icon name={name} size={18} className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-faint" />;
-}
 
 export function SignInForm() {
   const t = useTranslations("signIn");
@@ -48,56 +42,40 @@ export function SignInForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      {error && (
-        <p role="alert" className="flex items-start gap-2.5 rounded-md bg-danger-tint px-3.5 py-3 text-sm text-danger-fg">
-          <Icon name="alert-circle" size={18} className="mt-px shrink-0" />
-          <span>{error}</span>
-        </p>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
       <Field label={t("email")} id="email">
         <div className="relative">
           <LeadingIcon name="mail" />
-          <Input
-            name="email"
-            type="email"
-            autoComplete="username"
-            dir="ltr"
-            required
-            placeholder={t("emailPlaceholder")}
-            // An LTR address in an RTL page keeps the icon's side free and reads from the start.
-            className={`${tall} rtl:pe-10.5 rtl:ps-3.5 rtl:text-end`}
-          />
+          <Input name="email" type="email" autoComplete="username" dir="ltr" required placeholder={t("emailPlaceholder")} className={emailInput} />
         </div>
       </Field>
-      <Field label={t("password")} id="password">
-        <div className="relative">
-          <LeadingIcon name="lock" />
-          <Input
-            name="password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            required
-            className={`${tall} pe-11.5`}
-          />
-          <IconButton
-            label={showPassword ? t("hidePassword") : t("showPassword")}
-            size="sm"
-            className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted"
-            onClick={() => setShowPassword((shown) => !shown)}
-          >
-            <Icon name={showPassword ? "eye-off" : "eye"} size={18} />
-          </IconButton>
-        </div>
-      </Field>
-      <Button
-        type="submit"
-        disabled={pending}
-        aria-busy={pending}
-        className="h-11.5 w-full rounded-md text-[14.5px] font-semibold disabled:bg-primary disabled:text-on-primary disabled:opacity-70"
-      >
-        {pending && <span aria-hidden="true" className="size-4.5 animate-spin rounded-full border-2 border-on-primary/40 border-t-on-primary" />}
-        {t("submit")}
-      </Button>
+      {/* The design puts "Forgot password?" at the end of the password's label row (RP-1058). */}
+      <div className="relative">
+        <Field label={t("password")} id="password">
+          <div className="relative">
+            <LeadingIcon name="lock" />
+            <Input
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              className={`${tallInput} pe-11.5`}
+            />
+            <IconButton
+              label={showPassword ? t("hidePassword") : t("showPassword")}
+              size="sm"
+              className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted"
+              onClick={() => setShowPassword((shown) => !shown)}
+            >
+              <Icon name={showPassword ? "eye-off" : "eye"} size={18} />
+            </IconButton>
+          </div>
+        </Field>
+        <Link href="/forgot-password" className="absolute end-0 top-0 text-[13px] font-medium text-muted hover:text-primary hover:underline">
+          {t("forgot")}
+        </Link>
+      </div>
+      <SubmitButton pending={pending}>{t("submit")}</SubmitButton>
     </form>
   );
 }
