@@ -1,0 +1,7 @@
+{
+  "status": "error",
+  "checks": [],
+  "screenshots": [],
+  "notes": "Script error: locator.click: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('button', { name: 'Export PDF' })\u001b[22m | ",
+  "ranAt": "2026-10-27T18:11:13.195Z"
+}

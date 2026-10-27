@@ -1,0 +1,36 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Remarks are required with B",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"remarks\",\"code\":\"required\"}],\"error\":\"invalid_action_form\"}"
+    },
+    {
+      "text": "The MAR closes at Code B",
+      "ok": true,
+      "detail": "B"
+    },
+    {
+      "text": "The item data reads Comments: 3 open / 0 closed",
+      "ok": true,
+      "detail": "[{\"type\":{\"code\":\"CMT\",\"name\":{\"en\":\"Comment\",\"ar\":\"ملاحظة\"}},\"open\":3,\"closed\":0}]"
+    },
+    {
+      "text": "The MAR page shows '3 open / 0 closed'",
+      "ok": true,
+      "detail": "Comments (B)\nRaised by"
+    },
+    {
+      "text": "Three Comment items are in the Snag List, raised by Design Consultants, Open with TMC",
+      "ok": false,
+      "detail": "[[\"UAT SUB-12 comment one\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment two\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment three\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment three\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment two\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"],[\"UAT SUB-12 comment one\",\"Design Consultants LLC\",\"Open\",\"TMC Constructions\"]]"
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-12-1-mar-comments-count.jpg",
+    "evidence/SUB-12-2-snag-list.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:07:02.025Z"
+}

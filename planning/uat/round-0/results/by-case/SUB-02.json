@@ -1,0 +1,24 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The Form says \"2 fields need your attention: Description, Datasheet (PDF)\"",
+      "ok": true,
+      "detail": "2 fields need your attention: Description Datasheet (PDF) Material details Manufacturer* Approved supplier* Najd Electrical Supplies "
+    },
+    {
+      "text": "Nothing moved: still a Draft with no number",
+      "ok": true
+    },
+    {
+      "text": "The api refuses form_incomplete (422) naming the fields",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"description\",\"code\":\"required\"},{\"key\":\"datasheet\",\"code\":\"required\"}],\"error\":\"form_incomplete\"}"
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-02-1-refused-send.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:02:46.630Z"
+}

@@ -1,0 +1,65 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Setup: a TMC Submitted item and a TMC Comment exist",
+      "ok": true,
+      "detail": "6663b9fd-7294-4b40-bce6-224db0b20f92"
+    },
+    {
+      "text": "Ids are random: version 4 (no time, no order)",
+      "ok": true,
+      "detail": "444"
+    },
+    {
+      "text": "Nasser: the Tower Project by api is a 404 byte-identical to a made-up id (never 403)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"} / 404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "Nasser: the Tower Submittals list by api is a 404 byte-identical to a made-up id (never 403)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"} / 404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "Nasser: a TMC item by api is a 404 byte-identical to a made-up id (never 403)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"} / 404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "Yousef: a TMC item id by api is byte-identical to a made-up id",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Yousef: a TMC Comment id by api is byte-identical to a made-up id",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Nasser: the Tower Project page and a made-up id's page are identical (one heading, a Projects button)",
+      "ok": true,
+      "detail": "404/404 We can't find this page. It may not exist, or you may not ha"
+    },
+    {
+      "text": "Nasser: the Tower Submittals page and a made-up id's page are identical (one heading, a Projects button)",
+      "ok": true,
+      "detail": "404/404 We can't find this page. It may not exist, or you may not ha"
+    },
+    {
+      "text": "Nasser: the TMC item page and a made-up id's page are identical (one heading, a Projects button)",
+      "ok": true,
+      "detail": "404/404 We can't find this page. It may not exist, or you may not ha"
+    },
+    {
+      "text": "The wording is the plain 'We can't find this page' with no title, number or Company",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Proje"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-58-1-nasser-tmc-item.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:44:52.925Z"
+}

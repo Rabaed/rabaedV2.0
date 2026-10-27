@@ -1,0 +1,75 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Ahmed answers the reply checklist",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Ahmed sends the WIR to Mohammed recommending C with an Internal Note",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Mohammed Returns it to Ahmed",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Ahmed sends it again",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Mohammed issues the Code",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "hafiz reads no Recommended Code, Internal Note or Return of DCL's before or after the Code",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "hafiz reads the issued Code",
+      "ok": true,
+      "detail": "[\"transition\",\"assigned\",\"transition\",\"issue_code\"]"
+    },
+    {
+      "text": "ali reads no Recommended Code, Internal Note or Return of DCL's before or after the Code",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ali reads the issued Code",
+      "ok": true,
+      "detail": "[\"transition\",\"assigned\",\"transition\",\"issue_code\"]"
+    },
+    {
+      "text": "faisal reads no Recommended Code, Internal Note or Return of DCL's before or after the Code",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "faisal reads the issued Code",
+      "ok": true,
+      "detail": "[\"transition\",\"issue_code\"]"
+    },
+    {
+      "text": "DCL reads the Recommended Code and Internal Note",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Yousef reads nothing of the WIR",
+      "ok": true,
+      "detail": "19 channels clean"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-49-1-hafiz-wir-closed.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:41:17.568Z"
+}

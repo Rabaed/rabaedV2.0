@@ -1,0 +1,23 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The WIR and the submittal both sit at Pending Approval",
+      "ok": true
+    },
+    {
+      "text": "In the Submittals Kanban the WIR and the submittal are in the same Pending Approval column",
+      "ok": true,
+      "detail": "wir pending_approval, mar pending_approval"
+    },
+    {
+      "text": "The Inspections Kanban uses the same Stage column for the WIR",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-14-1-kanban-shared-column.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:53:22.005Z"
+}

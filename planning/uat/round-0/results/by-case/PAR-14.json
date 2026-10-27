@@ -1,0 +1,25 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Fixture FX-C2: Beta Build covers Tower 2 only (Location)",
+      "ok": true,
+      "detail": "{\"isAll\":false,\"valueIds\":[\"eebaab37-d05b-4b8f-b4cc-1edab645cc41\"]}"
+    },
+    {
+      "text": "Yousef sees only Tower 2 items from then on (no Tower 1 row)",
+      "ok": true,
+      "detail": "T2F01"
+    },
+    {
+      "text": "TMC is the only Contractor covering Tower 1 (all Locations)",
+      "ok": true,
+      "detail": "{\"isAll\":true,\"valueIds\":[]}"
+    }
+  ],
+  "screenshots": [
+    "evidence/PAR-14-1-yousef-list.jpg"
+  ],
+  "notes": "The fixture was applied by `run.ts --fixtures` (FX-C2). This Test Case checks its effect rather than re-doing the click-through.",
+  "ranAt": "2026-10-27T18:04:58.457Z"
+}

@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "A wrong password gives the one generic refusal",
+      "ok": true,
+      "detail": "Rabaed العربية Sign in Email* Password* That email and password don't match. Sign in"
+    },
+    {
+      "text": "An unknown email gets the very same refusal",
+      "ok": true,
+      "detail": "Rabaed العربية Sign in Email* Password* That email and password don't match. Sign in"
+    },
+    {
+      "text": "With the right password (the harness's demo session) sign-in opens Home",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en"
+    },
+    {
+      "text": "The session cookie belongs to the lane host (lane7.localhost), not 127.0.0.1",
+      "ok": true,
+      "detail": "lane7.localhost,lane7.localhost"
+    },
+    {
+      "text": "After sign-out a Project URL goes to sign-in",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/sign-in"
+    }
+  ],
+  "screenshots": [
+    "evidence/PAR-01-1-wrong-password.jpg",
+    "evidence/PAR-01-2-after-sign-out.jpg"
+  ],
+  "notes": "The right password is typed by the harness's demo:session script (the password is never read here); the wrong-password and sign-out steps are driven in the page.",
+  "ranAt": "2026-10-27T18:02:31.493Z"
+}

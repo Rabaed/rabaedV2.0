@@ -1,0 +1,19 @@
+{
+  "status": "error",
+  "checks": [
+    {
+      "text": "Yousef's Submittals List opens",
+      "ok": true,
+      "detail": "21 rows"
+    },
+    {
+      "text": "Yousef does not see Hafiz's Draft",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SMOKE-2-1-yousef-submittals-list.jpg"
+  ],
+  "notes": "Script error: Hafiz's Draft is not in his List.",
+  "ranAt": "2026-10-27T17:54:59.265Z"
+}

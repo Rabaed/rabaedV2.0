@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Mohammed is offered a Recommendation of Code A",
+      "ok": true,
+      "detail": "recommend_a,recommend_b,recommend_c,recommend_d"
+    },
+    {
+      "text": "TMC sees it \"With Owner review\", no Company or person",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"Owner review\",\"ar\":\"مراجعة المالك\"},\"memberName\":null,\"pool\":null}"
+    },
+    {
+      "text": "Noura holds the Owner's review and is offered Confirm",
+      "ok": true,
+      "detail": "confirm_a,owner_send_back"
+    },
+    {
+      "text": "Confirm issues Code A and closes the item",
+      "ok": true,
+      "detail": "A/approved"
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-21-1-noura-owner-review.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:11:42.945Z"
+}

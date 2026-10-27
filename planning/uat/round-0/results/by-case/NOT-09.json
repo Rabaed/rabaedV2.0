@@ -1,0 +1,38 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "the Consultant Engineer has a Send Back on the bound (Comment only) Workflow",
+      "ok": true,
+      "detail": "[\"send_to_manager\",\"send_back_to_draft\"]"
+    },
+    {
+      "text": "the Send Back is taken",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Hafiz is told it was Sent Back",
+      "ok": true
+    },
+    {
+      "text": "the notice names Design Consultants LLC as a Company, no person",
+      "ok": true,
+      "detail": "UAT NOT-09 sent back 185649 TWR-MAR-01-0296 · Sent Back to you by Design Consultants LLC Oct 22, 2026, 9:57 PM Unread"
+    },
+    {
+      "text": "Faisal (Al Waha) is not told of the Send Back or the moves inside TMC",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Yousef (Beta Build) is told nothing",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/NOT-09-1-hafiz-sent-back-notice.jpg"
+  ],
+  "notes": "Sent Back notices: Hafiz 1, Ali 1. The Send Back is at the Consultant Engineer Step (Ahmed), not Mohammed's Step: Mohammed has \"Return to Engineer\" only.",
+  "ranAt": "2026-10-22T18:57:12.122Z"
+}

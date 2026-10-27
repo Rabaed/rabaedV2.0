@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "With a failed item the pop-up pre-selects C",
+      "ok": true,
+      "detail": "revise_c"
+    },
+    {
+      "text": "With none failed it pre-selects A",
+      "ok": true,
+      "detail": "approve_a"
+    },
+    {
+      "text": "The Manager can still change it: every code is offered",
+      "ok": true,
+      "detail": "return_to_engineer, approve_a, approve_b, revise_c, reject_d"
+    },
+    {
+      "text": "The pop-up says the checklist proposes C and lists the Snag that will be raised",
+      "ok": true,
+      "detail": "Revise & Resubmit · C |  | Recommended Code: Revise and Resubmit (C) | Internal |  | Proposed | The checklist proposes Revise & Resubmit · C: an item failed. |  | Checklist · Cable trays and containment | 2 Pass / 1 Fail |  | Supports at the spacing on the drawing |  | Fail |  | A Snag is raised wit"
+    },
+    {
+      "text": "For the clean WIR the pop-up proposes A and lists no Snag",
+      "ok": true,
+      "detail": "Approve · A |  | Recommended Code: Approved (A) | Internal |  | Proposed | The checklist proposes Approve · A: no item failed. |  | Checklist · Cable trays and containment | 3 Pass |  | Supports at the spacing on the drawing |  | Pass |  | Trays bonded to earth |  | Pass |  | Clearance from other se"
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-11-1-pop-up-proposes-c.jpg",
+    "evidence/INS-11-2-pop-up-proposes-a.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:51:22.832Z"
+}

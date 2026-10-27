@@ -1,0 +1,57 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "a Draft Working Copy is made for Hafiz, who sees the Draft",
+      "ok": true,
+      "detail": "ready"
+    },
+    {
+      "text": "and refused as the plain 404 to a Member who does not see the Draft (Yousef)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "a TMC Member outside the Draft (Ali) gets what he sees of it: the same 404 while it is Hafiz's Draft",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "both Working Copies are made while the MAR is with DCL",
+      "ok": true,
+      "detail": "ready, ready"
+    },
+    {
+      "text": "both are the same (same text, same pages)",
+      "ok": true,
+      "detail": "2 pages / 2"
+    },
+    {
+      "text": "watermarked Not Final",
+      "ok": true
+    },
+    {
+      "text": "unsealed (no signature byte range)",
+      "ok": true
+    },
+    {
+      "text": "no Verification Code and no verification link",
+      "ok": true
+    },
+    {
+      "text": "Companies by name only, no person",
+      "ok": true
+    },
+    {
+      "text": "no Signature or Stamp cards",
+      "ok": true
+    },
+    {
+      "text": "the footer says Not Final on every page",
+      "ok": true
+    }
+  ],
+  "screenshots": [],
+  "notes": "",
+  "ranAt": "2026-10-22T19:09:33.227Z"
+}

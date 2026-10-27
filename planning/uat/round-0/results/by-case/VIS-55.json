@@ -1,0 +1,118 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Saeed (Project Admin) creates a Checklist Template",
+      "ok": true,
+      "detail": "201 {\"id\":\"990ff355-c6fc-4752-8d4e-7b2b99fa62c5\"}"
+    },
+    {
+      "text": "Nasser keeps a Template on JCV",
+      "ok": true,
+      "detail": "201 {\"id\":\"dc014a84-55f1-445a-8231-ff0c8266acca\"}"
+    },
+    {
+      "text": "saeed reads Tower's templates (and never JCV's)",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "text": "saeed reads nothing of who wrote or retired a template, or when",
+      "ok": true,
+      "detail": "id,versionId,versionNo,name,tradeId,status,items"
+    },
+    {
+      "text": "hafiz reads Tower's templates (and never JCV's)",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "text": "hafiz reads nothing of who wrote or retired a template, or when",
+      "ok": true,
+      "detail": "id,versionId,versionNo,name,tradeId,status,items"
+    },
+    {
+      "text": "ahmed reads Tower's templates (and never JCV's)",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "text": "ahmed reads nothing of who wrote or retired a template, or when",
+      "ok": true,
+      "detail": "id,versionId,versionNo,name,tradeId,status,items"
+    },
+    {
+      "text": "ali reads Tower's templates (and never JCV's)",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "text": "ali reads nothing of who wrote or retired a template, or when",
+      "ok": true,
+      "detail": "id,versionId,versionNo,name,tradeId,status,items"
+    },
+    {
+      "text": "Yousef (a Tower Member) reads the Tower templates too, no JCV one",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "Nasser reads none of Tower's (404)",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "ali cannot create, edit or retire: all the plain 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "hafiz cannot create, edit or retire: all the plain 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "ahmed cannot create, edit or retire: all the plain 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "yousef cannot create, edit or retire: all the plain 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "nasser cannot create, edit or retire: all the plain 404",
+      "ok": true,
+      "detail": "404,404,404"
+    },
+    {
+      "text": "Saeed edits the template into Version 2 while the WIR is a Draft",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "The Draft WIR's copy is read by TMC (Hafiz) and holds Version 1's 2 items",
+      "ok": true,
+      "detail": "[[1,2]]"
+    },
+    {
+      "text": "Before the Submit DCL (Ahmed) and Yousef read the WIR nowhere",
+      "ok": true
+    },
+    {
+      "text": "After the Submit DCL reads the same copy, still Version 1 with 2 items",
+      "ok": true,
+      "detail": "[[1,2]]"
+    },
+    {
+      "text": "Yousef reads no row of the WIR or its copy (404)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-55-1-ali-templates-read-only.jpg"
+  ],
+  "notes": "The UAT template was retired at the end (UAT Part leftovers: its WIR keeps its copy).",
+  "ranAt": "2026-10-22T19:43:22.232Z"
+}

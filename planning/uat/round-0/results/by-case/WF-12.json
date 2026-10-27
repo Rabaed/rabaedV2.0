@@ -1,0 +1,24 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Omar (Tower 2 only) covers the Tower 2 item too",
+      "ok": true
+    },
+    {
+      "text": "The Return goes back to Hafiz, who sent it",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":{\"en\":\"Hafiz Hamdan\",\"ar\":\"حافظ حمدان\"},\"pool\":null}"
+    },
+    {
+      "text": "Omar does not hold it and is offered nothing",
+      "ok": true,
+      "detail": "Hafiz Hamdan; offered "
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-12-1-hafiz-holds-after-return.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:25:30.768Z"
+}

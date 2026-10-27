@@ -1,0 +1,41 @@
+{
+  "status": "manual",
+  "checks": [
+    {
+      "text": "Step 1: Layla gives Ahmed a Trade DCL does not have: rejected (a Member never covers more than the Participant)",
+      "ok": true,
+      "detail": "422 {\"error\":\"exceeds_participant\"}"
+    },
+    {
+      "text": "and Ahmed's grant is unchanged",
+      "ok": true
+    },
+    {
+      "text": "Step 2: Saeed narrowing DCL off Electrical while Mohammed holds an Electrical MAR is refused (a Handover is needed first)",
+      "ok": true,
+      "detail": "409 {\"steps\":214,\"company\":{\"ar\":\"المصممون الاستشاريون ذ.م.م\",\"en\":\"Design Consultants LLC\"},\"error\":\"other_company_handover\"}"
+    },
+    {
+      "text": "The refusal names no Step, item, Member or Document Number of DCL",
+      "ok": true,
+      "detail": "{\"steps\":214,\"company\":{\"ar\":\"المصممون الاستشاريون ذ.م.م\",\"en\":\"Design Consultants LLC\"},\"error\":\"other_company_handover\"}"
+    },
+    {
+      "text": "The answer gives a count only (like: 1 Step of DCL needs a new holder first)",
+      "ok": true,
+      "detail": "{\"steps\":214,\"company\":{\"ar\":\"المصممون الاستشاريون ذ.م.م\",\"en\":\"Design Consultants LLC\"},\"error\":\"other_company_handover\"}"
+    },
+    {
+      "text": "Nothing changed (DCL still covers Electrical)",
+      "ok": true
+    },
+    {
+      "text": "Step 3 (the narrowing half): narrowing DCL's Locations to Tower 1 while DCL holds Tower 2 Steps is refused too, with no name",
+      "ok": true,
+      "detail": "409 {\"steps\":60,\"company\":{\"ar\":\"المصممون الاستشاريون ذ.م.م\",\"en\":\"Design Consultants LLC\"},\"error\":\"other_company_handover\"}"
+    }
+  ],
+  "screenshots": [],
+  "notes": "Step 3 second half not run: narrowing DCL's Locations from all to Tower 1 and widening back needs DCL to hold no Tower 2 Step, which other UAT cases keep open, and widening would leave every DCL engineer narrowed for the other Parts. The refusal above is proven. A person checks on a clean seed: 1) Saeed narrows DCL to Tower 1 only, then widens DCL back to all. 2) Open Ahmed's Visibility. Expected: after narrowing, DCL engineers cover Tower 1 only; widening the Participant again does not widen them.",
+  "ranAt": "2026-10-22T19:35:20.844Z"
+}

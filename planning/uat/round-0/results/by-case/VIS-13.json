@@ -1,0 +1,68 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz moves Rev 1 to Tower 2 and names the original in the link question",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "faisal sees it (the original, Tower 1): in the List and 200 by id",
+      "ok": true,
+      "detail": "list has it, by id 200"
+    },
+    {
+      "text": "Faisal's drop-down lists the original only",
+      "ok": true,
+      "detail": "[{\"id\":\"d9939adb-02a4-48f0-ae28-0cc859d3aba9\",\"documentNumber\":\"TWR-MAR-01-0432\",\"revisionNo\":0}]"
+    },
+    {
+      "text": "Faisal: the original has no Link to Rev 1 and no Linked from naming it",
+      "ok": true,
+      "detail": "{\"links\":[],\"canChange\":false} {\"items\":[]}"
+    },
+    {
+      "text": "Faisal gets 404 for Rev 1",
+      "ok": true
+    },
+    {
+      "text": "noura sees it (Rev 1, now Tower 2): in the List and 200 by id",
+      "ok": true,
+      "detail": "list has it, by id 200"
+    },
+    {
+      "text": "Noura: Rev 1 shows no Link, no Linked from and no link answer naming the original (its id is nowhere; no Link entry)",
+      "ok": true,
+      "detail": "200 links {\"links\":[],\"canChange\":false} from {\"items\":[]}"
+    },
+    {
+      "text": "Noura's drop-down lists Rev 1 only",
+      "ok": true,
+      "detail": "[{\"id\":\"55a677ed-5556-4971-8e6e-55ba6cdd0c52\",\"documentNumber\":\"TWR-MAR-01-0432 Rev 1\",\"revisionNo\":1}]"
+    },
+    {
+      "text": "Noura gets 404 for the original",
+      "ok": true
+    },
+    {
+      "text": "Noura finds nothing of the original in any channel",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Faisal finds nothing of Rev 1 in any channel",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Noura: the original's URL is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-13-1-noura-original-by-id.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:17:10.438Z"
+}

@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Home: Document Numbers read left to right whole",
+      "ok": true,
+      "detail": "0 found; not isolated: "
+    },
+    {
+      "text": "List: Document Numbers read left to right whole",
+      "ok": true,
+      "detail": "25 found; not isolated: "
+    },
+    {
+      "text": "a Revision (Rev n, with its Revision drop-down): Document Numbers read left to right whole",
+      "ok": true,
+      "detail": "3 found; not isolated: "
+    },
+    {
+      "text": "Notifications: Document Numbers read left to right whole",
+      "ok": true,
+      "detail": "50 found; not isolated: "
+    },
+    {
+      "text": "the record PDF carries the Document Number whole (TWR-MAR-01-nnnn in one piece)",
+      "ok": true,
+      "detail": "6 ﻦ ﻣ 1 ﺔ ﺤ ﻔ ﺻ · ﺪ ﺑ را رب ﻋ ﺎ ً ﻴ ﻧ و رت ﻜ ﻟ إ در ﺎ ﺻ · Issued electronically through Rabaed · SD90-8WKZ · page 1 of 6"
+    }
+  ],
+  "screenshots": [
+    "evidence/I18N-03-1-list-ar.jpg",
+    "evidence/I18N-03-2-revision-ar.jpg"
+  ],
+  "notes": "TWR-MAR-01-0002 (links to 0001) is not in Faisal's List: the Link check used another item.\nThe PDF's left-to-right order is read from the extracted text (number in one piece); how it sits inside Arabic lines is for the eye (see SIG-03).",
+  "ranAt": "2026-10-22T18:50:57.441Z"
+}

@@ -1,0 +1,47 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "The Package filter narrows the List to its items",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "text": "The Package filter narrows the Kanban too",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "text": "The List rows show the chip PKG number with the name",
+      "ok": false,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings We can't find this page. It may not exist, or you may not have access to it. Ask the person wh"
+    },
+    {
+      "text": "The Kanban cards show the chip",
+      "ok": true
+    },
+    {
+      "text": "The item page shows the chip with the Package name",
+      "ok": true
+    },
+    {
+      "text": "The chip opens the Package page",
+      "ok": true,
+      "detail": "http://lane7.localhost:3700/en/packages/d1a0160b-97f6-47c7-aff2-51e7cb2d4ab6"
+    },
+    {
+      "text": "An item in no Package shows no chip, and Package is not a Form field",
+      "ok": true
+    },
+    {
+      "text": "Beta Build opening the Package gets the plain 404",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/PKG-08-1-list-filtered-by-package.jpg",
+    "evidence/PKG-08-2-chip-opens-package.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:20:34.193Z"
+}

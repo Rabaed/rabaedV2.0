@@ -1,0 +1,84 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Home: the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    },
+    {
+      "text": "Home: a table wider than the screen scrolls inside its own area",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Projects: the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    },
+    {
+      "text": "Projects: a table wider than the screen scrolls inside its own area",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Submittals List: the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    },
+    {
+      "text": "Submittals List: a table wider than the screen scrolls inside its own area",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Kanban: the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    },
+    {
+      "text": "Kanban: a table wider than the screen scrolls inside its own area",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "an item: the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    },
+    {
+      "text": "an item: a table wider than the screen scrolls inside its own area",
+      "ok": true,
+      "detail": "[{\"wide\":false,\"scroller\":true}]"
+    },
+    {
+      "text": "Settings: the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    },
+    {
+      "text": "Settings: a table wider than the screen scrolls inside its own area",
+      "ok": true,
+      "detail": "[{\"wide\":false,\"scroller\":true},{\"wide\":false,\"scroller\":true}]"
+    },
+    {
+      "text": "the sidebar is closed on a phone and opens as a drawer from Menu",
+      "ok": true,
+      "detail": "closed first: true"
+    },
+    {
+      "text": "Workflow builder (opened as saeed): the page does not scroll sideways at 375",
+      "ok": true,
+      "detail": "375 > 375"
+    }
+  ],
+  "screenshots": [
+    "evidence/I18N-06-1-home-375.jpg",
+    "evidence/I18N-06-2-submittals-list-375.jpg",
+    "evidence/I18N-06-3-kanban-375.jpg",
+    "evidence/I18N-06-4-drawer-375.jpg",
+    "evidence/I18N-06-5-workflow-builder-375.jpg"
+  ],
+  "notes": "UX recommendations (do not fail this case): Projects: 3 controls under 44 px (e.g. All, Active, Closed); Projects: text cut off: Show; an item: 1 controls under 44 px (e.g. Submittals); an item: text cut off: Items; Settings: 2 controls under 44 px (e.g. INPUT, INPUT)",
+  "ranAt": "2026-10-22T18:52:11.021Z"
+}

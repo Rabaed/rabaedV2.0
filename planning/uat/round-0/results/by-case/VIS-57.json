@@ -1,0 +1,58 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Setup: Submit, Pick up, Send to Manager, a Return",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "A Code",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "Ali's feed shows TMC people by name and DCL by Company name only",
+      "ok": true,
+      "detail": "[[\"issue_code\",\"Design Consultants LLC\",null],[\"transition\",\"TMC Constructions\",\"Ali Sonour\"],[\"assigned\",\"TMC Constructions\",\"Ali Sonour\"],[\"transition\",\"TMC Constructions\",\"Hafiz Hamdan\"]]"
+    },
+    {
+      "text": "Ahmed's feed shows DCL people by name and TMC by Company name only",
+      "ok": true,
+      "detail": "[[\"issue_code\",\"Design Consultants LLC\",\"Mohammed Al Shamsi\"],[\"assigned\",\"Design Consultants LLC\",\"Mohammed Al Shamsi\"],[\"transition\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"internal_note\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"recommend_code\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"internal_answers\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"transition\",\"Design Consultants LLC\",\"Mohammed Al Shamsi\"],[\"assigned\",\"Design Consultants LLC\",\"Mohammed Al Shamsi\"],[\"transition\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"internal_note\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"recommend_code\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"internal_answers\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"assigned\",\"Design Consultants LLC\",\"Ahmed bin Said\"],[\"transition\",\"TMC Constructions\",null]]"
+    },
+    {
+      "text": "Ali sees no internal event, Internal Note, Recommended Code, answers_changed or Document upload of DCL",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Ahmed sees none of TMC's",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "text": "Positive control: Ahmed sees his own Recommended Code and Return events",
+      "ok": true,
+      "detail": "[\"issue_code\",\"assigned\",\"transition\",\"internal_note\",\"recommend_code\",\"internal_answers\",\"transition\",\"assigned\",\"transition\",\"internal_note\",\"recommend_code\",\"internal_answers\",\"assigned\",\"transition\"]"
+    },
+    {
+      "text": "Yousef's feed holds only Beta Build items (every entry is an item he sees); none of this one",
+      "ok": true,
+      "detail": "6 entries"
+    },
+    {
+      "text": "No setup changes appear (every entry is an item event)",
+      "ok": true
+    },
+    {
+      "text": "Yousef's Dashboard holds nothing of it",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-57-1-ali-activity-feed.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:44:15.550Z"
+}

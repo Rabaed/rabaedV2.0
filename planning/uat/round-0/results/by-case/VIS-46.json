@@ -1,0 +1,76 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Saeed turns Inside the Submittals tab on",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "hafiz sees the WIR in the Submittals List",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "hafiz's Type filter offers WIR and filtering by it finds it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "hafiz's Submittals Kanban holds it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "hafiz opens the WIR by id",
+      "ok": true
+    },
+    {
+      "text": "ahmed sees the WIR in the Submittals List",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed's Type filter offers WIR and filtering by it finds it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed's Submittals Kanban holds it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed opens the WIR by id",
+      "ok": true
+    },
+    {
+      "text": "Yousef sees the WIR in none of them (List, search, counts, Kanban, Home, bell) and gets 404 by id",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Yousef's Type filter and counts hold nothing of it",
+      "ok": true
+    },
+    {
+      "text": "Hafiz's Submittals page shows the WIR row",
+      "ok": true
+    },
+    {
+      "text": "Yousef: the WIR URL is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "The setting is back off, as found",
+      "ok": true,
+      "detail": "204"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-46-1-hafiz-submittals-with-wir.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:40:00.125Z"
+}

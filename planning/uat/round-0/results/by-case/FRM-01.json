@@ -1,0 +1,34 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The MAR Form carries the documented fields, in order",
+      "ok": true,
+      "detail": "have: Manufacturer, Approved supplier, Model, Specification section, Description, Items, Datasheet (PDF), Test certificate, Sample photo, Related submittals, Trade, Location, Scopes"
+    },
+    {
+      "text": "Approved supplier is required",
+      "ok": true
+    },
+    {
+      "text": "Items is a table with a total",
+      "ok": true
+    },
+    {
+      "text": "The SAR and the DAR have Forms of their own",
+      "ok": true,
+      "detail": "SAR: Supplier name (English), Supplier name (Arabic), Commercial registration number, Country of origin, Contact person, Contact email, Contact phone, Materials or services proposed, Additional information, Past projects, Company profile (PDF), ISO certificates, SASO certificates, Trade, Location, Scopes | DAR: Document type, Document title, Document revision, Specification section, Document, Supporting files, Trade, Location, Scopes"
+    },
+    {
+      "text": "Subject and Document Number sit above the Form; Attachments and Links below it",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-01-1-mar-form-top.jpg",
+    "evidence/FRM-01-2-new-sar-form.jpg",
+    "evidence/FRM-01-3-new-dar-form.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:28:58.005Z"
+}

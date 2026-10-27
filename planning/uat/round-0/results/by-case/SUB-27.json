@@ -1,0 +1,38 @@
+{
+  "status": "fail",
+  "checks": [
+    {
+      "text": "Home loads for Ali",
+      "ok": false,
+      "detail": "the page says: Home couldn't be loaded. Try again.; GET /v1/home took 22187 ms (the web app waits 3 s for it: apps/web/src/lib/session.ts)"
+    },
+    {
+      "text": "The Home api's Need My Action equals the sum of the Project's Need My Action reads",
+      "ok": false,
+      "detail": "home 225, Project reads 258 (other agents are creating items at the same time)"
+    },
+    {
+      "text": "The Home api's Waiting with others equals the Project's reads",
+      "ok": true,
+      "detail": "home 230, Project reads 230"
+    },
+    {
+      "text": "Active Projects is 1 (Ali's only Project)",
+      "ok": true
+    },
+    {
+      "text": "No Draft is counted as Need My Action or listed in it",
+      "ok": true
+    },
+    {
+      "text": "Recent activity holds at most four entries (api)",
+      "ok": true,
+      "detail": "[\"counts\",\"needsMyAction\",\"activity\",\"projects\",\"submittals\"]"
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-27-1-home.jpg"
+  ],
+  "notes": "With Home not loading, the page numbers (Need My Action, 4+ weeks, waiting with others, card count, Recent activity) could not be read on the page; only the api's were compared.",
+  "ranAt": "2026-10-27T18:15:27.851Z"
+}

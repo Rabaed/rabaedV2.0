@@ -1,0 +1,43 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Duplicate makes a Project copy",
+      "ok": true,
+      "detail": "{\"id\":\"9b4989d6-e4d8-4241-92d1-269f52324c0c\"}"
+    },
+    {
+      "text": "It is a draft Version 1, nothing published",
+      "ok": true,
+      "detail": "{\"published\":null,\"versionNo\":1,\"pv\":[]}"
+    },
+    {
+      "text": "It has no link to the original (nothing in the builder read names it)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Project Admins see it among this Project's own Workflows",
+      "ok": true,
+      "detail": "UAT FX-SB MAR Send Back (Comment only), UAT FX-SB MAR Send Back (Edit the Form), UAT WF-03 MAR copy 182418"
+    },
+    {
+      "text": "Ali does not see the unpublished copy",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Ali cannot open it (404)",
+      "ok": true
+    },
+    {
+      "text": "The builder opens for Saeed",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-03-1-builder-copy.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:24:20.148Z"
+}

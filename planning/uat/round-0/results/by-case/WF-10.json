@@ -1,0 +1,39 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz's Draft runs the author-only Workflow and Hafiz edits it",
+      "ok": true
+    },
+    {
+      "text": "omar: the item URL is the plain 404 (api)",
+      "ok": true
+    },
+    {
+      "text": "omar: the List shows no such Draft",
+      "ok": true
+    },
+    {
+      "text": "ali: the item URL is the plain 404 (api)",
+      "ok": true
+    },
+    {
+      "text": "ali: the List shows no such Draft",
+      "ok": true
+    },
+    {
+      "text": "Omar sees the plain 404 page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask"
+    },
+    {
+      "text": "After Send for Review TMC reads it as before (Ali sees it)",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/WF-10-1-omar-404.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:25:13.460Z"
+}

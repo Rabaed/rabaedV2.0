@@ -1,0 +1,59 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz creates the replacement and keeps it Draft",
+      "ok": true
+    },
+    {
+      "text": "mohammed: the rejected MAR's Links and Linked from do not name the Draft replacement",
+      "ok": true,
+      "detail": "{\"items\":[]}"
+    },
+    {
+      "text": "mohammed: nothing of the Draft replacement in any channel; its URL is 404",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "mohammed: the rejected MAR's history shows no replacement",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "faisal: the rejected MAR's Links and Linked from do not name the Draft replacement",
+      "ok": true,
+      "detail": "{\"items\":[]}"
+    },
+    {
+      "text": "faisal: nothing of the Draft replacement in any channel; its URL is 404",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "faisal: the rejected MAR's history shows no replacement",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "The replacement takes a new Document Number at its first send (no Rev)",
+      "ok": true,
+      "detail": "TWR-MAR-01-0381 vs TWR-MAR-01-0380"
+    },
+    {
+      "text": "Once Submitted it appears in the rejected MAR's Linked from by number and Subject",
+      "ok": true,
+      "detail": "[{\"documentNumber\":\"TWR-MAR-01-0381\",\"subject\":\"UAT VIS-40 rejected MAR 78794\",\"workItemId\":\"2352630d-b5e7-4863-be69-4c734c2cdb95\"}]"
+    },
+    {
+      "text": "The replacement lists the rejected MAR under Links",
+      "ok": true,
+      "detail": "[{\"id\":\"9fe0add3-d56b-4c0a-8e01-fedcd68ce925\",\"kind\":\"replaces\",\"fieldKey\":null,\"documentNumber\":\"TWR-MAR-01-0380\",\"subject\":\"UAT VIS-40 rejected MAR 78794\",\"workItemId\":\"f268f34d-5ee8-43ad-931c-e6f8a83601e0\"}]"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-40-1-mohammed-rejected-linked-from.jpg"
+  ],
+  "notes": "The UAT Owner PM observer is not covered: FX-OW is not applied.",
+  "ranAt": "2026-10-22T19:37:09.039Z"
+}

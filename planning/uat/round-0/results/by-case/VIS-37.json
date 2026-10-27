@@ -1,0 +1,60 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Hafiz lists his datasheet and photo on the Draft (positive control)",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "text": "yousef before the Submit: Documents list, download URL, upload and remove are all 404, the list exactly like a made-up id",
+      "ok": true,
+      "detail": "404 404 404 404"
+    },
+    {
+      "text": "ahmed before the Submit: Documents list, download URL, upload and remove are all 404, the list exactly like a made-up id",
+      "ok": true,
+      "detail": "404 404 404 404"
+    },
+    {
+      "text": "saeed before the Submit: Documents list, download URL, upload and remove are all 404, the list exactly like a made-up id",
+      "ok": true,
+      "detail": "404 404 404 404"
+    },
+    {
+      "text": "After the Submit Ahmed lists both Documents",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "text": "Ahmed reads the photo's time and place",
+      "ok": true,
+      "detail": "[\"2026-10-20T06:30:00.000Z\",{\"latitude\":24.7136,\"longitude\":46.6753}]"
+    },
+    {
+      "text": "The uploader is TMC as a Company, not the engineer",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":null}"
+    },
+    {
+      "text": "Ahmed downloads the photo",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "yousef after the Submit: Documents list, download URL, upload and remove are all 404, the list exactly like a made-up id",
+      "ok": true,
+      "detail": "404 404 404 404"
+    },
+    {
+      "text": "Yousef: the item page is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-37-1-yousef-item-after-submit.jpg"
+  ],
+  "notes": "The TMC Member off the Project of the Test Case is Saeed (TMC Authorized Person, not a Project Member in the seed).",
+  "ranAt": "2026-10-22T19:35:37.043Z"
+}

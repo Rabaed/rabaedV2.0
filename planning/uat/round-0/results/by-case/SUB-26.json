@@ -1,0 +1,18 @@
+{
+  "status": "error",
+  "checks": [
+    {
+      "text": "The Dashboard shows the Type cards (MAR, SAR, DAR)",
+      "ok": false
+    },
+    {
+      "text": "The Activity Feed sits on the Dashboard",
+      "ok": false
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-26-1-dashboard.jpg"
+  ],
+  "notes": "Script error: locator.innerText: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('main').getByRole('link', { name: /Pending/ }).first()\u001b[22m | ",
+  "ranAt": "2026-10-27T18:14:14.488Z"
+}

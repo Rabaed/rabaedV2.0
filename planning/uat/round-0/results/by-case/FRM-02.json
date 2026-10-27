@@ -1,0 +1,60 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "A Draft saves with Manufacturer empty",
+      "ok": true,
+      "detail": "{\"id\":\"c933a324-1871-4669-8cbe-72547e327ce2\"}"
+    },
+    {
+      "text": "Send for Review is refused and names Manufacturer (form_incomplete)",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"manufacturer\",\"code\":\"required\"}],\"error\":\"form_incomplete\"}"
+    },
+    {
+      "text": "A Draft saves with Description empty",
+      "ok": true,
+      "detail": "{\"id\":\"ed7c4f6a-bf85-4399-acb0-7412d939c7d2\"}"
+    },
+    {
+      "text": "Send for Review is refused and names Description (form_incomplete)",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"description\",\"code\":\"required\"}],\"error\":\"form_incomplete\"}"
+    },
+    {
+      "text": "Trade is required even to save a Draft (form-engine.md 2.x: no Work Item exists without one; the Test Case text says a Draft saves with any missing, which the docs contradict)",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"trade\",\"code\":\"required\"}],\"error\":\"invalid_answers\"}"
+    },
+    {
+      "text": "A Draft saves with Location empty",
+      "ok": true,
+      "detail": "{\"id\":\"bd4e27d8-4472-4d42-8a96-3c92640849b4\"}"
+    },
+    {
+      "text": "Send for Review is refused and names Location (form_incomplete)",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"location\",\"code\":\"required\"}],\"error\":\"form_incomplete\"}"
+    },
+    {
+      "text": "A Draft saves with Datasheet empty",
+      "ok": true,
+      "detail": "{\"id\":\"bdac1042-beaa-4440-8763-e50441ef8c48\"}"
+    },
+    {
+      "text": "Send for Review is refused and names Datasheet (form_incomplete)",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"datasheet\",\"code\":\"required\"}],\"error\":\"form_incomplete\"}"
+    },
+    {
+      "text": "The page names the missing field and marks it",
+      "ok": true,
+      "detail": "1 field needs your attention: Manufacturer Material details Manufacturer* This field is requ"
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-02-1-missing-manufacturer.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:31:36.021Z"
+}

@@ -1,0 +1,7 @@
+{
+  "status": "manual",
+  "checks": [],
+  "screenshots": [],
+  "notes": "Not run by script: the Handover dialog is read by taking Deactivate on a seeded Member, and a call that went through would deactivate Hafiz for every other Part. Steps for a person on a clean seed: 1) Hafiz holds two Tower 2 MARs at Contractor Engineer (Omar covers Tower 2 as well) and one Tower 1 MAR (Omar does not cover it). 2) Saeed: Members > Deactivate Hafiz. Expected: the Handover dialog lists his open Steps and Drafts (Project, Document Number or No number yet, Subject, Step); the Tower 2 Steps pre-fill Omar as the single candidate; the Tower 1 Step has nobody else who can take it, so the change is refused with 'Nobody else can take <Step> on <Project>. Give someone the Position or Visibility first', naming only TMC's own Step and the Project; nothing saves until every Step has a new holder.",
+  "ranAt": "2026-10-27T18:03:50.734Z"
+}

@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "On a phone Take a photo is offered beside Upload",
+      "ok": true
+    },
+    {
+      "text": "The thumbnail shows",
+      "ok": true
+    },
+    {
+      "text": "The photo's EXIF time and place are read by the api",
+      "ok": true,
+      "detail": "[\"2026-09-28T07:15:00.000Z\",{\"latitude\":24.7136,\"longitude\":46.6753}]"
+    },
+    {
+      "text": "Opening the photo shows the time and place",
+      "ok": true,
+      "detail": "Taken Sep 28, 2026, 10:15 AM 24"
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-06-1-phone-sample-photo.jpg",
+    "evidence/FRM-06-2-photo-opened.jpg"
+  ],
+  "notes": "The camera capture itself (Take a photo opening the phone camera) needs a device; the case ran with an uploaded JPEG with EXIF.",
+  "ranAt": "2026-10-22T18:31:12.765Z"
+}

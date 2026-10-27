@@ -1,0 +1,43 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "At 375 px the WIR shows the checklist with the three items",
+      "ok": true
+    },
+    {
+      "text": "Each item has Pass, Fail and N/A segmented controls",
+      "ok": true,
+      "detail": "3 Pass controls"
+    },
+    {
+      "text": "The controls are large enough to tap (at least 40 px high)",
+      "ok": true,
+      "detail": "44px"
+    },
+    {
+      "text": "On a Fail whose template requires them, the comment and photo show required",
+      "ok": true
+    },
+    {
+      "text": "A failed item can raise a Snag, ticked by default",
+      "ok": true
+    },
+    {
+      "text": "A summary reads like 1 Pass / 1 Fail / 1 N/A with progress",
+      "ok": true,
+      "detail": "1 Pass / 1 Fail / 1 N/A"
+    },
+    {
+      "text": "It saved as it went (the api holds the answers)",
+      "ok": true,
+      "detail": "{\"earthing\":{\"answer\":\"pass\"},\"supports\":{\"answer\":\"fail\"},\"clearance\":{\"answer\":\"na\"}}"
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-09-1-phone-checklist.jpg",
+    "evidence/INS-09-2-phone-checklist-answered.jpg"
+  ],
+  "notes": "The WIR is left with Ahmed (answers saved, not sent).",
+  "ranAt": "2026-10-22T18:50:13.228Z"
+}

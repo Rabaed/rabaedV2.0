@@ -1,0 +1,12 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "DCL is already a Participant of UATP in the role Consultant (an earlier run accepted it)",
+      "ok": true
+    }
+  ],
+  "screenshots": [],
+  "notes": "",
+  "ranAt": "2026-10-27T18:03:35.173Z"
+}

@@ -1,0 +1,5 @@
+[
+ { "bug": "RP-1049", "priority": "Highest", "testCase": "SNG-01", "title": "A server-side api read slower than 3 s shows the not-found page: Submittals List, Kanban and Snag List are unreachable for TMC at 858 items (also SUB-27 Home, SNG-13, PKG-08, SMOKE)" },
+ { "bug": "RP-1050", "priority": "Highest", "testCase": "SUB-27", "title": "Home takes 18–19 s and the Lists 3–4.4 s at 858 work items: the api reads do not scale to one real Project" },
+ { "bug": "RP-921", "priority": "Medium", "testCase": "SUB-29", "title": "List column headers and the Group by menu use terms the glossary avoids: Status, Discipline, Current owner (also SUB-23)" }
+]

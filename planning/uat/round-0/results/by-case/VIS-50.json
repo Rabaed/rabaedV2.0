@@ -1,0 +1,49 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "TMC moves it In Progress (Start work)",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Positive control: Hafiz (TMC) sees it in the Snag List",
+      "ok": true
+    },
+    {
+      "text": "Yousef's Snag List holds nothing of it; its stage counts show no In Progress from it",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "Yousef's Snag Kanban holds nothing of it",
+      "ok": true
+    },
+    {
+      "text": "His filters offer only his own Company (Company), nothing for Raised from",
+      "ok": true,
+      "detail": "{\"c\":[{\"participantId\":\"672f97f2-9b91-479f-8b35-d25494500e0b\",\"name\":{\"en\":\"Beta Build\",\"ar\":\"بيتا للبناء\"},\"own\":true}],\"r\":[]}"
+    },
+    {
+      "text": "By id, history, Links, Documents and every channel: nothing (404)",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "Filtering by another Company's Participant finds nothing of it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Yousef: the Snag by id is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-50-1-yousef-snag-by-id.jpg",
+    "evidence/VIS-50-2-yousef-snag-list.jpg"
+  ],
+  "notes": "Comment Type and a 'raised from a source Yousef cannot see' are covered by VIS-05 (Comments of a Code B).",
+  "ranAt": "2026-10-22T19:41:47.243Z"
+}

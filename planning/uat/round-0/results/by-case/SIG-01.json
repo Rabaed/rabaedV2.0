@@ -1,0 +1,43 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "the pop-up keeps the Transition's own label (Submit)",
+      "ok": true
+    },
+    {
+      "text": "there is no separate Sign button or checkbox",
+      "ok": true
+    },
+    {
+      "text": "after the confirm the history records who, from which Participant and when",
+      "ok": true,
+      "detail": "{\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"memberName\":{\"en\":\"Ali Sonour\",\"ar\":\"علي سنور\"}}"
+    },
+    {
+      "text": "the item page shows the entry with Ali Sonour and TMC Constructions",
+      "ok": true
+    },
+    {
+      "text": "a Transition without confirmed true is refused with not_confirmed",
+      "ok": true,
+      "detail": "422 {\"error\":\"not_confirmed\"}"
+    },
+    {
+      "text": "confirmed false is refused the same way",
+      "ok": true,
+      "detail": "422 {\"error\":\"not_confirmed\"}"
+    },
+    {
+      "text": "and nothing was taken (item still at the Contractor PM Step)",
+      "ok": true,
+      "detail": "internal_review"
+    }
+  ],
+  "screenshots": [
+    "evidence/SIG-01-1-submit-popup.jpg",
+    "evidence/SIG-01-2-history-after-confirm.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:03:24.496Z"
+}

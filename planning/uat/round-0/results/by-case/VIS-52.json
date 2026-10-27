@@ -1,0 +1,50 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Before the change Yousef does not see the Snag (Beta Build covers Tower 2 only)",
+      "ok": true
+    },
+    {
+      "text": "Saeed widens Beta Build to cover Tower 1 as well",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Beta Build still never sees the Snag (it stays with TMC, by id and in the Snag List)",
+      "ok": true
+    },
+    {
+      "text": "TMC resolves it",
+      "ok": true,
+      "detail": "204 204"
+    },
+    {
+      "text": "Mohammed Returns it to Open",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "The Return stays with TMC (TMC holds it, Open)",
+      "ok": true,
+      "detail": "open {\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}"
+    },
+    {
+      "text": "Yousef never sees it after the Return either",
+      "ok": true
+    },
+    {
+      "text": "A new Raise on a Location both Contractors now cover is refused (it asks which Contractor; without a pick nothing moves)",
+      "ok": true,
+      "detail": "mohammed raise answered 422: {\"error\":\"participant_not_picked\"}"
+    },
+    {
+      "text": "Beta Build's Visibility is restored to Tower 2 only (FX-C2 kept)",
+      "ok": true,
+      "detail": "204"
+    }
+  ],
+  "screenshots": [],
+  "notes": "",
+  "ranAt": "2026-10-22T19:42:23.666Z"
+}

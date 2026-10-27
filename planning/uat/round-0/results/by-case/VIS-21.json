@@ -1,0 +1,87 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "ali watches the MAR",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "ahmed watches the MAR",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "faisal watches the MAR",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "ali reads only their own Watching (no list or count of watchers)",
+      "ok": true,
+      "detail": "{\"watching\":true}"
+    },
+    {
+      "text": "ali's item read has no watchers list or count",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "ahmed reads only their own Watching (no list or count of watchers)",
+      "ok": true,
+      "detail": "{\"watching\":true}"
+    },
+    {
+      "text": "ahmed's item read has no watchers list or count",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "faisal reads only their own Watching (no list or count of watchers)",
+      "ok": true,
+      "detail": "{\"watching\":true}"
+    },
+    {
+      "text": "faisal's item read has no watchers list or count",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Hind narrows Faisal off the MAR's Trade",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Faisal now gets 404 for the MAR",
+      "ok": true
+    },
+    {
+      "text": "Mohammed issues Code A",
+      "ok": true,
+      "detail": "204 "
+    },
+    {
+      "text": "Faisal gets no in-app notification of the Code",
+      "ok": true,
+      "detail": "0 -> 0"
+    },
+    {
+      "text": "Faisal gets no email of the Code",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Positive control: Ali (raiser's Company, still sees it) has a notification for the item",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "text": "Faisal's Visibility is restored (FX-OR kept)",
+      "ok": true,
+      "detail": "204"
+    }
+  ],
+  "screenshots": [],
+  "notes": "",
+  "ranAt": "2026-10-22T19:30:02.424Z"
+}

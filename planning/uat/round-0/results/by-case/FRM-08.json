@@ -1,0 +1,33 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Ahmed's pop-up holds the verification, the Recommended Code and the Internal Note",
+      "ok": true,
+      "detail": "Send to Manager Verification Sample checked* Yes No Matches specification* Yes No Verification note Say what does not match the specification. Only your Company reads this reply. Internal Note Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in "
+    },
+    {
+      "text": "Mohammed's Code pop-up holds the final verification and Remarks",
+      "ok": true,
+      "detail": "Approve · A Final verification Sample checked* Yes No Matches specification* Yes No Verification note* Filled in from your Engineer's review; correct it if needed. Shared with the Code. Remarks Remarks Shared with everyone who sees this item. Internal Note Optional. Only your Company sees it, even w"
+    },
+    {
+      "text": "No Form field is editable by the Consultant",
+      "ok": true
+    },
+    {
+      "text": "The Form is shown read-only to Mohammed",
+      "ok": true
+    },
+    {
+      "text": "Fields a Screen marks internal never reach TMC",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/FRM-08-1-ahmed-send-to-manager-popup.jpg",
+    "evidence/FRM-08-2-mohammed-code-popup.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:30:23.699Z"
+}

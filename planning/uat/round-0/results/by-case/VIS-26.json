@@ -1,0 +1,141 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Positive control: Saeed (Project Admin) reads the builder of the Tower Workflow",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "ali: open the builder on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "ali: Duplicate on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "ali: Save draft on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "ali: Publish on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "ali: Bind on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "ali's builder answer is byte-identical to a made-up id's",
+      "ok": true,
+      "detail": "{\"error\":\"not_found\"} / {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "layla: open the builder on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "layla: Duplicate on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "layla: Save draft on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "layla: Publish on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "layla: Bind on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "layla's builder answer is byte-identical to a made-up id's",
+      "ok": true,
+      "detail": "{\"error\":\"not_found\"} / {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "nasser: open the builder on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "nasser: Duplicate on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "nasser: Save draft on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "nasser: Publish on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "nasser: Bind on the Tower Workflow is the plain 404 (and changes nothing)",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "nasser's builder answer is byte-identical to a made-up id's",
+      "ok": true,
+      "detail": "{\"error\":\"not_found\"} / {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "The Tower Workflow is unchanged (no draft, no new Version)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Positive control: Nasser reads the builder of his own JCV Workflow",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "A JCV Workflow id pasted under the Tower Project is 404 for Saeed",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Nasser: the JCV Workflow URL under the Tower Project is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    },
+    {
+      "text": "A Rabaed Default is 404 in the builder to the Project Admin",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Binding another Project's Workflow is 404 for the Project Admin too",
+      "ok": true,
+      "detail": "404 {\"error\":\"not_found\"}"
+    },
+    {
+      "text": "Ali: the builder URL of the Tower Workflow is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
+    }
+  ],
+  "screenshots": [
+    "evidence/VIS-26-1-nasser-jcv-workflow-under-tower.jpg",
+    "evidence/VIS-26-2-ali-builder-url.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T19:33:14.058Z"
+}

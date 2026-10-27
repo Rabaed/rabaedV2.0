@@ -1,0 +1,37 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "The api offers Ahmed no Save draft (the Form is the raiser's)",
+      "ok": true
+    },
+    {
+      "text": "A direct attempt to change an answer is refused",
+      "ok": true,
+      "detail": "409"
+    },
+    {
+      "text": "The Documents are frozen and no change is allowed",
+      "ok": true,
+      "detail": "{\"n\":2,\"canChange\":false}"
+    },
+    {
+      "text": "Every answer and the total show read-only",
+      "ok": true
+    },
+    {
+      "text": "No edit control for the Form is on Ahmed's page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "The photo shows time and place",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-09-1-ahmed-readonly-form.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:05:29.742Z"
+}

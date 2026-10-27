@@ -1,0 +1,7 @@
+{
+  "status": "blocked",
+  "checks": [],
+  "screenshots": [],
+  "notes": "Also: no demo person holds Assign, so nobody receives the Weekly Step Age report (receivesWeeklyReport is false for every seeded person).\nRP-922 UAT test tool not built (no `pnpm uat:age` / `uat:run-job`): aged items and the weekly report job cannot be made on demand",
+  "ranAt": "2026-10-22T18:55:48.670Z"
+}

@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Every Member (Ali) reads the Required links setting, WIR Approved submittals among it",
+      "ok": true,
+      "detail": "[\"MAR/related_submittals\",\"WIR/approved_submittals\"]"
+    },
+    {
+      "text": "Ali cannot change it (the plain 404) and it stays as it was",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "text": "Saeed (Project Admin) turns Approved submittals required on",
+      "ok": true,
+      "detail": "204"
+    },
+    {
+      "text": "With it on, Hafiz's WIR cannot leave Draft and the error names the field",
+      "ok": true,
+      "detail": "422 {\"fields\":[{\"key\":\"approved_submittals\",\"code\":\"required\"}],\"error\":\"form_incomplete\"}"
+    },
+    {
+      "text": "It stays a Draft",
+      "ok": true
+    },
+    {
+      "text": "The page says the Approved submittals field is required",
+      "ok": true
+    },
+    {
+      "text": "Turned off again, the same WIR can be sent",
+      "ok": true,
+      "detail": "204 204"
+    }
+  ],
+  "screenshots": [
+    "evidence/INS-02-1-form-names-the-field.jpg",
+    "evidence/INS-02-2-required-links-settings.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-22T18:47:26.067Z"
+}

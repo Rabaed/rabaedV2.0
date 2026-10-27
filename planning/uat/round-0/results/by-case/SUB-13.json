@@ -1,0 +1,37 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "Return to Engineer gives it back to Ahmed",
+      "ok": true,
+      "detail": "consultant_engineer Ahmed bin Said"
+    },
+    {
+      "text": "Code C with Remarks empty is refused",
+      "ok": true,
+      "detail": "{\"fields\":[{\"key\":\"remarks\",\"code\":\"required\"}],\"error\":\"invalid_action_form\"}"
+    },
+    {
+      "text": "With Remarks it closes at C",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "text": "Closed at C with its Remarks shown to TMC",
+      "ok": true
+    },
+    {
+      "text": "TMC is offered Create Revision",
+      "ok": true
+    },
+    {
+      "text": "The page shows Create Revision",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "evidence/SUB-13-1-tmc-code-c-offers-revision.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T18:07:26.271Z"
+}
