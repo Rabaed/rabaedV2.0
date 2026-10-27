@@ -145,6 +145,43 @@ function photosLabels(t: Translate): FormRendererLabels["photos"] {
     noPlace: t("photosField.noPlace"),
     atMost: (n, count) => t("photosField.atMost", { n, count }),
     full: (n, count) => t("photosField.full", { n, count }),
+    // A photo full screen, and the annotate view (RP-656, RP-1056).
+    annotatedMark: t("photosField.annotatedMark"),
+    viewer: {
+      close: t("photosField.viewer.close"),
+      show: t("photosField.viewer.show"),
+      annotated: t("photosField.viewer.annotated"),
+      original: t("photosField.viewer.original"),
+      annotate: t("photosField.viewer.annotate"),
+      noImage: t("photosField.viewer.noImage"),
+    },
+    annotator: {
+      title: (name) => t("photosField.annotator.title", { name }),
+      cancel: t("photosField.annotator.cancel"),
+      undo: t("photosField.annotator.undo"),
+      save: t("photosField.annotator.save"),
+      saving: t("photosField.annotator.saving"),
+      failed: t("photosField.annotator.failed"),
+      canvas: t("photosField.annotator.canvas"),
+      tools: t("photosField.annotator.tools"),
+      tool: {
+        arrow: t("photosField.annotator.tool.arrow"),
+        rectangle: t("photosField.annotator.tool.rectangle"),
+        circle: t("photosField.annotator.tool.circle"),
+        pen: t("photosField.annotator.tool.pen"),
+        text: t("photosField.annotator.tool.text"),
+      },
+      colours: t("photosField.annotator.colours"),
+      colour: {
+        red: t("photosField.annotator.colour.red"),
+        yellow: t("photosField.annotator.colour.yellow"),
+        blue: t("photosField.annotator.colour.blue"),
+        white: t("photosField.annotator.colour.white"),
+        black: t("photosField.annotator.colour.black"),
+      },
+      labelText: t("photosField.annotator.labelText"),
+      addLabel: t("photosField.annotator.addLabel"),
+    },
   };
 }
 

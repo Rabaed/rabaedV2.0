@@ -10,6 +10,7 @@ import {
   maxChecklistComment,
   maxItemPhotos,
   snagTick,
+  withAnnotatedCopies,
   type ChecklistAnswers,
   type ChecklistField as ChecklistFieldSchema,
   type ChecklistItem,
@@ -85,6 +86,8 @@ export type ChecklistFieldProps = {
   onUpload?: (itemKey: string, files: File[]) => void;
   onOpen?: (documentId: string) => void;
   onRemove?: (itemKey: string, documentId: string) => void;
+  /** Stores the annotated copy of a photo, beside it in its item (PhotosField's `onSaveAnnotated`). */
+  onSaveAnnotated?: (originalId: string, image: Blob) => Promise<void>;
 };
 
 const answersOf = (value: unknown): ChecklistAnswers => {
@@ -160,7 +163,7 @@ const evidenceField = (item: ChecklistItem): PhotosFieldSchema => ({
   maxFiles: maxItemPhotos,
 });
 
-export function ChecklistField({ field, value, mode, locale, labels: text, errors = [], files, onChange, onUpload, onOpen, onRemove }: ChecklistFieldProps) {
+export function ChecklistField({ field, value, mode, locale, labels: text, errors = [], files, onChange, onUpload, onOpen, onRemove, onSaveAnnotated }: ChecklistFieldProps) {
   const answers = answersOf(value);
   // The checklist's Field names and describes it as a group; its id is what the error summary links to.
   const { id, labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
@@ -175,8 +178,9 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
 
   const items = field.items.map((item, index) => {
     const entry = answers[item.key];
+    // The item's photos with their annotated copies; only the originals count.
     const documents = photosOf(item.key);
-    const shown = itemEvidence(item, entry, documents.length);
+    const shown = itemEvidence(item, entry, withAnnotatedCopies(documents).length);
     const textId = `${id ?? field.key}-${item.key}-text`;
     const itemErrors = errors.filter((e) => e.item === item.key);
     const label = text.evidence(item.text[locale]);
@@ -218,7 +222,16 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
           )}
           {entry?.comment && <p className="whitespace-pre-wrap text-body text-text"><bdi>{entry.comment}</bdi></p>}
           {documents.length > 0 && (
-            <PhotosField field={evidenceField(item)} files={itemFiles} mode="read" locale={locale} labels={text.photosField} label={label} onOpen={onOpen} />
+            <PhotosField
+              field={evidenceField(item)}
+              files={itemFiles}
+              mode="read"
+              locale={locale}
+              labels={text.photosField}
+              label={label}
+              onOpen={onOpen}
+              onSaveAnnotated={onSaveAnnotated}
+            />
           )}
         </li>
       );
@@ -284,6 +297,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
                 onUpload={(picked) => onUpload?.(item.key, picked)}
                 onOpen={onOpen}
                 onRemove={(documentId) => onRemove?.(item.key, documentId)}
+                onSaveAnnotated={onSaveAnnotated}
               />
             </div>
           )}

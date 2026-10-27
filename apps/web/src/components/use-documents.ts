@@ -1,9 +1,17 @@
 "use client";
 
-import { checklistItemFilesKey, contentTypeOfFile, type DocumentList, type DocumentSummary, type StartedDocumentUpload } from "@rabaed/domain";
+import {
+  checklistItemFilesKey,
+  contentTypeOfFile,
+  type DocumentList,
+  type DocumentSummary,
+  type StartDocumentUploadRequest,
+  type StartedDocumentUpload,
+} from "@rabaed/domain";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { annotatedCopyFile, annotatedCopyRequest } from "@/lib/annotated-copy";
 
 // Uploading, opening and removing a Work Item's Documents, for the Attachments
 // System Field and the Form's `attachments` and `photos` fields alike (RP-269,
@@ -30,18 +38,25 @@ const refusals: Record<string, string> = {
  * the file store, and the API is told it's there. `refused` is the API's refusal code (or
  * `unavailable` when the file store or the network failed).
  */
-export async function uploadToWorkItem(
+export function uploadToWorkItem(
   workItemId: string,
   file: File,
   { fieldKey, itemKey, reply = false }: { fieldKey?: string; itemKey?: string; reply?: boolean } = {},
-): Promise<{ ok: true } | { ok: false; refused: string; status?: number }> {
+): Promise<UploadResult> {
+  return uploadDocument(workItemId, file, { fileName: file.name, sizeBytes: file.size, contentType: contentTypeOfFile(file), fieldKey, itemKey, ...(reply ? { reply: true } : {}) });
+}
+
+type UploadResult = { ok: true } | { ok: false; refused: string; status?: number };
+
+/** The three steps of an upload, for the file `request` declares. */
+async function uploadDocument(workItemId: string, file: File, request: StartDocumentUploadRequest): Promise<UploadResult> {
   const base = `/api/v1/work-items/${workItemId}/documents`;
   const refusal = async (res: Response) => ({ ok: false as const, status: res.status, refused: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "unavailable" });
   try {
     const res = await fetch(base, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType: contentTypeOfFile(file), fieldKey, itemKey, ...(reply ? { reply: true } : {}) }),
+      body: JSON.stringify(request),
     });
     if (!res.ok) return await refusal(res);
     const started = (await res.json()) as StartedDocumentUpload;
@@ -141,6 +156,35 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"],
     return true;
   }
 
+  /**
+   * Stores `image`, drawn in the annotate view, as the annotated copy of photo `original` (RP-656,
+   * RP-1056), beside it: the api puts it in the original's field and item, read by exactly who reads
+   * the original. Throws when refused, so the annotate view keeps its marks; the message says why.
+   */
+  async function saveAnnotated(original: Pick<DocumentSummary, "id" | "fileName">, image: Blob) {
+    setMessage(null);
+    const file = annotatedCopyFile(original.fileName, image);
+    const result = await uploadDocument(workItemId, file, annotatedCopyRequest(original.id, file));
+    if (!result.ok) {
+      if (result.refused === "document_frozen") {
+        setMessage(t("annotateFrozen"));
+        router.refresh();
+      } else refusedWith(result.refused, result.status);
+      throw new Error(result.refused);
+    }
+    setMessage(t("annotatedSaved"));
+    router.refresh();
+    onChanged?.();
+  }
+
+  /** `saveAnnotated` for a photo among `documents`, by its id: the Form engine's `onSaveAnnotated`. */
+  const annotatesIn =
+    (documents: readonly DocumentSummary[]) =>
+    (originalId: string, image: Blob): Promise<void> => {
+      const original = documents.find((d) => d.id === originalId);
+      return original ? saveAnnotated(original, image) : Promise.reject(new Error("not_found"));
+    };
+
   async function open(documentId: string) {
     setMessage(null);
     // Opened at once, so the browser treats it as the click's own window; the URL follows.
@@ -179,6 +223,8 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"],
 
   return {
     upload,
+    saveAnnotated,
+    annotatesIn,
     open,
     remove,
     size,

@@ -965,7 +965,43 @@
         "noTime": "No time recorded",
         "noPlace": "No location recorded",
         "atMost": "{count, plural, one {At most 1 photo} other {At most {n} photos}}",
-        "full": "{count, plural, one {This field takes 1 photo.} other {This field takes at most {n} photos.}}"
+        "full": "{count, plural, one {This field takes 1 photo.} other {This field takes at most {n} photos.}}",
+        "annotatedMark": "Annotated",
+        "viewer": {
+          "close": "Close",
+          "show": "Show",
+          "annotated": "Annotated",
+          "original": "Original",
+          "annotate": "Annotate",
+          "noImage": "No image to show."
+        },
+        "annotator": {
+          "title": "Annotate {name}",
+          "cancel": "Cancel",
+          "undo": "Undo",
+          "save": "Save",
+          "saving": "Saving…",
+          "failed": "The annotated photo wasn't saved. Try again.",
+          "canvas": "The photo, to mark up",
+          "tools": "Tools",
+          "tool": {
+            "arrow": "Arrow",
+            "rectangle": "Rectangle",
+            "circle": "Circle",
+            "pen": "Pen",
+            "text": "Text"
+          },
+          "colours": "Colour",
+          "colour": {
+            "red": "Red",
+            "yellow": "Yellow",
+            "blue": "Blue",
+            "white": "White",
+            "black": "Black"
+          },
+          "labelText": "Label text",
+          "addLabel": "Add label"
+        }
       },
       "checklistField": {
         "comment": "Comment",
@@ -1082,6 +1118,8 @@
       "open": "Open",
       "remove": "Remove",
       "frozenLabel": "Submitted: can't be changed",
+      "annotatedSaved": "Annotated photo saved. The original is kept.",
+      "annotateFrozen": "This photo was Submitted, so it can't be annotated.",
       "uploaded": "Document attached.",
       "removed": "Document removed.",
       "tooLarge": "This Document is too large. The limit is {size}.",

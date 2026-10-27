@@ -1,14 +1,14 @@
 "use client";
 
-import { photoContentTypes, withAnnotatedCopies, type AnnotatedPhoto, type DocumentSummary } from "@rabaed/domain";
+import { photoContentTypes, withAnnotatedCopies, type DocumentSummary } from "@rabaed/domain";
 import { useRef, useState } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants, IconButton } from "../button/button.tsx";
-import { Badge } from "../data/badge.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import { PhotoAnnotator, type PhotoAnnotatorLabels } from "./photo-annotator.tsx";
-import { PhotoViewer, type PhotoViewerLabels } from "./photo-viewer.tsx";
+import type { PhotoAnnotatorLabels } from "./photo-annotator.tsx";
+import { AnnotatedMark, PhotoScreens } from "./photo-screens.tsx";
+import type { PhotoViewerLabels } from "./photo-viewer.tsx";
 
 // The one photo tool for every photo in Rabaed (RP-656): an Inspection's check
 // items and its request, Snags, Site Reports, attachments. Photos come from
@@ -107,7 +107,6 @@ export function PhotoTool({
 }: PhotoToolProps) {
   const photos = withAnnotatedCopies(documents);
   const [opened, setOpened] = useState<string | null>(null);
-  const [annotating, setAnnotating] = useState<{ photo: AnnotatedPhoto; imageUrl: string } | null>(null);
   const open = photos.find((p) => p.original.id === opened) ?? null;
   const full = maxPhotos !== undefined && photos.length >= maxPhotos;
   const takes = canChange && !full;
@@ -137,12 +136,7 @@ export function PhotoTool({
                     <Icon name="photo" size={32} className="text-muted" />
                   )}
                 </button>
-                {annotated && (
-                  <Badge className="pointer-events-none absolute start-1 bottom-1">
-                    <Icon name="pencil" size={12} />
-                    {text.annotatedMark}
-                  </Badge>
-                )}
+                {annotated && <AnnotatedMark text={text.annotatedMark} />}
                 {canChange && !original.frozen && (
                   <IconButton
                     label={text.remove(original.fileName)}
@@ -177,24 +171,13 @@ export function PhotoTool({
       {canChange && full && <p className="text-sm text-muted">{text.full}</p>}
 
       {open && (
-        <PhotoViewer
-          open={!annotating}
-          onOpenChange={(next) => !next && setOpened(null)}
+        <PhotoScreens
           photo={open}
           imageUrls={imageUrls}
-          labels={text.viewer}
-          canAnnotate={canChange && !open.original.frozen && !!onSaveAnnotated}
-          onAnnotate={(imageUrl) => setAnnotating({ photo: open, imageUrl })}
-        />
-      )}
-      {annotating && (
-        <PhotoAnnotator
-          open
-          onOpenChange={(next) => !next && setAnnotating(null)}
-          imageUrl={annotating.imageUrl}
-          fileName={annotating.photo.original.fileName}
-          labels={text.annotator}
-          onSave={(image) => onSaveAnnotated?.(annotating.photo.original.id, image)}
+          labels={text}
+          canAnnotate={canChange && !!onSaveAnnotated}
+          onClose={() => setOpened(null)}
+          onSaveAnnotated={onSaveAnnotated}
         />
       )}
     </div>
