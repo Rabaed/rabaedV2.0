@@ -11,17 +11,12 @@
       "detail": "204 "
     },
     {
-      "text": "ali: searching zircon finds nothing in the List (Search never reads answers or replies)",
+      "text": "mohammed: searching zircon finds nothing in the List (Search never reads answers or replies)",
       "ok": true,
       "detail": "0 rows"
     },
     {
-      "text": "ali: and nothing on the Kanban",
-      "ok": true,
-      "detail": "200"
-    },
-    {
-      "text": "mohammed: searching zircon finds nothing in the List (Search never reads answers or replies)",
+      "text": "ali: searching zircon finds nothing in the List (Search never reads answers or replies)",
       "ok": true,
       "detail": "0 rows"
     },
@@ -31,19 +26,24 @@
       "detail": "200"
     },
     {
-      "text": "ali: search by Document Number (TWR-MAR-01-0368) finds the item",
+      "text": "ali: and nothing on the Kanban",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "text": "ali: search by Document Number (TWR-MAR-01-0637) finds the item",
       "ok": true
     },
     {
-      "text": "mohammed: search by Document Number (TWR-MAR-01-0368) finds the item",
+      "text": "mohammed: search by Document Number (TWR-MAR-01-0637) finds the item",
       "ok": true
     },
     {
-      "text": "ali: search by Subject (UAT VIS-20 search MAR 200126) finds the item",
+      "text": "ali: search by Subject (UAT VIS-20 search MAR 162852) finds the item",
       "ok": true
     },
     {
-      "text": "mohammed: search by Subject (UAT VIS-20 search MAR 200126) finds the item",
+      "text": "mohammed: search by Subject (UAT VIS-20 search MAR 162852) finds the item",
       "ok": true
     },
     {
@@ -96,5 +96,5 @@
     "evidence/VIS-20-1-ali-search-zircon.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:29:30.503Z"
+  "ranAt": "2026-10-27T20:35:19.610Z"
 }

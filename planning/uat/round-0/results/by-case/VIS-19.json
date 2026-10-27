@@ -29,7 +29,7 @@
     {
       "text": "TMC's Internal Review column names its Steps with counts",
       "ok": true,
-      "detail": "[{\"key\":\"contractor_engineer\",\"name\":{\"en\":\"Contractor Engineer\",\"ar\":\"مهندس المقاول\"},\"count\":5},{\"key\":\"internal_review\",\"name\":{\"en\":\"Contractor PM\",\"ar\":\"مدير مشروع المقاول\"},\"count\":82}]"
+      "detail": "[{\"key\":\"contractor_engineer\",\"name\":{\"en\":\"Contractor Engineer\",\"ar\":\"مهندس المقاول\"},\"count\":7},{\"key\":\"internal_review\",\"name\":{\"en\":\"Contractor PM\",\"ar\":\"مدير مشروع المقاول\"},\"count\":124}]"
     },
     {
       "text": "DCL (Ahmed) sees no Step of TMC's Internal Review column",
@@ -49,12 +49,12 @@
     {
       "text": "DCL's Created date filter works on the Submission Date (the new Submitted item is found)",
       "ok": true,
-      "detail": "4 rows"
+      "detail": "6 rows"
     },
     {
       "text": "Yousef's List counts cover only Beta Build items (no TMC or DCL row)",
       "ok": true,
-      "detail": "17 rows"
+      "detail": "32 rows"
     },
     {
       "text": "Yousef's Kanban holds none of it, and no TMC or DCL Step names",
@@ -66,5 +66,5 @@
     "evidence/VIS-19-1-ali-kanban.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:26:38.397Z"
+  "ranAt": "2026-10-27T19:53:40.108Z"
 }

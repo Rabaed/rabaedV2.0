@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Not built: Chat has no ticket in the five epics (no Chat route in apps/api or apps/web). Steps for a person once built: 1) Ali posts in Chat on a Submitted MAR. 2) Ahmed and Faisal read it. Expected: both read it; messages cannot be edited or deleted; Chat is not on the closed record.",
-  "ranAt": "2026-10-27T18:11:52.652Z"
+  "ranAt": "2026-10-27T19:42:23.916Z"
 }

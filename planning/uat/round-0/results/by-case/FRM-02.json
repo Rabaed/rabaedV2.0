@@ -4,7 +4,7 @@
     {
       "text": "A Draft saves with Manufacturer empty",
       "ok": true,
-      "detail": "{\"id\":\"c933a324-1871-4669-8cbe-72547e327ce2\"}"
+      "detail": "{\"id\":\"7d13b1ec-1a93-47e9-9262-10a8a43c35a7\"}"
     },
     {
       "text": "Send for Review is refused and names Manufacturer (form_incomplete)",
@@ -14,7 +14,7 @@
     {
       "text": "A Draft saves with Description empty",
       "ok": true,
-      "detail": "{\"id\":\"ed7c4f6a-bf85-4399-acb0-7412d939c7d2\"}"
+      "detail": "{\"id\":\"58b1608d-3264-4696-ae38-9d6fd5ee4dfb\"}"
     },
     {
       "text": "Send for Review is refused and names Description (form_incomplete)",
@@ -29,7 +29,7 @@
     {
       "text": "A Draft saves with Location empty",
       "ok": true,
-      "detail": "{\"id\":\"bd4e27d8-4472-4d42-8a96-3c92640849b4\"}"
+      "detail": "{\"id\":\"68eee7db-0da5-439d-b161-2b1a54537d2e\"}"
     },
     {
       "text": "Send for Review is refused and names Location (form_incomplete)",
@@ -39,7 +39,7 @@
     {
       "text": "A Draft saves with Datasheet empty",
       "ok": true,
-      "detail": "{\"id\":\"bdac1042-beaa-4440-8763-e50441ef8c48\"}"
+      "detail": "{\"id\":\"8364c005-61ca-4b88-8f51-b91c863f789a\"}"
     },
     {
       "text": "Send for Review is refused and names Datasheet (form_incomplete)",
@@ -56,5 +56,5 @@
     "evidence/FRM-02-1-missing-manufacturer.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:31:36.021Z"
+  "ranAt": "2026-10-27T18:40:35.391Z"
 }

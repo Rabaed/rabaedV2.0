@@ -1,5 +1,5 @@
 {
-  "status": "error",
+  "status": "pass",
   "checks": [
     {
       "text": "hafiz sees it (his Draft): in the List and 200 by id",
@@ -12,22 +12,7 @@
       "detail": "19 channels clean"
     },
     {
-      "text": "ahmed sees nothing of it as a Draft",
-      "ok": true,
-      "detail": "19 channels clean"
-    },
-    {
       "text": "sara sees nothing of it as a Draft",
-      "ok": true,
-      "detail": "19 channels clean"
-    },
-    {
-      "text": "mohammed sees nothing of it as a Draft",
-      "ok": true,
-      "detail": "19 channels clean"
-    },
-    {
-      "text": "faisal sees nothing of it as a Draft",
       "ok": true,
       "detail": "19 channels clean"
     },
@@ -37,9 +22,24 @@
       "detail": "19 channels clean"
     },
     {
+      "text": "faisal sees nothing of it as a Draft",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "mohammed sees nothing of it as a Draft",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "ahmed sees nothing of it as a Draft",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
       "text": "Yousef's List stage counts and Home counts are unchanged by the Draft",
       "ok": true,
-      "detail": "{\"draft\":21,\"internal_review\":0,\"pending_approval\":0,\"approved\":0,\"revise_resubmit\":0,\"cancelled\":0,\"rejected\":0} / {\"draft\":21,\"internal_review\":0,\"pending_approval\":0,\"approved\":0,\"revise_resubmit\":0,\"cancelled\":0,\"rejected\":0}; {\"activeProjects\":1,\"needMyAction\":3,\"longAtStep\":0,\"waitingWithOthers\":0} / {\"activeProjects\":1,\"needMyAction\":3,\"longAtStep\":0,\"waitingWithOthers\":0}"
+      "detail": "{\"draft\":30,\"internal_review\":0,\"pending_approval\":0,\"approved\":0,\"revise_resubmit\":0,\"cancelled\":0,\"rejected\":0} / {\"draft\":30,\"internal_review\":0,\"pending_approval\":0,\"approved\":0,\"revise_resubmit\":0,\"cancelled\":0,\"rejected\":0}; {\"activeProjects\":5,\"needMyAction\":5,\"longAtStep\":0,\"waitingWithOthers\":0} / {\"activeProjects\":5,\"needMyAction\":5,\"longAtStep\":0,\"waitingWithOthers\":0}"
     },
     {
       "text": "hafiz sees it (sent for review): in the List and 200 by id",
@@ -57,12 +57,49 @@
       "detail": "19 channels clean"
     },
     {
+      "text": "sara sees nothing of it in TMC internal review",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "noura sees nothing of it in TMC internal review",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "faisal sees nothing of it in TMC internal review",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
+      "text": "mohammed sees nothing of it in TMC internal review",
+      "ok": true,
+      "detail": "19 channels clean"
+    },
+    {
       "text": "ahmed sees nothing of it in TMC internal review",
       "ok": true,
       "detail": "19 channels clean"
+    },
+    {
+      "text": "Yousef's counts are still unchanged after the send for review",
+      "ok": true,
+      "detail": "{\"draft\":30,\"internal_review\":0,\"pending_approval\":0,\"approved\":0,\"revise_resubmit\":0,\"cancelled\":0,\"rejected\":0} / {\"draft\":30,\"internal_review\":0,\"pending_approval\":0,\"approved\":0,\"revise_resubmit\":0,\"cancelled\":0,\"rejected\":0}"
+    },
+    {
+      "text": "Yousef's Submittals page, searched for the Subject, shows no row of it",
+      "ok": true
+    },
+    {
+      "text": "yousef: the item URL is the plain not-found page (data-testid not-found)",
+      "ok": true,
+      "detail": "404 We can't find this page. It may not exist, or you may not have access to it. Ask"
     }
   ],
-  "screenshots": [],
-  "notes": "Script error: VIS-01 ran over 180 s.",
-  "ranAt": "2026-10-27T18:05:18.380Z"
+  "screenshots": [
+    "evidence/VIS-01-1-yousef-search.jpg",
+    "evidence/VIS-01-2-yousef-item-url.jpg"
+  ],
+  "notes": "The UAT Owner PM observer of this Test Case is not covered: FX-OW (UAT Owner Co) is not applied.",
+  "ranAt": "2026-10-27T19:37:27.572Z"
 }

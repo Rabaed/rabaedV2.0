@@ -38,22 +38,22 @@
     {
       "text": "The replacement takes a new Document Number at its first send (no Rev)",
       "ok": true,
-      "detail": "TWR-MAR-01-0381 vs TWR-MAR-01-0380"
+      "detail": "TWR-MAR-01-0624 vs TWR-MAR-01-0623"
     },
     {
       "text": "Once Submitted it appears in the rejected MAR's Linked from by number and Subject",
       "ok": true,
-      "detail": "[{\"documentNumber\":\"TWR-MAR-01-0381\",\"subject\":\"UAT VIS-40 rejected MAR 78794\",\"workItemId\":\"2352630d-b5e7-4863-be69-4c734c2cdb95\"}]"
+      "detail": "[{\"documentNumber\":\"TWR-MAR-01-0624\",\"subject\":\"UAT VIS-40 rejected MAR 21466\",\"workItemId\":\"0fea7faa-e0c5-4c67-aef0-dfd7c9f30d56\"}]"
     },
     {
       "text": "The replacement lists the rejected MAR under Links",
       "ok": true,
-      "detail": "[{\"id\":\"9fe0add3-d56b-4c0a-8e01-fedcd68ce925\",\"kind\":\"replaces\",\"fieldKey\":null,\"documentNumber\":\"TWR-MAR-01-0380\",\"subject\":\"UAT VIS-40 rejected MAR 78794\",\"workItemId\":\"f268f34d-5ee8-43ad-931c-e6f8a83601e0\"}]"
+      "detail": "[{\"id\":\"3f8a2baa-ab49-4c94-9b1d-cfac2305609d\",\"kind\":\"replaces\",\"fieldKey\":null,\"documentNumber\":\"TWR-MAR-01-0623\",\"subject\":\"UAT VIS-40 rejected MAR 21466\",\"workItemId\":\"b93aed5f-2a73-446f-96da-eeb4fd91ebee\"}]"
     }
   ],
   "screenshots": [
     "evidence/VIS-40-1-mohammed-rejected-linked-from.jpg"
   ],
   "notes": "The UAT Owner PM observer is not covered: FX-OW is not applied.",
-  "ranAt": "2026-10-22T19:37:09.039Z"
+  "ranAt": "2026-10-27T20:07:49.244Z"
 }

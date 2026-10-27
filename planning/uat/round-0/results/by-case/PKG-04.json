@@ -12,7 +12,7 @@
     {
       "text": "Delete says the submittals stay, without a Package",
       "ok": true,
-      "detail": "Delete PKG-042?  Its submittals stay as they are, without a Package.  Cancel Delete Package"
+      "detail": "Delete PKG-066?  Its submittals stay as they are, without a Package.  Cancel Delete Package"
     },
     {
       "text": "The Package is gone",
@@ -25,7 +25,7 @@
     {
       "text": "A Package can be submitted for the status checks",
       "ok": true,
-      "detail": "200 {\"submitted\":[{\"id\":\"c2f80596-24db-49e0-a60f-0bc7627f1822\",\"documentNumber\":\"TWR-MAR-01-0277\",\"title"
+      "detail": "200 {\"submitted\":[{\"id\":\"4abe7e17-b821-4f89-9154-3540dd01e2ac\",\"documentNumber\":\"TWR-MAR-01-0551\",\"title"
     },
     {
       "text": "After the Submit, remove is refused",
@@ -44,5 +44,5 @@
     "evidence/PKG-04-1-delete-dialog.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:54:46.897Z"
+  "ranAt": "2026-10-27T19:13:42.554Z"
 }

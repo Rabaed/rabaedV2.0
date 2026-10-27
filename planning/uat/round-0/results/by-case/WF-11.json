@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Needs a person in the builder. Steps: as Saeed open a copy; open a Transition > Add rule; add Restrict by Position, a Validate with a message in EN and AR and an Effect Offer Assign to; Test run the Workflow. Expected: rules show under Condition with AND between Restrict rules; Test run opens each pop-up in test mode and saves nothing; a Transition whose Restrict fails is not offered.",
-  "ranAt": "2026-10-22T18:25:13.469Z"
+  "ranAt": "2026-10-27T18:26:32.882Z"
 }

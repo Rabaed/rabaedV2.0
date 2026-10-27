@@ -4,7 +4,7 @@
     {
       "text": "Saeed adds a Stage",
       "ok": true,
-      "detail": "201 {\"key\":\"uat_wf13_182535\"}"
+      "detail": "201 {\"key\":\"uat_wf13_182704\"}"
     },
     {
       "text": "Saeed renames it",
@@ -14,7 +14,7 @@
     {
       "text": "The Stage set shows the change",
       "ok": true,
-      "detail": "{\"key\":\"uat_wf13_182535\",\"name\":{\"en\":\"UAT WF-13 Stage renamed\",\"ar\":\"UAT WF-13 Stage renamed\"},\"category\":\"in_progress\",\"inUse\":false}"
+      "detail": "{\"key\":\"uat_wf13_182704\",\"name\":{\"en\":\"UAT WF-13 Stage renamed\",\"ar\":\"UAT WF-13 Stage renamed\"},\"category\":\"in_progress\",\"inUse\":false}"
     },
     {
       "text": "Ali's List reads the new Stage (its filter and group)",
@@ -55,5 +55,5 @@
     "evidence/WF-13-2-outcomes-page.jpg"
   ],
   "notes": "Cleanup: the Stage was deleted again (204). The default Stages were not renamed, so other agents' columns kept their names.",
-  "ranAt": "2026-10-22T18:25:44.784Z"
+  "ranAt": "2026-10-27T18:27:21.448Z"
 }

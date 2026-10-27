@@ -4,7 +4,7 @@
     {
       "text": "The item runs the Assign to Workflow",
       "ok": true,
-      "detail": "{\"name\":{\"en\":\"UAT WF-17 assign 182632\",\"ar\":\"UAT WF-17 assign 182632\"},\"versionNo\":1}"
+      "detail": "{\"name\":{\"en\":\"UAT WF-17 assign 182838\",\"ar\":\"UAT WF-17 assign 182838\"},\"versionNo\":1}"
     },
     {
       "text": "Hafiz is offered only TMC Members who may hold the Contractor PM Step",
@@ -26,5 +26,5 @@
     "evidence/WF-17-1-ali-submit-offers.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:26:37.418Z"
+  "ranAt": "2026-10-27T18:28:52.884Z"
 }

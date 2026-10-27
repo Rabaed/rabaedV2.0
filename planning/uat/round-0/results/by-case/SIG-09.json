@@ -16,12 +16,12 @@
     {
       "text": "Saeed replaces the logo (same image) and it is in force from then",
       "ok": true,
-      "detail": "2026-10-22T18:41:00.396Z -> 2026-10-22T19:07:47.365Z"
+      "detail": "2026-10-22T19:07:47.365Z -> 2026-10-27T18:51:24.660Z"
     },
     {
       "text": "Saeed replaces the Stamp (same image) and it is in force from then",
       "ok": true,
-      "detail": "2026-10-22T18:41:01.916Z -> 2026-10-22T19:07:48.898Z"
+      "detail": "2026-10-22T19:07:48.898Z -> 2026-10-27T18:51:26.143Z"
     },
     {
       "text": "Hafiz sees both cards with no buttons (only the Authorized Person has them)",
@@ -39,5 +39,5 @@
     "evidence/SIG-09-3-hafiz-company.jpg"
   ],
   "notes": "A company with no logo (records show its name) was not tried: there is no way to remove a logo on the shared lane.",
-  "ranAt": "2026-10-22T19:07:52.570Z"
+  "ranAt": "2026-10-27T18:51:30.684Z"
 }

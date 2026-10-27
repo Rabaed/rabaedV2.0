@@ -32,12 +32,12 @@
     {
       "text": "[INS-08] A Draft WIR: Yousef (Beta Build) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-08] A Draft WIR: Sara (Mechanical only) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-08] A Draft WIR has no Document Number and the Consultant (Ahmed) cannot read it",
@@ -46,7 +46,7 @@
     {
       "text": "[INS-08] Sent for review, the WIR is numbered TWR-WIR-nn-nnnn and sits in TMC's Internal Review",
       "ok": true,
-      "detail": "TWR-WIR-01-0061"
+      "detail": "TWR-WIR-01-0090"
     },
     {
       "text": "[INS-08] After Ali's Submit the WIR is at the Consultant Engineer Step with Ahmed, Pending Approval",
@@ -64,12 +64,12 @@
     {
       "text": "[INS-08] The Submitted WIR: Yousef (Beta Build) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-08] The Submitted WIR: Sara (Mechanical only) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[VIS] TMC's own WIR names the Consultant by Company name only (no Consultant person is named to TMC)",
@@ -82,18 +82,18 @@
     },
     {
       "text": "[INS-09] The answers saved as Ahmed went (the api holds 1 Fail and 1 Pass)",
-      "ok": false,
+      "ok": true,
       "detail": "{\"item_1\":{\"answer\":\"fail\",\"comment\":\"Spacing too wide on the far run, 2.4 m against 1.5 m.\"},\"item_2\":{\"answer\":\"pass\"}}"
     },
     {
       "text": "[INS-09] The photo is attached to the failed item",
-      "ok": false,
+      "ok": true,
       "detail": "[[\"inspection_checklist\",\"item_1\"]]"
     },
     {
       "text": "[INS-06] The annotated copy is saved beside the original, linked to it",
       "ok": true,
-      "detail": "copy dd8c212f-dafa-453d-bd35-ccfa67e1b389"
+      "detail": "copy 3954be86-a29e-43dd-a310-4dcf6ddf06d8"
     },
     {
       "text": "[INS-13] While Ahmed answers, TMC (Hafiz) reads none of the answers, the comment or the photo",
@@ -107,7 +107,7 @@
     {
       "text": "[INS-11] Mohammed's Code pop-up says the checklist proposes C and names the Snag that will be raised",
       "ok": true,
-      "detail": "Revise & Resubmit · C Recommended Code: Revise and Resubmit (C) Internal Proposed The checklist proposes Revise & Resubmit · C: an item failed. Checklist · UAT J9 Cable tray checklist 181934 1 Pass / 1 Fail Supports at the spacing on the drawing Fail A Snag is"
+      "detail": "Revise & Resubmit · C Recommended Code: Revise and Resubmit (C) Internal Proposed The checklist proposes Revise & Resubmit · C: an item failed. Checklist · UAT J9 Cable tray checklist 192508 1 Pass / 1 Fail Supports at the spacing on the drawing Fail A Snag is"
     },
     {
       "text": "[INS-13] With the Manager, TMC still reads none of Ahmed's answers, Internal Note or Recommended Code",
@@ -144,12 +144,12 @@
     {
       "text": "[INS-10] The Snag raised from the WIR: Yousef (Beta Build) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-10] The Snag raised from the WIR: Sara (Mechanical only) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-13] After the Code TMC reads the answers, the comment and the checklist photo",
@@ -166,12 +166,12 @@
     {
       "text": "[INS-12] The coded WIR: Yousef (Beta Build) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-12] The coded WIR: Sara (Mechanical only) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-12] After Code C Hafiz is offered Create Revision, the Manager is not",
@@ -189,24 +189,23 @@
     {
       "text": "[INS-12] The Revision Draft: Yousef (Beta Build) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     },
     {
       "text": "[INS-12] The Revision Draft: Sara (Mechanical only) gets the not-found page and api 404",
       "ok": true,
-      "detail": "page notFound=true (http 404); api 404"
+      "detail": "page notFound=true (http 404, read 1x); api 404"
     }
   ],
   "screenshots": [
     "evidence/J9-1-1-saeed-template-made.jpg",
-    "evidence/J9-2-debug-before-send.jpg",
-    "evidence/J9-3-2-hafiz-sent-for-review.jpg",
-    "evidence/J9-4-3-ahmed-receives-wir.jpg",
-    "evidence/J9-5-4-ahmed-answers-on-site.jpg",
-    "evidence/J9-6-5-mohammed-codes-wir.jpg",
-    "evidence/J9-7-6-hafiz-snag-from-wir.jpg",
-    "evidence/J9-8-7-hafiz-revision-draft.jpg"
+    "evidence/J9-2-2-hafiz-sent-for-review.jpg",
+    "evidence/J9-3-3-ahmed-receives-wir.jpg",
+    "evidence/J9-4-4-ahmed-answers-on-site.jpg",
+    "evidence/J9-5-5-mohammed-codes-wir.jpg",
+    "evidence/J9-6-6-hafiz-snag-from-wir.jpg",
+    "evidence/J9-7-7-hafiz-revision-draft.jpg"
   ],
   "notes": "A Checklist Template is the Project's own, read by every Company on it (visibility.md, Checklist Templates), so Yousef and Sara reading it is not a leak; the Beta Build and Sara checks start with the WIR.\nNo page offers the drawing tool: PhotoTool (packages/ui) is mounted on no page, so Open full size is the only photo control on the checklist; the copy was made through the api.",
-  "ranAt": "2026-10-27T18:21:48.187Z"
+  "ranAt": "2026-10-27T19:26:59.554Z"
 }

@@ -14,7 +14,10 @@ defineCase("VIS-05", async (t) => {
   const pid = crew.projectId;
   const subject = "UAT VIS-05 MAR Code B";
   const yousef = await crew.as("yousef");
+  const snagIds = async () => (await listAll(yousef, pid, "", "snag_list")).map((r) => r.id);
   const snagStages = async () => JSON.stringify(stageCounts(await listOf(yousef, pid, "", "snag_list")));
+  // Other Parts raise Snags for Yousef at the same time, so "unchanged" means: nothing this case made is among the new rows.
+  const idsBefore = new Set(await snagIds());
   const yBefore = await snagStages();
   const id = await submittedMar(crew, subject, { trade: "EL", location: "T1F01" });
   await ahmedSendsToManager(crew, id, "B");
@@ -28,21 +31,21 @@ defineCase("VIS-05", async (t) => {
   t.check("Hafiz (the raiser) sees the three Comments in the Snag List, Open with TMC", comments.length === 3 && comments.every((c) => c.stage.key === "open" && c.with?.kind === "own"), `${comments.length} found`);
   const c0 = (await detail(hafiz, comments[0]!.id)).body as any;
   t.check("A Comment is raised by Design Consultants and held by TMC", /Design Consultants/.test(JSON.stringify(c0?.raisedBy ?? c0?.raisedFrom)) || /TMC/.test(JSON.stringify(c0?.heldBy)), JSON.stringify({ raisedBy: c0?.raisedBy, heldBy: c0?.heldBy?.companyName }));
-  for (const who of ["ali", "mohammed", "faisal"]) {
+  await Promise.all(["ali", "mohammed", "faisal"].map(async (who) => {
     const l = await listAll(await crew.as(who), pid, "", "snag_list");
     const found = l.filter((i: any) => i.raisedFrom?.workItemId === id).length;
     t.check(`${who} sees all three Comments (${who === "faisal" ? "oversight" : who === "ali" ? "TMC" : "the issuer"})`, found === 3, `${found}`);
-  }
+  }));
   // Yousef: nothing, by list, search, kanban, counts and each id.
-  for (const c of comments) {
-    const probes = await leakProbe(yousef, pid, c.id, "UAT VIS-05 comment");
-    t.check(`Yousef: nothing of Comment ${c.documentNumber} in any channel; its id is 404`, leaked(probes).length === 0, leakSummary(probes));
-  }
+  const probed = await Promise.all(comments.map((c) => leakProbe(yousef, pid, c.id, "UAT VIS-05 comment")));
+  comments.forEach((c, i) => t.check(`Yousef: nothing of Comment ${c.documentNumber} in any channel; its id is 404`, leaked(probed[i]!).length === 0, leakSummary(probed[i]!)));
   const ySnag = await listOf(yousef, pid, "", "snag_list");
   t.check("Yousef's Snag List holds no Comment of this MAR", !ySnag.text.includes("UAT VIS-05"));
   const kan = await yousef.get(`/projects/${pid}/modules/snag_list/work-items/kanban`);
   t.check("Yousef's Snag List Kanban holds none", kan.status === 200 && !kan.text.includes("UAT VIS-05"), `${kan.status}`);
-  t.check("Yousef's Snag List counts are unchanged", (await snagStages()) === yBefore, `${yBefore} / ${await snagStages()}`);
+  const midNow = await snagStages();
+  const midNew = (await snagIds()).filter((x) => !idsBefore.has(x));
+  t.check("Yousef's Snag List counts are unchanged by this case (new rows are other Parts' Snags, none a Comment of this MAR)", midNow === yBefore || (midNew.length > 0 && !comments.some((c) => midNew.includes(c.id))), `${yBefore} / ${midNow}; ${midNew.length} new rows`);
   await expectHidden(t, crew, "yousef", id, subject, "(the MAR)");
   await expectHidden(t, crew, "sara", id, subject, "(Mechanical only: the MAR)");
   for (const c of comments) {
@@ -63,7 +66,9 @@ defineCase("VIS-05", async (t) => {
     const line = (d?.raisedItems ?? []).find((r: any) => r.type.code === "CMT");
     t.check(`${who} reads the MAR's Comments line as 2 open / 1 closed`, line?.open === 2 && line?.closed === 1, JSON.stringify(line));
   }
-  t.check("Yousef's Snag List counts are still unchanged after the close", (await snagStages()) === yBefore);
+  const endNow = await snagStages();
+  const endNew = (await snagIds()).filter((x) => !idsBefore.has(x));
+  t.check("Yousef's Snag List counts are still unchanged by this case after the close", endNow === yBefore || (endNew.length > 0 && !comments.some((c) => endNew.includes(c.id))), `${yBefore} / ${endNow}; ${endNew.length} new rows`);
   const { context, page } = await pageAs("yousef");
   try {
     const nf = await pageIsNotFound(page, `/work-items/${comments[1]!.id}`);

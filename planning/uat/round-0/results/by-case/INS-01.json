@@ -4,7 +4,7 @@
     {
       "text": "The two seeded templates are listed with Version and availability",
       "ok": true,
-      "detail": "Cable trays and containment v1 active; UAT INS-01 template 181030 v2 retired; UAT INS-03 to retire 181030 v1 retired; UAT INS-05 other template 181030 v1 retired; UAT INS-05 other template 181522 v1 retired; Concrete pour v1 active"
+      "detail": "Cable trays and containment v1 active; UAT INS-01 template 181030 v2 retired; UAT INS-01 template 184405 v2 retired; UAT INS-03 to retire 181030 v1 retired; UAT INS-03 to retire 184405 v1 retired; UAT INS-05 other template 181030 v1 retired; UAT INS-05 other template 181522 v1 retired; UAT INS-05 other template 184405 v1 retired; UAT J9 Cable tray checklist 181546 v1 active; UAT J9 Cable tray checklist 181748 v1 active; UAT J9 Cable tray checklist 181934 v1 active; UAT J9 Cable tray checklist 185216 v1 active; UAT VIS-55 Template 00486 v2 retired; UAT VIS-55 Template 84625 v2 retired; UAT VIS-55 Template 84642 v2 retired; Concrete pour v1 active"
     },
     {
       "text": "Ali reads them and cannot change them (canEdit false)",
@@ -49,5 +49,5 @@
     "evidence/INS-01-2-ali-templates-read-only.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:47:10.534Z"
+  "ranAt": "2026-10-27T18:55:48.853Z"
 }

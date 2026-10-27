@@ -42,5 +42,5 @@
     "evidence/WF-05-3-builder-after-publish.jpg"
   ],
   "notes": "The api itself publishes without a Change Note (answered 200); only the builder pop-up requires it.",
-  "ranAt": "2026-10-22T18:28:11.167Z"
+  "ranAt": "2026-10-27T18:25:04.584Z"
 }

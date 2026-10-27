@@ -4,7 +4,7 @@
     {
       "text": "Hafiz uploads and previews a register",
       "ok": true,
-      "detail": "201 {\"id\":\"10e2a04c-e875-431b-932c-baf6945bb6a1\",\"fileName\":\"uat-vis-56-04007.csv\",\"status\":\"previewed\","
+      "detail": "201 {\"id\":\"80ddf46b-182e-4c88-a876-9da0fa972b7d\",\"fileName\":\"uat-vis-56-54756.csv\",\"status\":\"previewed\","
     },
     {
       "text": "Before the confirm Ali cannot read the preview (404, like a made-up id)",
@@ -83,7 +83,7 @@
     {
       "text": "Hafiz reads the two imported Drafts (positive control)",
       "ok": true,
-      "detail": "4"
+      "detail": "8"
     },
     {
       "text": "Yousef: the import's page is the plain not-found page",
@@ -95,5 +95,5 @@
     "evidence/VIS-56-1-yousef-imports-page.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:43:51.513Z"
+  "ranAt": "2026-10-27T20:18:12.291Z"
 }

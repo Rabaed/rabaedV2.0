@@ -19,7 +19,7 @@
     {
       "text": "Sara reads the earlier item as well",
       "ok": true,
-      "detail": "3 rows"
+      "detail": "4 rows"
     },
     {
       "text": "Layla removes Electrical again (the fixture is restored)",
@@ -41,5 +41,5 @@
     "evidence/VIS-03-1-sara-after-removal.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:07:50.352Z"
+  "ranAt": "2026-10-27T19:39:11.097Z"
 }

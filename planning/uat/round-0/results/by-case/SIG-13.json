@@ -25,5 +25,5 @@
   ],
   "screenshots": [],
   "notes": "The made-up PDFs use a font that is not embedded, which PDF/A cannot take as pages, so both travelled attached (the documented exception). A person tries a PDF with embedded fonts and an image for the page appendix.\nAn image Document and a Company's internal Documents (not included) were not made by script; a person checks them.\nA person confirms the image pages and that a Company's internal Documents are left out. The script found the PDF Documents carried (attached, see notes), the DWG embedded in the PDF and the Documents listed.",
-  "ranAt": "2026-10-22T19:08:41.259Z"
+  "ranAt": "2026-10-27T18:52:43.797Z"
 }

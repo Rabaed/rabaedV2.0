@@ -9,7 +9,7 @@
     {
       "text": "The Package's Comments list the Comments raised from its submittals",
       "ok": true,
-      "detail": "{\"forInformation\":true,\"comments\":[{\"id\":\"6ab04d7f-78a4-42d6-93f9-d5b439e5daea\",\"type\":{\"code\":\"CMT\",\"name\":{\"en\":\"Comment\",\"ar\":\"ملاحظة\"}},\"documentNumber\":\"TWR-CMT-03-0045\",\"title\":\"UAT comment one\""
+      "detail": "{\"forInformation\":true,\"comments\":[{\"id\":\"6aeb8065-6e17-4455-b111-ed4dd231bbc7\",\"type\":{\"code\":\"CMT\",\"name\":{\"en\":\"Comment\",\"ar\":\"ملاحظة\"}},\"documentNumber\":\"TWR-CMT-03-0092\",\"title\":\"UAT comment one\""
     },
     {
       "text": "They do not change its status (the Code B item is closed; status follows the items only)",
@@ -19,7 +19,7 @@
     {
       "text": "The Comments section shows them with the note that Comments are not part of the Package",
       "ok": true,
-      "detail": " EL )\t DC Design Consultants LLC \t Code B Approved with Comments (B) \t— Comments 2 For information  Comments are not part of the Package and count in none of its counts.  TWR-CMT-03-0045 UAT comment one Open Raised from TWR-MAR-01-0300 TWR-CMT-03-0046 UAT comment two Open Raised from TWR-MAR-01-0300"
+      "detail": " EL )\t DC Design Consultants LLC \t Code B Approved with Comments (B) \t— Comments 2 For information  Comments are not part of the Package and count in none of its counts.  TWR-CMT-03-0092 UAT comment one Open Raised from TWR-MAR-01-0569 TWR-CMT-03-0093 UAT comment two Open Raised from TWR-MAR-01-0569"
     },
     {
       "text": "Mohammed also reads them for the items he sees",
@@ -30,5 +30,5 @@
     "evidence/PKG-11-1-package-comments.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:57:29.847Z"
+  "ranAt": "2026-10-27T19:17:38.436Z"
 }

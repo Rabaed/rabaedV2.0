@@ -16,12 +16,12 @@
     {
       "text": "After the Submit, MAR-2 appears in MAR-1's Linked from, by number and Subject",
       "ok": true,
-      "detail": "[{\"documentNumber\":\"TWR-MAR-01-0427\",\"subject\":\"UAT VIS-10 MAR-2 Draft Tower 2\",\"workItemId\":\"de47396a-2b51-4866-b9aa-511d30a24922\"}]"
+      "detail": "[{\"documentNumber\":\"TWR-MAR-01-0593\",\"subject\":\"UAT VIS-10 MAR-2 Draft Tower 2\",\"workItemId\":\"2ede2b8e-8ddf-4ff3-bede-a2262f8c4b8b\"}]"
     },
     {
       "text": "Omar (Tower 2 only) reads MAR-1's Linked from with Mohammed's Snag as number and Subject, no id",
       "ok": true,
-      "detail": "{\"documentNumber\":\"TWR-SNG-03-0066\",\"subject\":\"UAT VIS-10 Snag Tower 1\",\"workItemId\":null}"
+      "detail": "{\"documentNumber\":\"TWR-SNG-03-0096\",\"subject\":\"UAT VIS-10 Snag Tower 1\",\"workItemId\":null}"
     },
     {
       "text": "The Snag's URL is 404 for Omar; its history and Documents too",
@@ -30,7 +30,7 @@
     {
       "text": "Hafiz (TMC holds the Snag at Tower 1) reads it with its id",
       "ok": true,
-      "detail": "{\"documentNumber\":\"TWR-SNG-03-0066\",\"subject\":\"UAT VIS-10 Snag Tower 1\",\"workItemId\":\"e79dde69-5995-41db-bd99-d9d213947a6e\"}"
+      "detail": "{\"documentNumber\":\"TWR-SNG-03-0096\",\"subject\":\"UAT VIS-10 Snag Tower 1\",\"workItemId\":\"2ac56922-f48a-48dc-a44d-2b98be2a4203\"}"
     },
     {
       "text": "Omar: the Snag by id is the plain not-found page",
@@ -42,5 +42,5 @@
     "evidence/VIS-10-1-omar-snag-by-id.jpg"
   ],
   "notes": "Step 4 adapted: TMC covers every Location, so Hafiz sees a Snag raised at Tower 1; the viewer who may not see it is Omar (Tower 2 only), reading the Tower 2 MAR-1's Linked from.",
-  "ranAt": "2026-10-27T18:13:54.247Z"
+  "ranAt": "2026-10-27T19:44:17.847Z"
 }

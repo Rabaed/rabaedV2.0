@@ -4,7 +4,7 @@
     {
       "text": "Saeed (Project Admin) adds a Scope (positive control)",
       "ok": true,
-      "detail": "201 {\"id\":\"a35ce849-b928-42fd-b1cc-cc5ddb71b6da\"}"
+      "detail": "201 {\"id\":\"4389d0c4-ff55-4056-9674-dd2f8ee81713\"}"
     },
     {
       "text": "ali: add a Scope is the plain 404",
@@ -114,7 +114,7 @@
     {
       "text": "The Scope is unchanged (name and active)",
       "ok": true,
-      "detail": "{\"id\":\"a35ce849-b928-42fd-b1cc-cc5ddb71b6da\",\"tradeId\":\"92c81205-f76d-42c1-8721-e880eb216403\",\"parentId\":null,\"name\":{\"en\":\"UAT VIS-30 Scope 634219\",\"ar\":\"UAT VIS-30 Scope 634219\"},\"active\":true}"
+      "detail": "{\"id\":\"4389d0c4-ff55-4056-9674-dd2f8ee81713\",\"tradeId\":\"92c81205-f76d-42c1-8721-e880eb216403\",\"parentId\":null,\"name\":{\"en\":\"UAT VIS-30 Scope 411641\",\"ar\":\"UAT VIS-30 Scope 411641\"},\"active\":true}"
     },
     {
       "text": "Saeed can rename and deactivate it",
@@ -151,5 +151,5 @@
     "evidence/VIS-30-1-ali-numbering-settings.jpg"
   ],
   "notes": "The Scope is left deactivated and renamed (UAT data). Nasser is on another Project only: his reads of Tower setup are the 404 above.",
-  "ranAt": "2026-10-22T19:34:08.574Z"
+  "ranAt": "2026-10-27T20:03:47.000Z"
 }

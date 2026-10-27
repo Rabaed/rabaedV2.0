@@ -4,22 +4,22 @@
     {
       "text": "Yousef's Home shows 0 of 4+ weeks and 0 waiting with others",
       "ok": true,
-      "detail": "{\"activeProjects\":1,\"needMyAction\":3,\"longAtStep\":0,\"waitingWithOthers\":0}"
+      "detail": "{\"activeProjects\":5,\"needMyAction\":5,\"longAtStep\":0,\"waitingWithOthers\":0}"
     },
     {
       "text": "Yousef's Home has no row and no activity of TMC (every row is an item he sees)",
       "ok": true,
-      "detail": "3 rows, 4 activity"
+      "detail": "4 rows, 4 activity"
     },
     {
-      "text": "TMC appears for Yousef only as the Host Company on the Project card",
+      "text": "TMC appears for Yousef only as the Host Company on each Project card (other UAT journeys added Projects he belongs to)",
       "ok": true,
-      "detail": "[\"TMC Constructions\"]"
+      "detail": "[\"TMC Constructions\",\"TMC Constructions\",\"TMC Constructions\",\"TMC Constructions\",\"TMC Constructions\"]"
     },
     {
       "text": "Yousef's Project card Need My Action equals his Home count",
       "ok": true,
-      "detail": "3 / 3"
+      "detail": "0+0+0+0+5 / 5"
     },
     {
       "text": "Hafiz's Drafts never appear in Need My Action",
@@ -29,17 +29,17 @@
     {
       "text": "Hafiz's Project card equals his Home count",
       "ok": true,
-      "detail": "113 / 113"
+      "detail": "188 / 188"
     },
     {
       "text": "Hafiz's 'Waiting with others' counts his own items others hold (not Drafts, closed or Sent Back)",
       "ok": true,
-      "detail": "home 201, lists 201"
+      "detail": "home 350, lists 350"
     },
     {
       "text": "mohammed: no Submittal of theirs waits with others; Home's count equals their own lists across Modules (DCL's own Snags and Comments held by TMC count for DCL)",
       "ok": true,
-      "detail": "home 112, lists 112, submittals 0"
+      "detail": "home 188, lists 188, submittals 0"
     },
     {
       "text": "faisal: no Submittal of theirs waits with others; Home's count equals their own lists across Modules (DCL's own Snags and Comments held by TMC count for DCL)",
@@ -49,12 +49,12 @@
     {
       "text": "DCL's card count equals its Home count",
       "ok": true,
-      "detail": "39 / 39"
+      "detail": "63 / 63"
     }
   ],
   "screenshots": [
     "evidence/VIS-42-1-yousef-home.jpg"
   ],
   "notes": "The Test Case's every-state set-up is whatever the other UAT Parts left; the checks compare Home with the same Members' Lists, not with fixed numbers. The 4+ weeks column needs the AGE tool (RP-922).",
-  "ranAt": "2026-10-22T19:38:38.639Z"
+  "ranAt": "2026-10-27T20:37:53.722Z"
 }

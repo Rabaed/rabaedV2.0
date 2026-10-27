@@ -1,0 +1,132 @@
+{
+  "status": "pass",
+  "checks": [
+    {
+      "text": "[PKG-02] The new Package page shows its PKG number beside TMC's name, Open, and no submittals yet",
+      "ok": true,
+      "detail": "Submittals PKG-076 Package PKG-076 Owned by TC TMC Constructions Open UAT J12 Tower 1 electrical package 192002 Rename Delete Add items PROGRESS 0/0 0 of 0 closed 0 Still open Submittals 0 Submittals "
+    },
+    {
+      "text": "[PKG-12] An Open Package: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[PKG-12] An Open Package: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[PKG-03] Ali's own Drafts are offered in Add items",
+      "ok": true,
+      "detail": "Add submittals |  | Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added. |  | Search | Trade | All Trades | UAT J12 panel 1 183"
+    },
+    {
+      "text": "[PKG-03] The three Drafts are now in the Package",
+      "ok": true
+    },
+    {
+      "text": "[PKG-05] Drafts not yet sent for review stop the Submit: the page lists them and offers no Submit Package",
+      "ok": true,
+      "detail": "Submittals PKG-076 Package PKG-076 Owned by TC TMC Constructions Open UAT J12 Tower 1 electrical package 192002 Rename Delete Add items Not ready Submit Package is offered once nothing stops it. These stop it now: Number on submit UAT J12 p"
+    },
+    {
+      "text": "[PKG-05] With every item at internal review with Ali, Submit Package is offered",
+      "ok": true
+    },
+    {
+      "text": "[PKG-05] One confirm Submits all three: each gets its own Document Number and reaches the Consultant Engineer Step",
+      "ok": true,
+      "detail": "[[\"TWR-MAR-01-0574\",\"consultant_engineer\"],[\"TWR-MAR-01-0575\",\"consultant_engineer\"],[\"TWR-MAR-01-0576\",\"consultant_engineer\"]]"
+    },
+    {
+      "text": "[PKG-06] The Package is In Progress as soon as anything is Submitted",
+      "ok": true
+    },
+    {
+      "text": "[PKG-10] Ahmed has ONE grouped notification for the Package, counting the 3 submittals he sees, naming TMC Constructions",
+      "ok": true,
+      "detail": "{\"id\":\"3ae8678d-beae-4a88-affa-cde03f2d5271\",\"number\":\"PKG-076\",\"name\":{\"en\":\"UAT J12 Tower 1 electrical package 192002\",\"ar\":\"حزمة الأعمال الكهربائية، البرج 1 192002\"},\"companyName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"},\"count\":3}"
+    },
+    {
+      "text": "[PKG-10] ... and no separate Step reached notification for those items",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "[PKG-10] Ahmed's email names the Package number and the submittal count",
+      "ok": true,
+      "detail": "⁦PKG-076⁩ · UAT J12 Tower 1 electrical package 192002 · TMC Constructions Submitted 3 submittals"
+    },
+    {
+      "text": "[PKG-07] Positive control: Ahmed opens the Package and sees its 3 items",
+      "ok": true,
+      "detail": "Submittals PKG-076 Package PKG-076 Owned by TC TMC Constructions In Progress UAT J12 Tower 1 electrical package 192002 PROGRESS 0/3 0 of 3 closed 0 Code A 0 Code B 0 Code C 0 Code D 3 Still open Submi"
+    },
+    {
+      "text": "[PKG-10] The Submitted Package: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[PKG-10] The Submitted Package: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[PKG-10] Yousef (Beta Build) is told nothing about the Package or its items",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "[PKG-10] Sara (Mechanical only) is told nothing about the Package or its items",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "text": "[PKG-09] The Package page's bulk bar counts the 3 selected and offers the Codes they share (A, B, C, D)",
+      "ok": true,
+      "detail": "open Submittals 3 3 selected Return to Engineer Approve · A Approve with Comments · B Revise & Resubmit · C Reject · D Clear Submittals in this Package Document Number Rev Subject Type Trade With Review Code or Stage Ste"
+    },
+    {
+      "text": "[PKG-09] All three items closed at Code A, each with its own event",
+      "ok": true,
+      "detail": "[\"A\",\"A\",\"A\"]"
+    },
+    {
+      "text": "[PKG-06] The Package reaches Done: every latest submittal closed at A, B or D",
+      "ok": true,
+      "detail": "done"
+    },
+    {
+      "text": "[PKG-06] Ali's Package page says Done, with 3 of 3 closed, and never the word Closed for the Package",
+      "ok": true,
+      "detail": "Submittals PKG-076 Package PKG-076 Owned by TC TMC Constructions Done UAT J12 Tower 1 electrical package 192002 Rename Add items PROGRESS 3/3 3 of 3 closed 3 Code A 0 Code B 0 Code C 0 Code D 0 Still "
+    },
+    {
+      "text": "[PKG-12] The Done Package: Yousef (Beta Build) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[PKG-12] The Done Package: Sara (Mechanical only) gets the not-found page and api 404",
+      "ok": true,
+      "detail": "page notFound=true (http 404, read 1x); api 404"
+    },
+    {
+      "text": "[PKG-02] Beta Build's Packages board does not list TMC's Package",
+      "ok": true,
+      "detail": "3 Packages listed"
+    }
+  ],
+  "screenshots": [
+    "evidence/J12-1-1-ali-new-package.jpg",
+    "evidence/J12-2-2-ali-adds-drafts.jpg",
+    "evidence/J12-3-3-ali-submit-package-confirm.jpg",
+    "evidence/J12-4-4-ahmed-notifications.jpg",
+    "evidence/J12-5-5-mohammed-bulk-bar.jpg",
+    "evidence/J12-6-6-ali-package-done.jpg"
+  ],
+  "notes": "Bulk Code taken on the Package page's bulk bar.",
+  "ranAt": "2026-10-27T19:21:36.118Z"
+}

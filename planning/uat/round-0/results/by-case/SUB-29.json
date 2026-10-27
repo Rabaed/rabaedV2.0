@@ -9,17 +9,17 @@
     {
       "text": "The List header for Stage reads \"Stage\", not \"Status\"",
       "ok": false,
-      "detail": ""
+      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
     },
     {
       "text": "The List header for Trade reads \"Trade\", not \"Discipline\"",
       "ok": false,
-      "detail": ""
+      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
     },
     {
       "text": "The List header for the holder reads \"With\", not \"Current owner\"",
       "ok": false,
-      "detail": ""
+      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
     },
     {
       "text": "The Kanban uses no Status or Current owner wording",
@@ -30,5 +30,5 @@
     "evidence/SUB-29-1-list-headers.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:18:23.023Z"
+  "ranAt": "2026-10-27T19:04:17.450Z"
 }

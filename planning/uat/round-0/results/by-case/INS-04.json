@@ -4,7 +4,7 @@
     {
       "text": "Only the item closed at Code A is offered (not C, not open, not the Draft)",
       "ok": true,
-      "detail": "UAT INS-04 closedA 184405"
+      "detail": "UAT INS-04 closedA 185523"
     },
     {
       "text": "A saved pick of the Code A item is accepted",
@@ -36,5 +36,5 @@
     "evidence/INS-04-1-wir-with-approved-submittal.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:48:04.331Z"
+  "ranAt": "2026-10-27T18:58:05.120Z"
 }

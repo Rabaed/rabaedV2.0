@@ -14,7 +14,7 @@
     {
       "text": "It has a Document Number of the Snag pattern",
       "ok": true,
-      "detail": "TWR-SNG-03-0056"
+      "detail": "TWR-SNG-03-0077"
     },
     {
       "text": "Positive control: Ali (TMC) reads it",
@@ -35,5 +35,5 @@
     "evidence/SNG-02-2-raised.jpg"
   ],
   "notes": "Spec now (RP-658-1): with two Contractors covering a Location Raise asks which one; that is SNG-14 on Tower 2. FX-C2 leaves one Contractor on Tower 1.",
-  "ranAt": "2026-10-27T18:03:25.512Z"
+  "ranAt": "2026-10-27T18:58:51.952Z"
 }

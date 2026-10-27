@@ -27,26 +27,34 @@ defineCase("VIS-20", async (t) => {
   await ahmedSendsToManager(crew, id, "C", "UAT VIS-20 internal zircon");
   const ali = await crew.as("ali");
   const mohammed = await crew.as("mohammed");
-  const found = async (api: Api, q: string, module = "") => (await listAll(api, pid, "q=" + encodeURIComponent(q), module)).some((r) => r.id === id);
-  t.check("Positive control: Ali finds the item by its Subject; Mohammed too", (await found(ali, subject)) && (await found(mohammed, subject)));
+  // Pages until the item turns up (broad words such as Electrical match hundreds of rows); a miss reads every page.
+  const found = async (api: Api, q: string, module = "") => {
+    for (let page = 1; page <= 40; page++) {
+      const path = module ? `/projects/${pid}/modules/${module}/work-items` : `/projects/${pid}/work-items`;
+      const b = (await api.get(`${path}?pageSize=50&allRevisions=true&page=${page}&q=${encodeURIComponent(q)}`)).body as any;
+      if ((b?.items ?? []).some((r: any) => r.id === id)) return true;
+      if (!b?.page?.hasNext) return false;
+    }
+    return false;
+  };
+  const first = await Promise.all([found(ali, subject), found(mohammed, subject)]);
+  t.check("Positive control: Ali finds the item by its Subject; Mohammed too", first[0] && first[1]);
   const issued = await mohammedCodes(crew, id, "revise_c", { verification_note: "UAT zircon verification.", remarks: "UAT remarks: the finish is zircon coated." });
   t.check("Mohammed issues a Code with Remarks containing the word zircon", issued.status < 300, `${issued.status} ${issued.text.slice(0, 120)}`);
   await sleep(500);
-  for (const [who, api] of [["ali", ali], ["mohammed", mohammed]] as const) {
+  await Promise.all(([["ali", ali], ["mohammed", mohammed]] as const).map(async ([who, api]) => {
     const rows = await searchRows(api, pid, "zircon");
     t.check(`${who}: searching zircon finds nothing in the List (Search never reads answers or replies)`, rows.length === 0, `${rows.length} rows`);
     const kan = await api.get(`/projects/${pid}/work-items/kanban?q=zircon`);
     const cards = JSON.stringify((kan.body as any)?.columns ?? []);
     t.check(`${who}: and nothing on the Kanban`, kan.status === 200 && !cards.includes(id), `${kan.status}`);
-  }
+  }));
   const doc = (await detail(ali, id)).body as any;
   const number = doc.documentNumber as string;
-  for (const [what, q] of [["Document Number", number], ["Subject", subject], ["Type", "Material Approval"], ["Trade", "Electrical"], ["Location", "Tower 2 Floor 01"], ["raiser Company", "TMC Constructions"]] as const) {
-    for (const [who, api] of [["ali", ali], ["mohammed", mohammed]] as const) {
-      const r = await found(api, q);
-      t.check(`${who}: search by ${what} (${q}) finds the item`, r);
-    }
-  }
+  const searches = ([["Document Number", number], ["Subject", subject], ["Type", "Material Approval"], ["Trade", "Electrical"], ["Location", "Tower 2 Floor 01"], ["raiser Company", "TMC Constructions"]] as const).flatMap(([what, q]) =>
+    ([["ali", ali], ["mohammed", mohammed]] as const).map(([who, api]) => ({ what, q, who, api })));
+  const hits = await Promise.all(searches.map((x) => found(x.api, x.q)));
+  searches.forEach((x, i) => t.check(`${x.who}: search by ${x.what} (${x.q}) finds the item`, hits[i]!));
   // Owner phrase: own Company people, other Company by name only.
   const own = await listOf(ali, pid, "q=" + encodeURIComponent("Ahmed"));
   t.check("Ali searching for a DCL person's name finds nothing (people of another Company are never searched)", own.items.filter((r) => /UAT VIS-20/.test(r.title)).length === 0, `${own.items.length} rows`);

@@ -4,7 +4,7 @@
     {
       "text": "Description to Subject, Type to Type, Discipline to Trade: the preview is good (Notes is ignored)",
       "ok": true,
-      "detail": "201 {\"id\":\"9b00fad9-1882-49bf-9a37-18e52169d420\",\"fileName\":\"mapped.xlsx\",\"status\":\"previewed\",\"runBy\":{\"id\":\"c39da5c9-86d8-"
+      "detail": "201 {\"id\":\"c1c5eef9-4725-4a92-ab54-c7b346788d4f\",\"fileName\":\"mapped.xlsx\",\"status\":\"previewed\",\"runBy\":{\"id\":\"c39da5c9-86d8-"
     },
     {
       "text": "Validate with Trade unmapped is refused",
@@ -36,5 +36,5 @@
     "evidence/IMP-03-1-import-page-fixed-values.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:44:35.353Z"
+  "ranAt": "2026-10-27T19:08:39.517Z"
 }

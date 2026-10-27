@@ -1,33 +1,24 @@
 {
-  "status": "error",
+  "status": "fail",
   "checks": [
     {
-      "text": "Columns are the Stages with counts",
+      "text": "The Kanban page opens with the Stages as columns, a card, Move to and the filter panel (UI)",
       "ok": false,
-      "detail": "draft:195, internal_review:99, pending_approval:184, approved:104, revise_resubmit:26, cancelled:9, rejected:12"
+      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read. The Kanban page does the same."
     },
     {
-      "text": "Internal Review shows TMC's own Steps (Engineer, PM) with counts",
-      "ok": false,
-      "detail": "[{\"key\":\"contractor_engineer\",\"name\":{\"en\":\"Contractor Engineer\",\"ar\":\"مهندس المقاول\"},\"count\":7},{\"key\":\"internal_review\",\"name\":{\"en\":\"Contractor PM\",\"ar\":\"مدير مشروع المقاول\"},\"count\":92}]"
-    },
-    {
-      "text": "Another Company is one lane by its name",
-      "ok": false
-    },
-    {
-      "text": "A move that is not allowed is not offered (Ali's item offers Return, Submit, Cancel)",
+      "text": "A move that is not allowed is not offered (api: Ali's item offers Return, Submit, Cancel)",
       "ok": true,
       "detail": "return,submit,cancel_review"
     },
     {
-      "text": "The card is on the board",
-      "ok": false
+      "text": "Taking the move through the api puts the item in Pending Approval (the Kanban card could not be moved)",
+      "ok": true
     }
   ],
   "screenshots": [
     "evidence/SUB-25-1-kanban.jpg"
   ],
-  "notes": "Script error: locator.click: Timeout 15000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('button', { name: 'Move UAT SUB-25 kanban 181258' }).first()\u001b[22m | ",
-  "ranAt": "2026-10-27T18:13:45.958Z"
+  "notes": "",
+  "ranAt": "2026-10-27T18:59:28.599Z"
 }

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { Api, go, openProject, settle } from "../harness/helpers.ts";
+import { Api, openProject, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
-import { create, moduleItems, mustAct, runTag, team, testPhoto, upload, type Json, type Team } from "../harness/helpers-sng.ts";
+import { create, listReadable, moduleItems, mustAct, runTag, team, testPhoto, upload, type Json, type Team } from "../harness/helpers-sng.ts";
+import { goRetry as go } from "../harness/helpers-sng.ts";
 
 // Part INS: Inspections (WIR). Work Inspection Requests are made and moved through the api as the people
 // do; the pages are opened and read as the person would. Hafiz covers Electrical only (Civil Works is
@@ -321,12 +322,12 @@ defineCase("INS-07", async (t) => {
   await go(page, `/projects/${projectId}/inspections?q=${tag}`);
   await settle(page);
   const list = await page.getByRole("main").innerText();
-  t.check("The Inspections tab lists the WIR with Stage Pending Approval, in the Submittals List's layout", list.includes(`UAT INS-07 WIR ${tag}`) && /Pending Approval/.test(list) && /Document Number/.test(list));
+  if (await listReadable(t, page, "The Inspections tab opens and lists the WIR with Stage Pending Approval")) t.check("The Inspections tab lists the WIR with Stage Pending Approval, in the Submittals List's layout", list.includes(`UAT INS-07 WIR ${tag}`) && /Pending Approval/.test(list) && /Document Number/.test(list));
   await t.shot(page, "inspections-list");
   await go(page, `/projects/${projectId}/inspections?view=kanban&q=${tag}`);
   await settle(page);
   const kan = await page.getByRole("main").innerText();
-  t.check("The Kanban shows the WIR in the Submittals' Stage columns", kan.includes(`UAT INS-07 WIR ${tag}`) && /Pending Approval/.test(kan));
+  if (await listReadable(t, page, "The Inspections Kanban opens")) t.check("The Kanban shows the WIR in the Submittals' Stage columns", kan.includes(`UAT INS-07 WIR ${tag}`) && /Pending Approval/.test(kan));
   await t.shot(page, "inspections-kanban");
   const subs = async (api: Api) => (await H.listItems(api, tm.projectId, `q=${tag}&pageSize=50`)).filter((i) => i.type?.code === "WIR");
   t.check("With the setting off, WIRs are not in the Submittals List", (await subs(ali!)).length === 0);
@@ -341,11 +342,11 @@ defineCase("INS-07", async (t) => {
     await go(page, `/projects/${projectId}/work-items?q=${tag}`);
     await settle(page);
     const st = await page.getByRole("main").innerText();
-    t.check("The Submittals List page shows the WIR and a WIR type in its Type filter", st.includes(`UAT INS-07 WIR ${tag}`));
+    if (await listReadable(t, page, "The Submittals List page opens with the WIR in it")) t.check("The Submittals List page shows the WIR and a WIR type in its Type filter", st.includes(`UAT INS-07 WIR ${tag}`));
     await t.shot(page, "submittals-with-wir");
     await go(page, `/projects/${projectId}/work-items?view=kanban&q=${tag}`);
     await settle(page);
-    t.check("The Submittals Kanban shows it too", (await page.getByRole("main").innerText()).includes(`UAT INS-07 WIR ${tag}`));
+    if (await listReadable(t, page, "The Submittals Kanban opens with the WIR in it")) t.check("The Submittals Kanban shows it too", (await page.getByRole("main").innerText()).includes(`UAT INS-07 WIR ${tag}`));
     const dash = (await ali!.get(`/projects/${tm.projectId}/dashboard`)).text;
     t.check("The Dashboard counts WIRs with the Submittals", /WIR/.test(dash));
   } finally {
@@ -539,7 +540,7 @@ defineCase("INS-14", async (t) => {
   const { ali, saeed } = tm.api;
   const mar = await H.submittedMar(tm, `UAT INS-14 MAR ${tag}`);
   const wir = await submittedWir(tm, `UAT INS-14 WIR ${tag}`);
-  const stageIn = async (id: string, module: "inspections" | "submittals") => (await moduleItems(ali!, tm.projectId, module, "pageSize=50")).find((i) => i.id === id)?.stage?.key;
+  const stageIn = async (id: string, module: "inspections" | "submittals") => (await moduleItems(ali!, tm.projectId, module, `q=${tag}&pageSize=50`)).find((i) => i.id === id)?.stage?.key;
   t.check("The WIR and the submittal both sit at Pending Approval", (await stageIn(wir, "inspections")) === "pending_approval" && (await H.detail(ali!, mar)).stage.key === "pending_approval");
   try {
     await saeed!.put(`/projects/${tm.projectId}/settings/show-inspections-in-submittals`, { show: true });
@@ -553,7 +554,7 @@ defineCase("INS-14", async (t) => {
     await t.shot(page, "kanban-shared-column");
     await go(page, `/projects/${projectId}/inspections?view=kanban&q=${tag}`);
     await settle(page);
-    t.check("The Inspections Kanban uses the same Stage column for the WIR", (await page.getByRole("main").innerText()).includes("Pending Approval"));
+    if (await listReadable(t, page, "The Inspections Kanban opens")) t.check("The Inspections Kanban uses the same Stage column for the WIR", (await page.getByRole("main").innerText()).includes("Pending Approval"));
   } finally {
     await saeed!.put(`/projects/${tm.projectId}/settings/show-inspections-in-submittals`, { show: false });
   }

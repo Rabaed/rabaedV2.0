@@ -4,12 +4,12 @@
     {
       "text": "Hafiz (the raiser) sees his Draft Revision in the drop-down",
       "ok": true,
-      "detail": "[{\"id\":\"6f7f0709-ddcb-43c8-95f1-3b167ad51e77\",\"documentNumber\":\"TWR-MAR-01-0430\",\"revisionNo\":0},{\"id\":\"da723998-1648-4748-8514-59061e0ddf09\",\"documentNumber\":null,\"revisionNo\":1}]"
+      "detail": "[{\"id\":\"2713787a-a9df-4b76-8863-5c78c40f0ccc\",\"documentNumber\":\"TWR-MAR-01-0596\",\"revisionNo\":0},{\"id\":\"ec52fa41-8679-4666-94c6-c348615954db\",\"documentNumber\":null,\"revisionNo\":1}]"
     },
     {
       "text": "mohammed: the drop-down lists only the original before the Submit",
       "ok": true,
-      "detail": "[{\"id\":\"6f7f0709-ddcb-43c8-95f1-3b167ad51e77\",\"documentNumber\":\"TWR-MAR-01-0430\",\"revisionNo\":0}]"
+      "detail": "[{\"id\":\"2713787a-a9df-4b76-8863-5c78c40f0ccc\",\"documentNumber\":\"TWR-MAR-01-0596\",\"revisionNo\":0}]"
     },
     {
       "text": "mohammed: no Link or Linked from names the Draft Revision",
@@ -29,7 +29,7 @@
     {
       "text": "faisal: the drop-down lists only the original before the Submit",
       "ok": true,
-      "detail": "[{\"id\":\"6f7f0709-ddcb-43c8-95f1-3b167ad51e77\",\"documentNumber\":\"TWR-MAR-01-0430\",\"revisionNo\":0}]"
+      "detail": "[{\"id\":\"2713787a-a9df-4b76-8863-5c78c40f0ccc\",\"documentNumber\":\"TWR-MAR-01-0596\",\"revisionNo\":0}]"
     },
     {
       "text": "faisal: no Link or Linked from names the Draft Revision",
@@ -74,12 +74,12 @@
     {
       "text": "The discarded Revision never reaches Mohammed",
       "ok": true,
-      "detail": "[{\"id\":\"34a4438c-378f-4fdd-8977-bf600e5aefbb\",\"documentNumber\":\"TWR-MAR-01-0431\",\"revisionNo\":0}]"
+      "detail": "[{\"id\":\"c755a417-79ac-4881-adb7-4e2149a9f51b\",\"documentNumber\":\"TWR-MAR-01-0597\",\"revisionNo\":0}]"
     },
     {
       "text": "The re-created Revision is Rev 1 again",
       "ok": true,
-      "detail": "[{\"id\":\"34a4438c-378f-4fdd-8977-bf600e5aefbb\",\"documentNumber\":\"TWR-MAR-01-0431\",\"revisionNo\":0},{\"id\":\"d5e92101-ff4c-4852-a786-dc9a0ba1b353\",\"documentNumber\":null,\"revisionNo\":1}]"
+      "detail": "[{\"id\":\"c755a417-79ac-4881-adb7-4e2149a9f51b\",\"documentNumber\":\"TWR-MAR-01-0597\",\"revisionNo\":0},{\"id\":\"c720e096-8475-411b-b19b-1a3c7f328812\",\"documentNumber\":null,\"revisionNo\":1}]"
     },
     {
       "text": "Mohammed: the Draft Revision's URL is the plain not-found page",
@@ -91,5 +91,5 @@
     "evidence/VIS-12-1-mohammed-draft-revision-url.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:15:13.089Z"
+  "ranAt": "2026-10-27T19:45:26.446Z"
 }

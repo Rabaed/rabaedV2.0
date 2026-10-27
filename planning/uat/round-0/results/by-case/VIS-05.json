@@ -1,5 +1,5 @@
 {
-  "status": "error",
+  "status": "pass",
   "checks": [
     {
       "text": "Mohammed issues Code B with three comment rows",
@@ -17,7 +17,7 @@
       "detail": "{\"raisedBy\":{\"companyName\":{\"en\":\"Design Consultants LLC\",\"ar\":\"المصممون الاستشاريون ذ.م.م\"}},\"heldBy\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}}"
     },
     {
-      "text": "ali sees all three Comments (TMC)",
+      "text": "faisal sees all three Comments (oversight)",
       "ok": true,
       "detail": "3"
     },
@@ -27,22 +27,22 @@
       "detail": "3"
     },
     {
-      "text": "faisal sees all three Comments (oversight)",
+      "text": "ali sees all three Comments (TMC)",
       "ok": true,
       "detail": "3"
     },
     {
-      "text": "Yousef: nothing of Comment TWR-CMT-03-0071 in any channel; its id is 404",
+      "text": "Yousef: nothing of Comment TWR-CMT-03-0097 in any channel; its id is 404",
       "ok": true,
       "detail": "19 channels clean"
     },
     {
-      "text": "Yousef: nothing of Comment TWR-CMT-03-0072 in any channel; its id is 404",
+      "text": "Yousef: nothing of Comment TWR-CMT-03-0098 in any channel; its id is 404",
       "ok": true,
       "detail": "19 channels clean"
     },
     {
-      "text": "Yousef: nothing of Comment TWR-CMT-03-0073 in any channel; its id is 404",
+      "text": "Yousef: nothing of Comment TWR-CMT-03-0099 in any channel; its id is 404",
       "ok": true,
       "detail": "19 channels clean"
     },
@@ -56,9 +56,9 @@
       "detail": "200"
     },
     {
-      "text": "Yousef's Snag List counts are unchanged",
-      "ok": false,
-      "detail": "{\"draft\":0,\"open\":3,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0} / {\"draft\":0,\"open\":4,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0}"
+      "text": "Yousef's Snag List counts are unchanged by this case (new rows are other Parts' Snags, none a Comment of this MAR)",
+      "ok": true,
+      "detail": "{\"draft\":0,\"open\":5,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0} / {\"draft\":0,\"open\":5,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0}; 0 new rows"
     },
     {
       "text": "yousef sees nothing of it (the MAR)",
@@ -71,17 +71,17 @@
       "detail": "19 channels clean"
     },
     {
-      "text": "Sara gets 404 for Comment TWR-CMT-03-0071",
+      "text": "Sara gets 404 for Comment TWR-CMT-03-0097",
       "ok": true,
       "detail": "404"
     },
     {
-      "text": "Sara gets 404 for Comment TWR-CMT-03-0072",
+      "text": "Sara gets 404 for Comment TWR-CMT-03-0098",
       "ok": true,
       "detail": "404"
     },
     {
-      "text": "Sara gets 404 for Comment TWR-CMT-03-0073",
+      "text": "Sara gets 404 for Comment TWR-CMT-03-0099",
       "ok": true,
       "detail": "404"
     },
@@ -106,11 +106,19 @@
       "detail": "{\"type\":{\"code\":\"CMT\",\"name\":{\"en\":\"Comment\",\"ar\":\"ملاحظة\"}},\"open\":2,\"closed\":1}"
     },
     {
-      "text": "Yousef's Snag List counts are still unchanged after the close",
-      "ok": false
+      "text": "Yousef's Snag List counts are still unchanged by this case after the close",
+      "ok": true,
+      "detail": "{\"draft\":0,\"open\":5,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0} / {\"draft\":0,\"open\":5,\"in_progress\":0,\"on_hold\":0,\"resolved\":0,\"closed\":0}; 0 new rows"
+    },
+    {
+      "text": "Yousef: a Comment by id is the plain not-found page",
+      "ok": true,
+      "detail": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link. Projects"
     }
   ],
-  "screenshots": [],
-  "notes": "Script error: VIS-05 ran over 180 s.",
-  "ranAt": "2026-10-27T18:11:52.639Z"
+  "screenshots": [
+    "evidence/VIS-05-1-yousef-comment-by-id.jpg"
+  ],
+  "notes": "",
+  "ranAt": "2026-10-27T19:42:23.873Z"
 }

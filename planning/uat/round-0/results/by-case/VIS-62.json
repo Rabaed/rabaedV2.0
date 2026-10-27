@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "not built: the Files Module, Drawings and Plan View (no Files route in apps/api, no page in apps/web; no ticket in the five epics). Steps for later: Mohammed and Yousef open Files and a shared floor plan with Pins. Expected: Work Item folders only for visible items; Pins only of visible items.",
-  "ranAt": "2026-10-22T19:45:57.621Z"
+  "ranAt": "2026-10-27T20:22:34.980Z"
 }

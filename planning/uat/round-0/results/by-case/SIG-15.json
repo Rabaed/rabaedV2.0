@@ -8,7 +8,7 @@
     {
       "text": "the record prints a Verification Code and a long verification link",
       "ok": true,
-      "detail": "CDW8-8HGT / token 43 chars"
+      "detail": "QXQB-SN1R / token 43 chars"
     },
     {
       "text": "the link verifies with no sign-in and returns the printed face only",
@@ -18,7 +18,7 @@
     {
       "text": "it holds the Document Number, Subject, Project, outcome and sealed date",
       "ok": true,
-      "detail": "{\"status\":\"genuine\",\"documentNumber\":\"TWR-MAR-01-0331\",\"subject\":\"UAT SIG-15 verify 190855\",\"project\":{\"ar\":\"برج بوابة الرياض – المرحلة 2\",\"en\":\"Riyadh Gate Tower – Phase 2\"},\"outcome\":{\"code\":\"A\",\"name\":{\"ar\":\"معتمد\",\"en\":\"Approved\"}},\"signers\":[{\"name\":{\"ar\":\"حافظ حمدان\",\"en\":\"Hafiz Hamdan\"},\"posi"
+      "detail": "{\"status\":\"genuine\",\"documentNumber\":\"TWR-MAR-01-0522\",\"subject\":\"UAT SIG-15 verify 185306\",\"project\":{\"ar\":\"برج بوابة الرياض – المرحلة 2\",\"en\":\"Riyadh Gate Tower – Phase 2\"},\"outcome\":{\"code\":\"A\",\"name\":{\"ar\":\"معتمد\",\"en\":\"Approved\"}},\"signers\":[{\"name\":{\"ar\":\"حافظ حمدان\",\"en\":\"Hafiz Hamdan\"},\"posi"
     },
     {
       "text": "it names the signers with Positions and Companies",
@@ -42,7 +42,7 @@
     {
       "text": "the verification page opens with no sign-in and says the record is genuine",
       "ok": true,
-      "detail": "Rabaed العربية Verify a Documental Record This record is genuine UAT SIG-15 verify 190855 Document Number TWR-MAR-01-0331 Project Riyadh Gate Tower – Phase 2 Outcome A Approved Sealed 22 October 2026 "
+      "detail": "Rabaed العربية Verify a Documental Record This record is genuine UAT SIG-15 verify 185306 Document Number TWR-MAR-01-0522 Project Riyadh Gate Tower – Phase 2 Outcome A Approved Sealed 27 October 2026 "
     },
     {
       "text": "it shows the signers with their Companies and links to no live item",
@@ -69,5 +69,5 @@
     "evidence/SIG-15-2-verify-copy-original.jpg"
   ],
   "notes": "The per-visitor limit (10 attempts in 15 minutes from one address) was not run to its end: it would lock out other testers on the same address. 3 attempts were used from a made-up forwarded address.",
-  "ranAt": "2026-10-22T19:09:10.325Z"
+  "ranAt": "2026-10-27T18:53:31.512Z"
 }

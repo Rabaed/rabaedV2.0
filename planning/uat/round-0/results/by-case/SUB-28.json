@@ -1,10 +1,10 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "The Activity Feed reads as events (submitted, returned, approved...)",
-      "ok": false,
-      "detail": "Dashboard | Submittals | Inspections | Snag List | Activity Feed | Settings | Riyadh Gate Tower – Phase 2 | Activity Feed | Module | All | Type | All | Only items I'm on |  | Design Consultants LLC · Mohammed Al Shamsi Revise & "
+      "ok": true,
+      "detail": "Dashboard | Submittals | Inspections | Snag List | Activity Feed | Settings | Riyadh Gate Tower – Phase 2 | Activity Feed | Module | All | Type | All | Only items I'm on |  | Design Consultants LLC · Ahmed bin Said assigned TWR-"
     },
     {
       "text": "No answers_changed or Document upload entries",
@@ -19,5 +19,5 @@
     "evidence/SUB-28-1-activity-feed.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:15:44.498Z"
+  "ranAt": "2026-10-27T19:01:39.803Z"
 }

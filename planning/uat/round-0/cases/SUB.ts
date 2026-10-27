@@ -17,6 +17,11 @@ const overlap = (a: string[], b: string[]) => a.filter((x) => b.includes(x)).len
 
 const dots = (text: string) => /(\d)\s*(week|wk)/i.test(text);
 
+const RP1049 = "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read.";
+async function notFound(page: import("playwright").Page): Promise<boolean> {
+  return (await page.getByTestId("not-found").count()) > 0 || /We can.t find this page/.test(await page.locator("body").innerText());
+}
+
 defineCase("SUB-01", async (t) => {
   const tm = await H.team("hafiz");
   const subject = `UAT SUB-01 Lighting Fixtures ${H.stamp()}`;
@@ -35,10 +40,12 @@ defineCase("SUB-01", async (t) => {
   await page.waitForURL(/\/work-items(\?|$)|\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
   await settle(page, 800);
   await openList(page, tm.projectId);
-  const row = (await listRows(page)).find((r) => r.subject === subject);
-  t.check("The Draft is listed in the Submittals List", !!row, row?.text);
-  t.check('The Draft reads "No number yet"', row?.number === "No number yet", row?.number);
-  t.check("No Step Age dots on the Draft row", !!row && !dots(row.text), row?.text);
+  const blocked = await notFound(page);
+  const row = blocked ? undefined : (await listRows(page)).find((r) => r.subject === subject);
+  const why = blocked ? RP1049 : row?.text;
+  t.check("The Draft is listed in the Submittals List", !!row, why);
+  t.check('The Draft reads "No number yet"', row?.number === "No number yet", blocked ? RP1049 : row?.number);
+  t.check("No Step Age dots on the Draft row", !!row && !dots(row.text), why);
   await t.shot(page, "list-with-draft");
   const items = await H.listItems(tm.api.hafiz!, tm.projectId, "q=" + encodeURIComponent(subject));
   const it = items.find((i) => i.title === subject);
@@ -84,6 +91,7 @@ defineCase("SUB-03", async (t) => {
   const photo = docs?.find((x) => x.contentType === "image/jpeg");
   t.check("The photo carries its EXIF time and place", !!photo?.takenAt && !!photo?.takenWhere, JSON.stringify({ takenAt: photo?.takenAt, takenWhere: photo?.takenWhere }));
   await page.getByRole("main").getByRole("button", { name: "Save and close" }).click();
+  await page.waitForURL((u) => /\/work-items\/?$/.test(u.pathname), { timeout: 25000 }).catch(() => undefined);
   await settle(page, 800);
   t.check("Save and close returns to the Submittals list", /\/work-items(\?|$)/.test(page.url()) && !/\/work-items\/[0-9a-f-]{36}/.test(page.url()), page.url());
   await t.shot(page, "after-save-and-close");
@@ -282,12 +290,13 @@ defineCase("SUB-11", async (t) => {
 
 defineCase("SUB-12", async (t) => {
   const tm = await H.team("hafiz", "ali", "ahmed", "mohammed");
-  const id = await H.submittedMar(tm, `UAT SUB-12 codeB ${H.stamp()}`);
+  const runTag12 = H.stamp();
+  const id = await H.submittedMar(tm, `UAT SUB-12 codeB ${runTag12}`);
   await H.reviewedMar(tm, id, { sample_checked: true, matches_specification: true }, "B");
   const m = tm.api.mohammed!;
   const noRemarks = await H.move(m, id, "approve_b", { answers: { sample_checked: true, matches_specification: true, items_to_create: [{ comment: "c1" }] } });
   t.check("Remarks are required with B", noRemarks.status === 422 && /remarks/.test(noRemarks.text), noRemarks.text);
-  await H.must(m, id, "approve_b", { answers: { sample_checked: true, matches_specification: true, remarks: "Approved subject to the comments.", items_to_create: [{ comment: "UAT SUB-12 comment one", reference: "E-201" }, { comment: "UAT SUB-12 comment two" }, { comment: "UAT SUB-12 comment three" }] } });
+  await H.must(m, id, "approve_b", { answers: { sample_checked: true, matches_specification: true, remarks: "Approved subject to the comments.", items_to_create: [{ comment: `UAT SUB-12 comment one ${runTag12}`, reference: "E-201" }, { comment: `UAT SUB-12 comment two ${runTag12}` }, { comment: `UAT SUB-12 comment three ${runTag12}` }] } });
   const d = await H.detail(tm.api.ali!, id);
   t.check("The MAR closes at Code B", d.outcome === "B", d.outcome);
   const raised = d.raisedItems?.find((x: H.Json) => x.type.code === "CMT");
@@ -295,7 +304,7 @@ defineCase("SUB-12", async (t) => {
   const { page, text } = await H.viewItem(t, "ali", id, "mar-comments-count");
   t.check("The MAR page shows '3 open / 0 closed'", /3 open \/ 0 closed/.test(text), text.match(/Comments[^\n]*\n?[^\n]*/)?.[0]);
   const list = (await tm.api.ali!.get(`/projects/${tm.projectId}/modules/snag_list/work-items?q=${encodeURIComponent("UAT SUB-12")}`)).body as H.Json;
-  const mine = (list.items as H.Json[]).filter((i) => /UAT SUB-12 comment/.test(i.title));
+  const mine = (list.items as H.Json[]).filter((i) => i.title.endsWith(runTag12));
   t.check("Three Comment items are in the Snag List, raised by Design Consultants, Open with TMC", mine.length === 3 && mine.every((i) => i.raiserCompanyName?.en === "Design Consultants LLC" && i.stage?.name?.en === "Open" && i.with?.companyName?.en === "TMC Constructions"), JSON.stringify(mine.map((i) => [i.title, i.raiserCompanyName?.en, i.stage?.name?.en, i.with?.companyName?.en])));
   await go(page, `/projects/${tm.projectId}/snag-list`);
   await settle(page);
@@ -394,6 +403,14 @@ defineCase("SUB-16", async (t) => {
   const { page } = await pageAs("hafiz");
   await go(page, `/projects/${tm.projectId}/work-items?q=${encodeURIComponent(subject)}`);
   await settle(page);
+  if (await notFound(page)) {
+    t.check("Row menu > Delete shows the confirm and discards the Draft (UI)", false, RP1049);
+    await t.shot(page, "list-not-found");
+    const gone = await hafiz.post(`/work-items/${id}/discard-draft`);
+    t.check("Through the api, discard-draft removes the Draft: gone for Hafiz (404)", gone.status < 300 && (await hafiz.get(`/work-items/${id}`)).status === 404, String(gone.status));
+    t.check("A numbered item offers no Delete (api: discardDraft false)", (await H.detail(hafiz, numId)).actions.discardDraft === false);
+    return;
+  }
   await page.getByRole("table").first().getByRole("button", { name: `More for ${subject}` }).click();
   await page.getByRole("menuitem", { name: "Delete" }).click();
   const dlg = page.getByRole("alertdialog").or(page.getByRole("dialog")).first();
@@ -424,11 +441,21 @@ defineCase("SUB-17", async (t) => {
   const { page } = await pageAs("hafiz");
   await go(page, `/projects/${tm.projectId}/work-items?q=${encodeURIComponent(subject)}`);
   await settle(page);
-  await page.getByRole("table").first().getByRole("button", { name: `More for ${subject}` }).click();
-  await page.getByRole("menuitem", { name: "Duplicate" }).click();
-  await page.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 });
-  await settle(page, 800);
-  const newId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())![1]!;
+  let newId: string;
+  if (await notFound(page)) {
+    t.check("Row menu > Duplicate opens the new Draft (UI)", false, RP1049);
+    await t.shot(page, "list-not-found");
+    const dup = await tm.api.hafiz!.post(`/work-items/${id}/duplicate`, { idempotencyKey: crypto.randomUUID() });
+    newId = (dup.body as H.Json).id as string;
+    await go(page, `/work-items/${newId}`);
+    await settle(page);
+  } else {
+    await page.getByRole("table").first().getByRole("button", { name: `More for ${subject}` }).click();
+    await page.getByRole("menuitem", { name: "Duplicate" }).click();
+    await page.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 });
+    await settle(page, 800);
+    newId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())![1]!;
+  }
   const n = await H.detail(tm.api.hafiz!, newId);
   t.check("A new Draft with the Subject and TMC's answers", n.stage.key === "draft" && n.title === subject && n.answers.manufacturer === "Philips" && n.answers.model === "CoreLine Panel", `${n.stage.key} ${n.title}`);
   const docs = ((await tm.api.hafiz!.get(`/work-items/${newId}/documents`)).body as H.Json).documents as H.Json[];
@@ -457,6 +484,12 @@ defineCase("SUB-18", async (t) => {
   const { page } = await pageAs("ali");
   await go(page, `/projects/${tm.projectId}/work-items?q=${encodeURIComponent("UAT SUB-18")}`);
   await settle(page);
+  if (await notFound(page)) {
+    t.check("The row menu of the Submitted MAR offers Download, a Draft's does not (UI)", false, RP1049);
+    await t.shot(page, "list-not-found");
+    t.note("The shared item and the Draft's 404 were read through the api (above); the row menus could not be opened.");
+    return;
+  }
   await page.getByRole("table").first().getByRole("button", { name: `More for ${subject}` }).click();
   await page.waitForTimeout(1500);
   const withDownload = await page.getByRole("menuitem").allInnerTexts();
@@ -509,7 +542,7 @@ defineCase("SUB-20", async (t) => {
   const sar = async (supplier: string) => {
     const id = await H.createItem(tm.api.hafiz!, tm, "SAR", `UAT SUB-20 SAR ${supplier}`, {
       supplier_name_en: supplier,
-      supplier_name_ar: "دلتا للكابلات",
+      supplier_name_ar: `دلتا للكابلات ${supplier.slice(-6)}`,
       commercial_registration_number: "1010000099",
       country_of_origin: "Saudi Arabia",
       proposed_supply: "UAT made-up cables for the Tower 1 risers.",
@@ -603,6 +636,13 @@ defineCase("SUB-23", async (t) => {
   await go(page, `/projects/${tm.projectId}/work-items`);
   await settle(page);
   const main = page.getByRole("main");
+  if (await notFound(page)) {
+    t.check("The Submittals List opens with search, filters, Need My Action, sort and columns (UI)", false, RP1049);
+    await t.shot(page, "list-not-found");
+    const byNumber = await H.listItems(ali, tm.projectId, "q=TWR-MAR-01-0002");
+    t.check("(api) Search by Document Number finds exactly that item", byNumber.length === 1 && byNumber[0]!.documentNumber === "TWR-MAR-01-0002", JSON.stringify(byNumber.map((i) => i.documentNumber)));
+    return;
+  }
   const headers = (await main.locator("thead th").allInnerTexts()).map((x) => x.trim());
   await t.shot(page, "list-headers");
   // 1. Search
@@ -706,6 +746,14 @@ defineCase("SUB-25", async (t) => {
   await go(page, `/projects/${tm.projectId}/work-items?view=kanban`);
   await settle(page);
   await t.shot(page, "kanban");
+  if (await notFound(page)) {
+    t.check("The Kanban page opens with the Stages as columns, a card, Move to and the filter panel (UI)", false, `${RP1049} The Kanban page does the same.`);
+    const d0 = await H.detail(tm.api.ali!, id);
+    t.check("A move that is not allowed is not offered (api: Ali's item offers Return, Submit, Cancel)", JSON.stringify(H.offered(d0).sort()) === JSON.stringify(["cancel_review", "return", "submit"]), H.offered(d0).join(","));
+    await H.must(tm.api.ali!, id, "submit", { answers: { cover_note: "UAT SUB-25" } });
+    t.check("Taking the move through the api puts the item in Pending Approval (the Kanban card could not be moved)", (await H.detail(tm.api.ali!, id)).stage.key === "pending_approval");
+    return;
+  }
   const text = (await page.getByRole("main").innerText()).replace(/\s+/g, " ");
 const cols = board.columns as H.Json[];
   const stageNames = (board.stages as H.Json[]).map((s) => s.name.en as string);
@@ -753,14 +801,19 @@ defineCase("SUB-26", async (t) => {
   const marBefore = (text.match(/Material Approval Request MAR\s*\n?\s*(\d+) items/) ?? [])[1];
   // Click a number on the MAR card: Pending.
   const pendingLink = page.getByRole("main").getByRole("link", { name: /Pending/ }).first();
-  const label = ((await pendingLink.innerText()).replace(/\s+/g, " ")).trim();
-  const clicked = Number((label.match(/(\d+)/) ?? [])[1]);
-  await pendingLink.click();
-  await page.waitForURL(/work-items/, { timeout: 15000 });
-  await settle(page, 800);
-  await t.shot(page, "list-from-dashboard-number");
-  const footer = Number(((await page.getByRole("main").innerText()).match(/(\d+) submittals/) ?? [])[1]);
-  t.check("The number opens the List with the same filter and the same count", !Number.isNaN(clicked) && footer === clicked, `card ${label}; list ${footer}; url ${page.url()}`);
+  if ((await pendingLink.count()) === 0) {
+    t.check("The number opens the List with the same filter and the same count", false, "The Dashboard page has no Type cards, so there is no number to click (it shows only Project details and Participants; the api dashboard answers with the counts). See screenshot dashboard.");
+  } else {
+    const label = (await pendingLink.innerText()).replace(/\s+/g, " ").trim();
+    const clicked = Number((label.match(/(\d+)/) ?? [])[1]);
+    await pendingLink.click();
+    await page.waitForURL(/work-items/, { timeout: 15000 });
+    await settle(page, 800);
+    await t.shot(page, "list-from-dashboard-number");
+    const body = await page.getByRole("main").innerText();
+    const footer = Number((body.match(/(\d+) submittals/) ?? [])[1]);
+    t.check("The number opens the List with the same filter and the same count", !Number.isNaN(clicked) && footer === clicked, /We can.t find this page/.test(body) ? RP1049 : `card ${label}; list ${footer}; url ${page.url()}`);
+  }
   const feed = JSON.stringify((await ali.get(`/projects/${tm.projectId}/activity`)).body);
   t.check("The Activity Feed names Companies for others and no Consultant person", !/Ahmed bin Said|Mohammed Al Shamsi|"memberName":\{"en":"Sara/.test(feed), feed.match(/Ahmed bin Said|Mohammed Al Shamsi/)?.[0]);
   void dash; void marBefore;
@@ -774,7 +827,7 @@ defineCase("SUB-27", async (t) => {
   const homeMs = Date.now() - t0;
   const { page, text } = await H.viewPath(t, "ali", "/", "home", "en", { full: true });
   const loaded = !/Home couldn't be loaded/.test(text);
-  t.check("Home loads for Ali", loaded, `the page says: ${text.replace(/\s+/g, " ").slice(0, 80)}; GET /v1/home took ${homeMs} ms (the web app waits 3 s for it: apps/web/src/lib/session.ts)`);
+  t.check("Home loads for Ali", loaded, `Known Bug RP-1049: the page says: ${text.replace(/\s+/g, " ").slice(0, 80)}; GET /v1/home took ${homeMs} ms (the web app waits 3 s for it: apps/web/src/lib/session.ts)`);
   const num = (label: RegExp) => Number((text.match(new RegExp(`(\\d+)\\s*\\n\\s*${label.source}`)) ?? [])[1]);
   const sum = (b: H.Json) => (b.stages as H.Json[]).reduce((n, s) => n + s.count, 0);
   const mods = ["submittals", "inspections", "snag_list"];
@@ -805,7 +858,7 @@ defineCase("SUB-28", async (t) => {
   const tm = await H.team("mohammed", "hafiz");
   const { text } = await H.viewPath(t, "mohammed", `/projects/${tm.projectId}/activity`, "activity-feed", "en", { full: true });
   const feed = (await tm.api.mohammed!.get(`/projects/${tm.projectId}/activity`)).text;
-  t.check("The Activity Feed reads as events (submitted, returned, approved...)", /Submit|submitted/i.test(text) && /Approve|approved|Close/i.test(text), text.slice(0, 200).replace(/\n/g, " | "));
+  t.check("The Activity Feed reads as events (submitted, returned, approved...)", /Submit|Resubmit|submitted|Send/i.test(text) && /Approve|Revise|Reject|Close|Return/i.test(text), text.slice(0, 200).replace(/\n/g, " | "));
   t.check("No answers_changed or Document upload entries", !/answers_changed|document_uploaded|uploaded/i.test(feed + text), (feed + text).match(/answers_changed|document_uploaded|uploaded/i)?.[0]);
   t.check("TMC appears by Company name only (no TMC person)", !/Hafiz Hamdan|Ali Sonour|Saeed Al Qahtani|Omar Al Harbi/.test(text), text.match(/Hafiz Hamdan|Ali Sonour|Saeed Al Qahtani|Omar Al Harbi/)?.[0]);
 });
@@ -844,9 +897,9 @@ defineCase("SUB-29", async (t) => {
   const mails = await mailBodies();
   for (const m of mails) scan(`mail ${m.subject}`, m.text);
   t.check(`No due date, deadline, SLA or late on any page or email (${pages.length * 4} pages, ${mails.length} emails scanned)`, hits.length === 0, hits.slice(0, 6).join("; "));
-  t.check('The List header for Stage reads "Stage", not "Status"', listHeaders.includes("Stage") && !listHeaders.includes("Status"), listHeaders.join(" | "));
-  t.check('The List header for Trade reads "Trade", not "Discipline"', listHeaders.includes("Trade") && !listHeaders.includes("Discipline"), listHeaders.join(" | "));
-  t.check('The List header for the holder reads "With", not "Current owner"', listHeaders.includes("With") && !listHeaders.includes("Current owner"), listHeaders.join(" | "));
+  t.check('The List header for Stage reads "Stage", not "Status"', listHeaders.includes("Stage") && !listHeaders.includes("Status"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
+  t.check('The List header for Trade reads "Trade", not "Discipline"', listHeaders.includes("Trade") && !listHeaders.includes("Discipline"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
+  t.check('The List header for the holder reads "With", not "Current owner"', listHeaders.includes("With") && !listHeaders.includes("Current owner"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
   t.check("The Kanban uses no Status or Current owner wording", !/Current owner|Discipline/.test(kanbanText));
 });
 

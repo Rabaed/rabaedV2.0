@@ -12,13 +12,9 @@
       "detail": "2"
     },
     {
-      "text": "The List rows show the chip PKG number with the name",
+      "text": "The Package-filtered Submittals List opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
       "ok": false,
-      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings We can't find this page. It may not exist, or you may not have access to it. Ask the person wh"
-    },
-    {
-      "text": "The Kanban cards show the chip",
-      "ok": true
+      "detail": "the page answered with the not-found page; the api answers the same read for the same person"
     },
     {
       "text": "The item page shows the chip with the Package name",
@@ -27,7 +23,7 @@
     {
       "text": "The chip opens the Package page",
       "ok": true,
-      "detail": "http://lane7.localhost:3700/en/packages/d1a0160b-97f6-47c7-aff2-51e7cb2d4ab6"
+      "detail": "http://lane7.localhost:3700/en/packages/f08bdfd5-e998-4108-b77d-32947df3cb3c"
     },
     {
       "text": "An item in no Package shows no chip, and Package is not a Form field",
@@ -42,6 +38,6 @@
     "evidence/PKG-08-1-list-filtered-by-package.jpg",
     "evidence/PKG-08-2-chip-opens-package.jpg"
   ],
-  "notes": "",
-  "ranAt": "2026-10-22T19:20:34.193Z"
+  "notes": "The Package-filtered Kanban opens: the not-found page again (RP-1049); not checked.",
+  "ranAt": "2026-10-27T19:15:55.177Z"
 }

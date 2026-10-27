@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Needs the AGE fixture (pnpm uat:age, RP-922): the script does not exist on this branch (no uat:age in package.json, nothing in scripts/). Steps once it exists: age two items by 1 and by 4 weeks, read the dots in the List, Kanban and item page as Ali and as Mohammed.",
-  "ranAt": "2026-10-22T18:25:52.883Z"
+  "ranAt": "2026-10-27T18:27:34.780Z"
 }

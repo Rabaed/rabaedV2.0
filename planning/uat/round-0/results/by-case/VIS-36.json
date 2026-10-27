@@ -3,5 +3,5 @@
   "checks": [],
   "screenshots": [],
   "notes": "Needs Project setups this run must not change for the other Parts: (a) no Consultant covers Electrical (DCL cannot be narrowed off Electrical while it holds Steps), (b) a second Consultant on the Project (no second Consultant Company is seeded), (c) the covering Consultant with nobody holding the Position. Steps for a person on a clean Project: set each up in Settings > Visibility and Positions; as Ali (TMC PM) take Submit on an Electrical MAR in each case. Expected: Submit is not offered and taking it gives the same answer in all three: 'This cannot be handed over yet: the next step has nobody to take it. Ask a Project Admin.' Nothing names a Consultant or says which case it is.",
-  "ranAt": "2026-10-22T19:35:20.877Z"
+  "ranAt": "2026-10-27T20:05:36.931Z"
 }

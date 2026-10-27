@@ -1,10 +1,10 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Saeed's Members page lists TMC people only, each with a Projects count",
       "ok": true,
-      "detail": "saeed.alqahtani@tmc.demo.rabaed.test, hafiz.hamdan@tmc.demo.rabaed.test, ali.sonour@tmc.demo.rabaed.test, omar.alharbi@tmc.demo.rabaed.test, uat.par02.136599@tmc.demo.rabaed.test, uat.par02.probe278339@tmc.demo.rabaed.test, uat.par02.306443@tmc.demo.rabaed.test, uat.par02.352616@tmc.demo.rabaed.test"
+      "detail": "saeed.alqahtani@tmc.demo.rabaed.test, hafiz.hamdan@tmc.demo.rabaed.test, ali.sonour@tmc.demo.rabaed.test, omar.alharbi@tmc.demo.rabaed.test, uat.par02.136599@tmc.demo.rabaed.test, uat.par02.probe278339@tmc.demo.rabaed.test, uat.par02.306443@tmc.demo.rabaed.test, uat.par02.352616@tmc.demo.rabaed.test, uat.par02.411426@tmc.demo.rabaed.test, uat.par02.154177@tmc.demo.rabaed.test, uat.j13.1793124906560@tmc.demo.rabaed.test, uat.j13.1793124960190@tmc.demo.rabaed.test"
     },
     {
       "text": "Hafiz (a plain Member) reads the same list, the same counts",
@@ -13,7 +13,7 @@
     },
     {
       "text": "The Projects column counts only: no Project name or id in the answer",
-      "ok": false,
+      "ok": true,
       "detail": ""
     },
     {
@@ -36,5 +36,5 @@
     "evidence/VIS-44-1-hafiz-members.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:39:11.522Z"
+  "ranAt": "2026-10-27T20:11:35.489Z"
 }

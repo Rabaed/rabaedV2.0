@@ -8,12 +8,12 @@
     {
       "text": "the Subject holds the Document Number, the Subject and what happened",
       "ok": true,
-      "detail": "TWR-MAR-01-0274 · UAT NOT-03 mail 185418 · Reached you at Consultant Engineer"
+      "detail": "TWR-MAR-01-0469 · UAT NOT-03 mail 183028 · Reached you at Consultant Engineer"
     },
     {
       "text": "the Subject names no person",
       "ok": true,
-      "detail": "TWR-MAR-01-0274 · UAT NOT-03 mail 185418 · Reached you at Consultant Engineer"
+      "detail": "TWR-MAR-01-0469 · UAT NOT-03 mail 183028 · Reached you at Consultant Engineer"
     },
     {
       "text": "it is sent to the recipient alone",
@@ -23,7 +23,7 @@
     {
       "text": "the body names no TMC person (the other Company is by name only)",
       "ok": true,
-      "detail": "⁦TWR-MAR-01-0274⁩ · UAT NOT-03 mail 185418\r\n\r\nReached you at Consultant Engineer\r\n\r\nOpen it on Rabaed:\r\n\r\nhttp://lane7.localhost:3700/en/work-items/8b63882b-4fa3-4a19-9554-6a62bc22469f\r\n\r\nYou choose which emails you get in your notification settings on Rabaed.\r\n\r\nRabaed\r\n"
+      "detail": "⁦TWR-MAR-01-0469⁩ · UAT NOT-03 mail 183028\r\n\r\nReached you at Consultant Engineer\r\n\r\nOpen it on Rabaed:\r\n\r\nhttp://lane7.localhost:3700/en/work-items/267acbb2-4119-4d9c-86b5-588b11ea653f\r\n\r\nYou choose which emails you get in your notification settings on Rabaed.\r\n\r\nRabaed\r\n"
     },
     {
       "text": "the body holds no Form answer, cover note or Internal Note",
@@ -32,17 +32,17 @@
     {
       "text": "the body links to the item",
       "ok": true,
-      "detail": "http://lane7.localhost:3700/en/work-items/8b63882b-4fa3-4a19-9554-6a62bc22469f"
+      "detail": "http://lane7.localhost:3700/en/work-items/267acbb2-4119-4d9c-86b5-588b11ea653f"
     },
     {
       "text": "the link opens the item for Ahmed",
       "ok": true,
-      "detail": "UAT NOT-03 mail 185418"
+      "detail": "UAT NOT-03 mail 183028"
     },
     {
       "text": "Ali, who received it first (Contractor PM), has his own email",
       "ok": true,
-      "detail": "⁦TWR-MAR-01-0274⁩ · UAT NOT-03 mail 185418 · Reached you at Contractor PM"
+      "detail": "⁦TWR-MAR-01-0469⁩ · UAT NOT-03 mail 183028 · Reached you at Contractor PM"
     }
   ],
   "screenshots": [
@@ -50,5 +50,5 @@
     "evidence/NOT-03-2-mailpit-email.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T18:54:33.799Z"
+  "ranAt": "2026-10-27T18:30:57.500Z"
 }

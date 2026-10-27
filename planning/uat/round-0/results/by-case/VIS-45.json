@@ -4,17 +4,17 @@
     {
       "text": "yousef reads the Approved Supplier List (name, Trade, Scope, status)",
       "ok": true,
-      "detail": "200 6"
+      "detail": "200 12"
     },
     {
       "text": "ahmed reads the Approved Supplier List (name, Trade, Scope, status)",
       "ok": true,
-      "detail": "200 6"
+      "detail": "200 12"
     },
     {
       "text": "saeed reads the Approved Supplier List (name, Trade, Scope, status)",
       "ok": true,
-      "detail": "200 6"
+      "detail": "200 12"
     },
     {
       "text": "Every entry holds only id, name, Trade, Scope and status: never the SAR, its person, its time or its source",
@@ -61,5 +61,5 @@
     "evidence/VIS-45-2-yousef-approved-suppliers.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-22T19:39:24.527Z"
+  "ranAt": "2026-10-27T20:11:52.890Z"
 }

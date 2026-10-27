@@ -9,7 +9,7 @@
     {
       "text": "Ali's Step Age is week 1, counted from the Submit",
       "ok": true,
-      "detail": "1 2026-10-27T18:21:29.898Z 2026-10-27T18:21:29.898Z"
+      "detail": "1 2026-10-27T19:50:54.723Z 2026-10-27T19:50:54.723Z"
     },
     {
       "text": "Ahmed sends to Manager and Mohammed Returns it to Ahmed",
@@ -24,7 +24,7 @@
     {
       "text": "Ali's Step Age is unchanged: no reset by DCL's internal moves",
       "ok": true,
-      "detail": "2026-10-27T18:21:29.898Z / 2026-10-27T18:21:29.898Z"
+      "detail": "2026-10-27T19:50:54.723Z / 2026-10-27T19:50:54.723Z"
     },
     {
       "text": "Neither the workflow map nor the history shows Ali a DCL Step or person",
@@ -41,5 +41,5 @@
     "evidence/VIS-17-1-ali-item-with-dcl.jpg"
   ],
   "notes": "The checks above passed (With by Company, no reset by DCL's internal moves, DCL week 1). The 5-weeks-inside-TMC and four-weeks-later parts need the AGE fixture (RP-922, pnpm uat:age), which is not in this worktree.",
-  "ranAt": "2026-10-27T18:21:53.773Z"
+  "ranAt": "2026-10-27T19:51:17.604Z"
 }
