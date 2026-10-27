@@ -41,6 +41,9 @@ const differences = (projectId: string, modules: string[], allRevisions: boolean
       'values', (select jsonb_agg(jsonb_build_array(d, v) order by d, v) from unnest(b.dimension_ids, b.dimension_value_ids) x (d, v)),
       'holder_name', b.holder_company_name, 'raiser_name', b.raiser_company_name) as says
     from app.work_items_seen(${projectId}::uuid, ${modules}::text[], ${allRevisions}::boolean) b
+    -- The work item query joins the Step through its own row-level security, as the per-item side below does: an item
+    -- at a Step of a Workflow Version the reader may not read (another test's unpublished one) is listed by neither.
+    join workflow_step ws on ws.id = b.step_id
   ), helpers as (
     select w.id, jsonb_build_object(
       'step', seen.step_id, 'stage', seen.stage_key, 'entered', seen.entered_at,
@@ -82,7 +85,18 @@ describe("app.work_items_seen", () => {
           items += seen[0]!.n;
           return rows;
         });
-        expect({ member_id, project_id, allRevisions, found }).toEqual({ member_id, project_id, allRevisions, found: [] });
+        // On a difference, each item's Revision chain as it is, to tell why.
+        const chains =
+          found.length === 0
+            ? []
+            : (
+                await sql<Record<string, unknown>>`
+                  select w.id, w.root_id, w.revision_no, w.discarded_at, w.document_number, w.current_step_id, w.closed_at, t.module_key
+                  from work_item o join work_item w on w.root_id = o.root_id join work_item_type t on t.id = w.work_item_type_id
+                  where o.id = any(${found.map((f) => f.id)}::uuid[]) order by w.root_id, w.revision_no
+                `.execute(migrator)
+              ).rows;
+        expect({ member_id, project_id, allRevisions, found, chains }).toEqual({ member_id, project_id, allRevisions, found: [], chains: [] });
       }
     }
     // Not vacuous: the Members saw items between them.
