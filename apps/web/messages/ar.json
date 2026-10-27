@@ -431,12 +431,35 @@
     "apiVersion": "الواجهة البرمجية {version}"
   },
   "signIn": {
-    "title": "تسجيل الدخول",
-    "email": "البريد الإلكتروني",
+    "title": "سجّل الدخول إلى ربائد",
+    "subtitle": "التقديمات والفحوصات وتقارير الموقع لكل المشاركين في المشروع.",
+    "email": "بريد العمل",
+    "emailPlaceholder": "name@company.com",
     "password": "كلمة المرور",
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
     "submit": "تسجيل الدخول",
     "invalid": "البريد الإلكتروني وكلمة المرور غير متطابقين.",
-    "unavailable": "حدث خطأ. حاول مرة أخرى."
+    "unavailable": "حدث خطأ. حاول مرة أخرى.",
+    "invite": "جديد في ربائد؟ اطلب من المفوَّض في شركتك إضافتك.",
+    "copyright": "© {year} ربائد",
+    "languages": {
+      "en": "English",
+      "ar": "العربية"
+    },
+    "brand": {
+      "tagline": "نظام تشغيل مشاريع الإنشاء",
+      "owner": "المالك",
+      "contractor": "المقاول",
+      "consultant": "الاستشاري",
+      "sent": "أُرسل · {time}",
+      "reviewed": "رُوجع · {time}",
+      "approved": "اعتُمد · {time}",
+      "headlineCompanies": "ثلاث شركات.",
+      "headlineRecord": "سجل واحد.",
+      "headlineAccountability": "مسؤولية واضحة.",
+      "lead": "المالك والاستشاري والمقاول على منصة واحدة — وكل خطوة موثّقة ومؤرخة ومنسوبة إلى من قام بها."
+    }
   },
   "acceptInvitation": {
     "title": "قبول الدعوة",
