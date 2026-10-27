@@ -66,22 +66,19 @@ import type {
 import { activityFeedSearchParams, checklistTemplateChoices, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { readApiJson, readTimeouts, valueOf, type ApiRead } from "./api-read.ts";
 import { apiUrl } from "./api-url.ts";
+
+/** GETs an API path with the browser's session cookie: absent if signed out, failed (and logged) if slow or broken (RP-1049). */
+async function apiRead<T>(path: string, timeoutMs: number = readTimeouts.small): Promise<ApiRead<T>> {
+  const cookie = (await cookies()).toString();
+  if (!cookie) return { kind: "absent" };
+  return readApiJson<T>(`${apiUrl}${path}`, { cookie, timeoutMs });
+}
 
 /** GETs an API path with the browser's session cookie; null if signed out or it fails. */
 async function apiGet<T>(path: string): Promise<T | null> {
-  const cookie = (await cookies()).toString();
-  if (!cookie) return null;
-  try {
-    const res = await fetch(`${apiUrl}${path}`, {
-      headers: { cookie },
-      cache: "no-store",
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok ? ((await res.json()) as T) : null;
-  } catch {
-    return null;
-  }
+  return valueOf(await apiRead<T>(path));
 }
 
 /**
@@ -94,12 +91,12 @@ export const getMe = cache((): Promise<SignedInMember | null> => apiGet<SignedIn
 /** Once per request: the page and the top bar title both read it. */
 export const getMembers = cache((): Promise<CompanyMembers | null> => apiGet<CompanyMembers>("/v1/members"));
 
-/** The signed-in Member's Projects; null if signed out. */
-/** Home across the signed-in Member's Projects (RP-407); null when signed out or unavailable. */
-export function getHome(): Promise<Home | null> {
-  return apiGet<Home>("/v1/home");
+/** Home across the signed-in Member's Projects (RP-407); it reads every item they see, so it gets the wide time limit. */
+export function getHome(): Promise<ApiRead<Home>> {
+  return apiRead<Home>("/v1/home", readTimeouts.wide);
 }
 
+/** The signed-in Member's Projects; null if signed out. */
 /** Read once per request: the top bar's "n Projects" and the page both ask. */
 export const getMyProjects = cache((): Promise<MyProjects | null> => apiGet<MyProjects>("/v1/projects"));
 
@@ -107,9 +104,10 @@ export const getMyProjects = cache((): Promise<MyProjects | null> => apiGet<MyPr
  * One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist).
  * Read once per request: the top bar, the Project tabs and the page all ask.
  */
-export const getProject = cache(
-  (projectId: string): Promise<ProjectSummary | null> => apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`),
-);
+export const getProject = cache(async (projectId: string): Promise<ProjectSummary | null> => valueOf(await readProject(projectId)));
+
+/** The same read, telling a hidden Project (absent) from a slow or failed read (RP-1049); one fetch per request with `getProject`. */
+export const readProject = cache((projectId: string): Promise<ApiRead<ProjectSummary>> => apiRead<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`));
 
 /** The Participants of one of the signed-in Member's Projects; null if it isn't one of theirs. */
 export function getProjectParticipants(projectId: string): Promise<ProjectParticipants | null> {
@@ -215,16 +213,17 @@ function moduleWorkItemsPath(projectId: string, module: ModuleKey, view: "" | "/
 
 /**
  * One page of the work item query on a Module of a Project: the items the
- * signed-in Member can see that match `query`, with Stage counts; null if it
- * isn't one of their Projects or the Project has no Type in the Module.
+ * signed-in Member can see that match `query`, with Stage counts; absent if it
+ * isn't one of their Projects or the Project has no Type in the Module. It counts
+ * every item they see, so it gets the wide time limit (RP-1049).
  */
-export function getWorkItems(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<WorkItemList | null> {
-  return apiGet<WorkItemList>(moduleWorkItemsPath(projectId, module, "", query));
+export function getWorkItems(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<ApiRead<WorkItemList>> {
+  return apiRead<WorkItemList>(moduleWorkItemsPath(projectId, module, "", query), readTimeouts.wide);
 }
 
-/** The Kanban of a Module of a Project for `query`; null as for the List. */
-export function getWorkItemBoard(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<WorkItemBoard | null> {
-  return apiGet<WorkItemBoard>(moduleWorkItemsPath(projectId, module, "/kanban", query));
+/** The Kanban of a Module of a Project for `query`; absent as for the List. */
+export function getWorkItemBoard(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<ApiRead<WorkItemBoard>> {
+  return apiRead<WorkItemBoard>(moduleWorkItemsPath(projectId, module, "/kanban", query), readTimeouts.wide);
 }
 
 /** A Project's Dashboard: Type cards over the items the signed-in Member can see; null if it isn't one of theirs. */
@@ -253,9 +252,9 @@ export function getPackageComments(packageId: string): Promise<PackageComments |
   return apiGet<PackageComments>(`/v1/packages/${encodeURIComponent(packageId)}/comments`);
 }
 
-/** A Project's Packages the signed-in Member sees, with their counts (RP-641, the Packages view RP-660); null if the Project isn't one of theirs. */
-export function getPackages(projectId: string): Promise<PackageList | null> {
-  return apiGet<PackageList>(`/v1/projects/${encodeURIComponent(projectId)}/packages`);
+/** A Project's Packages the signed-in Member sees, with their counts (RP-641, the Packages view RP-660); absent if the Project isn't one of theirs. */
+export function getPackages(projectId: string): Promise<ApiRead<PackageList>> {
+  return apiRead<PackageList>(`/v1/projects/${encodeURIComponent(projectId)}/packages`, readTimeouts.wide);
 }
 
 /** A Type's outcome set on a Project (the badges read it, RP-429); null when the Member can't see the Project. */

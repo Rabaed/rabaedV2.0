@@ -7,7 +7,9 @@ import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
 import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
 import { Link, getPathname, redirect } from "@/i18n/navigation";
-import { getMe, getPackages, getRegisterImports, getProject, getRaisableTypes, getWorkItemBoard, getWorkItems } from "@/lib/session";
+import { ReadFailed } from "@/components/read-failed";
+import { pageOutcome, valueOf } from "@/lib/api-read";
+import { getMe, getPackages, getRegisterImports, getRaisableTypes, getWorkItemBoard, getWorkItems, readProject } from "@/lib/session";
 
 /**
  * A Module tab of a Project (RP-346): one page of the work item query over the
@@ -31,16 +33,21 @@ export async function ModuleWorkItemsPage({
   const tabs = await getTranslations("projectTabs");
   // The Submittals' Packages view (RP-660): the Project's Packages the Member sees, as a Kanban of their status.
   if (moduleViewFromSearchParams(searchParams, module) === "packages") {
-    const [me, project, packages, raisable, otherBoard] = await Promise.all([
+    const [me, projectRead, packagesRead, raisable, otherBoard] = await Promise.all([
       getMe(),
-      getProject(projectId),
+      readProject(projectId),
       getPackages(projectId),
       getRaisableTypes(projectId, module),
       // The filter fields' names in the other language, small after each (RP-953, as the List's).
       getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "packages.board" }),
     ]);
     if (!me) return redirect({ href: "/sign-in", locale });
-    if (!project || !packages) notFound();
+    // A slow or failed read says so; only the api's own "not there" is not found (RP-1049).
+    const outcome = pageOutcome(projectRead, [packagesRead]);
+    if (outcome === "failed") return <ReadFailed />;
+    const project = valueOf(projectRead);
+    const packages = valueOf(packagesRead);
+    if (outcome === "not-found" || !project || !packages) notFound();
     return (
       <>
         <h1 className="sr-only">{tabs(module)}</h1>
@@ -73,9 +80,9 @@ export async function ModuleWorkItemsPage({
     ...(view === "list" ? { ...listQuery, sort: snags && searchParams.sort === undefined ? snagListSort : listQuery.sort } : workItemQueryFromSearchParams(searchParams)),
     module,
   };
-  const [me, project, list, board, raisable, packages, registerImports] = await Promise.all([
+  const [me, projectRead, listRead, boardRead, raisable, packagesRead, registerImports] = await Promise.all([
     getMe(),
-    getProject(projectId),
+    readProject(projectId),
     // Names sort in the reader's language.
     view === "list" ? getWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? getWorkItemBoard(projectId, module, query) : null,
@@ -89,7 +96,16 @@ export async function ModuleWorkItemsPage({
     query.importId ? getRegisterImports(projectId) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !(list ?? board)) notFound();
+  // A slow or failed read of the Project or its items says so and offers Try again; only the
+  // api's own "not there" (a hidden Project, a Module it has no Type in) is not found (RP-1049).
+  // The Package filter is extra: without it the List still shows.
+  const outcome = pageOutcome(projectRead, [listRead ?? boardRead]);
+  if (outcome === "failed") return <ReadFailed />;
+  const project = valueOf(projectRead);
+  const list = valueOf(listRead);
+  const board = valueOf(boardRead);
+  const packages = valueOf(packagesRead);
+  if (outcome === "not-found" || !project || !(list ?? board)) notFound();
   const title = tabs(module);
 
   if (snags) {

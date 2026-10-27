@@ -2,6 +2,7 @@ import { homeGreeting, type Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { DocNo, buttonVariants } from "@rabaed/ui";
 import { HomeView } from "@/components/home-view";
+import { ReadFailed } from "@/components/read-failed";
 import { Link } from "@/i18n/navigation";
 import { getHome, getMe } from "@/lib/session";
 
@@ -16,14 +17,10 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
   const me = await getMe();
 
   if (me) {
-    const home = await getHome();
-    if (!home) {
-      return (
-        <p role="alert" className="text-danger-fg">
-          {t("unavailable")}
-        </p>
-      );
-    }
+    const read = await getHome();
+    // Signed in, so the api answers; anything but its answer is a read that failed (RP-1049).
+    if (read.kind !== "ok") return <ReadFailed />;
+    const home = read.value;
     const now = new Date();
     const greeting = t(`greeting.${homeGreeting(now)}`, { name: firstName(me.member.fullName[locale]) });
     return <HomeView home={home} locale={locale} greeting={greeting} canCreateProjects={me.member.canCreateProjects} now={now.toISOString()} />;
