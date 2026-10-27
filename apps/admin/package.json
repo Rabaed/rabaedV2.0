@@ -26,7 +26,7 @@
     "fastify": "^5.12.5",
     "fastify-type-provider-zod": "^7.0.0",
     "kysely": "^0.29.6",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@rabaed/ui": "workspace:*",
