@@ -103,4 +103,8 @@ describe("email (Amazon SES)", () => {
   it("tells the worker the customer web's address, for the links in notification emails", () => {
     expect(environmentOf("rabaed-dev-worker")).toMatchObject({ WEB_URL: expect.stringMatching(/^https:\/\//) });
   });
+
+  it("tells the api the same address, for the link in a Member's invitation email (RP-1052)", () => {
+    expect(environmentOf("rabaed-dev-api").WEB_URL).toEqual(environmentOf("rabaed-dev-worker").WEB_URL);
+  });
 });

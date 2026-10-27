@@ -240,6 +240,8 @@ export class AppStack extends Stack {
 
     // The customer web's address: the domain once there is one.
     const webUrl = `https://${config.domain ?? loadBalancer.loadBalancerDnsName}`;
+    // A Member's invitation email, which the api sends, links to accept-invitation there (RP-1052).
+    api.taskDefinition.defaultContainer!.addEnvironment("WEB_URL", webUrl);
 
     const workerTask = task("worker", {
       environment: {

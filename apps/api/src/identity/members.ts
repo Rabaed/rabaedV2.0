@@ -1,6 +1,7 @@
-import { newToken, type Invitation } from "@rabaed/auth";
+import { newToken } from "@rabaed/auth";
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { CompanyMember, HandoverPick, InviteMemberRequest, ListedMember } from "@rabaed/domain";
+import type { BilingualText, CompanyMember, HandoverPick, InviteMemberRequest, ListedMember } from "@rabaed/domain";
+import type { InvitationEmail } from "@rabaed/mailer";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
@@ -16,16 +17,33 @@ import { handedOver, type HandoverRefusal } from "./handover.ts";
  * by a Member of another Company, which is all the refusal says about them.
  */
 export type InviteResult =
-  | { ok: true; memberId: string; invitation: Invitation }
+  | { ok: true; memberId: string; invitationSentTo: string }
   | Forbidden
   | { ok: false; reason: "already_a_member" | "registered_with_another_company" }
   | { ok: false; reason: "deactivated_member"; memberId: string };
 
-/** The reactivated Member, with a new invitation when they had never accepted the first. */
+/** The reactivated Member, and where a new invitation went when they had never accepted the first. */
 export type ReactivateResult =
-  | { ok: true; member: CompanyMember; invitation?: Invitation }
+  | { ok: true; member: CompanyMember; invitationSentTo?: string }
   | Forbidden
   | { ok: false; reason: "not_found" };
+
+/**
+ * Emails an invitation to the invitee (RP-1052): the only place its token goes.
+ * Called inside the inviting transaction, so a send that fails invites no one.
+ */
+export type SendInvitation = (invitation: InvitationEmail) => Promise<void>;
+
+/** The acting Member's Company's name, to say in the invitation who invites. */
+async function companyName(trx: Transaction<Database>, memberId: string): Promise<BilingualText> {
+  const { legal_name } = await trx
+    .selectFrom("member as m")
+    .innerJoin("company as c", "c.id", "m.company_id")
+    .select("c.legal_name")
+    .where("m.id", "=", memberId)
+    .executeTakeFirstOrThrow();
+  return legal_name as BilingualText;
+}
 
 export type UpdateResult =
   | { ok: true; member: CompanyMember }
@@ -74,7 +92,7 @@ function readMember(trx: Transaction<Database>, id: string): Promise<CompanyMemb
 
 /**
  * The Authorized Person invites a Member of their Company. The invitation token
- * is returned once, to be passed on (email delivery comes later); only its hash is stored.
+ * is emailed to the invitee, in their language, and goes nowhere else; only its hash is stored.
  */
 export function inviteMember(
   db: Db,
@@ -82,6 +100,7 @@ export function inviteMember(
   input: InviteMemberRequest,
   now: Date,
   invitationTtlMs: number,
+  send: SendInvitation,
 ): Promise<InviteResult> {
   const { token, hash } = newToken();
   const expiresAt = new Date(now.getTime() + invitationTtlMs);
@@ -99,7 +118,10 @@ export function inviteMember(
       "already_a_member",
       "registered_with_another_company",
     ]);
-    if (reason === "invited") return { ok: true, memberId: id!, invitation: { token, expiresAt } };
+    if (reason === "invited") {
+      await send({ to: input.email, locale: input.locale, companyName: await companyName(trx, memberId), token });
+      return { ok: true, memberId: id!, invitationSentTo: input.email };
+    }
     if (reason === "deactivated_member") return { ok: false, reason, memberId: id! };
     return { ok: false, reason };
   });
@@ -108,7 +130,7 @@ export function inviteMember(
 /**
  * The Authorized Person reactivates a deactivated Member of their Company: the
  * same Member, keeping their Signature and records. One who had set a password
- * signs in with it again; one who never did gets a new invitation, returned once.
+ * signs in with it again; one who never did is emailed a new invitation.
  */
 export function reactivateMember(
   db: Db,
@@ -116,6 +138,7 @@ export function reactivateMember(
   targetId: string,
   now: Date,
   invitationTtlMs: number,
+  send: SendInvitation,
 ): Promise<ReactivateResult> {
   const { token, hash } = newToken();
   const expiresAt = new Date(now.getTime() + invitationTtlMs);
@@ -128,9 +151,9 @@ export function reactivateMember(
     const outcome = checkedOutcome(rows[0].outcome, ["reactivated", "unchanged"]);
     const member = await readMember(trx, targetId);
     // Invited again: the new invitation was stored with this token's hash.
-    return outcome === "reactivated" && member.status === "invited"
-      ? { ok: true, member, invitation: { token, expiresAt } }
-      : { ok: true, member };
+    if (outcome !== "reactivated" || member.status !== "invited") return { ok: true, member };
+    await send({ to: member.email, locale: member.locale, companyName: await companyName(trx, memberId), token });
+    return { ok: true, member, invitationSentTo: member.email };
   });
 }
 

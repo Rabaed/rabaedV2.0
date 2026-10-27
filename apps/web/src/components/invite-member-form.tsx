@@ -1,25 +1,23 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Button, Field, Input, Select } from "@rabaed/ui";
-import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
-import { invitationLink, requestReactivation } from "@/lib/member-invitations";
+import { requestReactivation } from "@/lib/member-invitations";
 
 /**
- * The Authorized Person invites a Member (the form, shown by `InviteMemberDialog`). Until email delivery exists, the
- * invitation link is shown once here for them to pass on. A taken email is
- * answered as visibility.md V17 says: another Company is never named, and a
- * deactivated Member of their own Company is reactivated once they confirm.
+ * The Authorized Person invites a Member (the form, shown by `InviteMemberDialog`). The
+ * invitation is emailed to the new Member, in the language chosen here; the form says
+ * where it went (RP-1052). A taken email is answered as visibility.md V17 says: another
+ * Company is never named, and a deactivated Member of their own Company is reactivated
+ * once they confirm.
  */
 export function InviteMemberForm() {
   const t = useTranslations("members");
   const locale = useLocale();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -29,7 +27,6 @@ export function InviteMemberForm() {
     const form = new FormData(formElement);
     setPending(true);
     setError(null);
-    setLink(null);
     setNotice(null);
     try {
       const res = await fetch("/api/v1/members", {
@@ -42,8 +39,8 @@ export function InviteMemberForm() {
         }),
       });
       if (res.status === 201) {
-        const { invitation } = (await res.json()) as { invitation: { token: string } };
-        setLink(invitationLink(form.get("locale") as Locale, invitation.token));
+        const { invitationSentTo } = (await res.json()) as { invitationSentTo: string };
+        setNotice(t("invitationSent", { email: invitationSentTo }));
         formElement.reset();
         router.refresh();
         return;
@@ -54,9 +51,8 @@ export function InviteMemberForm() {
       if (refused.error === "registered_with_another_company") return setError(t("registeredWithAnotherCompany"));
       if (refused.error !== "deactivated_member" || !refused.memberId) return setError(t("unavailable"));
       if (!window.confirm(t("confirmReactivateEmail", { email: String(form.get("email")).trim() }))) return;
-      const reactivated = await requestReactivation(refused.memberId);
-      if (reactivated.link) setLink(reactivated.link);
-      else setNotice(t("reactivated"));
+      const { invitationSentTo } = await requestReactivation(refused.memberId);
+      setNotice(invitationSentTo ? t("invitationSent", { email: invitationSentTo }) : t("reactivated"));
       formElement.reset();
       router.refresh();
     } catch {
@@ -101,11 +97,10 @@ export function InviteMemberForm() {
         </p>
       )}
       {notice && (
-        <p role="status" className="text-sm">
+        <p role="status" className="text-sm" data-testid="invitation-sent">
           {notice}
         </p>
       )}
-      {link && <InvitationLink id="invitation-link" link={link} />}
     </div>
   );
 }

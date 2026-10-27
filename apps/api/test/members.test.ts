@@ -1,7 +1,7 @@
 // Seam 1: the Authorized Person manages Members (RP-188; RP-185 stories 5–8, 13).
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, uniqueEmail, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -39,6 +39,51 @@ describe("inviting a Member", () => {
     });
     // And signs in again later with that password.
     await api.signIn(invited.email, DEFAULT_PASSWORD);
+  });
+
+  it("emails the invitation to the invitee, in their language, and never returns the token to the inviter (RP-1052)", async () => {
+    const email = uniqueEmail("member");
+    const res = await a.caller.post("/v1/members", { email, fullName: { en: "Khalid Omar", ar: "خالد عمر" }, locale: "ar" });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toEqual({ memberId: expect.any(String), invitationSentTo: email });
+
+    const [invitation, ...more] = api.mailbox.to(email);
+    expect(more).toEqual([]);
+    expect(invitation).toMatchObject({
+      template: "invitation",
+      locale: "ar",
+      values: { companyName: "إنشاءات الاختبار", link: expect.stringMatching(/^https:\/\/web\.rabaed\.test\/ar\/accept-invitation#token=[\w-]+$/) },
+    });
+    // The token is in the email only: nowhere in what the inviter got back.
+    const token = api.mailbox.invitationToken(email);
+    expect(res.body).not.toContain(token);
+    const caller = await api.acceptInvitation(token);
+    expect((await caller.get("/v1/me")).json().member.id).toBe(res.json().memberId);
+  });
+
+  it("invites no one when the email can't be sent, so the Authorized Person can invite again", async () => {
+    let fail = true;
+    const sent: string[] = [];
+    const flaky = await createTestApi({
+      mailer: {
+        async send(message) {
+          if (fail) throw new Error("mail transport down");
+          sent.push(message.to);
+        },
+      },
+    });
+    try {
+      const { caller } = await flaky.authorizedPerson();
+      const email = uniqueEmail("member");
+      const body = { email, fullName: { en: "Sara Ali", ar: "سارة علي" }, locale: "en" };
+      expect((await caller.post("/v1/members", body)).statusCode).toBe(500);
+      expect(ids(await caller.get("/v1/members"))).toHaveLength(1);
+      fail = false;
+      expect((await caller.post("/v1/members", body)).statusCode).toBe(201);
+      expect(sent).toEqual([email]);
+    } finally {
+      await flaky.close();
+    }
   });
 
   it("lists the invited Member as invited until they accept", async () => {
@@ -147,11 +192,16 @@ describe("reactivating a deactivated Member", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.member).toMatchObject({ id: invited.id, status: "invited" });
-    expect(body.invitation.token).toEqual(expect.any(String));
+    // Emailed to them, as the first one was; the token is not in the answer (RP-1052).
+    expect(body.invitationSentTo).toBe(invited.email);
+    expect(api.mailbox.to(invited.email)).toHaveLength(2);
+    const token = api.mailbox.invitationToken(invited.email);
+    expect(token).not.toBe(invited.invitationToken);
+    expect(res.body).not.toContain(token);
     // The old invitation stays void; the new one works.
     const old = await api.anonymous().post("/v1/invitations/accept", { token: invited.invitationToken, password: DEFAULT_PASSWORD });
     expect(old.statusCode).toBe(400);
-    const caller = await api.acceptInvitation(body.invitation.token);
+    const caller = await api.acceptInvitation(token);
     expect((await caller.get("/v1/me")).json().member.id).toBe(invited.id);
   });
 

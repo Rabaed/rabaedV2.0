@@ -4,6 +4,8 @@ import { z } from "zod";
 export interface ApiConfig {
   sessionTtlMs: number;
   invitationTtlMs: number;
+  /** The customer web (WEB_URL), which invitation emails link to; without it, inviting a Member fails. */
+  webUrl?: string;
   /** Send the session cookie over HTTPS only. True everywhere except local http. */
   cookieSecure: boolean;
   /** The deployed commit, reported by /health; `local` in development. */
@@ -20,6 +22,7 @@ export function apiConfigFromEnv(source: NodeJS.ProcessEnv = process.env): ApiCo
     .object({
       SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
       INVITATION_TTL_HOURS: z.coerce.number().positive().default(72),
+      WEB_URL: z.url().optional(),
       SESSION_COOKIE_SECURE: z.enum(["true", "false"]).default("true"),
       APP_VERSION: appVersion.default("local"),
       DOCUMENT_MAX_MB: z.coerce.number().positive().optional(),
@@ -34,6 +37,7 @@ export function apiConfigFromEnv(source: NodeJS.ProcessEnv = process.env): ApiCo
   return {
     sessionTtlMs: env.SESSION_TTL_HOURS * HOUR,
     invitationTtlMs: env.INVITATION_TTL_HOURS * HOUR,
+    ...(env.WEB_URL ? { webUrl: env.WEB_URL } : {}),
     cookieSecure: env.SESSION_COOKIE_SECURE === "true",
     version: env.APP_VERSION,
     documents: {

@@ -7,6 +7,7 @@ import {
   reactivatedMember,
   updateMemberRequest,
 } from "@rabaed/domain";
+import { invitationMessage } from "@rabaed/mailer";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
@@ -17,6 +18,7 @@ import {
   listMembers,
   reactivateMember,
   setProjectCreator,
+  type SendInvitation,
   type UpdateResult,
 } from "../identity/members.ts";
 import { refusal } from "../refusals.ts";
@@ -34,6 +36,12 @@ function unwrap(result: UpdateResult) {
 export const memberRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
+    // Invitations are emailed to the invitee, linking to the web app; the token goes nowhere else (RP-1052).
+    const sendInvitation: SendInvitation = (invitation) => {
+      if (!ctx.config.webUrl) throw new Error("WEB_URL is not set: invitation emails link to the web app");
+      return ctx.mailer.send(invitationMessage(invitation, ctx.config.webUrl));
+    };
+
     app.get("/v1/members", { schema: { response: { 200: companyMembers } } }, async (request) => {
       const memberId = ctx.requireMember(request);
       return { members: await listMembers(ctx.db, memberId) };
@@ -44,13 +52,13 @@ export const memberRoutes =
       { schema: { body: inviteMemberRequest, response: { 201: invitedMember } } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
-        const result = await inviteMember(ctx.db, memberId, request.body, ctx.now(), ctx.config.invitationTtlMs);
+        const result = await inviteMember(ctx.db, memberId, request.body, ctx.now(), ctx.config.invitationTtlMs, sendInvitation);
         // Their own Company's deactivated Member: the id, for the Authorized Person to confirm reactivating them.
         if (!result.ok && result.reason === "deactivated_member") {
           throw new HttpError(409, "deactivated_member", { memberId: result.memberId });
         }
         if (!result.ok) throw refusal(result);
-        return reply.code(201).send({ memberId: result.memberId, invitation: result.invitation });
+        return reply.code(201).send({ memberId: result.memberId, invitationSentTo: result.invitationSentTo });
       },
     );
 
@@ -84,9 +92,9 @@ export const memberRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         const target = idOrNotFound(request.params.memberId);
-        const result = await reactivateMember(ctx.db, memberId, target, ctx.now(), ctx.config.invitationTtlMs);
+        const result = await reactivateMember(ctx.db, memberId, target, ctx.now(), ctx.config.invitationTtlMs, sendInvitation);
         if (!result.ok) throw refusal(result);
-        return { member: result.member, invitation: result.invitation };
+        return { member: result.member, invitationSentTo: result.invitationSentTo };
       },
     );
   };

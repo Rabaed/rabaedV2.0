@@ -5,6 +5,7 @@ import { companyImagePrefix, type BaseRole, type BilingualText, type Locale, typ
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
 import { SESSION_COOKIE } from "../app.ts";
+import type { DemoMailbox } from "./mailbox.ts";
 import { demoPdf } from "./demo-pdf.ts";
 import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
 import { demoSignaturePng } from "./demo-signature.ts";
@@ -115,9 +116,13 @@ export interface SeedOptions {
 // Each invitation is accepted at once.
 const INVITATION_TTL_MS = 3_600_000;
 
-/** Seeds the demo Project through `app`, the customer api, and Rabaed Admin's onboarding. */
+/**
+ * Seeds the demo Project through `app`, the customer api, and Rabaed Admin's onboarding.
+ * `app` sends its emails to `mailbox`, where the seed reads each Member's invitation.
+ */
 export async function seedDemo(
   app: FastifyInstance,
+  mailbox: DemoMailbox,
   databases: SeedDatabases,
   password: string,
   options: SeedOptions = {},
@@ -340,13 +345,13 @@ export async function seedDemo(
    */
   async function member(company: Onboarded, participantId: string, person: Person, positions: string[], locations: VisibilityGrant = all) {
     const address = email(person.local, company.domain);
-    const invited = await company.caller<{ memberId: string; invitation: { token: string } }>("POST", "/v1/members", {
+    const invited = await company.caller<{ memberId: string }>("POST", "/v1/members", {
       email: address,
       fullName: person.name,
       locale: person.locale ?? "en",
     });
     const memberCaller = browser(app);
-    await memberCaller("POST", "/v1/invitations/accept", { token: invited.invitation.token, password });
+    await memberCaller("POST", "/v1/invitations/accept", { token: mailbox.invitationToken(address), password });
     await sign(memberCaller, invited.memberId);
     await company.caller("POST", `/v1/participants/${participantId}/members`, { memberId: invited.memberId });
     await company.caller("PUT", `/v1/participants/${participantId}/members/${invited.memberId}/visibility`, {

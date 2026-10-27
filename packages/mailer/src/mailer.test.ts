@@ -2,7 +2,7 @@ import type { SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { catcherTransport } from "./catcher.ts";
 import { mailerFromEnv } from "./config.ts";
-import { createMailer, notificationDigestMessage, notificationMessage, type OutgoingEmail } from "./mailer.ts";
+import { createMailer, invitationMessage, invitationTokenOf, notificationDigestMessage, notificationMessage, type OutgoingEmail } from "./mailer.ts";
 import { sesTransport } from "./ses.ts";
 import { renderEmail } from "./templates.ts";
 
@@ -36,6 +36,23 @@ describe("notificationMessage", () => {
       locale: "ar",
       values: { ...content, link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000001" },
     });
+  });
+});
+
+describe("invitationMessage", () => {
+  it("emails the invitation in the invitee's language, the token only in the link's fragment", () => {
+    const invite = { to: "khalid@rabaed.test", locale: "ar", companyName: { en: "Test Constructions", ar: "إنشاءات الاختبار" }, token: "tok-en_1" } as const;
+    expect(invitationMessage(invite, "https://rabaed.test")).toEqual({
+      to: "khalid@rabaed.test",
+      template: "invitation",
+      locale: "ar",
+      values: { companyName: "إنشاءات الاختبار", link: "https://rabaed.test/ar/accept-invitation#token=tok-en_1" },
+    });
+  });
+
+  it("reads the token back from the email's link, as tests and the demo seed do", () => {
+    const message = invitationMessage({ to: "k@rabaed.test", locale: "en", companyName: { en: "T", ar: "ت" }, token: "abc-_9" }, "http://127.0.0.1:3000");
+    expect(invitationTokenOf(message)).toBe("abc-_9");
   });
 });
 
