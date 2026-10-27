@@ -2,13 +2,12 @@ import { appearanceCookie, appearanceFromCookie, directionOf, isLocale } from "@
 import { DirectionProvider } from "@rabaed/ui";
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { setRequestLocale } from "next-intl/server";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/app-frame";
-import { LanguageSwitch } from "@/components/language-switch";
-import { Link } from "@/i18n/navigation";
+import { SignedOutFrame } from "@/components/signed-out-frame";
 import { routing } from "@/i18n/routing";
 import { getMe, getNotifications } from "@/lib/session";
 import { sidebarCookie } from "@/lib/shell";
@@ -23,7 +22,8 @@ export const metadata: Metadata = { title: "Rabaed" };
 /**
  * Every page: signed in, inside the app shell (RP-406), whose top bar title
  * and Project tabs come from the `@heading` and `@tabs` slots; signed out
- * (sign-in, accepting an invitation, the welcome), a plain centred page.
+ * (accepting an invitation, the welcome), a plain centred page, except the
+ * sign-in page, which draws its own (`SignedOutFrame`, RP-1057).
  */
 export default async function LocaleLayout({
   children,
@@ -39,7 +39,6 @@ export default async function LocaleLayout({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
-  const t = await getTranslations("shell");
   const me = await getMe();
   const notifications = me ? await getNotifications() : null;
   const jar = await cookies();
@@ -68,15 +67,7 @@ export default async function LocaleLayout({
                 {children}
               </AppFrame>
             ) : (
-              <>
-                <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-3 sm:px-6">
-                  <Link href="/" className="font-display text-lg font-semibold">
-                    {t("appName")}
-                  </Link>
-                  <LanguageSwitch />
-                </header>
-                <main className="mx-auto w-full max-w-xl px-4 py-10 sm:px-6">{children}</main>
-              </>
+              <SignedOutFrame>{children}</SignedOutFrame>
             )}
           </DirectionProvider>
         </NextIntlClientProvider>
