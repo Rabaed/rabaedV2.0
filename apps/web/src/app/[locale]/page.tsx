@@ -4,7 +4,7 @@ import { DocNo, buttonVariants } from "@rabaed/ui";
 import { HomeView } from "@/components/home-view";
 import { ReadFailed } from "@/components/read-failed";
 import { Link } from "@/i18n/navigation";
-import { getHome, getMe } from "@/lib/session";
+import { readHome, getMe } from "@/lib/session";
 
 /** The greeting's name: the first word of the Member's full name. */
 const firstName = (fullName: string) => fullName.trim().split(/\s+/)[0] ?? fullName;
@@ -17,7 +17,7 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
   const me = await getMe();
 
   if (me) {
-    const read = await getHome();
+    const read = await readHome();
     // Signed in, so the api answers; anything but its answer is a read that failed (RP-1049).
     if (read.kind !== "ok") return <ReadFailed />;
     const home = read.value;

@@ -1,8 +1,9 @@
 /**
- * A server-side read of the api, and what it came to (RP-1049). Only the api's own 4xx is
- * `absent`: a hidden page and a missing one read the same (docs/visibility.md, Direct URL row).
- * A read that is slow, can't reach the api or gets a 5xx is `failed`, and is logged, so it
- * never looks hidden to the Member nor quiet to support.
+ * A server-side read of the api, and what it came to (RP-1049). Only the api's own "not yours to
+ * read" (404, 403, or 401 when signed out) is `absent`: a hidden page and a missing one read the
+ * same (docs/visibility.md, Direct URL row). A read that is slow, can't reach the api or gets any
+ * other answer (a 400, a 5xx) is `failed`, and is logged, so it never looks hidden to the Member
+ * nor quiet to support.
  */
 export type ApiRead<T> = { kind: "ok"; value: T } | { kind: "absent" } | { kind: "failed" };
 
@@ -13,7 +14,10 @@ export type ApiRead<T> = { kind: "ok"; value: T } | { kind: "absent" } | { kind:
  */
 export const readTimeouts = { small: 3_000, wide: 30_000 } as const;
 
-type Deps = { fetch: (url: string, init: RequestInit) => Promise<Response>; log: (line: string) => void };
+/** The api's answers that mean the Member may not read it, or isn't signed in: never a fault. */
+const notYours = new Set([401, 403, 404]);
+
+type Deps ={ fetch: (url: string, init: RequestInit) => Promise<Response>; log: (line: string) => void };
 
 const defaultDeps: Deps = { fetch: (url, init) => fetch(url, init), log: (line) => console.error(line) };
 
@@ -26,12 +30,13 @@ export async function readApiJson<T>(url: string, { cookie, timeoutMs }: { cooki
   };
   try {
     const res = await deps.fetch(url, { headers: { cookie }, cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
-    if (res.status >= 400 && res.status < 500) return { kind: "absent" };
+    if (notYours.has(res.status)) return { kind: "absent" };
     if (!res.ok) return failed(`status ${res.status}`);
     return { kind: "ok", value: (await res.json()) as T };
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") return failed(`no answer within ${timeoutMs} ms`);
-    return failed(error instanceof Error ? error.message : "unknown error");
+    // The error's name only: a parse error's message quotes the body.
+    return failed(error instanceof Error ? error.name : "unknown error");
   }
 }
 
@@ -41,13 +46,13 @@ export function valueOf<T>(read: ApiRead<T> | null): T | null {
 }
 
 /**
- * What a page shows from its reads: the Project's (which decides visibility) and the others it
- * needs (null when not made). A hidden Project is not found whatever else failed; otherwise any
+ * What a page shows from its reads: the one that decides visibility (a Project's) and the others
+ * it needs (null when not made). A hidden one is not found whatever else failed; otherwise any
  * failed read is an error with Try again, never the not-found page.
  */
-export function pageOutcome(project: ApiRead<unknown>, needed: readonly (ApiRead<unknown> | null)[]): "show" | "not-found" | "failed" {
-  if (project.kind === "absent") return "not-found";
-  const reads = [project, ...needed];
+export function pageOutcome(gate: ApiRead<unknown>, needed: readonly (ApiRead<unknown> | null)[]): "show" | "not-found" | "failed" {
+  if (gate.kind === "absent") return "not-found";
+  const reads = [gate, ...needed];
   if (reads.some((r) => r?.kind === "failed")) return "failed";
   if (reads.some((r) => r?.kind === "absent")) return "not-found";
   return "show";

@@ -92,12 +92,11 @@ export const getMe = cache((): Promise<SignedInMember | null> => apiGet<SignedIn
 export const getMembers = cache((): Promise<CompanyMembers | null> => apiGet<CompanyMembers>("/v1/members"));
 
 /** Home across the signed-in Member's Projects (RP-407); it reads every item they see, so it gets the wide time limit. */
-export function getHome(): Promise<ApiRead<Home>> {
+export function readHome(): Promise<ApiRead<Home>> {
   return apiRead<Home>("/v1/home", readTimeouts.wide);
 }
 
-/** The signed-in Member's Projects; null if signed out. */
-/** Read once per request: the top bar's "n Projects" and the page both ask. */
+/** The signed-in Member's Projects; null if signed out. Read once per request: the top bar's "n Projects" and the page both ask. */
 export const getMyProjects = cache((): Promise<MyProjects | null> => apiGet<MyProjects>("/v1/projects"));
 
 /**
@@ -217,12 +216,12 @@ function moduleWorkItemsPath(projectId: string, module: ModuleKey, view: "" | "/
  * isn't one of their Projects or the Project has no Type in the Module. It counts
  * every item they see, so it gets the wide time limit (RP-1049).
  */
-export function getWorkItems(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<ApiRead<WorkItemList>> {
+export function readWorkItems(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<ApiRead<WorkItemList>> {
   return apiRead<WorkItemList>(moduleWorkItemsPath(projectId, module, "", query), readTimeouts.wide);
 }
 
 /** The Kanban of a Module of a Project for `query`; absent as for the List. */
-export function getWorkItemBoard(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<ApiRead<WorkItemBoard>> {
+export function readWorkItemBoard(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<ApiRead<WorkItemBoard>> {
   return apiRead<WorkItemBoard>(moduleWorkItemsPath(projectId, module, "/kanban", query), readTimeouts.wide);
 }
 
@@ -253,7 +252,7 @@ export function getPackageComments(packageId: string): Promise<PackageComments |
 }
 
 /** A Project's Packages the signed-in Member sees, with their counts (RP-641, the Packages view RP-660); absent if the Project isn't one of theirs. */
-export function getPackages(projectId: string): Promise<ApiRead<PackageList>> {
+export function readPackages(projectId: string): Promise<ApiRead<PackageList>> {
   return apiRead<PackageList>(`/v1/projects/${encodeURIComponent(projectId)}/packages`, readTimeouts.wide);
 }
 

@@ -34,6 +34,14 @@ describe("a server-side api read", () => {
     expect(log).toHaveBeenCalledWith("api read GET /v1/projects/p1/modules/submittals/work-items failed: status 503");
   });
 
+  it("failed, and logged, for any other 4xx: a refused query (400) or a busy api (429) is not a hidden page", async () => {
+    for (const status of [400, 409, 429]) {
+      const { read, log } = reader(async () => new Response("{}", { status }));
+      expect(await read()).toEqual({ kind: "failed" });
+      expect(log).toHaveBeenCalledWith(`api read GET /v1/projects/p1/modules/submittals/work-items failed: status ${status}`);
+    }
+  });
+
   it("failed, and logged, when the api takes longer than the time limit", async () => {
     const { read, log } = reader(
       (signal) =>
@@ -50,11 +58,12 @@ describe("a server-side api read", () => {
       throw new TypeError("fetch failed");
     });
     expect(await down.read()).toEqual({ kind: "failed" });
-    expect(down.log).toHaveBeenCalledWith("api read GET /v1/projects/p1/modules/submittals/work-items failed: fetch failed");
+    expect(down.log).toHaveBeenCalledWith("api read GET /v1/projects/p1/modules/submittals/work-items failed: TypeError");
 
-    const garbled = reader(async () => new Response("<html>", { status: 200 }));
+    // A parse error's message quotes the body; only its name is logged.
+    const garbled = reader(async () => new Response("<html>Riyadh Gate Tower</html>", { status: 200 }));
     expect(await garbled.read()).toEqual({ kind: "failed" });
-    expect(garbled.log).toHaveBeenCalledOnce();
+    expect(garbled.log).toHaveBeenCalledWith("api read GET /v1/projects/p1/modules/submittals/work-items failed: SyntaxError");
   });
 
   it("logs the path only: never the query string the Member typed, nor the api's body", async () => {
