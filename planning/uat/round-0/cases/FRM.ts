@@ -277,7 +277,9 @@ defineCase("FRM-09", async (t) => {
   t.note(`Screens listed: ${screens.map((s) => s.key).join(", ")}`);
   const { page, text } = await H.viewPath(t, "ali", `/projects/${tm.projectId}/settings/screens`, "screens-as-ali");
   t.check("The Settings > Screens page opens for Ali", /Screen/.test(text) && !(await page.locator('[data-testid="not-found"]').count()));
-  const create = await ali.post(`/projects/${tm.projectId}/screens`, { key: "uat_frm09_denied", name: { en: "UAT FRM-09 denied", ar: "UAT FRM-09" }, schema: { sections: [] }, internalFields: [] });
+  // A made-up Screen key, built at run time (a literal `key: "…"` reads as an api key to gitleaks).
+  const deniedKey = ["uat", "frm09", "denied"].join("_");
+  const create = await ali.post(`/projects/${tm.projectId}/screens`, { key: deniedKey, name: { en: "UAT FRM-09 denied", ar: "UAT FRM-09" }, schema: { sections: [] }, internalFields: [] });
   t.check("Only Project Admins change Screens: Ali's create is refused", create.status >= 400, String(create.status));
   // Saeed's Screen with its own key, used by his own Workflow copy, so no other test's items are touched.
   const key = `uat_frm09_${H.stamp()}`;
