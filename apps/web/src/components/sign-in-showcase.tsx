@@ -8,11 +8,11 @@ import { brandStep, type BrandRole } from "@/lib/sign-in-brand";
 
 // Where each Project Role sits in the diagram, in % of its box: across from the reading start, and down.
 // Logical insets, so Arabic mirrors it (the Contractor at the reading start in both).
-const roles: { role: BrandRole; icon: IconName; across: number; down: number }[] = [
-  { role: "owner", icon: "building-skyscraper", across: 50, down: 22 },
-  { role: "contractor", icon: "crane", across: 18, down: 80 },
-  { role: "consultant", icon: "ruler", across: 82, down: 80 },
-];
+const roles: Record<BrandRole, { icon: IconName; across: number; down: number }> = {
+  owner: { icon: "building-skyscraper", across: 50, down: 22 },
+  contractor: { icon: "crane", across: 18, down: 80 },
+  consultant: { icon: "ruler", across: 82, down: 80 },
+};
 
 const at = (across: number, down: number): CSSProperties => ({ insetInlineStart: `${across}%`, top: `${down}%` });
 // Centre an absolutely placed item on its point, whichever side the inset is measured from.
@@ -39,7 +39,7 @@ export function SignInShowcase() {
     return () => window.clearInterval(timer);
   }, []);
   const step = brandStep(tick);
-  const holder = roles.find((r) => r.role === step.role)!;
+  const holder = roles[step.role];
 
   return (
     <aside
@@ -64,7 +64,8 @@ export function SignInShowcase() {
             <line x1="270" y1="120" x2="170" y2="240" />
           </g>
         </svg>
-        {roles.map(({ role, icon, across, down }) => {
+        {(Object.keys(roles) as BrandRole[]).map((role) => {
+          const { icon, across, down } = roles[role];
           const lit = role === step.role;
           return (
             <div key={role} className={cn(centred, "flex flex-col items-center gap-2.5")} style={at(across, down)}>
@@ -78,7 +79,7 @@ export function SignInShowcase() {
               >
                 <Icon name={icon} size={38} />
               </span>
-              <b className={cn("text-sm font-medium transition-colors duration-400", lit ? "text-hero-text" : "text-hero-muted")}>{t(role)}</b>
+              <span className={cn("text-sm font-medium transition-colors duration-400", lit ? "text-hero-text" : "text-hero-muted")}>{t(role)}</span>
             </div>
           );
         })}
@@ -99,8 +100,8 @@ export function SignInShowcase() {
         aria-hidden="true"
         className="relative mt-4.5 mb-auto inline-flex h-8.5 items-center gap-2.5 self-center rounded-full border border-hero-text/8 bg-hero-text/5 px-4 text-sm whitespace-nowrap"
       >
-        <i className="size-1.75 rounded-full bg-brand" />
-        <b className="font-medium tabular-nums">{t(step.status, { time: step.time })}</b>
+        <span className="size-1.75 rounded-full bg-brand" />
+        <span className="font-medium tabular-nums">{t(step.status, { time: step.time })}</span>
       </div>
 
       <div className="relative flex flex-col gap-3.5">

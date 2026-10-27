@@ -4,13 +4,18 @@ import Image from "next/image";
 import { LanguageChoice } from "@/components/language-choice";
 import { SignInShowcase } from "@/components/sign-in-showcase";
 import { SignInForm } from "@/components/sign-in-form";
+import { redirect } from "@/i18n/navigation";
+import { getMe } from "@/lib/session";
 
 /**
  * The owner's sign-in design (RP-1057): the form on the reading-start side, the dark brand panel on the
  * other (hidden on narrow screens). The page draws its own frame: the layout leaves out the signed-out header.
+ * A signed-in Member goes home instead, so the page never sits inside the app shell.
  */
 export default async function SignInPage({ params }: { params: Promise<{ locale: Locale }> }) {
-  setRequestLocale((await params).locale);
+  const { locale } = await params;
+  setRequestLocale(locale);
+  if (await getMe()) return redirect({ href: "/", locale });
   const t = await getTranslations("signIn");
   const app = await getTranslations("shell");
   return (
@@ -27,7 +32,7 @@ export default async function SignInPage({ params }: { params: Promise<{ locale:
             </h1>
             <p className="-mt-2 text-[15px] leading-normal text-pretty text-muted">{t("subtitle")}</p>
             <SignInForm />
-            <p className="text-center text-body text-muted">{t("invite")}</p>
+            <p className="text-center text-body text-balance text-muted">{t("invite")}</p>
           </div>
         </main>
         <footer className="text-caption text-faint">{t("copyright", { year: String(new Date().getFullYear()) })}</footer>

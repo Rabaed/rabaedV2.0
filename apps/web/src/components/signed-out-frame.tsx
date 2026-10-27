@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { LanguageSwitch } from "@/components/language-switch";
 import { Link, usePathname } from "@/i18n/navigation";
-import { hasOwnFrame } from "@/lib/sign-in-brand";
+import { hasOwnFrame } from "@/lib/signed-out-frame";
 
 /** Signed out (accepting an invitation, the welcome): a header and a plain centred page. The sign-in page draws its own (RP-1057). */
 export function SignedOutFrame({ children }: { children: ReactNode }) {
