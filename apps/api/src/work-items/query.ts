@@ -23,6 +23,7 @@ import {
   workItemCursorSorts,
   workItemExportMax,
   workItemPageSize,
+  workItemQuery,
   type BilingualText,
   type ListColumnLayout,
   type Outcome,
@@ -161,15 +162,18 @@ type SnagRow = {
 };
 
 /**
- * The visible items of the scope as rows: the latest Revision of each chain
- * unless `allRevisions`. The holder's Participant and Member come from
- * app.work_item_holder, so another Company's Member is never read.
+ * The visible items of a scope as rows, from `seen`: what app.work_items_seen gives for the scope (`seenRows`).
+ *
+ * app.work_items_seen gives the scope's items the viewer sees, each checked once (RP-1050), the latest Revision of
+ * each chain unless all are asked for, with what the helpers the List read through give for each:
+ * app.step_as_seen, app.work_item_holder (so another Company's Member is never read), app.with_owner_review,
+ * app.revision_chain, app.work_item_creation_date and app.latest_visible_revision, its Trade and Location as
+ * work_item_dimension_value_seen gives them, and the holder's and raiser's Company names app.work_item_companies gives.
  */
-function visibleRows(scope: QueryScope, allRevisions: boolean): RawBuilder<unknown> {
-  const { projectId } = scope;
+function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
-      w.revision_no, w.outcome, w.paper_ref,
+      w.revision_no, w.outcome, w.paper_ref, w.closed_at,
       -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
       w.submitted_at is not null as submitted,
       coalesce(w.raised_by_participant_id in (select app.current_participant_ids()), false) as raised_by_own,
@@ -182,11 +186,8 @@ function visibleRows(scope: QueryScope, allRevisions: boolean): RawBuilder<unkno
       coalesce(oc.actions @> '[{"kind": "offer_revision"}]', false) as offers_revision,
       -- For the Code C line (codeCState): a Revision of the chain the viewer sees got an outcome offering
       -- a Revision (Code C), this one included. The chain is read only through app.revision_chain, which
-      -- gives the Revisions the viewer sees (V1 per Revision); their outcome is read through RLS like any item's.
-      exists (
-        select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id
-        where app.outcome_offers(o.project_id, o.work_item_type_id, o.outcome, 'offer_revision')
-      ) as had_code_c,
+      -- gives the Revisions the viewer sees (V1 per Revision).
+      w.had_code_c,
       st.key as stage_key, st.name as stage_name, st.category as stage_category, st.sort as stage_sort,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name, tv.sort as trade_sort,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
@@ -197,40 +198,67 @@ function visibleRows(scope: QueryScope, allRevisions: boolean): RawBuilder<unkno
       -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
-      app.work_item_creation_date(w.id) as creation_date,
+      w.creation_date,
       -- At the Owner's review, no holder for those who read "Owner review": no name, filter, search or lane names it.
-      case when orv.name is null then h.participant_id end as holder_participant_id,
-      case when orv.name is null then h.assignee_member_id end as assignee_member_id, orv.name as owner_review_name,
+      -- Asked only where the Step it is seen at confirms a Code: only there can it be at the Owner's review.
+      case when w.owner_review is null then w.holder_participant_id end as holder_participant_id,
+      case when w.owner_review is null then w.holder_member_id end as assignee_member_id, w.owner_review as owner_review_name,
+      -- The holder's and the raiser's Company by name, which everyone who sees the item reads (V14; the card's Contractor).
+      case when w.owner_review is null then w.holder_company_name end as holder_name, w.raiser_company_name as raiser_name,
       w.raised_by_participant_id as raiser_participant_id,
-      coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
+      -- One holder: a closed item has none.
+      coalesce(w.holder_participant_id in (select app.current_participant_ids()), false) as held_by_own,
       s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key
-    from work_item w
-    cross join lateral app.step_as_seen(w.id) seen
+    from ${seen} w
     -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
     -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
     -- count, cursor or card carries the time. numbered_at is set with the Document Number.
-    cross join lateral (select case when w.document_number is null then null else seen.entered_at end as step_entered_at) e
-    join workflow_step s on s.id = seen.step_id
+    cross join lateral (select case when w.document_number is null then null else w.entered_at end as step_entered_at) e
+    join workflow_step s on s.id = w.step_id
     join work_item_type t on t.id = w.work_item_type_id
     -- Its outcome in the Project's copy of its Type's set (RP-429); none while open or cancelled.
     left join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = t.id and oc.code = w.outcome
     -- The Project's own Stages (RP-428): their names, order and categories, never the Rabaed Defaults'.
-    join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
+    join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = w.stage_key
     -- Its Trade and Location as the viewer may know them: while it is Sent Back to its raiser, as at
     -- the Send Back for everyone but the holder (RP-582, V19), so rows, filters, sorts and counts agree.
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
-    join work_item_dimension_value_seen tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
-    join dimension_value tv on tv.id = tdv.dimension_value_id
+    join lateral unnest(w.dimension_ids, w.dimension_value_ids) as tdv (dimension_id, value_id) on tdv.dimension_id = td.id
+    join dimension_value tv on tv.id = tdv.value_id
     join visibility_dimension ld on ld.project_id = w.project_id and ld.kind = 'location'
-    left join work_item_dimension_value_seen ldv on ldv.work_item_id = w.id and ldv.dimension_id = ld.id
-    left join dimension_value lv on lv.id = ldv.dimension_value_id
-    -- One holder: a closed item has none.
-    left join lateral (select * from app.work_item_holder(w.id) limit 1) h on true
-    -- Asked only where the Step it is seen at confirms a Code: only there can it be at the Owner's review.
-    cross join lateral (select case when s.outcome_mode = 'confirm_code' then app.with_owner_review(w.id) end as name) orv
-    where w.project_id = ${projectId} and t.module_key = any(${modulesOf(scope)}::text[])
-      and (${allRevisions}::boolean or app.latest_visible_revision(w.id))
+    left join lateral unnest(w.dimension_ids, w.dimension_value_ids) as ldv (dimension_id, value_id) on ldv.dimension_id = ld.id
+    left join dimension_value lv on lv.id = ldv.value_id
   `;
+}
+
+/** Per transaction, the temporary table each scope's visible rows were read into (`seenRows`). */
+const seenTables = new WeakMap<Trx, Map<string, string>>();
+
+/**
+ * The scope's visible rows (`visibleRows`) to select from, read once per transaction (RP-1050): into a temporary
+ * table, dropped when the transaction ends, so a page, its Stage counts and its toolbar's choices read them once
+ * between them. Every caller is a read: nothing in its transaction writes after it, so the table holds what a read of
+ * `visibleRows` would.
+ */
+async function seenRows(trx: Trx, scope: QueryScope, allRevisions: boolean): Promise<RawBuilder<unknown>> {
+  let tables = seenTables.get(trx);
+  if (!tables) seenTables.set(trx, (tables = new Map()));
+  const key = JSON.stringify([scope.projectId, modulesOf(scope), allRevisions]);
+  let table = tables.get(key);
+  if (table === undefined) {
+    table = `work_items_seen_${tables.size + 1}`;
+    // The function's rows first, analyzed, so the joins to the Project's Stages, outcomes and values are planned for
+    // as many rows as it gave, not once per row.
+    const seen = sql.id(`${table}_items`);
+    await sql`
+      create temporary table ${seen} on commit drop as
+      select * from app.work_items_seen(${scope.projectId}::uuid, ${modulesOf(scope)}::text[], ${allRevisions}::boolean)
+    `.execute(trx);
+    await sql`analyze ${seen}`.execute(trx);
+    await sql`create temporary table ${sql.id(table)} on commit drop as ${visibleRows(seen)}`.execute(trx);
+    tables.set(key, table);
+  }
+  return sql`select * from ${sql.id(table)}`;
 }
 
 const noFilter = sql<boolean>`true`;
@@ -494,7 +522,7 @@ function afterCursor(q: WorkItemQuery & { sort: WorkItemCursorSort }): RawBuilde
  * as the viewer may read them: another Company's people are never read (V14), so an owner sorts by the
  * name the row shows. `value` may read `holderJoins`.
  */
-type ColumnSort = { value: (lang: Locale) => RawBuilder<unknown>; none?: RawBuilder<boolean>; reversed?: boolean };
+type ColumnSort = { value: (lang: Locale) => RawBuilder<unknown>; none?: RawBuilder<boolean>; reversed?: boolean; readsHolder?: true };
 
 /** The ancestor (or the Location itself) at `depth` of a row's Location: its place in the Project's order. */
 const locationLevel = (depth: number): ColumnSort => ({
@@ -526,15 +554,16 @@ const columnSorts: Record<WorkItemSort, ColumnSort> = {
   owner: {
     value: (lang) =>
       named(
-        sql`(case when r.closed then coalesce(cm.full_name, co.closer_company_name)
+        sql`(case when r.closed then coalesce(cm.full_name, ${closerCompanyName})
           when r.held_by_own and r.assignee_member_id is null then r.step_name
-          else coalesce(m.full_name, co.holder_name, r.owner_review_name) end)`,
+          else coalesce(m.full_name, r.holder_name, r.owner_review_name) end)`,
         lang,
       ),
+    readsHolder: true,
   },
   // The date the row shows: the Creation Date, which only the raiser's Participant reads, else the Submission Date.
   created: { value: () => sql`coalesce(r.creation_date, r.submitted_at)` },
-  contractor: { value: (lang) => named(sql`co.raiser_name`, lang) },
+  contractor: { value: (lang) => named(sql`r.raiser_name`, lang) },
 };
 
 /** A numbered page's order: the column's sort in the query's direction, rows with nothing to sort by last. */
@@ -562,7 +591,9 @@ function pagingOf(q: WorkItemQuery) {
   const cursor = pagesByCursor(q) ? { ...q, sort: q.sort as WorkItemCursorSort } : null;
   const page = cursor ? null : (q.page ?? 1);
   const size = page === null ? workItemPageSize : (q.pageSize ?? workItemPageSize);
-  return { cursor, page, size, orderBy: cursor ? sorts[cursor.sort].orderBy : columnOrder(q) };
+  // Whether the order reads `holderJoins` (an owner's or the Contractor's name), so every row needs them, not only the page's.
+  const readsHolder = cursor === null && columnSorts[q.sort].readsHolder === true;
+  return { cursor, page, size, orderBy: cursor ? sorts[cursor.sort].orderBy : columnOrder(q), readsHolder };
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
@@ -692,10 +723,20 @@ const snagJoins = sql`${sourceJoins}
 const snagReads = ({ moduleKey }: QueryScope) =>
   moduleKey === "snag_list" ? { columns: sql`, ${snagColumns}`, joins: snagJoins } : { columns: sql``, joins: sql`` };
 
+/**
+ * The closer's Company of a row of `visibleRows` (as `r`), with `holderJoins`: one of the Companies on the item, which
+ * everyone who sees it may name (app.work_item_companies). Asked of a closed item only: a case, so the function is
+ * never called for an open one.
+ */
+const closerCompanyName = sql`(case when r.closed then (
+    select x.legal_name from app.work_item_companies(r.id) x where x.participant_id = ce.actor_participant_id
+  ) end)`;
+
 // Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
 // Participant's holder is named (app.work_item_holder), and member's own RLS
-// shows only their own Company's people (V14).
-const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name, cm.full_name as closer_name,
+// shows only their own Company's people (V14). The holder's and raiser's
+// Companies are the row's own (`visibleRows`).
+const holderColumns = sql`${closerCompanyName} as closer_company_name, cm.full_name as closer_name,
   m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me,
   hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role,
   -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package. A column of
@@ -707,8 +748,8 @@ const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name
 // - The closing move of a closed item: the latest event, as RLS lets the viewer read it (the
 //   closing Transition is shared), that brought it to the Step it is at. Its actor is named only
 //   when they are of the viewer's own Participant; anyone else's Company by name only (V14).
-// - The holder's, the raiser's (the card's Contractor name) and the closer's Companies, from one read
-//   of the Companies on the item that everyone who sees it may name.
+// - The closer's Company, one of the Companies on the item that everyone who sees it may name; read for a closed
+//   item only.
 // - The role holding an open item of my own Company: the holder's Position on the Project, or for an
 //   Step not picked up the Positions its Step Pool holds (the Step's permission, narrowed to the Step's
 //   Positions where it names them), the first in the Positions' order where it spans several; with
@@ -721,13 +762,6 @@ const holderJoins = sql`left join lateral (
     order by e.seq desc
     limit 1
   ) ce on true
-  left join lateral (
-    select
-      (max(x.legal_name::text) filter (where x.participant_id = r.holder_participant_id))::jsonb as holder_name,
-      (max(x.legal_name::text) filter (where x.participant_id = r.raiser_participant_id))::jsonb as raiser_name,
-      (max(x.legal_name::text) filter (where x.participant_id = ce.actor_participant_id))::jsonb as closer_company_name
-    from app.work_item_companies(r.id) x
-  ) co on true
   left join member cm on cm.id = ce.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
   left join member m on m.id = r.assignee_member_id
   left join lateral (
@@ -761,23 +795,25 @@ export async function queryWorkItems(
   q: WorkItemQuery,
   now: Date,
 ): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; page?: NonNullable<WorkItemList["page"]>; stageCounts: Map<string, number> }> {
-  const rows = visibleRows(scope, q.allRevisions);
+  const rows = await seenRows(trx, scope, q.allRevisions);
   const where = matching(q, now, scope);
   const snag = snagReads(scope);
-  const { cursor, page: number, size, orderBy } = pagingOf(q);
+  const { cursor, page: number, size, orderBy, readsHolder } = pagingOf(q);
   const after = cursor ? afterCursor(cursor) : noFilter;
+  // Who holds it (holderJoins) is read for the page's rows only, unless the order reads it (RP-1050).
   const { rows: page } = await sql<Row>`
     with r as (${rows}), shown as (
-      select r.*, ${holderColumns}, row_number() over (order by ${orderBy}) as shown_seq
+      select r.*${readsHolder ? sql`, ${holderColumns}` : sql``}, row_number() over (order by ${orderBy}) as shown_seq
       from r
-      ${holderJoins}
+      ${readsHolder ? holderJoins : sql``}
       where ${where} and ${after}
       order by ${orderBy}
       limit ${size + 1} offset ${number === null ? 0 : (number - 1) * size}
     )
     -- The Snag List's source and photo (snagReads) are read for the page's rows only.
-    select r.*${snag.columns}
+    select r.*${readsHolder ? sql`` : sql`, ${holderColumns}`}${snag.columns}
     from shown r
+    ${readsHolder ? sql`` : holderJoins}
     ${snag.joins}
     order by r.shown_seq
   `.execute(trx);
@@ -814,7 +850,7 @@ export function exportWorkItems(
     const snag = snagReads(scope);
     // One row more than given, only to tell whether more matched.
     const { rows } = await sql<Row>`
-      with r as (${visibleRows(scope, q.allRevisions)})
+      with r as (${await seenRows(trx, scope, q.allRevisions)})
       select r.*, ${holderColumns}${snag.columns}
       from r
       ${holderJoins}
@@ -836,13 +872,47 @@ export function exportWorkItems(
 export async function workItemRowsById(trx: Trx, scope: QueryScope, ids: readonly string[], now: Date): Promise<Map<string, WorkItemRow>> {
   if (ids.length === 0) return new Map();
   const { rows } = await sql<Row>`
-    with r as (${visibleRows(scope, true)})
+    with r as (${await seenRows(trx, scope, true)})
     select r.*, ${holderColumns}
     from r
     ${holderJoins}
     where r.id = any(${ids}::uuid[])
   `.execute(trx);
   return new Map(rows.map((r) => [r.id, toRow(r, now)]));
+}
+
+/**
+ * The List's rows among `ids`, as its default read gives them (the latest Revision of each chain the viewer sees, in
+ * a bucket) and as the viewer reads them, in no order. Home lists the items waiting on the Member through it (RP-1050),
+ * having ordered them by `listKeysAmong`, so it reads whole rows only for the few it shows.
+ */
+export async function listRowsAmong(trx: Trx, scope: QueryScope, ids: readonly string[], now: Date): Promise<WorkItemRow[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await sql<Row>`
+    with r as (${await seenRows(trx, scope, false)})
+    select r.*, ${holderColumns}
+    from r
+    ${holderJoins}
+    where r.id = any(${ids}::uuid[]) and ${matching(workItemQuery.parse({}), now, scope)}
+  `.execute(trx);
+  return rows.map((r) => toRow(r, now));
+}
+
+/** `listRowsAmong`'s rows, with only what Home orders them by (byNewestWaiting), as the row gives it. */
+export async function listKeysAmong(
+  trx: Trx,
+  scope: QueryScope,
+  ids: readonly string[],
+  now: Date,
+): Promise<Pick<WorkItemRow, "id" | "title" | "stepEnteredAt">[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await sql<Pick<Row, "id" | "title" | "step_entered_at">>`
+    with r as (${await seenRows(trx, scope, false)})
+    select r.id, r.title, r.step_entered_at
+    from r
+    where r.id = any(${ids}::uuid[]) and ${matching(workItemQuery.parse({}), now, scope)}
+  `.execute(trx);
+  return rows.map((r) => ({ id: r.id, title: r.title, stepEnteredAt: r.step_entered_at?.toISOString() ?? null }));
 }
 
 function pageCounts(rows: Row[]): Map<string, number> {
@@ -864,7 +934,7 @@ export const stageCountTotal = (counts: Map<string, number>, keep: (stageKey: st
 /** How many of the scope's visible items match `q` in each Stage, by Stage key. */
 async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Map<string, number>> {
   const { rows: counts } = await sql<{ stage_key: string; count: number }>`
-    with r as (${visibleRows(scope, q.allRevisions)})
+    with r as (${await seenRows(trx, scope, q.allRevisions)})
     select r.stage_key, count(*)::int as count from r where ${matching(q, now, scope)} group by r.stage_key
   `.execute(trx);
   return new Map(counts.map((c) => [c.stage_key, c.count]));
@@ -878,7 +948,7 @@ async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: 
 async function typeCounts(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Pick<WorkItemList, "typeCounts">> {
   if (scope.moduleKey !== "snag_list" || q.q !== undefined) return {};
   const { rows } = await sql<{ code: string; count: number }>`
-    with r as (${visibleRows(scope, q.allRevisions)})
+    with r as (${await seenRows(trx, scope, q.allRevisions)})
     select r.type_code as code, count(*)::int as count from r where ${matching({ ...q, type: [] }, now, scope)} group by r.type_code order by r.type_code collate "C"
   `.execute(trx);
   return { typeCounts: rows };
@@ -893,14 +963,13 @@ async function typeCounts(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
 async function snagChoices(trx: Trx, scope: QueryScope): Promise<Pick<WorkItemList["filters"], "companies" | "raisedFrom">> {
   if (scope.moduleKey !== "snag_list") return {};
   const { rows: holders } = await sql<{ participant_id: string; name: BilingualText; own: boolean }>`
-    with r as (${visibleRows(scope, false)})
-    select distinct r.holder_participant_id as participant_id, hc.legal_name as name, r.held_by_own as own
+    with r as (${await seenRows(trx, scope, false)})
+    select distinct r.holder_participant_id as participant_id, r.holder_name as name, r.held_by_own as own
     from r
-    join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
-    where not r.closed and ${bucketOfRow} is not null
+    where not r.closed and r.holder_participant_id is not null and ${bucketOfRow} is not null
   `.execute(trx);
   const { rows: sources } = await sql<{ document_number: string; subject: string }>`
-    with r as (${visibleRows(scope, false)})
+    with r as (${await seenRows(trx, scope, false)})
     select s.* from (
       select distinct l.document_number, l.subject
       from r
@@ -929,13 +998,12 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
   const closedSince = new Date(now.getTime() - closedColumnDays * 86_400_000);
   const snag = snagReads(scope);
   const { rows } = await sql<Row>`
-    with r as (${visibleRows(scope, q.allRevisions)})
+    with r as (${await seenRows(trx, scope, q.allRevisions)})
     select r.*, ${holderColumns}${snag.columns}
     from r
     ${holderJoins}
     ${snag.joins}
-    left join work_item cw on cw.id = r.id and r.closed
-    where ${matching(q, now, scope)} and (not r.closed or coalesce(cw.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
+    where ${matching(q, now, scope)} and (not r.closed or coalesce(r.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
     order by ${sorts[isCursorSort(q.sort) ? q.sort : "stepAge"].orderBy}
   `.execute(trx);
   const byStage = new Map<string, BoardCardInput[]>();
@@ -990,7 +1058,7 @@ export async function countWorkItemBuckets(
   now: Date,
 ): Promise<{ typeCode: string; bucket: ChainBucket | null; codeC: CodeCState | null; count: number }[]> {
   const { rows } = await sql<{ type_code: string; bucket: ChainBucket | null; code_c: CodeCState | null; count: number }>`
-    with r as (${visibleRows(scope, q.allRevisions)})
+    with r as (${await seenRows(trx, scope, q.allRevisions)})
     select r.type_code, ${bucketOfRow} as bucket, ${codeCOfRow} as code_c, count(*)::int as count
     from r where ${matching(q, now, scope)}
     group by 1, 2, 3
@@ -1019,13 +1087,12 @@ async function holderChoices(
     member_id: string | null;
     member_name: BilingualText | null;
   }>`
-    with r as (${visibleRows(scope, false)})
-    select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, hc.legal_name as name,
+    with r as (${await seenRows(trx, scope, false)})
+    select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, r.holder_name as name,
       m.id as member_id, m.full_name as member_name
     from r
-    join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
     left join member m on m.id = r.assignee_member_id and r.held_by_own
-    where not r.closed
+    where not r.closed and r.holder_participant_id is not null
   `.execute(trx);
   const steps = new Map<string, BilingualText>();
   const companies = new Map<string, BilingualText>();

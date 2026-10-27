@@ -67,25 +67,34 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
 
 type ProjectRow = Awaited<ReturnType<ReturnType<typeof selectProjects>["executeTakeFirstOrThrow"]>>;
 
+/** Per transaction, `waitingOnMember`'s read of each set of Projects. Every caller is a read that writes nothing after it. */
+const waitingReads = new WeakMap<Transaction<Database>, Map<string, Promise<{ projectId: string; id: string }[]>>>();
+
 /**
  * The items waiting on the Member in these Projects, each once: the rows behind
  * the Need My Action count, which Home lists too (RP-407). The items
  * app.need_my_action says are waiting on them, one per Revision chain, the
  * latest Revision they see (app.latest_visible_revision), as the List shows by
  * default; never their own Drafts. Only open assignments of the Member's own
- * Participants are candidates (RLS on step_assignment), and RLS on work_item
- * keeps it to items they see. Nothing on a closed Project.
+ * Participants are candidates, and app.need_my_action keeps it to items they
+ * see: app.work_items_waiting_on_me (RP-1050). Nothing on a closed Project.
+ * Read once per transaction: Home asks again for the Projects its summaries asked for.
  */
-export async function waitingOnMember(trx: Transaction<Database>, projectIds: readonly string[]): Promise<{ projectId: string; id: string }[]> {
-  if (projectIds.length === 0) return [];
-  const { rows } = await sql<{ project_id: string; id: string }>`
-    select distinct w.project_id, w.id
-    from work_item w
-    join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'picked_up')
-    where w.project_id = any(${projectIds}::uuid[]) and app.need_my_action(w.id) = 'waiting'
-      and app.latest_visible_revision(w.id)
-  `.execute(trx);
-  return rows.map((r) => ({ projectId: r.project_id, id: r.id }));
+export function waitingOnMember(trx: Transaction<Database>, projectIds: readonly string[]): Promise<{ projectId: string; id: string }[]> {
+  if (projectIds.length === 0) return Promise.resolve([]);
+  let reads = waitingReads.get(trx);
+  if (!reads) waitingReads.set(trx, (reads = new Map()));
+  const key = projectIds.toSorted().join(",");
+  let read = reads.get(key);
+  if (!read) {
+    read = sql<{ project_id: string; work_item_id: string }>`
+      select project_id, work_item_id from app.work_items_waiting_on_me(${projectIds}::uuid[])
+    `
+      .execute(trx)
+      .then(({ rows }) => rows.map((r) => ({ projectId: r.project_id, id: r.work_item_id })));
+    reads.set(key, read);
+  }
+  return read;
 }
 
 /**

@@ -17,13 +17,12 @@ import {
   type ProjectSummary,
   type TransitionKind,
   type WorkItemQueryInput,
-  type WorkItemRow,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { myProjectSummaries, waitingOnMember } from "../projects/projects.ts";
 import { submittalCounts } from "../projects/submittal-counts.ts";
 import { activityFeedPage } from "../work-items/activity-feed.ts";
-import { countWorkItems, pagesByCursor, queryWorkItems, stageCountTotal, type QueryScope } from "../work-items/query.ts";
+import { countWorkItems, listKeysAmong, listRowsAmong, stageCountTotal, type QueryScope } from "../work-items/query.ts";
 
 // Home across my Projects (RP-407, spec RP-447; visibility.md "Home across
 // Projects"). Home has no read of its own: it runs the per-Project reads the
@@ -35,23 +34,19 @@ import { countWorkItems, pagesByCursor, queryWorkItems, stageCountTotal, type Qu
 
 type Trx = Transaction<Database>;
 
-/** Every row of the work item query for `scope` and `q`, page after page: only for Need My Action, a few rows. */
-async function everyRow(trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now: Date): Promise<WorkItemRow[]> {
-  const rows: WorkItemRow[] = [];
-  const query = workItemQuery.parse(q);
-  // Only a cursor pages to the end: a numbered page or a List-only sort would give one page, silently (RP-409).
-  if (!pagesByCursor(query)) throw new Error("everyRow reads every row by cursor: give it a cursor sort in its own order, and no page");
-  let cursor: string | undefined;
-  do {
-    const page = await queryWorkItems(trx, scope, workItemQuery.parse({ ...q, ...(cursor ? { cursor } : {}) }), now);
-    rows.push(...page.rows);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-  return rows;
-}
-
 /** How many items match `q` in the scope, by Stage key: the List's `stages[].count`, no rows read. */
 const counted = (trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now: Date) => countWorkItems(trx, scope, workItemQuery.parse(q), now);
+
+/** The shown items' ids, grouped by the Project and Module tab they were read in. */
+function shownByScope<S>(shown: readonly { id: string; project: ProjectSummary; scope: S }[]) {
+  const groups = new Map<S, { project: ProjectSummary; scope: S; ids: string[] }>();
+  for (const { id, project, scope } of shown) {
+    const group = groups.get(scope) ?? { project, scope, ids: [] };
+    group.ids.push(id);
+    groups.set(scope, group);
+  }
+  return [...groups.values()];
+}
 
 /** Each Module tab of each Project: where the work item query reads. */
 const scopesOf = (projects: readonly ProjectSummary[]) =>
@@ -65,13 +60,19 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
     const scopes = scopesOf(active);
     const ref = (p: ProjectSummary) => ({ id: p.id, code: p.code, name: p.name });
 
-    // Need My Action: the List's toggle rows that are the Projects page's count (never a Draft of mine).
-    const waiting = new Set((await waitingOnMember(trx, active.map((p) => p.id))).map((w) => w.id));
-    const needsMyAction: HomeWorkItem[] = [];
+    // Need My Action: the List's toggle rows that are the Projects page's count (never a Draft of mine). Those are the
+    // List's rows among the items waiting on me: each waits on me, so the toggle shows it wherever the List does (RP-1050).
+    // Asked of every Project, as myProjectSummaries just asked (read once); a closed one has none waiting.
+    const waiting = await waitingOnMember(trx, projects.map((p) => p.id));
+    // Home shows the newest few: ordered by what the rows give, then only those read whole.
+    const keys = [];
     for (const { project, ...scope } of scopes) {
-      for (const row of await everyRow(trx, scope, { needMyAction: true }, now)) {
-        if (waiting.has(row.id)) needsMyAction.push({ ...row, project: ref(project), moduleKey: scope.moduleKey });
-      }
+      const ids = waiting.filter((w) => w.projectId === project.id).map((w) => w.id);
+      for (const key of await listKeysAmong(trx, scope, ids, now)) keys.push({ ...key, project, scope });
+    }
+    const needsMyAction: HomeWorkItem[] = [];
+    for (const { project, scope, ids } of shownByScope(keys.toSorted(byNewestWaiting).slice(0, homeNeedsMyActionLimit))) {
+      for (const row of await listRowsAmong(trx, scope, ids, now)) needsMyAction.push({ ...row, project: ref(project), moduleKey: scope.moduleKey });
     }
 
     // The Draft Stages, which never age on Home: a Revision's Draft has a number, so the List ages it.
