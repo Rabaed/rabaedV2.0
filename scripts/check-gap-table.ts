@@ -1,0 +1,180 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+// `node scripts/check-gap-table.ts <file>... [--refs <folder>]` (RP-574): a gap table's citations checked, not
+// trusted. The first workflow-builder gap table (spec RP-528) told the owner its reference outlined a
+// selected Transition label, where the reference's CSS fills it (`.wl.sel{background:…}`), and read
+// ADR 0017 as "no signatures" where it says every Transition is signed. The process and the table's
+// format are in design/owner-reference-process.md.
+//
+// Every table with a "Reference source" column is a gap table. Each row:
+//   - cites its reference source as `<file> › <part>`, the part a `css selector`, `line N`
+//     (`lines N–M`) or `screenshot N` (a numbered screenshot of the reference); several citations split by `;`;
+//   - has a Verdict: match, gap, rule-forced or question;
+//   - when rule-forced, quotes the line that forces it in its Rule cell: `ADR 0017: "…"`,
+//     `docs/visibility.md V14: "…"`, `GLOSSARY.md Step Age: "…"` or `CLAUDE.md: "…"`. Every quote in a
+//     Rule cell must be in the file it names, word for word (spacing, emphasis and curly quotes aside).
+// With --refs (the folder holding the owner's pages, e.g. D:\Artifacts), each cited file must be there,
+// a selector must be in it and a line must exist. Without it, citations are checked for shape only.
+
+export interface GapTableOptions {
+  /** The repository root, where the ADRs, docs/visibility.md, GLOSSARY.md and CLAUDE.md are read. */
+  repo: string;
+  /** The folder the reference files are cited from; undefined checks citations for shape only. */
+  refs?: string | undefined;
+}
+
+export const VERDICTS = ["match", "gap", "rule-forced", "question"] as const;
+
+const SOURCE_FORMAT = "`<file> › <part>`, the part a `css selector`, `line N` or `screenshot N`";
+
+/** A table row's cells, `\|` kept as a pipe inside its cell. */
+function cells(line: string): string[] {
+  const inner = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
+  return inner.split(/(?<!\\)\|/).map((cell) => cell.trim().replaceAll("\\|", "|"));
+}
+
+const isTableLine = (line: string) => line.trim().startsWith("|");
+const isSeparator = (line: string) => /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(line.trim());
+
+interface Table {
+  header: string[];
+  rows: string[][];
+}
+
+/** Every markdown table in the text: a header line, a separator line, then its rows. */
+function tables(markdown: string): Table[] {
+  const lines = markdown.split(/\r?\n/);
+  const found: Table[] = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (!isTableLine(lines[i]!) || !isSeparator(lines[i + 1]!)) continue;
+    const table: Table = { header: cells(lines[i]!), rows: [] };
+    let j = i + 2;
+    for (; j < lines.length && isTableLine(lines[j]!); j++) table.rows.push(cells(lines[j]!));
+    found.push(table);
+    i = j - 1;
+  }
+  return found;
+}
+
+const column = (header: string[], name: RegExp) => header.findIndex((cell) => name.test(cell));
+
+/** Text compared as words: spacing collapsed, markdown emphasis and code marks dropped, quotes straightened. */
+const words = (text: string) =>
+  text
+    .replace(/[*`]/g, "")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** The repo file a rule label names, or why there is none. */
+function ruleFile(label: string, repo: string): { file: string } | { error: string } {
+  const adr = /\bADR\s*(\d{4})\b/i.exec(label)?.[1];
+  if (adr) {
+    const dir = join(repo, "docs/adr");
+    const name = existsSync(dir) ? readdirSync(dir).find((entry) => entry.startsWith(`${adr}-`)) : undefined;
+    return name ? { file: `docs/adr/${name}` } : { error: `ADR ${adr} is not in docs/adr` };
+  }
+  if (/\bvisibility\.md\b/i.test(label)) return { file: "docs/visibility.md" };
+  if (/\bGLOSSARY\.md\b/i.test(label)) return { file: "GLOSSARY.md" };
+  if (/\bCLAUDE\.md\b/i.test(label)) return { file: "CLAUDE.md" };
+  return { error: "cites no rule source (ADR nnnn, docs/visibility.md, GLOSSARY.md or CLAUDE.md) before its quote" };
+}
+
+/** The problems with a Rule cell: each quote must sit in the file the text before it names. */
+function ruleErrors(cell: string, ruleForced: boolean, repo: string): string[] {
+  const quote = /"([^"]+)"|“([^”]+)”/g;
+  const errors: string[] = [];
+  let labelStart = 0;
+  let quotes = 0;
+  for (const match of cell.matchAll(quote)) {
+    quotes++;
+    const quoted = match[1] ?? match[2]!;
+    const named = ruleFile(cell.slice(labelStart, match.index), repo);
+    labelStart = match.index + match[0].length;
+    if ("error" in named) {
+      errors.push(`"${quoted}" ${named.error}`);
+      continue;
+    }
+    const path = join(repo, named.file);
+    if (!existsSync(path)) errors.push(`"${quoted}": ${named.file} is not in the repo`);
+    else if (!words(readFileSync(path, "utf8")).includes(words(quoted))) errors.push(`"${quoted}" is not found in ${named.file}; quote its line word for word`);
+  }
+  if (ruleForced && quotes === 0) errors.push('is rule-forced but its Rule cell quotes no line: write `ADR nnnn: "<the line>"` (or docs/visibility.md, GLOSSARY.md, CLAUDE.md)');
+  return errors;
+}
+
+/** The problems with one `<file> › <part>` citation. */
+function citationErrors(citation: string, refs: string | undefined): string[] {
+  const match = /^([^`›]+?\.[A-Za-z0-9]+)\s*(?:›|>)\s*(.+)$/.exec(citation);
+  if (!match) return [`cites "${citation}"; write ${SOURCE_FORMAT}`];
+  const [, file, part] = match as unknown as [string, string, string];
+  const selector = /^`(.+)`$/.exec(part)?.[1];
+  const lines = /^lines?\s+(\d+)(?:\s*[–-]\s*(\d+))?$/i.exec(part);
+  const screenshot = /^screenshot\s+\d+$/i.test(part);
+  if (!selector && !lines && !screenshot) return [`cites "${part}" in ${file}; the part is a \`css selector\`, \`line N\` or \`screenshot N\``];
+  if (refs === undefined) return [];
+  const path = join(refs, file);
+  if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
+  const content = readFileSync(path, "utf8");
+  if (selector && !content.includes(selector)) return [`\`${selector}\` is not in ${file}`];
+  if (lines) {
+    const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;
+    const last = Number(lines[2] ?? lines[1]);
+    if (last > count) return [`cites line ${last} of ${file}, which has ${count} lines`];
+  }
+  return [];
+}
+
+/** Each problem in the file's gap tables, as `table t, row r: …`; empty when every row's citations hold. */
+export function checkGapTable(markdown: string, options: GapTableOptions): string[] {
+  const gapTables = tables(markdown).filter((table) => column(table.header, /reference source/i) >= 0);
+  if (gapTables.length === 0) return ["No gap table found: a gap table has the columns # | Element | Reference source | Built | Verdict | Proposal | Rule."];
+  return gapTables.flatMap((table, t) => {
+    const source = column(table.header, /reference source/i);
+    const verdict = column(table.header, /^verdict$/i);
+    const rule = column(table.header, /^rule$/i);
+    const number = column(table.header, /^#$/);
+    const missing = [verdict < 0 && "Verdict", rule < 0 && "Rule"].filter(Boolean);
+    if (missing.length > 0) return [`table ${t + 1}: no ${missing.join(" or ")} column`];
+    return table.rows.flatMap((row, r) => {
+      const at = `table ${t + 1}, row ${(number >= 0 && row[number]) || r + 1}`;
+      const errors: string[] = [];
+      const sourceCell = row[source] ?? "";
+      if (sourceCell === "") errors.push(`has no reference source; cite ${SOURCE_FORMAT}`);
+      else for (const citation of sourceCell.split(/;(?=(?:[^`]*`[^`]*`)*[^`]*$)/)) errors.push(...citationErrors(citation.trim(), options.refs));
+      const value = (row[verdict] ?? "").toLowerCase();
+      if (!(VERDICTS as readonly string[]).includes(value)) errors.push(`has verdict "${row[verdict] ?? ""}"; use ${VERDICTS.join(", ")}`);
+      errors.push(...ruleErrors(row[rule] ?? "", value === "rule-forced", options.repo));
+      return errors.map((error) => `${at}: ${error}`);
+    });
+  });
+}
+
+if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
+  const args = process.argv.slice(2);
+  const refsAt = args.indexOf("--refs");
+  const refs = refsAt < 0 ? undefined : args[refsAt + 1];
+  if (refsAt >= 0 && (!refs || refs.startsWith("-"))) {
+    console.error("--refs needs the folder the reference files are in, such as D:\\Artifacts.");
+    process.exit(2);
+  }
+  const files = refsAt < 0 ? args : args.filter((_, i) => i !== refsAt && i !== refsAt + 1);
+  if (files.length === 0) {
+    console.error("Usage: node scripts/check-gap-table.ts <gap table .md>... [--refs <folder with the reference files>]");
+    process.exit(2);
+  }
+  let failed = false;
+  for (const file of files) {
+    const errors = checkGapTable(readFileSync(file, "utf8"), { repo: process.cwd(), refs });
+    if (errors.length === 0) {
+      console.log(`${file}: every row cites its source${refs ? ` (checked in ${refs})` : " (shape only: pass --refs to check the reference files)"}.`);
+      continue;
+    }
+    failed = true;
+    console.error(`${file}: the gap table's citations don't hold (design/owner-reference-process.md):`);
+    for (const error of errors) console.error(`  ${error}`);
+  }
+  if (failed) process.exit(1);
+}
