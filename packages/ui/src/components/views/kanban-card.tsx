@@ -1,8 +1,9 @@
 "use client";
 
 import { stepAgeDots, type Locale, type OutcomeLook } from "@rabaed/domain";
-import type { ElementType, ReactNode } from "react";
+import type { ElementType, MouseEvent, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { isPlainClick } from "../../lib/plain-click.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -83,6 +84,13 @@ export type KanbanCardProps = {
   hovered?: boolean;
   /** Controls in the header (the Move menu): shown on hover or focus, always on touch. */
   actions?: ReactNode;
+  /**
+   * Opens the card in the Submittal Panel (RP-1061) instead of its page, on a plain click; `id`
+   * marks its link, where focus returns when the panel closes. A modified click keeps the link's own.
+   */
+  opener?: { id: string; onOpen: () => void };
+  /** Open in the panel (with `selected`'s ring). */
+  open?: boolean;
   className?: string;
 };
 
@@ -99,6 +107,24 @@ const otherTrade = "bg-trade-other-bg text-trade-other-fg";
 /** The Trade chip's colours: the default Trades in their own hues. */
 export function tradeChipClass(code: string): string {
   return tradeHues[code.toUpperCase()] ?? otherTrade;
+}
+
+/** The Trade chip: "Electrical Works (EL)" in its Trade's hue (the card, the List, the Submittal Panel). */
+export function TradeChip({ code, name }: { code: string; name: string }) {
+  return (
+    <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(code))}>
+      {name} (<bdi translate="no">{code}</bdi>)
+    </span>
+  );
+}
+
+/** The mark of a Step Pool nobody has picked up yet: a dashed circle with a group of people. */
+export function PoolMark() {
+  return (
+    <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
+      <Icon name={poolIcon} size={13} />
+    </span>
+  );
 }
 
 const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
@@ -135,6 +161,8 @@ export function KanbanCard({
   selected = false,
   hovered = false,
   actions,
+  opener,
+  open = false,
   className,
 }: KanbanCardProps) {
   const approved = badge?.kind === "outcome" && badge.look === "a";
@@ -146,6 +174,7 @@ export function KanbanCard({
       data-approved={approved ? "" : undefined}
       data-aged={aged ? "" : undefined}
       data-hovered={hovered ? "" : undefined}
+      data-open={open ? "" : undefined}
       className={cn(
         "group/card relative flex flex-col rounded-md border bg-surface px-3 py-[11px] shadow-xs transition-[box-shadow,translate] duration-150",
         "hover:-translate-y-px hover:shadow-[0_6px_16px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
@@ -174,6 +203,17 @@ export function KanbanCard({
       <h3 className="mt-1.5 text-[15px] leading-[1.35] font-bold text-text">
         <Link
           href={href}
+          data-open-id={opener?.id}
+          aria-current={open || undefined}
+          onClick={
+            opener
+              ? (event: MouseEvent) => {
+                  if (!isPlainClick(event)) return;
+                  event.preventDefault();
+                  opener.onOpen();
+                }
+              : undefined
+          }
           dir="auto"
           title={title}
           className={cn(
@@ -185,9 +225,7 @@ export function KanbanCard({
         </Link>
       </h3>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(trade.code))}>
-          {trade.name} (<bdi translate="no">{trade.code}</bdi>)
-        </span>
+        <TradeChip code={trade.code} name={trade.name} />
         <span translate="no" className="font-ui text-caption font-semibold tracking-wide text-muted">
           {typeCode}
         </span>
@@ -220,9 +258,7 @@ export function KanbanCard({
         {owner && (
           <span className="flex min-w-0 items-center gap-2">
             {owner.kind === "pool" ? (
-              <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
-                <Icon name={poolIcon} size={13} />
-              </span>
+              <PoolMark />
             ) : (
               <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
             )}

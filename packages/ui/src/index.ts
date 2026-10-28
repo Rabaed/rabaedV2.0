@@ -246,12 +246,14 @@ export {
 export {
   KanbanCard,
   tradeChipClass,
+  TradeChip,
   type KanbanCardBadge,
   type KanbanCardOwner,
   type KanbanCardPlace,
   type KanbanCardProps,
 } from "./components/views/kanban-card.tsx";
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
+export { placesOf } from "./components/views/work-item-board.tsx";
 export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
 export { PackageComments, type PackageCommentsLabels, type PackageCommentsProps } from "./components/packages/package-comments.tsx";
 export { PackagePage, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
@@ -290,6 +292,26 @@ export {
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
+export {
+  SubmittalPanel,
+  SubmittalPanelFacts,
+  SubmittalPanelIdentity,
+  useSubmittalPanelIds,
+  type SubmittalPanelFactsLabels,
+  type SubmittalPanelFactsProps,
+  type SubmittalPanelIdentityProps,
+  type SubmittalPanelLabels,
+  type SubmittalPanelProps,
+} from "./components/submittal-panel/submittal-panel.tsx";
+export { submittalPanelKey, submittalPanelNumber, submittalPanelPosition, submittalPanelWith, type SubmittalPanelKeyPress, type SubmittalPanelWith } from "./components/submittal-panel/panel-model.ts";
+export {
+  defaultSubmittalPanelPreferences,
+  submittalPanelNormalWidth,
+  submittalPanelStorage,
+  readSubmittalPanelPreferences,
+  writeSubmittalPanelPreferences,
+  type SubmittalPanelPreferences,
+} from "./components/submittal-panel/panel-preferences.ts";
 export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
 export {
   WorkflowBuilder,

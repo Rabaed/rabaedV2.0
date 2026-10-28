@@ -1,0 +1,28 @@
+/*
+ * The Submittal Panel's entrance (spec RP-1054, README §1): 260ms, sliding in 48px from the
+ * inline-end side. It plays when the panel mounts only: a click on another row swaps the
+ * content of the same panel, so nothing plays again. Prefixed `sdp` (README §9).
+ */
+@keyframes sdp-enter {
+  from {
+    transform: translateX(48px);
+    opacity: 0.2;
+  }
+}
+@keyframes sdp-enter-rtl {
+  from {
+    transform: translateX(-48px);
+    opacity: 0.2;
+  }
+}
+.sdp {
+  animation: sdp-enter 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.sdp[dir="rtl"] {
+  animation-name: sdp-enter-rtl;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sdp {
+    animation: none;
+  }
+}

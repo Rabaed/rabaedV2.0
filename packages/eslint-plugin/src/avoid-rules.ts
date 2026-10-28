@@ -122,6 +122,7 @@ const allowedInNames: string[] = [
   "built in", // Built-in Field, written short in the form engine (`builtInProblems`, `built_in_missing`).
   "touch area", // `touchArea`: a control's 44px hit area, not a Zone.
   "feed panel", // `ActivityFeedPanel`, the Dashboard's Activity Feed card.
+  "submittal panel", // the Submittal Panel, the slide-over a submittal opens in from the List and the Kanban (spec RP-1054), not a Form Section.
   "text notes", // the `text-notes` type-scale class (11px).
 ];
 

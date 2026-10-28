@@ -16,10 +16,11 @@ import {
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import { Fragment, useState, type ElementType, type ReactNode } from "react";
+import { Fragment, useState, type ElementType, type MouseEvent, type ReactNode } from "react";
 import { Checkbox } from "../form/checkbox.tsx";
 import { moveColumn } from "./column-settings.tsx";
 import { cn } from "../../lib/cn.ts";
+import { isPlainClick } from "../../lib/plain-click.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
@@ -27,7 +28,7 @@ import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
-import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { HeaderBadge, poolIcon, TradeChip } from "./kanban-card.tsx";
 import { badgeOf, ownerOf, placesOf } from "./work-item-board.tsx";
 
 // The List's table (RP-409, the owner's design): a header row of sortable
@@ -94,6 +95,13 @@ export type WorkItemTableProps = {
   groupHeader?: (group: TableGroup, colSpan: number) => ReactNode;
   /** The Stage column shows the Review Code once the item has one (the Package page's "Review Code or Stage", RP-633). */
   stageShowsCode?: boolean;
+  /**
+   * Opens a row in the Submittal Panel (RP-1061) instead of its page: a click on the row or its
+   * Subject. A click with a modifier on the Subject still opens the page. Without it, the row opens its page.
+   */
+  onOpen?: (row: WorkItemRow) => void;
+  /** The row open in the panel: highlighted. */
+  openId?: string;
   className?: string;
 };
 
@@ -106,7 +114,7 @@ export function columnHeader(key: ListColumnKey, labels: Pick<WorkItemTableLabel
   return named ? named[locale] : labels.columns[key];
 }
 
-const cell = "h-12 border-b border-border-subtle bg-surface px-3 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
+const cell = "h-12 border-b border-border-subtle bg-surface px-3 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint group-data-open/row:bg-brand-tint";
 const head =
   "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
@@ -130,6 +138,8 @@ export function WorkItemTable({
   groups,
   groupHeader,
   stageShowsCode = false,
+  onOpen,
+  openId,
   className,
 }: WorkItemTableProps) {
   const [dragging, setDragging] = useState<ListColumnKey | null>(null);
@@ -248,16 +258,20 @@ export function WorkItemTable({
               {!group.collapsed &&
                 group.rows.map((row) => {
                   const selected = selection?.selected.has(row.id) ?? false;
+                  const open = openId === row.id;
                   return (
                     <tr
                       key={row.id}
                       data-selected={selected || undefined}
+                      data-open={open || undefined}
+                      aria-current={open || undefined}
                       className="group/row cursor-pointer"
                       // The whole row opens the item; the Subject is its link, for the keyboard and screen readers.
                       onClick={(event) => {
                         // eslint-disable-next-line rabaed/no-avoid-terms -- CSS element names: a click on a control in the row is its own
                         if ((event.target as Element).closest("a, button, input, label, [role=menu], [role=dialog]")) return;
-                        event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
+                        if (onOpen) onOpen(row);
+                        else event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
                       }}
                     >
                       {selection && (
@@ -279,7 +293,7 @@ export function WorkItemTable({
                       )}
                       {shown.map((key, i) => (
                         <td key={key} className={cn(cell, i === 0 && pinnedFirst)}>
-                          <Cell column={key === "stage" && stageShowsCode && row.outcome !== null ? "outcome" : key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
+                          <Cell column={key === "stage" && stageShowsCode && row.outcome !== null ? "outcome" : key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} onOpen={onOpen} />
                         </td>
                       ))}
                       {end && <td className={cn(cell, "sticky end-0 z-[2] w-[60px] border-s ps-0 pe-2 text-end")}>{rowEnd?.(row)}</td>}
@@ -306,6 +320,7 @@ type CellProps = {
   places: Map<string, { depth: number; name: BilingualText }[]>;
   itemHref: (id: string) => string;
   linkAs: ElementType;
+  onOpen?: (row: WorkItemRow) => void;
 };
 
 /** One cell, as the viewer may read it: the owner per V14, the Creation Date only to the raiser's Participant. */
@@ -320,7 +335,7 @@ export function GroupValue({
   return <Cell column={column} row={row} locale={locale} labels={labels} filters={filters} places={placesOf(filters.locations)} itemHref={() => "#"} linkAs="a" />;
 }
 
-function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: Link }: CellProps): ReactNode {
+function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: Link, onOpen }: CellProps): ReactNode {
   const n = (value: number) => formatNumber(value, locale);
   switch (column) {
     case "documentNumber": {
@@ -337,6 +352,17 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
         <Link
           href={itemHref(row.id)}
           data-item-link=""
+          // Where focus returns when the panel closes.
+          data-open-id={onOpen ? row.id : undefined}
+          onClick={
+            onOpen
+              ? (event: MouseEvent) => {
+                  if (!isPlainClick(event)) return;
+                  event.preventDefault();
+                  onOpen(row);
+                }
+              : undefined
+          }
           dir="auto"
           title={row.title}
           className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
@@ -356,9 +382,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
       );
     case "trade":
       return (
-        <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(row.trade.code))}>
-          {row.trade.name[locale]} (<bdi translate="no">{row.trade.code}</bdi>)
-        </span>
+        <TradeChip code={row.trade.code} name={row.trade.name[locale]} />
       );
     case "type":
       return (
