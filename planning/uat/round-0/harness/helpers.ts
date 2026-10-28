@@ -139,6 +139,7 @@ export async function openItem(page: Page, projectId: string, ref: string, local
   if ((await row.count()) === 0) {
     const search = page.getByRole("main").getByRole("searchbox").or(page.getByRole("main").getByPlaceholder(/search|بحث/i)).first();
     await search.fill(ref);
+    await search.press("Enter"); // the List's Search runs on Enter (?q=), not as you type
     await settle(page, 800);
     row = page.getByRole("table").first().locator("tbody tr").filter({ hasText: ref });
   }

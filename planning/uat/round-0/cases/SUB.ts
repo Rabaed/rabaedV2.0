@@ -43,7 +43,10 @@ defineCase("SUB-01", async (t) => {
   const blocked = await notFound(page);
   // At ~1,000 items a Draft (no number yet) is not on page 1: find it with the List's Search.
   if (!blocked && !(await listRows(page)).some((r) => r.subject === subject)) {
-    await page.getByRole("main").getByRole("searchbox").or(page.getByRole("main").getByPlaceholder(/search/i)).first().fill(subject);
+    // The List's Search runs on Enter (it sends ?q=), not as you type.
+    const search = page.getByRole("main").getByRole("searchbox").or(page.getByRole("main").getByPlaceholder(/search/i)).first();
+    await search.fill(subject);
+    await search.press("Enter");
     await settle(page, 800);
   }
   const row = blocked ? undefined : (await listRows(page)).find((r) => r.subject === subject);

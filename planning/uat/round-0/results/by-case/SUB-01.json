@@ -1,20 +1,20 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "The Draft is listed in the Submittals List",
-      "ok": false,
-      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+      "ok": true,
+      "detail": "No number yetUAT SUB-01 Lighting Fixtures 194139R0Electrical Works (EL)MARDraft—Main ZoneTower 1Tower 1 Floor 02HHHafiz Hamdan—"
     },
     {
       "text": "The Draft reads \"No number yet\"",
-      "ok": false,
-      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+      "ok": true,
+      "detail": "No number yet"
     },
     {
       "text": "No Step Age dots on the Draft row",
-      "ok": false,
-      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+      "ok": true,
+      "detail": "No number yetUAT SUB-01 Lighting Fixtures 194139R0Electrical Works (EL)MARDraft—Main ZoneTower 1Tower 1 Floor 02HHHafiz Hamdan—"
     },
     {
       "text": "The Draft is in the Drafts Stage with no Step Age (api)",
@@ -35,5 +35,5 @@
     "evidence/SUB-01-2-list-with-draft.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:54:41.550Z"
+  "ranAt": "2026-10-28T19:41:48.821Z"
 }
