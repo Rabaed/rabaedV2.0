@@ -1,20 +1,20 @@
 name: Dependency audit
-# `pnpm audit --prod` (RP-1023): known advisories in the production dependencies.
-# Not a required check, and reporting only: the job summary tables the findings,
-# each one at high or above is a warning on the run, and the job passes. It fails
-# only when the audit could not run. Making it required for lockfile changes waits
-# for the existing high findings to be fixed or allow-listed with a reason.
+# `pnpm audit --prod` (RP-1023, RP-1032): known advisories in the production dependencies.
+# A required check on main's ruleset ("pnpm audit"): the job fails on an advisory at high or
+# above that `.audit-allowlist.json` does not list, with an error on the run and the PR's
+# checks and a table in the job summary. An allow-listed one has a reason and a review date;
+# an entry past its date, or no longer found, is a warning. It also fails when the audit
+# could not run (a registry outage must not read as a clean audit).
 #
-# A `paths` filter is fine here because no ruleset requires this check; a required
-# check needs ci.yml's `changes` job instead, or it stays pending (RP-984).
+# No `paths` filter: a required check must report on every PR and merge-group entry, or it
+# stays pending (RP-984). scripts/dependency-audit-needed.ts decides whether this change can
+# move the audit (the lockfile, any package.json, the allow-list, ...); when it can't, the
+# audit steps are skipped and the job passes. The nightly run on main always audits:
+# advisories are published against versions already merged, and a failure there is a red run
+# on main.
 on:
   pull_request:
-    paths:
-      - pnpm-lock.yaml
-      - "**/package.json"
-      - .github/workflows/dependency-audit.yml
-      - scripts/dependency-audit.ts
-  # main, nightly: advisories are published against versions already merged.
+  merge_group:
   schedule:
     - cron: "41 2 * * *"
   workflow_dispatch:
@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   audit:
-    name: pnpm audit (reporting)
+    name: pnpm audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -33,10 +33,18 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      # Reads pnpm-lock.yaml only: no install, so no package script runs. Every
-      # severity goes into the JSON; the report splits it at --level. pnpm exits 1
-      # on any finding and on a failed request alike, so the report tells them apart.
+      # main's tip in the merge queue (base_ref), never the group's base_sha; the PR's base
+      # otherwise; none on schedule and workflow_dispatch, which always audit.
+      - id: needed
+        run: node scripts/dependency-audit-needed.ts
+        env:
+          BASE: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.sha }}
+      # Reads pnpm-lock.yaml only: no install, so no package script runs. Every severity goes
+      # into the JSON; the report splits it at --level. pnpm exits 1 on any finding and on a
+      # failed request alike, so the report tells them apart.
       - name: pnpm audit --prod
+        if: steps.needed.outputs.needed == 'true'
         run: pnpm audit --prod --json > audit.json || true
       - name: Report
+        if: steps.needed.outputs.needed == 'true'
         run: node scripts/dependency-audit.ts audit.json --level high
