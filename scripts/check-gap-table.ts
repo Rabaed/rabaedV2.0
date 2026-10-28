@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 // `node scripts/check-gap-table.ts <file>... [--refs <folder>]` (RP-574): a gap table's citations checked, not
 // trusted. The first workflow-builder gap table (spec RP-528) told the owner its reference outlined a
@@ -24,9 +24,12 @@ export interface GapTableOptions {
   refs?: string | undefined;
 }
 
-export const VERDICTS = ["match", "gap", "rule-forced", "question"] as const;
+const VERDICTS = ["match", "gap", "rule-forced", "question"];
 
-const SOURCE_FORMAT = "`<file> › <part>`, the part a `css selector`, `line N` or `screenshot N`";
+const PARTS = "a `css selector`, `line N` or `screenshot N`";
+const SOURCE_FORMAT = `\`<file> › <part>\`, the part ${PARTS}`;
+/** The fewest words a rule quote has: "no" or "every" alone is in every file. */
+const MIN_QUOTE_WORDS = 3;
 
 /** A table row's cells, `\|` kept as a pipe inside its cell. */
 function cells(line: string): string[] {
@@ -35,7 +38,7 @@ function cells(line: string): string[] {
 }
 
 const isTableLine = (line: string) => line.trim().startsWith("|");
-const isSeparator = (line: string) => /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(line.trim());
+const isSeparator = (line: string) => /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(line.trim());
 
 interface Table {
   header: string[];
@@ -58,11 +61,15 @@ function tables(markdown: string): Table[] {
 }
 
 const column = (header: string[], name: RegExp) => header.findIndex((cell) => name.test(cell));
+const SOURCE_COLUMN = /reference source/i;
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Text compared as words: spacing collapsed, markdown emphasis and code marks dropped, quotes straightened. */
 const words = (text: string) =>
   text
     .replace(/[*`]/g, "")
+    .replace(/(^|\W)_+|_+(?=\W|$)/g, "$1")
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/\s+/g, " ")
@@ -98,8 +105,11 @@ function ruleErrors(cell: string, ruleForced: boolean, repo: string): string[] {
       continue;
     }
     const path = join(repo, named.file);
-    if (!existsSync(path)) errors.push(`"${quoted}": ${named.file} is not in the repo`);
-    else if (!words(readFileSync(path, "utf8")).includes(words(quoted))) errors.push(`"${quoted}" is not found in ${named.file}; quote its line word for word`);
+    const wanted = words(quoted);
+    if (wanted.split(" ").length < MIN_QUOTE_WORDS) errors.push(`"${quoted}" is too short to show the rule; quote at least ${MIN_QUOTE_WORDS} words of its line`);
+    else if (!existsSync(path)) errors.push(`"${quoted}": ${named.file} is not in the repo`);
+    else if (!new RegExp(`(?<!\\w)${escapeRegExp(wanted)}(?!\\w)`).test(words(readFileSync(path, "utf8"))))
+      errors.push(`"${quoted}" is not found in ${named.file}; quote its line word for word (a line holding straight quotes goes in curly quotes “…”)`);
   }
   if (ruleForced && quotes === 0) errors.push('is rule-forced but its Rule cell quotes no line: write `ADR nnnn: "<the line>"` (or docs/visibility.md, GLOSSARY.md, CLAUDE.md)');
   return errors;
@@ -113,15 +123,19 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
   const selector = /^`(.+)`$/.exec(part)?.[1];
   const lines = /^lines?\s+(\d+)(?:\s*[–-]\s*(\d+))?$/i.exec(part);
   const screenshot = /^screenshot\s+\d+$/i.test(part);
-  if (!selector && !lines && !screenshot) return [`cites "${part}" in ${file}; the part is a \`css selector\`, \`line N\` or \`screenshot N\``];
+  if (!selector && !lines && !screenshot) return [`cites "${part}" in ${file}; the part is ${PARTS}`];
+  const first = Number(lines?.[1] ?? 1);
+  const last = Number(lines?.[2] ?? first);
+  if (lines && (first < 1 || last < first)) return [`cites ${part} of ${file}; lines count from 1, the first before the last`];
   if (refs === undefined) return [];
-  const path = join(refs, file);
+  const path = resolve(refs, file);
+  if (relative(resolve(refs), path).startsWith("..")) return [`cites ${file}, outside ${refs}`];
   if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
   const content = readFileSync(path, "utf8");
-  if (selector && !content.includes(selector)) return [`\`${selector}\` is not in ${file}`];
+  // The whole selector of a CSS rule: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
+  if (selector && !new RegExp(`(?:^|[\\s{},;>])${escapeRegExp(selector)}\\s*[{,]`, "m").test(content)) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
   if (lines) {
     const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;
-    const last = Number(lines[2] ?? lines[1]);
     if (last > count) return [`cites line ${last} of ${file}, which has ${count} lines`];
   }
   return [];
@@ -129,10 +143,10 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
 
 /** Each problem in the file's gap tables, as `table t, row r: …`; empty when every row's citations hold. */
 export function checkGapTable(markdown: string, options: GapTableOptions): string[] {
-  const gapTables = tables(markdown).filter((table) => column(table.header, /reference source/i) >= 0);
+  const gapTables = tables(markdown).filter((table) => column(table.header, SOURCE_COLUMN) >= 0);
   if (gapTables.length === 0) return ["No gap table found: a gap table has the columns # | Element | Reference source | Built | Verdict | Proposal | Rule."];
   return gapTables.flatMap((table, t) => {
-    const source = column(table.header, /reference source/i);
+    const source = column(table.header, SOURCE_COLUMN);
     const verdict = column(table.header, /^verdict$/i);
     const rule = column(table.header, /^rule$/i);
     const number = column(table.header, /^#$/);
@@ -143,30 +157,55 @@ export function checkGapTable(markdown: string, options: GapTableOptions): strin
       const errors: string[] = [];
       const sourceCell = row[source] ?? "";
       if (sourceCell === "") errors.push(`has no reference source; cite ${SOURCE_FORMAT}`);
-      else for (const citation of sourceCell.split(/;(?=(?:[^`]*`[^`]*`)*[^`]*$)/)) errors.push(...citationErrors(citation.trim(), options.refs));
+      else {
+        const citations = sourceCell.split(/;(?=(?:[^`]*`[^`]*`)*[^`]*$)/).map((citation) => citation.trim());
+        for (const citation of citations.filter(Boolean)) errors.push(...citationErrors(citation, options.refs));
+      }
       const value = (row[verdict] ?? "").toLowerCase();
-      if (!(VERDICTS as readonly string[]).includes(value)) errors.push(`has verdict "${row[verdict] ?? ""}"; use ${VERDICTS.join(", ")}`);
+      if (!VERDICTS.includes(value)) errors.push(`has verdict "${row[verdict] ?? ""}"; use ${VERDICTS.join(", ")}`);
       errors.push(...ruleErrors(row[rule] ?? "", value === "rule-forced", options.repo));
       return errors.map((error) => `${at}: ${error}`);
     });
   });
 }
 
+/** The command line's table files and refs folder (`--refs <folder>` or `--refs=<folder>`, once), or what is wrong with it. */
+export function parseArgs(args: string[]): { files: string[]; refs: string | undefined } | { error: string } {
+  const files: string[] = [];
+  let refs: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg !== "--refs" && !arg.startsWith("--refs=")) {
+      files.push(arg);
+      continue;
+    }
+    const value = arg === "--refs" ? args[++i] : arg.slice("--refs=".length);
+    if (!value || value.startsWith("-")) return { error: "--refs needs the folder holding the owner's pages, such as D:\\Artifacts." };
+    if (refs !== undefined) return { error: "--refs is given twice; give one folder." };
+    refs = value;
+  }
+  return files.length === 0 ? { error: "No gap table given." } : { files, refs };
+}
+
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
-  const args = process.argv.slice(2);
-  const refsAt = args.indexOf("--refs");
-  const refs = refsAt < 0 ? undefined : args[refsAt + 1];
-  if (refsAt >= 0 && (!refs || refs.startsWith("-"))) {
-    console.error("--refs needs the folder the reference files are in, such as D:\\Artifacts.");
+  const parsed = parseArgs(process.argv.slice(2));
+  if ("error" in parsed) {
+    console.error(parsed.error);
+    console.error("Usage: node scripts/check-gap-table.ts <gap table .md>... [--refs <folder with the reference files>]");
     process.exit(2);
   }
-  const files = refsAt < 0 ? args : args.filter((_, i) => i !== refsAt && i !== refsAt + 1);
-  if (files.length === 0) {
-    console.error("Usage: node scripts/check-gap-table.ts <gap table .md>... [--refs <folder with the reference files>]");
+  const { files, refs } = parsed;
+  if (refs !== undefined && !existsSync(refs)) {
+    console.error(`--refs ${refs}: no such folder.`);
     process.exit(2);
   }
   let failed = false;
   for (const file of files) {
+    if (!existsSync(file)) {
+      console.error(`${file}: no such file.`);
+      failed = true;
+      continue;
+    }
     const errors = checkGapTable(readFileSync(file, "utf8"), { repo: process.cwd(), refs });
     if (errors.length === 0) {
       console.log(`${file}: every row cites its source${refs ? ` (checked in ${refs})` : " (shape only: pass --refs to check the reference files)"}.`);

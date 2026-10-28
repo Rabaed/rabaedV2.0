@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { checkGapTable } from "./check-gap-table.ts";
+import { checkGapTable, parseArgs } from "./check-gap-table.ts";
 
 // A throwaway repo with the rule sources a rule-forced row may quote, and an
 // owner reference folder (the owner's pages sit in D:\Artifacts, never in the repo).
@@ -17,7 +17,7 @@ function write(root: string, path: string, content: string) {
 beforeEach(() => {
   repo = mkdtempSync(join(tmpdir(), "rabaed-gap-repo-"));
   refs = mkdtempSync(join(tmpdir(), "rabaed-gap-refs-"));
-  write(repo, "docs/adr/0017-signed-transitions.md", "# Signed Transitions\n\nEvery Transition is signed by the\nUser who takes it.\n");
+  write(repo, "docs/adr/0017-signed-transitions.md", "# Signed Transitions\n\nEvery Transition is signed by the\nMember who takes it.\n");
   write(repo, "docs/visibility.md", "# Visibility\n\nV14. A Company never sees **another Company's** Work Items.\n");
   write(repo, "GLOSSARY.md", "**Step Age**:\nWeeks since the Step started, shown as 1–4+ dots.\n");
   write(repo, "CLAUDE.md", "- Rabaed shows no due dates, deadlines or SLAs: only Step Age.\n");
@@ -37,7 +37,7 @@ describe("checkGapTable", () => {
   it("passes a table whose rows cite their reference source and quote their rule", () => {
     const markdown = table(
       "| 1 | Selected Transition label | Rabaed Settings Workflows.html › `.wl.sel` | outlined | gap | fill it | |",
-      "| 2 | Signature on a Transition | Rabaed Settings Workflows.html › screenshot 3 | none | rule-forced | sign it | ADR 0017: \"Every Transition is signed by the User who takes it.\" |",
+      "| 2 | Signature on a Transition | Rabaed Settings Workflows.html › screenshot 3 | none | rule-forced | sign it | ADR 0017: \"Every Transition is signed by the Member who takes it.\" |",
       "| 3 | First Step chosen | Rabaed Settings Workflows.html › line 5 | yes | match | | |",
     );
     expect(check(markdown)).toEqual([]);
@@ -99,7 +99,7 @@ describe("checkGapTable", () => {
 
   it("matches a quote across line breaks, markdown emphasis and curly quotes", () => {
     const markdown = table(
-      "| 2 | Signature | Rabaed Settings Workflows.html › screenshot 3 | none | rule-forced | sign it | ADR 0017: “Every Transition is signed by the User” |",
+      "| 2 | Signature | Rabaed Settings Workflows.html › screenshot 3 | none | rule-forced | sign it | ADR 0017: “Every Transition is signed by the Member” |",
       "| 4 | Other Company's items | Rabaed Settings Workflows.html › screenshot 4 | shown | rule-forced | hide | docs/visibility.md V14: \"A Company never sees another Company’s Work Items.\" |",
       "| 5 | Due date chip | Rabaed Settings Workflows.html › screenshot 5 | shown | rule-forced | Step Age | CLAUDE.md: \"no due dates, deadlines or SLAs\"; GLOSSARY.md Step Age: \"shown as 1–4+ dots\" |",
     );
@@ -121,6 +121,53 @@ describe("checkGapTable", () => {
   it("refuses a CSS selector the reference file does not have: the RP-528 'outlined' claim", () => {
     const errors = check(table("| 1 | Label | Rabaed Settings Workflows.html › `.wl.outline` | outlined | match | | |"));
     expect(errors).toEqual([expect.stringMatching(/row 1.*`\.wl\.outline` is not in Rabaed Settings Workflows\.html/)]);
+  });
+
+  it("refuses a selector found only as the start of a longer one", () => {
+    write(refs, "b.css", ".wl.selected{color:red}\n");
+    const errors = check(table("| 1 | Label | b.css › `.wl.sel` | outlined | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*`\.wl\.sel` is not in b\.css/)]);
+  });
+
+  it("refuses a fragment of a selector: `.wl` alone is not the rule `.wl.sel{…}`", () => {
+    const errors = check(table("| 1 | Label | Rabaed Settings Workflows.html › `.wl` | outlined | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*`\.wl` is not in/)]);
+  });
+
+  it("refuses line 0 and a range whose first line is after its last", () => {
+    const errors = check(table("| 1 | A | Rabaed Settings Workflows.html › line 0 | x | match | | |", "| 2 | B | Rabaed Settings Workflows.html › lines 400–2 | x | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*count from 1/), expect.stringMatching(/row 2.*count from 1/)]);
+  });
+
+  it("refuses a reference file outside the refs folder", () => {
+    write(refs, "../outside.html", "a\n");
+    const errors = check(table("| 1 | A | ../outside.html › line 1 | x | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*outside/)]);
+  });
+
+  it("ignores a trailing semicolon in the source cell", () => {
+    expect(check(table("| 1 | A | Rabaed Settings Workflows.html › screenshot 1; | x | match | | |"))).toEqual([]);
+  });
+
+  it("reads a table whose separator has one dash per column", () => {
+    const markdown = "| # | Element | Reference source | Built | Verdict | Proposal | Rule |\n|-|-|-|-|-|-|-|\n| 1 | A | | x | gap | | |\n";
+    expect(check(markdown)).toEqual([expect.stringMatching(/row 1.*no reference source/)]);
+  });
+
+  it("refuses a quote too short to show the rule", () => {
+    const errors = check(table("| 5 | Due date | Rabaed Settings Workflows.html › screenshot 5 | shown | rule-forced | Step Age | CLAUDE.md: \"no due\" |"));
+    expect(errors).toEqual([expect.stringMatching(/row 5.*too short/)]);
+  });
+
+  it("refuses a quote that only matches inside longer words", () => {
+    const errors = check(table("| 2 | Signature | Rabaed Settings Workflows.html › screenshot 3 | none | rule-forced | sign it | ADR 0017: \"very Transition is sign\" |"));
+    expect(errors).toEqual([expect.stringMatching(/row 2.*not found/)]);
+  });
+
+  it("matches a quote across markdown underscores, as GLOSSARY.md's _Avoid_ lines", () => {
+    write(repo, "GLOSSARY.md", "**Member**:\nA person.\n_Avoid_: account holder, person\n");
+    const markdown = table("| 1 | A | Rabaed Settings Workflows.html › screenshot 1 | x | rule-forced | y | GLOSSARY.md Member: \"Avoid: account holder, person\" |");
+    expect(check(markdown)).toEqual([]);
   });
 
   it("refuses a line past the reference file's end", () => {
@@ -158,5 +205,19 @@ describe("checkGapTable", () => {
   it("checks every gap table in the file and names each row's table", () => {
     const markdown = `${table("| 1 | A | Rabaed Settings Workflows.html › screenshot 1 | x | match | | |")}\n## Drawer\n\n${header}| 1 | B | | x | gap | | |\n`;
     expect(check(markdown)).toEqual([expect.stringMatching(/table 2, row 1/)]);
+  });
+});
+
+describe("parseArgs", () => {
+  it("reads the files and --refs in either form", () => {
+    expect(parseArgs(["a.md", "--refs", "D:\\Artifacts", "b.md"])).toEqual({ files: ["a.md", "b.md"], refs: "D:\\Artifacts" });
+    expect(parseArgs(["--refs=D:\\Artifacts", "a.md"])).toEqual({ files: ["a.md"], refs: "D:\\Artifacts" });
+    expect(parseArgs(["a.md"])).toEqual({ files: ["a.md"], refs: undefined });
+  });
+
+  it("refuses --refs with no folder, --refs twice, and no file", () => {
+    expect(parseArgs(["a.md", "--refs"])).toEqual({ error: expect.stringMatching(/needs the folder/) });
+    expect(parseArgs(["--refs", "x", "--refs=y", "a.md"])).toEqual({ error: expect.stringMatching(/twice/) });
+    expect(parseArgs(["--refs", "x"])).toEqual({ error: expect.stringMatching(/No gap table given/) });
   });
 });

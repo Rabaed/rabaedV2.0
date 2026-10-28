@@ -7,7 +7,7 @@ Only rule-forced deviations are made without asking. Everything else is built as
 ## The steps
 
 1. **Reference.** Open the owner's page and say which one the ticket builds from.
-2. **Render every state.** Render the page with Playwright to text and full-page screenshots, one per state (each tab, menu, selection, empty and error state). Number them: `screenshot 1`, `screenshot 2`, … The numbers are what the gap table cites.
+2. **Screenshot every view.** Render the page with Playwright to text and full-page screenshots, one for each way the page can look (each tab, open menu, selection, empty page and error). Number them: `screenshot 1`, `screenshot 2`, … The numbers are what the gap table cites.
 3. **Gap table.** One row per element of the reference, in the format below. Run `node scripts/check-gap-table.ts <file> --refs <folder with the reference files>`; it must pass before the table goes to the owner.
 4. **Owner's answers.** The owner approves the table and answers its `question` rows. The answers go into the table.
 5. **Build** to the approved table (`/mattpocock-skills:implement`).
@@ -28,6 +28,6 @@ Only rule-forced deviations are made without asking. Everything else is built as
 - **Verdict:** `match`, `gap`, `rule-forced` or `question`.
 - **Rule:** a `rule-forced` row quotes the line that forces it, word for word, after the file it comes from: `ADR nnnn: "…"`, `docs/visibility.md V14: "…"`, `GLOSSARY.md <term>: "…"` or `CLAUDE.md: "…"`. Spec RP-528's table read ADR 0017 as "no signatures" where it says every Transition is signed; a quote makes that misreading visible.
 
-`scripts/check-gap-table.ts` checks every row: a citation of the right shape, a known verdict, and each quote found in the repo file it names. With `--refs`, it also checks that each cited file is in that folder, that each selector is in the file and that each line exists. It can't check that a screenshot shows what the row says; the reviewer does.
+`scripts/check-gap-table.ts` checks every row: a citation of the right shape, a known verdict, and each quote (three words or more; a line holding straight quotes goes in curly quotes “…”) found word for word in the repo file it names. With `--refs`, it also checks that each cited file is in that folder, that each selector is a whole CSS rule's selector there (`.wl.sel` is not found in `.wl.selected{…}`) and that each line exists. It can't check that a screenshot shows what the row says, that a quote comes from the rule the label names (V14, a glossary term), or that the cited source says what the row claims; the reviewer does.
 
 Gap tables live in the session's notes (its scratchpad or the shared notes folder), not in the repo. The PR body says the table passed and where it is.
