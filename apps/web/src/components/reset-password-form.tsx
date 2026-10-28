@@ -44,9 +44,12 @@ export function ResetPasswordForm() {
 
   // The fragment exists only in the browser, so read it after hydration; then take it out of the
   // address bar, so the token isn't left in the browser's history.
+  // A second run (React's development double run) finds the hash gone and keeps the token read first.
   useEffect(() => {
-    setToken(tokenFromHash());
-    if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    const found = tokenFromHash();
+    if (!found) return setToken((read) => (read === undefined ? null : read));
+    setToken(found);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
