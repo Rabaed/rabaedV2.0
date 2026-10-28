@@ -30,7 +30,7 @@ const labels = {
   revision: (n: string) => `R${n}`,
 };
 const filters = { outcomes: [], locations: [] };
-const headerOf = (key: string) => ({ documentNumber: "Submittal No.", subject: "Title", revision: "Rev", owner: "Current owner", created: "Created" })[key] ?? key;
+const headerOf = (key: string) => ({ documentNumber: "Submittal No.", subject: "Title", revision: "Rev", owner: "With", created: "Created" })[key] ?? key;
 const context = (locale: "en" | "ar") => ({ locale, labels, filters, headerOf, name: "Submittals" });
 const only = (...keys: string[]) => defaultListColumns.map((c) => ({ ...c, shown: keys.includes(c.key) }));
 const whole = { typeName: "Work Item Type", location: "Location", creationDate: "Creation Date", submissionDate: "Submission Date", project: "Project" };
@@ -41,7 +41,7 @@ describe("Export (RP-409)", () => {
     expect(file.name).toBe("Submittals.csv");
     expect(file.type).toBe("text/csv;charset=utf-8");
     expect(file.content).toBe(
-      '﻿"Submittal No.","Title","Rev","Current owner"\r\n"TWR-MAR-0003","Cable ""tray"", galvanised","R1","Design Consultants"\r\n',
+      '﻿"Submittal No.","Title","Rev","With"\r\n"TWR-MAR-0003","Cable ""tray"", galvanised","R1","Design Consultants"\r\n',
     );
   });
 

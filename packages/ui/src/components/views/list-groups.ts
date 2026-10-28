@@ -2,7 +2,7 @@ import type { Locale, WorkItemList as WorkItemListData, WorkItemRow } from "@rab
 import { ownerOf, placesOf } from "./work-item-board.tsx";
 import { cellText, type CellTextLabels } from "./work-item-table.tsx";
 
-/** What the List's rows can be grouped by (RP-409, the owner's design): Status, Discipline, Type, Current owner, Zone, Code. */
+/** What the List's rows can be grouped by (RP-409, the owner's design): Status, Discipline, Type, With, Zone, Code. */
 export const listGroupings = ["stage", "trade", "type", "owner", "locationLevel1", "outcome"] as const;
 export type ListGrouping = (typeof listGroupings)[number];
 

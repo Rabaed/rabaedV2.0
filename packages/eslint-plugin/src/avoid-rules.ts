@@ -129,7 +129,7 @@ const allowedInNames: string[] = [
  * Messages (apps/web/messages/*.json) whose text may keep an Avoid word, by key path: a one-word label can't be
  * narrowed to a phrase. Each says why.
  */
-const allowedMessages: Record<string, string> = {
+export const allowedMessages: Record<string, string> = {
   "members.name": "a Member's name column; Subject replaces name only for a Work Item",
   "members.status": "a Member's active or deactivated column, not a Stage or a Review Code",
   "members.search": "owner's kit (2026-10-10): the Members search box reads \"Search by name or email\"",
