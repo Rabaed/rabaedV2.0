@@ -8,7 +8,7 @@ const route = (position: Parameters<typeof submittalRoute>[0]["position"]) => su
 const states = (r: ReturnType<typeof submittalRoute>) => r.stops.map((s) => `${s.role}:${s.state}`);
 
 describe("the route strip's stops (RP-1064, README §4.4)", () => {
-  it("runs by Project Role, each Company's Steps one stop, back to the raiser for the result", () => {
+  it("runs by Project Role, each Company's Steps one stop, back to the raiser for the outcome", () => {
     const r = route(null);
     expect(r.stops.map((s) => s.role)).toEqual(["contractor", "consultant", "owner", "contractor"]);
     expect(r.stops.map((s) => s.stepKeys)).toEqual([
@@ -37,7 +37,7 @@ describe("the route strip's stops (RP-1064, README §4.4)", () => {
   });
 
   it("reads 'Owner review' where the API gives it in the Company's place (ADR 0022)", () => {
-    const ownerReview = { en: "Owner review", ar: "مراجعة المالك" };
+    const ownerReview = name("Owner review");
     const r = route({ kind: "company", role: "owner", companyName: ownerReview });
     expect(states(r)).toEqual(["contractor:done", "consultant:done", "owner:current", "contractor:upcoming"]);
     expect(r.stops[2]!.companyName).toEqual(ownerReview);
@@ -52,7 +52,7 @@ describe("the route strip's stops (RP-1064, README §4.4)", () => {
     expect(route(null).stops.every((s) => s.state === "upcoming")).toBe(true);
   });
 
-  it("adds no result stop when the route already ends with the raiser (a Snag's verify Step)", () => {
+  it("adds no closing stop when the route already ends with the raiser (a Snag's verify Step)", () => {
     const step = (key: string, role: "contractor" | "consultant" | null): WorkflowStep => ({ key, name: name(key), stage: role ? "internal_review" : "approved", actor: role ? { role, permission: "review" } : null, outcomeMode: "none" });
     const move = (key: string, kind: WorkflowTransition["kind"], from: string, to: string): WorkflowTransition => ({ key, label: name(key), kind, from, to, outcome: null, permission: "review", actionForm: null });
     const snag: WorkflowDefinition = {

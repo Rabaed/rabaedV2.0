@@ -1,3 +1,5 @@
+"use client";
+
 import { formatNumber, type BaseRole, type Locale } from "@rabaed/domain";
 import type { CSSProperties } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -16,14 +18,14 @@ export type SubmittalRouteLabels = {
   route: string;
   /** A stop's state for assistive technology, e.g. "done". */
   state: (state: RouteStopState) => string;
-  /** The large strip's line on the last stop, where the raiser receives the result. */
-  result: string;
+  /** The large strip's line on the last stop, where the raiser receives the outcome. */
+  outcome: string;
   /** The large strip's line on any other stop, e.g. "3 Steps". */
   steps: (count: number, formatted: string) => string;
 };
 
 /** A Project Role's icon and colours (README §4.4: Contractor orange, Consultant blue, Owner green), from the DS's semantic tones. */
-const party: Record<BaseRole, { icon: IconName; tint: string; fg: string }> = {
+const roleLook: Record<BaseRole, { icon: IconName; tint: string; fg: string }> = {
   contractor: { icon: "crane", tint: "var(--trade-su-bg)", fg: "var(--trade-su-fg)" },
   consultant: { icon: "ruler", tint: "var(--info-tint)", fg: "var(--info-fg)" },
   owner: { icon: "building", tint: "var(--success-tint)", fg: "var(--success-fg)" },
@@ -31,12 +33,12 @@ const party: Record<BaseRole, { icon: IconName; tint: string; fg: string }> = {
 };
 
 /** A Project Role's icon tile. */
-export function PartyIcon({ role, size = 24, className }: { role: BaseRole; size?: number; className?: string }) {
-  const look = party[role];
+export function RoleIcon({ role, size = 24, className }: { role: BaseRole; size?: number; className?: string }) {
+  const look = roleLook[role];
   return (
     <span
       aria-hidden="true"
-      className={cn("sdp-party inline-flex shrink-0 items-center justify-center rounded-[7px]", className)}
+      className={cn("sdp-role inline-flex shrink-0 items-center justify-center rounded-[7px]", className)}
       style={{ width: size, height: size, background: look.tint, color: look.fg } satisfies CSSProperties}
     >
       <Icon name={look.icon} size={Math.round(size * 0.56)} />
@@ -73,11 +75,11 @@ export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = fal
             "sdp-stop flex min-w-0 items-center gap-1.5 rounded-[9px]",
             large ? "py-1.5 ps-1.5 pe-3 text-[13.5px]" : "py-[3px] ps-[3px] pe-2 text-[12px]",
             // The design fades an upcoming stop to 55%; its text keeps the contrast it needs in the muted colour, and only its icon fades.
-            stop.state === "upcoming" && "text-muted [&_.sdp-party]:opacity-55",
+            stop.state === "upcoming" && "text-muted [&_.sdp-role]:opacity-55",
             stop.state === "current" && "bg-surface shadow-[0_0_0_1.5px_var(--brand),0_1px_3px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
           )}
         >
-          <PartyIcon role={stop.role} size={large ? 32 : 24} />
+          <RoleIcon role={stop.role} size={large ? 32 : 24} />
           <span className="min-w-0">
             <b className="block leading-tight font-semibold">{labels.role(stop.role)}</b>
             {line && <small className="block text-[11px] leading-tight font-medium text-muted">{line}</small>}
@@ -113,6 +115,6 @@ export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = fal
 /** The large strip's line under a stop: who holds it, or what it is. */
 function stopLine(stop: RouteStop, labels: SubmittalRouteLabels, locale: Locale): string {
   if (stop.companyName) return labels.withCompany(stop.companyName[locale]);
-  if (stop.stepKeys.length === 0) return labels.result;
+  if (stop.stepKeys.length === 0) return labels.outcome;
   return labels.steps(stop.stepKeys.length, formatNumber(stop.stepKeys.length, locale));
 }

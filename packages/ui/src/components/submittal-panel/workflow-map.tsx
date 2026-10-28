@@ -7,7 +7,7 @@ import { buttonVariants } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Dialog, DialogContent } from "../overlay/dialog.tsx";
 import { submittalRoute } from "./route-model.ts";
-import { PartyIcon, SubmittalRouteStrip, type SubmittalRouteLabels } from "./route-strip.tsx";
+import { RoleIcon, SubmittalRouteStrip, type SubmittalRouteLabels } from "./route-strip.tsx";
 
 /** The Workflow map's words, beside the route strip's. */
 export type SubmittalWorkflowMapLabels = SubmittalRouteLabels & {
@@ -103,7 +103,7 @@ export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, 
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <PartyIcon role={s.role} size={30} />
+                          <RoleIcon role={s.role} size={30} />
                           <span className="min-w-0 flex-1">
                             <small className="block text-[11px] text-muted">{labels.step(n(s.number), labels.role(s.role))}</small>
                             <b className="block text-[13.5px] leading-tight">{s.step.name[locale]}</b>

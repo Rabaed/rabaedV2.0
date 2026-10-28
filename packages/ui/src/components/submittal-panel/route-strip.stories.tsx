@@ -25,7 +25,7 @@ const copy = {
   with: { en: "With", ar: "لدى" },
   open: { en: "View the Workflow", ar: "عرض سير العمل" },
   route: { en: "Route", ar: "المسار" },
-  result: { en: "Receives the result", ar: "يستلم النتيجة" },
+  outcome: { en: "Receives the outcome", ar: "يستلم النتيجة" },
   step: { en: "Step", ar: "الخطوة" },
   steps: { en: "Steps", ar: "خطوات" },
   title: { en: "Workflow", ar: "سير العمل" },
@@ -44,7 +44,7 @@ const labels = (locale: Locale): SubmittalWorkflowMapLabels => ({
   open: copy.open[locale],
   route: copy.route[locale],
   state: (state) => copy.states[state][locale],
-  result: copy.result[locale],
+  outcome: copy.outcome[locale],
   steps: (count, formatted) => (count === 1 ? `1 ${copy.step[locale]}` : `${formatted} ${copy.steps[locale]}`),
   title: copy.title[locale],
   version: (name, version) => `${name} · ${copy.version[locale]} ${version}`,
@@ -175,7 +175,7 @@ export const WithOwnerReview: Story = {
   },
 };
 
-/** Closed: every stop done, the last one current, where the raiser receives the result. */
+/** Closed: every stop done, the last one current, where the raiser receives the outcome. */
 export const Closed: Story = {
   args: { position: { kind: "closed", stepKey: "rejected" } },
   play: async (context) => {

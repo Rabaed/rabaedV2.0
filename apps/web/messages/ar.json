@@ -1280,6 +1280,26 @@
     "notFound": "لم يعد هذا البند متاحًا لك.",
     "unavailable": "لم ينجح ذلك. حاول مرة أخرى."
   },
+  "submittalRoute": {
+    "open": "عرض سير العمل",
+    "route": "المسار",
+    "withCompany": "لدى {company}",
+    "states": {
+      "done": "منجزة",
+      "current": "الحالية",
+      "upcoming": "قادمة"
+    },
+    "outcome": "يستلم النتيجة",
+    "steps": "{count, plural, one {خطوة واحدة} two {خطوتان} few {{n} خطوات} many {{n} خطوة} other {{n} خطوة}}",
+    "title": "سير العمل",
+    "version": "{name} · الإصدار {version}",
+    "step": "الخطوة {n} · {role}",
+    "youAreHere": "أنت هنا",
+    "happens": "ما يحدث هنا",
+    "newOnly": "تنطبق التغييرات على التقديمات الجديدة فقط.",
+    "openSettings": "فتح في إعدادات سير العمل",
+    "close": "إغلاق"
+  },
   "workflowMap": {
     "line": "سير العمل: {name} · الإصدار {version}",
     "view": "عرض سير العمل",

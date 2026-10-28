@@ -4,7 +4,7 @@ import { actorRole, type BaseRole, type BilingualText, type StageCategory, type 
 // ADR 0016 and 0022), worked out apart from React so it can be tested.
 //
 // The route runs by Project Role: each Company's Steps in a row are one stop, e.g. Contractor →
-// Consultant → Owner → Contractor, the last stop the raiser receiving the result. Where the item
+// Consultant → Owner → Contractor, the last stop the raiser receiving the outcome. Where the item
 // is comes only from the API's `position` (`GET /v1/work-items/:id/workflow`): inside the viewer's
 // own Participant, its Step; with another Participant, only that Participant's role and the name
 // the API gives ("Owner review" to the Contractor at an Owner review it isn't part of, ADR 0022).
@@ -15,7 +15,7 @@ export type RouteStopState = "done" | "current" | "upcoming";
 
 export type RouteStop = {
   role: BaseRole;
-  /** Its Steps, in route order; none on the closing stop, where the raiser receives the result. */
+  /** Its Steps, in route order; none on the closing stop, where the raiser receives the outcome. */
   stepKeys: string[];
   state: RouteStopState;
   /** On the stop another Company holds the item at: that Company as the API names it. Null on every other stop. */
@@ -98,7 +98,7 @@ export function submittalRoute({ definition, stages, position }: SubmittalRouteI
     else stops.push({ role, stepKeys: [key] });
   }
 
-  // The result goes back to the raiser, unless its own Step already ends the route.
+  // The outcome goes back to the raiser, unless its own Step already ends the route.
   const raiserRole = roleOf.get(start.key)!;
   if (stops.at(-1)!.role !== raiserRole) stops.push({ role: raiserRole, stepKeys: [] });
 
