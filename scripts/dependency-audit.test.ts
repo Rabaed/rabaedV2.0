@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { workflowCommands, parseAllowlist, parseAudit, report, summary } from "./dependency-audit.ts";
+import { parseAllowlist, parseAudit, report, summary, workflowCommands } from "./dependency-audit.ts";
 
 // RP-1023: `pnpm audit --prod` in CI, reporting first. RP-635 checked a new
 // library by hand, and the audit then showed 7 findings (2 high, in apps/web's
@@ -79,6 +79,10 @@ describe("parseAllowlist", () => {
     expect(parseAllowlist(undefined)).toEqual([]);
   });
 
+  it("reads a file saved with a byte-order mark, as some Windows editors and PowerShell 5.1 write it", () => {
+    expect(parseAllowlist(`\uFEFF${JSON.stringify({ advisories: [] })}`)).toEqual([]);
+  });
+
   it("refuses an entry without a reason or a real review date, naming the entry", () => {
     const entries = (...advisories: unknown[]) => JSON.stringify({ advisories });
     expect(() => parseAllowlist("{")).toThrow(".audit-allowlist.json is not JSON");
@@ -151,13 +155,13 @@ describe("workflowCommands", () => {
 });
 
 // RP-1032: the allow-list, and the failing exit. Dates are fixed: "today" is the run's UTC date.
-const on = "2026-10-28";
+const runDate = "2026-10-28";
 const allowlist = (...advisories: { id: string; reason?: string; review?: string }[]) =>
   JSON.stringify({ advisories: advisories.map((a) => ({ reason: "No patched release fits yet.", review: "2026-12-01", ...a })) });
 
 describe("report", () => {
   it("fails on an advisory at the level that the allow-list does not name, still writing the table", () => {
-    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1241209" }), today: on });
+    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1241209" }), today: runDate });
     expect(result.exitCode).toBe(1);
     expect(result.summary).toContain("## Package audit failed: 1 at high or above, not allow-listed");
     expect(result.summary).toContain("| high | next | [Next.js has Server-Side Request Forgery in Image Optimization](https://github.com/advisories/GHSA-1241496) | >=16.3.8 | apps/web › next |");
@@ -165,32 +169,46 @@ describe("report", () => {
   });
 
   it("fails with no allow-list file at all", () => {
-    const result = report(today, "high", { allowlist: undefined, today: on });
+    const result = report(today, "high", { allowlist: undefined, today: runDate });
     expect(result.exitCode).toBe(1);
     expect(result.summary).toContain("## Package audit failed: 2 at high or above, not allow-listed");
     expect(result.lines).toHaveLength(2);
   });
 
   it("passes when every advisory at the level is allow-listed, and tables those with their reason and review date", () => {
-    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1241496", reason: "Next 16.4 | breaks the build." }, { id: "GHSA-1241209" }), today: on });
+    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1241496", reason: "Next 16.4 | breaks the build." }, { id: "GHSA-1241209" }), today: runDate });
     expect(result.exitCode).toBe(0);
     expect(result.lines).toEqual([]);
     expect(result.summary).toContain("## Package audit: nothing at high or above outside the allow-list");
     const listed = result.summary.slice(result.summary.indexOf("### Allow-listed"));
     expect(listed).toContain("### Allow-listed: 2");
-    expect(listed).toContain("| Severity | Package | Advisory | Reason | Review by |");
-    expect(listed).toContain("| high | next | [Next.js has Server-Side Request Forgery in Image Optimization](https://github.com/advisories/GHSA-1241496) | Next 16.4 \\| breaks the build. | 2026-12-01 |");
+    expect(listed).toContain("| Severity | Package | Advisory | Reason | Review by | Paths |");
+    expect(listed).toContain("| high | next | [Next.js has Server-Side Request Forgery in Image Optimization](https://github.com/advisories/GHSA-1241496) | Next 16.4 \\| breaks the build. | 2026-12-01 | apps/web › next |");
     expect(result.summary.slice(result.summary.indexOf("<details>"))).not.toContain("| high |");
+  });
+
+  it("says 'outside the allow-list' only when a listed advisory reaches the level", () => {
+    const below = auditOf(advisory(1, "moderate", "x", "t", ["apps__api>x"]));
+    const result = report(below, "high", { allowlist: allowlist({ id: "GHSA-1" }), today: runDate });
+    expect(result.summary.split("\n")[0]).toBe("## Package audit: nothing at high or above");
+    expect(result.summary).toContain("### Allow-listed: 1");
+  });
+
+  it("allow-lists an advisory with no GitHub id by pnpm's own number", () => {
+    const { github_advisory_id: _, ...npmOnly } = advisory(7, "high", "x", "t", ["apps__api>x"]);
+    const result = report(auditOf(npmOnly as ReturnType<typeof advisory>), "high", { allowlist: allowlist({ id: "7" }), today: runDate });
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toContain("### Allow-listed: 1");
   });
 
   it("passes with findings below the level only", () => {
     const below = auditOf(advisory(1, "moderate", "x", "t", ["apps__api>x"]));
-    expect(report(below, "high", { allowlist: undefined, today: on }).exitCode).toBe(0);
-    expect(report(clean, "high", { allowlist: undefined, today: on }).exitCode).toBe(0);
+    expect(report(below, "high", { allowlist: undefined, today: runDate }).exitCode).toBe(0);
+    expect(report(clean, "high", { allowlist: undefined, today: runDate }).exitCode).toBe(0);
   });
 
   it("names an entry past its review date, in the summary and as a warning, and still skips its advisory", () => {
-    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1241496", review: "2026-10-27" }, { id: "GHSA-1241209", review: on }), today: on });
+    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1241496", review: "2026-10-27" }, { id: "GHSA-1241209", review: runDate }), today: runDate });
     expect(result.exitCode).toBe(0);
     expect(result.summary).toContain("**Review date passed:** `GHSA-1241496` (review by 2026-10-27). Fix it, or give it a new reason and review date.");
     expect(result.summary).not.toContain("`GHSA-1241209` (review by");
@@ -198,21 +216,21 @@ describe("report", () => {
   });
 
   it("names an entry the audit no longer finds, so the allow-list does not keep it forever", () => {
-    const result = report(clean, "high", { allowlist: allowlist({ id: "GHSA-9" }), today: on });
+    const result = report(clean, "high", { allowlist: allowlist({ id: "GHSA-9" }), today: runDate });
     expect(result.exitCode).toBe(0);
     expect(result.summary).toContain("**No longer found:** `GHSA-9`. Remove it from `.audit-allowlist.json`.");
     expect(result.lines).toEqual(["::warning title=pnpm audit%3A allow-list::GHSA-9 is no longer found. Remove it from .audit-allowlist.json."]);
   });
 
   it("fails on a malformed allow-list, as when the audit could not run", () => {
-    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1", review: "soon" }), today: on });
+    const result = report(today, "high", { allowlist: allowlist({ id: "GHSA-1", review: "soon" }), today: runDate });
     expect(result.exitCode).toBe(1);
     expect(result.summary).toContain("## Package audit could not run");
     expect(result.summary).toContain(".audit-allowlist.json entry 1 (GHSA-1) needs");
   });
 
   it("fails when the audit could not run, with the reason in the summary and an error line", () => {
-    const result = report(JSON.stringify({ error: { code: "ENOTFOUND", message: "registry <b>down</b> | now" } }), "high", { allowlist: undefined, today: on });
+    const result = report(JSON.stringify({ error: { code: "ENOTFOUND", message: "registry <b>down</b> | now" } }), "high", { allowlist: undefined, today: runDate });
     expect(result.exitCode).toBe(1);
     expect(result.summary).toContain("## Package audit could not run");
     expect(result.summary).toContain("pnpm audit failed: ENOTFOUND registry &lt;b>down&lt;/b> \\| now");

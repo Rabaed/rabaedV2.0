@@ -121,7 +121,8 @@ export function parseAllowlist(text: string | undefined): AllowEntry[] {
   if (text === undefined) return [];
   let json: unknown;
   try {
-    json = JSON.parse(text);
+    // A byte-order mark, as PowerShell 5.1 and some Windows editors save UTF-8, is not part of the JSON.
+    json = JSON.parse(text.replace(/^\uFEFF/, ""));
   } catch {
     throw new Error(`${ALLOWLIST} is not JSON.`);
   }
@@ -147,31 +148,33 @@ export interface Allowance {
 
 const noAllowance: Allowance = { entries: [], today: "" };
 
-interface Sorted {
+interface Classified {
   /** At the level or above, and not allow-listed: these fail the job. */
   failing: Advisory[];
   allowed: { advisory: Advisory; entry: AllowEntry }[];
   /** Below the level, and not allow-listed. */
   below: Advisory[];
   /** Entries whose review date has passed. */
-  expired: AllowEntry[];
+  pastReview: AllowEntry[];
   /** Entries the audit no longer finds. */
-  unused: AllowEntry[];
+  notFound: AllowEntry[];
 }
 
-function sortAdvisories(audit: Audit, level: Severity, { entries, today }: Allowance): Sorted {
+const atLevel = (advisory: Advisory, level: Severity) => rank(advisory.severity) <= rank(level);
+
+function classify(audit: Audit, level: Severity, { entries, today }: Allowance): Classified {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
-  const sorted: Sorted = { failing: [], allowed: [], below: [], expired: [], unused: [] };
+  const classified: Classified = { failing: [], allowed: [], below: [], pastReview: [], notFound: [] };
   for (const advisory of audit.advisories) {
     const entry = byId.get(advisory.id);
-    if (entry) sorted.allowed.push({ advisory, entry });
-    else if (rank(advisory.severity) <= rank(level)) sorted.failing.push(advisory);
-    else sorted.below.push(advisory);
+    if (entry) classified.allowed.push({ advisory, entry });
+    else if (atLevel(advisory, level)) classified.failing.push(advisory);
+    else classified.below.push(advisory);
   }
   const found = new Set(audit.advisories.map((a) => a.id));
-  sorted.unused = entries.filter((entry) => !found.has(entry.id));
-  sorted.expired = entries.filter((entry) => found.has(entry.id) && entry.review < today);
-  return sorted;
+  classified.notFound = entries.filter((entry) => !found.has(entry.id));
+  classified.pastReview = entries.filter((entry) => found.has(entry.id) && entry.review < today);
+  return classified;
 }
 
 /** Registry text in a Markdown table cell: one line, no column break, no link or HTML syntax. */
@@ -190,33 +193,36 @@ function advisoryLink(advisory: Advisory): string {
   return `[${tableCell(advisory.title)}](${url})`;
 }
 
+const pathsCell = (advisory: Advisory) => advisory.paths.map(tableCell).join("<br>");
+
 const table = (advisories: Advisory[]) => [
   "| Severity | Package | Advisory | Patched | Paths |",
   "| --- | --- | --- | --- | --- |",
-  ...advisories.map((a) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(a.patched)} | ${a.paths.map(tableCell).join("<br>")} |`),
+  ...advisories.map((a) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(a.patched)} | ${pathsCell(a)} |`),
 ];
 
-const allowedTable = (allowed: Sorted["allowed"]) => [
-  "| Severity | Package | Advisory | Reason | Review by |",
-  "| --- | --- | --- | --- | --- |",
-  ...allowed.map(({ advisory: a, entry }) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(entry.reason)} | ${entry.review} |`),
+/** Paths too: one GitHub advisory can come as two pnpm advisories (two version ranges), and the paths tell the rows apart. */
+const allowedTable = (allowed: Classified["allowed"]) => [
+  "| Severity | Package | Advisory | Reason | Review by | Paths |",
+  "| --- | --- | --- | --- | --- | --- |",
+  ...allowed.map(({ advisory: a, entry }) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(entry.reason)} | ${entry.review} | ${pathsCell(a)} |`),
 ];
 
 /** The job summary: counts, a table of the failing findings, the allow-listed ones, and the rest in a closed section. */
 export function summary(audit: Audit, level: Severity, allowance: Allowance = noAllowance): string {
-  const { failing, allowed, below, expired, unused } = sortAdvisories(audit, level, allowance);
+  const { failing, allowed, below, pastReview, notFound } = classify(audit, level, allowance);
   const counts = SEVERITIES.filter((s) => audit.counts[s]).map((s) => `${audit.counts[s]} ${s}`);
   const lines = [
     failing.length > 0
       ? `## Package audit failed: ${failing.length} at ${level} or above, not allow-listed`
-      : `## Package audit: nothing at ${level} or above${allowed.length > 0 ? " outside the allow-list" : ""}`,
+      : `## Package audit: nothing at ${level} or above${allowed.some(({ advisory }) => atLevel(advisory, level)) ? " outside the allow-list" : ""}`,
     "",
     `\`pnpm audit --prod\`: ${counts.length > 0 ? counts.join(", ") : "no findings"} in ${audit.packages} production packages.`,
     "",
   ];
   if (failing.length > 0) lines.push(...table(failing), "");
-  for (const entry of expired) lines.push(`**Review date passed:** \`${entry.id}\` (review by ${entry.review}). Fix it, or give it a new reason and review date.`, "");
-  for (const entry of unused) lines.push(`**No longer found:** \`${entry.id}\`. Remove it from \`${ALLOWLIST}\`.`, "");
+  for (const entry of pastReview) lines.push(`**Review date passed:** \`${entry.id}\` (review by ${entry.review}). Fix it, or give it a new reason and review date.`, "");
+  for (const entry of notFound) lines.push(`**No longer found:** \`${entry.id}\`. Remove it from \`${ALLOWLIST}\`.`, "");
   if (allowed.length > 0) lines.push(`### Allow-listed: ${allowed.length}`, "", ...allowedTable(allowed), "");
   if (below.length > 0) lines.push("<details>", `<summary>${below.length} below ${level}</summary>`, "", ...table(below), "", "</details>", "");
   lines.push(
@@ -232,11 +238,11 @@ const allowlistWarning = (message: string) => `::warning title=${commandProperty
 
 /** Workflow commands shown on the run and the pull request's checks: an error per failing advisory, a warning per stale allow-list entry. */
 export function workflowCommands(audit: Audit, level: Severity, allowance: Allowance = noAllowance): string[] {
-  const { failing, expired, unused } = sortAdvisories(audit, level, allowance);
+  const { failing, pastReview, notFound } = classify(audit, level, allowance);
   return [
     ...failing.map((a) => `::error title=${commandProperty(`pnpm audit: ${a.severity} in ${a.module}`)}::${commandData(`${a.title}. Patched: ${a.patched}. Path: ${a.paths.join("; ")}. ${a.url}`)}`),
-    ...expired.map((entry) => allowlistWarning(`${entry.id} was to be reviewed by ${entry.review}. Fix it, or give it a new reason and review date in ${ALLOWLIST}.`)),
-    ...unused.map((entry) => allowlistWarning(`${entry.id} is no longer found. Remove it from ${ALLOWLIST}.`)),
+    ...pastReview.map((entry) => allowlistWarning(`${entry.id} was to be reviewed by ${entry.review}. Fix it, or give it a new reason and review date in ${ALLOWLIST}.`)),
+    ...notFound.map((entry) => allowlistWarning(`${entry.id} is no longer found. Remove it from ${ALLOWLIST}.`)),
   ];
 }
 
@@ -267,7 +273,7 @@ export function report(output: string, level: Severity, { allowlist, today }: { 
     return couldNotRun(message(error), `Fix \`${ALLOWLIST}\`; this is not a clean audit.`);
   }
   const allowance = { entries, today };
-  const failing = sortAdvisories(audit, level, allowance).failing.length > 0;
+  const failing = classify(audit, level, allowance).failing.length > 0;
   return { summary: summary(audit, level, allowance), lines: workflowCommands(audit, level, allowance), exitCode: failing ? 1 : 0 };
 }
 
