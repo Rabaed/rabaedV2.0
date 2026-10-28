@@ -1,10 +1,11 @@
 import { formSchema, type DocumentSummary } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { formRendererLabels } from "../../storybook/form-engine.ts";
+import { overlay } from "../../storybook/overlay.ts";
 import { FormRenderer, type FormFiles } from "./form-renderer.tsx";
 
 // The `checklist` field (RP-285, spec RP-278): a pour inspection recorded item by
@@ -96,14 +97,19 @@ const evidence = (id: string, itemKey: string, fileName: string, frozen = false)
 });
 
 const coverPhoto = evidence("0199a3b0-0000-7000-8000-000000000301", "rebar_cover", "cover.jpg");
+// The cover photo marked up on site (RP-656): its annotated copy, in the same item.
+const coverAnnotated: DocumentSummary = { ...evidence("0199a3b0-0000-7000-8000-000000000302", "rebar_cover", "cover-annotated.jpg"), annotatedFromId: coverPhoto.id };
+
+const imageUrls = { [coverPhoto.id]: swatch("slategray"), [coverAnnotated.id]: swatch("firebrick") };
 
 const files = (documents: DocumentSummary[], canChange = true): FormFiles => ({
   documents,
   canChange,
-  imageUrls: { [coverPhoto.id]: swatch("slategray") },
+  imageUrls,
   onUpload: fn(),
   onOpen: fn(),
   onRemove: fn(),
+  onSaveAnnotated: fn(),
 });
 
 const meta = {
@@ -127,6 +133,7 @@ const itemOf = (context: PlayContext, name: Record<"en" | "ar", string>) =>
 const lineOf = (item: ReturnType<typeof itemOf>, name: Record<"en" | "ar", string>, context: PlayContext) =>
   item.getByText((_, element) => element?.tagName === "P" && element.textContent === storyText(context, name));
 const summaryOf = (context: PlayContext) => context.canvas.getByRole("status", { name: storyText(context, copy.summary) });
+const photoWords = (context: PlayContext) => formRendererLabels[storyLocale(context)].checklist.photosField;
 
 /** Answering: nothing answered yet, so the summary says so; each item takes its own answer set. */
 export const Empty: Story = {
@@ -203,8 +210,39 @@ export const Answered: Story = {
     const rebar = itemOf(context, copy.rebar);
     await expect(rebar.getByRole("radio", { name: storyText(context, copy.fail) })).toBeChecked();
     await expect(rebar.getByLabelText(storyText(context, copy.commentRequired))).toHaveValue("Cover is 15 mm on the east wall");
+    // The photo opens full screen, to annotate while the item's photos may change.
     await userEvent.click(rebar.getByRole("button", { name: /(Open|فتح).*cover\.jpg/ }));
-    await expect(context.args.files!.onOpen).toHaveBeenCalledWith(coverPhoto.id);
+    const viewer = within(await screen.findByRole("dialog", { name: "cover.jpg" }));
+    await expect(viewer.getByRole("button", { name: photoWords(context).viewer.annotate })).toBeVisible();
+    await userEvent.click(viewer.getByRole("button", { name: photoWords(context).viewer.close }));
+    await expect(context.args.files!.onOpen).not.toHaveBeenCalled();
+  },
+};
+
+/**
+ * On site, on a phone (RP-1056): a failed item's photo marked up, its thumbnail the annotated copy with its
+ * mark. It opens on the copy, Annotated / Original shows the untouched original, and Annotate marks it up again.
+ */
+export const PhoneAnnotated: Story = {
+  parameters: { ...phone, ...overlay },
+  args: {
+    answers: { pour_check: { rebar_cover: { answer: "fail", comment: "Cover is 15 mm" } } },
+    files: files([coverPhoto, coverAnnotated]),
+  },
+  play: async (context) => {
+    const text = photoWords(context);
+    const rebar = itemOf(context, copy.rebar);
+    await expect(rebar.getAllByRole("listitem")).toHaveLength(1);
+    await expect(rebar.getByText(text.annotatedMark)).toBeVisible();
+    await userEvent.click(rebar.getByRole("button", { name: /(Open|فتح).*cover\.jpg/ }));
+    const viewer = within(await screen.findByRole("dialog", { name: "cover.jpg" }));
+    await expect(viewer.getByRole("img")).toHaveAttribute("src", imageUrls[coverAnnotated.id]);
+    await userEvent.click(viewer.getByRole("radio", { name: text.viewer.original }));
+    await expect(viewer.getByRole("img")).toHaveAttribute("src", imageUrls[coverPhoto.id]);
+    await expectTouchTarget(viewer.getByRole("button", { name: text.viewer.annotate }));
+    await userEvent.click(viewer.getByRole("button", { name: text.viewer.annotate }));
+    await expect(await screen.findByRole("dialog", { name: text.annotator.title("cover.jpg") })).toBeVisible();
+    await expect(context.args.files!.onSaveAnnotated).not.toHaveBeenCalled();
   },
 };
 
@@ -251,7 +289,7 @@ export const ReadOnly: Story = {
         permit_on_site: { answer: "na" },
       },
     },
-    files: files([{ ...coverPhoto, frozen: true }], false),
+    files: files([{ ...coverPhoto, frozen: true }, { ...coverAnnotated, frozen: true }], false),
   },
   play: async (context) => {
     const { canvas } = context;
@@ -259,8 +297,13 @@ export const ReadOnly: Story = {
     await expect(canvas.queryByRole("radio")).toBeNull();
     await expect(canvas.getByText("Cover is 15 mm on the east wall")).toBeVisible();
     await expect(canvas.queryByRole("button", { name: /Remove/ })).toBeNull();
+    // Opened and switched, never annotated: nothing may change, and the photo is frozen.
     await userEvent.click(canvas.getByRole("button", { name: /(Open|فتح).*cover\.jpg/ }));
-    await expect(context.args.files!.onOpen).toHaveBeenCalledWith(coverPhoto.id);
+    const viewer = within(await screen.findByRole("dialog", { name: "cover.jpg" }));
+    await expect(viewer.getByRole("radio", { name: photoWords(context).viewer.original })).toBeVisible();
+    await expect(viewer.queryByRole("button", { name: photoWords(context).viewer.annotate })).toBeNull();
+    // Closed again, so the screenshot shows the checklist.
+    await userEvent.click(viewer.getByRole("button", { name: photoWords(context).viewer.close }));
   },
 };
 

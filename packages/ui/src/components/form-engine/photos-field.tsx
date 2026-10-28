@@ -4,24 +4,30 @@ import {
   fileFieldContentTypes,
   formatDate,
   formatNumber,
+  withAnnotatedCopies,
   type DocumentSummary,
   type Locale,
   type PhotosField as PhotosFieldSchema,
   type TakenWhere,
 } from "@rabaed/domain";
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants, IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { OutsideField, useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { AnnotatedMark, PhotoScreens, type PhotoScreensLabels, type SaveAnnotated } from "../photo/photo-screens.tsx";
 import type { AttachmentsFieldFiles } from "./attachments-field.tsx";
 
 // A Form's `photos` field (RP-284): its photos as thumbnails, each with when and
 // where it was taken (from its EXIF, read by the api; visibility.md V13), to
 // open full size; and, while the viewer may change them, photos to take with
-// the phone's camera or choose, several at once, and to remove. Presentational:
-// the page uploads and passes the field's Documents, and their image URLs, back in.
+// the phone's camera or choose, several at once, and to remove. A photo opens
+// full screen in the page, with Annotate while it may change; its annotated copy
+// (RP-656) shows on its thumbnail, marked, and Annotated / Original switches
+// back to the untouched original (RP-1056). Presentational: the page uploads and
+// stores the copies, and passes the field's Documents, copies included, and
+// their image URLs back in.
 
 /** The field's words, from the app's messages. A number is given already formatted for the locale, with the count itself where the wording depends on it. */
 export type PhotosFieldLabels = {
@@ -38,10 +44,14 @@ export type PhotosFieldLabels = {
   noPlace: string;
   atMost: (n: string, count: number) => string;
   full: (n: string, count: number) => string;
-};
+  /** The mark on the thumbnail of a photo with an annotated copy. */
+  annotatedMark: string;
+} & PhotoScreensLabels;
 
 /** What a photos field's files are, what may be done with them now, and their images to show. */
 export type PhotosFieldFiles = AttachmentsFieldFiles & {
+  /** The field's photos with their annotated copies among them (a copy names its original); a copy whose original isn't here is ignored. */
+  documents: readonly DocumentSummary[];
   /** Each photo's image URL, by Document id; a photo without one shows an icon in its place. */
   imageUrls?: Readonly<Record<string, string>>;
 };
@@ -60,13 +70,19 @@ export type PhotosFieldProps = {
   label?: string;
   /** Called with the photos taken or chosen, in order. */
   onUpload?: (files: File[]) => void;
+  /** Opens a photo as a file: one the browser can't show here (no image URL, a HEIC). */
   onOpen?: (documentId: string) => void;
   onRemove?: (documentId: string) => void;
+  /** Stores a photo's annotated copy (throws when refused). Without it, nothing is offered to annotate. */
+  onSaveAnnotated?: SaveAnnotated;
 };
+
+/** How many photos the field holds: its originals, an annotated copy counting toward no limit (RP-656). */
+const photoCount = (files: PhotosFieldFiles) => withAnnotatedCopies(files.documents).length;
 
 /** Whether the field takes photos now: they may change, and it has room for another. */
 export function takesPhotos(field: PhotosFieldSchema, files: PhotosFieldFiles | undefined, mode: "edit" | "read"): boolean {
-  return mode === "edit" && !!files?.canChange && (field.maxFiles === undefined || files.documents.length < field.maxFiles);
+  return mode === "edit" && !!files?.canChange && (field.maxFiles === undefined || photoCount(files) < field.maxFiles);
 }
 
 /** The field's limit, as a hint: its maximum of photos. */
@@ -177,9 +193,15 @@ function PhotoInputs({
   );
 }
 
-export function PhotosField({ field, files, mode, locale, labels: text, label, onUpload, onOpen, onRemove }: PhotosFieldProps) {
-  const documents = files?.documents ?? [];
-  const canRemove = mode === "edit" && !!files?.canChange;
+export function PhotosField({ field, files, mode, locale, labels: text, label, onUpload, onOpen, onRemove, onSaveAnnotated }: PhotosFieldProps) {
+  const photos = withAnnotatedCopies(files?.documents ?? []);
+  // The photos may change now: removed, and annotated (a frozen one neither).
+  const mayChange = mode === "edit" && !!files?.canChange;
+  const [opened, setOpened] = useState<string | null>(null);
+  const open = photos.find((p) => p.original.id === opened) ?? null;
+  // Inside a modal <dialog> (the Transition pop-up), the photo opens in it (PhotoScreen's container).
+  const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
+  const root = useCallback((node: HTMLDivElement | null) => setDialog(node?.closest("dialog") ?? null), []);
   const upload = takesPhotos(field, files, mode);
   // Without a file input, the Field's label, help and error name and describe the photos as a group.
   const { labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
@@ -189,18 +211,21 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
       ? { role: "group", "aria-labelledby": labelId, "aria-describedby": describedBy }
       : {};
   return (
-    <div className="flex flex-col gap-3" {...group}>
-      {documents.length > 0 ? (
+    <div ref={root} className="flex flex-col gap-3" {...group}>
+      {photos.length > 0 ? (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {documents.map((d) => {
-            const url = files?.imageUrls?.[d.id];
+          {photos.map(({ original: d, annotated }) => {
+            // The thumbnail shows the annotated copy when there is one; the original opens in the page when it can be shown.
+            const url = files?.imageUrls?.[annotated?.id ?? d.id];
+            // Opened in the page when the browser can show the photo or its copy (a HEIC original's JPEG copy, say).
+            const browserShows = !!url || !!files?.imageUrls?.[d.id];
             return (
               <li key={d.id} className="flex min-w-0 flex-col gap-1">
                 <div className="relative">
                   <button
                     type="button"
                     aria-label={text.open(d.fileName)}
-                    onClick={() => onOpen?.(d.id)}
+                    onClick={() => (browserShows ? setOpened(d.id) : onOpen?.(d.id))}
                     className={cn(
                       "flex aspect-square w-full items-center justify-center overflow-hidden rounded-md border border-border bg-surface-subtle",
                       focusRing,
@@ -212,7 +237,8 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
                       <Icon name="photo" size={32} className="text-muted" />
                     )}
                   </button>
-                  {canRemove && !d.frozen && (
+                  {annotated && <AnnotatedMark text={text.annotatedMark} />}
+                  {mayChange && !d.frozen && (
                     <IconButton
                       label={text.remove(d.fileName)}
                       size="sm"
@@ -237,6 +263,17 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
       {upload && <PhotoInputs field={field} pending={!!files?.pending} labels={text} label={label} onUpload={onUpload} />}
       {mode === "edit" && files?.canChange && !upload && field.maxFiles !== undefined && (
         <p className="text-sm text-muted">{text.full(formatNumber(field.maxFiles, locale), field.maxFiles)}</p>
+      )}
+      {open && (
+        <PhotoScreens
+          photo={open}
+          imageUrls={files?.imageUrls}
+          labels={text}
+          canAnnotate={mayChange}
+          onClose={() => setOpened(null)}
+          onSaveAnnotated={onSaveAnnotated}
+          container={dialog}
+        />
       )}
     </div>
   );

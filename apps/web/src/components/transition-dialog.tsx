@@ -197,6 +197,7 @@ function useReplyFiles(workItemId: string, actionForm: FormSchema | null) {
           onUpload: (fieldKey, picked) => void documents.upload(picked, fieldKey),
           onOpen: (documentId) => void documents.open(documentId),
           onRemove: (fieldKey, documentId) => void documents.remove(documentId, fieldKey),
+          onSaveAnnotated: documents.annotatesIn(waiting),
         }
       : null;
   return { files, counts, message: documents.message };
