@@ -233,7 +233,7 @@
         "locationLevel1": "Zone",
         "locationLevel2": "Building",
         "locationLevel3": "Floor",
-        "owner": "Current owner",
+        "owner": "With",
         "contractor": "Contractor",
         "created": "Created",
         "stepAge": "Step Age"

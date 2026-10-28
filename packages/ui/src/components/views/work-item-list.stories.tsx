@@ -37,7 +37,7 @@ const copy = {
   number: b("Submittal No.", "رقم التقديم"),
   title: b("Title", "العنوان"),
   created: b("Created", "التاريخ"),
-  currentOwner: b("Current owner", "المسؤول الحالي"),
+  withColumn: b("With", "لدى"),
   settings: b("Table settings", "إعدادات الجدول"),
   group: b("Group", "تجميع"),
   export: b("Export", "تصدير"),
@@ -240,7 +240,7 @@ export const FocusedSortButtonInView: Story = {
 
 /**
  * Wide: the owner's design's columns, 12 shown of 14 (no Due date; Contractor and
- * Step Age off), a checkbox first and the settings last. The Current owner is my
+ * Step Age off), a checkbox first and the settings last. The "With" column is my
  * own Company's person or Step not picked up, another Company by its name only, and on
  * a closed item who closed it (V14). The Rev is its own chip, the number left
  * without its " Rev n"; numbers read left to right, in Arabic too.
@@ -252,10 +252,10 @@ export const Wide: Story = {
     await expect(within(table).getAllByRole("columnheader")).toHaveLength(14);
     await expect(within(table).getAllByRole("row")).toHaveLength(items.length + 1);
     const locale = storyLocale(context);
-    await expect(cellOf(context, "Cable tray support brackets", copy.currentOwner)).toHaveTextContent(consultant[locale]);
-    await expect(cellOf(context, "Main LV switchboard", copy.currentOwner)).toHaveTextContent(storyText(context, copy.notPickedUp));
-    await expect(cellOf(context, "LED downlights", copy.currentOwner)).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
-    await expect(cellOf(context, "Busbar trunking", copy.currentOwner)).toHaveTextContent(consultant[locale]);
+    await expect(cellOf(context, "Cable tray support brackets", copy.withColumn)).toHaveTextContent(consultant[locale]);
+    await expect(cellOf(context, "Main LV switchboard", copy.withColumn)).toHaveTextContent(storyText(context, copy.notPickedUp));
+    await expect(cellOf(context, "LED downlights", copy.withColumn)).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
+    await expect(cellOf(context, "Busbar trunking", copy.withColumn)).toHaveTextContent(consultant[locale]);
     await expect(cellOf(context, "Busbar trunking", b("Code", "الرمز"))).toHaveTextContent("Code A");
     await expect(cellOf(context, "Earthing rods", b("Zone", "المنطقة"))).toHaveTextContent(zone.name[locale]);
     await expect(cellOf(context, "Earthing rods", b("Building", "المبنى"))).toHaveTextContent("—");
@@ -372,11 +372,11 @@ export const MovingAColumn: Story = {
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.settings) }));
     const panel = await screen.findByRole("dialog", { name: storyText(context, b("Columns", "الأعمدة")) });
-    const handle = within(panel).getByRole("button", { name: storyText(context, b("Move Current owner", "نقل المسؤول الحالي")) });
+    const handle = within(panel).getByRole("button", { name: storyText(context, b("Move With", "نقل لدى")) });
     handle.focus();
     for (let i = 0; i < 12; i++) await userEvent.keyboard("{ArrowUp}");
     const headers = within(tableOf(context)).getAllByRole("columnheader").map((h) => h.textContent);
-    await expect(headers.slice(1, 4)).toEqual([storyText(context, copy.number), storyText(context, copy.title), storyText(context, copy.currentOwner)]);
+    await expect(headers.slice(1, 4)).toEqual([storyText(context, copy.number), storyText(context, copy.title), storyText(context, copy.withColumn)]);
     await userEvent.keyboard("{Escape}");
   },
 };
@@ -430,14 +430,14 @@ export const GroupedByStatus: Story = {
   },
 };
 
-/** The Group menu: GROUP BY Status, Discipline, Type, Current owner, Zone, Code. Left open for the screenshot. */
+/** The Group menu: GROUP BY Status, Discipline, Type, With, Zone, Code. Left open for the screenshot. */
 export const GroupMenuOpen: Story = {
   parameters: overlay,
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.group) }));
     const menu = await screen.findByRole("dialog");
     await expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
-      [copy.status, b("Discipline", "التخصص"), b("Type", "النوع"), copy.currentOwner, b("Zone", "المنطقة"), b("Code", "الرمز")].map((c) => storyText(context, c)),
+      [copy.status, b("Discipline", "التخصص"), b("Type", "النوع"), copy.withColumn, b("Zone", "المنطقة"), b("Code", "الرمز")].map((c) => storyText(context, c)),
     );
   },
 };

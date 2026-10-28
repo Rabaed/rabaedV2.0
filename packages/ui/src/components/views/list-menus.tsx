@@ -9,7 +9,7 @@ import { RowActionsMenu, type RowActionsItem } from "../list/row-menu.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 
 // The List's toolbar menus (RP-409, the owner's design): Group (GROUP BY Status, Discipline,
-// Type, Current owner, Zone, Code) and Export with its arrow (CSV, Excel). List only.
+// Type, With, Zone, Code) and Export with its arrow (CSV, Excel). List only.
 
 /** One choice of a toolbar menu. */
 export const menuItem = cn(
