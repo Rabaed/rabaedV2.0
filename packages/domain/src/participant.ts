@@ -3,7 +3,8 @@ import { bilingualText, crNumber } from "./company.ts";
 import { withHandovers } from "./handover.ts";
 import { baseRoles } from "./project.ts";
 
-const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText });
+/** A Participant's Project Role: its base role and its name on the Project. */
+export const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText });
 
 /**
  * A Project Admin invites another Company, found by its CR number, to be a
