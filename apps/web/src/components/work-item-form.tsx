@@ -17,13 +17,12 @@ import {
   type OptionList,
   type SupplierChoice,
   type ChecklistTemplateChoice,
-  type ReplyChecklistRead,
 } from "@rabaed/domain";
 import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
-import { formBesideReplyChecklists } from "@/lib/checklist-once";
+import { formBesideReplyChecklists, type AnsweredChecklists } from "@/lib/checklist-once";
 import { useFormRendererLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
 import { saveButton } from "@/lib/save-button";
@@ -292,19 +291,19 @@ export function WorkItemFormProvider({
 
 /**
  * The Form itself: to fill in while the viewer may edit it, otherwise to read. `replyChecklists`:
- * the checklists the viewer answers on the page (ReplyChecklists), whose template fields the Form
- * then leaves out, so the checklist shows once (RP-1071).
+ * the reply checklists the viewer answers on the page (ReplyChecklists), whose Checklist Template
+ * fields the Form then leaves out, so the checklist shows once (RP-1071).
  */
 export function WorkItemAnswers({
   locale,
   workItemId,
   documents,
-  replyChecklists = [],
+  replyChecklists,
 }: {
   locale: Locale;
   workItemId: string;
   documents: DocumentList;
-  replyChecklists?: readonly Pick<ReplyChecklistRead, "copyOf">[];
+  replyChecklists: AnsweredChecklists;
 }) {
   const t = useTranslations("workItems.form");
   const formLabels = useFormRendererLabels();
