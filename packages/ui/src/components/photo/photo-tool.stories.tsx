@@ -243,8 +243,13 @@ export const AnnotateAndSave: Story = {
       { keys: "[/MouseLeft]", target: photoCanvas, coords: { clientX: box.x + box.width * 0.5, clientY: box.y + box.height * 0.4 } },
     ]);
     await expect(save).toBeEnabled();
+    // Save decodes the photo and encodes the JPEG before it calls the page, which a loaded runner can take
+    // longer than `waitFor`'s 1 s over (RP-1028): wait for the call itself instead of polling for it.
+    const saved = new Promise<void>((resolve) => (args.onSaveAnnotated as ReturnType<typeof fn>).mockImplementationOnce(() => resolve()));
     await userEvent.click(save);
-    await waitFor(() => expect(args.onSaveAnnotated).toHaveBeenCalledWith(ceiling.id, expect.any(Blob)));
+    await saved;
+    await expect(args.onSaveAnnotated).toHaveBeenCalledOnce();
+    await expect(args.onSaveAnnotated).toHaveBeenCalledWith(ceiling.id, expect.any(Blob));
     const image = (args.onSaveAnnotated as ReturnType<typeof fn>).mock.calls[0]![1] as Blob;
     await expect(image.type).toBe("image/jpeg");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: text.annotator.title("ceiling.jpg") })).toBeNull());
