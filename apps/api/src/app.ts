@@ -28,6 +28,7 @@ import { numberingRoutes } from "./routes/numbering.ts";
 import { numberingCounterRoutes } from "./routes/numbering-counters.ts";
 import { optionListRoutes } from "./routes/option-lists.ts";
 import { participantRoutes } from "./routes/participants.ts";
+import { passwordResetRoutes } from "./routes/password-reset.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
 import { approvedSupplierRoutes } from "./routes/approved-suppliers.ts";
@@ -79,6 +80,8 @@ export interface AppOptions {
   now?: () => Date;
   /** `errors`: only a failed request's error (a 500 and its cause), as the tests' setups want. */
   logger?: boolean | "errors";
+  /** Writes the full log here instead (tests that read what the log holds); `logger` is then ignored. */
+  logStream?: NodeJS.WritableStream;
   /** Sees every route as it is registered; test/sign-in-first.test.ts lists them this way. */
   onRoute?: (route: RouteOptions) => void;
   /** The outbox pass Vercel Cron calls (RP-1039), and its secret; left out, the route refuses every call (locally the worker delivers). */
@@ -115,13 +118,14 @@ export async function buildApp({
   files = noFileStore,
   now = () => new Date(),
   logger = true,
+  logStream,
   onRoute,
   cron,
   mailer = mailerFromEnvAtFirstSend(),
 }: AppOptions): Promise<FastifyInstance> {
   await dummyHash();
   const app = Fastify({
-    logger: logger === "errors" ? loggerOptions(undefined, "error") : logger && loggerOptions(),
+    logger: logStream ? loggerOptions(logStream) : logger === "errors" ? loggerOptions(undefined, "error") : logger && loggerOptions(),
   }).withTypeProvider<ZodTypeProvider>();
   if (onRoute) app.addHook("onRoute", onRoute);
   app.setValidatorCompiler(validatorCompiler);
@@ -186,6 +190,7 @@ export async function buildApp({
   await app.register(healthRoutes(context));
   await app.register(outboxCronRoutes(cron));
   await app.register(sessionRoutes(context));
+  await app.register(passwordResetRoutes(context));
   await app.register(companyRoutes(context));
   await app.register(memberRoutes(context));
   await app.register(projectRoutes(context));

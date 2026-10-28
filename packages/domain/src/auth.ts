@@ -24,6 +24,32 @@ export const acceptInvitationRequest = z.object({
 });
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequest>;
 
+/**
+ * Forgot password (RP-1058): a link valid `validMinutes`, once. Requests are limited per email and
+ * per visitor in `windowMinutes`, whatever the email; every answer to a request takes at least
+ * `answerAfterMs`, so its time never tells whether the email is registered.
+ */
+export const PASSWORD_RESET = { validMinutes: 30, perEmail: 5, perVisitor: 20, windowMinutes: 60, answerAfterMs: 300 } as const;
+
+/** A reset link's email, from the worker's outbox handler to the mailer. `token` goes in the link only. */
+export interface PasswordResetEmail {
+  to: string;
+  language: (typeof locales)[number];
+  token: string;
+  validMinutes: number;
+}
+
+export const passwordResetRequest = z.object({ email });
+export type PasswordResetRequest = z.infer<typeof passwordResetRequest>;
+
+export const resetPasswordRequest = z.object({
+  token: z.string().min(1).max(200),
+  password: newPassword,
+  /** The browser's language, as at sign-in. */
+  locale: z.enum(locales).optional(),
+});
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequest>;
+
 /** GET /v1/me: the signed-in Member and their Company. */
 export const signedInMember = z.object({
   member: z.object({

@@ -13,25 +13,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { sql } from "kysely";
 import type { AppContext } from "../app.ts";
 import { HttpError, notFound } from "../http-error.ts";
+import { visitorSha256 } from "../visitor.ts";
 
 const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest();
-
-/**
- * Who is asking, for the limit on typed codes: the address the load balancer saw. Only web reaches
- * the api (packages/infra app-stack.ts), and it forwards the browser's X-Forwarded-For, to which the
- * load balancer appended the address it saw (its `append` mode, pinned in app-stack.ts): the last
- * entry. Whatever a browser wrote before it is ignored. Without one (local, tests), the caller.
- */
-function visitorOf(request: FastifyRequest): string {
-  const last = [request.headers["x-forwarded-for"]]
-    .flat()
-    .join(",")
-    .split(",")
-    .map((a) => a.trim())
-    .filter((a) => a !== "")
-    .at(-1);
-  return last ?? request.ip;
-}
 
 const tooManyAttempts = () => new HttpError(429, "too_many_attempts");
 
@@ -80,7 +64,7 @@ export const verificationRoutes =
       const documentNumber = body.success ? body.data.documentNumber : "";
       const { rows } = await sql<{ outcome: "found" | "not_found" | "too_many_attempts"; verification: RecordVerification | null }>`
         select outcome, verification from app.verify_documental_record_by_code(
-          ${code}, ${documentNumber}, ${sha256(visitorOf(request))}, ${ctx.now()},
+          ${code}, ${documentNumber}, ${visitorSha256(request)}, ${ctx.now()},
           ${VERIFICATION_ATTEMPTS.perVisitor}::integer, make_interval(mins => ${VERIFICATION_ATTEMPTS.windowMinutes}::integer)
         )
       `.execute(ctx.db);

@@ -438,6 +438,7 @@
     "password": "Password",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
+    "forgot": "Forgot password?",
     "submit": "Sign in",
     "invalid": "That email and password don't match.",
     "unavailable": "Something went wrong. Try again.",
@@ -460,6 +461,26 @@
       "headlineAccountability": "Clear accountability.",
       "lead": "Owner, consultant and contractor on one platform — every step recorded, dated and credited to whoever took it."
     }
+  },
+  "passwordReset": {
+    "back": "Back to sign in",
+    "requestTitle": "Reset your password",
+    "requestSubtitle": "Enter your work email. If it belongs to a Member of Rabaed, we'll send a reset link.",
+    "send": "Send reset link",
+    "invalidEmail": "Enter a valid email.",
+    "sent": "If this email belongs to a Member of Rabaed, we've sent a link to it. The link works once, for {minutes} minutes.",
+    "tooMany": "Too many tries. Wait a while, then try again.",
+    "resetTitle": "Choose a new password",
+    "resetSubtitle": "Changing your password signs you out on every other device.",
+    "password": "New password",
+    "confirm": "Confirm new password",
+    "hint": "At least {min} characters.",
+    "tooShort": "Use at least {min} characters.",
+    "mismatch": "The passwords don't match.",
+    "submit": "Set password and sign in",
+    "expired": "This link has expired or was already used.",
+    "requestNew": "Get a new link",
+    "unavailable": "Something went wrong. Try again."
   },
   "acceptInvitation": {
     "title": "Accept your invitation",

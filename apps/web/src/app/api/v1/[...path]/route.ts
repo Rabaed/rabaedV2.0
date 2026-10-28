@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { memberApiTarget } from "@/lib/api-url";
+import { memberApiTarget } from "../../../../lib/api-url.ts";
 
 // Forwards the browser's /api/v1/* calls to the API, so the session cookie is
 // first-party (HttpOnly, SameSite=Lax) and no CORS is needed. Resolved per
@@ -11,7 +11,9 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
   if (!target) return Response.json({ error: "not_found" }, { status: 404 });
 
   const headers = new Headers();
-  for (const name of ["cookie", "content-type", "accept"]) {
+  // X-Forwarded-For: the API limits some public routes per visitor (password reset requests, RP-1058),
+  // reading the last entry, the one the load balancer appended (apps/api/src/visitor.ts).
+  for (const name of ["cookie", "content-type", "accept", "x-forwarded-for"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }

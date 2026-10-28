@@ -10,6 +10,8 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 |---|---|---|
 | `page.tsx` | `/` | Home across the Member's Projects; the welcome when signed out |
 | `sign-in/page.tsx` | `/sign-in` | Sign-in form |
+| `forgot-password/page.tsx` | `/forgot-password` | Ask for a password reset link by email (RP-1058) |
+| `reset-password/page.tsx` | `/reset-password` | Set a new password from the emailed link (RP-1058) |
 | `accept-invitation/page.tsx` | `/accept-invitation` | Accept an invitation to a Company or Project |
 | `verify/page.tsx` | `/verify` | Public: verify a Documental Record by its Verification Code and Document Number (RP-157) |
 | `verify/[token]/page.tsx` | `/verify/:token` | Public: the page a Documental Record's QR opens (RP-157) |
