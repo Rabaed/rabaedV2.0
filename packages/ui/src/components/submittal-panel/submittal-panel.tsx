@@ -57,6 +57,8 @@ export type SubmittalPanelProps = {
   /** Top-bar controls before Close (the size switch, RP-1063). */
   topBarEnd?: ReactNode;
   identity?: ReactNode;
+  /** The route strip under the identity, which opens the Workflow map (RP-1064). */
+  route?: ReactNode;
   facts?: ReactNode;
   /** The tabs, sticky at the top of the scrolling body (RP-1066). */
   tabs?: ReactNode;
@@ -93,6 +95,7 @@ export function SubmittalPanel({
   busy = false,
   topBarEnd,
   identity,
+  route,
   facts,
   tabs,
   rail,
@@ -178,6 +181,7 @@ export function SubmittalPanel({
         <div className="sdp-layout flex min-w-0">
           <div className="sdp-main min-w-0 flex-1 pb-6">
             {identity}
+            {route}
             {facts}
             {tabs}
             {children}
