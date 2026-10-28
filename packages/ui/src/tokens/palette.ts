@@ -107,6 +107,11 @@ export const palette = {
   // The page's scrim behind a dialog (the kit's --ui-overlay), with its opacity: #rrggbbaa.
   "overlay-grey": "#0f142361",
 
+  // The sign-in brand panel, as the rabaedapp.com hero (owner's design, RP-1057).
+  "hero-ink": "#14161c",
+  "hero-text": "#edeef3",
+  "hero-muted": "#9aa0b4",
+
   // The navy sidebar (the kit's shell.css `.rs` --sb-*): Theme 1, Grey, in Light and Dark. Its hover,
   // press and current item are the kit's translucent overlays (#rrggbbaa), laid on the sidebar.
   "navy-sidebar": "#131b2e",
