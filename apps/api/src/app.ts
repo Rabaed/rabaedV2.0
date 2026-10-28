@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import { dummyHash } from "@rabaed/auth";
 import type { Db } from "@rabaed/db";
+import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type RouteOptions } from "fastify";
 import {
   hasZodFastifySchemaValidationErrors,
@@ -82,6 +83,11 @@ export interface AppOptions {
   onRoute?: (route: RouteOptions) => void;
   /** The outbox pass Vercel Cron calls (RP-1039), and its secret; left out, the route refuses every call (locally the worker delivers). */
   cron?: OutboxCron;
+  /**
+   * Sends the api's own emails (Member invitations, RP-1052). Left out, the mailer the
+   * environment sets up (MAIL_FROM and one transport), built at the first send.
+   */
+  mailer?: Mailer;
 }
 
 /** What route plugins get from the app. */
@@ -89,11 +95,18 @@ export interface AppContext {
   db: Db;
   config: ApiConfig;
   files: FileStore;
+  mailer: Mailer;
   now: () => Date;
   /** The signed-in Member's id, or a 401. */
   requireMember(request: FastifyRequest): string;
   setSessionCookie(reply: FastifyReply, session: Session): void;
   clearSessionCookie(reply: FastifyReply): void;
+}
+
+/** The environment's mailer, built when the api first sends, so an environment with no sender yet still starts. */
+function mailerFromEnvAtFirstSend(): Mailer {
+  let mailer: Mailer | undefined;
+  return { send: (message) => (mailer ??= mailerFromEnv()).send(message) };
 }
 
 export async function buildApp({
@@ -104,6 +117,7 @@ export async function buildApp({
   logger = true,
   onRoute,
   cron,
+  mailer = mailerFromEnvAtFirstSend(),
 }: AppOptions): Promise<FastifyInstance> {
   await dummyHash();
   const app = Fastify({
@@ -155,6 +169,7 @@ export async function buildApp({
     db,
     config,
     files,
+    mailer,
     now,
     requireMember(request) {
       if (!request.principal) throw notSignedIn();

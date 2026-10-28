@@ -80,7 +80,7 @@ defineCase("PAR-02", async (t) => {
   const invite = await saeed.post("/members", { email, fullName: { en: `UAT PAR-02 ${tag}`, ar: `اختبار ${tag}` }, locale: "ar" });
   t.check("Saeed invites a new Member (Arabic)", invite.status === 201, `${invite.status} ${invite.text.slice(0, 120)}`);
   const memberId = (invite.body as any).memberId as string;
-  const token = (invite.body as any).invitation?.token as string;
+  let token = "";
   const list = async (api: Api) => ((await api.get("/members")).body as any).members as any[];
   const invited = (await list(saeed)).find((m) => m.id === memberId);
   t.check("The Member appears as invited", invited?.status === "invited", JSON.stringify(invited?.status));
@@ -89,11 +89,14 @@ defineCase("PAR-02", async (t) => {
     await sleep(2000);
     mails = await mailsWith(email, "");
   }
-  t.check("The invitation email arrives in Mailpit", mails.length > 0, `${mails.length} mails for ${email}; the invite response carries the token (the members route says email delivery comes later)`);
+  t.check("The invitation email arrives in Mailpit", mails.length > 0, `${mails.length} mails for ${email}`);
   if (mails[0]) {
     const full = (await (await fetch(`http://127.0.0.1:${process.env.MAILPIT_PORT ?? "8725"}/api/v1/message/${mails[0].id}`)).json()) as { Text?: string; Subject: string };
     t.check("The email is in the chosen language (Arabic)", /[؀-ۿ]/.test(`${full.Subject} ${full.Text ?? ""}`), full.Subject);
+    // The one-time token is in the email's link only (RP-1052): the invite answer no longer carries it.
+    token = /accept-invitation#token=([\w-]+)/.exec(full.Text ?? "")?.[1] ?? "";
   }
+  t.check("The invite answer does not carry the token", !!token && !invite.text.includes(token), "");
   const password = `Uat-${crypto.randomUUID()}`;
   const accept = await fetch(`${process.env.API_URL ?? "http://127.0.0.1:4700"}/v1/invitations/accept`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, password, locale: "ar" }) });
   t.check("The new person follows the link's token and sets a password", accept.status < 300, `${accept.status}`);

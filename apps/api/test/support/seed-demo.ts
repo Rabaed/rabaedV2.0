@@ -24,7 +24,7 @@ export default async function setup(): Promise<void> {
     await ensureDemo(
       { migrator, admin: adminDb },
       // A 500 while seeding prints its cause, not only "answered 500 internal".
-      () => buildApp({ db, config: testConfig, logger: "errors", files }),
+      (mailer) => buildApp({ db, config: testConfig, logger: "errors", files, mailer }),
       DEFAULT_PASSWORD,
       { files: true },
     );

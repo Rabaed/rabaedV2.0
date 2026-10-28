@@ -34,16 +34,17 @@ export const inviteMemberRequest = z.object({
 });
 export type InviteMemberRequest = z.infer<typeof inviteMemberRequest>;
 
-/** Shown once, for the Authorized Person to pass on (email delivery comes later). */
-const invitation = z.object({ token: z.string(), expiresAt: z.date() });
-
-export const invitedMember = z.object({ memberId: z.uuid(), invitation });
+/**
+ * The invited Member, and the address their invitation was emailed to. The
+ * token goes to the invitee by email only, never back to the inviter (RP-1052).
+ */
+export const invitedMember = z.object({ memberId: z.uuid(), invitationSentTo: z.string() });
 
 /**
  * A deactivated Member, reactivated as the same Member (visibility.md V17). One
- * who never accepted their first invitation gets a new one.
+ * who never accepted their first invitation is emailed a new one.
  */
-export const reactivatedMember = z.object({ member: companyMember, invitation: invitation.optional() });
+export const reactivatedMember = z.object({ member: companyMember, invitationSentTo: z.string().optional() });
 
 /** The Authorized Person deactivates a Member, handing each Step they hold to a new holder (RP-108). */
 export const deactivateMemberRequest = z.object(withHandovers);

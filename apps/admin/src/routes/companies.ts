@@ -1,4 +1,5 @@
 import { crNumber, engineerReason, onboardCompanyRequest, onboardingLeads, type BilingualText, type Locale } from "@rabaed/domain";
+import { invitationMessage } from "@rabaed/mailer";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { HttpError, type AdminContext } from "../app.ts";
@@ -10,12 +11,7 @@ export const companyRoutes =
   async (app) => {
     /** Emails the Authorized Person their invitation, in their language, linking to the customer web. */
     const sendInvitation = (to: { email: string; locale: Locale; companyName: BilingualText; token: string }) =>
-      ctx.mailer.send({
-        to: to.email,
-        template: "invitation",
-        locale: to.locale,
-        values: { companyName: to.companyName[to.locale], link: `${ctx.config.webUrl}/${to.locale}/accept-invitation#token=${to.token}` },
-      });
+      ctx.mailer.send(invitationMessage({ to: to.email, locale: to.locale, companyName: to.companyName, token: to.token }, ctx.config.webUrl));
 
     // Onboards a Company and invites its Authorized Person by email. Should
     // the email fail, the Company stands; invite again (below).
