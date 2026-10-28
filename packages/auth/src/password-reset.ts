@@ -3,7 +3,7 @@ import { sql } from "kysely";
 import { hashPassword } from "./password.ts";
 import { hashToken } from "./tokens.ts";
 
-// The api's side of forgot password (RP-1058; migration 20271020000000_password_reset.sql). The
+// The api's side of forgot password (RP-1058; migration 20271021000000_password_reset.sql). The
 // worker mints and emails the link (@rabaed/db password-reset.ts); its token, like an invitation's,
 // is stored only as a hash. The limits are @rabaed/domain's PASSWORD_RESET, passed in by the api.
 
