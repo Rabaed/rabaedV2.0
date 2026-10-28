@@ -7,8 +7,10 @@
 // again just before each merged project is removed.
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed, nor, in any mode, one that another existing worktree's .env
-// names while it is not running or has only volumes left (RP-1007): that worktree is named instead,
-// and the .env files are read again just before each removal. With --lane N such a keep exits 1.
+// names while it is not running or has only volumes left (RP-1007): that worktree is named instead.
+// Just before each removal it checks again (RP-1073): a worktree's .env naming it now, a container of
+// it started from an existing folder, Docker not answering, or a client connected to its Postgres
+// keeps it. With --lane N such a keep at listing exits 1.
 //
 //   pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
 //
@@ -28,9 +30,10 @@ import {
   laneProject,
   listContainers,
   listVolumes,
-  newClaimant,
   onlyLane,
   parsePruneArgs,
+  projectInUseNow,
+  readProjectNow,
   readWorktreeEnv,
   removeProject,
   staleProjects,
@@ -124,10 +127,10 @@ for (const s of candidates) {
     console.log(`Kept ${s.project}: ${held}.`);
     continue;
   }
-  // RP-1007: and a lane:env since the prompt may have written a .env naming it.
-  const claimant = newClaimant(s.project, claims, readClaims());
-  if (claimant !== undefined) {
-    console.log(`Kept ${s.project}: the .env of ${claimant.path} (on ${claimant.branch ?? "a detached HEAD"}) names it now.`);
+  // RP-1007, RP-1073: and since the prompt a lane:env may have written a .env naming it, or a session started or connected to it.
+  const inUse = projectInUseNow(s.project, { listedClaims: claims, listedContainers: containers, now: readProjectNow(s.project, readClaims()), exists: existsSync });
+  if (inUse !== undefined) {
+    console.log(`Kept ${s.project}: ${inUse}.`);
     continue;
   }
   try {

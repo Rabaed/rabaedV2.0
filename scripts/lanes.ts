@@ -353,6 +353,48 @@ export const laneKeptByClaim = (lane: number | undefined, claimed: KeptProject[]
 export const newClaimant = (project: string, listed: EnvClaim[], now: EnvClaim[], platform?: NodeJS.Platform): EnvClaim | undefined =>
   now.find((c) => c.project === project && !listed.some((l) => l.project === project && samePath(l.path, c.path, platform)));
 
+/** What a compose project's last check reads, just before removing it (projectInUseNow). */
+export type ProjectNow = {
+  /** Every other existing worktree's .env claim, read again (envClaims). */
+  claims: EnvClaim[];
+  /** The containers, listed again; undefined when Docker did not answer. */
+  containers: Container[] | undefined;
+  /** The client connections to the project's running db container (postgresClients), or why it could not be asked; undefined when it has none running. */
+  postgres: { container: string; clients: number | string } | undefined;
+};
+
+type InUseInput = {
+  /** The .env claims as listed before the prompt. */
+  listedClaims: EnvClaim[];
+  /** The containers as listed before the prompt. */
+  listedContainers: Container[];
+  now: ProjectNow;
+  /** Whether a folder exists now (the removed worktrees' folders do not count). */
+  exists: (dir: string) => boolean;
+  platform?: NodeJS.Platform;
+};
+
+/**
+ * Why a compose project chosen for removal stays after all, judged just before removing it
+ * (RP-1073): the prune can take minutes between reading the .env files and removing a stack,
+ * and a session may run lane:env or start the lane meanwhile. In order: a worktree's .env
+ * names it now; Docker did not answer; one of its containers runs now from a folder that
+ * exists and did not run it at listing; something is connected to its Postgres, or Postgres
+ * could not be asked. Undefined when it still goes.
+ */
+export function projectInUseNow(project: string, { listedClaims, listedContainers, now, exists, platform }: InUseInput): string | undefined {
+  const claimant = newClaimant(project, listedClaims, now.claims, platform);
+  if (claimant !== undefined) return `the .env of ${claimant.path} (on ${claimant.branch ?? "a detached HEAD"}) holds it now`;
+  if (now.containers === undefined) return "Docker did not answer when it was checked again";
+  const ranFrom = (dir: string) => listedContainers.some((c) => c.project === project && c.state === "running" && samePath(c.workingDir, dir, platform));
+  const started = now.containers.find((c) => c.project === project && c.state === "running" && exists(c.workingDir) && !ranFrom(c.workingDir));
+  if (started !== undefined) return `a container of it runs from ${started.workingDir} now (${started.name})`;
+  if (now.postgres === undefined) return undefined;
+  const { container, clients } = now.postgres;
+  if (typeof clients === "string") return `its Postgres (${container}) could not be asked who is connected: ${clients}`;
+  return clients > 0 ? `${clients} connection${clients === 1 ? "" : "s"} to its Postgres (${container}) now` : undefined;
+}
+
 /** lanes:prune --lane N: only lane N's compose project among the candidates (all of them without --lane). */
 export const onlyLane = (projects: StaleProject[], lane: number | undefined): StaleProject[] =>
   lane === undefined ? projects : projects.filter((p) => p.project === laneProject(lane));
@@ -647,6 +689,30 @@ export function listContainers(): Container[] | undefined {
 
 export function listVolumes(): Volume[] {
   return parseVolumes(docker(["volume", "ls", "--format", volumeFormat]));
+}
+
+/** Client connections to the lane databases (rabaed*), not counting the asking session itself. */
+const CLIENTS_SQL = "select count(*) from pg_stat_activity where backend_type = 'client backend' and pid <> pg_backend_pid() and datname like 'rabaed%'";
+
+/** How many clients are connected to the db container's Postgres right now, or why it could not be asked (30 s at most: a stuck container must not hang the prune). */
+export function postgresClients(container: string): number | string {
+  try {
+    const out = execFileSync("docker", ["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-At", "-c", CLIENTS_SQL], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30_000,
+    }).trim();
+    return /^\d+$/.test(out) ? Number(out) : `psql answered "${out}"`;
+  } catch (error) {
+    return (error as { stderr?: string }).stderr?.trim() || (error as Error).message;
+  }
+}
+
+/** What projectInUseNow judges a project on, read now: the containers again, and its running db container's clients (RP-1073). */
+export function readProjectNow(project: string, claims: EnvClaim[]): ProjectNow {
+  const containers = listContainers();
+  const db = containers && dbContainers(containers).find((c) => c.project === project);
+  return { claims, containers, postgres: db && { container: db.name, clients: postgresClients(db.name) } };
 }
 
 /** Removes a project's containers, volumes and networks (what `docker compose down -v` would, without its compose file). */

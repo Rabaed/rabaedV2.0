@@ -31,6 +31,7 @@ import {
   chooseTakeover,
   clashesAfterRemoval,
   holdsLaneProject,
+  projectInUseNow,
   pruneCommand,
   releaseContainers,
   staleProjects,
@@ -547,6 +548,62 @@ describe("chooseMerged (lanes:prune --merged)", () => {
   it("keeps a project with a container from a folder that is not a worktree of this clone", () => {
     const other = [container({ name: "rabaed-lane6-db-1", project: "rabaed-lane6", workingDir: "D:\\other-clone\\wt" })];
     expect(chooseMerged({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, holders: none, platform: "win32" }).merged).toEqual([]);
+  });
+});
+
+describe("projectInUseNow (lanes:prune and worktrees:prune, just before each removal, RP-1073)", () => {
+  const gone = "G:\\rabaed-wt\\hopeful-chaum";
+  const live = "G:\\rabaed-wt\\rp-921";
+  // A Windows disk: any case names the same folder.
+  const exists = (dir: string) => dir.toLowerCase() === live.toLowerCase();
+  const listedContainers = [container({ name: "rabaed-lane12-files-1", project: "rabaed-lane12", workingDir: gone })];
+  const check = (now: Partial<Parameters<typeof projectInUseNow>[1]["now"]>, more: { listedContainers?: Container[] } = {}) =>
+    projectInUseNow("rabaed-lane12", {
+      listedClaims: [],
+      listedContainers: more.listedContainers ?? listedContainers,
+      now: { claims: [], containers: listedContainers, postgres: undefined, ...now },
+      exists,
+      platform: "win32",
+    });
+
+  it("lets the project go when nothing changed", () => {
+    expect(check({})).toBeUndefined();
+  });
+
+  it("keeps it when a worktree's .env names it now, but not for a claim already listed or on another project", () => {
+    const claim = { path: live, branch: "RP-921-x", project: "rabaed-lane12" };
+    expect(check({ claims: [claim] })).toBe(`the .env of ${live} (on RP-921-x) holds it now`);
+    expect(check({ claims: [{ ...claim, project: "rabaed-lane13" }] })).toBeUndefined();
+    expect(projectInUseNow("rabaed-lane12", { listedClaims: [claim], listedContainers, now: { claims: [claim], containers: listedContainers, postgres: undefined }, exists })).toBeUndefined();
+  });
+
+  it("keeps it when a container of it runs now from a folder that exists and did not run it at listing", () => {
+    const started = container({ name: "rabaed-lane12-db-1", project: "rabaed-lane12", workingDir: live.toUpperCase() });
+    expect(check({ containers: [...listedContainers, started] })).toBe(`a container of it runs from ${live.toUpperCase()} now (rabaed-lane12-db-1)`);
+    // The same container, running from the same folder at listing: nothing new.
+    expect(check({ containers: [started] }, { listedContainers: [started] })).toBeUndefined();
+    // Started from a folder that is gone, or stopped, or another project's: nothing in use.
+    expect(check({ containers: [{ ...started, workingDir: gone }] })).toBeUndefined();
+    expect(check({ containers: [{ ...started, state: "exited" }] })).toBeUndefined();
+    expect(check({ containers: [{ ...started, project: "rabaed-lane13" }] })).toBeUndefined();
+  });
+
+  it("keeps it when Docker does not answer: its containers cannot be checked", () => {
+    expect(check({ containers: undefined })).toBe("Docker did not answer when it was checked again");
+  });
+
+  it("keeps it while something is connected to its Postgres, or when Postgres cannot be asked", () => {
+    expect(check({ postgres: { container: "rabaed-lane12-db-1", clients: 2 } })).toBe("2 connections to its Postgres (rabaed-lane12-db-1) now");
+    expect(check({ postgres: { container: "rabaed-lane12-db-1", clients: 1 } })).toBe("1 connection to its Postgres (rabaed-lane12-db-1) now");
+    expect(check({ postgres: { container: "rabaed-lane12-db-1", clients: "timed out" } })).toBe(
+      "its Postgres (rabaed-lane12-db-1) could not be asked who is connected: timed out",
+    );
+    expect(check({ postgres: { container: "rabaed-lane12-db-1", clients: 0 } })).toBeUndefined();
+  });
+
+  it("names a new .env claim before anything else", () => {
+    const claim = { path: live, branch: "RP-921-x", project: "rabaed-lane12" };
+    expect(check({ claims: [claim], containers: undefined })).toBe(`the .env of ${live} (on RP-921-x) holds it now`);
   });
 });
 
