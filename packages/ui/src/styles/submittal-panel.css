@@ -26,3 +26,182 @@
     animation: none;
   }
 }
+
+/*
+ * Sizes and layout bands (RP-1063, README §2 and §3). A preset eases the width; a drag and the
+ * first paint don't (`data-resizing`). The bands follow the panel's own width, a container query
+ * on `@container/sdp`, so they change live while the edge is dragged; their edges are the ones
+ * `submittalPanelBandOf` uses: Compact < 560, Normal < 880, Wide < 1160, Full.
+ * These rules sit outside Tailwind's layers, so they win over the utilities on the same elements.
+ */
+.sdp {
+  transition: width 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.sdp[data-resizing] {
+  transition: none;
+  user-select: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sdp {
+    transition: none;
+  }
+}
+
+/* The drag edge: a 14px strip astride the inline-start edge, a pill of 3 dots, a brand line on hover. */
+.sdp-grip {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -7px;
+  z-index: 10;
+  width: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+.sdp-grip::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 6px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+.sdp-grip:hover::before,
+.sdp-grip[data-dragging]::before {
+  background: var(--brand);
+}
+.sdp-grip-pill {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 8px;
+  height: 44px;
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong),
+    0 1px 3px color-mix(in srgb, var(--shadow-colour) 12%, transparent);
+}
+.sdp-grip-pill b {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.sdp-grip:hover .sdp-grip-pill,
+.sdp-grip[data-dragging] .sdp-grip-pill {
+  box-shadow: inset 0 0 0 1.5px var(--brand);
+}
+.sdp-grip-tip {
+  position: absolute;
+  top: calc(50% + 32px);
+  inset-inline-start: 14px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--inverse);
+  color: var(--on-inverse);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* The size switch's glyph: a rectangle whose inline-end part is filled, more for a wider preset. */
+.sdp-size-glyph {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 2.5px;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.sdp-size-glyph::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: var(--sdp-fill);
+  background: currentColor;
+}
+.sdp-size-text {
+  display: none;
+}
+
+/* The side rail: an empty slot below the Wide band. */
+.sdp-rail {
+  display: none;
+}
+
+/* Compact (< 560): one column; no previous / next, no breadcrumb label, no hint; number at 21px. */
+@container sdp (max-width: 559px) {
+  .sdp-nav,
+  .sdp-crumb-label,
+  .sdp-hint {
+    display: none;
+  }
+  .sdp-number {
+    font-size: 21px;
+  }
+  .sdp-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Normal (560–879): fields in 2 columns. */
+@container sdp (min-width: 560px) {
+  .sdp-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Wide (880–1159): two panes, the main column and a 300px rail; the in-flow log is the rail's now. */
+@container sdp (min-width: 880px) {
+  .sdp-layout {
+    min-height: 100%;
+  }
+  .sdp-rail {
+    display: flex;
+    flex: 0 0 300px;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
+    padding: 20px;
+    border-inline-start: 1px solid var(--border-subtle);
+    background: var(--surface-subtle);
+  }
+  .sdp-inflow {
+    display: none;
+  }
+  .sdp-size-text {
+    display: inline;
+  }
+  .sdp-identity {
+    padding: 24px 28px 16px;
+  }
+  .sdp-number {
+    font-size: 32px;
+  }
+  .sdp-facts {
+    margin-inline: 28px;
+  }
+}
+
+/* Full (≥ 1160): a 360px rail, fields in 3 columns, the main column at most 1040px. */
+@container sdp (min-width: 1160px) {
+  .sdp-rail {
+    flex-basis: 360px;
+  }
+  .sdp-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .sdp-main {
+    max-width: 1040px;
+  }
+}

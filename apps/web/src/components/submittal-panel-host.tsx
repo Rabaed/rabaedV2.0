@@ -1,6 +1,6 @@
 "use client";
 
-import { isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
+import { directionOf, isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
 import {
   Button,
   DocNo,
@@ -9,7 +9,9 @@ import {
   StagePill,
   SubmittalPanel,
   SubmittalPanelFacts,
+  SubmittalPanelGrip,
   SubmittalPanelIdentity,
+  SubmittalPanelSizeSwitch,
   TradeChip,
   submittalPanelNormalWidth,
   submittalPanelNumber,
@@ -20,15 +22,18 @@ import {
   readSubmittalPanelPreferences,
   stageColour,
   useSubmittalPanelIds,
+  useSubmittalPanelSize,
+  writeSubmittalPanelPreferences,
+  type SubmittalPanelSizeLabels,
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { useCreateRevision } from "@/components/work-item-revision";
-import { openIdFrom, submittalPanelHref } from "@/lib/submittal-panel-url";
+import { openIdFrom, sizeFrom, submittalPanelHref } from "@/lib/submittal-panel-url";
 
 type Filters = Pick<WorkItemListData["filters"], "outcomes" | "locations">;
 
@@ -60,6 +65,11 @@ export function useOpenSubmittal() {
   );
   return { openId, open: showInUrl, close: () => showInUrl(null) };
 }
+
+/** The kept width, as one value, so reading it again gives the same snapshot. */
+const keptWidth = () => readSubmittalPanelPreferences(submittalPanelStorage()).width;
+/** Nothing to follow: the width is read when the panel opens. */
+const noStorageEvents = () => () => {};
 
 /** The item read for one id: the item, or null when it couldn't be read (hidden, gone or failed: the same to the viewer). */
 type ItemRead = { id: string; item: WorkItemDetail | null };
@@ -93,10 +103,20 @@ export function SubmittalPanelHost({
   const [read, setRead] = useState<ItemRead | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [order, setOrder] = useState<string[]>([]);
-  const [width] = useState(() => {
-    const kept = readSubmittalPanelPreferences(submittalPanelStorage()).width;
-    return kept === "full" ? submittalPanelNormalWidth : kept;
+  // The viewer's kept width, read once mounted (the server has no storage, so it draws Normal),
+  // unless a link sets the size: that view is the link's and never writes (README §2).
+  const linkSize = sizeFrom(useSearchParams());
+  const kept = useSyncExternalStore(noStorageEvents, keptWidth, () => null);
+  const size = useSubmittalPanelSize({
+    initial: linkSize ?? kept ?? submittalPanelNormalWidth,
+    dir: directionOf(locale),
+    onKeep: linkSize === null ? (width) => writeSubmittalPanelPreferences(submittalPanelStorage(), { width }) : undefined,
   });
+  const sizeLabels: SubmittalPanelSizeLabels = {
+    group: t("size.group"),
+    sizes: { compact: t("size.compact"), normal: t("size.normal"), wide: t("size.wide"), full: t("size.full") },
+    grip: t("size.grip"),
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,7 +177,10 @@ export function SubmittalPanelHost({
       onPrevious={moveTo(position.previous)}
       onNext={moveTo(position.next)}
       onClose={close}
-      width={width}
+      width={size.width}
+      resizing={size.resizing}
+      edge={<SubmittalPanelGrip size={size} locale={locale} labels={sizeLabels} />}
+      topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels} />}
       labelledBy={item ? ids.labelledBy : undefined}
       label={item ? undefined : loading ? t("loading") : t("unavailable")}
       busy={loading}
