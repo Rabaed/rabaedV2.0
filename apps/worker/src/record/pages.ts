@@ -10,9 +10,12 @@ import type { PdfRenderer } from "./render.ts";
 // on the last page of its draw: the Comments run on after the Documents (RP-1059), and their
 // heading, first author and first Comment print together, so a draw that stops after them ends on
 // the page they start on; the issuing card's answers follow its head with nothing between, so they
-// start on the last page of a draw that stops after its head. Then the record is drawn once more, with the pages
-// it names, and the Record Data holds them, as it holds everything the pages print. A record
-// with neither (no Comments, a reply page 1 prints whole) is drawn once.
+// start on the last page of a draw that stops after its head. (A first Comment taller than a page
+// would split, and its page would be the one it ends on; Comments are a few lines each.) On a
+// record short enough for its Comments to start on page 1, page 1 says "page 1". Then the record
+// is drawn once more, with the pages it names, and the Record Data holds them, as it holds
+// everything the pages print. A record with neither (no Comments, a reply page 1 prints whole)
+// is drawn once.
 
 /** A placeholder as wide as a page number, so a probe's page 1 wraps as the record's does. */
 const PROBE_PAGE = 88;

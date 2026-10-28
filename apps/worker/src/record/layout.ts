@@ -223,19 +223,16 @@ export function recordHtml(
   // Paired as txt() pairs every bilingual value: the Arabic sentence, then the English on its own line in
   // the same column, so a wrapped line never mixes the two. The date is the record's one format, as
   // every date beside a label (RP-1059).
+  const paired = (fn: (l: Locale) => string) =>
+    language === "bilingual"
+      ? `<span lang="ar" class="line">${fn("ar")}</span><span class="line en"><bdi lang="en" dir="ltr">${fn("en")}</bdi></span>`
+      : `<span lang="${language}" dir="${dirOf(language)}" class="line">${fn(language)}</span>`;
   const revisionOf = data.revisionOf;
-  const revisionSentence = (l: Locale) =>
-    revisionOf
-      ? `${WORDS.revisionOf[l]} ${ltr(revisionOf.documentNumber)}, ${WORDS.closedAtCode[l]} ${html(revisionOf.outcome)} ${WORDS.closedOn[l]} ${day(revisionOf.closedAt)}`
-      : "";
   const revisionLine = revisionOf
-    ? `<div class="revision">${locales
-        .map((l) =>
-          language === "bilingual" && l === "en"
-            ? `<div class="line en"><bdi lang="en" dir="ltr">${revisionSentence(l)}</bdi></div>`
-            : `<div class="line" lang="${l}">${revisionSentence(l)}</div>`,
-        )
-        .join("")}</div>`
+    ? `<div class="revision">${paired(
+        (l) =>
+          `${WORDS.revisionOf[l]} ${ltr(revisionOf.documentNumber)}, ${WORDS.closedAtCode[l]} ${html(revisionOf.outcome)} ${WORDS.closedOn[l]} ${day(revisionOf.closedAt)}`,
+      )}</div>`
     : "";
 
   // The running header on every page after the first: the Type badge, the Subject, the Document
