@@ -8,7 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, inInternalReview, memberOnProject, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
 
-const api = await createTestApi();
+// The Tower's MARs attach a datasheet before they leave Draft, so the api needs its file store.
+const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 let c1: Company;
