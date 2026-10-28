@@ -188,7 +188,10 @@ export const FrozenNotAnnotated: Story = {
     await expect(viewer.queryByRole("button", { name: text.viewer.annotate })).toBeNull();
     await userEvent.click(viewer.getByRole("button", { name: text.viewer.close }));
     await userEvent.click(context.canvas.getByRole("button", { name: text.open("IMG-20261003-WA0007.jpg") }));
-    await expect(within(await screen.findByRole("dialog")).getByRole("button", { name: text.viewer.annotate })).toBeVisible();
+    const other = within(await screen.findByRole("dialog"));
+    await expect(other.getByRole("button", { name: text.viewer.annotate })).toBeVisible();
+    // Closed again, so the screenshot shows the field.
+    await userEvent.click(other.getByRole("button", { name: text.viewer.close }));
   },
 };
 
@@ -209,6 +212,8 @@ export const HeicWithCopy: Story = {
     await userEvent.click(viewer.getByRole("radio", { name: text.viewer.original }));
     await expect(viewer.getByText(text.viewer.noImage)).toBeVisible();
     await expect(args.files!.onOpen).not.toHaveBeenCalled();
+    // Closed again, so the screenshot shows the field.
+    await userEvent.click(viewer.getByRole("button", { name: text.viewer.close }));
   },
 };
 
@@ -269,6 +274,8 @@ export const ReadOnly: Story = {
     await userEvent.click(viewer.getByRole("radio", { name: text.viewer.original }));
     await expect(viewer.getByRole("img")).toHaveAttribute("src", imageUrls[facade.id]);
     await expect(viewer.queryByRole("button", { name: text.viewer.annotate })).toBeNull();
+    // Closed again, so the screenshot shows the field.
+    await userEvent.click(viewer.getByRole("button", { name: text.viewer.close }));
   },
 };
 

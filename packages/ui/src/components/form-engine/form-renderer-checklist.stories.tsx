@@ -302,6 +302,8 @@ export const ReadOnly: Story = {
     const viewer = within(await screen.findByRole("dialog", { name: "cover.jpg" }));
     await expect(viewer.getByRole("radio", { name: photoWords(context).viewer.original })).toBeVisible();
     await expect(viewer.queryByRole("button", { name: photoWords(context).viewer.annotate })).toBeNull();
+    // Closed again, so the screenshot shows the checklist.
+    await userEvent.click(viewer.getByRole("button", { name: photoWords(context).viewer.close }));
   },
 };
 
