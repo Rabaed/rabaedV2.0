@@ -18,6 +18,7 @@ import {
   isUnanswered,
   parseNumberInput,
   isAnnotatedCopy,
+  withAnnotatedCopies,
   scopesFittingTrade,
   toLatinDigits,
   toProjectWallTime,
@@ -57,6 +58,7 @@ import { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "
 import { ChecklistTemplateField, PickedTemplateItems, templateOptions, type ChecklistTemplateFieldLabels } from "./checklist-template-field.tsx";
 import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabels } from "./link-question-field.tsx";
 import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
+import type { SaveAnnotated } from "../photo/photo-screens.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
 import { TableInput, TableRead, type TableFieldLabels } from "./table-field.tsx";
 
@@ -204,7 +206,7 @@ export type FormRendererProps = {
 export type FormFiles = {
   /**
    * The item's confirmed Documents tied to a field (`fieldKey`), and a checklist's to an item (`itemKey`); others are
-   * ignored, annotated copies too (RP-656: shown by PhotoTool, beside their originals, not as files of their own).
+   * ignored. A photo's annotated copy (RP-656) is in its original's field and item, shown beside it, not as a file of its own.
    */
   documents: readonly DocumentSummary[];
   /** Files may be uploaded and removed now (the raiser's Company, in Draft, with Attach). */
@@ -220,14 +222,22 @@ export type FormFiles = {
   onUpload?: (fieldKey: string, files: File[], itemKey?: string) => void;
   onOpen?: (documentId: string) => void;
   onRemove?: (fieldKey: string, documentId: string, itemKey?: string) => void;
+  /**
+   * Stores `image` as the annotated copy of photo `originalId` (RP-656), in its field and item;
+   * throws when refused. Offered on the photos that may change now (`canChange`), never a frozen one.
+   */
+  onSaveAnnotated?: SaveAnnotated;
 };
 
-/** One file field's files, out of the Form's (never a checklist item's evidence). */
-const filesOf = (files: FormFiles | undefined, key: string): PhotosFieldFiles | undefined =>
+/**
+ * One file field's files, out of the Form's (never a checklist item's evidence). A `photos` field's
+ * keep their annotated copies, which it shows beside their originals; an `attachments` field's never do.
+ */
+const filesOf = (files: FormFiles | undefined, field: AttachmentsFieldSchema | PhotosFieldSchema): PhotosFieldFiles | undefined =>
   files && {
-    documents: files.documents.filter((d) => d.fieldKey === key && d.itemKey === null && !isAnnotatedCopy(d)),
+    documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey === null && (field.type === "photos" || !isAnnotatedCopy(d))),
     canChange: files.canChange,
-    pending: files.pending?.has(key),
+    pending: files.pending?.has(field.key),
     imageUrls: files.imageUrls,
   };
 
@@ -675,7 +685,7 @@ export function FormRenderer({
 
   /** An `attachments` field's files, to upload and remove while they may change; a group when there is no file input. */
   function attachmentsControl(field: AttachmentsFieldSchema): { element: ReactNode; group?: boolean } {
-    const own = filesOf(files, field.key);
+    const own = filesOf(files, field);
     return {
       group: !takesUpload(field, own, "edit"),
       element: (
@@ -759,7 +769,7 @@ export function FormRenderer({
 
   /** A `photos` field's photos, to take, choose and remove while they may change; a group when there is no file input. */
   function photosControl(field: PhotosFieldSchema): { element: ReactNode; group?: boolean } {
-    const own = filesOf(files, field.key);
+    const own = filesOf(files, field);
     return {
       group: !takesPhotos(field, own, "edit"),
       element: (
@@ -772,6 +782,7 @@ export function FormRenderer({
           onUpload={(picked) => files?.onUpload?.(field.key, picked)}
           onOpen={files?.onOpen}
           onRemove={(documentId) => files?.onRemove?.(field.key, documentId)}
+          onSaveAnnotated={files?.onSaveAnnotated}
         />
       ),
     };
@@ -781,7 +792,7 @@ export function FormRenderer({
   function checklistFiles(field: ChecklistFieldSchema): ChecklistFiles | undefined {
     if (!files) return undefined;
     return {
-      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null && !isAnnotatedCopy(d)),
+      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null),
       canChange: files.canChange,
       pendingItems: new Set(field.items.filter((i) => files.pending?.has(checklistItemFilesKey(field.key, i.key))).map((i) => i.key)),
       imageUrls: files.imageUrls,
@@ -805,6 +816,7 @@ export function FormRenderer({
           onUpload={(itemKey, picked) => files?.onUpload?.(field.key, picked, itemKey)}
           onOpen={files?.onOpen}
           onRemove={(itemKey, documentId) => files?.onRemove?.(field.key, documentId, itemKey)}
+          onSaveAnnotated={files?.onSaveAnnotated}
         />
       ),
     };
@@ -850,21 +862,21 @@ export function FormRenderer({
     const value = answers[field.key];
     // Its answer is its files.
     if (field.type === "attachments") {
-      const own = filesOf(files, field.key);
+      const own = filesOf(files, field);
       return own && own.documents.length > 0 ? (
         <AttachmentsField field={field} files={own} mode="read" locale={locale} labels={labels.attachments} onOpen={files?.onOpen} />
       ) : null;
     }
     if (field.type === "photos") {
-      const own = filesOf(files, field.key);
-      return own && own.documents.length > 0 ? (
+      const own = filesOf(files, field);
+      return own && withAnnotatedCopies(own.documents).length > 0 ? (
         <PhotosField field={field} files={own} mode="read" locale={locale} labels={labels.photos} onOpen={files?.onOpen} />
       ) : null;
     }
     if (field.type === "checklist") {
       const own = checklistFiles(field);
       const answered = typeof value === "object" && value !== null && Object.keys(value).length > 0;
-      return answered || (own && own.documents.length > 0) ? (
+      return answered || (own && withAnnotatedCopies(own.documents).length > 0) ? (
         <ChecklistField field={field} value={value} mode="read" locale={locale} labels={labels.checklist} files={own} onOpen={files?.onOpen} />
       ) : null;
     }

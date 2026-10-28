@@ -3,7 +3,6 @@
 import {
   checklistItemFilesKey,
   checklistOfRead,
-  isAnnotatedCopy,
   type ChecklistAnswers,
   type DocumentList,
   type DocumentSummary,
@@ -26,9 +25,9 @@ import { useFormRendererLabels } from "@/lib/form-labels";
 /** How long after the last change the answers save themselves. */
 const SAVE_MS = 800;
 
-/** The checklist's photos that no Transition took yet: its items' reply Documents. */
+/** The checklist's photos that no Transition took yet: its items' reply Documents, each annotated copy beside its original (RP-981). */
 const photosOf = (checklist: ReplyChecklistRead, documents: readonly DocumentSummary[]) =>
-  documents.filter((d) => d.reply && !d.reply.taken && d.fieldKey === checklist.fieldKey && d.itemKey !== null && !isAnnotatedCopy(d));
+  documents.filter((d) => d.reply && !d.reply.taken && d.fieldKey === checklist.fieldKey && d.itemKey !== null);
 
 /**
  * The item page's reply checklists, for the Participant holding the item (RP-86): each one's items
@@ -124,6 +123,7 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
         onUpload={(itemKey, picked) => void files.upload(picked, checklist.fieldKey, itemKey)}
         onOpen={(documentId) => void files.open(documentId)}
         onRemove={(itemKey, documentId) => void files.remove(documentId, checklist.fieldKey, itemKey)}
+        onSaveAnnotated={files.annotatesIn(photos)}
       />
       {(status || files.message) && (
         <p role={status === "notSaved" ? "alert" : "status"} className={status === "notSaved" ? "text-sm text-danger-fg" : "text-sm text-muted"}>
