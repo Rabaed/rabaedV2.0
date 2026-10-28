@@ -1061,7 +1061,7 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "snagRaised": "عند {answer} تُنشأ ملاحظة"
+        "raisesSnag": "عند {answer} يُنشأ عيب"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
@@ -1915,7 +1915,7 @@
       "trade": "التخصص",
       "tradeHelp": "لا يُعرض إلا على طلبات المعاينة من هذا التخصص.",
       "checksTitle": "{count, plural, one {بند واحد} two {بندان} few {{n} بنود} many {{n} بندًا} other {{n} بند}}",
-      "checksIntro": "يُجاب عن كل بند في الموقع. حدّد ما يتطلبه من دليل، وهل يُنشئ البند الفاشل ملاحظة.",
+      "checksIntro": "يُجاب عن كل بند في الموقع. حدّد ما يتطلبه من دليل، وهل يُنشئ البند الفاشل عيبًا.",
       "checkNo": "البند {n}",
       "checkEn": "البند (بالإنجليزية)",
       "checkAr": "البند (بالعربية)",
@@ -1931,7 +1931,7 @@
       },
       "onNegative": "عند مرفوض أو لا",
       "negative": {
-        "create_snag": "إنشاء ملاحظة",
+        "create_snag": "إنشاء عيب",
         "none": "لا شيء"
       },
       "moveUp": "نقل البند {n} للأعلى",

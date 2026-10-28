@@ -1061,7 +1061,7 @@
         "photoRequired": "Photo required on {answer}",
         "commentOptional": "Comment optional",
         "photoOptional": "Photos optional",
-        "snagRaised": "{answer} raises a Snag"
+        "raisesSnag": "{answer} raises a Snag"
       },
       "linkQuestion": {
         "remove": "Remove {number}"
