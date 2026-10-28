@@ -58,6 +58,15 @@ describe("a Working Copy's page", () => {
     expect(html).toContain("Cable ladders for Building A");
   });
 
+  it("prints a Revision's Document Number with its revision once, in each language (RP-1059)", async () => {
+    for (const language of ["bilingual", "en", "ar"] as const) {
+      const revision = { ...content(language), documentNumber: "RGT-MAR-EL-0012 Rev 1", revisionNo: 1, revisionOf: { documentNumber: "RGT-MAR-EL-0012", closedAt: "2026-10-08T11:00:00.000Z", outcome: "C" } };
+      const html = recordHtml(workingCopyDataOf(revision), await fallbackFonts());
+      expect(html, language).toContain("RGT-MAR-EL-0012 Rev 1");
+      expect(html, language).not.toMatch(/Rev 1\s+Rev 1/);
+    }
+  });
+
   it("marks a move that gave the item back as returned for revision", () => {
     const moves = workingCopyDataOf({ ...content("en"), moves: [{ ...content("en").moves[0]!, kind: "return" }] }).moves;
     expect(moves.map((m) => m.mark)).toEqual(["revise"]);

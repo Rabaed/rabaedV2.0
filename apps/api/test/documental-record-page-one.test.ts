@@ -666,6 +666,8 @@ describe("a Revision and the other outcomes", () => {
     const firstNumber = (await detail(c1Pm, first)).documentNumber!;
     const firstClosed = (await sql<{ closed: Date }>`select closed_at as closed from work_item where id = ${first}::uuid`.execute(migrator)).rows[0]!.closed;
     expect(record.text).toContain(squeeze(`${firstNumber}Rev1`));
+    // The stored number carries the revision: the printed record never repeats it (RP-1059).
+    expect(record.text).not.toContain("Rev1Rev1");
     expect(record.text).toContain("closedatCodeC");
     expect(record.text).toContain(squeeze(formatDate(firstClosed, "en")));
     expect(record.xml).toMatch(new RegExp(`<revisionOf outcome="C" at="[^"]+">${firstNumber}</revisionOf>`));
