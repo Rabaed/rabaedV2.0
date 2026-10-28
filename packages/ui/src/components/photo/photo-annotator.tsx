@@ -47,6 +47,8 @@ export type PhotoAnnotatorProps = {
   onSave: (image: Blob) => Promise<void> | void;
   /** Marks already drawn when the view opens (stories). */
   defaultMarks?: readonly Mark[];
+  /** Where the screen mounts (PhotoScreen's `container`). */
+  container?: HTMLElement | null;
 };
 
 const toolIcons: Record<MarkTool, IconName> = {
@@ -87,7 +89,7 @@ function fitted(natural: Size | null, stage: Size | null): Size | null {
   return { width: Math.floor(natural.width * scale), height: Math.floor(natural.height * scale) };
 }
 
-export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels: text, onSave, defaultMarks = [] }: PhotoAnnotatorProps) {
+export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels: text, onSave, defaultMarks = [], container }: PhotoAnnotatorProps) {
   const [marks, setMarks] = useState<readonly Mark[]>(defaultMarks);
   // The mark being drawn: kept in a ref too, as pointer moves can come faster than renders.
   const [draft, setDraftState] = useState<Mark | null>(null);
@@ -204,6 +206,7 @@ export function PhotoAnnotator({ open, onOpenChange, imageUrl, fileName, labels:
       title={text.title(fileName)}
       closeLabel={text.cancel}
       locked={saving}
+      container={container}
       actions={
         <>
           <IconButton label={text.undo} disabled={marks.length === 0 || saving} onClick={() => setMarks(marks.slice(0, -1))} className={onBar}>

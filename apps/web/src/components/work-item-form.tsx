@@ -361,6 +361,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
           onUpload: (fieldKey, picked, itemKey) => void files.upload(picked, fieldKey, itemKey),
           onOpen: (documentId) => void files.open(documentId),
           onRemove: (fieldKey, documentId, itemKey) => void files.remove(documentId, fieldKey, itemKey),
+          onSaveAnnotated: files.annotatesIn(documents.documents),
         }}
       />
       {form.message && (

@@ -22,13 +22,18 @@ export type PhotoScreenProps = {
   locked?: boolean;
   /** At the end of the bar. */
   actions?: ReactNode;
+  /**
+   * Where the screen mounts: inside a modal <dialog> (the Transition pop-up) it must mount in it,
+   * since in <body> it would sit under the dialog's top layer, hidden and unclickable (as Select, RP-658).
+   */
+  container?: HTMLElement | null;
   children: ReactNode;
 };
 
-export function PhotoScreen({ open, onOpenChange, title, closeLabel, locked = false, actions, children }: PhotoScreenProps) {
+export function PhotoScreen({ open, onOpenChange, title, closeLabel, locked = false, actions, container, children }: PhotoScreenProps) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => !locked && onOpenChange(next)}>
-      <DialogPrimitive.Portal>
+      <DialogPrimitive.Portal container={container ?? undefined}>
         <DialogPrimitive.Content
           aria-describedby={undefined}
           className="fixed inset-0 z-50 flex h-dvh flex-col bg-inverse text-on-inverse focus-visible:outline-none"
