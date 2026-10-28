@@ -18,13 +18,15 @@ export const passwordResetRoutes =
     // the answer never tells whether it is registered. Past the limits, 429 for any email alike.
     app.post("/v1/password-resets", { config: { public: true }, schema: { body: passwordResetRequest } }, async (request, reply) => {
       const answerAt = performance.now() + PASSWORD_RESET.answerAfterMs;
+      let outcome;
       try {
-        const outcome = await requestPasswordReset(ctx.db, request.body.email, visitorSha256(request), ctx.now(), PASSWORD_RESET);
-        if (outcome === "too_many_attempts") throw new HttpError(429, "too_many_attempts");
-        return reply.code(202).send();
+        outcome = await requestPasswordReset(ctx.db, request.body.email, visitorSha256(request), ctx.now(), PASSWORD_RESET);
       } finally {
+        // Before anything is sent: a reply, once sent, has already told its time.
         await sleep(Math.max(0, answerAt - performance.now()));
       }
+      if (outcome === "too_many_attempts") throw new HttpError(429, "too_many_attempts");
+      return reply.code(202).send();
     });
 
     // Uses a link: sets the new password, signs the Member out everywhere else and in here. An

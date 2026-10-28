@@ -16,7 +16,7 @@
 -- through the SECURITY DEFINER functions below.
 
 create table password_reset (
-  id uuid primary key default app.uuid_v7(),
+  id uuid primary key default gen_random_uuid(),
   member_id uuid not null references member (id),
   requested_at timestamptz not null,
   -- Set when the email is sent: the SHA-256 of the link's token, and when it expires.
@@ -49,7 +49,7 @@ revoke all on password_reset_attempt from rabaed_admin;
 -- A Member's security events, append-only: a password reset, by when. Nobody reads it through
 -- the app role; it is the audit record.
 create table member_security_event (
-  id uuid primary key default app.uuid_v7(),
+  id uuid primary key default gen_random_uuid(),
   member_id uuid not null references member (id),
   kind text not null check (kind in ('password_reset')),
   at timestamptz not null
