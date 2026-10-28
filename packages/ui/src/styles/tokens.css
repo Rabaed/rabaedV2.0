@@ -84,6 +84,9 @@
   --palette-warm-menu-border: #ece2d8;
   --palette-warm-field-fill: #f8f2ec;
   --palette-overlay-grey: #0f142361;
+  --palette-hero-ink: #14161c;
+  --palette-hero-text: #edeef3;
+  --palette-hero-muted: #9aa0b4;
   --palette-navy-sidebar: #131b2e;
   --palette-navy-sidebar-card: #1b2438;
   --palette-navy-sidebar-divider: #232d44;
@@ -218,6 +221,9 @@
   --sidebar-press: var(--palette-white-10);
   --sidebar-current: var(--palette-tomato-16);
   --sidebar-current-text: var(--palette-white);
+  --hero: var(--palette-hero-ink);
+  --hero-text: var(--palette-hero-text);
+  --hero-muted: var(--palette-hero-muted);
   --text: var(--palette-slate-900);
   --text-secondary: var(--palette-slate-800);
   --muted: var(--palette-slate-625);
@@ -380,6 +386,9 @@
   --sidebar-press: var(--palette-white-10);
   --sidebar-current: var(--palette-tomato-16);
   --sidebar-current-text: var(--palette-white);
+  --hero: var(--palette-hero-ink);
+  --hero-text: var(--palette-hero-text);
+  --hero-muted: var(--palette-hero-muted);
   --text: var(--palette-navy-text);
   --text-secondary: var(--palette-navy-text-2);
   --muted: var(--palette-navy-muted-text);
@@ -543,6 +552,9 @@
     --sidebar-press: var(--palette-white-10);
     --sidebar-current: var(--palette-tomato-16);
     --sidebar-current-text: var(--palette-white);
+    --hero: var(--palette-hero-ink);
+    --hero-text: var(--palette-hero-text);
+    --hero-muted: var(--palette-hero-muted);
     --text: var(--palette-navy-text);
     --text-secondary: var(--palette-navy-text-2);
     --muted: var(--palette-navy-muted-text);
@@ -707,6 +719,9 @@
   --sidebar-press: var(--palette-cream-10);
   --sidebar-current: var(--palette-tomato-18);
   --sidebar-current-text: var(--palette-white);
+  --hero: var(--palette-hero-ink);
+  --hero-text: var(--palette-hero-text);
+  --hero-muted: var(--palette-hero-muted);
   --text: var(--palette-warm-text);
   --text-secondary: var(--palette-warm-text-2);
   --muted: var(--palette-warm-muted-text);
@@ -869,6 +884,9 @@
   --sidebar-press: var(--palette-cream-10);
   --sidebar-current: var(--palette-tomato-20);
   --sidebar-current-text: var(--palette-white);
+  --hero: var(--palette-hero-ink);
+  --hero-text: var(--palette-hero-text);
+  --hero-muted: var(--palette-hero-muted);
   --text: var(--palette-espresso-text);
   --text-secondary: var(--palette-espresso-text-2);
   --muted: var(--palette-espresso-muted);
@@ -1032,6 +1050,9 @@
     --sidebar-press: var(--palette-cream-10);
     --sidebar-current: var(--palette-tomato-20);
     --sidebar-current-text: var(--palette-white);
+    --hero: var(--palette-hero-ink);
+    --hero-text: var(--palette-hero-text);
+    --hero-muted: var(--palette-hero-muted);
     --text: var(--palette-espresso-text);
     --text-secondary: var(--palette-espresso-text-2);
     --muted: var(--palette-espresso-muted);
@@ -1195,6 +1216,9 @@
   --color-sidebar-press: var(--sidebar-press);
   --color-sidebar-current: var(--sidebar-current);
   --color-sidebar-current-text: var(--sidebar-current-text);
+  --color-hero: var(--hero);
+  --color-hero-text: var(--hero-text);
+  --color-hero-muted: var(--hero-muted);
   --color-text: var(--text);
   --color-text-secondary: var(--text-secondary);
   --color-muted: var(--muted);

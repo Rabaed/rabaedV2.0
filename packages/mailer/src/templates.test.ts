@@ -58,6 +58,7 @@ const examples: EmailTemplateValues = {
   invitation: { companyName: "Al Bina <Contracting> & Sons", link: "https://rabaed.test/ar/accept-invitation#token=abc" },
   "new-device-sign-in": { when: "2026-10-02 09:15 UTC", ip: "203.0.113.7" },
   "sign-in-locked": { minutes: 15 },
+  "password-reset": { link: "https://rabaed.test/ar/reset-password#token=abc", validMinutes: 30 },
   "notification-step-reached": { ...item, step: { en: "Contractor review", ar: "مراجعة المقاول" } },
   "notification-watched-event": { ...item, event: codeB },
   "notification-sent-back": {
@@ -183,6 +184,29 @@ describe("invitation", () => {
 
   it("refuses a link that is not https or http", () => {
     expect(() => renderEmail("invitation", "en", { ...examples.invitation, link: "javascript:alert(1)" })).toThrow();
+  });
+});
+
+describe("password reset", () => {
+  const values = examples["password-reset"];
+
+  it("links to the reset page, kept left to right, and says how long the link works, in both languages", () => {
+    for (const locale of locales) {
+      const email = renderEmail("password-reset", locale, values);
+      expect(email.text).toContain(values.link);
+      expect(email.text).toContain("30");
+      expect(email.html).toContain(`href="${values.link}"`);
+    }
+    expect(renderEmail("password-reset", "ar", values).html).toContain('<bdi dir="ltr"');
+  });
+
+  it("tells whoever didn't ask for it that they can ignore it", () => {
+    expect(renderEmail("password-reset", "en", values).text).toContain("If you didn't ask");
+    expect(renderEmail("password-reset", "ar", values).text).toContain("إن لم تطلب");
+  });
+
+  it("refuses a link that is not https or http", () => {
+    expect(() => renderEmail("password-reset", "en", { ...values, link: "javascript:alert(1)" })).toThrow();
   });
 });
 

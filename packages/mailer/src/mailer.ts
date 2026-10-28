@@ -1,6 +1,7 @@
 import {
   stepAgeReportQuery,
   workItemSearchParams,
+  type BilingualText,
   type Locale,
   type NotificationDigest,
   type NotificationEmail,
@@ -44,6 +45,32 @@ const oneAddress = z.email();
 export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
   const link = content.package ? packageLink(content.package.id, language, webUrl) : itemLink(content.workItemId!, language, webUrl);
   return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link } };
+}
+
+/** Who an invitation goes to, the inviting Company's name, and the one-time token. */
+export interface InvitationEmail {
+  to: string;
+  locale: Locale;
+  companyName: BilingualText;
+  token: string;
+}
+
+/**
+ * An invitation to become a Member, as the mailer sends it: in the invitee's
+ * language, linking to accept-invitation on the customer web (`webUrl`). The
+ * token is only in the link's fragment, which browsers never send to a server.
+ */
+export function invitationMessage({ to, locale, companyName, token }: InvitationEmail, webUrl: string): MailMessage<"invitation"> {
+  const link = new URL(`/${locale}/accept-invitation`, webUrl);
+  link.hash = `token=${token}`;
+  return { to, template: "invitation", locale, values: { companyName: companyName[locale], link: link.href } };
+}
+
+/** The token in an invitation email's link: how tests and the demo seed accept one they did not receive. */
+export function invitationTokenOf(message: MailMessage<"invitation">): string {
+  const token = new URLSearchParams(new URL(message.values.link).hash.slice(1)).get("token");
+  if (!token) throw new Error("The invitation email has no token in its link");
+  return token;
 }
 
 /** An item's page on the customer web (`webUrl`), in `language`. */

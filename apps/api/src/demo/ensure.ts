@@ -1,5 +1,7 @@
+import type { Mailer } from "@rabaed/mailer";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
+import { demoMailbox } from "./mailbox.ts";
 import { DEMO_ENGINEER_EMAIL, DEMO_LAST_ITEM_TITLE, seedDemo, type SeedDatabases, type SeedOptions } from "./seed.ts";
 
 // Any constant; distinct from the bootstrap and migration locks.
@@ -10,9 +12,9 @@ const SEED_LOCK_KEY = 718_200_196;
  * Rabaed Engineer exists) but never finished (its last Draft is missing) is an
  * error: only a reset can repair it. Serialised on the migrator's connection, so two callers at once seed
  * it once: both seam suites' global setups, or two deploys in dev. `app` is
- * built only when the seed runs.
+ * built only when the seed runs, with the mailer it must send through (a DemoMailbox).
  */
-export async function ensureDemo(databases: SeedDatabases, app: () => Promise<FastifyInstance>,
+export async function ensureDemo(databases: SeedDatabases, app: (mailer: Mailer) => Promise<FastifyInstance>,
   password: string,
   options: SeedOptions = {},
 ): Promise<"seeded" | "present"> {
@@ -25,9 +27,10 @@ export async function ensureDemo(databases: SeedDatabases, app: () => Promise<Fa
       `.execute(connection);
       if (state!.started && state!.finished) return "present";
       if (state!.started) throw new Error("The demo was only partly seeded; reset it (drop the database and seed again).");
-      const api = await app();
+      const mailbox = demoMailbox();
+      const api = await app(mailbox.mailer);
       try {
-        await seedDemo(api, databases, password, options);
+        await seedDemo(api, mailbox, databases, password, options);
       } finally {
         await api.close();
       }

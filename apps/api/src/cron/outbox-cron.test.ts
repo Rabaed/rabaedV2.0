@@ -143,7 +143,7 @@ describe("the cron pass", () => {
     expect(await pass()).toEqual({ scheduledJobs: [{ job: "daily_digest", outcome: "ran" }], outbox: run });
     expect(order).toEqual(["jobs", "outbox"]);
     expect(calls).toHaveLength(1);
-    expect([...calls[0]!.kinds!].sort()).toEqual(["digest", "email", "notification", "record_ready", "step_age_report"]);
+    expect([...calls[0]!.kinds!].sort()).toEqual(["digest", "email", "notification", "password_reset", "record_ready", "step_age_report"]);
     for (const kind of ["documental_record", "documental_record_reproduce", "working_copy", "snag_report"]) {
       expect(calls[0]!.kinds).not.toContain(kind);
     }

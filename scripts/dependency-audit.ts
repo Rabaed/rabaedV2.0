@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Reports `pnpm audit --prod --json` in a CI job summary (RP-1023). Run by
@@ -6,9 +6,12 @@ import { resolve } from "node:path";
 // a package.json, and nightly on main. RP-635 checked a new library's advisories by
 // hand, and the audit then showed 7 findings, 2 of them high, that no check reported.
 //
-// Reporting only for now: findings at the level or above become warnings and a table,
-// and the job passes. It fails only when the audit itself could not run (a registry
-// outage must not read as a clean audit). Failing on findings waits for an allow-list.
+// Fails on new findings (RP-1032): an advisory at the level or above exits 1, with an
+// error line and a table, unless `.audit-allowlist.json` at the repo root lists its id
+// with a reason and a review date. Listed advisories get a table of their own; an entry
+// past its review date, or one the audit no longer finds, is named and warned about.
+// It also fails when the audit could not run (a registry outage must not read as a
+// clean audit) or the allow-list is malformed.
 //
 // Usage: node scripts/dependency-audit.ts <audit.json> [--level high]
 // Writes the summary to $GITHUB_STEP_SUMMARY (stdout without it) and the workflow
@@ -20,6 +23,8 @@ export type Severity = (typeof SEVERITIES)[number];
 const isSeverity = (value: unknown): value is Severity => SEVERITIES.includes(value as Severity);
 
 export interface Advisory {
+  /** GitHub's advisory id (GHSA-…), or pnpm's own number when there is none: the allow-list's key. */
+  id: string;
   severity: Severity;
   module: string;
   title: string;
@@ -58,7 +63,8 @@ function findingPaths(entry: Obj): string[] {
 function readAdvisory(entry: Obj): Advisory {
   // An unknown severity counts as critical, so a new pnpm level is never hidden below the line.
   const severity = isSeverity(entry.severity) ? entry.severity : "critical";
-  return { severity, module: stringOrEmpty(entry.module_name), title: stringOrEmpty(entry.title), patched: stringOrEmpty(entry.patched_versions), url: stringOrEmpty(entry.url), paths: findingPaths(entry) };
+  const id = stringOrEmpty(entry.github_advisory_id) || (typeof entry.id === "number" || typeof entry.id === "string" ? String(entry.id) : "");
+  return { id, severity, module: stringOrEmpty(entry.module_name), title: stringOrEmpty(entry.title), patched: stringOrEmpty(entry.patched_versions), url: stringOrEmpty(entry.url), paths: findingPaths(entry) };
 }
 
 function readJson(output: string): Obj {
@@ -92,11 +98,83 @@ export function parseAudit(output: string): Audit {
   return { advisories, counts, packages };
 }
 
-/** The advisories at `level` or above, and the ones below it. */
-function splitAtLevel(audit: Audit, level: Severity): { atLevel: Advisory[]; below: Advisory[] } {
-  const atLevel = audit.advisories.filter((a) => rank(a.severity) <= rank(level));
-  const below = audit.advisories.filter((a) => rank(a.severity) > rank(level));
-  return { atLevel, below };
+/** An advisory that cannot be fixed yet: why, and the date to look at it again. */
+export interface AllowEntry {
+  id: string;
+  reason: string;
+  /** YYYY-MM-DD. */
+  review: string;
+}
+
+const ALLOWLIST = ".audit-allowlist.json";
+
+/** A real calendar date written YYYY-MM-DD (not 2026-02-30). */
+function isDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
+}
+const nonBlank = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
+
+/** The allow-list file's entries; undefined (no file) is an empty list. Throws, naming the entry, on anything malformed. */
+export function parseAllowlist(text: string | undefined): AllowEntry[] {
+  if (text === undefined) return [];
+  let json: unknown;
+  try {
+    // A byte-order mark, as PowerShell 5.1 and some Windows editors save UTF-8, is not part of the JSON.
+    json = JSON.parse(text.replace(/^\uFEFF/, ""));
+  } catch {
+    throw new Error(`${ALLOWLIST} is not JSON.`);
+  }
+  if (!isObj(json) || !Array.isArray(json.advisories)) throw new Error(`${ALLOWLIST} needs an "advisories" list.`);
+  const seen = new Set<string>();
+  return json.advisories.map((entry: unknown, index) => {
+    // An advisory id's own characters (GHSA-xxxx-xxxx-xxxx, or pnpm's number): the summary prints it in a code span.
+    const id = isObj(entry) && typeof entry.id === "string" && /^[A-Za-z0-9-]+$/.test(entry.id) ? entry.id : undefined;
+    if (!isObj(entry) || !id || !nonBlank(entry.reason) || !isDate(entry.review)) {
+      throw new Error(`${ALLOWLIST} entry ${index + 1}${id ? ` (${id})` : ""} needs an "id", a "reason" and a "review" date (YYYY-MM-DD).`);
+    }
+    if (seen.has(id)) throw new Error(`${ALLOWLIST} lists ${id} twice.`);
+    seen.add(id);
+    return { id, reason: entry.reason, review: entry.review };
+  });
+}
+
+/** The allow-list's entries and the run's UTC date (YYYY-MM-DD), against which review dates are read. */
+export interface Allowance {
+  entries: AllowEntry[];
+  today: string;
+}
+
+const noAllowance: Allowance = { entries: [], today: "" };
+
+interface Classified {
+  /** At the level or above, and not allow-listed: these fail the job. */
+  failing: Advisory[];
+  allowed: { advisory: Advisory; entry: AllowEntry }[];
+  /** Below the level, and not allow-listed. */
+  below: Advisory[];
+  /** Entries whose review date has passed. */
+  pastReview: AllowEntry[];
+  /** Entries the audit no longer finds. */
+  notFound: AllowEntry[];
+}
+
+const atLevel = (advisory: Advisory, level: Severity) => rank(advisory.severity) <= rank(level);
+
+function classify(audit: Audit, level: Severity, { entries, today }: Allowance): Classified {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const classified: Classified = { failing: [], allowed: [], below: [], pastReview: [], notFound: [] };
+  for (const advisory of audit.advisories) {
+    const entry = byId.get(advisory.id);
+    if (entry) classified.allowed.push({ advisory, entry });
+    else if (atLevel(advisory, level)) classified.failing.push(advisory);
+    else classified.below.push(advisory);
+  }
+  const found = new Set(audit.advisories.map((a) => a.id));
+  classified.notFound = entries.filter((entry) => !found.has(entry.id));
+  classified.pastReview = entries.filter((entry) => found.has(entry.id) && entry.review < today);
+  return classified;
 }
 
 /** Registry text in a Markdown table cell: one line, no column break, no link or HTML syntax. */
@@ -115,47 +193,88 @@ function advisoryLink(advisory: Advisory): string {
   return `[${tableCell(advisory.title)}](${url})`;
 }
 
+const pathsCell = (advisory: Advisory) => advisory.paths.map(tableCell).join("<br>");
+
 const table = (advisories: Advisory[]) => [
   "| Severity | Package | Advisory | Patched | Paths |",
   "| --- | --- | --- | --- | --- |",
-  ...advisories.map((a) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(a.patched)} | ${a.paths.map(tableCell).join("<br>")} |`),
+  ...advisories.map((a) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(a.patched)} | ${pathsCell(a)} |`),
 ];
 
-/** The job summary: counts, a table of the findings at the level or above, the rest in a closed section. */
-export function summary(audit: Audit, level: Severity): string {
-  const { atLevel, below } = splitAtLevel(audit, level);
+/** Paths too: one GitHub advisory can come as two pnpm advisories (two version ranges), and the paths tell the rows apart. */
+const allowedTable = (allowed: Classified["allowed"]) => [
+  "| Severity | Package | Advisory | Reason | Review by | Paths |",
+  "| --- | --- | --- | --- | --- | --- |",
+  ...allowed.map(({ advisory: a, entry }) => `| ${a.severity} | ${tableCell(a.module)} | ${advisoryLink(a)} | ${tableCell(entry.reason)} | ${entry.review} | ${pathsCell(a)} |`),
+];
+
+/** The job summary: counts, a table of the failing findings, the allow-listed ones, and the rest in a closed section. */
+export function summary(audit: Audit, level: Severity, allowance: Allowance = noAllowance): string {
+  const { failing, allowed, below, pastReview, notFound } = classify(audit, level, allowance);
   const counts = SEVERITIES.filter((s) => audit.counts[s]).map((s) => `${audit.counts[s]} ${s}`);
   const lines = [
-    atLevel.length > 0 ? `## Package audit: ${atLevel.length} at ${level} or above` : `## Package audit: nothing at ${level} or above`,
+    failing.length > 0
+      ? `## Package audit failed: ${failing.length} at ${level} or above, not allow-listed`
+      : `## Package audit: nothing at ${level} or above${allowed.some(({ advisory }) => atLevel(advisory, level)) ? " outside the allow-list" : ""}`,
     "",
     `\`pnpm audit --prod\`: ${counts.length > 0 ? counts.join(", ") : "no findings"} in ${audit.packages} production packages.`,
     "",
   ];
-  if (atLevel.length > 0) lines.push(...table(atLevel), "");
+  if (failing.length > 0) lines.push(...table(failing), "");
+  for (const entry of pastReview) lines.push(`**Review date passed:** \`${entry.id}\` (review by ${entry.review}). Fix it, or give it a new reason and review date.`, "");
+  for (const entry of notFound) lines.push(`**No longer found:** \`${entry.id}\`. Remove it from \`${ALLOWLIST}\`.`, "");
+  if (allowed.length > 0) lines.push(`### Allow-listed: ${allowed.length}`, "", ...allowedTable(allowed), "");
   if (below.length > 0) lines.push("<details>", `<summary>${below.length} below ${level}</summary>`, "", ...table(below), "", "</details>", "");
-  lines.push("Reporting only (RP-1023): this job does not fail on findings yet. Fix one by moving the package, or the package that brings it in, to a patched version in a dependencies-only PR.");
+  lines.push(
+    `The job fails on an advisory at ${level} or above that \`${ALLOWLIST}\` does not list (RP-1032). Fix one by moving the package, or the package that brings it in, to a patched version in a dependencies-only PR. One with no fix yet goes on the allow-list, with a reason and a review date.`,
+  );
   return lines.join("\n");
 }
 
 /** Workflow-command escaping: data for the message, and also `:` and `,` for a property. */
 const commandData = (value: string) => value.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
 const commandProperty = (value: string) => commandData(value).replaceAll(":", "%3A").replaceAll(",", "%2C");
+const allowlistWarning = (message: string) => `::warning title=${commandProperty("pnpm audit: allow-list")}::${commandData(message)}`;
 
-/** One `::warning` command per advisory at the level or above, shown on the run and the pull request's checks. */
-export function warnings(audit: Audit, level: Severity): string[] {
-  return splitAtLevel(audit, level).atLevel.map((a) => `::warning title=${commandProperty(`pnpm audit: ${a.severity} in ${a.module}`)}::${commandData(`${a.title}. Patched: ${a.patched}. Path: ${a.paths.join("; ")}. ${a.url}`)}`);
+/** Workflow commands shown on the run and the pull request's checks: an error per failing advisory, a warning per stale allow-list entry. */
+export function workflowCommands(audit: Audit, level: Severity, allowance: Allowance = noAllowance): string[] {
+  const { failing, pastReview, notFound } = classify(audit, level, allowance);
+  return [
+    ...failing.map((a) => `::error title=${commandProperty(`pnpm audit: ${a.severity} in ${a.module}`)}::${commandData(`${a.title}. Patched: ${a.patched}. Path: ${a.paths.join("; ")}. ${a.url}`)}`),
+    ...pastReview.map((entry) => allowlistWarning(`${entry.id} was to be reviewed by ${entry.review}. Fix it, or give it a new reason and review date in ${ALLOWLIST}.`)),
+    ...notFound.map((entry) => allowlistWarning(`${entry.id} is no longer found. Remove it from ${ALLOWLIST}.`)),
+  ];
 }
 
-/** The summary, the workflow commands and the exit code for one audit's output. */
-export function report(output: string, level: Severity): { summary: string; lines: string[]; exitCode: number } {
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const couldNotRun = (reason: string, next: string) => ({
+  summary: ["## Package audit could not run", "", tableCell(reason), "", next].join("\n"),
+  lines: [`::error title=pnpm audit::${commandData(reason)}`],
+  exitCode: 1,
+});
+
+/**
+ * The summary, the workflow commands and the exit code for one audit's output: 1 when an advisory at
+ * `level` or above is not allow-listed, or when the audit or the allow-list could not be read.
+ * `allowlist` is the file's text (undefined: no file); `today` is YYYY-MM-DD.
+ */
+export function report(output: string, level: Severity, { allowlist, today }: { allowlist: string | undefined; today: string }): { summary: string; lines: string[]; exitCode: number } {
   let audit: Audit;
   try {
     audit = parseAudit(output);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return { summary: ["## Package audit could not run", "", tableCell(reason), "", "Run the workflow again; this is not a clean audit."].join("\n"), lines: [`::error title=pnpm audit::${commandData(reason)}`], exitCode: 1 };
+    return couldNotRun(message(error), "Run the workflow again; this is not a clean audit.");
   }
-  return { summary: summary(audit, level), lines: warnings(audit, level), exitCode: 0 };
+  let entries: AllowEntry[];
+  try {
+    entries = parseAllowlist(allowlist);
+  } catch (error) {
+    return couldNotRun(message(error), `Fix \`${ALLOWLIST}\`; this is not a clean audit.`);
+  }
+  const allowance = { entries, today };
+  const failing = classify(audit, level, allowance).failing.length > 0;
+  return { summary: summary(audit, level, allowance), lines: workflowCommands(audit, level, allowance), exitCode: failing ? 1 : 0 };
 }
 
 function main(argv: string[]): number {
@@ -165,7 +284,10 @@ function main(argv: string[]): number {
     console.error(`Usage: node scripts/dependency-audit.ts <audit.json> [--level ${SEVERITIES.join("|")}]`);
     return 2;
   }
-  const result = report(readFileSync(file, "utf8"), isSeverity(value) ? value : "high");
+  const allowlistFile = resolve(import.meta.dirname, "..", ALLOWLIST);
+  const allowlist = existsSync(allowlistFile) ? readFileSync(allowlistFile, "utf8") : undefined;
+  const today = new Date().toISOString().slice(0, 10);
+  const result = report(readFileSync(file, "utf8"), isSeverity(value) ? value : "high", { allowlist, today });
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (summaryFile) appendFileSync(summaryFile, `${result.summary}\n`);
   else console.log(result.summary);

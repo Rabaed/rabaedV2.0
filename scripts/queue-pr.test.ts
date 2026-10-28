@@ -217,6 +217,10 @@ describe("queuePr", () => {
       expect(verifiedCommits(finalLine({ sha: "", dirty: false, steps }))).toEqual([]);
     });
 
+    it("does not count a run resumed with --from, which skipped steps (RP-1019)", () => {
+      expect(verifiedCommits(finalLine({ sha: "abc1234", dirty: false, steps: ["test:seam2"], from: { step: "test:seam2", notRun: ["lint", "test:seam1"] } }))).toEqual([]);
+    });
+
     it("queues when the verified commit is followed only by clean merges of main", () => {
       // abc1234 merges main's m2 into n1, which merged main's m1 into the verified beef999.
       const graph: Record<string, string[]> = { abc1234: ["n1", "m2"], n1: ["beef999", "m1"] };

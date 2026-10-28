@@ -36,7 +36,8 @@ export class Api {
 
   static async as(person: string): Promise<Api> {
     const { context, page } = await pageAs(person);
-    await page.goto(urlOf("/"), { waitUntil: "domcontentloaded" });
+    // Any page of the web app's origin will do for its /api proxy; not Home, whose reads are the slowest (RP-1050).
+    await page.goto(urlOf("/uat-api-origin"), { waitUntil: "domcontentloaded" });
     return new Api(person, context, page);
   }
 

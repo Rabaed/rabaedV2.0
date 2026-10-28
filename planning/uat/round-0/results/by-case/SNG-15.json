@@ -1,15 +1,24 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
-      "text": "Ali's Snag List page opens, to export the PDF (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "the Snag List page shows the not-found page, so Export PDF cannot be reached"
+      "text": "The PDF is made and offers exactly the Snags Ali sees",
+      "ok": true,
+      "detail": "Download the Snag List PDF (24 items); Ali sees 24"
+    },
+    {
+      "text": "It downloads as a PDF",
+      "ok": true,
+      "detail": "36296 bytes"
+    },
+    {
+      "text": "No Draft of another Company is among what Ali exports",
+      "ok": true
     }
   ],
   "screenshots": [
-    "evidence/SNG-15-1-snag-list-not-found.jpg"
+    "evidence/SNG-15-1-pdf-ready.jpg"
   ],
-  "notes": "",
-  "ranAt": "2026-10-27T19:06:45.748Z"
+  "notes": "Mode is Manual: the PDF's pages, photos and wording still want a person's eye; the count and the bytes are checked here.",
+  "ranAt": "2026-10-27T22:53:00.255Z"
 }

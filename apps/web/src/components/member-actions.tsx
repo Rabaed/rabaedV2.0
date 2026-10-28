@@ -5,18 +5,17 @@ import { Button, Dialog, DialogClose, DialogContent, DialogFooter, RowActionsMen
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useHandover } from "@/components/handover";
-import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
 import { requestReactivation } from "@/lib/member-invitations";
 
-type Asking = "deactivate" | "reactivate" | "link";
+type Asking = "deactivate" | "reactivate";
 
 /**
  * The Authorized Person's commands on one row of the Members list: a "⋯" menu with
  * Make or Remove Project Creator, Deactivate (after a confirmation, then a Handover
  * of every open Step they hold, RP-108) or, for a deactivated Member, Reactivate
- * (also confirmed). A Member who never accepted their first invitation gets a new
- * one when reactivated, shown once.
+ * (also confirmed). A Member who never accepted their first invitation is emailed a
+ * new one when reactivated (RP-1052).
  */
 export function MemberActions({ member }: { member: CompanyMember }) {
   const t = useTranslations("members");
@@ -31,7 +30,6 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     setError(true);
     toast({ title: message ?? t("unavailable"), tone: "danger" });
   };
-  const [link, setLink] = useState<string | null>(null);
 
   async function send(path: string, method: "PATCH" | "POST", body?: unknown) {
     setPending(true);
@@ -80,12 +78,11 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     setPending(true);
     setError(false);
     try {
-      const { link: invitation } = await requestReactivation(member.id);
+      const { invitationSentTo } = await requestReactivation(member.id);
       router.refresh();
-      toast({ title: t("saved", { name }), tone: "success" });
-      // Never accepted their first invitation: the new one, shown once.
-      setAsking(invitation ? "link" : null);
-      setLink(invitation ?? null);
+      // Never accepted their first invitation: a new one was emailed to them.
+      toast({ title: invitationSentTo ? t("invitationSent", { email: invitationSentTo }) : t("saved", { name }), tone: "success" });
+      setAsking(null);
     } catch {
       failed();
     } finally {
@@ -108,21 +105,16 @@ export function MemberActions({ member }: { member: CompanyMember }) {
             : [{ key: "deactivate", icon: "logout" as const, label: t("deactivate"), tone: "danger" as const, onSelect: () => setAsking("deactivate") }]),
         ];
 
-  const confirming = asking === "deactivate" || asking === "reactivate";
-
   return (
     <div className="flex items-center justify-end gap-2">
       <RowActionsMenu label={t("menuFor", { name })} items={items} busy={pending || handover.pending} />
       <Dialog open={asking !== null} onOpenChange={(open) => !open && !pending && setAsking(null)}>
         <DialogContent
-          title={asking === "link" ? t("linkTitle") : asking === "reactivate" ? t("reactivateTitle") : t("deactivateTitle")}
-          description={
-            asking === "link" ? undefined : t(asking === "reactivate" ? "confirmReactivate" : "confirmDeactivate", { name })
-          }
+          title={asking === "reactivate" ? t("reactivateTitle") : t("deactivateTitle")}
+          description={t(asking === "reactivate" ? "confirmReactivate" : "confirmDeactivate", { name })}
           closeLabel={t("close")}
         >
-          {asking === "link" && link && <InvitationLink id={`invitation-link-${member.id}`} link={link} />}
-          {confirming && error && (
+          {error && (
             <p role="alert" className="text-sm text-danger-fg">
               {t("unavailable")}
             </p>
@@ -130,18 +122,16 @@ export function MemberActions({ member }: { member: CompanyMember }) {
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="secondary" disabled={pending}>
-                {asking === "link" ? t("close") : t("cancel")}
+                {t("cancel")}
               </Button>
             </DialogClose>
-            {confirming && (
-              <Button
-                variant={asking === "deactivate" ? "danger" : "primary"}
-                disabled={pending || handover.pending}
-                onClick={() => (asking === "deactivate" ? deactivate() : void reactivate())}
-              >
-                {asking === "deactivate" ? t("deactivate") : t("reactivate")}
-              </Button>
-            )}
+            <Button
+              variant={asking === "deactivate" ? "danger" : "primary"}
+              disabled={pending || handover.pending}
+              onClick={() => (asking === "deactivate" ? deactivate() : void reactivate())}
+            >
+              {asking === "deactivate" ? t("deactivate") : t("reactivate")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

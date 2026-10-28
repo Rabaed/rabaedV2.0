@@ -15,6 +15,7 @@ import { z } from "zod";
 import { buildApp } from "../app.ts";
 import { apiConfigFromEnv } from "../config.ts";
 import { ensureDemo } from "../demo/ensure.ts";
+import { seedingConfig } from "../demo/mailbox.ts";
 
 const parsed = z
   .object({
@@ -41,7 +42,11 @@ const migrator = createDb(urls.migrator, { max: 2 });
 const db = createDb(urls.app, { max: 2 });
 const adminDb = createDb(urls.admin, { max: 1 });
 try {
-  const result = await ensureDemo({ migrator, admin: adminDb }, () => buildApp({ db, config: apiConfigFromEnv(), logger: false }), password);
+  const result = await ensureDemo(
+    { migrator, admin: adminDb },
+    (mailer) => buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, mailer }),
+    password,
+  );
   console.log(result === "seeded" ? "demo: seeded Riyadh Gate Tower – Phase 2 and Jeddah Corniche Villas" : "demo: already seeded");
 } finally {
   await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);

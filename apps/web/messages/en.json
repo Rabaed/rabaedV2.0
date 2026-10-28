@@ -431,11 +431,55 @@
     "apiVersion": "api {version}"
   },
   "signIn": {
-    "title": "Sign in",
-    "email": "Email",
+    "title": "Sign in to Rabaed",
+    "subtitle": "Submittals, inspections and site reports for every Participant on the Project.",
+    "email": "Work email",
+    "emailPlaceholder": "name@company.com",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "forgot": "Forgot password?",
     "submit": "Sign in",
     "invalid": "That email and password don't match.",
+    "unavailable": "Something went wrong. Try again.",
+    "invite": "New to Rabaed? Ask your company's Authorized Person to add you.",
+    "copyright": "© {year} Rabaed",
+    "languages": {
+      "en": "English",
+      "ar": "العربية"
+    },
+    "brand": {
+      "tagline": "Construction project operating system",
+      "owner": "Owner",
+      "contractor": "Contractor",
+      "consultant": "Consultant",
+      "sent": "Sent · {time}",
+      "reviewed": "Reviewed · {time}",
+      "approved": "Approved · {time}",
+      "headlineCompanies": "Three companies.",
+      "headlineRecord": "One record.",
+      "headlineAccountability": "Clear accountability.",
+      "lead": "Owner, consultant and contractor on one platform — every step recorded, dated and credited to whoever took it."
+    }
+  },
+  "passwordReset": {
+    "back": "Back to sign in",
+    "requestTitle": "Reset your password",
+    "requestSubtitle": "Enter your work email. If it belongs to a Member of Rabaed, we'll send a reset link.",
+    "send": "Send reset link",
+    "invalidEmail": "Enter a valid email.",
+    "sent": "If this email belongs to a Member of Rabaed, we've sent a link to it. The link works once, for {minutes} minutes.",
+    "tooMany": "Too many tries. Wait a while, then try again.",
+    "resetTitle": "Choose a new password",
+    "resetSubtitle": "Changing your password signs you out on every other device.",
+    "password": "New password",
+    "confirm": "Confirm new password",
+    "hint": "At least {min} characters.",
+    "tooShort": "Use at least {min} characters.",
+    "mismatch": "The passwords don't match.",
+    "submit": "Set password and sign in",
+    "expired": "This link has expired or was already used.",
+    "requestNew": "Get a new link",
     "unavailable": "Something went wrong. Try again."
   },
   "acceptInvitation": {
@@ -474,7 +518,7 @@
     "nameAr": "Full name (Arabic)",
     "language": "Language",
     "invite": "Send invitation",
-    "invitationLink": "Invitation created. Send this link to the new Member; it works once and expires.",
+    "invitationSent": "Invitation emailed to {email}. Its link works once and expires.",
     "alreadyAMember": "That email already belongs to a Member of your Company.",
     "registeredWithAnotherCompany": "This person is already registered on Rabaed with another Company.",
     "confirmReactivateEmail": "{email} belongs to a deactivated Member of your Company. Reactivate them? They keep their Signature and records.",
@@ -489,7 +533,6 @@
     "reactivate": "Reactivate",
     "reactivateTitle": "Reactivate Member",
     "confirmReactivate": "Reactivate {name}? They keep their Signature and records.",
-    "linkTitle": "Invitation link",
     "cancel": "Cancel",
     "saved": "Saved: {name}.",
     "toastLabel": "Notifications",
@@ -1019,7 +1062,7 @@
         "photoRequired": "Photo required on {answer}",
         "commentOptional": "Comment optional",
         "photoOptional": "Photos optional",
-        "snagRaised": "{answer} raises a Snag"
+        "raisesSnag": "{answer} raises a Snag"
       },
       "linkQuestion": {
         "remove": "Remove {number}"

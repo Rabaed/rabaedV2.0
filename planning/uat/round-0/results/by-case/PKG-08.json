@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "The Package filter narrows the List to its items",
@@ -12,9 +12,13 @@
       "detail": "2"
     },
     {
-      "text": "The Package-filtered Submittals List opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "the page answered with the not-found page; the api answers the same read for the same person"
+      "text": "The List rows show the chip PKG number with the name",
+      "ok": true,
+      "detail": "Dashboard Submittals Inspections Snag List Activity Feed Settings Submittals Add Submittal Search Filter 1 Package: PKG-077 TMC Constructions Need My Action Gro"
+    },
+    {
+      "text": "The Kanban cards show the chip",
+      "ok": true
     },
     {
       "text": "The item page shows the chip with the Package name",
@@ -23,7 +27,7 @@
     {
       "text": "The chip opens the Package page",
       "ok": true,
-      "detail": "http://lane7.localhost:3700/en/packages/f08bdfd5-e998-4108-b77d-32947df3cb3c"
+      "detail": "http://lane7.localhost:3700/en/packages/5f1fa9eb-6c63-4015-9932-5858dde4c58c"
     },
     {
       "text": "An item in no Package shows no chip, and Package is not a Form field",
@@ -38,6 +42,6 @@
     "evidence/PKG-08-1-list-filtered-by-package.jpg",
     "evidence/PKG-08-2-chip-opens-package.jpg"
   ],
-  "notes": "The Package-filtered Kanban opens: the not-found page again (RP-1049); not checked.",
-  "ranAt": "2026-10-27T19:15:55.177Z"
+  "notes": "",
+  "ranAt": "2026-10-27T22:52:01.107Z"
 }

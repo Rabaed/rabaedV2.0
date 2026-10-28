@@ -2,8 +2,9 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Button, Field, Input } from "@rabaed/ui";
-import { useRouter } from "@/i18n/navigation";
+import { Field, Icon, IconButton, Input } from "@rabaed/ui";
+import { emailInput, FormAlert, LeadingIcon, SubmitButton, tallInput } from "@/components/sign-in-fields";
+import { Link, useRouter } from "@/i18n/navigation";
 import { browserLanguage } from "@/lib/browser-locale";
 
 export function SignInForm() {
@@ -12,6 +13,7 @@ export function SignInForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,21 +41,41 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="max-w-sm space-y-4" noValidate>
-      <Field label={t("email")} id="email" required>
-        <Input name="email" type="email" autoComplete="username" dir="ltr" />
+    <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+      {error && <FormAlert>{error}</FormAlert>}
+      <Field label={t("email")} id="email">
+        <div className="relative">
+          <LeadingIcon name="mail" />
+          <Input name="email" type="email" autoComplete="username" dir="ltr" required placeholder={t("emailPlaceholder")} className={emailInput} />
+        </div>
       </Field>
-      <Field label={t("password")} id="password" required>
-        <Input name="password" type="password" autoComplete="current-password" />
-      </Field>
-      {error && (
-        <p role="alert" className="text-sm text-danger-fg">
-          {error}
-        </p>
-      )}
-      <Button type="submit" disabled={pending}>
-        {t("submit")}
-      </Button>
+      {/* The design puts "Forgot password?" at the end of the password's label row (RP-1058). */}
+      <div className="relative">
+        <Field label={t("password")} id="password">
+          <div className="relative">
+            <LeadingIcon name="lock" />
+            <Input
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              className={`${tallInput} pe-11.5`}
+            />
+            <IconButton
+              label={showPassword ? t("hidePassword") : t("showPassword")}
+              size="sm"
+              className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted"
+              onClick={() => setShowPassword((shown) => !shown)}
+            >
+              <Icon name={showPassword ? "eye-off" : "eye"} size={18} />
+            </IconButton>
+          </div>
+        </Field>
+        <Link href="/forgot-password" className="absolute end-0 top-0 text-[13px] font-medium text-muted hover:text-primary hover:underline">
+          {t("forgot")}
+        </Link>
+      </div>
+      <SubmitButton pending={pending}>{t("submit")}</SubmitButton>
     </form>
   );
 }

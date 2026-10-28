@@ -142,7 +142,7 @@ All three: `nodeVersion: "24.x"`, `sourceFilesOutsideRootDirectory: true`, `serv
 | `FILE_STORE_ENDPOINT` | | ✓ | | `uat` variable: R2's S3 address |
 | `FILE_STORE_ACCESS_KEY_ID`, `FILE_STORE_SECRET_ACCESS_KEY` | | ✓ | | _uat_ (R2 key, Object Read & Write on the files bucket only) |
 | `FILE_STORE_REGION` | | `auto` | | R2's region (RP-1041); never `AWS_REGION`, which Vercel sets to its own |
-| `WEB_URL` | | ✓ | ✓ | web's production URL: invitation links (Admin), and the links in notification emails, digests and Step Age reports (the api's cron pass, RP-1039) |
+| `WEB_URL` | | ✓ | ✓ | web's production URL: invitation links (Admin's, and the api's Member invitations, RP-1052), and the links in notification emails, digests and Step Age reports (the api's cron pass, RP-1039) |
 | `MAIL_FROM` | | ✓ | ✓ | `uat` variable |
 | `SENDGRID_API_KEY` | | ✓ | ✓ | _uat_ (Mail Send only); no `MAIL_CATCHER_URL` or `MAIL_SES_CONFIGURATION_SET` beside it |
 | `CRON_SECRET` | | ✓ | | _uat_: random, 16 characters or more (a shorter one counts as none); Vercel Cron sends it as `Authorization: Bearer …` (RP-1039); production only |

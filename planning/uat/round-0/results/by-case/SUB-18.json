@@ -13,21 +13,27 @@
     {
       "text": "No Step, no person, no Internal Note in it",
       "ok": true,
-      "detail": "{\"id\":\"0fdc4e89-0787-485d-94fb-0cff61549480\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 185705\",\"documentNum"
+      "detail": "{\"id\":\"52688fcf-3290-4505-935f-07bfcab5e2e5\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 225328\",\"documentNum"
     },
     {
       "text": "A Draft has nothing shared: the plain 404",
       "ok": true
     },
     {
-      "text": "The row menu of the Submitted MAR offers Download, a Draft's does not (UI)",
+      "text": "The row menu of the Submitted MAR offers Download",
+      "ok": true,
+      "detail": "Open | Duplicate | Download"
+    },
+    {
+      "text": "A Draft offers no Download",
       "ok": false,
-      "detail": "Known Bug RP-1049: the Submittals List page shows the not-found page (the web app gives up on the api read at 3 s); the api answers the same read."
+      "detail": "Open | Edit | Duplicate | Download | Delete"
     }
   ],
   "screenshots": [
-    "evidence/SUB-18-1-list-not-found.jpg"
+    "evidence/SUB-18-1-row-menu-submitted.jpg",
+    "evidence/SUB-18-2-row-menu-draft.jpg"
   ],
-  "notes": "The shared item and the Draft's 404 were read through the api (above); the row menus could not be opened.",
-  "ranAt": "2026-10-27T18:57:18.531Z"
+  "notes": "POST /work-items/<Draft>/working-copy as Hafiz answers 200 {\"status\":\"preparing\"}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.\nThe content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.",
+  "ranAt": "2026-10-27T22:53:36.351Z"
 }

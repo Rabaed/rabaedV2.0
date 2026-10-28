@@ -19,6 +19,7 @@ import type {
   OnboardingLeads,
   StartedDocumentUpload,
 } from "@rabaed/domain";
+import { invitationTokenOf, type MailMessage, type Mailer } from "@rabaed/mailer";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
@@ -43,6 +44,7 @@ export async function expectHidden(response: LightMyRequestResponse | Promise<Li
 export const testConfig: ApiConfig = {
   sessionTtlMs: 12 * HOUR,
   invitationTtlMs: 72 * HOUR,
+  webUrl: "https://web.rabaed.test",
   cookieSecure: true,
   version: "0123abc",
   documents: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/jpeg", "image/png", "text/plain"] },
@@ -197,7 +199,17 @@ export interface TestApi {
    * wants sessions to expire; otherwise use `later`.
    */
   advanceClock(ms: number): void;
+  /** Every email the api sent, kept instead of delivered (RP-1052). */
+  mailbox: Mailbox;
   close(): Promise<void>;
+}
+
+/** The emails a TestApi's api sent, newest last. */
+export interface Mailbox {
+  messages: MailMessage[];
+  to(email: string): MailMessage[];
+  /** The token in the newest invitation email to `email`: the test-only way to an invitation's token. */
+  invitationToken(email: string): string;
 }
 
 export const DEFAULT_PASSWORD = "a long enough test password";
@@ -256,7 +268,7 @@ function expectStatus(res: LightMyRequestResponse, status: number, what: string)
  * `files`: the suite uploads and downloads Documents, through the local file
  * store (FILE_STORE_ENDPOINT; docker-compose.yml locally, ci.yml in CI).
  */
-export async function createTestApi(options: { databaseUrl?: string; files?: boolean } = {}): Promise<TestApi> {
+export async function createTestApi(options: { databaseUrl?: string; files?: boolean; mailer?: Mailer } = {}): Promise<TestApi> {
   const urls = testDatabaseUrls();
   const db = createDb(options.databaseUrl ?? urls.app);
   // Rabaed Admin's connection, for onboarding only: the customer api has none (ADR 0010).
@@ -270,8 +282,20 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
     await ensureLocalBucket(settings);
     files = createFileStore(settings);
   }
+  // Emails are kept, never sent; `mailer` replaces this, e.g. with one that fails.
+  const messages: MailMessage[] = [];
+  const mailbox: Mailbox = {
+    messages,
+    to: (email) => messages.filter((m) => m.to === email),
+    invitationToken(email) {
+      const last = mailbox.to(email).filter((m): m is MailMessage<"invitation"> => m.template === "invitation").at(-1);
+      if (!last) throw new Error(`no invitation emailed to ${email}`);
+      return invitationTokenOf(last);
+    },
+  };
+  const mailer: Mailer = options.mailer ?? { send: async (message) => void messages.push(message as MailMessage) };
   // A test's unexpected 500 prints its cause beside the failed assertion.
-  const app = await buildApp({ db, config: testConfig, now, logger: "errors", ...(files ? { files } : {}) });
+  const app = await buildApp({ db, config: testConfig, now, logger: "errors", mailer, ...(files ? { files } : {}) });
 
   // One Engineer per TestApi does every onboarding.
   let engineerId: string | undefined;
@@ -364,9 +388,10 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       };
       const res = await by.post("/v1/members", body);
       expectStatus(res, 201, "invite member");
-      const json = res.json();
-      invitedEmails.set(json.invitation.token, body.email);
-      return { id: json.memberId, email: body.email, invitationToken: json.invitation.token };
+      // The token reaches the invitee by email only (RP-1052).
+      const token = mailbox.invitationToken(body.email);
+      invitedEmails.set(token, body.email);
+      return { id: res.json().memberId, email: body.email, invitationToken: token };
     },
 
     async member(by) {
@@ -430,6 +455,8 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
     advanceClock(ms) {
       offset += ms;
     },
+
+    mailbox,
 
     async close() {
       await app.close();
