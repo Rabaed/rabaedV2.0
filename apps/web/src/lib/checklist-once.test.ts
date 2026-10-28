@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { formBesideReplyChecklists } from "./checklist-once.ts";
 
 // A WIR's checklist shows once on its page (RP-1071): the Participant answering it reads its
-// answering cards, everyone else the Form's read-only Checklist Template field.
+// reply checklists, every other reader the Form's read-only Checklist Template field.
 
 const text = (en: string) => ({ en, ar: en });
 
@@ -24,16 +24,16 @@ const wir: FormSchema = {
 };
 
 describe("the WIR's checklist on its page", () => {
-  it("the Participant answering it reads its answering cards only: the Form leaves the template's section out", () => {
+  it("the Participant answering it reads its reply checklists only: the Form leaves the Checklist Template section out", () => {
     const shown = formBesideReplyChecklists(wir, [{ copyOf: "checklist_template" }]);
     expect(shown.sections.map((s) => s.key)).toEqual(["inspection"]);
   });
 
-  it("any other reader, who has no answering cards, reads the Form's read-only template once", () => {
+  it("any other reader, who has no reply checklists, reads the Form's read-only Checklist Template field once", () => {
     expect(formBesideReplyChecklists(wir, [])).toBe(wir);
   });
 
-  it("keeps a section's other fields, and a template no answering card copies", () => {
+  it("keeps a section's other fields, and a Checklist Template field no reply checklist copies", () => {
     const mixed: FormSchema = {
       sections: [
         {
