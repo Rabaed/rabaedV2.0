@@ -18,12 +18,14 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
   const t = await getTranslations("participants");
   const [me, list, invited] = await Promise.all([getMe(), getCompanyParticipations(), getCompanyInvitations()]);
   if (!me) return redirect({ href: "/sign-in", locale });
+  // Any other Member reads the Projects they are on, read-only.
+  const manages = me.member.isAuthorizedPerson;
 
   return (
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-h4 font-semibold">{t("title")}</h1>
-        <p className="text-muted">{t("subtitle", { company: me.company.legalName[locale] })}</p>
+        <p className="text-muted">{t(manages ? "subtitle" : "subtitleMember", { company: me.company.legalName[locale] })}</p>
       </div>
       {invited && invited.invitations.length > 0 && (
         <section className="space-y-2" aria-labelledby="invitations-title">
@@ -51,7 +53,7 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
           {t("unavailable")}
         </p>
       ) : list.participants.length === 0 ? (
-        <p className="text-muted">{t("empty")}</p>
+        <p className="text-muted">{t(manages ? "empty" : "emptyMember")}</p>
       ) : (
         <ul className="divide-y divide-border border-y border-border">
           {list.participants.map((p) => (
