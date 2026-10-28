@@ -1,5 +1,5 @@
--- RP-664 (follow-up of RP-652, spec RP-649): the Project setting "Show Inspections in the Submittals
--- tab" is audited in setup_event.
+-- RP-664 (follow-up of RP-652, spec RP-649): the Project setting "Show Inspections in Submittals" is
+-- audited in setup_event.
 --
 -- * A new kind, `project_setting`, for a Project setting a Project Admin changes; its one type so far
 --   is `show_inspections_in_submittals_changed`, with the value before and after (`from`, `to`).
