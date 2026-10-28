@@ -1,20 +1,20 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Home loads for Ali",
-      "ok": false,
-      "detail": "Known Bug RP-1049: the page says: Home couldn't be loaded. Try again.; GET /v1/home took 34418 ms (the web app waits 3 s for it: apps/web/src/lib/session.ts)"
+      "ok": true,
+      "detail": "Known Bug RP-1049: the page says: Good evening, Ali Here's what needs you across your Projects today. 1 Active Pro; GET /v1/home took 820 ms (the web app waits 3 s for it: apps/web/src/lib/session.ts)"
     },
     {
       "text": "The Home api's Need My Action equals the sum of the Project's Need My Action reads",
-      "ok": false,
-      "detail": "home 263, Project reads 318 (other agents are creating items at the same time)"
+      "ok": true,
+      "detail": "home 320, Project reads without own Drafts 320 (other agents are creating items at the same time)"
     },
     {
       "text": "The Home api's Waiting with others equals the Project's reads",
-      "ok": false,
-      "detail": "home 284, Project reads 333"
+      "ok": true,
+      "detail": "home 358, Project reads 358"
     },
     {
       "text": "Active Projects is 1 (Ali's only Project)",
@@ -28,11 +28,20 @@
       "text": "Recent activity holds at most four entries (api)",
       "ok": true,
       "detail": "[\"counts\",\"needsMyAction\",\"activity\",\"projects\",\"submittals\"]"
+    },
+    {
+      "text": "The page's Need My Action equals the api's",
+      "ok": true
+    },
+    {
+      "text": "The Project card's submittal count equals the List's",
+      "ok": true,
+      "detail": "card 996, list 996"
     }
   ],
   "screenshots": [
     "evidence/SUB-27-1-home.jpg"
   ],
-  "notes": "With Home not loading, the page numbers (Need My Action, 4+ weeks, waiting with others, card count, Recent activity) could not be read on the page; only the api's were compared.",
-  "ranAt": "2026-10-27T19:01:27.564Z"
+  "notes": "",
+  "ranAt": "2026-10-28T19:39:02.299Z"
 }

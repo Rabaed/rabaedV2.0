@@ -60,12 +60,16 @@ defineCase("SNG-01", async (t) => {
   t.check("Ali sees the Snag List tab with the Types chips All, Snag, Comment", /All/.test(text) && /Snag/.test(text) && /Comment/.test(text));
   const api = (await moduleItems(tm.api.ali!, projectId, "snag_list", "pageSize=50")) as Json[];
   t.check("Ali's List shows the new Snag, grouped under its Stage (Open)", text.includes(title) && /Open\s*\d+ item/.test(text.replace(/\n+/g, " ")), `${api.length} items by api`);
-  const groups = [...text.replace(/\n+/g, " ").matchAll(/(Draft|Open|In Progress|On Hold|Resolved|Closed) (\d+) items?/g)].map((m) => Number(m[2]));
-  // The group headers show each Stage's full count; the api's first page holds only 50 rows,
-  // so compare with the api's own Stage counts for the same read.
+  // The List loads 50 rows a page, so only the groups on page 1 show their header. Each shown
+  // header must equal the api's count for its Stage, and the All chip the api's total.
+  const flat = text.replace(/\n+/g, " ");
+  const stageKey = (label: string) => label.toLowerCase().replace(" ", "_");
+  const groups = [...flat.matchAll(/(Draft|Open|In Progress|On Hold|Resolved|Closed) (\d+) items?/g)].map((m) => ({ key: stageKey(m[1]!), count: Number(m[2]) }));
   const stageCounts = ((apiRead.body as Json).stages as Json[]).map((x) => ({ key: x.key as string, count: x.count as number }));
   const apiTotal = stageCounts.reduce((a, s) => a + s.count, 0);
-  t.check("The Stage counts add up to the rows Ali sees", groups.reduce((a, b) => a + b, 0) === apiTotal, `groups ${groups.join("+")} = ${groups.reduce((a, b) => a + b, 0)} vs api Stage counts ${stageCounts.map((s) => s.key + ":" + s.count).join(" ")} = ${apiTotal}`);
+  const allChip = Number(/All (\d+)/.exec(flat)?.[1] ?? NaN);
+  const headersMatch = groups.length > 0 && groups.every((g) => stageCounts.find((s) => s.key === g.key)?.count === g.count);
+  t.check("The Stage counts add up to the rows Ali sees", headersMatch && allChip === apiTotal, `headers ${groups.map((g) => g.key + ":" + g.count).join(" ")}, All chip ${allChip} vs api Stage counts ${stageCounts.map((s) => s.key + ":" + s.count).join(" ")} = ${apiTotal}`);
   const other = api.some((i) => i.raiserCompanyName?.en !== "TMC Constructions" && i.stage.key === "draft");
   t.check("Ali does not see another Company's Draft in the List or counts", !other);
   await t.shot(page, "ali-snag-list");

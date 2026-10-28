@@ -1,18 +1,30 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
-      "text": "Ali's Snag List page opens (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "The page shows the not-found page although the api answers 200 for the same read in 8848 ms (draft:0 open:153 in_progress:14 on_hold:0 resolved:9 closed:22); the web app gives up on an api read after 3000 ms (apps/web/src/lib/session.ts apiGet) and shows not found."
+      "text": "Ali sees the Snag List tab with the Types chips All, Snag, Comment",
+      "ok": true
     },
     {
-      "text": "By api: Ali's Snag List holds the new Snag, under the Open Stage",
+      "text": "Ali's List shows the new Snag, grouped under its Stage (Open)",
       "ok": true,
-      "detail": "open (found by its Subject; 50 items on the first page of 50)"
+      "detail": "50 items by api"
     },
     {
-      "text": "By api: Ali does not see another Company's Draft in the List",
+      "text": "The Stage counts add up to the rows Ali sees",
+      "ok": true,
+      "detail": "headers open:183, All chip 235 vs api Stage counts draft:0 open:183 in_progress:15 on_hold:0 resolved:10 closed:27 = 235"
+    },
+    {
+      "text": "Ali does not see another Company's Draft in the List or counts",
+      "ok": true
+    },
+    {
+      "text": "A search with no match says nothing you can see matches",
+      "ok": true
+    },
+    {
+      "text": "The Kanban shows the Stages with the Snag",
       "ok": true
     },
     {
@@ -20,14 +32,16 @@
       "ok": true
     },
     {
-      "text": "Beta Build's Yousef does not see it in his api Snag List",
+      "text": "Beta Build's Yousef does not see it and his empty List reads No snags. Nice work.",
       "ok": true,
       "detail": "5 items for Yousef"
     }
   ],
   "screenshots": [
-    "evidence/SNG-01-1-snag-list-not-found.jpg"
+    "evidence/SNG-01-1-ali-snag-list.jpg",
+    "evidence/SNG-01-2-ali-snag-kanban.jpg",
+    "evidence/SNG-01-3-yousef-empty-snag-list.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T19:09:51.128Z"
+  "ranAt": "2026-10-28T19:41:38.100Z"
 }
