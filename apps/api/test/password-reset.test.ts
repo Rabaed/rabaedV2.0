@@ -61,7 +61,7 @@ async function linkFor(email: string): Promise<string> {
   return mine.at(-1)!.token;
 }
 
-describe("asking for a link", () => {
+describe("asking for a link (scenario RP-1058-1)", () => {
   it("gives a registered and an unregistered email the same answer, in no less time", async () => {
     const { email } = await member();
     const invited = await api.onboardCompany();

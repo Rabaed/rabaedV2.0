@@ -31,6 +31,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Link search
 - [ ] Notifications and emails
 - [ ] Daily email digest
+- [ ] Password reset emails
 - [ ] Need My Action
 - [ ] Watch
 - [ ] Working Copy
