@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { baseRoles } from "./project.ts";
+import { projectRole } from "./participant.ts";
 
 // Chat on a Work Item (RP-1062; GLOSSARY Chat; visibility.md V6 and the Chat row): a text-only thread every
 // Participant with access reads, written from the item's Submission Date on. Messages are never edited or deleted.
 
-/** The longest Chat message, in characters, once trimmed. */
+/**
+ * The longest Chat message, in characters (code points: an emoji is one), once trimmed: for the composer's counter.
+ * The database's check is the rule (`chat_message.body`, refused as `invalid_body`); keep the two equal.
+ */
 export const CHAT_MESSAGE_MAX_LENGTH = 4000;
-
-const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText });
 
 /**
  * Who wrote a message, as the reader may know it. Of the reader's own Company: the Member by name. Of another
@@ -37,8 +38,11 @@ export const workItemChat = z.object({
 });
 export type WorkItemChat = z.infer<typeof workItemChat>;
 
-/** A message to post: text only, trimmed, 1 to CHAT_MESSAGE_MAX_LENGTH characters. */
-export const postChatMessageRequest = z.object({ body: z.string().trim().min(1).max(CHAT_MESSAGE_MAX_LENGTH) });
+/**
+ * A message to post: text only. The database trims it and refuses one empty once trimmed or longer than
+ * CHAT_MESSAGE_MAX_LENGTH characters (422 `invalid_body`), so the rule has one definition.
+ */
+export const postChatMessageRequest = z.object({ body: z.string() });
 export type PostChatMessageRequest = z.infer<typeof postChatMessageRequest>;
 
 export const postedChatMessage = z.object({ id: z.uuid() });

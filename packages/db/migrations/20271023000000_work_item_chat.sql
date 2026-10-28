@@ -13,6 +13,13 @@
 -- app.post_chat_message, both security definer, both checking app.sees_work_item first.
 -- Files in Chat and Chat notifications are follow-ups (each with its own leak-channel row).
 
+-- A Chat body without its leading and trailing white space (spaces, tabs, line breaks), as it is stored.
+create function app.chat_body_trimmed(p_body text) returns text
+  language sql immutable
+  set search_path = pg_catalog, public
+  return regexp_replace(p_body, '^\s+|\s+$', '', 'g');
+revoke all on function app.chat_body_trimmed(text) from public;
+
 create table chat_message (
   id uuid primary key default gen_random_uuid(),
   -- Orders the thread when two messages share a time; never read outside app.work_item_chat's order by.
@@ -22,7 +29,9 @@ create table chat_message (
   -- The author's Participant on the Project, as it was when they posted.
   participant_id uuid not null references participant (id),
   author_member_id uuid not null references member (id),
-  body text not null check (body = btrim(body) and body <> '' and char_length(body) <= 4000),
+  -- The one definition of a valid body (app.chat_body_trimmed gives what is stored): no leading or trailing white
+  -- space of any kind, not empty, at most 4000 characters (code points, so an emoji is one).
+  body text not null check (body = app.chat_body_trimmed(body) and body <> '' and char_length(body) <= 4000),
   created_at timestamptz not null,
   constraint chat_message_item_fk foreign key (work_item_id, project_id) references work_item (id, project_id)
 );
@@ -42,11 +51,13 @@ create function app.chat_message_insert_only() returns trigger
 revoke all on function app.chat_message_insert_only() from public;
 create trigger chat_message_insert_only before update or delete on chat_message
   for each row execute function app.chat_message_insert_only();
+create trigger chat_message_no_truncate before truncate on chat_message
+  for each statement execute function app.chat_message_insert_only();
 
 -- Item p_work_item_id's Chat as the calling Member reads it, oldest first; no rows for an item they don't see (or that
 -- doesn't exist). The author: of the reader's own Company, the Member's name; of another, its Company's name and
 -- Project Role only (member_name null). `mine` marks the reader's own messages. A message's time is never before the
--- item's Submission Date (the Creation Date row), which posting already ensures.
+-- item's Submission Date (the Creation Date row): posting stores it so.
 create function app.work_item_chat(p_work_item_id uuid)
   returns table (
     id uuid, author_kind text, member_name jsonb, company_name jsonb, role_base text, role_name jsonb, mine boolean, body text, at timestamptz
@@ -70,9 +81,8 @@ create function app.work_item_chat(p_work_item_id uuid)
           co.legal_name, r.base_role, r.name,
           c.author_member_id = v_member,
           c.body,
-          greatest(c.created_at, w.submitted_at)
+          c.created_at
         from chat_message c
-        join work_item w on w.id = c.work_item_id
         join participant p on p.id = c.participant_id
         join company co on co.id = p.company_id
         join project_role r on r.id = p.project_role_id
@@ -96,7 +106,7 @@ create function app.post_chat_message(p_work_item_id uuid, p_body text, p_now ti
     #variable_conflict use_column
     declare
       v_at timestamptz := greatest(p_now, now());
-      v_body text := btrim(coalesce(p_body, ''));
+      v_body text := app.chat_body_trimmed(coalesce(p_body, ''));
       v_item record;
       v_me record;
       v_id uuid;
@@ -105,9 +115,12 @@ create function app.post_chat_message(p_work_item_id uuid, p_body text, p_now ti
         return query select 'not_found'::text, null::uuid;
         return;
       end if;
+      -- The Project held, so closing it waits for the post, or the post for the close. A Submission Date, once set,
+      -- never changes, so the item needs no lock.
       select w.id, w.project_id, w.submitted_at, pr.status as project_status into v_item
       from work_item w join project pr on pr.id = w.project_id
-      where w.id = p_work_item_id;
+      where w.id = p_work_item_id
+      for share of pr;
       select * into v_me from app.acting_project_member(p_work_item_id);
       if v_item.id is null or v_me.project_member_id is null then
         return query select 'not_found'::text, null::uuid;
