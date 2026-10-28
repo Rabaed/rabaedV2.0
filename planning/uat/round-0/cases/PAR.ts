@@ -36,14 +36,14 @@ defineCase("PAR-01", async (t) => {
     const page = await anon.newPage();
     await page.goto(urlOf("/sign-in"), { waitUntil: "networkidle" });
     await page.getByLabel("Email").fill(emailOf.hafiz!);
-    await page.getByLabel("Password").fill("UAT-not-the-password-1");
+    await page.getByLabel("Password", { exact: true }).fill("UAT-not-the-password-1");
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForTimeout(1200);
     const wrongText = (await page.locator("body").innerText()).replace(/\s+/g, " ");
     await t.shot(page, "wrong-password");
     t.check("A wrong password gives the one generic refusal", /That email and password don't match\./.test(wrongText) && !/not found|no such|no account|locked|TMC/i.test(wrongText.replace("don't match", "")), wrongText.slice(0, 200));
     await page.getByLabel("Email").fill("nobody.at.all@tmc.demo.rabaed.test");
-    await page.getByLabel("Password").fill("UAT-not-the-password-1");
+    await page.getByLabel("Password", { exact: true }).fill("UAT-not-the-password-1");
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForTimeout(1200);
     const unknownText = (await page.locator("body").innerText()).replace(/\s+/g, " ");
