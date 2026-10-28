@@ -260,9 +260,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
 
         {/* Sent Back to a "Comment only" Step (ADR 0021): why its Form is read-only, for the raiser's Members only. */}
         {item.sentBackForComment && <SentBackNotice>{t("sentBackForComment")}</SentBackNotice>}
-        {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19). */}
+        {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19).
+            The Form then leaves their read-only template out, so the checklist shows once (RP-1071). */}
         <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />
-        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />
+        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} replyChecklists={item.replyChecklists} />
 
         {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />

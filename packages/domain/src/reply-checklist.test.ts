@@ -145,7 +145,7 @@ describe("the \"Raise a Snag\" tick (RP-577)", () => {
 });
 
 describe("a reply checklist as read", () => {
-  const read = { fieldKey: "inspection_checklist", label: label("Checklist"), name: copy.name, items: copy.items, required: true, answers: {}, canChange: true };
+  const read = { fieldKey: "inspection_checklist", copyOf: "checklist_template", label: label("Checklist"), name: copy.name, items: copy.items, required: true, answers: {}, canChange: true };
 
   it("is drawn as the same checklist the api checks", () => {
     expect(checklistOfRead(read)).toEqual(checklist);

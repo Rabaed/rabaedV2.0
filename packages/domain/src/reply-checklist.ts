@@ -70,6 +70,8 @@ export const checklistAnswers = z.record(
  */
 export const replyChecklistRead = z.object({
   fieldKey: formKey,
+  /** The Form's `checklist_template` field it answers the copy of, which the item page then leaves out (RP-1071). */
+  copyOf: formKey,
   label: bilingualText,
   name: bilingualText,
   items: z.array(checklistTemplateItem),

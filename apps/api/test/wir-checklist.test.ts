@@ -141,6 +141,8 @@ describe("the Consultant Engineer fills the checklist on site (seam 1)", () => {
     expect((await detail(ahmed.caller, id)).replyChecklists).toEqual([
       {
         fieldKey: FIELD,
+        // The Form field it was copied from, which the item page then shows once (RP-1071).
+        copyOf: "checklist_template",
         label: { en: "Checklist", ar: "قائمة التحقق" },
         name: bilingual("Slab pour"),
         items: expect.arrayContaining([expect.objectContaining({ key: "formwork", photo: "required_on_negative" })]),

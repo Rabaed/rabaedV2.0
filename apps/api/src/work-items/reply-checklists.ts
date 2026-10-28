@@ -76,6 +76,7 @@ async function filledNow(trx: Trx, workItemId: string): Promise<{ field_key: str
 /** The checklist `field` answers on an item holding `copy`, as read, with the answers saved so far. */
 const asRead = (field: CopiedChecklistField, copy: ChecklistCopy, answers: ChecklistAnswers, canChange: boolean): ReplyChecklistRead => ({
   fieldKey: field.key,
+  copyOf: field.copyOf,
   label: field.label,
   name: copy.name,
   items: copy.items,
