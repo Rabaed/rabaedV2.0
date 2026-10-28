@@ -1,9 +1,9 @@
 {
-  "status": "fail",
+  "status": "manual",
   "checks": [
     {
-      "text": "At 375 px the Snag List opens with cards and no horizontal scroll (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false
+      "text": "At 375 px the Snag List opens with cards and no horizontal scroll",
+      "ok": true
     },
     {
       "text": "The camera-first New flow opens (Take a photo / New Snag)",
@@ -15,6 +15,6 @@
     "evidence/SNG-13-1-phone-list.jpg",
     "evidence/SNG-13-2-phone-new.jpg"
   ],
-  "notes": "",
-  "ranAt": "2026-10-27T19:06:03.433Z"
+  "notes": "The camera itself (Take photo opens the device camera) and the saved-as-you-go feel are a person's. Automated: the list at 375 px has no horizontal scroll and the New flow page opens.",
+  "ranAt": "2026-10-27T22:52:52.672Z"
 }

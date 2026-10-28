@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Ali's New offers Snag and not Comment",
@@ -7,14 +7,14 @@
       "detail": "OBS, QSN, SNG"
     },
     {
-      "text": "Ali's Snag List page opens, with its New menu (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "the Snag List page shows the not-found page, so its New menu cannot be opened; the api's raisable types above are what the menu lists"
+      "text": "The New menu lists Snag and no Comment",
+      "ok": true,
+      "detail": "New | Site Observation | Question to Consultant | Snag"
     }
   ],
   "screenshots": [
-    "evidence/SNG-07-1-snag-list-not-found.jpg"
+    "evidence/SNG-07-1-new-menu.jpg"
   ],
   "notes": "Opening New with type=CMT by URL answers 200; the page: Dashboard | Submittals | Inspections | Snag List | Activity Feed | Settings | Snag List | New Submittal | Type | OBS | Site Observation | QSN | Question to Cons",
-  "ranAt": "2026-10-27T19:03:04.529Z"
+  "ranAt": "2026-10-27T22:52:23.743Z"
 }

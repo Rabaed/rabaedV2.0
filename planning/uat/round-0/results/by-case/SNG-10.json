@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Mohammed may raise Site Observation, Question to Contractor and Snag",
@@ -21,9 +21,8 @@
       "ok": true
     },
     {
-      "text": "Mohammed's Snag List page opens, with its Type chips (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "the Snag List page shows the not-found page, so the chips cannot be read; the Types themselves are checked above by api"
+      "text": "The Type chips show Site Observation and Question to Contractor",
+      "ok": true
     },
     {
       "text": "Nothing is called Violation",
@@ -31,8 +30,8 @@
     }
   ],
   "screenshots": [
-    "evidence/SNG-10-1-snag-list-not-found.jpg"
+    "evidence/SNG-10-1-type-chips.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T19:04:49.896Z"
+  "ranAt": "2026-10-27T22:52:32.963Z"
 }

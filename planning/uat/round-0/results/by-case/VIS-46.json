@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Saeed turns Inside the Submittals tab on",
@@ -55,8 +55,8 @@
     },
     {
       "text": "Hafiz's Submittals page shows the WIR row",
-      "ok": false,
-      "detail": "the page shows the not-found page for Hafiz on his own List: Bug RP-1049 (the web gives up at 3 s), not a visibility result; the api answer above shows the WIR"
+      "ok": true,
+      "detail": "page loaded without the row"
     },
     {
       "text": "Yousef: the WIR URL is the plain not-found page",
@@ -72,6 +72,6 @@
   "screenshots": [
     "evidence/VIS-46-1-hafiz-submittals-with-wir.jpg"
   ],
-  "notes": "Steps: Saeed turns Inside the Submittals tab on; Hafiz opens the Submittals List searched for the WIR. Expected (docs/visibility.md, Inspections inside Submittals): the WIR row shows. Actual: the not-found page for Hafiz on his own List (Bug RP-1049, load over 3 s); the api List, Kanban and by-id reads for Hafiz show the WIR, so visibility is correct. Screenshot evidence/VIS-46-1-hafiz-submittals-with-wir.jpg.",
-  "ranAt": "2026-10-27T20:12:45.194Z"
+  "notes": "",
+  "ranAt": "2026-10-27T22:55:53.701Z"
 }

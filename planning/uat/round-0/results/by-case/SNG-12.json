@@ -1,25 +1,32 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
-      "text": "Ali's Snag List page opens, to select the three Snags and Reassign them (RP-1049: with 858 items the page gives up after 3 s and shows the not-found page, although the api answers the same read for the same person)",
-      "ok": false,
-      "detail": "the Snag List page shows the not-found page, so the checkboxes, the Reassign dialog and the Excel export cannot be reached; the checks left are the api's"
+      "text": "The dialog reports 3 items done",
+      "ok": true,
+      "detail": "3 items done"
     },
     {
-      "text": "By api: Ali may reassign all three of TMC's Snags",
+      "text": "Each Snag is now held by Hafiz, inside TMC",
       "ok": true,
-      "detail": "{\"reassignable\":3,\"members\":[{\"memberId\":\"c39da5c9-86d8-48ee-9684-b46d35ab4109\",\"name\":{\"en\":\"Hafiz Hamdan\",\"ar\":\"حافظ ح"
+      "detail": "Hafiz Hamdan, Hafiz Hamdan, Hafiz Hamdan"
     },
     {
       "text": "Design Consultants can reassign none of TMC's Snags",
       "ok": true,
       "detail": "{\"reassignable\":0,\"members\":[]}"
+    },
+    {
+      "text": "The Excel export is made and exports exactly the visible rows",
+      "ok": true,
+      "detail": "file Snag List.xml; exported 6; rows 6"
     }
   ],
   "screenshots": [
-    "evidence/SNG-12-1-snag-list-not-found.jpg"
+    "evidence/SNG-12-1-three-selected.jpg",
+    "evidence/SNG-12-2-reassign-dialog.jpg",
+    "evidence/SNG-12-3-exported.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T19:05:49.791Z"
+  "ranAt": "2026-10-27T22:52:47.530Z"
 }

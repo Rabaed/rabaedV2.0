@@ -61,7 +61,11 @@ defineCase("SNG-01", async (t) => {
   const api = (await moduleItems(tm.api.ali!, projectId, "snag_list", "pageSize=50")) as Json[];
   t.check("Ali's List shows the new Snag, grouped under its Stage (Open)", text.includes(title) && /Open\s*\d+ item/.test(text.replace(/\n+/g, " ")), `${api.length} items by api`);
   const groups = [...text.replace(/\n+/g, " ").matchAll(/(Draft|Open|In Progress|On Hold|Resolved|Closed) (\d+) items?/g)].map((m) => Number(m[2]));
-  t.check("The Stage counts add up to the rows Ali sees", groups.reduce((a, b) => a + b, 0) === api.length, `groups ${groups.join("+")} vs api ${api.length}`);
+  // The group headers show each Stage's full count; the api's first page holds only 50 rows,
+  // so compare with the api's own Stage counts for the same read.
+  const stageCounts = ((apiRead.body as Json).stages as Json[]).map((x) => ({ key: x.key as string, count: x.count as number }));
+  const apiTotal = stageCounts.reduce((a, s) => a + s.count, 0);
+  t.check("The Stage counts add up to the rows Ali sees", groups.reduce((a, b) => a + b, 0) === apiTotal, `groups ${groups.join("+")} = ${groups.reduce((a, b) => a + b, 0)} vs api Stage counts ${stageCounts.map((s) => s.key + ":" + s.count).join(" ")} = ${apiTotal}`);
   const other = api.some((i) => i.raiserCompanyName?.en !== "TMC Constructions" && i.stage.key === "draft");
   t.check("Ali does not see another Company's Draft in the List or counts", !other);
   await t.shot(page, "ali-snag-list");

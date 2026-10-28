@@ -1,18 +1,18 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "The Dashboard shows the Type cards (MAR, SAR, DAR)",
-      "ok": false
+      "ok": true
     },
     {
       "text": "The Activity Feed sits on the Dashboard",
-      "ok": false
+      "ok": true
     },
     {
       "text": "The number opens the List with the same filter and the same count",
-      "ok": false,
-      "detail": "The Dashboard page has no Type cards, so there is no number to click (it shows only Project details and Participants; the api dashboard answers with the counts). See screenshot dashboard."
+      "ok": true,
+      "detail": "card Pending 4; list 4; url http://lane7.localhost:3700/en/projects/88705372-91e2-4806-aa3c-fbdf6807324f/work-items?type=DAR&bucket=pending"
     },
     {
       "text": "The Activity Feed names Companies for others and no Consultant person",
@@ -20,8 +20,9 @@
     }
   ],
   "screenshots": [
-    "evidence/SUB-26-1-dashboard.jpg"
+    "evidence/SUB-26-1-dashboard.jpg",
+    "evidence/SUB-26-2-list-from-dashboard-number.jpg"
   ],
   "notes": "",
-  "ranAt": "2026-10-27T18:59:49.399Z"
+  "ranAt": "2026-10-27T22:54:42.435Z"
 }
