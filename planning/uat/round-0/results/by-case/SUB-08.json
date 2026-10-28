@@ -1,7 +1,0 @@
-{
-  "status": "blocked",
-  "checks": [],
-  "screenshots": [],
-  "notes": "Observed with FX-K1M applied (Sara covers Mechanical only): Ahmed alone holds the Electrical MAR at once (heldBy \"Ahmed bin Said\", pickUp offered: false); Sara gets 404 for it. TMC raises only Electrical, so no item can have both Engineers in its pool while Sara is narrowed.\nThe Consultant pool of two Engineers needs Sara to cover Electrical, but fixture FX-K1M (applied, not to be undone) narrows her to Mechanical only, and TMC cannot raise Mechanical items. Run SUB-08 before PAR-15 on a fresh seed, or have a person widen Sara's Trade for the case. Steps: Ahmed and Sara open the Submitted MAR (both read 'not picked up yet' with both names); Ahmed Pick up; Sara's Need My Action and unread Step reached drop it; Ahmed Return to pool then Pick up again; Mohammed reads it read-only.",
-  "ranAt": "2026-10-27T18:05:04.366Z"
-}

@@ -1,9 +1,0 @@
-* text=auto eol=lf
-*.png binary
-*.jpg binary
-*.pdf binary
-*.woff2 binary
-*.otf binary
-*.zip binary
-# Every branch appends its rows at the table's end (pnpm migration:new, RP-583): a merge keeps both sides' rows.
-planning/migration-days.md merge=union

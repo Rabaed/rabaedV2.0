@@ -1,7 +1,0 @@
-{
-  "status": "manual",
-  "checks": [],
-  "screenshots": [],
-  "notes": "A lane engineer must feed a broken record through the worker (RP-155 checks) and a person then looks for the alert in Rabaed Admin's Record Job Monitor (needs an Engineer session) and confirms the item is not reopened. No script can make a broken record or sign in to Admin.",
-  "ranAt": "2026-10-27T18:52:43.812Z"
-}

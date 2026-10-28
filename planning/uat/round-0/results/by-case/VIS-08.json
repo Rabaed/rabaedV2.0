@@ -1,7 +1,0 @@
-{
-  "status": "manual",
-  "checks": [],
-  "screenshots": [],
-  "notes": "Needs a person with a PDF viewer. Steps: 1) Ali downloads the PDF of a closed MAR (for example from VIS-07) and opens the PDF's attachments; extract the Record Data XML. 2) Compare every value of the XML with the text printed in the PDF. Expected: every value in the XML (Transitions on the path with name, Position, Company, times and hashes; Verification Code and link) is printed in the PDF; the XML holds no Internal Note, Recommended Code, Chat or Return.",
-  "ranAt": "2026-10-27T19:43:24.356Z"
-}

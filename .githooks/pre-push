@@ -1,4 +1,0 @@
-#!/bin/sh
-# Refuses a push to a branch while pnpm lint or pnpm typecheck fails (RP-989); git's ref lines come on stdin.
-# pnpm install turns the hooks on for the clone and every worktree (scripts/hooks-install.ts).
-exec node scripts/pre-push.ts

@@ -1,7 +1,0 @@
-{
-  "status": "manual",
-  "checks": [],
-  "screenshots": [],
-  "notes": "Needs a person to cut the network. Steps: as Hafiz open a Draft MAR, edit Manufacturer and note the 'Saved <time>' under the Form moving with each autosave; in browser dev tools go Offline, edit again (a clear failed-save message with a retry should show), go Online and retry. Expected: the Saved time moves with each save; the failed save is shown clearly with a retry; no edit is lost.",
-  "ranAt": "2026-10-27T18:43:12.426Z"
-}
