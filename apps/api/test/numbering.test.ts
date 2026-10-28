@@ -57,15 +57,15 @@ const pattern = (p: { segments: object[]; countedBy: number[]; separator?: strin
 
 /**
  * The paths in a parsed response that carry a counter: a `lastValue` or `counterKey` field, or a
- * string that is an issued Document Number or a counter's key. Reads fields and values, never a
- * substring of the serialised body, whose random ids can end in any digits (RP-1009).
+ * string holding an issued Document Number or a counter's key. It looks for those exact values,
+ * never for digits such as "0002" in the serialised body, which a random id can end in (RP-1009).
  */
 function counterLeaks(value: unknown, counters: readonly string[], path = ""): string[] {
-  if (typeof value === "string") return counters.includes(value) ? [path] : [];
+  if (typeof value === "string") return counters.some((c) => value.includes(c)) ? [path] : [];
   if (value === null || typeof value !== "object") return [];
   return Object.entries(value).flatMap(([key, child]) => {
-    const at = path ? `${path}.${key}` : key;
-    return [...(key === "lastValue" || key === "counterKey" ? [at] : []), ...counterLeaks(child, counters, at)];
+    const here = path ? `${path}.${key}` : key;
+    return [...(key === "lastValue" || key === "counterKey" ? [here] : []), ...counterLeaks(child, counters, here)];
   });
 }
 
@@ -293,9 +293,8 @@ describe("visibility.md, Document Numbers", () => {
   it("RP-412-2: the page's examples reach a Member who isn't a Project Admin without any counter value", async () => {
     const t = await tower("NEX");
     const issued = [await numbered(t, t.c1Engineer), await numbered(t, t.c1Engineer)];
-    const counterKeys = ((await ok(c1.caller.get(`/v1/projects/${t.projectId}/numbering/counters`), 200)).json().counters as { counterKey: string }[]).map(
-      (c) => c.counterKey,
-    );
+    const counters = (await ok(c1.caller.get(`/v1/projects/${t.projectId}/numbering/counters`), 200)).json().counters as { counterKey: string; lastValue: number }[];
+    const counterKeys = counters.map((c) => c.counterKey);
     for (const [label, who] of [
       ["C1 engineer", t.c1Engineer],
       ["C2 engineer", t.c2Engineer],
@@ -311,8 +310,7 @@ describe("visibility.md, Document Numbers", () => {
       await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counters`), label);
       await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counter?workItemType=MAR`), label);
     }
-    const counters = (await ok(c1.caller.get(`/v1/projects/${t.projectId}/numbering/counters`), 200)).json();
-    expect(counters.counters).toEqual([expect.objectContaining({ counterKey: "NEX-MAR-01", lastValue: 2 })]);
+    expect(counters).toEqual([expect.objectContaining({ counterKey: "NEX-MAR-01", lastValue: 2 })]);
   });
 
   it("RP-1009: the counter-leak check reads the parsed body, so a Type id ending 0002 is no leak but a counter field or value is", () => {
@@ -328,6 +326,8 @@ describe("visibility.md, Document Numbers", () => {
     expect(counterLeaks({ ...body, example: { ...body.example, counterKey: "NEX-MAR-01" } }, [])).toEqual(["example.counterKey"]);
     expect(counterLeaks({ ...body, example: { ...body.example, projectCode: "NEX-MAR-01-0002" } }, ["NEX-MAR-01-0002"])).toEqual(["example.projectCode"]);
     expect(counterLeaks({ ...body, example: { ...body.example, locationPath: ["NEX-MAR-01"] } }, ["NEX-MAR-01"])).toEqual(["example.locationPath.0"]);
+    // A counter embedded in a longer string is still a leak.
+    expect(counterLeaks({ ...body, types: [{ ...body.types[0], name: { en: "MAR (next NEX-MAR-01-0003)", ar: "MAR" } }] }, ["NEX-MAR-01-0003"])).toEqual(["types.0.name.en"]);
   });
 
   it("a Project's own pattern can't be set to 'use the Project pattern'", async () => {
