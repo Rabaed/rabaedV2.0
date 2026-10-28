@@ -1,4 +1,4 @@
-import { PASSWORD_RESET, type Locale } from "@rabaed/domain";
+import { PASSWORD_RESET, type Locale, type PasswordResetEmail } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { OutboxHandler } from "./outbox.ts";
 import { newToken } from "./tokens.ts";
@@ -6,14 +6,6 @@ import { newToken } from "./tokens.ts";
 // The worker's side of forgot password (RP-1058; migration 20271020000000_password_reset.sql; the
 // api's side is @rabaed/auth password-reset.ts). The link's token is minted only as its email is
 // sent, and only its SHA-256 is stored: no raw token is ever in the database, the outbox included.
-
-/** A reset link's email, as the handler hands it to the mailer. `token` goes in the link only. */
-export interface PasswordResetEmail {
-  to: string;
-  language: Locale;
-  token: string;
-  validMinutes: number;
-}
 
 /** Sends a reset link's email. Throws when it could not, so the outbox retries with a fresh token. */
 export type SendPasswordResetEmail = (email: PasswordResetEmail) => Promise<void>;

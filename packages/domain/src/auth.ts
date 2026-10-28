@@ -31,6 +31,14 @@ export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequest>;
  */
 export const PASSWORD_RESET = { validMinutes: 30, perEmail: 5, perVisitor: 20, windowMinutes: 60, answerAfterMs: 300 } as const;
 
+/** A reset link's email, from the worker's outbox handler to the mailer. `token` goes in the link only. */
+export interface PasswordResetEmail {
+  to: string;
+  language: (typeof locales)[number];
+  token: string;
+  validMinutes: number;
+}
+
 export const passwordResetRequest = z.object({ email });
 export type PasswordResetRequest = z.infer<typeof passwordResetRequest>;
 

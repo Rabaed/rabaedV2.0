@@ -6,9 +6,9 @@
 import { randomInt } from "node:crypto";
 import { Writable } from "node:stream";
 import { hashToken } from "@rabaed/auth";
-import { createDb, passwordResetHandler, processOutbox, type PasswordResetEmail } from "@rabaed/db";
+import { createDb, passwordResetHandler, processOutbox } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { PASSWORD_RESET } from "@rabaed/domain";
+import { PASSWORD_RESET, type PasswordResetEmail } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
@@ -190,6 +190,17 @@ describe("using the link", () => {
     await reset(await linkFor(email));
     const { rows } = await sql<Record<string, unknown>>`select * from member_security_event where member_id = ${id}::uuid`.execute(migrator);
     expect(rows).toEqual([{ id: expect.any(String), member_id: id, kind: "password_reset", at: expect.any(Date) }]);
+  });
+
+  it("fails once its Member can no longer sign in", async () => {
+    const { email, id } = await member();
+    const token = await linkFor(email);
+    await sql`update member set status = 'deactivated' where id = ${id}::uuid`.execute(migrator);
+    const res = await reset(token);
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_reset_link" });
+    const { rows } = await sql`select 1 from member_security_event where member_id = ${id}::uuid`.execute(migrator);
+    expect(rows).toEqual([]);
   });
 
   it("expires after 30 minutes", async () => {

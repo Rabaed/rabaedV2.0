@@ -3,18 +3,11 @@
 import { PASSWORD_MIN_LENGTH as MIN_PASSWORD } from "@rabaed/domain";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState, type FormEvent } from "react";
-import { Field, Input } from "@rabaed/ui";
-import { FormAlert, LeadingIcon, SubmitButton, tallInput } from "@/components/sign-in-fields";
+import { buttonVariants, cn, Field, Input } from "@rabaed/ui";
+import { FormAlert, LeadingIcon, SubmitButton, tallButton, tallInput } from "@/components/sign-in-fields";
 import { Link, useRouter } from "@/i18n/navigation";
 import { browserLanguage } from "@/lib/browser-locale";
-
-/**
- * The reset link carries its token in the URL fragment (#token=…), which browsers never send to a
- * server or in a Referer header, as an invitation link does.
- */
-function tokenFromHash(): string | null {
-  return new URLSearchParams(window.location.hash.slice(1)).get("token");
-}
+import { tokenFromHash } from "@/lib/link-token";
 
 /** One plain message for an expired, used or made-up link, with the way to ask for a new one. */
 function ExpiredLink() {
@@ -22,10 +15,7 @@ function ExpiredLink() {
   return (
     <div className="flex flex-col gap-4">
       <FormAlert>{t("expired")}</FormAlert>
-      <Link
-        href="/forgot-password"
-        className="inline-flex h-11.5 w-full items-center justify-center rounded-md bg-primary text-[14.5px] font-semibold text-on-primary hover:bg-primary-hover"
-      >
+      <Link href="/forgot-password" className={cn(buttonVariants(), tallButton)}>
         {t("requestNew")}
       </Link>
     </div>

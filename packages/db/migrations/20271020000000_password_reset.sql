@@ -76,7 +76,8 @@ create function app.request_password_reset(
   as $$
     declare
       v_at timestamptz := greatest(p_now, now());
-      v_email_sha256 bytea := sha256(convert_to(lower(trim(p_email)), 'UTF8'));
+      v_email text := lower(trim(p_email));
+      v_email_sha256 bytea := sha256(convert_to(v_email, 'UTF8'));
       v_member_id uuid;
       v_reset_id uuid;
     begin
@@ -98,7 +99,7 @@ create function app.request_password_reset(
 
       select m.id into v_member_id
       from member m join company co on co.id = m.company_id
-      where m.email = lower(trim(p_email)) and m.status = 'active' and co.status = 'active'
+      where m.email = v_email and m.status = 'active' and co.status = 'active'
       for update of m;
       if v_member_id is null then
         return 'requested';

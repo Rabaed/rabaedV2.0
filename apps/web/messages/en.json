@@ -467,6 +467,7 @@
     "requestTitle": "Reset your password",
     "requestSubtitle": "Enter your work email. If it belongs to a Member of Rabaed, we'll send a reset link.",
     "send": "Send reset link",
+    "invalidEmail": "Enter a valid email.",
     "sent": "If this email belongs to a Member of Rabaed, we've sent a link to it. The link works once, for {minutes} minutes.",
     "tooMany": "Too many tries. Wait a while, then try again.",
     "resetTitle": "Choose a new password",

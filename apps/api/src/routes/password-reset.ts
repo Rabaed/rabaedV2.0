@@ -4,10 +4,8 @@ import { PASSWORD_RESET, passwordResetRequest, resetPasswordRequest } from "@rab
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { AppContext } from "../app.ts";
 import { HttpError } from "../http-error.ts";
-import { startSession } from "../identity/sessions.ts";
-import { rememberBrowserLanguage } from "../notifications/settings.ts";
 import { visitorSha256 } from "../visitor.ts";
-import { replaceSession } from "./session.ts";
+import { signInFromLink } from "./session.ts";
 
 // Forgot password (RP-1058). Both routes are public POSTs, so neither the email nor the token is
 // in a logged path; the api logs method and path only (logging.ts).
@@ -35,9 +33,7 @@ export const passwordResetRoutes =
       const now = ctx.now();
       const memberId = await resetPassword(ctx.db, request.body.token, request.body.password, now);
       if (!memberId) throw new HttpError(400, "invalid_reset_link");
-      if (request.body.locale) await rememberBrowserLanguage(ctx.db, memberId, request.body.locale, now);
-      const session = await startSession(ctx.db, { kind: "member", memberId }, now, ctx.config.sessionTtlMs);
-      await replaceSession(ctx, request, reply, session);
+      await signInFromLink(ctx, request, reply, memberId, request.body.locale, now);
       return reply.code(204).send();
     });
   };

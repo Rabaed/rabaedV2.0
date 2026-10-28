@@ -26,6 +26,9 @@ export function FormAlert({ tone = "danger", children }: { tone?: "danger" | "su
   );
 }
 
+/** The design's full-width 46px primary button, on top of the kit's: for a link styled as one, with `buttonVariants()`. */
+export const tallButton = "h-11.5 w-full rounded-md text-[14.5px] font-semibold";
+
 /** The full-width 46px primary button, with a spinner while busy. */
 export function SubmitButton({ pending, children }: { pending: boolean; children: ReactNode }) {
   return (
@@ -33,7 +36,7 @@ export function SubmitButton({ pending, children }: { pending: boolean; children
       type="submit"
       disabled={pending}
       aria-busy={pending}
-      className="h-11.5 w-full rounded-md text-[14.5px] font-semibold disabled:bg-primary disabled:text-on-primary disabled:opacity-70"
+      className={`${tallButton} disabled:bg-primary disabled:text-on-primary disabled:opacity-70`}
     >
       {pending && <span aria-hidden="true" className="size-4.5 animate-spin rounded-full border-2 border-on-primary/40 border-t-on-primary" />}
       {children}

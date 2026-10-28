@@ -6,14 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
 import { browserLanguage } from "@/lib/browser-locale";
-
-/**
- * The invitation link carries its token in the URL fragment (#token=…), which
- * browsers never send to a server or in a Referer header.
- */
-function tokenFromHash(): string | null {
-  return new URLSearchParams(window.location.hash.slice(1)).get("token");
-}
+import { tokenFromHash } from "@/lib/link-token";
 
 export function AcceptInvitationForm() {
   const t = useTranslations("acceptInvitation");

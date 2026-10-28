@@ -1,5 +1,5 @@
 import { acceptInvitation } from "@rabaed/auth";
-import { acceptInvitationRequest, signInRequest } from "@rabaed/domain";
+import { acceptInvitationRequest, signInRequest, type Locale } from "@rabaed/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { AppContext } from "../app.ts";
@@ -8,9 +8,19 @@ import { endSession, signIn, startSession, type Session } from "../identity/sess
 import { rememberBrowserLanguage } from "../notifications/settings.ts";
 
 /** Sets the new session cookie, ending whatever session the browser had before. */
-export async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, session: Session) {
+async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, session: Session) {
   if (request.sessionToken) await endSession(ctx.db, request.sessionToken, ctx.now());
   ctx.setSessionCookie(reply, session);
+}
+
+/**
+ * Signs a Member in after an emailed link set their password (an invitation, a password reset):
+ * remembers the browser's language as at sign-in, and replaces the browser's session.
+ */
+export async function signInFromLink(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, memberId: string, locale: Locale | undefined, now: Date) {
+  if (locale) await rememberBrowserLanguage(ctx.db, memberId, locale, now);
+  const session = await startSession(ctx.db, { kind: "member", memberId }, now, ctx.config.sessionTtlMs);
+  await replaceSession(ctx, request, reply, session);
 }
 
 export const sessionRoutes =
@@ -39,9 +49,7 @@ export const sessionRoutes =
       const now = ctx.now();
       const memberId = await acceptInvitation(ctx.db, request.body.token, request.body.password, now);
       if (!memberId) throw new HttpError(400, "invalid_invitation");
-      if (request.body.locale) await rememberBrowserLanguage(ctx.db, memberId, request.body.locale, now);
-      const session = await startSession(ctx.db, { kind: "member", memberId }, now, ctx.config.sessionTtlMs);
-      await replaceSession(ctx, request, reply, session);
+      await signInFromLink(ctx, request, reply, memberId, request.body.locale, now);
       return reply.code(204).send();
     });
   };

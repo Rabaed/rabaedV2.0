@@ -29,7 +29,7 @@ export function ForgotPasswordForm() {
       });
       if (res.ok) return setState("sent");
       // A malformed email is the one thing the page can say without telling whether it is registered.
-      setError(res.status === 429 ? t("tooMany") : res.status === 400 ? signIn("invalid") : t("unavailable"));
+      setError(res.status === 429 ? t("tooMany") : res.status === 400 ? t("invalidEmail") : t("unavailable"));
     } catch {
       setError(t("unavailable"));
     }
