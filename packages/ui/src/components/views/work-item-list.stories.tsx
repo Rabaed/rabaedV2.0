@@ -37,7 +37,7 @@ const copy = {
   number: b("Submittal No.", "رقم التقديم"),
   title: b("Title", "العنوان"),
   created: b("Created", "التاريخ"),
-  currentOwner: b("With", "لدى"),
+  withColumn: b("With", "لدى"),
   settings: b("Table settings", "إعدادات الجدول"),
   group: b("Group", "تجميع"),
   export: b("Export", "تصدير"),
@@ -252,10 +252,10 @@ export const Wide: Story = {
     await expect(within(table).getAllByRole("columnheader")).toHaveLength(14);
     await expect(within(table).getAllByRole("row")).toHaveLength(items.length + 1);
     const locale = storyLocale(context);
-    await expect(cellOf(context, "Cable tray support brackets", copy.currentOwner)).toHaveTextContent(consultant[locale]);
-    await expect(cellOf(context, "Main LV switchboard", copy.currentOwner)).toHaveTextContent(storyText(context, copy.notPickedUp));
-    await expect(cellOf(context, "LED downlights", copy.currentOwner)).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
-    await expect(cellOf(context, "Busbar trunking", copy.currentOwner)).toHaveTextContent(consultant[locale]);
+    await expect(cellOf(context, "Cable tray support brackets", copy.withColumn)).toHaveTextContent(consultant[locale]);
+    await expect(cellOf(context, "Main LV switchboard", copy.withColumn)).toHaveTextContent(storyText(context, copy.notPickedUp));
+    await expect(cellOf(context, "LED downlights", copy.withColumn)).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
+    await expect(cellOf(context, "Busbar trunking", copy.withColumn)).toHaveTextContent(consultant[locale]);
     await expect(cellOf(context, "Busbar trunking", b("Code", "الرمز"))).toHaveTextContent("Code A");
     await expect(cellOf(context, "Earthing rods", b("Zone", "المنطقة"))).toHaveTextContent(zone.name[locale]);
     await expect(cellOf(context, "Earthing rods", b("Building", "المبنى"))).toHaveTextContent("—");
@@ -376,7 +376,7 @@ export const MovingAColumn: Story = {
     handle.focus();
     for (let i = 0; i < 12; i++) await userEvent.keyboard("{ArrowUp}");
     const headers = within(tableOf(context)).getAllByRole("columnheader").map((h) => h.textContent);
-    await expect(headers.slice(1, 4)).toEqual([storyText(context, copy.number), storyText(context, copy.title), storyText(context, copy.currentOwner)]);
+    await expect(headers.slice(1, 4)).toEqual([storyText(context, copy.number), storyText(context, copy.title), storyText(context, copy.withColumn)]);
     await userEvent.keyboard("{Escape}");
   },
 };
@@ -437,7 +437,7 @@ export const GroupMenuOpen: Story = {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.group) }));
     const menu = await screen.findByRole("dialog");
     await expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
-      [copy.status, b("Discipline", "التخصص"), b("Type", "النوع"), copy.currentOwner, b("Zone", "المنطقة"), b("Code", "الرمز")].map((c) => storyText(context, c)),
+      [copy.status, b("Discipline", "التخصص"), b("Type", "النوع"), copy.withColumn, b("Zone", "المنطقة"), b("Code", "الرمز")].map((c) => storyText(context, c)),
     );
   },
 };

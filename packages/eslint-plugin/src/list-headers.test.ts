@@ -1,4 +1,4 @@
-// RP-921: every List's column headers, in English and Arabic, use the glossary's terms.
+// RP-921: every List's column headers (the strings under a `columns` object), in English and Arabic, use the glossary's terms.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { allowedMessages, avoidInNames, avoidInText } from "./avoid-rules.ts";
@@ -8,7 +8,7 @@ type Messages = { [key: string]: string | Messages };
 const read = (locale: "en" | "ar"): Messages =>
   JSON.parse(readFileSync(new URL(`../../../apps/web/messages/${locale}.json`, import.meta.url), "utf8")) as Messages;
 
-/** Every List header: each string under a `columns` object, by key path. */
+/** Every List column header: each string under a `columns` object, by key path. Filter, Group and Kanban labels are left to the lint rule. */
 function headers(messages: Messages, path: string[] = []): [string, string][] {
   return Object.entries(messages).flatMap(([key, value]): [string, string][] => {
     if (typeof value === "string") return path.at(-1) === "columns" ? [[[...path, key].join("."), value]] : [];
@@ -23,11 +23,11 @@ describe("List headers (RP-921)", () => {
   for (const locale of ["en", "ar"] as const) {
     const all = headers(read(locale));
 
-    it(`${locale}: finds the Lists' headers`, () => {
+    it(`${locale}: finds the Lists' column headers`, () => {
       expect(all.map(([path]) => path)).toContain("workItemViews.list.columns.owner");
     });
 
-    it(`${locale}: no header uses an _Avoid_ term, except the owner's anatomy words in the allowlist`, () => {
+    it(`${locale}: no column header uses an _Avoid_ term, except the owner's anatomy words in the allowlist`, () => {
       const hits = all
         .filter(([path]) => !(path in allowedMessages))
         .map(([path, text]) => [path, avoidTermInCopy(text, avoidInText, avoidInNames)?.term] as const)
@@ -35,7 +35,7 @@ describe("List headers (RP-921)", () => {
       expect(hits).toEqual([]);
     });
 
-    it(`${locale}: no header says "Current owner" (docs/visibility.md: the List's "With" column)`, () => {
+    it(`${locale}: no column header says "Current owner" (docs/visibility.md: the List's "With" column)`, () => {
       const hits = all.filter(([, text]) => forbidden[locale].some((phrase) => text.toLowerCase().includes(phrase)));
       expect(hits).toEqual([]);
     });
