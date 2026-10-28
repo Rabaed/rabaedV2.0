@@ -168,6 +168,23 @@ const photos: Record<Locale, PhotosFieldLabels> = {
     noPlace: "No location recorded",
     atMost: (n, count) => (count === 1 ? "At most 1 photo" : `At most ${n} photos`),
     full: (n, count) => (count === 1 ? "This field takes 1 photo." : `This field takes at most ${n} photos.`),
+    annotatedMark: "Annotated",
+    viewer: { close: "Close", show: "Show", annotated: "Annotated", original: "Original", annotate: "Annotate", noImage: "No image to show." },
+    annotator: {
+      title: (name) => `Annotate ${name}`,
+      cancel: "Cancel",
+      undo: "Undo",
+      save: "Save",
+      saving: "Saving…",
+      failed: "The annotated photo wasn't saved. Try again.",
+      canvas: "The photo, to mark up",
+      tools: "Tools",
+      tool: { arrow: "Arrow", rectangle: "Rectangle", circle: "Circle", pen: "Pen", text: "Text" },
+      colours: "Colour",
+      colour: { red: "Red", yellow: "Yellow", blue: "Blue", white: "White", black: "Black" },
+      labelText: "Label text",
+      addLabel: "Add label",
+    },
   },
   ar: {
     none: "لا توجد صور بعد.",
@@ -191,6 +208,23 @@ const photos: Record<Locale, PhotosFieldLabels> = {
           : count <= 10
             ? `يقبل هذا الحقل ${n} صور على الأكثر.`
             : `يقبل هذا الحقل ${n} صورة على الأكثر.`,
+    annotatedMark: "معلَّمة",
+    viewer: { close: "إغلاق", show: "عرض", annotated: "المعلَّمة", original: "الأصلية", annotate: "تعليم", noImage: "لا توجد صورة لعرضها." },
+    annotator: {
+      title: (name) => `تعليم \u2068${name}\u2069`,
+      cancel: "إلغاء",
+      undo: "تراجع",
+      save: "حفظ",
+      saving: "جارٍ الحفظ…",
+      failed: "لم تُحفظ الصورة المعلَّمة. حاول مرة أخرى.",
+      canvas: "الصورة، للتعليم عليها",
+      tools: "الأدوات",
+      tool: { arrow: "سهم", rectangle: "مستطيل", circle: "دائرة", pen: "قلم", text: "نص" },
+      colours: "اللون",
+      colour: { red: "أحمر", yellow: "أصفر", blue: "أزرق", white: "أبيض", black: "أسود" },
+      labelText: "نص التسمية",
+      addLabel: "إضافة التسمية",
+    },
   },
 };
 

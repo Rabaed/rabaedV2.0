@@ -34,9 +34,11 @@ export type PhotoViewerProps = {
   canAnnotate?: boolean;
   /** Annotate the photo shown, from its image URL. */
   onAnnotate?: (imageUrl: string) => void;
+  /** Where the screen mounts (PhotoScreen's `container`). */
+  container?: HTMLElement | null;
 };
 
-export function PhotoViewer({ open, onOpenChange, photo, imageUrls, labels: text, canAnnotate = false, onAnnotate }: PhotoViewerProps) {
+export function PhotoViewer({ open, onOpenChange, photo, imageUrls, labels: text, canAnnotate = false, onAnnotate, container }: PhotoViewerProps) {
   const copyId = photo.annotated?.id;
   const [showing, setShowing] = useState<"annotated" | "original">(copyId ? "annotated" : "original");
   // The copy first each time the viewer opens, or a new copy is saved; not on every render of the page.
@@ -52,6 +54,7 @@ export function PhotoViewer({ open, onOpenChange, photo, imageUrls, labels: text
       onOpenChange={onOpenChange}
       title={photo.original.fileName}
       closeLabel={text.close}
+      container={container}
       actions={
         canAnnotate &&
         url && (
