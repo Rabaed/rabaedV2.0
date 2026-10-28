@@ -131,6 +131,43 @@ describe("the layout's content, from the same fixtures", () => {
     expect(text).toContain("stroke=\"#b3261e\"");
   });
 
+  it("prints a Revision's Document Number with its revision once: the stored number carries it (RP-1059)", () => {
+    for (const language of ["bilingual", "en", "ar"] as const) {
+      const text = html("D", language);
+      expect(text, language).toContain("RGT-DAS-QA-0003 Rev 1");
+      expect(text, language).not.toMatch(/Rev 1\s+Rev 1/);
+    }
+  });
+
+  it("pairs the revision line as the other bilingual rows, with one date format (RP-1059)", () => {
+    const text = html("D", "bilingual");
+    const start = text.indexOf('<div class="revision">');
+    expect(start).toBeGreaterThan(-1);
+    const revision = text.slice(start, text.indexOf("</section>", start));
+    // Arabic, then English on its own line in the same column, as txt() prints every bilingual value.
+    expect(revision).toContain('class="line en"');
+    expect(revision).not.toMatch(/<div class="line" lang="en" dir="ltr">/);
+    // The record's date format in both sentences (English in a bilingual record), Latin digits.
+    expect(revision.split("Oct 8, 2026").length - 1).toBe(2);
+    expect(revision).not.toMatch(/2026\/10\/0?8/);
+  });
+
+  it("forces a new page only for an appendix page, and lets the approval flow run on from page 1 (RP-1059)", () => {
+    for (const code of ["A", "B", "C"] as const) {
+      const text = html(code, "bilingual");
+      // The selector of each CSS rule that forces a new page.
+      const breaks = text
+        .split("}")
+        .filter((rule) => rule.includes("break-before: page"))
+        .map((rule) => rule.slice(rule.lastIndexOf("\n") + 1).split(" {")[0]);
+      expect(breaks, code).toEqual([".appendix-page"]);
+      expect(text, code).not.toContain("after-start");
+    }
+    const text = html("A", "bilingual");
+    expect(text).toContain('<section class="box flow">');
+    expect(text).toMatch(/\.box\.flow \{[^}]*break-inside: auto/);
+  });
+
   it("prints a single language only", () => {
     expect(html("A", "en")).not.toMatch(/[؀-ۿ]/);
     expect(html("A", "ar")).not.toContain("Final decision");
@@ -165,13 +202,17 @@ describe("the layout's content, from the same fixtures", () => {
     const cut = (c?: RecordCut) => recordHtml(data, fallbackFonts(), fixtureImages, images, c);
     const cards = (text: string) => text.split('<article class="card').length - 1;
     const answers = (text: string) => text.split('<div class="answer">').length - 1;
-    expect(cut({ beforeComments: true })).not.toContain("Review Comments</span></h2>");
-    expect(cards(cut({ beforeComments: true }))).toBe(0);
+    // To the Comments' start: their heading, first author and first Comment, which print together, and no card.
+    const items = (text: string) => text.split("<li value=").length - 1;
+    expect(cut({ commentsStart: true })).toContain("Review Comments</span></h2>");
+    expect(items(cut({ commentsStart: true }))).toBe(1);
+    expect(items(cut())).toBeGreaterThan(1);
+    expect(cards(cut({ commentsStart: true }))).toBe(0);
     // To the issuing card's answers: every card, the last without them.
     expect(cut({ replyCard: true })).toContain("Review Comments</span></h2>");
     expect(cards(cut({ replyCard: true }))).toBe(4);
     expect(answers(cut({ replyCard: true }))).toBe(answers(cut()) - data.cards.at(-1)!.lines.length);
-    for (const c of [{ beforeComments: true } as const, { replyCard: true } as const]) expect(cut(c)).not.toContain("Disclaimer");
+    for (const c of [{ commentsStart: true } as const, { replyCard: true } as const]) expect(cut(c)).not.toContain("Disclaimer");
     expect(cards(cut())).toBe(4);
     // The issuing card holding the reply's full text may run across pages; no other card does.
     expect(cut().match(/<article class="card flows">/g) ?? []).toHaveLength(data.reply?.cut ? 1 : 0);

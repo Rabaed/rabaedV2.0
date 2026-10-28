@@ -44,12 +44,13 @@ function inline(t: RecordText): string {
 }
 
 /**
- * Where a probe render stops (pages.ts): before the Review Comments, or at the start of the answers
- * of the last card (the issuing one, which holds the reply's full text). Nothing after it is drawn,
- * so its page count says on which page that part is. `appendixList` (RP-147, appendix.ts) draws
- * the whole record and the appendix's list, but not the appendix's pages: where they start.
+ * Where a probe render stops (pages.ts): after the start of the Review Comments (their heading, first
+ * author and first Comment, which print together), or at the start of the answers of the last card
+ * (the issuing one, which holds the reply's full text). Nothing after it is drawn, so its last page
+ * is the page that part starts on. `appendixList` (RP-147, appendix.ts) draws the whole record and
+ * the appendix's list, but not the appendix's pages: where they start.
  */
-export type RecordCut = { readonly beforeComments: true } | { readonly replyCard: true } | { readonly appendixList: true };
+export type RecordCut = { readonly commentsStart: true } | { readonly replyCard: true } | { readonly appendixList: true };
 
 /**
  * The record's HTML. `images` are the data URLs of the images it prints by storage key, and
@@ -88,8 +89,8 @@ export function recordHtml(
   const day = (iso: string) => dateText(iso, primary, false);
   const when = (iso: string) => dateText(iso, primary, true);
 
+  // A Revision's stored number already ends in " Rev n" (workflow-engine.md, Revisions), so it prints as it is (RP-1059).
   const number = data.documentNumber ?? "—";
-  const numberLine = data.revisionNo > 0 ? `${number} Rev ${data.revisionNo}` : number;
   // One line on every page: "Issued electronically through Rabaed · code · page X of Y", with the Arabic
   // beside it in a bilingual record. The code is printed once; each part is bidi-isolated, so the order holds.
   const LRI = "\u2066";
@@ -219,12 +220,20 @@ export function recordHtml(
     )
     .join("");
 
-  // Each language's sentence on a line of its own, so a wrapped line never mixes the two.
-  const revisionLine = data.revisionOf
+  // Paired as txt() pairs every bilingual value: the Arabic sentence, then the English on its own line in
+  // the same column, so a wrapped line never mixes the two. The date is the record's one format, as
+  // every date beside a label (RP-1059).
+  const revisionOf = data.revisionOf;
+  const revisionSentence = (l: Locale) =>
+    revisionOf
+      ? `${WORDS.revisionOf[l]} ${ltr(revisionOf.documentNumber)}, ${WORDS.closedAtCode[l]} ${html(revisionOf.outcome)} ${WORDS.closedOn[l]} ${day(revisionOf.closedAt)}`
+      : "";
+  const revisionLine = revisionOf
     ? `<div class="revision">${locales
-        .map(
-          (l) =>
-            `<div class="line" lang="${l}" dir="${dirOf(l)}">${WORDS.revisionOf[l]} ${ltr(data.revisionOf!.documentNumber)}, ${WORDS.closedAtCode[l]} ${html(data.revisionOf!.outcome)} ${WORDS.closedOn[l]} ${dateText(data.revisionOf!.closedAt, l, false)}</div>`,
+        .map((l) =>
+          language === "bilingual" && l === "en"
+            ? `<div class="line en"><bdi lang="en" dir="ltr">${revisionSentence(l)}</bdi></div>`
+            : `<div class="line" lang="${l}">${revisionSentence(l)}</div>`,
         )
         .join("")}</div>`
     : "";
@@ -239,7 +248,7 @@ export function recordHtml(
     : copy?.stage
       ? texts(copy.stage).map((n) => `${FSI}${n}${PDI}`).join(" / ")
       : "";
-  const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${LRI}${numberLine}${PDI}  ·  ${outcomeBadge}`);
+  const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${LRI}${number}${PDI}  ·  ${outcomeBadge}`);
 
   const image = (key: string | null | undefined, cls: string) => {
     const src = key ? images.get(key) : undefined;
@@ -258,10 +267,14 @@ export function recordHtml(
         }`
     : "";
 
+  // The parts after the Form run on where there is room, never from a forced new page (RP-1059).
+  // A probe to the Comments' start draws their heading, first author and first Comment only.
+  const commentsStart = cut !== undefined && "commentsStart" in cut;
+  const groups = commentsStart ? data.comments.slice(0, 1).map((g) => ({ ...g, items: g.items.slice(0, 1) })) : data.comments;
   const commentsPart =
-    data.comments.length === 0 || (cut !== undefined && "beforeComments" in cut)
+    data.comments.length === 0
       ? ""
-      : `<section class="after-start comments"><h2 class="part">${heading("reviewComments")}</h2>${data.comments
+      : `<section class="comments"><h2 class="part">${heading("reviewComments")}</h2>${groups
           .map(
             (g) => `<div class="author">
   <div class="avatar">${txt(g.initials)}</div>
@@ -297,10 +310,7 @@ export function recordHtml(
 </article>`;
   // A probe to the reply's card draws every card, the last without its answers.
   const cardsHtml = data.cards.map((c, i) => cardHtml(c, i, !(cut && "replyCard" in cut && i === data.cards.length - 1))).join("");
-  const signaturesPart =
-    cut !== undefined && "beforeComments" in cut
-      ? ""
-      : `<section class="${data.comments.length === 0 ? "after-start " : ""}signatures"><h2 class="part">${heading("signatures")}</h2>${cardsHtml}</section>`;
+  const signaturesPart = commentsStart ? "" : `<section class="signatures"><h2 class="part">${heading("signatures")}</h2>${cardsHtml}</section>`;
   const appendixList = cut !== undefined && "appendixList" in cut;
   const ended = cut === undefined || appendixList;
   const nextStepPart =
@@ -408,7 +418,9 @@ body { font-family: ${fonts.family}; font-size: 9pt; line-height: 1.4; }
 .muted { color: #555; font-size: 8pt; }
 .hijri { color: #555; font-size: 8pt; }
 .box { border: 0.75pt solid #777; border-radius: 1.5mm; padding: 3mm 4mm; margin-bottom: 4mm; break-inside: avoid; }
-.box > h2 { font-size: 9.5pt; margin: -3mm -4mm 3mm; padding: 1.6mm 4mm; background: #eee; border-bottom: 0.75pt solid #777; border-radius: 1.5mm 1.5mm 0 0; }
+.box > h2 { font-size: 9.5pt; margin: -3mm -4mm 3mm; padding: 1.6mm 4mm; background: #eee; border-bottom: 0.75pt solid #777; border-radius: 1.5mm 1.5mm 0 0; break-after: avoid; }
+/* The approval flow starts on page 1 right after the box before it and runs on by whole rows, its head repeated (RP-1059). */
+.box.flow { break-inside: auto; }
 .companies { display: flex; flex-wrap: wrap; gap: 3mm; margin-bottom: 4mm; break-inside: avoid; }
 .company { flex: 1 1 40mm; border: 0.75pt solid #999; border-radius: 1.5mm; padding: 2mm 3mm; min-height: 12mm; }
 .title-block { border-bottom: 2px solid #111; padding-bottom: 4mm; margin-bottom: 4mm; break-inside: avoid; }
@@ -444,7 +456,7 @@ td.hash { font-size: 6pt; word-break: break-all; width: 30mm; }
 tr { break-inside: avoid; }
 .totals td { font-weight: 700; background: #f6f6f6; }
 section.form { margin-top: 2mm; }
-section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid #111; padding-bottom: 1mm; }
+section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid #111; padding-bottom: 1mm; break-after: avoid; }
 .tablewrap { grid-column: 1 / -1; margin: 2mm 0; }
 .tlabel { font-weight: 700; margin-bottom: 1mm; }
 .photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin-top: 1.5mm; }
@@ -456,8 +468,7 @@ section.form > h2 { font-size: 11pt; margin: 5mm 0 2mm; border-bottom: 1pt solid
 .pre { white-space: pre-line; }
 .logo { display: block; max-height: 12mm; max-width: 40mm; margin-bottom: 1.5mm; }
 .pointer { margin-top: 1.5mm; }
-.after-start { break-before: page; }
-h2.part { font-size: 12pt; margin: 0 0 3mm; border-bottom: 1.5pt solid #111; padding-bottom: 1mm; }
+h2.part { font-size: 12pt; margin: 5mm 0 3mm; border-bottom: 1.5pt solid #111; padding-bottom: 1mm; break-after: avoid; }
 .signatures, .comments { margin-bottom: 4mm; }
 .author { display: flex; gap: 3mm; align-items: center; margin: 3mm 0 2mm; break-after: avoid; }
 .avatar { width: 10mm; height: 10mm; border-radius: 50%; background: #111; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 9pt; flex: none; }
@@ -495,7 +506,7 @@ ${copy ? `<div class="watermark">${txt(copy.watermark)}</div>` : ""}
   <h1>${txt(data.type.name)} <span class="badge">${ltr(data.type.code)}</span></h1>
   <dl>
     <dt>${heading("subject")}</dt><dd><bdi>${html(data.subject)}</bdi></dd>
-    <dt>${heading("number")}</dt><dd>${ltr(numberLine)}</dd>
+    <dt>${heading("number")}</dt><dd>${ltr(number)}</dd>
   </dl>
   ${revisionLine}
 </section>
@@ -525,7 +536,7 @@ ${
       }</section>`
     : ""
 }
-<section class="box">
+<section class="box flow">
   <h2>${heading("flow")}</h2>
   <table>
     <thead>

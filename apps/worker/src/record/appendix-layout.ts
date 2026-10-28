@@ -65,7 +65,7 @@ export function appendixHtml(data: RecordData, withPages = true): string {
     }
   };
 
-  const list = `<section class="after-start appendix"><h2 class="part">${heading("appendix")}</h2>
+  const list = `<section class="appendix"><h2 class="part">${heading("appendix")}</h2>
 <div class="lead">${sentence((l) => html(WORDS.howToOpen[l]))}</div>
 <table><thead><tr><th>#</th><th>${heading("documentName")}</th><th>${heading("fingerprint")}</th><th>${heading("inThisRecord")}</th></tr></thead><tbody>${data.appendix
     .map(
