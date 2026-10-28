@@ -581,7 +581,8 @@ export function goldenFacts(golden: GoldenCode, language: RecordData["language"]
   return {
     ...common,
     type: { code: "DAS", name: t("Document Approval Sheet", "نموذج اعتماد مستند") },
-    documentNumber: "RGT-DAS-QA-0003",
+    // A Revision's stored number carries its suffix (workflow-engine.md, Revisions; RP-316).
+    documentNumber: "RGT-DAS-QA-0003 Rev 1",
     revisionNo: 1,
     revisionOf: { documentNumber: "RGT-DAS-QA-0003", closedAt: "2026-10-08T11:00:00.000Z", outcome: "C" },
     subject: "Method statement for the concrete pour, level 3",
