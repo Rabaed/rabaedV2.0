@@ -8,9 +8,9 @@ import { cardNumber, sortedByName, type Locale, type WorkItemDetail } from "@rab
  */
 export type SubmittalPanelWith =
   /** One of the viewer's own Company's people. */
-  | { kind: "person"; name: string; companyName: string }
+  | { kind: "person"; name: string }
   /** A Step Pool of the viewer's own Company: up to 3 names in the reader's order, then how many more. */
-  | { kind: "pool"; names: string[]; more: number; companyName: string }
+  | { kind: "pool"; names: string[]; more: number }
   /** Another Company (or "Owner review"), by name only. */
   | { kind: "company"; name: string };
 
@@ -18,13 +18,12 @@ const poolNamesShown = 3;
 
 export function submittalPanelWith(heldBy: WorkItemDetail["heldBy"], locale: Locale): SubmittalPanelWith | null {
   if (!heldBy) return null;
-  const companyName = heldBy.companyName[locale];
-  if (heldBy.memberName) return { kind: "person", name: heldBy.memberName[locale], companyName };
+  if (heldBy.memberName) return { kind: "person", name: heldBy.memberName[locale] };
   if (heldBy.pool && heldBy.pool.names.length > 0) {
     const names = sortedByName(heldBy.pool.names, (n) => n[locale], locale).map((n) => n[locale]);
-    return { kind: "pool", names: names.slice(0, poolNamesShown), more: Math.max(names.length - poolNamesShown, 0), companyName };
+    return { kind: "pool", names: names.slice(0, poolNamesShown), more: Math.max(names.length - poolNamesShown, 0) };
   }
-  return { kind: "company", name: companyName };
+  return { kind: "company", name: heldBy.companyName[locale] };
 }
 
 /**
@@ -54,24 +53,26 @@ export type SubmittalPanelKeyPress = {
 };
 
 /**
- * What a key does to the panel (README §1, gap C6): Esc closes it, innermost layer first; ↑ / ↓
- * move to the previous or next loaded row while focus isn't in a field or a widget that uses them.
+ * What a key does to the panel (README §1, gap C6): Esc closes it, innermost layer first, and ↑ / ↓
+ * move to the previous or next loaded row; neither while focus is in a field being typed in (as the
+ * design's drawer.js), nor the arrows in a widget that moves by them.
  */
 export function submittalPanelKey(press: SubmittalPanelKeyPress): "close" | "previous" | "next" | null {
-  if (press.defaultPrevented || press.layerOpen) return null;
+  if (press.defaultPrevented || press.layerOpen || press.typing) return null;
   if (press.key === "Escape") return "close";
-  if (press.modifier || press.typing || press.inWidget) return null;
+  if (press.modifier || press.inWidget) return null;
   if (press.key === "ArrowUp") return "previous";
   if (press.key === "ArrowDown") return "next";
   return null;
 }
 
 /**
- * The panel's big number (gap A16): a Revision's stored " Rev n" split off, so it shows inline
- * after the number in brand orange; Rev 0 shows nothing. Null for a Draft, which has no number.
+ * The panel's big number (gap A16): a Revision's stored " Rev n" split off, so `DocNo` words it
+ * in the reader's language, inline after the number in brand orange; Rev 0 shows nothing
+ * (`revisionNo` null). Null for a Draft, which has no number.
  */
-export function submittalPanelNumber(documentNumber: string | null, revisionNo: number): { number: string; revision: string | null } | null {
+export function submittalPanelNumber(documentNumber: string | null, revisionNo: number): { number: string; revisionNo: number | null } | null {
   const number = cardNumber(documentNumber, revisionNo);
-  if (number === null || documentNumber === null) return null;
-  return { number, revision: number === documentNumber ? null : documentNumber.slice(number.length).trim() };
+  if (number === null) return null;
+  return { number, revisionNo: revisionNo > 0 ? revisionNo : null };
 }

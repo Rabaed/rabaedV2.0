@@ -28,7 +28,7 @@ import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
-import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { HeaderBadge, poolIcon, TradeChip } from "./kanban-card.tsx";
 import { badgeOf, ownerOf, placesOf } from "./work-item-board.tsx";
 
 // The List's table (RP-409, the owner's design): a header row of sortable
@@ -382,9 +382,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
       );
     case "trade":
       return (
-        <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(row.trade.code))}>
-          {row.trade.name[locale]} (<bdi translate="no">{row.trade.code}</bdi>)
-        </span>
+        <TradeChip code={row.trade.code} name={row.trade.name[locale]} />
       );
     case "type":
       return (

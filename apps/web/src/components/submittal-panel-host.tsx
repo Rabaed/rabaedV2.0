@@ -3,12 +3,14 @@
 import { isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
 import {
   Button,
+  DocNo,
+  ErrorState,
   Outcome,
   StagePill,
   SubmittalPanel,
   SubmittalPanelFacts,
   SubmittalPanelIdentity,
-  cn,
+  TradeChip,
   submittalPanelNormalWidth,
   submittalPanelNumber,
   submittalPanelPosition,
@@ -17,16 +19,15 @@ import {
   placesOf,
   readSubmittalPanelPreferences,
   stageColour,
-  tradeChipClass,
   useSubmittalPanelIds,
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { WorkItemActions } from "@/components/work-item-actions";
-import { useRouter } from "@/i18n/navigation";
+import { useCreateRevision } from "@/components/work-item-revision";
 import { openIdFrom, submittalPanelHref } from "@/lib/submittal-panel-url";
 
 type Filters = Pick<WorkItemListData["filters"], "outcomes" | "locations">;
@@ -53,11 +54,15 @@ export function useOpenSubmittal() {
   const params = useSearchParams();
   const pathname = usePathname();
   const openId = openIdFrom(params);
-  const go = useCallback((id: string | null) => window.history.replaceState(null, "", submittalPanelHref(pathname, window.location.search, id)), [pathname]);
-  return { openId, open: go, close: () => go(null) };
+  const showInUrl = useCallback(
+    (id: string | null) => window.history.replaceState(null, "", submittalPanelHref(pathname, window.location.search, id)),
+    [pathname],
+  );
+  return { openId, open: showInUrl, close: () => showInUrl(null) };
 }
 
-type Read = { id: string; item: WorkItemDetail | null };
+/** The item read for one id: the item, or null when it couldn't be read (hidden, gone or failed: the same to the viewer). */
+type ItemRead = { id: string; item: WorkItemDetail | null };
 
 /**
  * The open submittal in the Submittal Panel (RP-1061, spec RP-1054): read from the item read
@@ -85,15 +90,13 @@ export function SubmittalPanelHost({
   const t = useTranslations("submittalPanel");
   const tabs = useTranslations("projectTabs");
   const ids = useSubmittalPanelIds();
-  const [read, setRead] = useState<Read | null>(null);
+  const [read, setRead] = useState<ItemRead | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [order, setOrder] = useState<string[]>([]);
   const [width] = useState(() => {
     const kept = readSubmittalPanelPreferences(submittalPanelStorage()).width;
     return kept === "full" ? submittalPanelNormalWidth : kept;
   });
-  const openedId = useRef(openId);
-  openedId.current = openId;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -108,23 +111,26 @@ export function SubmittalPanelHost({
   useEffect(() => setOrder(loadedOrder()), [openId, refreshKey]);
 
   const close = () => {
-    const id = openedId.current;
     onClose();
     // Focus goes back to the row or card that was open.
-    openerOf(id)?.focus();
+    openerOf(openId)?.focus();
   };
-  const go = (id: string | null) => {
-    if (!id) return undefined;
-    return () => {
-      onOpen(id);
-      openerOf(id)?.scrollIntoView({ block: "nearest" });
-    };
-  };
+  /** Opens a neighbouring row, scrolled into view; none at the edge, which disables the button. */
+  const moveTo = (id: string | null) =>
+    id === null
+      ? undefined
+      : () => {
+          onOpen(id);
+          openerOf(id)?.scrollIntoView({ block: "nearest" });
+        };
 
-  const position = submittalPanelPosition(order, openId);
-  // While the next item is read, the last one stays, so the content swaps in place.
-  const item = read?.item ?? null;
+  // While the next item is read, the last one stays, so the content swaps in place; until it
+  // arrives everything shown, its place and its actions included, is the last one's, and no
+  // action can be taken on it.
+  const shownId = read?.id ?? openId;
   const loading = read === null || read.id !== openId;
+  const item = read?.item ?? null;
+  const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
 
   return (
@@ -138,10 +144,18 @@ export function SubmittalPanelHost({
         close: t("close"),
         hint: t("hint"),
       }}
-      crumb={item ? (item.documentNumber ?? t("noNumber")) : ""}
+      crumb={
+        !item ? null : number === null ? (
+          t("noNumber")
+        ) : number.revisionNo === null ? (
+          <DocNo value={number.number} />
+        ) : (
+          <DocNo value={number.number} rev={number.revisionNo} locale={locale} />
+        )
+      }
       position={position}
-      onPrevious={go(position.previous)}
-      onNext={go(position.next)}
+      onPrevious={moveTo(position.previous)}
+      onNext={moveTo(position.next)}
       onClose={close}
       width={width}
       labelledBy={item ? ids.labelledBy : undefined}
@@ -150,6 +164,7 @@ export function SubmittalPanelHost({
       identity={
         item && (
           <SubmittalPanelIdentity
+            locale={locale}
             number={number}
             noNumber={t("noNumber")}
             subject={item.title}
@@ -162,9 +177,7 @@ export function SubmittalPanelHost({
                 {item.outcome && (
                   <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={filters.outcomes} locale={locale} cancelled={watchOutcomeNames.cancelled[locale]} />
                 )}
-                <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(item.trade.code))}>
-                  {item.trade.name[locale]} (<bdi translate="no">{item.trade.code}</bdi>)
-                </span>
+                <TradeChip code={item.trade.code} name={item.trade.name[locale]} />
               </>
             }
           />
@@ -182,63 +195,53 @@ export function SubmittalPanelHost({
         )
       }
       actions={
-        item && (
+        item &&
+        !loading && (
           <>
             {/* Its Documental Record once closed, its Working Copy while open (V7). */}
             {item.outcome ? <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} /> : <DownloadWorkingCopyButton workItemId={item.id} />}
-            {item.actions.createRevision && <CreateRevisionButton workItemId={item.id} />}
+            {item.actions.createRevision && <CreateRevisionButton key={item.id} workItemId={item.id} />}
             {/* Only what the engine offers this Member: its Transitions, Pick up and Return to pool. */}
             <WorkItemActions key={item.id} workItemId={item.id} actions={item.actions} locale={locale} />
           </>
         )
       }
     >
-      {!item && (
-        <div role="status" className="px-5 py-8 text-sm text-muted">
-          {loading ? (
-            t("loading")
-          ) : (
-            <span className="flex flex-col items-start gap-3">
-              {t("unavailable")}
+      {!item &&
+        (loading ? (
+          <p role="status" className="px-5 py-8 text-sm text-muted">
+            {t("loading")}
+          </p>
+        ) : (
+          <ErrorState
+            title={t("unavailable")}
+            className="m-5"
+            action={
               <Button variant="secondary" size="sm" onClick={() => setAttempt((a) => a + 1)}>
                 {t("tryAgain")}
               </Button>
-            </span>
-          )}
-        </div>
-      )}
+            }
+          />
+        ))}
     </SubmittalPanel>
   );
 }
 
 /**
- * Create Revision (after Code C: the API offers it only where the Type's outcome does): the new
- * Revision opens on its own page, as a Draft, as the item page's button does (RP-316).
+ * Create Revision (only where the API offers it: after Code C), the item page's own call
+ * (`useCreateRevision`): the new Revision opens on its own page, as a Draft.
  */
 function CreateRevisionButton({ workItemId }: { workItemId: string }) {
   const t = useTranslations("revision");
-  const router = useRouter();
-  const key = useRef<string | null>(null);
+  const create = useCreateRevision(workItemId);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function create() {
+  async function run() {
     setPending(true);
     setError(null);
-    key.current ??= crypto.randomUUID();
     try {
-      const res = await fetch(`/api/v1/work-items/${workItemId}/revisions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idempotencyKey: key.current }),
-      });
-      if (!res.ok) {
-        const { error: code } = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(t.has(`refusals.${code}`) ? t(`refusals.${code}`) : t("refusals.unavailable"));
-        return;
-      }
-      key.current = null;
-      const { id } = (await res.json()) as { id: string };
-      router.push(`/work-items/${id}`);
+      const result = await create();
+      if (!result.ok) setError(t.has(`refusals.${result.reason}`) ? t(`refusals.${result.reason}`) : t("refusals.unavailable"));
     } catch {
       setError(t("refusals.unavailable"));
     } finally {
@@ -252,7 +255,7 @@ function CreateRevisionButton({ workItemId }: { workItemId: string }) {
           {error}
         </span>
       )}
-      <Button variant="secondary" disabled={pending} onClick={() => void create()}>
+      <Button variant="secondary" disabled={pending} onClick={() => void run()}>
         {t("create")}
       </Button>
     </span>

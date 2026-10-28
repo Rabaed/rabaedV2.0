@@ -1,13 +1,14 @@
 "use client";
 
-import { directionOf, formatNumber, stepAgeLabel, type Locale } from "@rabaed/domain";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { directionOf, formatNumber, levelSeparator, listSeparator, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
+import { DocNo } from "../doc-no/doc-no.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
-import { poolIcon } from "../views/kanban-card.tsx";
+import { PoolMark } from "../views/kanban-card.tsx";
 import { submittalPanelKey, type SubmittalPanelWith } from "./panel-model.ts";
 import { submittalPanelNormalWidth } from "./panel-preferences.ts";
 
@@ -37,8 +38,8 @@ export type SubmittalPanelLabels = {
 export type SubmittalPanelProps = {
   locale: Locale;
   labels: SubmittalPanelLabels;
-  /** The open item's number as the breadcrumb shows it (its Document Number with any " Rev n"), or what a Draft says instead. */
-  crumb: string;
+  /** The open item's number as the breadcrumb shows it (a `DocNo`, with its revision), or what a Draft says instead. */
+  crumb: ReactNode;
   /** Its place among the loaded rows; none for an item that isn't on the loaded page. */
   position?: { index: number; total: number };
   /** The previous and next loaded rows; absent at either edge, which disables the button. */
@@ -68,8 +69,8 @@ export type SubmittalPanelProps = {
   className?: string;
 };
 
-/** A layer opened over the panel (a pop-up, a menu): Esc and the arrows are its own until it closes. */
-const layerSelector = '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"], [role="listbox"]';
+/** A layer open over the panel (a pop-up, a menu, a drop-down): Esc and the arrows are its own until it closes. Radix marks an open one `data-state="open"`. */
+const layerSelector = ['dialog', 'alertdialog', 'menu', 'listbox'].map((role) => `[role="${role}"][data-state="open"]`).join(", ");
 /** Where the arrows already move something. */
 const widgetSelector = '[role="menu"], [role="menubar"], [role="listbox"], [role="grid"], [role="tablist"], [role="radiogroup"], [role="slider"], [role="tree"]';
 
@@ -100,35 +101,33 @@ export function SubmittalPanel({
   className,
 }: SubmittalPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
-  // The latest handlers, so the one key listener never reads stale ones.
-  const handlers = useRef({ onPrevious, onNext, onClose });
-  handlers.current = { onPrevious, onNext, onClose };
 
   // Focus moves into the panel when it opens (not when its content swaps), so the keyboard reaches it.
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
   }, []);
 
+  // Reads the latest handlers, so the one key listener never calls stale ones.
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    const target = document.activeElement;
+    const self = ref.current;
+    const action = submittalPanelKey({
+      key: event.key,
+      modifier: event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
+      defaultPrevented: event.defaultPrevented,
+      typing: isTyping(target),
+      inWidget: target instanceof Element && target.closest(widgetSelector) !== null,
+      layerOpen: [...document.querySelectorAll(layerSelector)].some((layer) => layer !== self),
+    });
+    const run = action === "close" ? onClose : action === "previous" ? onPrevious : action === "next" ? onNext : undefined;
+    if (!run) return;
+    event.preventDefault();
+    run();
+  });
   useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const target = document.activeElement;
-      const self = ref.current;
-      const action = submittalPanelKey({
-        key: event.key,
-        modifier: event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
-        defaultPrevented: event.defaultPrevented,
-        typing: isTyping(target),
-        inWidget: target instanceof Element && target.closest(widgetSelector) !== null,
-        layerOpen: [...document.querySelectorAll(layerSelector)].some((layer) => layer !== self),
-      });
-      const { onPrevious, onNext, onClose } = handlers.current;
-      const run = action === "close" ? onClose : action === "previous" ? onPrevious : action === "next" ? onNext : undefined;
-      if (!run) return;
-      event.preventDefault();
-      run();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    const listener = (event: KeyboardEvent) => onKeyDown(event);
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
   }, []);
 
   const n = (value: number) => formatNumber(value, locale);
@@ -149,15 +148,12 @@ export function SubmittalPanel({
         className,
       )}
     >
-      <div className="sdp-top flex h-[52px] shrink-0 items-center gap-1 border-b border-border-subtle ps-3.5 pe-2.5">
+      <div className="sdp-top flex h-[52px] shrink-0 items-center gap-1 border-b border-border-subtle ps-4 pe-2.5">
         <p className="sdp-crumb me-auto flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
           <Icon name="file-text" size={15} className="shrink-0" />
           <span className="whitespace-nowrap">{labels.module}</span>
           <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="shrink-0" />
-          {/* A Document Number reads left to right, in Arabic too. */}
-          <bdi dir="ltr" translate="no" className="truncate font-bold text-text">
-            {crumb}
-          </bdi>
+          <span className="truncate font-bold text-text">{crumb}</span>
           {position && position.index >= 0 && (
             <span className="whitespace-nowrap tabular-nums">· {labels.position(n(position.index + 1), n(position.total))}</span>
           )}
@@ -196,8 +192,9 @@ export function SubmittalPanel({
 }
 
 export type SubmittalPanelIdentityProps = {
+  locale: Locale;
   /** The Document Number with " Rev n" split off (`submittalPanelNumber`); null for a Draft. */
-  number: { number: string; revision: string | null } | null;
+  number: { number: string; revisionNo: number | null } | null;
   /** What a Draft with no number says instead. */
   noNumber: string;
   subject: string;
@@ -210,23 +207,25 @@ export type SubmittalPanelIdentityProps = {
 
 /**
  * The identity (README §4.3, gap A16): the Document Number big, bold and monochrome, left to right
- * in Arabic too, with a Revision's "Rev N" inline after it in brand orange (Rev 0 shows nothing),
- * then the Subject and the chips.
+ * in Arabic too, with a Revision's revision word inline after it in brand orange (`DocNo`'s
+ * wording: "Rev 1", «مراجعة 1»; Rev 0 shows nothing), then the Subject and the chips.
  */
-export function SubmittalPanelIdentity({ number, noNumber, subject, chips, numberId, subjectId }: SubmittalPanelIdentityProps) {
+export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId }: SubmittalPanelIdentityProps) {
   return (
-    <div className="sdp-identity px-5 pt-[18px] pb-3.5">
+    <div className="sdp-identity px-5 pt-[18px] pb-4">
       <p id={numberId} className="sdp-number text-[26px] leading-[1.1] font-extrabold break-all text-text tabular-nums">
         {number ? (
-          <bdi dir="ltr" translate="no">
-            {number.number}
-            {number.revision && (
-              <>
-                {" "}
-                <span className="sdp-rev font-extrabold text-brand-fg">{number.revision}</span>
-              </>
-            )}
-          </bdi>
+          number.revisionNo === null ? (
+            <DocNo value={number.number} className="font-extrabold whitespace-normal" />
+          ) : (
+            <DocNo
+              value={number.number}
+              rev={formatNumber(number.revisionNo, locale)}
+              locale={locale}
+              className="font-extrabold whitespace-normal"
+              revClassName="sdp-rev text-brand-fg"
+            />
+          )
         ) : (
           <span className="text-[21px] text-muted">{noNumber}</span>
         )}
@@ -287,11 +286,9 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
           </>
         ) : holder.kind === "pool" ? (
           <>
-            <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
-              <Icon name={poolIcon} size={13} />
-            </span>
+            <PoolMark />
             <span className="truncate">
-              {holder.names.join(locale === "ar" ? "، " : ", ")}
+              {holder.names.join(listSeparator[locale])}
               {holder.more > 0 && ` ${labels.more(formatNumber(holder.more, locale))}`}
             </span>
           </>
@@ -314,7 +311,7 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
           </>
         ),
       )}
-      {fact("location", labels.location, place.length === 0 ? none : <span className="truncate">{place.join(" › ")}</span>)}
+      {fact("location", labels.location, place.length === 0 ? none : <span className="truncate">{place.join(levelSeparator[locale])}</span>)}
     </dl>
   );
 }

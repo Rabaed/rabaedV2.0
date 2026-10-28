@@ -5,6 +5,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
+import { DocNo } from "../doc-no/doc-no.tsx";
 import { StagePill } from "../status/stage-pill.tsx";
 import { submittalPanelNumber, submittalPanelPosition, submittalPanelWith } from "./panel-model.ts";
 import {
@@ -66,6 +67,7 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
   const ids = useSubmittalPanelIds();
   const row = rows.find((r) => r.id === open);
   const position = row ? submittalPanelPosition(rows.map((r) => r.id), row.id) : null;
+  const number = row ? submittalPanelNumber(row.documentNumber, row.revisionNo) : null;
   return (
     <div className="space-y-2 p-4">
       {rows.map((r) => (
@@ -77,7 +79,15 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
         <SubmittalPanel
           locale={locale}
           labels={panelLabels(locale)}
-          crumb={row.documentNumber ?? copy.noNumber[locale]}
+          crumb={
+            number === null ? (
+              copy.noNumber[locale]
+            ) : number.revisionNo === null ? (
+              <DocNo value={number.number} />
+            ) : (
+              <DocNo value={number.number} rev={number.revisionNo} locale={locale} />
+            )
+          }
           position={position}
           onPrevious={position.previous ? () => setOpen(position.previous) : undefined}
           onNext={position.next ? () => setOpen(position.next) : undefined}
@@ -85,7 +95,8 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
           labelledBy={ids.labelledBy}
           identity={
             <SubmittalPanelIdentity
-              number={submittalPanelNumber(row.documentNumber, row.revisionNo)}
+              locale={locale}
+              number={number}
               noNumber={copy.noNumber[locale]}
               subject={row.title}
               numberId={ids.numberId}
@@ -125,13 +136,14 @@ const factOf = (context: PlayContext, key: string) => panelOf(context).querySele
 /**
  * Open on the second loaded row: at the inline-end side (the right in English, the left in
  * Arabic) at the Normal width, over the list with no scrim. The breadcrumb counts the loaded rows;
- * "Rev 1" sits inline after the number; every icon button is named and 32px at least; nothing
+ * the revision sits inline after the number as DocNo words it ("Rev 1", «مراجعة 1»); every icon button is named and 32px at least; nothing
  * scrolls sideways. Its own Company's holder is named (the positive control of gap A3).
  */
 export const Open: Story = {
   play: async (context) => {
     const panel = panelOf(context);
-    await expect(panel).toHaveAccessibleName("TWR-TMC-EL-MAR-042 Rev 1 Linear LED fixtures");
+    const rev1 = storyText(context, { en: "Rev 1", ar: "مراجعة 1" });
+    await expect(panel).toHaveAccessibleName(`TWR-TMC-EL-MAR-042 ${rev1} Linear LED fixtures`);
     const box = panel.getBoundingClientRect();
     await expect(box.width).toBe(640);
     await expect(box.height).toBe(innerHeight);
@@ -140,11 +152,12 @@ export const Open: Story = {
     // No scrim: the list beside it is still clickable.
     await expect(document.elementFromPoint(storyLocale(context) === "ar" ? innerWidth - 40 : 40, 30)?.closest("[data-submittal-panel]")).toBeNull();
 
-    await expect(within(panel).getByText("TWR-TMC-EL-MAR-042 Rev 1")).toBeVisible();
+    await expect(panel.querySelector(".sdp-crumb")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${rev1}`);
     await expect(within(panel).getByText("2 / 3", { exact: false })).toBeVisible();
-    const rev = panel.querySelector(".sdp-rev")!;
-    await expect(rev).toHaveTextContent("Rev 1");
-    await expect(getComputedStyle(rev.closest("bdi")!).direction).toBe("ltr");
+    await expect(panel.querySelector(".sdp-rev")).toHaveTextContent(rev1);
+    // The number itself reads left to right, in Arabic too.
+    const number = within(panel.querySelector<HTMLElement>(".sdp-number")!).getByText("TWR-TMC-EL-MAR-042");
+    await expect(getComputedStyle(number).direction).toBe("ltr");
 
     for (const name of [copy.previous, copy.next, copy.close]) {
       const button = within(panel).getByRole("button", { name: storyText(context, name) });

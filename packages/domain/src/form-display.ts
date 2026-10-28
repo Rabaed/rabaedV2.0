@@ -22,9 +22,10 @@ import { optionPath, type OptionList, type OptionNode } from "./option-list.ts";
 
 const yesNo = { en: { yes: "Yes", no: "No" }, ar: { yes: "نعم", no: "لا" } } satisfies Record<Locale, unknown>;
 const anotherCompany = { en: "Another Company", ar: "شركة أخرى" } satisfies Record<Locale, string>;
-const listSeparator = { en: ", ", ar: "، " } satisfies Record<Locale, string>;
+/** How a list of names or choices is joined, in each language. */
+export const listSeparator = { en: ", ", ar: "، " } satisfies Record<Locale, string>;
 // An Option List choice reads from its first level down, marked when an option on the way is retired.
-const levelSeparator = { en: " › ", ar: " ‹ " } satisfies Record<Locale, string>;
+export const levelSeparator = { en: " › ", ar: " ‹ " } satisfies Record<Locale, string>;
 /** The mark beside a retired option, as the admin shows it. */
 export const retiredMark = { en: "retired", ar: "موقوف" } satisfies Record<Locale, string>;
 

@@ -29,6 +29,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `settings/` | `SettingsLayout` (the Project Settings frame) |
 | `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
 | `signature/` | The Signature (RP-85): `SignatureEditor` (Profile → Add Signature: draw, type or upload), `SignatureRequiredDialog` (no Signature, no Transition); `CompanyImages` and `StampRequiredDialog` (the logo and Stamp, RP-617); `ImageFileButton` (their image file control, a button in the page's language) |
+| `submittal-panel/` | The Submittal Panel (spec RP-1054): `SubmittalPanel`, the slide-over a submittal opens in from the List and the Kanban, with no scrim (so not the modal `Sheet`), its classes prefixed `sdp`; its identity and key facts; its keys and loaded-row position (`panel-model.ts`); its per-viewer preferences, kept in one place (`panel-preferences.ts`) |
 | `status/` | `StagePill`, `StageDot`, `AgeDots`, `CodeBadge`, `SaveStatus`, `SentBackNotice`, `WithChip`, `WorkItemCard`, `stageColour` |
 | `verification/` | The public verification page of a Documental Record (RP-157): `RecordVerificationView` (genuine or replaced, its first-page facts and signers), `CopyCheck` (a dropped PDF fingerprinted in the browser), `VerificationCodeForm` |
 | `views/` | Whole views: `WorkItemList`, `WorkItemTable`, `WorkItemBoard` (Kanban), `ProjectDashboard`, `ProjectCards`, `ProjectsBrowser`, `ActivityFeedPanel`, Home cards, `ColumnSettings` |

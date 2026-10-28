@@ -21,6 +21,8 @@ export type DocNoProps = Omit<ComponentProps<"bdi">, "children" | "dir" | "rev">
         rev?: number | string;
         /** The language of the revision word; required with `rev`. */
         locale: Locale;
+        /** Classes for the revision part alone, e.g. the Submittal Panel's brand orange. */
+        revClassName?: string;
       }
   );
 
@@ -32,7 +34,7 @@ export type DocNoProps = Omit<ComponentProps<"bdi">, "children" | "dir" | "rev">
  * locale's direction, so the revision follows the number in reading order.
  */
 // The types require `locale` with `rev`; the default only keeps an untyped caller's revision visible.
-export function DocNo({ value, rev, locale = "en", className, ...props }: DocNoProps) {
+export function DocNo({ value, rev, locale = "en", className, revClassName, ...props }: DocNoProps & { revClassName?: string }) {
   const classes = cn("whitespace-nowrap font-medium tabular-nums", className);
   // Browser translation would mangle an identifier.
   if (rev === undefined) {
@@ -47,7 +49,15 @@ export function DocNo({ value, rev, locale = "en", className, ...props }: DocNoP
       <bdi dir="ltr" translate="no">
         {value}
       </bdi>{" "}
-      {revisionWord[locale]} {rev}
+      {revClassName ? (
+        <span className={revClassName}>
+          {revisionWord[locale]} {rev}
+        </span>
+      ) : (
+        <>
+          {revisionWord[locale]} {rev}
+        </>
+      )}
     </bdi>
   );
 }

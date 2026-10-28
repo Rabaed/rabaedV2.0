@@ -14,12 +14,12 @@ describe("the Submittal Panel's With (V14, gap A3)", () => {
 
   it("names the viewer's own Company's person (the positive control)", () => {
     const heldBy = { companyName: en("TMC Constructions"), memberName: en("Hafiz Hamdan"), pool: null };
-    expect(submittalPanelWith(heldBy, "en")).toEqual({ kind: "person", name: "Hafiz Hamdan", companyName: "TMC Constructions" });
+    expect(submittalPanelWith(heldBy, "en")).toEqual({ kind: "person", name: "Hafiz Hamdan" });
   });
 
   it("shows up to 3 names of an own Step Pool, in the reader's order, then how many more", () => {
     const heldBy = { companyName: en("TMC"), memberName: null, pool: { names: ["Sara", "Ali", "Hafiz", "Badr", "Omar"].map(en) } };
-    expect(submittalPanelWith(heldBy, "en")).toEqual({ kind: "pool", names: ["Ali", "Badr", "Hafiz"], more: 2, companyName: "TMC" });
+    expect(submittalPanelWith(heldBy, "en")).toEqual({ kind: "pool", names: ["Ali", "Badr", "Hafiz"], more: 2 });
   });
 
   it("reads 'Owner review' as the API gives it, as a Company name (ADR 0022)", () => {
@@ -61,6 +61,8 @@ describe("the panel's keys (README §1)", () => {
   });
   it("leaves ↑ / ↓ to a field being typed in, a menu or list that moves by them, and to a modifier", () => {
     expect(key("ArrowDown", { typing: true })).toBeNull();
+    // Esc in a search box clears or leaves the box, as the design does: the panel stays.
+    expect(key("Escape", { typing: true })).toBeNull();
     expect(key("ArrowDown", { inWidget: true })).toBeNull();
     expect(key("ArrowUp", { modifier: true })).toBeNull();
     expect(key("ArrowUp", { layerOpen: true })).toBeNull();
@@ -68,11 +70,11 @@ describe("the panel's keys (README §1)", () => {
 });
 
 describe("the panel's number (gap A16)", () => {
-  it("splits a Revision's ' Rev n' off, to show it inline", () => {
-    expect(submittalPanelNumber("TWR-TMC-CV-DAR-282 Rev 1", 1)).toEqual({ number: "TWR-TMC-CV-DAR-282", revision: "Rev 1" });
+  it("splits a Revision's stored ' Rev n' off, so DocNo words it in the reader's language, inline", () => {
+    expect(submittalPanelNumber("TWR-TMC-CV-DAR-282 Rev 1", 1)).toEqual({ number: "TWR-TMC-CV-DAR-282", revisionNo: 1 });
   });
   it("shows nothing for Rev 0", () => {
-    expect(submittalPanelNumber("TWR-TMC-CV-DAR-282", 0)).toEqual({ number: "TWR-TMC-CV-DAR-282", revision: null });
+    expect(submittalPanelNumber("TWR-TMC-CV-DAR-282", 0)).toEqual({ number: "TWR-TMC-CV-DAR-282", revisionNo: null });
   });
   it("has no number for a Draft", () => {
     expect(submittalPanelNumber(null, 0)).toBeNull();

@@ -246,6 +246,7 @@ export {
 export {
   KanbanCard,
   tradeChipClass,
+  TradeChip,
   type KanbanCardBadge,
   type KanbanCardOwner,
   type KanbanCardPlace,

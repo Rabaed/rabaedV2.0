@@ -109,6 +109,24 @@ export function tradeChipClass(code: string): string {
   return tradeHues[code.toUpperCase()] ?? otherTrade;
 }
 
+/** The Trade chip: "Electrical Works (EL)" in its Trade's hue (the card, the List, the Submittal Panel). */
+export function TradeChip({ code, name }: { code: string; name: string }) {
+  return (
+    <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(code))}>
+      {name} (<bdi translate="no">{code}</bdi>)
+    </span>
+  );
+}
+
+/** The mark of a Step Pool nobody has picked up yet: a dashed circle with a group of people. */
+export function PoolMark() {
+  return (
+    <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
+      <Icon name={poolIcon} size={13} />
+    </span>
+  );
+}
+
 const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
   a: { classes: "bg-code-a-bg text-code-a-fg", icon: "circle-check" },
   // Code A: the solid green pill, and the green card; Code B: a light green pill (light fill, green text) on a white card.
@@ -207,9 +225,7 @@ export function KanbanCard({
         </Link>
       </h3>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(trade.code))}>
-          {trade.name} (<bdi translate="no">{trade.code}</bdi>)
-        </span>
+        <TradeChip code={trade.code} name={trade.name} />
         <span translate="no" className="font-ui text-caption font-semibold tracking-wide text-muted">
           {typeCode}
         </span>
@@ -242,9 +258,7 @@ export function KanbanCard({
         {owner && (
           <span className="flex min-w-0 items-center gap-2">
             {owner.kind === "pool" ? (
-              <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
-                <Icon name={poolIcon} size={13} />
-              </span>
+              <PoolMark />
             ) : (
               <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
             )}
