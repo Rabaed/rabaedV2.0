@@ -266,6 +266,10 @@ export type WorkItemListProps = {
     load: (row: WorkItemRow) => Promise<RowPermissions | null>;
     run: (row: WorkItemRow, action: RowAction) => Promise<string | null | void>;
   };
+  /** Opens a row in the Submittal Panel (RP-1061) instead of its page (`WorkItemTable`'s `onOpen`). */
+  onOpen?: (row: WorkItemRow) => void;
+  /** The row open in the panel: highlighted. */
+  openId?: string;
 };
 
 /**
@@ -356,6 +360,8 @@ function WorkItemListBody({
   loadExportRows,
   projectName,
   rowActions,
+  onOpen,
+  openId,
 }: WorkItemListProps) {
   const [deleting, setDeleting] = useState<WorkItemRow | null>(null);
   const runRowAction = async (row: WorkItemRow, action: RowAction) => {
@@ -775,6 +781,8 @@ function WorkItemListBody({
                 onSort={(sort) => change(sort)}
                 itemHref={itemHref}
                 linkAs={Link}
+                onOpen={onOpen}
+                openId={openId}
                 onColumnsChange={onSaveColumns ? setColumns : undefined}
                 selection={{ selected, onChange: select, selectAll: labels.selectAll, selectRow: labels.selectRow }}
                 groups={groups}

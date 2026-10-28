@@ -290,6 +290,26 @@ export {
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
+export {
+  SubmittalPanel,
+  SubmittalPanelFacts,
+  SubmittalPanelIdentity,
+  useSubmittalPanelIds,
+  type SubmittalPanelFactsLabels,
+  type SubmittalPanelFactsProps,
+  type SubmittalPanelIdentityProps,
+  type SubmittalPanelLabels,
+  type SubmittalPanelProps,
+} from "./components/submittal-panel/submittal-panel.tsx";
+export { panelKey, panelNumber, panelPosition, panelWith, type PanelKeyPress, type PanelWith } from "./components/submittal-panel/panel-model.ts";
+export {
+  defaultPanelPreferences,
+  normalPanelWidth,
+  panelStorage,
+  readPanelPreferences,
+  writePanelPreferences,
+  type PanelPreferences,
+} from "./components/submittal-panel/panel-preferences.ts";
 export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
 export {
   WorkflowBuilder,

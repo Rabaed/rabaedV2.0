@@ -100,6 +100,13 @@ export type WorkItemBoardProps = {
    * Transition's Action Form. Without it, the cards can't be moved.
    */
   onMove?: (card: WorkItemRow, move: WorkItemMove) => void;
+  /**
+   * Opens a card in the Submittal Panel (RP-1061) instead of its page: a click on it, not a drag.
+   * A click with a modifier still opens the page. Without it, the card opens its page.
+   */
+  onOpen?: (card: WorkItemRow) => void;
+  /** The card open in the panel: the 2px brand ring. */
+  openId?: string;
   /** E.g. negative margins and padding, so the grey canvas reaches the page's edges as the anatomy draws it. */
   className?: string;
 };
@@ -139,6 +146,8 @@ export function WorkItemBoard({
   packageHref,
   linkAs: Link = "a",
   onMove,
+  onOpen,
+  openId,
   className,
 }: WorkItemBoardProps) {
   const columns = new Map(board.columns.map((c) => [c.stageKey, c]));
@@ -277,6 +286,8 @@ export function WorkItemBoard({
                         stageNames={stageNames}
                         outcomes={board.filters.outcomes}
                         onMove={onMove}
+                        onOpen={onOpen}
+                        openId={openId}
                         dragging={dragging?.card.id ?? null}
                         onDragChange={(d) => {
                           setDragging(d);
@@ -430,6 +441,8 @@ function Lane({
   stageNames,
   outcomes,
   onMove,
+  onOpen,
+  openId,
   dragging,
   onDragChange,
 }: {
@@ -449,6 +462,8 @@ function Lane({
   /** Each Type's outcomes on the Project, for a closed card's badge (RP-429). */
   outcomes: ListOutcomes;
   onMove?: (card: WorkItemRow, move: WorkItemMove) => void;
+  onOpen?: (card: WorkItemRow) => void;
+  openId?: string;
   /** The id of the card being dragged. */
   dragging: string | null;
   onDragChange: (dragging: Dragging | null) => void;
@@ -517,7 +532,9 @@ function Lane({
                 {...cardContent(card, locale, labels, outcomes, layout, places, packageHref)}
                 href={itemHref(card.id)}
                 linkAs={linkAs}
-                selected={dragging === card.id}
+                selected={dragging === card.id || openId === card.id}
+                open={openId === card.id}
+                opener={onOpen && { id: card.id, onOpen: () => onOpen(card) }}
                 actions={movable ? <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} /> : undefined}
               />
             </li>

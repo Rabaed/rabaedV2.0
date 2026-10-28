@@ -953,3 +953,29 @@ export const FromTheCodeCLine: Story = {
     );
   },
 };
+
+/**
+ * With `onOpen` (RP-1061), a click anywhere on a row, or on its Subject, opens the item in the
+ * Submittal Panel instead of its page; the checkbox and the row menu stay their own. The open
+ * row is highlighted. A modified click on the Subject still opens its page (a new tab).
+ */
+export const OpensInThePanel: Story = {
+  args: { onOpen: fn(), openId: items[1]!.id },
+  play: async (context) => {
+    const onOpen = context.args.onOpen as ReturnType<typeof fn>;
+    const open = context.canvas.getByRole("link", { name: items[1]!.title }).closest("tr")!;
+    await expect(open).toHaveAttribute("data-open");
+    await expect(open).toHaveAttribute("aria-current", "true");
+
+    const subject = context.canvas.getByRole("link", { name: items[2]!.title });
+    await userEvent.click(subject.closest("tr")!.querySelector("td:last-of-type")!.previousElementSibling!);
+    await expect(onOpen).toHaveBeenLastCalledWith(items[2]);
+    await userEvent.click(subject);
+    await expect(onOpen).toHaveBeenCalledTimes(2);
+    await expect(subject).toHaveAttribute("data-open-id", items[2]!.id);
+
+    const calls = onOpen.mock.calls.length;
+    await userEvent.click(within(tableOf(context)).getByRole("checkbox", { name: storyText(context, b("Select LED downlights", "تحديد LED downlights")) }));
+    await expect(onOpen).toHaveBeenCalledTimes(calls);
+  },
+};

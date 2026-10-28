@@ -649,3 +649,21 @@ export const StepFilterNarrows: Story = {
     await expect(within(internal()).getByRole("button", { name: labels.showOnlyStep(storyText(context, pmStep.name)) })).toHaveAttribute("aria-pressed", "false");
   },
 };
+
+/**
+ * With `onOpen` (RP-1061), a click on a card (a click, not a drag) opens it in the Submittal
+ * Panel instead of its page; the open card has the 2px brand ring.
+ */
+export const OpensInThePanel: Story = {
+  args: { onOpen: fn(), openId: cards.fire.id },
+  play: async (context) => {
+    const onOpen = context.args.onOpen as ReturnType<typeof fn>;
+    await expect(cardOf(context, cards.fire)).toHaveAttribute("data-open");
+    await expect(cardOf(context, cards.fire).className).toMatch(/ring-2/);
+    const link = context.canvasElement.querySelector<HTMLElement>(`a[href="#${cards.hvac.id}"]`)!;
+    await expect(link).toHaveAttribute("data-open-id", cards.hvac.id);
+    await userEvent.click(link);
+    await expect(onOpen).toHaveBeenCalledWith(cards.hvac);
+    await expect(location.hash).not.toBe(`#${cards.hvac.id}`);
+  },
+};

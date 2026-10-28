@@ -1,8 +1,9 @@
 "use client";
 
 import { stepAgeDots, type Locale, type OutcomeLook } from "@rabaed/domain";
-import type { ElementType, ReactNode } from "react";
+import type { ElementType, MouseEvent, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { isPlainClick } from "../../lib/plain-click.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -83,6 +84,13 @@ export type KanbanCardProps = {
   hovered?: boolean;
   /** Controls in the header (the Move menu): shown on hover or focus, always on touch. */
   actions?: ReactNode;
+  /**
+   * Opens the card in the Submittal Panel (RP-1061) instead of its page, on a plain click; `id`
+   * marks its link, where focus returns when the panel closes. A modified click keeps the link's own.
+   */
+  opener?: { id: string; onOpen: () => void };
+  /** Open in the panel (with `selected`'s ring). */
+  open?: boolean;
   className?: string;
 };
 
@@ -135,6 +143,8 @@ export function KanbanCard({
   selected = false,
   hovered = false,
   actions,
+  opener,
+  open = false,
   className,
 }: KanbanCardProps) {
   const approved = badge?.kind === "outcome" && badge.look === "a";
@@ -146,6 +156,7 @@ export function KanbanCard({
       data-approved={approved ? "" : undefined}
       data-aged={aged ? "" : undefined}
       data-hovered={hovered ? "" : undefined}
+      data-open={open ? "" : undefined}
       className={cn(
         "group/card relative flex flex-col rounded-md border bg-surface px-3 py-[11px] shadow-xs transition-[box-shadow,translate] duration-150",
         "hover:-translate-y-px hover:shadow-[0_6px_16px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
@@ -174,6 +185,17 @@ export function KanbanCard({
       <h3 className="mt-1.5 text-[15px] leading-[1.35] font-bold text-text">
         <Link
           href={href}
+          data-open-id={opener?.id}
+          aria-current={open || undefined}
+          onClick={
+            opener
+              ? (event: MouseEvent) => {
+                  if (!isPlainClick(event)) return;
+                  event.preventDefault();
+                  opener.onOpen();
+                }
+              : undefined
+          }
           dir="auto"
           title={title}
           className={cn(
