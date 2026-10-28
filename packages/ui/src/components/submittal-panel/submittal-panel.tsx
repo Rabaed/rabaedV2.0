@@ -155,7 +155,9 @@ export function SubmittalPanel({
           <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="shrink-0" />
           <span className="truncate font-bold text-text">{crumb}</span>
           {position && position.index >= 0 && (
-            <span className="whitespace-nowrap tabular-nums">· {labels.position(n(position.index + 1), n(position.total))}</span>
+            <span className="whitespace-nowrap tabular-nums">
+              {/* "3 / 42" reads left to right in Arabic too, like a page count. */}· <bdi dir="ltr">{labels.position(n(position.index + 1), n(position.total))}</bdi>
+            </span>
           )}
         </p>
         <span className="sdp-nav flex shrink-0 items-center">
@@ -269,7 +271,7 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
   const fact = (key: string, label: string, value: ReactNode) => (
     <div key={key} data-fact={key} className="min-w-0 bg-surface px-3 py-2.5">
       <dt className="mb-1 text-[11.5px] text-muted">{label}</dt>
-      <dd className="flex min-w-0 items-center gap-[7px] text-[13.5px] font-semibold">{value}</dd>
+      <dd className="flex min-w-0 flex-wrap items-center gap-x-[7px] gap-y-1 text-[13.5px] font-semibold [overflow-wrap:anywhere]">{value}</dd>
     </div>
   );
   return (
@@ -282,19 +284,19 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
         ) : holder.kind === "person" ? (
           <>
             <Avatar name={holder.name} size="sm" decorative />
-            <span className="truncate">{holder.name}</span>
+            <span className="min-w-0">{holder.name}</span>
           </>
         ) : holder.kind === "pool" ? (
           <>
             <PoolMark />
-            <span className="truncate">
+            <span className="min-w-0">
               {holder.names.join(listSeparator[locale])}
               {holder.more > 0 && ` ${labels.more(formatNumber(holder.more, locale))}`}
             </span>
           </>
         ) : (
           // Another Company, or "Owner review": its name only, no avatar.
-          <span className="truncate">{holder.name}</span>
+          <span className="min-w-0">{holder.name}</span>
         ),
       )}
       {fact(
@@ -305,13 +307,13 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
         ) : (
           <>
             <AgeDots weeks={stepAgeWeeks} locale={locale} />
-            <span aria-hidden="true" className="truncate">
+            <span aria-hidden="true" className="min-w-0">
               {stepAgeLabel(stepAgeWeeks, locale)}
             </span>
           </>
         ),
       )}
-      {fact("location", labels.location, place.length === 0 ? none : <span className="truncate">{place.join(levelSeparator[locale])}</span>)}
+      {fact("location", labels.location, place.length === 0 ? none : <span className="min-w-0">{place.join(levelSeparator[locale])}</span>)}
     </dl>
   );
 }
