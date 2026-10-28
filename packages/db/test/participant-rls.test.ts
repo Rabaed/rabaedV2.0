@@ -136,9 +136,29 @@ describe("the Participant functions", () => {
     await expect(addProjectMember(consultant.member, consultantParticipant, consultant.ap)).rejects.toThrow(
       /only the Authorized Person/,
     );
-    await expect(
-      withMember(app, consultant.member, (trx) => sql`select * from app.company_participants()`.execute(trx)),
-    ).rejects.toThrow(/only the Authorized Person/);
+  });
+
+  // Scenario RP-1051-1 (V15): Company Projects is every Member's of the Participant, read-only.
+  it("list Company Projects to every Member of a Participant: their own Company's, on the Projects they are on (scenario RP-1051-1)", async () => {
+    const companyProjects = (as: string) =>
+      withMember(app, as, (trx) =>
+        sql<{ participant_id: string }>`select participant_id from app.company_participants()`
+          .execute(trx)
+          .then((r) => r.rows.map((x) => x.participant_id).sort()),
+      );
+    // A second Project the consultant takes part in, without its plain Member.
+    const annex = await withMember(app, host.ap, (trx) =>
+      sql<{ project_id: string }>`select project_id from app.create_project('{"en": "A", "ar": "م"}'::jsonb, 'ANX', 'contractor')`
+        .execute(trx)
+        .then((r) => r.rows[0]!.project_id),
+    );
+    const annexParticipant = await joinProject(app, annex, { adminId: host.ap, crNumber: consultant.cr, role: "consultant" }, consultant.ap);
+
+    expect(await companyProjects(consultant.member)).toEqual([consultantParticipant]);
+    expect(await companyProjects(consultant.ap)).toEqual([consultantParticipant, annexParticipant].sort());
+    // Only their own Company's, even for the Host Company's Project Admin.
+    expect(await companyProjects(host.member)).toEqual([hostParticipant]);
+    expect(await companyProjects(host.ap)).not.toContain(consultantParticipant);
   });
 
   it("let only a Project Admin add Participants", async () => {

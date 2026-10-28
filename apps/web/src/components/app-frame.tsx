@@ -25,8 +25,6 @@ export type AppFrameProps = {
   /** The signed-in Member's name and their Company's, in the page's language. */
   memberName: string;
   companyName: string;
-  /** Only an Authorized Person sees Company Projects today. */
-  isAuthorizedPerson: boolean;
   /** Unread notifications; null when they couldn't be read. */
   unread: number | null;
   defaultCollapsed: boolean;
@@ -67,7 +65,7 @@ function paint(value: Appearance) {
   document.documentElement.dataset.mode = value.mode;
 }
 
-function Frame({ locale, memberName, companyName, isAuthorizedPerson, unread, defaultCollapsed, appearance: kept, heading, tabs, children }: AppFrameProps) {
+function Frame({ locale, memberName, companyName, unread, defaultCollapsed, appearance: kept, heading, tabs, children }: AppFrameProps) {
   const t = useTranslations("shell");
   const pathname = usePathname();
   const router = useRouter();
@@ -111,7 +109,8 @@ function Frame({ locale, memberName, companyName, isAuthorizedPerson, unread, de
         { key: "company", label: t("companyProfile"), icon: "building", href: "/company" },
         // eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy
         { key: "members", label: t("members"), icon: "users", href: "/members" },
-        ...(isAuthorizedPerson ? [{ key: "company-projects", label: t("participations"), icon: "building" as const, href: "/participants" }] : []),
+        // Company Projects (V15): every Member of the Company reads it; its Authorized Person manages Project Members there.
+        { key: "company-projects", label: t("participations"), icon: "building", href: "/participants" },
         // The Company's Library (RP-442): every Member of the Company lists it; it is private to the Company (V18).
         { key: "library", label: t("library"), icon: "folder", href: "/library" },
       ],

@@ -127,11 +127,10 @@ export const participantRoutes =
       },
     );
 
+    // Company Projects: every Member's, read-only but for the Authorized Person (V15, scenario RP-1051-1).
     app.get("/v1/participants", { schema: { response: { 200: companyParticipations } } }, async (request) => {
       const actorId = ctx.requireMember(request);
-      const result = await listCompanyParticipations(ctx.db, actorId);
-      if (!result.ok) throw forbidden();
-      return { participants: result.participations };
+      return { participants: await listCompanyParticipations(ctx.db, actorId) };
     });
 
     app.get(
