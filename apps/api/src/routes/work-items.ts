@@ -38,6 +38,9 @@ import {
   workItemList,
   workItemQuery,
   workItemWorkflowMap,
+  workItemChat,
+  postChatMessageRequest,
+  postedChatMessage,
   type WorkItemQuery,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -46,6 +49,7 @@ import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getActivityFeed } from "../work-items/activity-feed.ts";
+import { getWorkItemChat, postChatMessage } from "../work-items/chat.ts";
 import { takeBulkTransition } from "../work-items/bulk-transitions.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
@@ -334,6 +338,30 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getLinkedFrom(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Chat (RP-1062; visibility.md V6): the item's thread, oldest first with its count, for whoever sees it.
+    // Another Company's author by its name and Project Role only.
+    app.get(
+      "/v1/work-items/:workItemId/chat",
+      { schema: { params: workItemParams, response: { 200: workItemChat } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getWorkItemChat(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Posting in Chat, from the item's Submission Date on. A refusal writes nothing.
+    app.post(
+      "/v1/work-items/:workItemId/chat",
+      { schema: { params: workItemParams, body: postChatMessageRequest, response: { 201: postedChatMessage } } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await postChatMessage(ctx.db, memberId, id, request.body.body, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(201).send({ id: result.id });
       },
     );
 

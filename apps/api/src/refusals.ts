@@ -199,6 +199,9 @@ const answers = {
   // Participant on the Project already holds (never which).
   paper_ref_too_long: () => new HttpError(422, "paper_ref_too_long"),
   paper_ref_taken: () => new HttpError(409, "paper_ref_taken"),
+  // Chat (RP-1062): posting waits for the item's Submission Date; a body empty once trimmed, or too long.
+  not_submitted: () => new HttpError(409, "not_submitted"),
+  invalid_body: () => new HttpError(422, "invalid_body"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

@@ -1,6 +1,7 @@
 export * from "./action-form.ts";
 export * from "./auth.ts";
 export * from "./canonical-json.ts";
+export * from "./chat.ts";
 export * from "./company.ts";
 export * from "./company-image.ts";
 export * from "./condition.ts";
