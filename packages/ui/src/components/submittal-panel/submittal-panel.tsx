@@ -8,8 +8,8 @@ import { Avatar } from "../data/avatar.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { poolIcon } from "../views/kanban-card.tsx";
-import { panelKey, type PanelWith } from "./panel-model.ts";
-import { normalPanelWidth } from "./panel-preferences.ts";
+import { submittalPanelKey, type SubmittalPanelWith } from "./panel-model.ts";
+import { submittalPanelNormalWidth } from "./panel-preferences.ts";
 
 /**
  * The Submittal Panel (spec RP-1054, RP-1061): a slide-over that opens a submittal from the List
@@ -49,6 +49,10 @@ export type SubmittalPanelProps = {
   width?: number;
   /** The ids of what names the panel for screen readers: the identity's number and Subject. */
   labelledBy?: string;
+  /** Its name while there is no identity to name it (the item is being read, or couldn't be). */
+  label?: string;
+  /** The item is being read: the body says so to assistive technology. */
+  busy?: boolean;
   /** Top-bar controls before Close (the size switch, RP-1063). */
   topBarEnd?: ReactNode;
   identity?: ReactNode;
@@ -82,8 +86,10 @@ export function SubmittalPanel({
   onPrevious,
   onNext,
   onClose,
-  width = normalPanelWidth,
+  width = submittalPanelNormalWidth,
   labelledBy,
+  label,
+  busy = false,
   topBarEnd,
   identity,
   facts,
@@ -106,14 +112,14 @@ export function SubmittalPanel({
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = document.activeElement;
-      const panel = ref.current;
-      const action = panelKey({
+      const self = ref.current;
+      const action = submittalPanelKey({
         key: event.key,
         modifier: event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
         defaultPrevented: event.defaultPrevented,
         typing: isTyping(target),
         inWidget: target instanceof Element && target.closest(widgetSelector) !== null,
-        layerOpen: [...document.querySelectorAll(layerSelector)].some((layer) => layer !== panel),
+        layerOpen: [...document.querySelectorAll(layerSelector)].some((layer) => layer !== self),
       });
       const { onPrevious, onNext, onClose } = handlers.current;
       const run = action === "close" ? onClose : action === "previous" ? onPrevious : action === "next" ? onNext : undefined;
@@ -132,6 +138,7 @@ export function SubmittalPanel({
       role="dialog"
       aria-modal="false"
       aria-labelledby={labelledBy}
+      aria-label={labelledBy ? undefined : label}
       tabIndex={-1}
       dir={directionOf(locale)}
       data-submittal-panel=""
@@ -169,7 +176,7 @@ export function SubmittalPanel({
           <Icon name="x" size={16} />
         </IconButton>
       </div>
-      <div className="sdp-body min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div aria-busy={busy || undefined} className="sdp-body min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="sdp-layout flex min-w-0">
           <div className="sdp-main min-w-0 flex-1 pb-6">
             {identity}
@@ -189,7 +196,7 @@ export function SubmittalPanel({
 }
 
 export type SubmittalPanelIdentityProps = {
-  /** The Document Number with " Rev n" split off (`panelNumber`); null for a Draft. */
+  /** The Document Number with " Rev n" split off (`submittalPanelNumber`); null for a Draft. */
   number: { number: string; revision: string | null } | null;
   /** What a Draft with no number says instead. */
   noNumber: string;
@@ -245,8 +252,8 @@ export type SubmittalPanelFactsLabels = {
 export type SubmittalPanelFactsProps = {
   locale: Locale;
   labels: SubmittalPanelFactsLabels;
-  /** Who it is with (`panelWith`): null once closed. */
-  with: PanelWith | null;
+  /** Who it is with (`submittalPanelWith`): null once closed. */
+  with: SubmittalPanelWith | null;
   /** Step Age in weeks; null when it doesn't age (closed, or a Draft with no number). */
   stepAgeWeeks: number | null;
   /** The plan location, top level first; empty when it has none. */

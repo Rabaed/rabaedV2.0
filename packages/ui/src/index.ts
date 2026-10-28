@@ -252,6 +252,7 @@ export {
   type KanbanCardProps,
 } from "./components/views/kanban-card.tsx";
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
+export { placesOf } from "./components/views/work-item-board.tsx";
 export { PackageChip, type PackageChipProps } from "./components/packages/package-chip.tsx";
 export { PackageComments, type PackageCommentsLabels, type PackageCommentsProps } from "./components/packages/package-comments.tsx";
 export { PackagePage, type PackageCall, type PackagePageLabels, type PackagePageProps } from "./components/packages/package-page.tsx";
@@ -301,14 +302,14 @@ export {
   type SubmittalPanelLabels,
   type SubmittalPanelProps,
 } from "./components/submittal-panel/submittal-panel.tsx";
-export { panelKey, panelNumber, panelPosition, panelWith, type PanelKeyPress, type PanelWith } from "./components/submittal-panel/panel-model.ts";
+export { submittalPanelKey, submittalPanelNumber, submittalPanelPosition, submittalPanelWith, type SubmittalPanelKeyPress, type SubmittalPanelWith } from "./components/submittal-panel/panel-model.ts";
 export {
-  defaultPanelPreferences,
-  normalPanelWidth,
-  panelStorage,
-  readPanelPreferences,
-  writePanelPreferences,
-  type PanelPreferences,
+  defaultSubmittalPanelPreferences,
+  submittalPanelNormalWidth,
+  submittalPanelStorage,
+  readSubmittalPanelPreferences,
+  writeSubmittalPanelPreferences,
+  type SubmittalPanelPreferences,
 } from "./components/submittal-panel/panel-preferences.ts";
 export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
 export {

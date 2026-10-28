@@ -41,6 +41,7 @@ import { useState, type ReactNode } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname): next/link keeps navigation
 // client-side without adding the locale again.
 import NextLink from "next/link";
+import { SubmittalPanelHost, useOpenSubmittal } from "@/components/submittal-panel-host";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
@@ -232,6 +233,12 @@ export function WorkItemListOrKanban(
     return search ? `${pathname}?${search}` : pathname;
   };
   const hrefFor = (q: WorkItemQuery) => hrefIn(view, q);
+  // The Submittals open a row or card in the Submittal Panel (RP-1061); `?open=<id>` keeps it.
+  const opened = useOpenSubmittal();
+  const submittal = module === "submittals" ? opened : null;
+  const openId = submittal?.openId ?? undefined;
+  const onOpen = submittal ? (row: WorkItemRow) => submittal.open(row.id) : undefined;
+  const loaded = props.view === "list" ? props.list : props.board;
   const itemHref = (id: string) => getPathname({ href: `/work-items/${id}`, locale });
   const post = (path: string, body: unknown) =>
     fetch(`/api/v1${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -267,8 +274,11 @@ export function WorkItemListOrKanban(
     }
   };
   return (
+    <>
     <WorkItemList
       list={props.view === "list" ? props.list : { ...props.board, items: [], nextCursor: null }}
+      onOpen={props.view === "list" ? onOpen : undefined}
+      openId={openId}
       query={query}
       locale={locale}
       labels={labels.list}
@@ -357,6 +367,8 @@ export function WorkItemListOrKanban(
               packageHref={(id) => getPathname({ href: `/packages/${id}`, locale })}
               linkAs={NextLink}
               onMove={(card, move) => setMoving({ card, move })}
+              onOpen={onOpen}
+              openId={openId}
             />
             {/* A drop, or the card's Move menu, opens the Transition's Action Form. */}
             {moving && <WorkItemBoardMove key={`${moving.card.id}:${moving.move.transition}`} {...moving} locale={locale} onClose={() => setMoving(null)} />}
@@ -364,5 +376,16 @@ export function WorkItemListOrKanban(
         ) : undefined
       }
     />
+    {submittal?.openId && (
+      <SubmittalPanelHost
+        openId={submittal.openId}
+        onOpen={submittal.open}
+        onClose={submittal.close}
+        locale={locale}
+        filters={loaded.filters}
+        refreshKey={loaded}
+      />
+    )}
+    </>
   );
 }

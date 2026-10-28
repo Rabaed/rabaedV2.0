@@ -5,7 +5,7 @@
  * here. A convenience only: without storage the panel opens with the defaults. A deep link
  * (`?open=`) reads them but never writes them (README §2).
  */
-export type PanelPreferences = {
+export type SubmittalPanelPreferences = {
   /** The panel's width in px, or "full" (to the sidebar's edge). */
   width: number | "full";
   /** The sections the viewer folded, by key. */
@@ -15,11 +15,11 @@ export type PanelPreferences = {
 };
 
 /** The Normal width, which the panel opens at (README §2). */
-export const normalPanelWidth = 640;
+export const submittalPanelNormalWidth = 640;
 
-export const defaultPanelPreferences: PanelPreferences = { width: normalPanelWidth, collapsed: {}, tab: "details" };
+export const defaultSubmittalPanelPreferences: SubmittalPanelPreferences = { width: submittalPanelNormalWidth, collapsed: {}, tab: "details" };
 
-export const panelPreferencesKey = "rabaed:submittal-panel:v1";
+export const submittalPanelPreferencesKey = "rabaed:submittal-panel:v1";
 
 type PreferenceStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -28,35 +28,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** What is kept, field by field: a field of the wrong shape keeps its default. */
-export function readPanelPreferences(storage: PreferenceStorage | null): PanelPreferences {
+export function readSubmittalPanelPreferences(storage: PreferenceStorage | null): SubmittalPanelPreferences {
   let kept: unknown;
   try {
-    kept = JSON.parse(storage?.getItem(panelPreferencesKey) ?? "null");
+    kept = JSON.parse(storage?.getItem(submittalPanelPreferencesKey) ?? "null");
   } catch {
-    return defaultPanelPreferences;
+    return defaultSubmittalPanelPreferences;
   }
-  if (!isRecord(kept)) return defaultPanelPreferences;
+  if (!isRecord(kept)) return defaultSubmittalPanelPreferences;
   const { width, collapsed, tab } = kept;
   return {
-    width: width === "full" || (typeof width === "number" && Number.isFinite(width) && width > 0) ? width : defaultPanelPreferences.width,
+    width: width === "full" || (typeof width === "number" && Number.isFinite(width) && width > 0) ? width : defaultSubmittalPanelPreferences.width,
     collapsed: isRecord(collapsed)
       ? Object.fromEntries(Object.entries(collapsed).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"))
-      : defaultPanelPreferences.collapsed,
-    tab: typeof tab === "string" ? tab : defaultPanelPreferences.tab,
+      : defaultSubmittalPanelPreferences.collapsed,
+    tab: typeof tab === "string" ? tab : defaultSubmittalPanelPreferences.tab,
   };
 }
 
 /** Keeps `change` on top of what is kept; quietly does nothing without storage. */
-export function writePanelPreferences(storage: PreferenceStorage | null, change: Partial<PanelPreferences>): void {
+export function writeSubmittalPanelPreferences(storage: PreferenceStorage | null, change: Partial<SubmittalPanelPreferences>): void {
   try {
-    storage?.setItem(panelPreferencesKey, JSON.stringify({ ...readPanelPreferences(storage), ...change }));
+    storage?.setItem(submittalPanelPreferencesKey, JSON.stringify({ ...readSubmittalPanelPreferences(storage), ...change }));
   } catch {
     // Not kept: fine.
   }
 }
 
 /** The browser's storage, or null where reading it throws (a private window, blocked site data). */
-export function panelStorage(): PreferenceStorage | null {
+export function submittalPanelStorage(): PreferenceStorage | null {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
   } catch {

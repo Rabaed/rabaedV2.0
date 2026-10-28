@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultPanelPreferences, panelPreferencesKey, readPanelPreferences, writePanelPreferences } from "./panel-preferences.ts";
+import { defaultSubmittalPanelPreferences, submittalPanelPreferencesKey, readSubmittalPanelPreferences, writeSubmittalPanelPreferences } from "./panel-preferences.ts";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const items = new Map(Object.entries(initial));
@@ -12,22 +12,22 @@ function memoryStorage(initial: Record<string, string> = {}) {
 
 describe("the Submittal Panel's preferences, kept in one place", () => {
   it("opens at the Normal width (640px) with nothing kept", () => {
-    expect(readPanelPreferences(memoryStorage())).toEqual(defaultPanelPreferences);
-    expect(defaultPanelPreferences.width).toBe(640);
+    expect(readSubmittalPanelPreferences(memoryStorage())).toEqual(defaultSubmittalPanelPreferences);
+    expect(defaultSubmittalPanelPreferences.width).toBe(640);
   });
 
   it("reads back what was kept, and keeps the defaults for what wasn't", () => {
     const storage = memoryStorage();
-    writePanelPreferences(storage, { collapsed: { loc: true } });
-    expect(readPanelPreferences(storage)).toEqual({ ...defaultPanelPreferences, collapsed: { loc: true } });
-    writePanelPreferences(storage, { width: 960 });
-    expect(readPanelPreferences(storage)).toEqual({ ...defaultPanelPreferences, width: 960, collapsed: { loc: true } });
+    writeSubmittalPanelPreferences(storage, { collapsed: { loc: true } });
+    expect(readSubmittalPanelPreferences(storage)).toEqual({ ...defaultSubmittalPanelPreferences, collapsed: { loc: true } });
+    writeSubmittalPanelPreferences(storage, { width: 960 });
+    expect(readSubmittalPanelPreferences(storage)).toEqual({ ...defaultSubmittalPanelPreferences, width: 960, collapsed: { loc: true } });
   });
 
   it("ignores a kept value of the wrong shape", () => {
-    const storage = memoryStorage({ [panelPreferencesKey]: JSON.stringify({ width: "wide", collapsed: [1], tab: 3 }) });
-    expect(readPanelPreferences(storage)).toEqual(defaultPanelPreferences);
-    expect(readPanelPreferences(memoryStorage({ [panelPreferencesKey]: "{not json" }))).toEqual(defaultPanelPreferences);
+    const storage = memoryStorage({ [submittalPanelPreferencesKey]: JSON.stringify({ width: "wide", collapsed: [1], tab: 3 }) });
+    expect(readSubmittalPanelPreferences(storage)).toEqual(defaultSubmittalPanelPreferences);
+    expect(readSubmittalPanelPreferences(memoryStorage({ [submittalPanelPreferencesKey]: "{not json" }))).toEqual(defaultSubmittalPanelPreferences);
   });
 
   it("works without storage (a private window, or storage that throws)", () => {
@@ -39,8 +39,8 @@ describe("the Submittal Panel's preferences, kept in one place", () => {
         throw new Error("blocked");
       },
     };
-    expect(readPanelPreferences(throwing)).toEqual(defaultPanelPreferences);
-    expect(() => writePanelPreferences(throwing, { width: 960 })).not.toThrow();
-    expect(readPanelPreferences(null)).toEqual(defaultPanelPreferences);
+    expect(readSubmittalPanelPreferences(throwing)).toEqual(defaultSubmittalPanelPreferences);
+    expect(() => writeSubmittalPanelPreferences(throwing, { width: 960 })).not.toThrow();
+    expect(readSubmittalPanelPreferences(null)).toEqual(defaultSubmittalPanelPreferences);
   });
 });

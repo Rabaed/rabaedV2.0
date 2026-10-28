@@ -2931,5 +2931,20 @@
       "body": "Try again in a few minutes."
     },
     "checkAnother": "Verify another record"
+  },
+  "submittalPanel": {
+    "position": "{n} / {total}",
+    "previous": "Previous submittal",
+    "next": "Next submittal",
+    "close": "Close",
+    "hint": "Esc to close · ↑ ↓ to move through the list",
+    "with": "With",
+    "stepAge": "Step Age",
+    "location": "Location",
+    "more": "+{n}",
+    "noNumber": "No number yet",
+    "loading": "Opening the submittal…",
+    "unavailable": "This submittal couldn't be opened.",
+    "tryAgain": "Try again"
   }
 }

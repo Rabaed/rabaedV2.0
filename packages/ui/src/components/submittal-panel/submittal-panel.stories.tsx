@@ -6,7 +6,7 @@ import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { StagePill } from "../status/stage-pill.tsx";
-import { panelNumber, panelPosition, panelWith } from "./panel-model.ts";
+import { submittalPanelNumber, submittalPanelPosition, submittalPanelWith } from "./panel-model.ts";
 import {
   SubmittalPanel,
   SubmittalPanelFacts,
@@ -65,7 +65,7 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
   const [open, setOpen] = useState<string | null>(startOpen ? start : null);
   const ids = useSubmittalPanelIds();
   const row = rows.find((r) => r.id === open);
-  const position = row ? panelPosition(rows.map((r) => r.id), row.id) : null;
+  const position = row ? submittalPanelPosition(rows.map((r) => r.id), row.id) : null;
   return (
     <div className="space-y-2 p-4">
       {rows.map((r) => (
@@ -85,7 +85,7 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
           labelledBy={ids.labelledBy}
           identity={
             <SubmittalPanelIdentity
-              number={panelNumber(row.documentNumber, row.revisionNo)}
+              number={submittalPanelNumber(row.documentNumber, row.revisionNo)}
               noNumber={copy.noNumber[locale]}
               subject={row.title}
               numberId={ids.numberId}
@@ -97,7 +97,7 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
             <SubmittalPanelFacts
               locale={locale}
               labels={factLabels(locale)}
-              with={panelWith(row.heldBy, locale)}
+              with={submittalPanelWith(row.heldBy, locale)}
               stepAgeWeeks={row.stepAgeWeeks}
               place={locale === "ar" ? ["المنطقة A", "المبنى 1", "الطابق 3"] : ["Zone A", "Building 1", "Floor 3"]}
             />
