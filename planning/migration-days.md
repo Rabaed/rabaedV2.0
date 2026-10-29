@@ -159,3 +159,9 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271030 | RP-1078 | 32 | snag_hardening |
 | 20271104 | RP-1081 | 32 | raised_from_check_item_photos (moved from 20271103: main's RP-664 took it) |
 | 20271103 | RP-664 | 42 | required_field_audit |
+| 20271107 | RP-1065 | 51 | Submittal Panel number segments (spec RP-1054, lane 5A; placeholder) |
+| 20271108 | spec RP-1054 | 51 | review fixes, lane 5A integration branch (placeholder) |
+| 20271109 | spec RP-1054 | 51 | merge-with-main reconciliation, lane 5A (placeholder) |
+| 20271110 | RP-1091 | 52 | approval log Position in the history read (spec RP-1054 follow-ups, lane 5B; placeholder) |
+| 20271111 | spec RP-1054 | 52 | review fixes, lane 5B integration branch (placeholder) |
+| 20271112 | spec RP-1054 | 52 | merge-with-main reconciliation, lane 5B (placeholder) |
