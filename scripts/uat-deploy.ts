@@ -101,19 +101,19 @@ const FILE_STORE = ["PROJECT_FILES_BUCKET", "FILE_STORE_ENDPOINT", "FILE_STORE_A
 
 /**
  * The environment `pnpm --filter @rabaed/db run setup` and the demo command run in: UAT's
- * session-pooler URLs, on-create passwords, a demo environment. The demo command (`demo`)
- * also gets UAT's file store when the step passes its key, so the api it builds stores the
- * demo's images as it stores anyone's (ADR 0007, RP-672); no other command gets any of it.
+ * session-pooler URLs, on-create passwords, a demo environment. With `fileStore` (the demo
+ * command only) it also gets UAT's file store when the step passes its key, so the api it
+ * builds stores the demo's images as it stores anyone's (ADR 0007, RP-672); otherwise none of it.
  */
-export function commandEnv(env: NodeJS.ProcessEnv, command?: string): NodeJS.ProcessEnv {
+export function commandEnv(env: NodeJS.ProcessEnv, { fileStore = false }: { fileStore?: boolean } = {}): NodeJS.ProcessEnv {
   const { session } = uatDatabase(env);
   const child: NodeJS.ProcessEnv = { ...env };
   for (const name of [...NOT_FOR_COMMANDS, ...FILE_STORE]) delete child[name];
-  const fileStore = command === "demo" && env.FILE_STORE_ACCESS_KEY_ID && env.FILE_STORE_SECRET_ACCESS_KEY;
+  const passFileStore = fileStore && Boolean(env.FILE_STORE_ACCESS_KEY_ID && env.FILE_STORE_SECRET_ACCESS_KEY);
   return {
     ...child,
     // R2 takes the region `auto`, as the api's own variables say (projectEnv).
-    ...(fileStore
+    ...(passFileStore
       ? {
           PROJECT_FILES_BUCKET: required(env, "PROJECT_FILES_BUCKET"),
           FILE_STORE_ENDPOINT: httpsUrl(env, "FILE_STORE_ENDPOINT"),
@@ -326,7 +326,7 @@ export function pnpmCommand(command: string | undefined, argument?: string): str
 async function main([command, argument]: string[]): Promise<void> {
   const env = process.env;
   const pnpmArgs = pnpmCommand(command, argument);
-  if (pnpmArgs) return run("pnpm", pnpmArgs, commandEnv(env, command));
+  if (pnpmArgs) return run("pnpm", pnpmArgs, commandEnv(env, { fileStore: command === "demo" }));
   if (command === "project") {
     await applyProject(project(argument), env, required(env, "VERSION"));
     // A GitHub Actions notice: Admin is not behind Password Protection from this deploy.

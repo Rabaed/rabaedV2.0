@@ -11,9 +11,10 @@
 // there is no way to import anything else.
 //
 // With the environment's file store (UAT's R2, which scripts/uat-deploy.ts passes to this
-// command alone), the api it builds stores the demo's images itself (ADR 0007), and `ensure`
-// puts back any demo Signature, logo or Stamp the store lacks (RP-672: UAT's demo was seeded
-// with none). Without one, the demo is seeded with its images recorded but not stored.
+// command alone), the api it builds stores the demo's images through its own routes, and
+// `ensure` puts back, with the api's file store, any demo Signature, logo or Stamp the store
+// lacks (ADR 0007; RP-672: UAT's demo was seeded with none). Without one, the demo is seeded
+// with its images recorded but not stored.
 import { createDb, databaseUrlsFromEnv, resetDatabase } from "@rabaed/db";
 import { DEMO_FLAG, DEMO_ON, ROLE_PASSWORDS_ON_CREATE } from "@rabaed/db/task-flags";
 import { z } from "zod";

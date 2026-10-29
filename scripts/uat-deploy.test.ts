@@ -90,7 +90,7 @@ describe("UAT's database connections", () => {
   const fileStore = ["PROJECT_FILES_BUCKET", "FILE_STORE_ENDPOINT", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_SECRET_ACCESS_KEY", "FILE_STORE_REGION"];
 
   it("gives the demo command UAT's file store, so the demo's images are stored as the api stores them (RP-672)", () => {
-    expect(commandEnv(env, "demo")).toMatchObject({
+    expect(commandEnv(env, { fileStore: true })).toMatchObject({
       PROJECT_FILES_BUCKET: "rabaed-uat-files",
       FILE_STORE_ENDPOINT: "https://acc.r2.cloudflarestorage.com",
       FILE_STORE_ACCESS_KEY_ID: "r2-rw-key-id",
@@ -98,12 +98,12 @@ describe("UAT's database connections", () => {
       FILE_STORE_REGION: "auto",
     });
     // Without the store's key (a workflow step that does not pass it), none of the store: the demo seeds with no images stored.
-    const without = commandEnv({ ...env, FILE_STORE_SECRET_ACCESS_KEY: undefined }, "demo");
+    const without = commandEnv({ ...env, FILE_STORE_SECRET_ACCESS_KEY: undefined }, { fileStore: true });
     for (const variable of fileStore) expect(without[variable], variable).toBeUndefined();
   });
 
-  it.each(["migrate", "app-role-check"])("gives %s nothing of the file store", (name) => {
-    const command = commandEnv(env, name);
+  it("gives the migrations and the app-role check nothing of the file store", () => {
+    const command = commandEnv(env);
     for (const variable of fileStore) expect(command[variable], variable).toBeUndefined();
   });
 });
