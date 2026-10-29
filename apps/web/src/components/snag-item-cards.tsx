@@ -68,14 +68,13 @@ export function SnagItemCards({
 }) {
   const labels = useSnagItemLabels();
   const urls = useImageUrls(workItemId, response ? [...before, ...response.after] : []);
-  const photos = (docs: readonly DocumentSummary[]): SnagPhoto[] => docs.map((d) => ({ id: d.id, url: urls[d.id] ?? null, name: d.fileName }));
-  // The failed check item's photos are the source's own, so their URLs are asked of the source.
-  const sourceId = source?.workItemId;
-  const checkPhotos = source?.checkItem && sourceId ? source.checkItem.photos : [];
-  const checkUrls = usePhotoUrls(sourceId ? checkPhotos.map((p) => ({ workItemId: sourceId, documentId: p.id, contentType: p.contentType })) : []);
-  const checkItem = source?.checkItem
-    ? { text: source.checkItem.text, photos: checkPhotos.map((p) => ({ id: p.id, url: checkUrls[p.id] ?? null, name: p.fileName })) }
-    : null;
+  // The failed check item's photos are the source's own, so their URLs are asked of the source
+  // (the api gives a check item only to a viewer who sees it).
+  const failed = source?.workItemId && source.checkItem ? { sourceId: source.workItemId, ...source.checkItem } : null;
+  const checkUrls = usePhotoUrls(failed ? failed.photos.map((p) => ({ workItemId: failed.sourceId, documentId: p.id, contentType: p.contentType })) : []);
+  const photos = (docs: readonly Pick<DocumentSummary, "id" | "fileName">[], known = urls): SnagPhoto[] =>
+    docs.map((d) => ({ id: d.id, url: known[d.id] ?? null, name: d.fileName }));
+  const checkItem = failed && { text: failed.text, photos: photos(failed.photos, checkUrls) };
   return (
     <div className="space-y-4">
       <RaisedFromCard source={source} quote={quote} checkItem={checkItem} locale={locale} labels={labels} itemHref={(id) => `/work-items/${id}`} linkAs={Link} />

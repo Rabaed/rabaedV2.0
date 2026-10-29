@@ -3,8 +3,8 @@
 --
 -- The photos are the Inspection's own: the Documents the code's shared event took for that item,
 -- which app.raise_checklist_snags copied as the Snag's "before" photos (document_copy names each
--- original). This names them, by id, for the api to read through the documents policy as the
--- Member, so a reader gets only the ones member_reads_documents lets them. Like
+-- original). This names them, by id, only those the reader's documents policy shows (the checks
+-- app.document_times makes), and the api reads them through that policy as the Member. Like
 -- app.raised_from_check_item (20271030000000_snag_hardening.sql), it names none unless the reader
 -- sees the Snag and the Inspection, through a `raised_from` Link of a check item not removed.
 -- document_copy is never the app role's, hence security definer.
@@ -25,8 +25,11 @@ create function app.raised_from_check_item_photos(p_work_item_id uuid) returns t
         join document_copy c on c.document_id = d.id
         join document s on s.id = c.copied_from_id
         where l.from_id = p_work_item_id and l.kind = 'raised_from' and l.item_key is not null and l.removed_at is null
-          and s.work_item_id = l.to_id and s.item_key = l.item_key and s.removed_at is null
-          and app.sees_work_item(l.to_id);
+          and s.work_item_id = l.to_id and s.item_key = l.item_key and s.confirmed_at is not null and s.removed_at is null
+          and app.sees_work_item(l.to_id)
+          -- As member_reads_documents and app.document_times: never an id the reader can't read.
+          and app.item_row_seen(s.work_item_id, s.arrival, false)
+          and app.reply_event_seen(s.work_item_id, s.reply_event_id);
     end
   $$;
 

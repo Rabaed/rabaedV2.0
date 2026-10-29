@@ -673,7 +673,7 @@ export const workItemDetail = workItemSummary.extend({
         .object({
           key: z.string(),
           text: bilingualText,
-          photos: z.array(z.object({ id: z.uuid(), fileName: z.string(), contentType: z.string() })),
+          photos: z.array(documentSummary.pick({ id: true, fileName: true, contentType: true })),
         })
         .nullable(),
     })
