@@ -4,7 +4,10 @@
 // the photo, but its events are internal to K1 and the Owner, so the photo goes no further: C1, the
 // Contractor, reads it by no channel (the document rows, by id, their times, the shared Documents, the
 // Working Copy), neither during the review, after an Owner Send Back, nor after the Confirm, and the
-// Documental Record holds it not.
+// Documental Record holds it not. C1's own Datasheet, Submitted with the item, is the positive control.
+//
+// The world is built here as owner-review-rls.test.ts builds it, not with buildSeamTwoTower: the Tower's
+// Owner holds no review of its own, and K1's PM needs a Position that may attach files in Submittals.
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -77,16 +80,17 @@ async function addSitePhoto(as: string, id: string): Promise<string> {
   return started!.document_id;
 }
 
-/** The site photos `as` reads of item `id`, by every channel a reader has. */
-async function photosRead(as: string, id: string, photo: string) {
+/** Document `file` of item `id` as `as` reads it, by every channel a reader has: the item's rows, by id, their times, the shared Documents. */
+async function fileRead(as: string, id: string, file: string) {
   return {
-    rows: (await call<{ id: string }>(as, sql`select id from document where work_item_id = ${id}::uuid and field_key = 'site_photos'`)).map((r) => r.id),
-    byId: (await call<{ id: string }>(as, sql`select id from document where id = ${photo}::uuid`)).map((r) => r.id),
-    times: (await call<{ document_id: string }>(as, sql`select document_id from app.document_times(${id}::uuid)`)).map((r) => r.document_id).filter((d) => d === photo),
-    shared: (await call<{ id: string }>(as, sql`select d as id from app.work_item_shared_documents(${id}::uuid) d`)).map((r) => r.id).filter((d) => d === photo),
+    rows: (await call<{ id: string }>(as, sql`select id from document where work_item_id = ${id}::uuid`)).map((r) => r.id).filter((d) => d === file),
+    byId: (await call<{ id: string }>(as, sql`select id from document where id = ${file}::uuid`)).map((r) => r.id),
+    times: (await call<{ document_id: string }>(as, sql`select document_id from app.document_times(${id}::uuid)`)).map((r) => r.document_id).filter((d) => d === file),
+    shared: (await call<{ id: string }>(as, sql`select d as id from app.work_item_shared_documents(${id}::uuid) d`)).map((r) => r.id).filter((d) => d === file),
   };
 }
 const none = { rows: [], byId: [], times: [], shared: [] };
+const every = (file: string) => ({ rows: [file], byId: [file], times: [file], shared: [file] });
 
 /** Whether the item's Working Copy (one content for every viewer) lists the photo. */
 const inWorkingCopy = async (id: string, photo: string) => {
@@ -94,11 +98,22 @@ const inWorkingCopy = async (id: string, photo: string) => {
   const content = (await migrator.query<{ c: unknown }>("select app.working_copy_content($1) as c", [id])).rows[0]!.c;
   return JSON.stringify(content).includes(rows[0]!.key);
 };
+/** Which `has_document` rule on `field` fails for `as` on item `id` (0), or null when it holds: a Transition's Validate check. */
+async function hasDocumentFails(as: string, id: string, field: string): Promise<number | null> {
+  await migrator.query("begin");
+  try {
+    await migrator.query("select set_config('app.member_id', $1, true)", [as]);
+    const rules = JSON.stringify({ validate: [{ type: "has_document", field }] });
+    return (await migrator.query<{ n: number | null }>("select app.transition_validation_failed($1, $2::jsonb, '{}'::jsonb) as n", [id, rules])).rows[0]!.n;
+  } finally {
+    await migrator.query("rollback");
+  }
+}
 const inRecord = async (id: string, photo: string) =>
   (await migrator.query<{ id: string }>("select id from app.documents_shared_before_close($1)", [id])).rows.some((r) => r.id === photo);
 
-/** A Submitted item, picked up by the Consultant PM. */
-async function atConsultant(title: string): Promise<string> {
+/** A Submitted item with C1's Datasheet (a Form file, the positive control), picked up by the Consultant PM. */
+async function atConsultant(title: string): Promise<{ id: string; datasheet: string }> {
   const [created] = await call<{ outcome: string; work_item_id: string }>(
     people.c1Engineer,
     sql`select outcome, work_item_id from app.create_work_item(
@@ -107,11 +122,22 @@ async function atConsultant(title: string): Promise<string> {
   );
   expect(created!.outcome).toBe("created");
   const id = created!.work_item_id;
+  const [started] = await call<{ outcome: string; document_id: string }>(
+    people.c1Engineer,
+    sql`select outcome, document_id from app.start_document_upload(${id}::uuid, 'datasheet.pdf', 10, 'application/pdf', now(), 'datasheet')`,
+  );
+  expect(started!.outcome).toBe("started");
+  expect(
+    await outcome(
+      people.c1Engineer,
+      sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'application/pdf', ${randomBytes(32)}::bytea, now()) as outcome`,
+    ),
+  ).toBe("confirmed");
   expect(await take(people.c1Engineer, id, "send_for_review")).toBe("applied");
   expect(await pickUp(people.c1Pm, id)).toBe("picked_up");
   expect(await take(people.c1Pm, id, "submit")).toBe("applied");
   expect(await pickUp(people.k1Pm, id)).toBe("picked_up");
-  return id;
+  return { id, datasheet: started!.document_id };
 }
 
 beforeAll(async () => {
@@ -141,7 +167,12 @@ beforeAll(async () => {
     [
       form,
       JSON.stringify({
-        sections: [{ key: "material", title: { en: "Material", ar: "المادة" }, fields: [{ key: "model", type: "text", label: { en: "Model", ar: "الطراز" } }] }],
+        sections: [{ key: "material", title: { en: "Material", ar: "المادة" }, fields: [
+              { key: "model", type: "text", label: { en: "Model", ar: "الطراز" } },
+              { key: "datasheet", type: "attachments", label: { en: "Datasheet", ar: "نشرة البيانات" } },
+            ],
+          },
+        ],
       }),
     ],
   );
@@ -210,36 +241,49 @@ afterAll(async () => {
 
 describe("scenario RP-1079-1: the photos K1's Recommendation takes are read by K1 and the Owner only, during the Owner's review", () => {
   it("C1 reads none by any channel, and the Working Copy lists none; K1 and the Owner read it", async () => {
-    const id = await atConsultant("Pump skid");
+    const { id, datasheet } = await atConsultant("Pump skid");
     const photo = await addSitePhoto(people.k1Pm, id);
     expect(await take(people.k1Pm, id, "recommend_c")).toBe("applied");
     const [taken] = (await migrator.query("select reply_event_id is not null as taken, frozen_at is not null as frozen from document where id = $1", [photo])).rows;
     expect(taken).toEqual({ taken: true, frozen: true });
 
-    for (const c1 of [people.c1Pm, people.c1Engineer]) expect(await photosRead(c1, id, photo)).toEqual(none);
+    for (const c1 of [people.c1Pm, people.c1Engineer]) {
+      expect(await fileRead(c1, id, photo)).toEqual(none);
+      // Positive control: C1 reads its own Datasheet by every channel.
+      expect(await fileRead(c1, id, datasheet)).toEqual(every(datasheet));
+    }
     expect(await inWorkingCopy(id, photo)).toBe(false);
+    expect(await inWorkingCopy(id, datasheet)).toBe(true);
+    // Nor does it tell C1 the photo is there: a Validate rule on its field fails, and annotating it is not_found.
+    expect(await hasDocumentFails(people.c1Pm, id, "site_photos")).toBe(0);
+    expect(await hasDocumentFails(people.c1Pm, id, "datasheet")).toBeNull();
+    const [annotate] = await call<{ outcome: string }>(
+      people.c1Pm,
+      sql`select outcome from app.start_annotated_copy_upload(${id}::uuid, ${photo}::uuid, 'marked.jpg', 10, 'image/jpeg', now())`,
+    );
+    expect(annotate!.outcome).toBe("not_found");
     for (const reader of [people.k1Pm, people.owPm]) {
-      expect((await photosRead(reader, id, photo)).rows).toEqual([photo]);
-      expect((await photosRead(reader, id, photo)).byId).toEqual([photo]);
+      expect((await fileRead(reader, id, photo)).rows).toEqual([photo]);
+      expect((await fileRead(reader, id, photo)).byId).toEqual([photo]);
     }
     // The Owner holding it reads it too.
     expect(await pickUp(people.owPm, id)).toBe("picked_up");
-    expect((await photosRead(people.owPm, id, photo)).byId).toEqual([photo]);
-    expect(await photosRead(people.c1Pm, id, photo)).toEqual(none);
+    expect((await fileRead(people.owPm, id, photo)).byId).toEqual([photo]);
+    expect(await fileRead(people.c1Pm, id, photo)).toEqual(none);
   });
 });
 
 describe("scenario RP-1079-2: neither an Owner Send Back nor the Confirm shares them, and the record holds none", () => {
   it("C1 reads none after the Send Back, the second Recommendation or the Confirm; documents_shared_before_close lists none", async () => {
-    const id = await atConsultant("Chiller");
+    const { id, datasheet } = await atConsultant("Chiller");
     const photo = await addSitePhoto(people.k1Pm, id);
     expect(await take(people.k1Pm, id, "recommend_c")).toBe("applied");
     expect(await pickUp(people.owPm, id)).toBe("picked_up");
     expect(await take(people.owPm, id, "owner_send_back")).toBe("applied");
-    expect(await photosRead(people.c1Pm, id, photo)).toEqual(none);
+    expect(await fileRead(people.c1Pm, id, photo)).toEqual(none);
     expect(await inWorkingCopy(id, photo)).toBe(false);
     // K1 holds it again and reads its photo.
-    expect((await photosRead(people.k1Pm, id, photo)).byId).toEqual([photo]);
+    expect((await fileRead(people.k1Pm, id, photo)).byId).toEqual([photo]);
 
     const second = await addSitePhoto(people.k1Pm, id);
     expect(await take(people.k1Pm, id, "recommend_c")).toBe("applied");
@@ -248,10 +292,13 @@ describe("scenario RP-1079-2: neither an Owner Send Back nor the Confirm shares 
     expect((await call<{ outcome: string }>(people.c1Pm, sql`select outcome from work_item where id = ${id}::uuid`))[0]!.outcome).toBe("C");
 
     for (const p of [photo, second]) {
-      for (const c1 of [people.c1Pm, people.c1Engineer]) expect(await photosRead(c1, id, p)).toEqual(none);
+      for (const c1 of [people.c1Pm, people.c1Engineer]) expect(await fileRead(c1, id, p)).toEqual(none);
       expect(await inRecord(id, p)).toBe(false);
       expect(await inWorkingCopy(id, p)).toBe(false);
-      for (const reader of [people.k1Pm, people.owPm]) expect((await photosRead(reader, id, p)).byId).toEqual([p]);
+      for (const reader of [people.k1Pm, people.owPm]) expect((await fileRead(reader, id, p)).byId).toEqual([p]);
     }
+    // Positive control: C1's Datasheet reaches C1 and the record.
+    expect(await fileRead(people.c1Pm, id, datasheet)).toEqual(every(datasheet));
+    expect(await inRecord(id, datasheet)).toBe(true);
   });
 });
