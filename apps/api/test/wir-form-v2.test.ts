@@ -20,7 +20,7 @@ import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { pinToWorkflowVersion } from "./support/pin-version.ts";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { bilingual, buildTower, detail, ok, take, tryTake, type Company, type Tower } from "./support/tower.ts";
+import { bilingual, buildTower, detail, ok, projectMember, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -103,17 +103,17 @@ const wirForm = async (): Promise<FormVersion> => (await ok(tower.c1Engineer.get
 
 /**
  * A WIR of C1's closed by K1's manager at Code A (RP-673), on the WIR Workflow Version 3, whose
- * code Screen asks for the final verification only (Version 4 adds the checklist).
+ * code Screen asks for the final verification only (Version 4 adds the checklist). K1's Engineer
+ * holds the Consultant Engineer Step; added here, so the submittals above keep their Step Pools.
  */
 async function wirClosedWithCodeA(title: string): Promise<string> {
+  const k1Engineer = await projectMember(api, k1, tower.k1ParticipantId!, ["engineer"]);
   const id = (await ok(tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, { type: "WIR", title, answers: wirAnswers() }), 201)).json().id as string;
   await take(tower.c1Engineer, id, "send_for_review");
   await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(tower.c1Pm, id, "submit", { answers: { cover_note: "Ready on site from 09:00" } });
   await pinToWorkflowVersion(migrator, "WIR", 3, id);
-  await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
-  await take(tower.k1Manager, id, "send_to_manager", { recommendedCode: "A" });
-  await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+  await take(k1Engineer, id, "send_to_manager", { recommendedCode: "A" });
   await take(tower.k1Manager, id, "approve_a", { answers: { sample_checked: true, matches_specification: true } });
   return id;
 }
@@ -233,9 +233,9 @@ describe("a WIR's Approved submittals", () => {
     const closedWir = await wirClosedWithCodeA("Cable trays, inspected at Code A");
     expect(await detail(tower.c1Engineer, closedWir)).toMatchObject({ outcome: "A" });
     const field = (await wirForm()).schema.sections.flatMap((s) => s.fields).find((f) => f.key === "approved_submittals")!;
-    expect(field.type === "work_item_ref" && field.accepts).toEqual({ modules: ["submittals"], outcomes: ["A", "B"] });
-    const offered = await search(tower.c1Engineer, "Cable", acceptsQuery(field.type === "work_item_ref" ? field.accepts : undefined));
-    expect(new Set(offered)).toEqual(new Set([item.a, item.b]));
+    const accepts = field.type === "work_item_ref" ? field.accepts : undefined;
+    // Link search with the field's `accepts`, as the link question asks it.
+    expect(new Set(await search(tower.c1Engineer, "Cable", acceptsQuery(accepts)))).toEqual(new Set([item.a, item.b]));
 
     const created = await createWir({ approved_submittals: [item.a, closedWir] });
     expect({ status: created.statusCode, body: created.json() }).toEqual({
@@ -248,6 +248,7 @@ describe("a WIR's Approved submittals", () => {
       status: 422,
       body: { error: "invalid_answers", fields: [{ key: "approved_submittals", code: "unknown_option" }] },
     });
+    expect(accepts).toEqual({ modules: ["submittals"], outcomes: ["A", "B"] });
   });
 
   it("is optional: a WIR without one is sent for review", async () => {
