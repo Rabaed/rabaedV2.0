@@ -1,15 +1,12 @@
-import { RECORD_OBJECTS, SNAG_REPORT_OBJECTS } from "@rabaed/db";
+import { RECORD_OBJECTS } from "@rabaed/db";
+import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
-import { snagReportKey } from "../snag-report/job.ts";
 import { replacedRecordKey } from "./reproduce.ts";
 import { projectFilesFromEnv, recordKeys, s3Client, workingCopyKey } from "./files.ts";
 
-// An IAM key pattern, as S3 matches it: `*` is any run of characters, `/` included.
-const matches = (pattern: string, key: string) => new RegExp(`^${pattern.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(key);
-
-// The infrastructure refuses the api any write under these patterns (RP-1084), so every file the
-// worker writes must fall inside one, or a sealed record could be overwritten through the api.
-describe("every file the worker writes is one the api may not overwrite or delete", () => {
+// The infrastructure refuses the api any write under this pattern (RP-1084), so every record file
+// the worker writes must fall inside it, or a sealed record could be overwritten through the api.
+describe("every record file the worker writes is one the api may not overwrite or delete", () => {
   const { pdf, recordData } = recordKeys("p1", "w1");
 
   it("an item's record keeps one location for good (ADR 0023)", () => {
@@ -18,15 +15,10 @@ describe("every file the worker writes is one the api may not overwrite or delet
       recordData: "projects/p1/work-items/w1/documental-record/record-data.xml",
     });
     expect(workingCopyKey("p1", "w1", "c1")).toBe("projects/p1/work-items/w1/documental-record/working-copies/c1.pdf");
-    expect(snagReportKey("p1", "r1")).toBe("projects/p1/snag-reports/r1/snag-report.pdf");
   });
 
   it.each([pdf, recordData, replacedRecordKey(pdf, "ab12"), workingCopyKey("p1", "w1", "c1")])("%s is a record file", (key) => {
-    expect(matches(RECORD_OBJECTS, key)).toBe(true);
-  });
-
-  it("a Snag report is one too", () => {
-    expect(matches(SNAG_REPORT_OBJECTS, snagReportKey("p1", "r1"))).toBe(true);
+    expect(iamPatternMatches(RECORD_OBJECTS, key)).toBe(true);
   });
 });
 

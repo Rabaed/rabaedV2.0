@@ -1,3 +1,4 @@
+import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
 import { environmentTemplates, references, render, type Resource } from "./support.ts";
@@ -141,11 +142,18 @@ describe("Project files", () => {
   // Whether the role's own policies let it do `action` on `key`, as IAM decides: some Allow
   // matches and no Deny does. `*` in an action or key pattern matches anything, `/` included.
   function roleMay(role: string, action: string, key: string): boolean {
-    const glob = (pattern: string) => new RegExp(`^${pattern.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
-    const matching = projectFilesGrants().filter(
-      (g) => g.role === role && g.actions.some((a) => glob(a).test(action)) && g.resources.some((r) => objectKey(r) !== "" && glob(objectKey(r)).test(key)),
-    );
+    const matching = grantsMatching(role, action, key);
     return matching.some((g) => g.effect === "Allow") && !matching.some((g) => g.effect === "Deny");
+  }
+  // Whether an explicit Deny refuses it, whatever any Allow (today's or a later, wider one) grants.
+  const roleDenied = (role: string, action: string, key: string) => grantsMatching(role, action, key).some((g) => g.effect === "Deny");
+  function grantsMatching(role: string, action: string, key: string) {
+    return projectFilesGrants().filter(
+      (g) =>
+        g.role === role &&
+        g.actions.some((a) => iamPatternMatches(a, action)) &&
+        g.resources.some((r) => objectKey(r) !== "" && iamPatternMatches(objectKey(r), key)),
+    );
   }
 
   // A signed URL carries the api role's permissions, so one wrong key in a signed PUT or a delete
@@ -166,9 +174,12 @@ describe("Project files", () => {
       expect(roleMay(api, "s3:GetObject", key)).toBe(true);
     });
 
-    it("refuses every Put and Delete variant there, so no tag, ACL or version change slips past", () => {
-      for (const action of ["s3:PutObjectTagging", "s3:PutObjectAcl", "s3:DeleteObjectVersion", "s3:DeleteObjectTagging"]) {
-        expect(roleMay(api, action, workerOnly[0]!)).toBe(false);
+    it("explicitly refuses every Put and Delete variant there, so a wider Allow later can't let a tag, ACL or version change slip past", () => {
+      for (const key of workerOnly) {
+        for (const action of ["s3:PutObject", "s3:PutObjectTagging", "s3:PutObjectAcl", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:DeleteObjectTagging"]) {
+          expect(roleDenied(api, action, key)).toBe(true);
+        }
+        expect(roleDenied(api, "s3:GetObject", key)).toBe(false);
       }
     });
 

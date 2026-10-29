@@ -98,6 +98,9 @@ export class AppStack extends Stack {
     });
     const appDatabase = databaseConnection(data, "rabaed_app");
     appDatabase.grantRead(apiTaskRole);
+    // What only the worker writes: the sealed Documental Records, their Working Copies and the Snag
+    // reports (ADR 0017, ADR 0023). One list, so the worker's grant and the api's refusal never drift apart.
+    const workerWrittenObjects = [RECORD_OBJECTS, SNAG_REPORT_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key));
     // Read and write objects under projects/, and the Signatures, logos and
     // Stamps it stores itself (RP-951), only: what the signed URLs it creates
     // may do, since a signed URL carries the signer's permissions.
@@ -107,15 +110,10 @@ export class AppStack extends Stack {
         resources: [`${PROJECT_FILES_PREFIX}*`, ...RECORD_IMAGE_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
       }),
     );
-    // Except what only the worker writes: the sealed Documental Records, their Working Copies and the
-    // Snag reports (ADR 0017, ADR 0023, RP-1084). The api still reads them, to sign download links;
-    // a wrong key in a signed PUT or a delete can never overwrite or remove one.
+    // Except what only the worker writes (RP-1084). The api still reads it, to sign download links;
+    // a wrong key in a signed PUT or a delete can never overwrite or remove a record.
     apiTaskRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.DENY,
-        actions: ["s3:PutObject*", "s3:DeleteObject*"],
-        resources: [RECORD_OBJECTS, SNAG_REPORT_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
-      }),
+      new iam.PolicyStatement({ effect: iam.Effect.DENY, actions: ["s3:PutObject*", "s3:DeleteObject*"], resources: workerWrittenObjects }),
     );
     // So S3 answers 404, not 403, for a file not uploaded yet: confirming a
     // Document's upload asks whether it is there (RP-269). It reads no object.
@@ -148,13 +146,8 @@ export class AppStack extends Stack {
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: RECORD_IMAGE_OBJECTS.map((key) => storage.projectFiles.arnForObjects(key)) }),
     );
-    workerTaskRole.addToPolicy(
-      new iam.PolicyStatement({
-        actions: ["s3:PutObject"],
-        // The records, and the Snag reports (RP-677): plain PDFs under their Project's snag-reports/ prefix.
-        resources: [RECORD_OBJECTS, SNAG_REPORT_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
-      }),
-    );
+    // The records, and the Snag reports (RP-677): plain PDFs under their Project's snag-reports/ prefix.
+    workerTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:PutObject"], resources: workerWrittenObjects }));
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["s3:GetObject"],
