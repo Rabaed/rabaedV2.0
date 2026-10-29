@@ -2970,6 +2970,25 @@
     },
     "checkAnother": "تحقق من سجل آخر"
   },
+  "submittalPanelLog": {
+    "created": "أُنشئ",
+    "review": "مراجعة {company}",
+    "coverNote": "ملاحظة الإحالة",
+    "remarks": "الملاحظات",
+    "internalNote": "ملاحظة داخلية",
+    "reason": "السبب",
+    "comments": "{count, plural, one {ملاحظة واحدة في قائمة الملاحظات} two {ملاحظتان في قائمة الملاحظات} few {{n} ملاحظات في قائمة الملاحظات} other {{n} ملاحظة في قائمة الملاحظات}}",
+    "recommendedCode": "الرمز الموصى به {code}",
+    "empty": "لم يحدث شيء بين الشركات بعد.",
+    "internalEmpty": "لا توجد إدخالات داخلية بعد.",
+    "workflow": "سير العمل",
+    "map": "خريطة سير العمل",
+    "log": "سجل الاعتماد",
+    "section": "سير العمل وسجل الاعتماد",
+    "summary": "{step} · {count, plural, one {إدخال واحد} two {إدخالان} few {{n} إدخالات} other {{n} إدخال}}",
+    "banner": "داخلي: لا يراه إلا {company}. لا يظهر أبداً {role, select, contractor {للاستشاري أو المالك} consultant {للمقاول أو المالك} other {للمقاول أو الاستشاري}}.",
+    "unavailable": "تعذّرت قراءة سجل الاعتماد."
+  },
   "submittalPanelDetails": {
     "tabs": "التقديم",
     "details": "التفاصيل",

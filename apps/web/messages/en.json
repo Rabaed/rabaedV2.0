@@ -2970,6 +2970,25 @@
     },
     "checkAnother": "Verify another record"
   },
+  "submittalPanelLog": {
+    "created": "Created",
+    "review": "{company} review",
+    "coverNote": "Cover Note",
+    "remarks": "Remarks",
+    "internalNote": "Internal Note",
+    "reason": "Reason",
+    "comments": "{count, plural, one {1 Comment in the Snag List} other {{n} Comments in the Snag List}}",
+    "recommendedCode": "Recommended Code {code}",
+    "empty": "Nothing has happened between the Companies yet.",
+    "internalEmpty": "No internal entries yet.",
+    "workflow": "Workflow",
+    "map": "Workflow map",
+    "log": "Approval log",
+    "section": "Workflow & approval log",
+    "summary": "{step} · {count, plural, one {1 entry} other {{n} entries}}",
+    "banner": "Internal: only {company} can see this. Never shown to {role, select, contractor {the Consultant or the Owner} consultant {the Contractor or the Owner} other {the Contractor or the Consultant}}.",
+    "unavailable": "The approval log couldn't be read."
+  },
   "submittalPanelDetails": {
     "tabs": "Submittal",
     "details": "Details",
