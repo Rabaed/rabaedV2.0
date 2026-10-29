@@ -74,6 +74,7 @@ const allowedInText: string[] = [
   "both names", // a Member's or Company's name in English and Arabic.
   "stage category", // a Stage's category (`stage.category`: draft, in progress, closed or cancelled), not a Form's.
   "follow up actions", // an outcome's follow-up actions (`outcome.actions`, workflow-engine.md "Outcomes"), not a Watch.
+  "dependencies only", // a PR that changes only npm packages (scripts/dependency-audit.ts), not a Link between Work Items.
   "filters", // the List's own filters ("Clear filters"; docs/data-model.md, List and Dashboard). "Filter" alone names a Visibility Dimension.
 ];
 
@@ -126,6 +127,7 @@ const allowedInNames: string[] = [
   "feed panel", // `ActivityFeedPanel`, the Dashboard's Activity Feed card.
   "submittal panel", // the Submittal Panel, the slide-over a submittal opens in from the List and the Kanban (spec RP-1054), not a Form Section.
   "text notes", // the `text-notes` type-scale class (11px).
+  "dependencies", // package.json's `dependencies` and `devDependencies` (the -ies plural is checked since RP-1086), not a Link.
 ];
 
 /**
