@@ -323,7 +323,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
   // RP-618: a Document's fingerprint goes into that hash, and confirms a guess at
   // the file's bytes, so it is read by nobody through the app role either, while
   // the Document itself is (Side channels).
-  it("scenario RP-618-1: never lets the app role read a Document's fingerprint, while it reads the Document", async () => {
+  it("scenario RP-1083-1: never lets the app role read a Document's fingerprint, while it reads the Document", async () => {
     for (const as of [c1.member, k1.member, ow.member]) {
       const documents = await call<{ id: string }>(as, sql`select id from document where work_item_id = ${id}`);
       expect(documents.length, as).toBeGreaterThan(0);

@@ -1,5 +1,5 @@
 // Seam 2 for what the record job is told (app.documental_record_facts, as the worker: the app role
-// with no Member set), scenarios RP-23-1, RP-23-2, RP-23-5, RP-650-1 and RP-1053-1 (RP-1083; spec
+// with no Member set), scenarios RP-23-1, RP-23-2, RP-23-5, RP-650-1 and RP-1083-5 (RP-1083; spec
 // RP-632; ADR 0022, ADR 0023; visibility.md V5, V7 and the Documental Record row). Seam 1 makes the
 // PDF and its Record Data from these facts and reads them (documental-record.test.ts,
 // documental-record-signatures.test.ts, company-stamp.test.ts); this file holds the facts
@@ -27,6 +27,7 @@ import {
   withSignature,
   withoutSignature,
   withoutStamp,
+  withStamp,
   type RunAsOwner,
   type SeamTwoTower,
 } from "../test-support/index.ts";
@@ -95,6 +96,11 @@ const recordFile = (as: string, id: string) =>
   withMember(app, as, (trx) => sql<{ storage_key: string }>`select storage_key from app.documental_record_file(${id}::uuid)`.execute(trx)).then((r) =>
     r.rows.map((row) => row.storage_key),
   );
+
+/** Each of `moves` gives no answers and no Remarks: a move inside one Participant, or one of the Owner's review. */
+const expectNothingShared = (moves: readonly RecordFacts["transitions"][number][]) => {
+  for (const move of moves) expect([move.answers, move.remarks], move.label.en).toEqual([null, null]);
+};
 
 /** Every string in `value`, with where it is, leaving out `skip`'s keys. */
 function strings(value: unknown, skip: readonly string[] = [], path = "$"): [string, string][] {
@@ -193,8 +199,13 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's item; the record is ma
     expect(await takeWith(k1.members.engineer, id, "send_to_manager", { recommended: "A" })).toBe("applied");
     expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
     expect(await takeWith(k1.members.manager, id, "approve_a")).toBe("applied");
-    // K1's Manager adds a new Signature after the close: the facts keep the one in force when they acted.
+    // After the close K1's Manager adds a new Signature and K1's Authorized Person a new Stamp: the facts keep
+    // the Signature in force when the Manager acted and the Stamp in force at the close.
     await withSignature(asOwner, k1.members.manager);
+    const newStamp = `companies/${k1.id}/stamp/${randomUUID()}.png`;
+    expect(
+      await tower.outcome(k1.ap, sql`select app.set_company_image(${k1.id}::uuid, 'stamp', ${newStamp}, ${sha(newStamp)}, ${2048}, 'image/png', now()) as outcome`),
+    ).toBe("set");
     facts = await factsOf(id);
     key = await publish(id);
   });
@@ -244,7 +255,7 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's item; the record is ma
   });
 });
 
-describe("scenarios RP-23-2 and RP-1053-1: a Returned send, a Recommended Code C and a Return in K1, then Code A", () => {
+describe("scenarios RP-23-2 and RP-1083-5: a Returned send, a Recommended Code C and a Return in K1, then Code A", () => {
   let id = "";
   let facts: RecordFacts;
 
@@ -291,7 +302,7 @@ describe("scenarios RP-23-2 and RP-1053-1: a Returned send, a Recommended Code C
       ["K1", "return"],
       ["K1", "send"],
     ]);
-    for (const move of inside) expect([move.answers, move.remarks], move.label.en).toEqual([null, null]);
+    expectNothingShared(inside);
   });
 
   it("RP-23-2: never give the Draft's start", async () => {
@@ -300,7 +311,7 @@ describe("scenarios RP-23-2 and RP-1053-1: a Returned send, a Recommended Code C
     expect(facts.transitions[0]!.at > started).toBe(true);
   });
 
-  it("RP-1053-1: give both of C1's sends in order, the Returned one before the Return and the one on the path after it", () => {
+  it("RP-1083-5: give both of C1's sends in order, the Returned one before the Return and the one on the path after it", () => {
     const c1Moves = facts.transitions.filter((t) => t.companyName.en === "C1");
     expect(c1Moves.map((t) => t.kind)).toEqual(["send", "return", "send", "submit"]);
     const [returned, back, again] = c1Moves;
@@ -344,7 +355,7 @@ describe("scenario RP-23-2: the Owner sends a Code B back and confirms the Code 
       ["K1", "submit"],
       ["OW", "close"],
     ]);
-    for (const move of review) expect([move.answers, move.remarks], move.label.en).toEqual([null, null]);
+    expectNothingShared(review);
   });
 
   it("never give the Draft's start", async () => {
@@ -400,14 +411,22 @@ describe("scenario RP-23-5: C1 has no Stamp until its Authorized Person adds one
     await withoutStamp(asOwner, tower.c1.id);
   });
 
-  it("refuses C1's Engineer no_stamp, after no_signature, writing nothing and telling nobody; C2 gets the plain not_found", async () => {
+  it("refuses C1's Engineer no_stamp, after no_signature, writing nothing and telling nobody; C2, also with no Stamp, gets the plain not_found", async () => {
     const { c1, c2 } = tower;
     const before = await written();
     expect(await tower.take(c1.members.engineer, id, "send_for_review")).toBe("no_stamp");
     await withoutSignature(asOwner, c1.members.engineer);
     expect(await tower.take(c1.members.engineer, id, "send_for_review")).toBe("no_signature");
     await withSignature(asOwner, c1.members.engineer);
-    expect(await tower.take(c2.members.engineer, id, "send_for_review")).toBe("not_found");
+    await withoutStamp(asOwner, c2.id);
+    try {
+      expect(await tower.take(c2.members.engineer, id, "send_for_review")).toBe("not_found");
+      // Positive control: on its own Draft, which it sees, C2 is told its own Company has no Stamp.
+      const own = await c2Draft(tower, { type: "WIR", title: "Column pour, no Stamp" });
+      expect(await tower.take(c2.members.engineer, own, "send_for_review")).toBe("no_stamp");
+    } finally {
+      await withStamp(asOwner, c2.id);
+    }
     expect(await written()).toEqual(before);
     // C1's own Company state, read for the acting Member only.
     expect(await tower.outcome(c1.members.engineer, sql`select app.member_company_has_stamp(${c1.members.engineer}::uuid)::text as outcome`)).toBe("false");

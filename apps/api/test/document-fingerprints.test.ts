@@ -149,7 +149,7 @@ describe("copied Documents", () => {
 
 // A fingerprint confirms a guess at the file's bytes (CODING_STANDARDS, Side channels), so like the
 // content hash it reaches nobody through the api: only the record job reads it.
-describe("scenario RP-618-1: the api never gives a Document's fingerprint", () => {
+describe("scenario RP-1083-1: the api never gives a Document's fingerprint", () => {
   let id = "";
   beforeAll(async () => {
     id = await draft(at, at.c1Engineer, "Letter K1 reads");

@@ -12,7 +12,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, bilingual, buildSeamTwoTower, digits, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestWorkflow, bilingual, buildSeamTwoTower, c2Draft, digits, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const TYPE = `RY${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
@@ -121,6 +121,19 @@ describe("scenario RP-155-2: the record's state on the item, as its job waits, p
     expect(await stateOf(c2.members.engineer, passed)).toBeNull();
     expect(await recordFile(c1.members.project_manager, passed)).toHaveLength(1);
     expect(await recordFile(c2.members.engineer, passed)).toEqual([]);
+    // Positive control: C2 reads the state and the file of a published record on an item it sees (its own Draft,
+    // which the owner gives one).
+    const own = await c2Draft(tower, { type: "WIR", title: "Column pour" });
+    const key = `projects/${tower.projectId}/work-items/${own}/documental-record/record.pdf`;
+    const file = async (k: string, mime: string) => one("insert into stored_file (storage_key, sha256, size, mime) values ($1, $2, 10, $3) returning id", [k, sha(k), mime]);
+    await migrator.query(
+      `insert into documental_record (project_id, work_item_id, pdf_file_id, record_data_file_id, layout_version, language, outcome,
+         pdf_sha256, sealed_at, verification_token_hash, verification_code)
+       values ($1, $2, $3, $4, '1', 'bilingual', 'A', $5, now(), $6, $7)`,
+      [tower.projectId, own, await file(key, "application/pdf"), await file(`${key}.xml`, "application/xml"), sha("pdf"), sha(randomUUID()), verificationCode()],
+    );
+    expect(await stateOf(c2.members.engineer, own)).toBe("published");
+    expect(await recordFile(c2.members.engineer, own)).toEqual([{ storage_key: key }]);
   });
 
   it("shows nothing for a record that failed its checks, as for an item with no record: its download is the plain 404 for everyone, and nobody is told it is ready", async () => {
@@ -198,6 +211,20 @@ describe("scenarios RP-155-1 and RP-950-1: record ready reaches each Member who 
       "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'notification' order by column_name",
     );
     expect(rows.map((r) => r.column_name).filter((c) => /name|text|body|subject|company|storage|file|payload/.test(c))).toEqual([]);
+  });
+
+  it("RP-155-1: reaches the Member who muted the Project once they unmute it, and still never C2", async () => {
+    // Positive control beside the muted Member's silence: K1's Engineer sees the item, so the mute alone kept it away.
+    const { k1, c2 } = tower;
+    expect(await tower.outcome(k1.members.engineer, sql`select app.set_project_mute(${tower.projectId}::uuid, false) as outcome`)).toBe("set");
+    const again = await one("insert into outbox (kind, project_id, payload) values ('record_ready', $1, $2) returning id", [
+      tower.projectId,
+      JSON.stringify({ work_item_id: passed }),
+    ]);
+    expect(await deliver(again!)).toBeGreaterThan(0);
+    const got = await notified(again!);
+    expect(got.get(k1.members.engineer)?.inApp).toBe(true);
+    expect(got.has(c2.members.engineer)).toBe(false);
   });
 
   it("RP-155-1: reaches nobody once the Project is closed", async () => {
