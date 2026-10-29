@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { certificateDer, commonNameOf, distinct, OID, parseCertificate, pkijs, toArrayBuffer, toBytes } from "./pki.ts";
+import { hostOf, refusedHost } from "./public-fetch.ts";
 
 // The seal's revocation data (RP-669): what makes it PAdES B-LT and not only
 // B-T. For every certificate of the sealing chain and of the timestamp
@@ -247,14 +248,16 @@ export async function longTermProblems(chain: readonly Uint8Array[], data: Revoc
 const MAX_BYTES = 20 * 1024 * 1024;
 
 /**
- * The bytes at `url`, an address a certificate names: plain http(s) only, never a loopback or
- * link-local host (the task's metadata endpoint), never redirected, and no larger than MAX_BYTES.
+ * The bytes at `url`, an address a certificate names: plain http(s) only, never a local address
+ * (`refusedHost`: the metadata endpoint, the VPC, the worker itself), never redirected, and no
+ * larger than MAX_BYTES. In AWS `fetchImpl` is `publicFetch`, which also checks what a name
+ * resolves to and connects to that checked address only (RP-1085).
  */
 async function get(fetchImpl: typeof fetch, url: string, init: RequestInit = {}): Promise<Uint8Array> {
   const parsed = new URL(url);
-  const host = parsed.hostname.replace(/^\[|\]$/g, "");
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("not an http(s) address");
-  if (/^(localhost|127\.|169\.254\.|0\.|::1$|fe80:)/i.test(host)) throw new Error("a local address");
+  const refused = refusedHost(hostOf(parsed));
+  if (refused) throw new Error(`a local address: ${refused}`);
   const res = await fetchImpl(url, { ...init, redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`answered ${res.status}`);
   if (Number(res.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error("answered more than 20 MB");

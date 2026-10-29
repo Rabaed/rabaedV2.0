@@ -13,6 +13,7 @@ import {
   toArrayBuffer,
   toBytes,
 } from "./pki.ts";
+import { publicFetch } from "./public-fetch.ts";
 import { fetchRevocationData, type RevocationData } from "./revocation.ts";
 
 // The timestamp authority (ADR 0023), the seal's other adapter: in AWS a free
@@ -107,10 +108,15 @@ export async function localTimestampAuthority(now: () => Date = () => new Date()
   };
 }
 
-/** A public RFC 3161 service at `url`, asked over HTTP(S) with a nonce; refuses any answer but a granted token. */
-export function rfc3161TimestampAuthority(url: string, fetchImpl: typeof fetch = fetch): TimestampAuthority {
+/**
+ * A public RFC 3161 service at `url`, asked over HTTP(S) with a nonce; refuses any answer but a
+ * granted token. Its certificates' revocation data comes from the addresses they name, public
+ * ones only (`revocationFetch`, `publicFetch` by default, RP-1085): `url` is Rabaed's own setting,
+ * those addresses are the CA's.
+ */
+export function rfc3161TimestampAuthority(url: string, fetchImpl: typeof fetch = fetch, revocationFetch: typeof fetch = publicFetch()): TimestampAuthority {
   return {
-    revocation: (token) => fetchRevocationData(tokenCertificates(token), fetchImpl),
+    revocation: (token) => fetchRevocationData(tokenCertificates(token), revocationFetch),
     async timestamp(digest) {
       const nonce = webcrypto.getRandomValues(new Uint8Array(8));
       nonce[0]! &= 0x7f;
