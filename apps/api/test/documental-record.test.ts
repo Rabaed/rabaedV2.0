@@ -305,7 +305,7 @@ async function closedAt(code: "approve_a" | "revise_c", subject = SUBJECT): Prom
   return id;
 }
 
-describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is made", () => {
+describe("scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made", () => {
   let id = "";
   let record: Uint8Array;
   let text = "";
@@ -412,7 +412,7 @@ describe("scenario RP-23-1: K1's PM issues Code A on C1's MAR, and the record is
 
   // RP-1053 (UAT SIG-04): the Rabaed Default MAR Returns to the Contractor Engineer's Step, and the
   // engineer sends again from there with send_for_review_again; Prepared is that send, not the Returned one.
-  it("dates Prepared at the send again when the Return went to the engineer's Step, not the Draft (RP-1053)", async () => {
+  it("scenario RP-1083-5: dates Prepared at the send again when the Return went to the engineer's Step, not the Draft (RP-1053)", async () => {
     const id = shared.returnedToEngineer;
     const xml = new TextDecoder().decode((await attachedFiles((await download(c1Pm, id)).bytes))[0]!.bytes);
     const firstAt = /<transition n="1" at="([^"]+)"/.exec(xml)![1]!;
