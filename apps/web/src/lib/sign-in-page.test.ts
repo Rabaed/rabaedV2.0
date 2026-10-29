@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { legalLinks, signInAppearance, signInFieldError } from "./sign-in-check.ts";
+import { legalLinks, signInAppearance, signInFieldError } from "./sign-in-page.ts";
 
 describe("the sign-in pages' theme (owner, 2026-10-30)", () => {
   it("is always Grey, as the design, keeping the last Member's light or dark mode", () => {
@@ -19,6 +19,7 @@ describe("the sign-in form's check before sending (owner's design)", () => {
     expect(signInFieldError({ email: "hafiz", password: "secret" })).toBe("email");
     expect(signInFieldError({ email: "hafiz@tmc", password: "secret" })).toBe("email");
     expect(signInFieldError({ email: "hafiz @tmc.ae", password: "secret" })).toBe("email");
+    expect(signInFieldError({ email: "hafiz@tmc.", password: "secret" })).toBe("email");
   });
 
   it("then asks for a password", () => {

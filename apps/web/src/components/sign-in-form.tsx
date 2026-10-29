@@ -6,14 +6,14 @@ import { Field, Icon, IconButton, Input } from "@rabaed/ui";
 import { emailInput, FormAlert, LeadingIcon, signInLink, SubmitButton, tallInput } from "@/components/sign-in-fields";
 import { Link, useRouter } from "@/i18n/navigation";
 import { browserLanguage } from "@/lib/browser-locale";
-import { signInFieldError } from "@/lib/sign-in-check";
+import { signInFieldError, type SignInField } from "@/lib/sign-in-page";
 
 export function SignInForm() {
   const t = useTranslations("signIn");
   const locale = useLocale();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [fieldError, setFieldError] = useState<"email" | "password" | null>(null);
+  const [fieldError, setFieldError] = useState<SignInField | null>(null);
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
