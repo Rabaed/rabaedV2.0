@@ -59,6 +59,7 @@ export async function askForSnagReport(
       projectName: project.rows[0].name,
       capped: request.ids === undefined && exported.capped,
       items: rows.map((r) => ({
+        id: r.id,
         documentNumber: r.documentNumber,
         subject: r.title,
         type: r.type.name,
@@ -70,7 +71,7 @@ export async function askForSnagReport(
         photo: (r.photo && photos.get(r.photo.documentId)) || null,
       })),
     };
-    const id = await requestSnagReport(trx, projectId, request.language, content);
+    const id = await requestSnagReport(trx, projectId, request.language, content, now);
     return id ? { id, status: "preparing", url: null, count: content.items.length } : null;
   });
 }
