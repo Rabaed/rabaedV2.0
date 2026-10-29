@@ -70,11 +70,13 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
               <p
                 key={text.label}
                 data-text={text.label}
-                dir="auto"
-                className="sdp-timeline-text mt-2 rounded-[8px] bg-surface px-2.5 py-2 text-[12.5px] leading-[1.45] whitespace-pre-wrap shadow-[inset_0_0_0_1px_var(--border-subtle)] [overflow-wrap:anywhere]"
+                className="sdp-timeline-text mt-2 rounded-[8px] bg-surface px-2.5 py-2 text-[12.5px] leading-[1.45] shadow-[inset_0_0_0_1px_var(--border-subtle)] [overflow-wrap:anywhere]"
               >
                 <span className="block text-[11.5px] font-semibold text-muted">{text.label}</span>
-                {text.text}
+                {/* The text's own direction, whatever the page's: an English Remark in Arabic keeps its full stop. */}
+                <span dir="auto" className="block whitespace-pre-wrap">
+                  {text.text}
+                </span>
               </p>
             ))}
             {item.chip && <div className="mt-2">{item.chip}</div>}
@@ -107,6 +109,9 @@ export type SubmittalTimelineLabels = {
 };
 
 const toneIcon: Record<SubmittalTimelineTone, IconName> = { neutral: "send", ok: "circle-check", warn: "arrow-back-up", bad: "circle-x" };
+/** A Code's own icon: approved (A or B) or not (C or D); a move's by its tone. */
+const iconOf = (event: SubmittalTimelineEvent, tone: SubmittalTimelineTone): IconName =>
+  event.outcome !== null ? (tone === "bad" ? "circle-x" : "circle-check") : toneIcon[tone];
 
 const chipClass = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold";
 
@@ -140,7 +145,7 @@ export function SubmittalApprovalLog({
     return {
       key: String(event.seq),
       tone: entry.tone,
-      icon: toneIcon[entry.tone],
+      icon: iconOf(event, entry.tone),
       move: labels.move(event),
       who: { person: entry.person?.[locale] ?? null, company: event.by.companyName?.[locale] ?? null },
       texts: entry.texts.map((t) => ({ label: labels.texts[t.kind], text: t.text })),
