@@ -77,6 +77,7 @@ const workflow = parse(readFileSync(join(dirname(import.meta.filename), "..", ".
 };
 const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
 const decide = steps.find((step) => step.run === "node scripts/dependency-audit-needed.ts");
+const audit = steps.find((step) => /^pnpm audit .*--json/.test(step.run ?? ""));
 const gate = "steps.needed.outputs.needed == 'true'";
 
 // The workflow runs this script, so it changes in its own PR after this one (rule 3); until then these wait for it.
@@ -95,9 +96,17 @@ describe.skipIf(decide === undefined)("dependency-audit.yml runs on every change
   });
 
   it("audits and reports only when the decision says so", () => {
-    const audit = steps.find((step) => step.run?.startsWith("pnpm audit --prod --json"));
     const report = steps.find((step) => step.run === "node scripts/dependency-audit.ts audit.json --level high");
     expect(audit?.if).toBe(gate);
     expect(report?.if).toBe(gate);
+  });
+});
+
+// RP-1070: dev dependencies run on every developer machine, in CI and in the lane stacks, so they are audited
+// too. The workflow drops `--prod` (and renames the step) in its own PR after this one (rule 3); until then this waits for it.
+describe.skipIf(audit?.name === "pnpm audit --prod")("dependency-audit.yml audits the dev dependencies too", () => {
+  it("runs pnpm audit without --prod, every severity into the JSON the report reads", () => {
+    expect(audit?.name).toBe("pnpm audit");
+    expect(audit?.run).toBe("pnpm audit --json > audit.json || true");
   });
 });
