@@ -398,6 +398,7 @@ export interface ChecklistTemplateVersionTable {
  */
 export interface WorkItemChecklistTable {
   work_item_id: string;
+  project_id: string;
   field_key: string;
   checklist_template_version_id: string;
   name: ColumnType<Bilingual, string, string>;
