@@ -1,4 +1,12 @@
-import type { Locale } from "@rabaed/domain";
+import { appearanceFromCookie, type Appearance, type Locale } from "@rabaed/domain";
+
+/**
+ * The sign-in pages' Appearance: always the Grey theme, as the owner's design (owner, 2026-10-30), in the
+ * light or dark Mode the browser's appearance cookie mirrors from the last Member, else the device's.
+ */
+export function signInAppearance(cookie: string | undefined): Appearance {
+  return { theme: "grey", mode: appearanceFromCookie(cookie).mode };
+}
 
 /**
  * The field the sign-in form flags before sending (owner's design): a malformed email first, then an

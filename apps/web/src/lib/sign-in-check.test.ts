@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { legalLinks, signInFieldError } from "./sign-in-check.ts";
+import { legalLinks, signInAppearance, signInFieldError } from "./sign-in-check.ts";
+
+describe("the sign-in pages' theme (owner, 2026-10-30)", () => {
+  it("is always Grey, as the design, keeping the last Member's light or dark mode", () => {
+    expect(signInAppearance("warm.dark")).toEqual({ theme: "grey", mode: "dark" });
+    expect(signInAppearance("warm.light")).toEqual({ theme: "grey", mode: "light" });
+    expect(signInAppearance("grey.system")).toEqual({ theme: "grey", mode: "system" });
+  });
+
+  it("follows the device with no cookie", () => {
+    expect(signInAppearance(undefined)).toEqual({ theme: "grey", mode: "system" });
+  });
+});
 
 describe("the sign-in form's check before sending (owner's design)", () => {
   it("asks for a valid email first", () => {
