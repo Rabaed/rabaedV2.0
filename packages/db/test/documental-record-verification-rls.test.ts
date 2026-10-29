@@ -110,7 +110,7 @@ afterAll(async () => {
   await app.destroy();
 });
 
-describe("the app role reads nothing new", () => {
+describe("scenario RP-157-1: the app role reads nothing new", () => {
   it("can't read or write the visitors' attempts, as the public route or as a Member", async () => {
     for (const who of [null, member]) {
       expect(await failure(who, sql`select * from verification_attempt`)).toBe("42501");
@@ -147,7 +147,7 @@ describe("the app role reads nothing new", () => {
   });
 });
 
-describe("app.verify_documental_record_by_token", () => {
+describe("scenario RP-157-1: app.verify_documental_record_by_token", () => {
   it("answers a published record with exactly the page's fields, with no Member set", async () => {
     const v = await byToken(records.published.token);
     expect(Object.keys(v!).sort()).toEqual(["documentNumber", "fingerprints", "outcome", "project", "sealedAt", "signers", "status", "subject"].sort());
@@ -170,7 +170,7 @@ describe("app.verify_documental_record_by_token", () => {
   });
 });
 
-describe("app.verify_documental_record_by_code", () => {
+describe("scenario RP-157-1: app.verify_documental_record_by_code", () => {
   it("finds a published record by its code with its Document Number, in any case", async () => {
     const found = await byCode(records.published.code, records.published.documentNumber.toLowerCase());
     expect(found.outcome).toBe("found");

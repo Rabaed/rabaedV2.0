@@ -146,3 +146,29 @@ describe("copied Documents", () => {
     expect(await fingerprintsByName(copy)).toEqual(source);
   });
 });
+
+// A fingerprint confirms a guess at the file's bytes (CODING_STANDARDS, Side channels), so like the
+// content hash it reaches nobody through the api: only the record job reads it.
+describe("scenario RP-618-1: the api never gives a Document's fingerprint", () => {
+  let id = "";
+  beforeAll(async () => {
+    id = await draft(at, at.c1Engineer, "Letter K1 reads");
+    await letter(at.c1Engineer, id, FIRST);
+    await take(at.c1Engineer, id, "send_for_review");
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(at.c1Pm, id, "submit");
+  });
+
+  it("not in the Documents list nor the item read, to C1 or to K1, who read the Document", async () => {
+    const hidden = [sha256Hex(FIRST), sha256Hex(DATASHEET)];
+    for (const reader of [at.c1Engineer, at.k1Manager]) {
+      const list = await ok(reader.get(`/v1/work-items/${id}/documents`), 200);
+      expect((list.json() as DocumentList).documents.map((d) => d.fileName).sort()).toEqual(["datasheet.pdf", "letter.pdf"]);
+      const item = await ok(reader.get(`/v1/work-items/${id}`), 200);
+      for (const body of [list.body, item.body]) {
+        for (const fingerprint of hidden) expect(body).not.toContain(fingerprint);
+        expect(body).not.toMatch(/fingerprint|file_?sha/i);
+      }
+    }
+  });
+});
