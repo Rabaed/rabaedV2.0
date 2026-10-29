@@ -7,7 +7,8 @@
 --   (20271004000000_discard_package_locks_unseen_items.sql), and returns the same 'not_found'.
 --   The owner still locks the item, then the Package (RP-973's order).
 -- * app.package_items_to_submit answers the owner only, the guard app.package_hides_unsubmitted
---   has. Today it was safe only because another Company never sees an item not yet Submitted.
+--   has. Before RP-1075 it was safe only because another Company never sees an item not yet
+--   Submitted.
 -- * Each body is otherwise unchanged from 20271003000000_package_write_lock_order.sql and
 --   20271009000000_package_one_definition.sql. The grants stay as they are.
 
