@@ -95,7 +95,7 @@ export function SubmittalPanelNumberCard({ segments, labels, className }: Submit
         role="tooltip"
         hidden={!open}
         data-number-card=""
-        className="absolute start-0 top-full z-20 mt-1.5 flex w-[min(360px,100%)] flex-col gap-3 rounded-[12px] bg-surface p-3.5 text-start text-[12px] leading-[1.4] font-normal text-muted shadow-lg ring-1 ring-border"
+        className="absolute start-0 top-full z-20 mt-1.5 flex w-[min(360px,100%)] flex-col gap-3 rounded-[12px] bg-surface p-[14px] text-start text-[12px] leading-[1.4] font-normal text-muted shadow-lg ring-1 ring-border"
       >
         <p className="text-[13px] font-bold text-text">{labels.title}</p>
         <PatternNumber parts={card.parts} separator={card.separator} className="text-[17px] font-extrabold" />
