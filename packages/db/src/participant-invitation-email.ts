@@ -3,7 +3,7 @@ import { sql } from "kysely";
 import type { OutboxHandler } from "./outbox.ts";
 
 // The worker's side of the Participant Invitation email (RP-1072; migration
-// 20271024000000_participant_invitation_email.sql). app.add_participant queues the row only for a
+// 20271027000000_participant_invitation_email.sql). app.add_participant queues the row only for a
 // Company on Rabaed, so the Project Admin's answer is the same for any CR number and never waits
 // for the email.
 
