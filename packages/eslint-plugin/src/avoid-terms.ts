@@ -53,7 +53,9 @@ export function parseAvoidTerms(glossary: string, allowed: readonly string[] = [
   return { terms: [...terms.values()], exempt: [...defined, ...allowed.map(wordsOf)] };
 }
 
-const sameWord = (word: string, avoided: string) => word === avoided || word === `${avoided}s` || word === `${avoided}es`;
+/** The word or its plural: -s, -es, and -ies for a word ending in a consonant and y ("party", "parties"; RP-1086). */
+const sameWord = (word: string, avoided: string) =>
+  word === avoided || word === `${avoided}s` || word === `${avoided}es` || (/[^aeiou]y$/.test(avoided) && word === `${avoided.slice(0, -1)}ies`);
 
 /** Where `phrase` occurs in `words`, as [start, end) pairs. */
 function occurrences(words: string[], phrase: string[]): [number, number][] {

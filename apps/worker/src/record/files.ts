@@ -60,16 +60,20 @@ export function s3RecordFiles(settings: S3Settings, client = s3Client(settings))
   };
 }
 
-/** Every file under `prefix` of `bucket` (the fonts), by its name after the prefix. */
+/** Every file under `prefix` of `bucket` (the fonts), by its name after the prefix. Reads every page of the listing (1000 keys each). */
 export async function filesUnder(client: S3Client, bucket: string, prefix: string): Promise<Map<string, Uint8Array>> {
   const out = new Map<string, Uint8Array>();
-  const listed = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }));
-  for (const object of listed.Contents ?? []) {
-    if (!object.Key || object.Key.endsWith("/")) continue;
-    const got = await client.send(new GetObjectCommand({ Bucket: bucket, Key: object.Key }));
-    const bytes = await got.Body?.transformToByteArray();
-    if (bytes) out.set(object.Key.slice(prefix.length), bytes);
-  }
+  let token: string | undefined;
+  do {
+    const listed = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+    for (const object of listed.Contents ?? []) {
+      if (!object.Key || object.Key.endsWith("/")) continue;
+      const got = await client.send(new GetObjectCommand({ Bucket: bucket, Key: object.Key }));
+      const bytes = await got.Body?.transformToByteArray();
+      if (bytes) out.set(object.Key.slice(prefix.length), bytes);
+    }
+    token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (token);
   return out;
 }
 
