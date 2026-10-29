@@ -392,6 +392,64 @@ describe("RP-1078: a Snag's check item is read only by those who see its Inspect
   });
 });
 
+// RP-1081 (story 32 of spec RP-649): the Snag's "Raised from" card shows the failed check item's
+// photos. app.raised_from_check_item_photos names them: the Inspection's Documents the code's
+// shared event took for that item (the originals of the Snag's copied "before" photos, an annotated
+// copy too), never another item's, and only to a reader who sees both the Snag and the Inspection,
+// through a Link not removed. The reader then reads each one through the documents policy.
+describe("RP-1081-1: a Snag's check item photos are the Inspection's, read where the Inspection is", () => {
+  let id = "";
+  let snag = "";
+  let item: string[] = [];
+  /** The check item photos `as` reads: the ids the function names, read through the documents policy. */
+  const photos = async (as: string) =>
+    (
+      await call<{ id: string }>(
+        as,
+        sql`select d.id from document d where d.id in (select document_id from app.raised_from_check_item_photos(${snag}::uuid)) order by d.id`,
+      )
+    ).map((r) => r.id);
+  const named = async (as: string) => (await call<{ document_id: string }>(as, sql`select document_id from app.raised_from_check_item_photos(${snag}::uuid)`)).length;
+
+  beforeAll(async () => {
+    id = await atConsultantReview("Slab pour, Level 11");
+    expect(await save(k1.members.engineer, id)).toBe("saved");
+    const photo = await addPhoto(k1.members.engineer, id);
+    const copy = await annotate(k1.members.engineer, id, photo);
+    // A photo of another item (`cover`, passed): no Snag of its own, never on this one's card.
+    await addPhoto(k1.members.engineer, id, "cover");
+    expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
+    expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
+    expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    const raised = await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from'", [id]);
+    snag = raised.rows[0].from_id as string;
+    item = [photo, copy].sort();
+  });
+
+  it("C1, K1 and the Owner read the failed item's photos, its annotated copy too, never the passed item's", async () => {
+    for (const reader of [c1.members.engineer, c1.members.project_manager, k1.members.engineer, k1.members.manager, ow.members.representative]) {
+      expect(await photos(reader), reader).toEqual(item);
+    }
+  });
+
+  it("C2 and another Project's Member are named none", async () => {
+    for (const outsider of [c2.members.engineer, other.ap]) {
+      expect(await named(outsider), outsider).toBe(0);
+    }
+  });
+
+  it("names none to the Owner once it sees the Snag but not the Inspection, and none to anyone once the Link is removed", async () => {
+    const owner = ow.members.representative;
+    await migrator.query("delete from work_item_access where work_item_id = $1 and participant_id = $2", [id, ow.participantId]);
+    expect(await named(owner)).toBe(0);
+    expect(await photos(c1.members.engineer)).toEqual(item);
+    await migrator.query("update work_item_link set removed_at = now() where from_id = $1 and kind = 'raised_from'", [snag]);
+    for (const reader of [c1.members.engineer, k1.members.manager]) {
+      expect(await named(reader), reader).toBe(0);
+    }
+  });
+});
+
 // RP-981 (INSP-12): the Engineer annotates a checklist item's photo with RP-656's tool. The
 // annotated copy is a reply Document of the same field and check item, never a Form Document, so
 // it is K1's until the code exactly as its original is (V19, ADR 0024).

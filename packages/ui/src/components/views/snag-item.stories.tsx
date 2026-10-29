@@ -21,6 +21,7 @@ const labels: Record<Locale, SnagItemLabels> = {
     before: "Before",
     after: "After",
     noPhoto: "No photo",
+    failedItem: "Failed checklist item",
     photoOf: (subject) => `Photo of ${subject}`,
   },
   ar: {
@@ -33,6 +34,7 @@ const labels: Record<Locale, SnagItemLabels> = {
     before: "قبل",
     after: "بعد",
     noPhoto: "لا صورة",
+    failedItem: "بند فحص راسب",
     photoOf: (subject) => `صورة ${subject}`,
   },
 };
@@ -94,6 +96,51 @@ export const SourceNotSeen: Story = {
     await expect(within(card).getByText("Riser 01 earthing")).toBeVisible();
     await expect(within(card).queryByRole("link")).toBeNull();
     await expect(card.querySelector("[data-outcome]")).toBeNull();
+  },
+};
+
+const ir045: RaisedFromSource = {
+  documentNumber: "TWR-TMC-EL-WIR-045",
+  subject: "First-fix electrical, Floor 02",
+  workItemId: "00000000-0000-4000-8000-0000000000c1",
+  outcome: { code: "C", name: b("Revise and Resubmit", "يُعدّل ويُعاد تقديمه"), look: "c" },
+};
+
+/**
+ * A Snag raised from a failed check item (RP-1081): the Inspection, the failed check item's text
+ * and its photos, as the reader sees them on the Inspection, and "Open".
+ */
+export const FromFailedCheckItem: Story = {
+  args: {
+    source: ir045,
+    checkItem: {
+      text: b("Earthing continuity", "استمرارية التأريض"),
+      photos: [
+        { id: "c1", url: pixel("indianred"), name: "earthing.jpg" },
+        { id: "c2", url: null, name: "earthing-2.heic" },
+      ],
+    },
+  },
+  play: async (context) => {
+    const l = labels[storyLocale(context)];
+    const card = context.canvas.getByRole("region", { name: l.raisedFrom });
+    const failed = within(card).getByText(storyLocale(context) === "ar" ? "استمرارية التأريض" : "Earthing continuity");
+    await expect(failed).toBeVisible();
+    await expect(within(card).getByText(l.failedItem, { exact: false })).toBeVisible();
+    await expect(within(card).getAllByRole("img", { name: l.photoOf(failed.textContent ?? "") })).toHaveLength(2);
+    await expect(within(card).getByRole("link", { name: l.open })).toBeVisible();
+  },
+};
+
+/** A failed check item with no photo: its text only, no empty photo tile. */
+export const FromFailedCheckItemWithoutPhotos: Story = {
+  args: { source: ir045, checkItem: { text: b("Earthing continuity", "استمرارية التأريض"), photos: [] } },
+  play: async (context) => {
+    const l = labels[storyLocale(context)];
+    const card = context.canvas.getByRole("region", { name: l.raisedFrom });
+    await expect(within(card).getByText(l.failedItem, { exact: false })).toBeVisible();
+    await expect(within(card).queryByText(l.noPhoto)).toBeNull();
+    await expect(within(card).queryAllByRole("img")).toHaveLength(0);
   },
 };
 

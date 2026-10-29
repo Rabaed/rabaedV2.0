@@ -23,7 +23,12 @@ export type SnagItemLabels = {
   after: string;
   noPhoto: string;
   photoOf: (subject: string) => string;
+  /** Before the text of the failed check item a code raised it from (RP-1081). */
+  failedItem: string;
 };
+
+/** The failed check item a code raised it from (RP-1081): its text, and its photos as the viewer sees them on the source. */
+export type RaisedFromCheckItem = { text: BilingualText; photos: readonly SnagPhoto[] };
 
 /** A photo the viewer sees: its image URL once it is fetched (null until then, or for a type the browser can't show). */
 export type SnagPhoto = { id: string; url: string | null; name: string };
@@ -48,12 +53,14 @@ export function SnagItemCard({ title, icon, aside, children, className }: { titl
 
 /**
  * Where it was raised from (the Link, read generically): the source's number and Subject, and
- * when the viewer sees it (E1) its outcome and "Open". A Comment quotes its reviewer's comment.
- * Raised by hand: says so.
+ * when the viewer sees it (E1) its outcome and "Open". A Comment quotes its reviewer's comment; a
+ * Snag from a failed check item names the item, with its photos (RP-1081; the reference's
+ * `.failed` row over its `.gal`). Raised by hand: says so.
  */
 export function RaisedFromCard({
   source,
   quote,
+  checkItem,
   locale,
   labels,
   itemHref,
@@ -61,6 +68,7 @@ export function RaisedFromCard({
 }: {
   source: RaisedFromSource | null;
   quote?: BilingualText | string | null;
+  checkItem?: RaisedFromCheckItem | null;
   locale: Locale;
   labels: SnagItemLabels;
   itemHref: (id: string) => string;
@@ -91,6 +99,17 @@ export function RaisedFromCard({
           <bdi>“{text}”</bdi>
           <small className="mt-1.5 block text-[11.5px] text-muted">{labels.comment}</small>
         </blockquote>
+      )}
+      {checkItem && (
+        <>
+          <p className="flex items-center gap-2.5 rounded-[10px] bg-danger-tint p-2.5 text-[13px] font-semibold text-danger-fg">
+            <Icon name="x" size={16} />
+            <span>
+              {labels.failedItem}: <bdi>{checkItem.text[locale]}</bdi>
+            </span>
+          </p>
+          {checkItem.photos.length > 0 && <SnagPhotoGrid photos={checkItem.photos} labels={labels} subject={checkItem.text[locale]} />}
+        </>
       )}
       {source.workItemId && (
         <div>
