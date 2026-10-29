@@ -38,6 +38,7 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, type ReactNode } from "react";
+import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
 import { Link } from "@/i18n/navigation";
 import { submittalPanelLinks } from "@/lib/submittal-panel-links";
 
@@ -67,7 +68,8 @@ function textAnswer(form: FormToFill, answers: WorkItemDetail["answers"], key: s
 
 /**
  * The Submittal Panel's tabs and Details sections (RP-1066, spec RP-1054): read from the reads the
- * item page uses, so it shows exactly what the viewer may see. Internal Communication is offered
+ * item page uses, so it shows exactly what the viewer may see. Chat is always offered (RP-1069):
+ * before the Submission Date it shows its empty state. Internal Communication is offered
  * only to a Member of a Participant with internal history on the item: the history read gives
  * internal events only within the viewer's own Participant (V5). The open tab and the folded
  * sections are kept in this browser, across submittals.
@@ -86,6 +88,7 @@ export function SubmittalPanelDetails({
   refreshKey: unknown;
 }) {
   const t = useTranslations("submittalPanelDetails");
+  const chat = useSubmittalPanelChatTab({ item, locale, refreshKey });
   const [read, setRead] = useState<DetailsRead | null>(null);
   const [prefs, setPrefs] = useState<Pick<SubmittalPanelPreferences, "collapsed" | "tab">>(() => readSubmittalPanelPreferences(submittalPanelStorage()));
   /** Shows the viewer's choice and keeps it in this browser. */
@@ -239,6 +242,7 @@ export function SubmittalPanelDetails({
 
   const tabs: SubmittalPanelTabItem[] = [
     { key: "details", label: t("details"), content: details },
+    chat,
     // Its timeline comes with the approval log (RP-1067).
     ...(internal > 0
       ? [{ key: "internal", label: t("internal"), icon: "lock" as const, count: internal, content: <p className="px-5 py-4 text-sm text-muted">{t("internalOnly")}</p> }]

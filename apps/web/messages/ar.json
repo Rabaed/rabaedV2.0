@@ -2970,6 +2970,21 @@
     },
     "checkAnother": "تحقق من سجل آخر"
   },
+  "submittalPanelChat": {
+    "tab": "المحادثة",
+    "loading": "جارٍ قراءة المحادثة…",
+    "unavailable": "تعذّرت قراءة المحادثة.",
+    "closedTitle": "المحادثة لم تُفتح بعد",
+    "closedBody": "تُفتح المحادثة بعد تقديم العنصر إلى المشارك التالي.",
+    "none": "لم يكتب أحد في المحادثة بعد.",
+    "composer": "اكتب في المحادثة",
+    "send": "إرسال",
+    "keys": "Enter للإرسال · Shift+Enter لسطر جديد",
+    "tooLong": "{max} حرف على الأكثر.",
+    "notSubmitted": "تُفتح المحادثة بعد تقديم العنصر.",
+    "projectClosed": "المشروع مغلق.",
+    "sendFailed": "تعذّر الإرسال. حاول مرة أخرى."
+  },
   "submittalPanelDetails": {
     "tabs": "التقديم",
     "details": "التفاصيل",
