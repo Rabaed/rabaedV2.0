@@ -56,6 +56,7 @@ export async function insertTestWorkflow(
   workflowName: { en: string; ar: string },
   steps: readonly TestStep[],
   transitions: readonly RulesTransition[],
+  screens: Record<string, string> = {},
 ): Promise<string> {
   const definition = JSON.stringify({ steps, transitions });
   const { rows } = await run(`
@@ -90,6 +91,14 @@ export async function insertTestWorkflow(
   `);
   const id = (rows[0] as { id?: string } | undefined)?.id;
   if (!id) throw new Error("insertTestWorkflow: nothing inserted");
+  // The Screen a Transition shows, pinned as publishing pins it (RP-516; addTestScreen).
+  for (const [key, screenVersionId] of Object.entries(screens)) {
+    await run(`
+      update workflow_transition t set screen_key = s.key, screen_version_id = v.id, action_form = v.schema
+      from screen_version v join screen s on s.id = v.screen_id, workflow_version wv
+      where v.id = '${screenVersionId}' and t.key = '${key}' and t.workflow_version_id = wv.id and wv.workflow_definition_id = '${id}'
+    `);
+  }
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
   await run(`update workflow_version set status = 'published', published_at = now() where workflow_definition_id = '${id}'`);
   return id;

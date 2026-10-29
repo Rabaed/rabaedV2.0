@@ -76,7 +76,7 @@ afterAll(async () => {
   await app.destroy();
 });
 
-describe("the documental_record table", () => {
+describe("scenario RP-1083-2: the documental_record table", () => {
   it("is not read by the app role at all: its keys, fingerprints and verification hash go through functions only", async () => {
     expect(await failure(seer, sql`select * from documental_record`)).toBe("42501");
     expect(await failure(seer, sql`select id from documental_record`)).toBe("42501");
@@ -127,7 +127,7 @@ describe("the documental_record table", () => {
   });
 });
 
-describe("app.documental_record_file", () => {
+describe("scenario RP-1083-2: app.documental_record_file", () => {
   it("gives a Member who sees the item its record's storage key and file name", async () => {
     expect(await recordFile(seer, itemId)).toEqual([{ storage_key: storageKey, file_name: expect.stringMatching(/\.pdf$/) }]);
   });
@@ -141,7 +141,7 @@ describe("app.documental_record_file", () => {
   });
 });
 
-describe("the worker's functions", () => {
+describe("scenario RP-1083-2: the worker's functions", () => {
   it("refuse a caller with a Member set", async () => {
     const outbox = randomUUID();
     expect(await failure(seer, sql`select app.documental_record_facts(${outbox}::uuid)`)).toBe("42501");
