@@ -21,6 +21,7 @@ export function useSubmittalPanelChatTab({ item, locale, refreshKey }: { item: W
   const open = submittalPanelChatOpen(item.submissionDate);
   const [read, setRead] = useState<ChatRead | null>(null);
   const [posted, setPosted] = useState(0);
+  const chatUrl = `/api/v1/work-items/${item.id}/chat`;
 
   useEffect(() => {
     if (!open) return;
@@ -28,13 +29,13 @@ export function useSubmittalPanelChatTab({ item, locale, refreshKey }: { item: W
     const id = item.id;
     // A read again that fails keeps the thread already shown; a new item's says it couldn't be read.
     const failed = () => setRead((shown) => (shown?.id === id && shown.ok ? shown : { id, ok: false }));
-    fetch(`/api/v1/work-items/${id}/chat`, { signal: controller.signal })
+    fetch(chatUrl, { signal: controller.signal })
       .then(async (res) => (res.ok ? setRead({ id, ok: true, chat: (await res.json()) as WorkItemChat }) : failed()))
       .catch(() => {
         if (!controller.signal.aborted) failed();
       });
     return () => controller.abort();
-  }, [item.id, open, refreshKey, posted]);
+  }, [item.id, chatUrl, open, refreshKey, posted]);
 
   const tooLong = t("tooLong", { max: formatNumber(CHAT_MESSAGE_MAX_LENGTH, locale) });
   const labels: SubmittalPanelChatLabels = {
@@ -53,7 +54,7 @@ export function useSubmittalPanelChatTab({ item, locale, refreshKey }: { item: W
   };
   async function send(body: string): Promise<string | null> {
     try {
-      const res = await fetch(`/api/v1/work-items/${item.id}/chat`, {
+      const res = await fetch(chatUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ body }),
@@ -70,18 +71,17 @@ export function useSubmittalPanelChatTab({ item, locale, refreshKey }: { item: W
   }
 
   const ready = open && read?.id === item.id ? read : null;
-  const content = !open ? (
-    <SubmittalPanelChat locale={locale} labels={labels} open={false} messages={[]} onSend={send} />
+  // Before the Submission Date nothing is read: the tab shows its empty state.
+  const content = !open || ready?.ok ? (
+    <SubmittalPanelChat locale={locale} labels={labels} open={open} messages={ready?.ok ? ready.chat.messages : []} onSend={send} />
   ) : !ready ? (
     <p role="status" className="px-5 py-6 text-sm text-muted">
       {t("loading")}
     </p>
-  ) : !ready.ok ? (
+  ) : (
     <p role="alert" className="px-5 py-6 text-sm text-muted">
       {t("unavailable")}
     </p>
-  ) : (
-    <SubmittalPanelChat locale={locale} labels={labels} open messages={ready.chat.messages} onSend={send} />
   );
 
   return { key: "chat", label: t("tab"), count: ready?.ok ? ready.chat.count : undefined, content };

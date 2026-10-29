@@ -148,7 +148,7 @@ export function SubmittalPanelChat({ locale, labels, open, messages, onSend }: S
         </div>
       )}
       <div ref={end} className="flex flex-col gap-1.5">
-        <form onSubmit={onSubmit} className="flex items-end gap-2">
+        <form onSubmit={onSubmit} aria-label={labels.log} className="flex items-end gap-2">
           <Textarea
             rows={1}
             value={draft}
