@@ -28,6 +28,8 @@ export type WorktreeFacts = Worktree & {
   ahead: number;
   /** Uncommitted changes, including untracked files that are not ignored. */
   dirty: boolean;
+  /** Those changes as `git status --porcelain` lines ("?? notes.md" is untracked), so a skip can list them (RP-1101). */
+  changes?: string[];
   /**
    * Its branch (or detached HEAD) has never had a commit of its own (see hasOwnCommit),
    * so its subagent may still be running: a new agent worktree has nothing ahead and
@@ -192,8 +194,14 @@ export function listWorktrees(cwd?: string): Worktree[] {
  * A root .pnpm-store/ never counts: pnpm makes one when a sandboxed agent can't write to the
  * drive root's store, and a branch from before RP-549 does not ignore it yet.
  */
-export const gitDirty = (dir: string): boolean =>
-  git(["--no-optional-locks", "status", "--porcelain", "--", ":(top)", ":(top,exclude).pnpm-store"], dir).trim() !== "";
+export const gitDirty = (dir: string): boolean => gitChanges(dir).length > 0;
+
+/** gitDirty's changes, one `git status --porcelain` line each. */
+export const gitChanges = (dir: string): string[] =>
+  git(["-c", "core.quotePath=false", "--no-optional-locks", "status", "--porcelain", "--", ":(top)", ":(top,exclude).pnpm-store"], dir)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
 
 /** The current worktree's top folder. */
 export const currentRoot = (): string => git(["rev-parse", "--show-toplevel"]).trim();
@@ -231,13 +239,14 @@ export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: str
 function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Liveness): WorktreeFacts {
   // A folder deleted by hand is still listed; it has nothing uncommitted, and no subagent runs in it.
   const exists = existsSync(w.path);
-  const dirty = exists && gitDirty(w.path);
+  const changes = exists ? gitChanges(w.path) : [];
+  const dirty = changes.length > 0;
   const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
   // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
   const mayBeStarting = ahead === 0 && noCommitsYet;
-  return { ...w, ahead, dirty, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
+  return { ...w, ahead, dirty, changes, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
 }
 
 /** judgeWorktree's answer. neverCommitted: finished although its branch has had no commit of its own. */
