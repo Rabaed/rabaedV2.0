@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { branchClaims, type ClaimsVerdict } from "./check-claims.ts";
+import { mergeRefusal, readMergeState, type MergeState } from "./merge-in-progress.ts";
 import { isDoc } from "./reviewed-required.ts";
 import { branchMix } from "./shared-files.ts";
 
@@ -17,6 +18,8 @@ import { branchMix } from "./shared-files.ts";
 // warning, not a refusal (RP-993): `pnpm queue` refuses it later, by the same rule.
 // A branch that changes a shared module with no open RP-603 claim for its key is
 // refused before either check runs, docs-only pushes too (rule 12, RP-1008).
+// A branch push while a merge is in progress (MERGE_HEAD exists) is refused first,
+// naming the conflicted files (RP-1101: Auto-fix left half-done merges in lanes).
 // The checks read the working tree, which is the pushed commit when you push
 // the branch you have checked out with nothing uncommitted.
 //
@@ -42,6 +45,8 @@ export interface PrePushSeam {
   branchMix(ref: PushedRef): string[] | undefined;
   /** Rule 12's claims for the pushed ref (scripts/check-claims.ts): refused, a warning, or "" when nothing to say. */
   claims(ref: PushedRef): Promise<ClaimsVerdict>;
+  /** Whether a merge is in progress in the working tree (scripts/merge-in-progress.ts). */
+  mergeState(): MergeState;
   /** Runs `pnpm <check>`, its stdout and stderr together. */
   run(check: Check): Promise<{ status: number; output: string }>;
   /** The checked-out commit, and whether tracked files have uncommitted changes. */
@@ -60,6 +65,9 @@ function parsePushedRefs(stdin: string): PushedRef[] {
 export async function prePush(stdin: string, seam: PrePushSeam): Promise<{ ok: boolean; message: string }> {
   const branches = parsePushedRefs(stdin).filter((ref) => ref.remoteRef.startsWith("refs/heads/") && !ZERO.test(ref.localSha));
   if (branches.length === 0) return { ok: true, message: "pre-push: no branch pushed, lint and typecheck skipped." };
+  const merging = mergeRefusal(seam.mergeState(), "Push");
+  if (merging !== undefined) return { ok: false, message: `${merging}
+(pre-push, RP-1101)` };
   const mix = mixWarning(branches, seam);
   // Rule 12 first, docs-only pushes too (the rule files are shared modules): a refusal needs a claim, not a fix (RP-1008).
   const claims = await Promise.all(branches.map((ref) => seam.claims(ref)));
@@ -158,6 +166,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
         return { ok: true, message: `Warning: check:claims could not run (${error instanceof Error ? error.message : String(error)}).` };
       }
     },
+    mergeState: () => readMergeState(repo),
     run: (check) => runPnpm(repo, (pnpm ??= pnpmCommand(repo)), check),
     workingTree: () => ({ head: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain", "--untracked-files=no") !== "" }),
   });

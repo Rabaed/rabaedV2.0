@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { MergeState } from "./merge-in-progress.ts";
 import { changedFiles, prePush, type PrePushSeam } from "./pre-push.ts";
 
 // What git writes to a pre-push hook's stdin: one line per ref pushed.
@@ -16,12 +17,14 @@ function seam(
   tree = { head: "a".repeat(40), dirty: false },
   mix?: string[],
   claims: { ok: boolean; message: string } = { ok: true, message: "" },
+  merge: MergeState = { inProgress: false },
 ) {
   const ran: string[] = [];
   const fake: PrePushSeam = {
     changedFiles: () => files,
     branchMix: () => mix,
     claims: async () => claims,
+    mergeState: () => merge,
     workingTree: () => tree,
     run: async (script) => {
       ran.push(script);
@@ -106,6 +109,22 @@ describe("prePush", () => {
     const result = await prePush(branchPush, seam({}, undefined, undefined, undefined, warned).fake);
     expect(result.ok).toBe(true);
     expect(result.message).toContain("Warning: check:claims could not read RP-603 (fetch failed)");
+  });
+
+  it("refuses a branch push while a merge is in progress, naming the conflicted files, before anything else runs (RP-1101)", async () => {
+    const merging: MergeState = { inProgress: true, conflicted: ["docs/visibility.md"] };
+    for (const files of [["apps/api/src/a.ts"], ["docs/visibility.md"]]) {
+      const { fake, ran } = seam({}, files, undefined, undefined, undefined, merging);
+      const result = await prePush(branchPush, fake);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("Push refused: a merge is in progress (MERGE_HEAD exists).");
+      expect(result.message).toContain("  docs/visibility.md");
+      expect(ran).toEqual([]);
+    }
+    // Deleting a branch or pushing a tag carries none of the half-merged tree.
+    const stdin = `(delete) ${zero} refs/heads/old ${"c".repeat(40)}
+`;
+    expect((await prePush(stdin, seam({}, undefined, undefined, undefined, undefined, merging).fake)).ok).toBe(true);
   });
 
   it("runs the checks when the push changes a doc and code, or its files can't be told", async () => {
