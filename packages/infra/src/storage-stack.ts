@@ -10,9 +10,6 @@ export interface StorageStackProps extends StackProps {
   readonly config: EnvironmentConfig;
 }
 
-/** Project files live under this prefix, then the Project's `project_id` (ADR 0007). */
-export const PROJECT_FILES_PREFIX = "projects/";
-
 /** The licensed fonts in the build assets bucket; the Thmanyah files go under `fonts/thmanyah/`. */
 export const FONTS_PREFIX = "fonts/";
 
@@ -21,12 +18,6 @@ export const SEALING_PREFIX = "sealing/";
 
 /** The tag on the `pdf-sealing` key; the permissions boundary allows kms:Sign only on a key carrying it. */
 export const PDF_SEALING_TAG = { key: "rabaed-purpose", value: "pdf-sealing" } as const;
-
-/** Where each item's Documental Record lives under its Project's prefix (apps/worker recordKeys). */
-export const RECORD_OBJECTS = "projects/*/work-items/*/documental-record/*";
-
-/** Where each Snag report lives under its Project's prefix (apps/worker snagReportKey): plain PDFs, written by the worker (RP-677). */
-export const SNAG_REPORT_OBJECTS = "projects/*/snag-reports/*";
 
 /**
  * The images a record prints besides the Documents: Members' Signatures (RP-85) and Companies'
@@ -43,7 +34,8 @@ export const RECORD_IMAGE_OBJECTS = ["members/*/signatures/*", "companies/*/logo
 //   Signatures, logos and Stamps under members/ and companies/), and the
 //   bucket policy refuses everyone else, administrators included. Browsers
 //   upload and get files through signed URLs the api creates, refused once 15
-//   minutes old. The worker reads Documents and writes only Documental Records.
+//   minutes old. The worker reads Documents and writes only Documental Records
+//   and Snag reports; the api only reads those (app stack, RP-1084).
 // - Build assets: private files the build needs. The setup wizard uploads
 //   the licensed Thmanyah fonts under fonts/; the deploy workflow, which
 //   builds the images, may read that prefix and nothing else (RP-211). The
