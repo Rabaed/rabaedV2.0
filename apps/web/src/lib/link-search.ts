@@ -1,9 +1,10 @@
 import type { LinkAccepts, LinkSearchResults, WorkItemLink } from "@rabaed/domain";
 import type { LinkTargetNames } from "@rabaed/ui";
 
-/** Link search's query: the words, the page, and a link question's `accepts` (RP-82) as `types` and `outcomes`. */
+/** Link search's query: the words, the page, and a link question's `accepts` (RP-82, RP-1080) as `modules`, `types` and `outcomes`. */
 export function linkSearchParams(q: string, page: number, accepts?: LinkAccepts): URLSearchParams {
   const query = new URLSearchParams({ q, page: String(page) });
+  if (accepts?.modules) query.set("modules", accepts.modules.join(","));
   if (accepts?.types) query.set("types", accepts.types.join(","));
   if (accepts?.outcomes) query.set("outcomes", accepts.outcomes.join(","));
   return query;

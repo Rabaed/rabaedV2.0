@@ -39,8 +39,15 @@ describe("the work_item_ref field's settings", () => {
     expect(build([related({ required: true })]).sections[0]!.fields[0]).toMatchObject({ required: true });
   });
 
-  it("takes `accepts`: Work Item Types and/or outcomes, each at least one, no duplicates (RP-82)", () => {
-    for (const accepts of [{ outcomes: ["A", "B"] }, { types: ["MAR"] }, { types: ["MAR", "SAR"], outcomes: ["A"] }, { outcomes: ["passed_with_comments"] }]) {
+  it("takes `accepts`: Modules, Work Item Types and/or outcomes, each at least one, no duplicates (RP-82, RP-1080)", () => {
+    for (const accepts of [
+      { outcomes: ["A", "B"] },
+      { types: ["MAR"] },
+      { types: ["MAR", "SAR"], outcomes: ["A"] },
+      { outcomes: ["passed_with_comments"] },
+      { modules: ["submittals"], outcomes: ["A", "B"] },
+      { modules: ["submittals", "drawings"] },
+    ]) {
       expect(build([related({ accepts })]).sections[0]!.fields[0]).toMatchObject({ accepts });
     }
     for (const accepts of [
@@ -53,6 +60,10 @@ describe("the work_item_ref field's settings", () => {
       { outcomes: ["1A"] },
       { outcomes: ["cancelled"] },
       { outcomes: ["A"], stages: ["passed"] },
+      { modules: [] },
+      { modules: ["submittals", "submittals"] },
+      { modules: ["Submittals"] },
+      { modules: ["made_up"] },
     ]) {
       expect(formSchema.safeParse({ sections: [{ key: "main", title: label("Main"), fields: [related({ accepts })] }, classification] }).success).toBe(false);
     }
@@ -79,6 +90,7 @@ describe("the work_item_ref field's settings", () => {
       expect(problemsOf({ outcomes: ["A", "B"] })).toEqual([]);
       expect(problemsOf({ types: ["MAR", "WIR"] })).toEqual([]);
       expect(problemsOf({ types: ["WIR"], outcomes: ["passed"] })).toEqual([]);
+      expect(problemsOf({ modules: ["submittals"], outcomes: ["A", "B"] })).toEqual([]);
     });
 
     it("refuses a Type that doesn't exist, and an outcome no Type it names (or none at all) has", () => {
@@ -94,26 +106,37 @@ describe("the work_item_ref field's settings", () => {
 });
 
 describe("linkAccepts: whether a link question's `accepts` takes an item (RP-82)", () => {
-  const closedA = { type: "MAR", outcome: "A", closed: true };
+  const closedA = { module: "submittals", type: "MAR", outcome: "A", closed: true };
 
   it("takes any item without `accepts`", () => {
-    expect(linkAccepts(undefined, { type: "MAR", outcome: null, closed: false })).toBe(true);
+    expect(linkAccepts(undefined, { module: "submittals", type: "MAR", outcome: null, closed: false })).toBe(true);
   });
 
   it("with outcomes, takes only a closed item with one of them", () => {
     const accepts = { outcomes: ["A", "B"] };
     expect(linkAccepts(accepts, closedA)).toBe(true);
-    expect(linkAccepts(accepts, { type: "SAR", outcome: "B", closed: true })).toBe(true);
-    expect(linkAccepts(accepts, { type: "MAR", outcome: "C", closed: true })).toBe(false);
-    expect(linkAccepts(accepts, { type: "MAR", outcome: null, closed: false })).toBe(false);
-    expect(linkAccepts(accepts, { type: "MAR", outcome: "A", closed: false })).toBe(false);
+    expect(linkAccepts(accepts, { module: "submittals", type: "SAR", outcome: "B", closed: true })).toBe(true);
+    expect(linkAccepts(accepts, { module: "submittals", type: "MAR", outcome: "C", closed: true })).toBe(false);
+    expect(linkAccepts(accepts, { module: "submittals", type: "MAR", outcome: null, closed: false })).toBe(false);
+    expect(linkAccepts(accepts, { module: "submittals", type: "MAR", outcome: "A", closed: false })).toBe(false);
   });
 
   it("with Types, takes only an item of one of them, open or closed unless outcomes are named too", () => {
-    expect(linkAccepts({ types: ["MAR"] }, { type: "MAR", outcome: null, closed: false })).toBe(true);
-    expect(linkAccepts({ types: ["MAR"] }, { type: "DAR", outcome: "A", closed: true })).toBe(false);
+    expect(linkAccepts({ types: ["MAR"] }, { module: "submittals", type: "MAR", outcome: null, closed: false })).toBe(true);
+    expect(linkAccepts({ types: ["MAR"] }, { module: "submittals", type: "DAR", outcome: "A", closed: true })).toBe(false);
     expect(linkAccepts({ types: ["MAR"], outcomes: ["A"] }, closedA)).toBe(true);
     expect(linkAccepts({ types: ["DAR"], outcomes: ["A"] }, closedA)).toBe(false);
+  });
+
+  // RP-1080: a WIR closes with Code A–D too (RP-673), so the WIR's Approved submittals names its Module.
+  it("with Modules, takes only an item of a Type in one of them; outcomes narrow it as ever", () => {
+    const closedWirA = { module: "inspections", type: "WIR", outcome: "A", closed: true };
+    const accepts = { modules: ["submittals" as const], outcomes: ["A", "B"] };
+    expect(linkAccepts(accepts, closedA)).toBe(true);
+    expect(linkAccepts(accepts, closedWirA)).toBe(false);
+    expect(linkAccepts(accepts, { ...closedA, outcome: "C" })).toBe(false);
+    expect(linkAccepts({ modules: ["submittals"] }, { module: "submittals", type: "MAR", outcome: null, closed: false })).toBe(true);
+    expect(linkAccepts({ modules: ["submittals"], types: ["DAR"] }, closedA)).toBe(false);
   });
 });
 

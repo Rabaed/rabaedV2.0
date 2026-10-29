@@ -288,8 +288,8 @@ async function linkableIds(
   const ids = fields.flatMap((f) => idsIn(given[f.key]));
   if (ids.length === 0) return Object.fromEntries(fields.map((f) => [f.key, new Set<string>()]));
   const kept = fields.flatMap((f) => keptIn(f.key));
-  const { rows } = await sql<{ id: string; type: string; outcome: string | null; closed: boolean; submitted: boolean }>`
-    select t.id, ty.code as type, t.outcome, t.closed_at is not null as closed, app.work_item_submitted(t.id) as submitted
+  const { rows } = await sql<{ id: string; module: string; type: string; outcome: string | null; closed: boolean; submitted: boolean }>`
+    select t.id, ty.module_key as module, ty.code as type, t.outcome, t.closed_at is not null as closed, app.work_item_submitted(t.id) as submitted
     from work_item t
     join work_item_type ty on ty.id = t.work_item_type_id
     where t.id = any(${ids}::uuid[]) and t.project_id = ${projectId} and t.id is distinct from ${workItemId}::uuid
@@ -689,8 +689,8 @@ const containsPattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\
  * Submitted first (the Submission Date, which every caller who sees an item may
  * read; never when its Draft was started), one page at a time. Only items the Member sees (RLS, the list's own
  * path) that have been Submitted (app.work_item_submitted): never a Draft or an
- * item in internal review. With a link question's `accepts` (`types`,
- * `outcomes`; RP-82), only those it takes. One row more than the page is read only to tell
+ * item in internal review. With a link question's `accepts` (`modules`, RP-1080;
+ * `types`, `outcomes`; RP-82), only those it takes. One row more than the page is read only to tell
  * whether there is a next page; there is no total, so nothing counts hidden
  * matches. Null when it isn't one of the Member's Projects.
  */
@@ -699,7 +699,8 @@ export function searchLinkTargets(db: Db, memberId: string, projectId: string, q
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
     const pattern = containsPattern(query.q);
-    // A link question's `accepts` (form.ts linkAccepts): its Types, and with outcomes only closed items with one.
+    // A link question's `accepts` (form.ts linkAccepts): its Modules and Types, and with outcomes only closed items with one.
+    const modules = query.modules ?? null;
     const types = query.types ?? null;
     const outcomes = query.outcomes ?? null;
     const { rows } = await sql<{ id: string; document_number: string; title: string }>`
@@ -708,6 +709,7 @@ export function searchLinkTargets(db: Db, memberId: string, projectId: string, q
       join work_item_type ty on ty.id = w.work_item_type_id
       where w.project_id = ${projectId} and app.work_item_submitted(w.id)
         and (w.document_number ilike ${pattern} or w.title ilike ${pattern})
+        and (${modules}::text[] is null or ty.module_key = any(${modules}::text[]))
         and (${types}::text[] is null or ty.code = any(${types}::text[]))
         and (${outcomes}::text[] is null or (w.closed_at is not null and w.outcome = any(${outcomes}::text[])))
       order by w.submitted_at desc nulls last, w.id desc
