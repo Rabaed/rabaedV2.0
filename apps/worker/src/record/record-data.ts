@@ -13,7 +13,7 @@ import { pick, type RecordLanguage, type RecordText } from "./record-text.ts";
 // Chat, an answer still in progress or when the Draft was started (V7). In a
 // single-language record it holds only that language.
 //
-// Version 2 (RP-151) holds page 1 (the Companies, title block, Parties,
+// Version 2 (RP-151) holds page 1 (the Companies, title block, Participants,
 // Classification, Final decision, the reply's excerpt, the approval flow), the
 // Form's sections and the shared Documents. Version 3 (RP-650) adds the pages
 // after: the Review Comments, a Signature card per Transition on the path (with
@@ -101,8 +101,8 @@ export interface RecordData {
   readonly reviewComments: number;
   /** The Owner and every Company whose Member acted, for the top of page 1. */
   readonly companies: readonly CompanyLine[];
-  /** The Companies on the item by Project Role, for the Parties box. */
-  readonly parties: readonly CompanyLine[];
+  /** The Companies on the item by Project Role, for the Participants box. */
+  readonly participants: readonly CompanyLine[];
   readonly trades: readonly { readonly name: RecordText; readonly selected: boolean }[];
   readonly location: readonly RecordText[];
   readonly scopes: readonly RecordText[];
@@ -450,7 +450,7 @@ export function recordOf(
     confirmedBy: confirmation && confirmation !== issuer ? person(confirmation) : null,
     reviewComments: facts.reviewComments,
     companies: stripCompanies.map((c, i) => ({ ...company(c), logo: logoKeys[i] !== null, logoSha256: fingerprintOf(logoKeys[i] ?? null) })),
-    parties: facts.companies.map(company),
+    participants: facts.companies.map(company),
     trades: facts.trades.map((t) => ({ name: pick(t.name, language), selected: t.selected })),
     location: (facts.location ?? []).map((l) => pick(l, language)),
     scopes: facts.scopes.map((s) => pick(s, language)),
@@ -636,8 +636,11 @@ export function recordDataXml(data: RecordData): string {
     "    </outcome>",
     ...(data.submittedAt ? [`    <submitted${at(data.submittedAt)}/>`] : []),
     "  </item>",
+    // The element keeps its version 2 name: stored records hold it and a Re-produce reads them back (RP-1086).
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the Record Data's stored element name, read back only by code (record-data-read.ts); no page prints it, and the box prints "Participants".
     "  <parties>",
-    ...data.parties.flatMap((c) => ["    <company>", ...lang("name", c.name, "      "), ...lang("role", c.role, "      "), "    </company>"]),
+    ...data.participants.flatMap((c) => ["    <company>", ...lang("name", c.name, "      "), ...lang("role", c.role, "      "), "    </company>"]),
+    // eslint-disable-next-line rabaed/no-avoid-terms -- as above.
     "  </parties>",
     "  <classification>",
     "    <trades>",

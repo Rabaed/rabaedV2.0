@@ -165,3 +165,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271110 | RP-1091 | 52 | approval log Position in the history read (spec RP-1054 follow-ups, lane 5B; placeholder) |
 | 20271111 | spec RP-1054 | 52 | review fixes, lane 5B integration branch (placeholder) |
 | 20271112 | spec RP-1054 | 52 | merge-with-main reconciliation, lane 5B (placeholder) |
+| 20271105 | RP-1086 | 22 | record_clean_up |
