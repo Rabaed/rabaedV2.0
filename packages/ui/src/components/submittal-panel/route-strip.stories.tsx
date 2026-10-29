@@ -130,6 +130,8 @@ const noTimesOrCounts = async (root: HTMLElement) => {
 export const InsideTheConsultant: Story = {
   play: async (context) => {
     const strip = stripOf(context);
+    // Named by what it does; the route, with each stop's state, is its description.
+    await expect(strip).toHaveAccessibleDescription(new RegExp(storyText(context, bi("Consultant With Design Consultants LLC \\(current\\)", "الاستشاري لدى ديزاين للاستشارات \\(الحالية\\)"))));
     const current = currentStops(strip);
     await expect(current).toHaveLength(1);
     await expect(current[0]).toHaveTextContent(storyText(context, copy.roles.consultant));

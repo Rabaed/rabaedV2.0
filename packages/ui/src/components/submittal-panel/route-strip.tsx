@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, type BaseRole, type Locale } from "@rabaed/domain";
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import type { RouteStop, RouteStopState } from "./route-model.ts";
@@ -64,6 +64,7 @@ export type SubmittalRouteStripProps = {
  * names, never one of its Steps (V14).
  */
 export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = false, className }: SubmittalRouteStripProps) {
+  const listId = useId();
   const items = stops.map((stop, i) => {
     const line = large ? stopLine(stop, labels, locale) : stop.companyName ? labels.withCompany(stop.companyName[locale]) : null;
     return (
@@ -90,23 +91,25 @@ export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = fal
     );
   });
   const list = (
-    <ol aria-label={onOpen ? undefined : labels.route} className={cn("flex w-full flex-wrap items-center", large ? "justify-between gap-2" : "gap-1")}>
+    <ol id={listId} aria-label={onOpen ? undefined : labels.route} className={cn("flex w-full flex-wrap items-center", large ? "justify-between gap-2" : "gap-1")}>
       {items}
     </ol>
   );
   const frame = cn("sdp-route block w-full rounded-[12px] bg-surface-subtle text-start text-text shadow-[inset_0_0_0_1px_var(--border-subtle)]", large ? "p-3" : "p-2", className);
   if (!onOpen) return <div className={frame}>{list}</div>;
   return (
+    // Named by what it does; the route is its description, read after the name.
     <button
       type="button"
       onClick={onOpen}
       title={labels.open}
+      aria-label={labels.open}
+      aria-describedby={listId}
       className={cn(
         frame,
         "min-h-8 cursor-pointer transition-shadow hover:shadow-[inset_0_0_0_1.5px_var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
       )}
     >
-      <span className="sr-only">{labels.open}: </span>
       {list}
     </button>
   );
