@@ -5,7 +5,18 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
 import type { Container, StaleProject } from "./lanes.ts";
-import { bareMergedYesRefusal, isShallowRepo, keptLast, laneRefusal, protectedLaneReason, sessionHeldProject, shallowRefusal, splitProtected } from "./prune-guards.ts";
+import {
+  bareMergedYesRefusal,
+  isShallowRepo,
+  keptLast,
+  laneRefusal,
+  listedChanges,
+  mergedLanes,
+  protectedLaneReason,
+  sessionHeldProject,
+  shallowRefusal,
+  splitProtected,
+} from "./prune-guards.ts";
 
 const container = (name: string, project: string, workingDir: string, state = "exited"): Container => ({ name, state, project, workingDir, ports: [] });
 const stale = (project: string, reason = "not running"): StaleProject => ({ project, reason, containers: [`${project}-db-1`], volumes: [`${project}_db`] });
@@ -95,6 +106,30 @@ describe("shallow clones", () => {
   });
 });
 
+describe("mergedLanes (lanes:prune --merged)", () => {
+  it("counts a finished worktree with uncommitted or untracked files as not merged, and lists them", () => {
+    const { worktrees, kept } = mergedLanes([
+      { path: "/w/done", branch: "RP-1-done", project: "rabaed-lane41", finished: true, changes: [] },
+      { path: "/w/dirty", branch: "RP-2-dirty", project: "rabaed-lane42", finished: true, changes: ["UU docs/visibility.md", "?? notes.md"] },
+      { path: "/w/open", branch: "RP-3-open", project: "rabaed-lane43", finished: false, changes: ["?? x"] },
+    ]);
+    expect(worktrees.map((w) => [w.path, w.merged])).toEqual([
+      ["/w/done", true],
+      ["/w/dirty", false],
+      ["/w/open", false],
+    ]);
+    expect(kept).toEqual([{ project: "rabaed-lane42", path: "/w/dirty", reason: "uncommitted changes: UU docs/visibility.md, ?? notes.md" }]);
+  });
+});
+
+describe("listedChanges", () => {
+  it("lists at most five, then how many more", () => {
+    expect(listedChanges(undefined)).toBe("");
+    expect(listedChanges(["?? a"])).toBe(": ?? a");
+    expect(listedChanges(["1", "2", "3", "4", "5", "6", "7"])).toBe(": 1, 2, 3, 4, 5 and 2 more");
+  });
+});
+
 describe("keptLast", () => {
   it("prints each kept item with its reason as the last lines, so `| tail` keeps them", () => {
     expect(keptLast([{ what: "rabaed-lane12 of G:/w/a", reason: "a running Claude session is in it" }])).toEqual([
@@ -102,5 +137,7 @@ describe("keptLast", () => {
       "  rabaed-lane12 of G:/w/a: a running Claude session is in it",
     ]);
     expect(keptLast([])).toEqual([]);
+    // Lines a later step logged (removeProjectsNow's "Kept compose project …") follow, under the same heading.
+    expect(keptLast([], ["Kept compose project rabaed-lane12: /w/a was not removed."])).toEqual(["Kept, with why (printed last):", "  Kept compose project rabaed-lane12: /w/a was not removed."]);
   });
 });

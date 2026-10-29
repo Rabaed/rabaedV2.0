@@ -15,7 +15,7 @@ import {
   type WorktreeLane,
 } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { protectedLaneReason, sessionHeldProject, splitProtected } from "./prune-guards.ts";
+import { listedChanges, protectedLaneReason, sessionHeldProject, splitProtected } from "./prune-guards.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
@@ -86,13 +86,6 @@ export function isAppWorktree(path: string, mainRoot: string, platform: NodeJS.P
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-/** A dirty worktree's changes for its reason (RP-1101): ": a, b" or ": a, … e and 2 more"; "" when not known. */
-const listedChanges = (changes: string[] | undefined, most = 5): string => {
-  if (changes === undefined || changes.length === 0) return "";
-  const more = changes.length - most;
-  return `: ${changes.slice(0, most).join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
-};
 
 /**
  * Which worktrees, branches and compose projects to remove. A worktree goes when it is

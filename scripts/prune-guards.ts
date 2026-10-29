@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { holdReason, type Holders } from "./claude-sessions.ts";
-import type { Container, KeptProject, StaleProject } from "./lanes.ts";
+import type { Container, KeptProject, StaleProject, WorktreeLane } from "./lanes.ts";
 
 // RP-1101: the guards worktrees:prune and lanes:prune share, after 2026-10-29's prunes removed
 // live work. A session working in a stale project's folder keeps it; lane 7 (the live UAT stack
@@ -65,6 +65,31 @@ export const shallowRefusal = (shallow: boolean, command: string): string | unde
     ? `${command} refused: this clone is shallow, so merged branches can look unmerged and the other way round. Run \`git fetch --unshallow origin\` in the main folder, then re-run.`
     : undefined;
 
-/** The kept items with their reasons, as a prune's last lines (nothing when none was kept). */
-export const keptLast = (kept: { what: string; reason: string }[]): string[] =>
-  kept.length === 0 ? [] : ["Kept, with why (printed last):", ...kept.map((k) => `  ${k.what}: ${k.reason}`)];
+/** A dirty worktree's changes for its reason: ": a, b", or ": a, … e and 2 more"; "" when not known. */
+export const listedChanges = (changes: string[] | undefined, most = 5): string => {
+  if (changes === undefined || changes.length === 0) return "";
+  const more = changes.length - most;
+  return `: ${changes.slice(0, most).join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
+};
+
+/** A worktree as lanes:prune --merged judged it (worktrees.ts judgeWorktree), with its uncommitted changes (gitChanges). */
+export type JudgedLane = Omit<WorktreeLane, "merged"> & { finished: boolean; changes: string[] };
+
+/**
+ * lanes:prune --merged's worktrees: one is merged when finished with nothing uncommitted or
+ * untracked (isFinished judges commits only). A finished one with changes keeps its project,
+ * which is listed with the files.
+ */
+export function mergedLanes(judged: JudgedLane[]): { worktrees: WorktreeLane[]; kept: KeptProject[] } {
+  const kept: KeptProject[] = [];
+  const worktrees = judged.map(({ finished, changes, ...w }) => {
+    const dirty = finished && changes.length > 0;
+    if (dirty && w.project !== undefined) kept.push({ project: w.project, path: w.path, reason: `uncommitted changes${listedChanges(changes)}` });
+    return { ...w, merged: finished && !dirty };
+  });
+  return { worktrees, kept };
+}
+
+/** The kept items with their reasons, then lines a later step logged, as a prune's last lines (nothing when none was kept). */
+export const keptLast = (kept: { what: string; reason: string }[], logged: string[] = []): string[] =>
+  kept.length + logged.length === 0 ? [] : ["Kept, with why (printed last):", ...kept.map((k) => `  ${k.what}: ${k.reason}`), ...logged.map((line) => `  ${line}`)];

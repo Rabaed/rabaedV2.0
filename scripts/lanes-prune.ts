@@ -2,15 +2,19 @@
 // worktree no longer exists, that are not running, or that only have volumes left.
 // With --merged, also those whose worktrees are all merged into origin/main (their branch, or a detached HEAD's commit, RP-601)
 // (as of the last fetch), unless a worktree that is not merged names the project in its .env. A merged
-// project stays, named with the session, while a running Claude session works in one of its worktrees
-// (RP-956) or its Claude desktop session is open (RP-612), or when they cannot be checked; both are read
-// again just before each merged project is removed.
+// worktree with uncommitted or untracked files is not merged (RP-1101): its project stays, listed with
+// the files. A project stays, named with the session, while a running Claude session works in one of its
+// existing folders (RP-956; stale projects too since RP-1101) or its Claude desktop session is open
+// (RP-612), or when they cannot be checked; that is read again just before each removal.
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed, nor, in any mode, one that another existing worktree's .env
 // names while it is not running or has only volumes left (RP-1007): that worktree is named instead.
 // Just before each removal it checks again (RP-1073): a worktree's .env naming it now, a container of
 // it started from an existing folder, Docker not answering, or a connection to its Postgres
 // keeps it. With --lane N such a keep at listing exits 1.
+// RP-1101: lane 7 (the live UAT stack) is never a candidate and `--lane 7` is refused; a bare
+// `--merged --yes` (no --lane N) is refused (RP-1007); --merged refuses on a shallow clone. What
+// was kept is printed last, with why, so a `| tail` keeps the reasons.
 //
 //   pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
 //
@@ -23,7 +27,6 @@ import {
   chooseMerged,
   composeProjectOfEnv,
   envClaims,
-  heldSinceListed,
   keptByClaims,
   laneKeptByClaim,
   LANE_SCHEME,
@@ -37,14 +40,20 @@ import {
   readWorktreeEnv,
   removeProject,
   staleProjects,
+  type KeptProject,
   type StaleProject,
-  type WorktreeLane,
 } from "./lanes.ts";
-import { judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
+import { bareMergedYesRefusal, isShallowRepo, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, splitProtected, type JudgedLane } from "./prune-guards.ts";
+import { gitChanges, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
 if (!options) {
   console.error(`Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`);
+  process.exit(1);
+}
+const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal(options);
+if (refused !== undefined) {
+  console.error(refused);
   process.exit(1);
 }
 const withMerged = options.merged;
@@ -57,58 +66,81 @@ if (!containers) {
 }
 const currentProject = composeProjectOfEnv(readWorktreeEnv(".") ?? "");
 const volumes = listVolumes();
+const inScope = (project: string) => lane === undefined || project === laneProject(lane);
+/** What was kept, with why: printed last (RP-1101), so it is not cut off. */
+const kept: { what: string; reason: string }[] = [];
+const keep = (k: KeptProject) => {
+  if (inScope(k.project)) kept.push({ what: `${k.project} of ${k.path}`, reason: k.reason });
+};
+const printKept = () => {
+  for (const line of keptLast(kept)) console.log(line);
+};
+
 /** Every other worktree's .env claim (RP-1007), read now; a project one names is not pruned as stale. */
 const claims = envClaims(listWorktrees().filter((w) => existsSync(w.path)), { cwd: process.cwd(), readEnv: readWorktreeEnv });
 const { prune: stale, kept: claimed } = keptByClaims(staleProjects({ containers, volumes, cwd: process.cwd(), currentProject, exists: existsSync }), claims);
-const inScope = (project: string) => lane === undefined || project === laneProject(lane);
 /** The projects --merged adds (none without it); a claimed project it adds is not reported as kept. */
 let fresh: StaleProject[] = [];
-/** The candidates chosen as merged (--merged): checked again for sessions just before each removal. */
-const mergedOnes = new Set<string>();
+let holders = systemHolders();
 
 if (withMerged) {
   const all = listWorktrees();
   const mainRoot = all[0]!.path;
+  const shallow = shallowRefusal(isShallowRepo(mainRoot), "lanes:prune --merged");
+  if (shallow !== undefined) {
+    console.error(shallow);
+    process.exit(1);
+  }
   if (!refExists("origin/main", mainRoot)) {
     console.error("origin/main not found: run `git fetch origin main` and re-run.");
     process.exit(1);
   }
   // The main folder, and any worktree on main itself, always keeps its lane. Merged is the finished rule
-  // lane:env, worktrees:clean and worktrees:prune share (worktrees.ts isFinished, RP-585).
+  // lane:env, worktrees:clean and worktrees:prune share (worktrees.ts isFinished, RP-585), with nothing
+  // uncommitted or untracked (RP-1101).
   const live = systemLiveness();
-  const worktrees: WorktreeLane[] = all
+  holders = live.holders;
+  const judged: JudgedLane[] = all
     .filter((w) => existsSync(w.path))
-    .map((w, i) => ({
-      path: w.path,
-      branch: w.branch,
-      merged: i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished,
-      project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? ""),
-    }));
+    .map((w, i) => {
+      const finished = i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished;
+      return { path: w.path, branch: w.branch, finished, changes: finished ? changesOf(w.path) : [], project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") };
+    });
+  const { worktrees, kept: dirty } = mergedLanes(judged);
   const known = new Set(stale.map((s) => s.project));
   // RP-956, RP-612: a holder a running or desktop Claude session holds keeps its project; name the session.
-  const { merged, kept } = chooseMerged({ containers, volumes, worktrees, cwd: process.cwd(), currentProject, holders: live.holders });
+  const { merged, kept: held } = chooseMerged({ containers, volumes, worktrees, cwd: process.cwd(), currentProject, holders });
   fresh = merged.filter((m) => !known.has(m.project));
   stale.push(...fresh);
-  for (const m of fresh) mergedOnes.add(m.project);
-  for (const k of kept) if (!known.has(k.project) && inScope(k.project)) console.log(`Not pruned as merged: ${k.project} of ${k.path}: ${k.reason}.`);
+  for (const k of [...dirty, ...held]) if (!known.has(k.project)) keep({ ...k, reason: `not pruned as merged: ${k.reason}` });
 }
 
-for (const k of claimed) if (inScope(k.project) && !fresh.some((m) => m.project === k.project)) console.log(`Not pruned: ${k.project} of ${k.path}: ${k.reason}.`);
+for (const k of claimed) if (!fresh.some((m) => m.project === k.project)) keep(k);
 // --lane N's own project kept for a claim is a refusal: exit 1.
 const laneRefused = laneKeptByClaim(lane, claimed, fresh);
 
-const candidates = onlyLane(stale, lane);
+// RP-1101: never lane 7, nor a project whose existing folder a Claude session works in.
+const { prune: unprotected, kept: uat } = splitProtected(onlyLane(stale, lane), containers);
+uat.forEach(keep);
+const candidates = unprotected.filter((s) => {
+  const held = sessionHeldProject(s, containers, holders, existsSync);
+  if (held !== undefined) keep(held);
+  return held === undefined;
+});
 if (candidates.length === 0) {
   console.log(lane === undefined ? "Nothing to prune." : `Nothing to prune for lane ${lane}.`);
+  printKept();
   process.exit(laneRefused ? 1 : 0);
 }
 console.log("Compose projects to prune:");
 for (const s of candidates) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
+if (kept.length > 0) console.log(`(${kept.length} kept: listed at the end, with why.)`);
 
 if (options.dryRun) {
   console.log("Dry run: nothing removed.");
+  printKept();
   process.exit(0);
 }
 
@@ -120,16 +152,16 @@ await confirmOrExit("Remove them with their volumes? Their databases are lost, i
 
 let failed = 0;
 for (const s of candidates) {
-  // Read again just before: a session may have moved into or opened a merged project's worktree since the prompt.
-  const held = mergedOnes.has(s.project) ? heldSinceListed(s, containers, systemHolders()) : undefined;
+  // Read again just before: a session may have moved into or opened one of its folders since the prompt.
+  const held = sessionHeldProject(s, containers, systemHolders(), existsSync, { sinceListed: true });
   if (held !== undefined) {
-    console.log(`Kept ${s.project}: ${held}.`);
+    kept.push({ what: s.project, reason: `${held.path}: ${held.reason}` });
     continue;
   }
   // RP-1007, RP-1073: and since the prompt a lane:env may have written a .env naming it, or a session started or connected to it.
   const inUse = projectInUseNow(s.project, { listedClaims: claims, listedContainers: containers, now: readProjectNow(s.project, { worktrees: listWorktrees(), cwd: process.cwd() }), exists: existsSync });
   if (inUse !== undefined) {
-    console.log(`Kept ${s.project}: ${inUse}.`);
+    kept.push({ what: s.project, reason: inUse });
     continue;
   }
   try {
@@ -140,4 +172,15 @@ for (const s of candidates) {
     console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
   }
 }
+printKept();
 if (failed > 0) process.exit(1);
+
+/** A worktree's uncommitted changes; one that git cannot read counts as changed, so its project stays. */
+function changesOf(path: string): string[] {
+  try {
+    return gitChanges(path);
+  } catch {
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the git command, by its own name.
+    return ["git status could not be read"];
+  }
+}

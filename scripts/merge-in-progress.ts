@@ -22,10 +22,12 @@ export function readMergeState(dir: string): MergeState {
 /** Why `what` ("pnpm verify", "Push") is refused while a merge is in progress, or undefined when none is. */
 export function mergeRefusal(state: MergeState, what: string): string | undefined {
   if (!state.inProgress) return undefined;
+  /* eslint-disable rabaed/no-avoid-terms -- git's own words for the paths of a merge, not Rabaed Files. */
   const files =
     state.conflicted.length > 0
       ? ["Conflicted files:", ...state.conflicted.map((f) => `  ${f}`)]
       : ["No conflicted file is left, but the merge is not committed."];
+  /* eslint-enable rabaed/no-avoid-terms */
   return [
     `${what} refused: a merge is in progress (MERGE_HEAD exists).`,
     ...files,
