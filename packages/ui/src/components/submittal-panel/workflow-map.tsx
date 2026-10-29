@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, type Locale, type WorkItemWorkflowMap } from "@rabaed/domain";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -37,6 +37,8 @@ export type SubmittalWorkflowMapProps = {
   map: WorkItemWorkflowMap;
   /** Workflow settings, only for a Member who may edit Workflows (a Project Admin); left out for anyone else. */
   settingsHref?: string;
+  /** The app's link component (Next's `Link`), so going to Workflow settings stays client-side; a plain `<a>` otherwise. */
+  linkAs?: ElementType;
 };
 
 /**
@@ -49,7 +51,7 @@ export type SubmittalWorkflowMapProps = {
  *
  * Esc closes it before the panel: it is a dialog layer, which the panel waits for (`layerOpen`).
  */
-export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, settingsHref }: SubmittalWorkflowMapProps) {
+export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, settingsHref, linkAs: Link = "a" }: SubmittalWorkflowMapProps) {
   const route = submittalRoute({ definition: map.definition, stages: map.stages, position: map.position });
   const n = (value: number) => formatNumber(value, locale);
   // Focus goes back to whatever opened it (the strip, the Details tab's button or the rail's link), still inside the panel.
@@ -68,9 +70,9 @@ export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, 
         title={labels.title}
         description={labels.version(map.name[locale], n(map.versionNo))}
         closeLabel={labels.close}
-        className="sdp-map w-[min(920px,calc(100%-2rem))] gap-0 p-0 [&>div:first-child]:border-b [&>div:first-child]:border-border-subtle [&>div:first-child]:px-[18px] [&>div:first-child]:py-4"
+        className="sdp-map w-[min(920px,calc(100%-2rem))]"
       >
-        <div className="flex flex-col gap-4 p-[18px]">
+        <div className="flex flex-col gap-4">
           <SubmittalRouteStrip locale={locale} labels={labels} stops={route.stops} large />
           <ol className="flex flex-col gap-4">
             {route.stops.map((stop, i) => {
@@ -85,12 +87,8 @@ export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, 
                   aria-current={held ? "step" : undefined}
                   className={cn("rounded-[14px]", held && "p-2 shadow-[inset_0_0_0_1.5px_var(--brand)]")}
                 >
-                  {held && (
-                    <p className="mb-2 flex flex-wrap items-center gap-x-2 px-1 text-[12.5px] font-semibold">
-                      <em className="text-[10.5px] font-bold text-brand-fg not-italic">{labels.youAreHere}</em>
-                      <span className="text-muted">{labels.withCompany(stop.companyName![locale])}</span>
-                    </p>
-                  )}
+                  {/* Who holds it, not "You are here": that is said only on the viewer's own Step. */}
+                  {held && <p className="mb-2 px-1 text-[12.5px] font-bold text-brand-fg">{labels.withCompany(stop.companyName![locale])}</p>}
                   <ol className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2.5">
                     {steps.map((s) => (
                       <li
@@ -127,13 +125,13 @@ export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, 
             })}
           </ol>
         </div>
-        <div className="flex flex-wrap items-center gap-3 rounded-b-md border-t border-border-subtle bg-surface-subtle px-[18px] py-3 text-[12.5px] text-muted">
+        <div className="-mx-6 -mb-6 flex flex-wrap items-center gap-3 rounded-b-md border-t border-border-subtle bg-surface-subtle px-6 py-3 text-[12.5px] text-muted">
           <span className="me-auto">{labels.newOnly}</span>
           {settingsHref && (
-            <a href={settingsHref} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+            <Link href={settingsHref} className={buttonVariants({ variant: "secondary", size: "sm" })}>
               <Icon name="settings" />
               {labels.openSettings}
-            </a>
+            </Link>
           )}
         </div>
       </DialogContent>

@@ -12,7 +12,7 @@ export type SubmittalRouteLabels = {
   role: (role: BaseRole) => string;
   /** The stop another Company holds the item at, e.g. "With Design Consultants LLC" or "With Owner review". */
   withCompany: (company: string) => string;
-  /** What the strip does, e.g. "View the Workflow". */
+  /** What the strip does, e.g. "View workflow". */
   open: string;
   /** The large strip's name, e.g. "Route". */
   route: string;

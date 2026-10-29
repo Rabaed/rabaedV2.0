@@ -1281,9 +1281,7 @@
     "unavailable": "That didn't work. Try again."
   },
   "submittalRoute": {
-    "open": "View the Workflow",
     "route": "Route",
-    "withCompany": "With {company}",
     "states": {
       "done": "done",
       "current": "current",
@@ -1297,8 +1295,7 @@
     "youAreHere": "You are here",
     "happens": "What happens here",
     "newOnly": "Changes apply to new submittals only.",
-    "openSettings": "Open in Workflow settings",
-    "close": "Close"
+    "openSettings": "Open in Workflow settings"
   },
   "workflowMap": {
     "line": "Workflow: {name} · Version {version}",

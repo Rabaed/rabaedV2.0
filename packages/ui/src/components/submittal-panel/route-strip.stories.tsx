@@ -23,7 +23,7 @@ const copy = {
   },
   states: { done: { en: "done", ar: "منجزة" }, current: { en: "current", ar: "الحالية" }, upcoming: { en: "upcoming", ar: "قادمة" } },
   with: { en: "With", ar: "لدى" },
-  open: { en: "View the Workflow", ar: "عرض سير العمل" },
+  open: { en: "View workflow", ar: "عرض سير العمل" },
   route: { en: "Route", ar: "المسار" },
   outcome: { en: "Receives the outcome", ar: "يستلم النتيجة" },
   step: { en: "Step", ar: "الخطوة" },
@@ -123,9 +123,10 @@ const noTimesOrCounts = async (root: HTMLElement) => {
 };
 
 /**
- * As the Contractor, while the item is inside the Consultant (V14): the strip marks the Consultant's
- * stop as a whole, "With Design Consultants LLC"; the map lists the Consultant's Steps (V20) and
- * outlines none of them, only the Consultant's block. No due date, time or count anywhere.
+ * Scenario RP-1064-1. As the Contractor, while the item is inside the Consultant (V14): the strip
+ * marks the Consultant's stop as a whole, "With Design Consultants LLC"; the map lists the
+ * Consultant's Steps (V20) and outlines none of them, only the Consultant's block. No due date,
+ * time or count anywhere.
  */
 export const InsideTheConsultant: Story = {
   play: async (context) => {
@@ -147,14 +148,16 @@ export const InsideTheConsultant: Story = {
     await expect(map.querySelectorAll("[data-step][aria-current]")).toHaveLength(0);
     const block = map.querySelector<HTMLElement>("[data-stop][aria-current]")!;
     await expect(block.querySelectorAll("[data-step]")).toHaveLength(2);
-    await expect(block).toHaveTextContent(storyText(context, copy.youAreHere));
+    // "You are here" belongs on the viewer's own Step; another Company's block says who holds it.
+    await expect(block).toHaveTextContent(storyText(context, bi("With Design Consultants LLC", "لدى ديزاين للاستشارات")));
+    await expect(block).not.toHaveTextContent(storyText(context, copy.youAreHere));
     await noTimesOrCounts(map);
     // Only a Member who may edit Workflows sees the way to its settings.
     await expect(within(map).queryByRole("link", { name: storyText(context, copy.openSettings) })).toBeNull();
   },
 };
 
-/** The positive control: the Contractor's own Step is the one outlined, "You are here". */
+/** Scenario RP-1064-1's positive control: the Contractor's own Step is the one outlined, "You are here". */
 export const OwnStep: Story = {
   args: { position: ownStep, startOpen: true },
   parameters: overlay,

@@ -48,6 +48,15 @@ describe("the route strip's stops (RP-1064, README §4.4)", () => {
     expect(states(r)).toEqual(["contractor:done", "consultant:done", "owner:done", "contractor:current"]);
   });
 
+  it("keeps a Company's Steps one stop when one of them can also skip ahead (review)", () => {
+    // The Consultant's engineer may also send straight to the Owner, listed before the move to its manager.
+    const skip: WorkflowTransition = { ...definition.transitions.find((t) => t.key === "send_to_manager")!, key: "skip", kind: "submit", to: "owner_review" };
+    const at = definition.transitions.findIndex((t) => t.key === "send_to_manager");
+    const skipping = { ...definition, transitions: [...definition.transitions.slice(0, at), skip, ...definition.transitions.slice(at)] };
+    const r = submittalRoute({ definition: skipping, stages, position: { kind: "company", role: "consultant", companyName: name("Design Consultants LLC") } });
+    expect(r.stops.map((s) => `${s.role}:${s.state}`)).toEqual(["contractor:done", "consultant:current", "owner:upcoming", "contractor:upcoming"]);
+  });
+
   it("marks no stop while the viewer may not know who holds it", () => {
     expect(route(null).stops.every((s) => s.state === "upcoming")).toBe(true);
   });
@@ -69,6 +78,7 @@ describe("the route strip's stops (RP-1064, README §4.4)", () => {
   });
 });
 
+// Scenario RP-1064-1 (docs/visibility.md): the model draws no more than the map read's position.
 describe("the Workflow map's Step cards (RP-1064, README §6, V14 and V20)", () => {
   it("shows every Company's Steps, numbered in route order, each with its Project Role", () => {
     const r = route(null);

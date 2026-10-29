@@ -1,4 +1,14 @@
-import { actorRole, type BaseRole, type BilingualText, type StageCategory, type WorkItemMapPosition, type WorkflowDefinition, type WorkflowStep } from "@rabaed/domain";
+import {
+  actorRole,
+  isOpenStageCategory,
+  type BaseRole,
+  type BilingualText,
+  type StageCategory,
+  type TransitionKind,
+  type WorkItemMapPosition,
+  type WorkflowDefinition,
+  type WorkflowStep,
+} from "@rabaed/domain";
 
 // The Submittal Panel's route strip and its Workflow map (RP-1064; README §4.4 and §6; V14, V20,
 // ADR 0016 and 0022), worked out apart from React so it can be tested.
@@ -46,27 +56,40 @@ export type SubmittalRouteInput = {
   position: WorkItemMapPosition | null;
 };
 
-const closedCategories = new Set<StageCategory>(["closed_positive", "closed_negative", "cancelled"]);
 /** The moves that carry an item along its route: not a Return, a Send Back, a close or a Cancel. */
-const onward = new Set(["send", "submit"]);
+const onward = new Set<TransitionKind>(["send", "submit"]);
+
+/** A stop as the route is laid out, before where the item is marks it. */
+type Stop = Pick<RouteStop, "role" | "stepKeys">;
 
 /** The stops and Step cards of the item's route, and where it is as the viewer may know. */
 export function submittalRoute({ definition, stages, position }: SubmittalRouteInput): SubmittalRoute {
   const category = new Map(stages.map((s) => [s.key, s.category]));
   // The Steps someone holds: not a terminal one, nor (outside an item's map) one still held by "the raiser".
-  const open = definition.steps.filter((s) => actorRole(s.actor) !== null && !closedCategories.has(category.get(s.stage) ?? "in_progress"));
+  const open = definition.steps.filter((s) => actorRole(s.actor) !== null && isOpenStageCategory(category.get(s.stage) ?? "in_progress"));
   const roleOf = new Map(open.map((s) => [s.key, actorRole(s.actor)!]));
   const start = open.find((s) => category.get(s.stage) === "draft") ?? open[0];
   if (!start) return { stops: [], steps: [] };
 
-  // The route: from the Draft Step over the onward moves, nearest first.
-  const order = [start.key];
-  for (let i = 0; i < order.length; i++) {
-    for (const t of definition.transitions) {
-      if (t.from === order[i] && onward.has(t.kind) && roleOf.has(t.to) && !order.includes(t.to)) order.push(t.to);
+  // The route: from the Draft Step over the onward moves, nearest first. Among Steps as near, the
+  // Company already on the route goes first, so its Steps stay one stop when one of them can also
+  // skip ahead to the next Company (the review of RP-1064).
+  const order: string[] = [];
+  const seen = new Set([start.key]);
+  for (let level = [start.key]; level.length > 0; ) {
+    const role = order.length > 0 ? roleOf.get(order.at(-1)!) : undefined;
+    const sorted = level.toSorted((a, b) => Number(roleOf.get(b) === role) - Number(roleOf.get(a) === role));
+    order.push(...sorted);
+    level = [];
+    for (const key of sorted) {
+      for (const t of definition.transitions) {
+        if (t.from !== key || !onward.has(t.kind) || !roleOf.has(t.to) || seen.has(t.to)) continue;
+        seen.add(t.to);
+        level.push(t.to);
+      }
     }
   }
-  const stops: Omit<RouteStop, "state" | "companyName">[] = [];
+  const stops: Stop[] = [];
   for (const key of order) {
     const role = roleOf.get(key)!;
     const last = stops.at(-1);
@@ -109,7 +132,7 @@ export function submittalRoute({ definition, stages, position }: SubmittalRouteI
   return {
     stops: stops.map((s, i) => ({
       ...s,
-      state: current === null ? "upcoming" : i < current ? "done" : i === current ? "current" : "upcoming",
+      state: stateAt(i, current),
       companyName: i === current && position?.kind === "company" ? position.companyName : null,
     })),
     steps: stops.flatMap((s, stop) =>
@@ -121,8 +144,14 @@ export function submittalRoute({ definition, stages, position }: SubmittalRouteI
   };
 }
 
+/** A stop's state, by its place against the stop holding the item (`current`, null when unknown). */
+function stateAt(i: number, current: number | null): RouteStopState {
+  if (current === null || i > current) return "upcoming";
+  return i < current ? "done" : "current";
+}
+
 /** The index of the stop holding the item; null when the viewer may not know which. */
-function currentStop(stops: Omit<RouteStop, "state" | "companyName">[], position: WorkItemMapPosition | null): number | null {
+function currentStop(stops: Stop[], position: WorkItemMapPosition | null): number | null {
   if (position === null) return null;
   if (position.kind === "closed") return stops.length - 1;
   if (position.kind === "own") {

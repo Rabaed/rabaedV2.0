@@ -1281,9 +1281,7 @@
     "unavailable": "لم ينجح ذلك. حاول مرة أخرى."
   },
   "submittalRoute": {
-    "open": "عرض سير العمل",
     "route": "المسار",
-    "withCompany": "لدى {company}",
     "states": {
       "done": "منجزة",
       "current": "الحالية",
@@ -1297,8 +1295,7 @@
     "youAreHere": "أنت هنا",
     "happens": "ما يحدث هنا",
     "newOnly": "تنطبق التغييرات على التقديمات الجديدة فقط.",
-    "openSettings": "فتح في إعدادات سير العمل",
-    "close": "إغلاق"
+    "openSettings": "فتح في إعدادات سير العمل"
   },
   "workflowMap": {
     "line": "سير العمل: {name} · الإصدار {version}",
