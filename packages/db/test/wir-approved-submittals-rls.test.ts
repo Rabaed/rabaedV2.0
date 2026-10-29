@@ -10,7 +10,8 @@
 // RP-82-2: which link questions a Project makes required (project_required_field) is
 // read by every Project Member of every Participant, never by another Project's, and
 // changed only by its Project Admins, through app.set_project_required_field; the app
-// role reads no one who set it, and writes no row itself.
+// role reads no one who set it, and writes no row itself. Each change is audited in
+// setup_event (RP-664), which the app role does not read.
 //
 // The WIR here is a test-only Type on the WIR's Workflow whose Form is the WIR Form
 // document itself (apps/admin/forms/WIR.json), so this suite needs no `pnpm defaults:publish`.
@@ -250,5 +251,37 @@ describe("RP-82-2: which link questions a Project makes required", () => {
     expect(await requiredRows(k1.ap)).toEqual([{ project_id: projectId, field_key: "approved_submittals" }]);
     await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [otherProjectId]);
     expect(await setRequired(other.ap, otherProjectId, TYPE, false)).toBe("project_closed");
+  });
+
+  // RP-664 (RP-1082 item 5): each change is audited in setup_event, kind project_setting; a repeat or a refusal writes nothing.
+  it("writes one setup_event per change, with from and to, and none for a repeat or a refusal", async () => {
+    const events = async (project: string) =>
+      (
+        await migrator.query<{ kind: string; type: string; actor_member_id: string; payload: unknown }>(
+          "select kind, type, actor_member_id, payload from setup_event where project_id = $1 and type = 'required_field_changed' order by created_at, id",
+          [project],
+        )
+      ).rows;
+    const typeId = (await migrator.query("select id from work_item_type where code = $1", [TYPE])).rows[0].id as string;
+    const change = (from: boolean, to: boolean) => ({
+      kind: "project_setting",
+      type: "required_field_changed",
+      actor_member_id: c1.ap,
+      payload: { work_item_type_id: typeId, field_key: "approved_submittals", from, to },
+    });
+    // On here since the beforeAll's change, then off and on again in the test before.
+    expect(await events(projectId)).toEqual([change(false, true), change(true, false), change(false, true)]);
+    // The other Project: its one change; the refusal on its Closed Project wrote nothing.
+    expect(await events(otherProjectId)).toHaveLength(1);
+
+    expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
+    expect(await setRequired(k1.ap, projectId, TYPE, false)).toBe("not_found");
+    expect(await setRequired(c1.ap, projectId, "ZZZ", false)).toBe("type_not_found");
+    expect(await events(projectId)).toHaveLength(3);
+
+    expect(await setRequired(c1.ap, projectId, TYPE, false)).toBe("set");
+    expect((await events(projectId)).at(-1)).toEqual(change(true, false));
+    expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
+    expect(await events(projectId)).toHaveLength(5);
   });
 });
