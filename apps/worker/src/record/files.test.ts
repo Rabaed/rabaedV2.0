@@ -1,5 +1,26 @@
+import { RECORD_OBJECTS } from "@rabaed/db";
+import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
-import { projectFilesFromEnv, s3Client } from "./files.ts";
+import { replacedRecordKey } from "./reproduce.ts";
+import { projectFilesFromEnv, recordKeys, s3Client, workingCopyKey } from "./files.ts";
+
+// The infrastructure refuses the api any write under this pattern (RP-1084), so every record file
+// the worker writes must fall inside it, or a sealed record could be overwritten through the api.
+describe("every record file the worker writes is one the api may not overwrite or delete", () => {
+  const { pdf, recordData } = recordKeys("p1", "w1");
+
+  it("an item's record keeps one location for good (ADR 0023)", () => {
+    expect(recordKeys("p1", "w1")).toEqual({
+      pdf: "projects/p1/work-items/w1/documental-record/record.pdf",
+      recordData: "projects/p1/work-items/w1/documental-record/record-data.xml",
+    });
+    expect(workingCopyKey("p1", "w1", "c1")).toBe("projects/p1/work-items/w1/documental-record/working-copies/c1.pdf");
+  });
+
+  it.each([pdf, recordData, replacedRecordKey(pdf, "ab12"), workingCopyKey("p1", "w1", "c1")])("%s is a record file", (key) => {
+    expect(iamPatternMatches(RECORD_OBJECTS, key)).toBe(true);
+  });
+});
 
 const local = {
   PROJECT_FILES_BUCKET: "rabaed-project-files",
