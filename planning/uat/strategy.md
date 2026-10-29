@@ -54,6 +54,8 @@ UAT runs on **lane 7**, the Main 7 stack. Lane 7 is a legacy single-digit lane, 
 
 **Start and reset a round.** From the lane 7 worktree, in PowerShell: `pnpm lane:env 7`, then `pnpm demo`. It starts Postgres, Mailpit and the file store, resets the database, seeds the demo and runs web, api, worker and Rabaed Admin. The worker must run: it delivers notifications and makes the PDFs. Reset before each round so every tester starts from the same seed. The password for every demo person is the one in `.env.demo` (never written in this plan, never in a screenshot).
 
+**When Docker stops (RP-1099).** Lane 7's worktree has a `docker-compose.override.yml`, its copy of `docker-compose.uat.yml`, so Postgres, Mailpit and the file store restart on their own when Docker starts again. The apps are not containers: after a reboot, run `pnpm dev:apps` (not `pnpm demo`, which resets the database). A scheduled task, "Rabaed lane 7 health", runs `node scripts/stack-health.ts --lane 7 --alert` every 5 minutes and shows the owner a message box while the api or the database is down. The UAT harness writes no result while either is down.
+
 **Scripted sign-in** (automated suite and API checks): `pnpm demo:session <name>` writes a Playwright storage-state file for `hafiz`, `ali`, `saeed`, `omar`, `yousef`, `ahmed`, `sara`, `mohammed`, `faisal`, `noura` or `nasser`. The record is sealed locally on lane 7 (`RECORD_SEALING=local`), so a PDF seal shows an unverified signer by design (ADR 0023).
 
 ### 2.2 Seed people

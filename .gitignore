@@ -36,6 +36,9 @@ packages/ui/src/styles/arabic-font.css
 .verify.lock
 .verify.lock.*
 
+# A worktree's own compose override: lane 7's copy of docker-compose.uat.yml (RP-1099).
+/docker-compose.override.yml
+
 # --- Tooling ---
 node_modules/
 # pnpm's store, when a sandboxed agent can't write to the drive root's store (RP-549).

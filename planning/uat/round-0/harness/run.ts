@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stackProblems, stoppedMessage, targetOfEnv } from "../../../../scripts/stack-health.ts";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
 import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
 
@@ -8,6 +9,11 @@ import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
 //
 // Loads cases/<part>.ts, runs the cases in sequence, and merges each result into
 // results/results.json as it finishes. A thrown error is "error" (a script problem), never "fail".
+// The api and db are checked before the run and again before each result is saved: a result taken
+// against a down stack is not written (RP-1099).
+
+/** The lane's api and db (API_URL and POSTGRES_PORT from .env, which browser.ts loaded; lane 7 by default). */
+const stack = targetOfEnv(process.env);
 
 const resultsFile = resolve(round, "results", "results.json");
 const casesDir = resolve(round, "cases");
@@ -79,6 +85,12 @@ async function runCase(id: string, body: (t: CaseRun) => Promise<void>): Promise
 
 async function main() {
   const argv = process.argv.slice(2);
+  const down = await stackProblems(stack);
+  if (down.length > 0) {
+    console.error(stoppedMessage(down));
+    process.exitCode = 1;
+    return;
+  }
   if (argv.includes("--fixtures")) {
     const { applyFixtures } = await import("./fixtures.ts");
     await applyFixtures(argList(argv, "--only"));
@@ -100,6 +112,12 @@ async function main() {
     for (const c of todo) {
       if (!known.has(c.id) && !c.id.startsWith("SMOKE")) console.warn(`Warning: ${c.id} is not in test-cases.json.`);
       const result = await runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
+      const wentDown = await stackProblems(stack);
+      if (wentDown.length > 0) {
+        console.error(stoppedMessage(wentDown, c.id));
+        process.exitCode = 1;
+        break;
+      }
       saveResult(c.id, result);
       counts[result.status] = (counts[result.status] ?? 0) + 1;
       const failed = result.checks.filter((k) => !k.ok).length;
