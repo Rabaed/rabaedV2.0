@@ -39,7 +39,7 @@ export const WORDS = {
   project: { ar: "المشروع", en: "Project" },
   subject: { ar: "الموضوع", en: "Subject" },
   number: { ar: "رقم المستند", en: "Document Number" },
-  parties: { ar: "الأطراف", en: "Parties" },
+  participants: { ar: "المشاركون", en: "Participants" },
   classification: { ar: "التصنيف", en: "Classification" },
   trade: { ar: "التخصص", en: "Trade" },
   location: { ar: "الموقع", en: "Location" },
