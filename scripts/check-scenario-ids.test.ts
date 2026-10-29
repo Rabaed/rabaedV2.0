@@ -91,7 +91,7 @@ describe("scenarioIdProblems", () => {
 
   it("sends an RP-nnn-n row in docs/visibility.md to its ticket's own file", () => {
     expect(scenarioIdProblems([visibility(["1", "RP-400-1"])], [])).toEqual([
-      "docs/visibility.md:14: scenario RP-400-1 goes in docs/visibility/scenarios/RP-400.md, not in this table: each Jira key has its own RP-nnn.md, so parallel PRs never edit the same lines (RP-1097)",
+      'docs/visibility.md:14: scenario RP-400-1: move this row, unchanged, to docs/visibility/scenarios/RP-400.md (made like the others in docs/visibility/scenarios/: a "# RP-400 scenarios" heading and one table headed `| # | Scenario | Who | Expected |`) and delete it here; since RP-1097 the table in docs/visibility.md holds rows 1–81 only, so parallel PRs never edit the same lines',
     ]);
   });
 

@@ -70,7 +70,8 @@ function matrixRowProblem(row: ScenarioRow): string | undefined {
   }
   const key = jiraKeyRow.exec(row.id)?.[1];
   if (key === undefined) return `${at} is neither a plain number nor RP-nnn-n`;
-  return `${at} goes in ${scenarioFile(`RP-${key}`)}, not in this table: each Jira key has its own RP-nnn.md, so parallel PRs never edit the same lines (RP-1097)`;
+  const target = scenarioFile(`RP-${key}`);
+  return `${at}: move this row, unchanged, to ${target} (made like the others in ${scenariosDir}/: a "# RP-${key} scenarios" heading and one table headed \`${scenarioHeader}\`) and delete it here; since RP-1097 the table in ${matrixFile} holds rows 1–${lastPlainNumber} only, so parallel PRs never edit the same lines`;
 }
 
 /** What is wrong with a row of the file of the Jira key `key`: its own RP-key-n rows only. */
