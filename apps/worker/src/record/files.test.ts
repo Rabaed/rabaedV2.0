@@ -1,8 +1,9 @@
 import { RECORD_OBJECTS } from "@rabaed/db";
 import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
+import { GetObjectCommand, ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
 import { replacedRecordKey } from "./reproduce.ts";
-import { projectFilesFromEnv, recordKeys, s3Client, workingCopyKey } from "./files.ts";
+import { filesUnder, projectFilesFromEnv, recordKeys, s3Client, workingCopyKey } from "./files.ts";
 
 // The infrastructure refuses the api any write under this pattern (RP-1084), so every record file
 // the worker writes must fall inside it, or a sealed record could be overwritten through the api.
@@ -60,5 +61,29 @@ describe("the worker's Project files bucket", () => {
     expect(await client.config.region()).toBe("auto");
     expect(await client.config.requestChecksumCalculation()).toBe("WHEN_REQUIRED");
     expect(await client.config.responseChecksumValidation()).toBe("WHEN_REQUIRED");
+  });
+});
+
+// ListObjectsV2 returns at most 1000 keys a call; the rest come by continuation token (RP-1086).
+describe("filesUnder", () => {
+  it("reads every page of the listing", async () => {
+    const pages: Record<string, { keys: string[]; next?: string }> = {
+      first: { keys: ["fonts/", "fonts/a.otf"], next: "second" },
+      second: { keys: ["fonts/b.otf"] },
+    };
+    const client = {
+      send: async (command: unknown) => {
+        if (command instanceof ListObjectsV2Command) {
+          const page = pages[command.input.ContinuationToken ?? "first"]!;
+          return { Contents: page.keys.map((Key) => ({ Key })), IsTruncated: page.next !== undefined, NextContinuationToken: page.next };
+        }
+        if (command instanceof GetObjectCommand) {
+          return { Body: { transformToByteArray: async () => new TextEncoder().encode(command.input.Key) } };
+        }
+        throw new Error("unexpected command");
+      },
+    } as unknown as S3Client;
+    const files = await filesUnder(client, "bucket", "fonts/");
+    expect([...files.keys()]).toEqual(["a.otf", "b.otf"]);
   });
 });

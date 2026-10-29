@@ -41,7 +41,7 @@ export interface WorkingCopyData
     | "submittedAt"
     | "chips"
     | "companies"
-    | "parties"
+    | "participants"
     | "trades"
     | "location"
     | "scopes"
@@ -88,7 +88,7 @@ export function workingCopyDataOf(content: WorkingCopyContent, pageCounts: Reado
     stage: content.stage ? pick(content.stage, language) : null,
     chips,
     companies,
-    parties: companies,
+    participants: companies,
     trades: content.trades.map((t) => ({ name: pick(t.name, language), selected: t.selected })),
     location: (content.location ?? []).map((l) => pick(l, language)),
     scopes: content.scopes.map((s) => pick(s, language)),
