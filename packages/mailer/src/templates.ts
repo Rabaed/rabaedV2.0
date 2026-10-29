@@ -10,6 +10,7 @@ import {
   type NotificationDigestItem,
   type NotificationEmailContent,
   type NotificationEmailKind,
+  type ParticipantInvitationEmail,
   type StepAgeReportItem,
   type StepAgeReportWeeks,
 } from "@rabaed/domain";
@@ -40,7 +41,7 @@ export interface EmailTemplateValues {
    * A Company was invited to a Project (RP-1072; ADR 0009): what its Authorized Person sees of the
    * invitation before accepting, and the link to their Company's Projects, where they accept or decline.
    */
-  "participant-invitation": { projectName: BilingualText; hostCompanyName: BilingualText; roleName: BilingualText; link: string };
+  "participant-invitation": Omit<ParticipantInvitationEmail, "to" | "language"> & { link: string };
   /** A Step reached the Member or their Step Pool. */
   "notification-step-reached": NotificationEmailValues;
   /** Something happened on an item the Member watches. */

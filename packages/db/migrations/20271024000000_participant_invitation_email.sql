@@ -98,20 +98,27 @@ create or replace function app.add_participant(p_project_id uuid, p_cr_number te
 -- The outbox handler's read: where, in which language and what to email for the invitation
 -- p_participant_id sent at p_invited_at. No row when it is no longer that pending invitation, the
 -- Project is closed, or the Company or its Authorized Person is not active.
+-- Like app.issue_password_reset, it is the worker's (the app role with no Member set): it checks no
+-- caller, and the api never calls it. Its ids are random and found only in the outbox, which no
+-- policy lets the app role read.
 create function app.participant_invitation_email(p_participant_id uuid, p_invited_at timestamptz)
-  returns table (to_address text, language text, project_name jsonb, host_name jsonb, role_name jsonb)
-  language sql stable security definer
+  returns table (to_address text, language text, project_name jsonb, host_company_name jsonb, role_name jsonb)
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select m.email, coalesce(np.preferred_language, m.locale), pr.name, host.legal_name, r.name
-    from participant p
-    join project pr on pr.id = p.project_id and pr.status = 'active'
-    join company host on host.id = pr.host_company_id
-    join project_role r on r.id = p.project_role_id
-    join company co on co.id = p.company_id and co.status = 'active'
-    join member m on m.id = co.authorized_person_id and m.status = 'active'
-    left join member_notification_preference np on np.member_id = m.id
-    where p.id = p_participant_id and p.status = 'invited' and p.invited_at = p_invited_at
+    #variable_conflict use_column
+    begin
+      return query
+      select m.email, coalesce(np.preferred_language, m.locale), pr.name, host.legal_name, r.name
+      from participant p
+      join project pr on pr.id = p.project_id and pr.status = 'active'
+      join company host on host.id = pr.host_company_id
+      join project_role r on r.id = p.project_role_id
+      join company co on co.id = p.company_id and co.status = 'active'
+      join member m on m.id = co.authorized_person_id and m.status = 'active'
+      left join member_notification_preference np on np.member_id = m.id
+      where p.id = p_participant_id and p.status = 'invited' and p.invited_at = p_invited_at;
+    end
   $$;
 
 revoke all on function app.participant_invitation_email(uuid, timestamptz) from public;

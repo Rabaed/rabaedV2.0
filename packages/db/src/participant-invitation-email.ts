@@ -25,7 +25,7 @@ export function participantInvitationHandler(send: SendParticipantInvitationEmai
       to_address: string;
       language: Locale;
       project_name: BilingualText;
-      host_name: BilingualText;
+      host_company_name: BilingualText;
       role_name: BilingualText;
     }>`
       select * from app.participant_invitation_email(${participantId}::uuid, ${invitedAt}::timestamptz)
@@ -36,7 +36,7 @@ export function participantInvitationHandler(send: SendParticipantInvitationEmai
       to: email.to_address,
       language: email.language,
       projectName: email.project_name,
-      hostCompanyName: email.host_name,
+      hostCompanyName: email.host_company_name,
       roleName: email.role_name,
     });
   };
