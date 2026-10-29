@@ -56,6 +56,14 @@ describe("avoidTermIn", () => {
     expect(found(text)).toBe(term);
   });
 
+  // RP-1086: "Parties" printed on every record went unflagged; a word ending in y makes its plural in -ies.
+  it("finds the -ies plural of a term ending in y, in text and in a name", () => {
+    const parties = parseAvoidTerms("**Project Participant**:\nOne Company in one Project.\n_Avoid_: party\n");
+    expect(avoidTermIn("Parties", parties)?.term).toBe("party");
+    expect(avoidTermIn("partiesBox", parties, "name")?.term).toBe("party");
+    expect(avoidTermIn("third parties", parseAvoidTerms("_Avoid_: party\n", ["third party"]))).toBeNull();
+  });
+
   it.each(["companyId", "organizational", "tenancy", "Every Project {company} takes part", "projectId", "isLandscape", "noted"])("ignores %s", (text) => {
     expect(found(text)).toBeNull();
   });
