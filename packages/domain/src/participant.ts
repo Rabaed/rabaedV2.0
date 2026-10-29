@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { bilingualText, crNumber } from "./company.ts";
+import { bilingualText, crNumber, type BilingualText } from "./company.ts";
+import type { Locale } from "./locale.ts";
 import { withHandovers } from "./handover.ts";
 import { baseRoles } from "./project.ts";
 
@@ -40,6 +41,18 @@ export type CompanyInvitation = z.infer<typeof companyInvitation>;
 
 export const companyInvitations = z.object({ invitations: z.array(companyInvitation) });
 export type CompanyInvitations = z.infer<typeof companyInvitations>;
+
+/**
+ * A Participant Invitation's email to the invited Company's Authorized Person (RP-1072), from the
+ * worker's outbox handler to the mailer: only what they see of the invitation before accepting.
+ */
+export interface ParticipantInvitationEmail {
+  to: string;
+  language: Locale;
+  projectName: BilingualText;
+  hostCompanyName: BilingualText;
+  roleName: BilingualText;
+}
 
 /**
  * A CR number a Project Admin invited that wasn't on Rabaed, for Rabaed to

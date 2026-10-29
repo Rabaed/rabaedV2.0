@@ -59,6 +59,12 @@ const examples: EmailTemplateValues = {
   "new-device-sign-in": { when: "2026-10-02 09:15 UTC", ip: "203.0.113.7" },
   "sign-in-locked": { minutes: 15 },
   "password-reset": { link: "https://rabaed.test/ar/reset-password#token=abc", validMinutes: 30 },
+  "participant-invitation": {
+    projectName: { en: "Riyadh <Gate> Tower", ar: "برج بوابة الرياض" },
+    hostCompanyName: { en: "Test Constructions", ar: "إنشاءات الاختبار" },
+    roleName: { en: "Consultant", ar: "الاستشاري" },
+    link: "https://rabaed.test/ar/participants",
+  },
   "notification-step-reached": { ...item, step: { en: "Contractor review", ar: "مراجعة المقاول" } },
   "notification-watched-event": { ...item, event: codeB },
   "notification-sent-back": {
@@ -207,6 +213,36 @@ describe("password reset", () => {
 
   it("refuses a link that is not https or http", () => {
     expect(() => renderEmail("password-reset", "en", { ...values, link: "javascript:alert(1)" })).toThrow();
+  });
+});
+
+describe("participant invitation (RP-1072)", () => {
+  const values = examples["participant-invitation"];
+
+  it("names the Project, the Host Company and the offered Project Role in the reader's language, and links to the invitation", () => {
+    for (const locale of locales) {
+      const email = renderEmail("participant-invitation", locale, values);
+      for (const name of [values.projectName, values.hostCompanyName, values.roleName]) expect(email.text).toContain(name[locale]);
+      expect(email.subject).toContain(values.projectName[locale]);
+      expect(email.text).toContain(values.link);
+      expect(email.html).toContain(`href="${values.link}"`);
+    }
+    expect(renderEmail("participant-invitation", "ar", values).html).toContain('<bdi dir="ltr"');
+  });
+
+  it("says the Company joins only if its Authorized Person accepts", () => {
+    expect(renderEmail("participant-invitation", "en", values).text).toContain("accept or decline");
+    expect(renderEmail("participant-invitation", "ar", values).text).toContain("قبولها أو رفضها");
+  });
+
+  it("escapes the names in the HTML body", () => {
+    const { html } = renderEmail("participant-invitation", "en", values);
+    expect(html).toContain("Riyadh &lt;Gate&gt; Tower");
+    expect(html).not.toContain("<Gate>");
+  });
+
+  it("refuses a link that is not https or http", () => {
+    expect(() => renderEmail("participant-invitation", "en", { ...values, link: "javascript:alert(1)" })).toThrow();
   });
 });
 
