@@ -61,7 +61,7 @@ const notAlias = new Set([
  * contents stay in the code, so dynamic SQL in a literal is checked like any
  * other. A `$$` body is code, not skipped.
  */
-function splitComments(sql: string): { code: string; comments: Map<number, string> } {
+export function splitComments(sql: string): { code: string; comments: Map<number, string> } {
   const comments = new Map<number, string>();
   let code = "";
   let line = 1;
@@ -103,7 +103,7 @@ function splitComments(sql: string): { code: string; comments: Map<number, strin
 }
 
 /** Where the sort clause starting at `start` (just after `order by`) ends: a `;`, `$$`, an unmatched `)` or a word that ends it. */
-function orderByEnd(code: string, start: number): number {
+export function orderByEnd(code: string, start: number): number {
   const token = /\$\$|[();]|[a-z_]\w*/gi;
   token.lastIndex = start;
   let depth = 0;

@@ -58,6 +58,13 @@ export default tseslint.config(
     rules: { "rabaed/no-raw-bidi": "error" },
   },
   {
+    // A Kysely sort never ends on a timestamp: rows sharing one, or written under another clock, came back in
+    // either order and failed tests at random (RP-1105). The SQL in migrations: scripts/check-sort-tiebreakers.test.ts.
+    files: ["apps/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}", "scripts/**/*.ts"],
+    plugins: { rabaed },
+    rules: { "rabaed/order-by-tiebreaker": "error" },
+  },
+  {
     // An ARN or account id in an error or log line reaches CloudWatch and the user (RP-329).
     files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
     ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**"],

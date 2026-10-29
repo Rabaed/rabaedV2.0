@@ -39,27 +39,48 @@ function statementEnd(code: string, start: number): number {
   return end === -1 ? code.length : end + 1;
 }
 
-/** Every create or drop of `app.<name>` in one migration's SQL, in order. */
-export function definitionsIn(file: string, sql: string, name: string): Definition[] {
+/** Every create or drop of an `app.*` function in one migration's SQL, by lower-case name, each in order. */
+export function definitionsByName(file: string, sql: string): Map<string, Definition[]> {
   const code = blankComments(sql);
   const head = /\b(?<op>create(?:\s+or\s+replace)?|drop)\s+function\s+(?:if\s+exists\s+)?app\."?(?<name>\w+)"?\s*(?:\()?/gi;
-  const matches = [...code.matchAll(head)].filter((m) => m.groups?.name?.toLowerCase() === name);
   // functionChanges reads the same statements, in the same order, for their argument types.
-  const changes = functionChanges(sql).filter((c) => c.name === name);
-  return matches.map((m, i) => ({
-    file,
-    line: code.slice(0, m.index).split("\n").length,
-    args: changes[i]?.args ?? null,
-    op: changes[i]?.op ?? "create",
-    // The original text (comments kept) over the same offsets.
-    text: sql.slice(m.index, statementEnd(code, m.index)),
-  }));
+  const changes = Map.groupBy(functionChanges(sql), (c) => c.name);
+  const found = new Map<string, Definition[]>();
+  for (const m of code.matchAll(head)) {
+    const name = m.groups!.name!.toLowerCase();
+    const list = found.get(name) ?? [];
+    const change = changes.get(name)?.[list.length];
+    list.push({
+      file,
+      line: code.slice(0, m.index).split("\n").length,
+      args: change?.args ?? null,
+      op: change?.op ?? "create",
+      // The original text (comments kept) over the same offsets.
+      text: sql.slice(m.index, statementEnd(code, m.index)),
+    });
+    found.set(name, list);
+  }
+  return found;
+}
+
+/** Every create or drop of `app.<name>` in one migration's SQL, in order. */
+export function definitionsIn(file: string, sql: string, name: string): Definition[] {
+  return definitionsByName(file, sql).get(name) ?? [];
 }
 
 /** The definitions of `app.<name>` across the migrations, in file order. */
 export function findDefinitions(migrations: { name: string; sql: string }[], name: string): Definition[] {
   const wanted = name.replace(/^app\./i, "").toLowerCase();
   return migrations.toSorted((a, b) => (a.name < b.name ? -1 : 1)).flatMap((m) => definitionsIn(m.name, m.sql, wanted));
+}
+
+/** The definitions of every `app.*` function across the migrations, by lower-case name, each in file order. */
+export function allDefinitions(migrations: { name: string; sql: string }[]): Map<string, Definition[]> {
+  const all = new Map<string, Definition[]>();
+  for (const m of migrations.toSorted((a, b) => (a.name < b.name ? -1 : 1))) {
+    for (const [name, list] of definitionsByName(m.name, m.sql)) all.set(name, [...(all.get(name) ?? []), ...list]);
+  }
+  return all;
 }
 
 /** The newest definition of each signature that is still live: not dropped after its last create. */
