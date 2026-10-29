@@ -50,7 +50,7 @@ export const testConfig: ApiConfig = {
   documents: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/jpeg", "image/png", "text/plain"] },
 };
 
-type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+type Method = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /**
  * A file to upload to a Work Item: to a named file field with `fieldKey` (a
