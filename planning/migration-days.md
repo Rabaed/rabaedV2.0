@@ -152,4 +152,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271021 | RP-1058 | 43 | password_reset (moved from 20271020) |
 | 20271022 | RP-1051 | 13 | member_company_projects (`app.company_participants` reads through `app.current_participant_ids`; moved from 20271020 before queueing: main's RP-1058 took 20271021) |
 | 20271023 | RP-1062 | 54 | work_item_chat |
+| 20271026 | RP-1075 | 22 | package_owner_before_lock |
 | 20271025 | RP-664 | 42 | show_inspections_setting_audit |

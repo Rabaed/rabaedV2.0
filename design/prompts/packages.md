@@ -45,7 +45,7 @@ A **Package** is a named group of submittals that one company (usually the Contr
 
 ## Reference (RP-633)
 
-The product owner's prototype is `design/reference/claude-design/ui_kits/app/packages.html` (2026-10-17). Its embedded Thmanyah fonts were removed, as the licence requires, so it renders in fallback fonts. Take its **look** from it: the Package card, the page header layout, the counts panel, the bulk bar and the item slide-over. Where it differs from this prompt, the spec RP-616, `GLOSSARY.md` or `docs/visibility.md`, those win (product owner, 2026-10-17). The known differences:
+The product owner's prototype is `design/reference/claude-design/ui_kits/app/packages.html` (2026-10-17). Its embedded Thmanyah fonts were removed, as the licence requires, so it renders in fallback fonts. Take its **look** from it: the Package card, the page header layout, the counts panel, the bulk bar and the item slide-over. Where it differs from this prompt, the spec RP-616, `GLOSSARY.md` or `docs/visibility.md`, those win (product owner, 2026-10-17; the general rule is `design/README.md` › "Which design a page follows"). The known differences:
 
 | Area | The prototype shows | Build this instead |
 | --- | --- | --- |
