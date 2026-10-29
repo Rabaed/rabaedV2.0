@@ -271,5 +271,6 @@ export const BeforeSubmission: Story = {
     await expect(composerOf(context)).toBeDisabled();
     await expect(sendOf(context)).toBeDisabled();
     await expect(within(panel).queryByRole("log")).toBeNull();
+    await expect(within(panel).queryByText(storyText(context, copy.keys))).toBeNull();
   },
 };

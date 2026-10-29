@@ -157,7 +157,7 @@ export function SubmittalPanelChat({ locale, labels, open, messages, onSend }: S
             disabled={!open}
             aria-label={labels.composer}
             placeholder={labels.composer}
-            aria-describedby={problem === null ? hintId : `${hintId} ${problemId}`}
+            aria-describedby={[open ? hintId : null, problem === null ? null : problemId].filter(Boolean).join(" ") || undefined}
             aria-invalid={state === "too_long" || undefined}
             dir="auto"
             className="max-h-40 min-h-[38px] flex-1 resize-none [field-sizing:content]"
@@ -166,9 +166,11 @@ export function SubmittalPanelChat({ locale, labels, open, messages, onSend }: S
             <Icon name="send" />
           </IconButton>
         </form>
-        <p id={hintId} className="text-[11px] text-muted">
-          {labels.hint}
-        </p>
+        {open && (
+          <p id={hintId} className="text-[11px] text-muted">
+            {labels.hint}
+          </p>
+        )}
         {problem !== null && (
           <p id={problemId} role="alert" className="text-sm text-danger-fg">
             {problem}
