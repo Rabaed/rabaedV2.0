@@ -74,3 +74,4 @@ For every channel ticked above:
 
 - [ ] `pnpm verify` passed
 - [ ] UI: screenshots at 1366 and 1920, English and Arabic, beside the reference screen
+- [ ] UI from an owner reference: its gap table passed `node scripts/check-gap-table.ts <file> --refs <folder>`, and the independent review opened every citation (`design/owner-reference-process.md`). Table:
