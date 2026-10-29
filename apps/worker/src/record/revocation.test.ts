@@ -72,17 +72,23 @@ describe("fetching the revocation data", () => {
     await expect(fetchRevocationData([key.certificate, stale.certificate], stale.fetch)).rejects.toThrow(/no revocation data for Sealing/);
   });
 
-  it("never fetches a local, link-local or non-http address a certificate names", async () => {
+  it.each([
+    ["http://169.254.170.2/v4/ca", "169.254.170.2 is the metadata endpoint"],
+    ["http://[::ffff:a9fe:a9fe]/ca", "::ffff:a9fe:a9fe is the metadata endpoint"],
+    ["http://10.0.0.8/ca", "10.0.0.8 is a private address"],
+    ["http://[fd00::8]/ca", "fd00::8 is a unique-local address"],
+    ["http://localhost/ca", "localhost is a loopback host"],
+  ])("never fetches a local address a certificate names: %s", async (address, reason) => {
     const asked: string[] = [];
     const spy = (async (input: string | URL | Request) => {
       asked.push(String(input));
       return new Response(null, { status: 404 });
     }) as typeof fetch;
     const key = await ca.issue("Sealing", { ocsp: true });
-    // A certificate whose issuer is missing and whose caIssuers address is the task's metadata endpoint.
-    const metadata = Buffer.from(key.certificate).toString("latin1").match(/http:\/\/[0-9a-f]+\.local-ca\.invalid\/ca\.cer/)![0];
-    const forged = Buffer.from(Buffer.from(key.certificate).toString("latin1").replace(metadata, "http://169.254.170.2/v4/ca".padEnd(metadata.length, "x")), "latin1");
-    await expect(fetchRevocationData([new Uint8Array(forged)], spy)).rejects.toThrow(/a local address/);
+    // A certificate whose issuer is missing and whose caIssuers address is a local one.
+    const original = Buffer.from(key.certificate).toString("latin1").match(/http:\/\/[0-9a-f]+\.local-ca\.invalid\/ca\.cer/)![0];
+    const forged = Buffer.from(Buffer.from(key.certificate).toString("latin1").replace(original, address.padEnd(original.length, "x")), "latin1");
+    await expect(fetchRevocationData([new Uint8Array(forged)], spy)).rejects.toThrow(`a local address: ${reason}`);
     expect(asked).toEqual([]);
   });
 
