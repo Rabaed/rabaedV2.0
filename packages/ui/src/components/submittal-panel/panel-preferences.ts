@@ -2,8 +2,9 @@
  * The Submittal Panel's preferences, per viewer, in this browser (spec RP-1054 table B): its
  * width, which sections are folded and the open tab. This is the one place they are read and
  * written; the panel's later parts (sizes, sections, tabs: RP-1063, RP-1066) add their fields
- * here. A convenience only: without storage the panel opens with the defaults. A deep link
- * (`?open=`) reads them but never writes them (README §2).
+ * here. A convenience only: without storage the panel opens with the defaults. A deep link that
+ * sets the view (`?open=…&size=…`) never writes them (README §2; a plain `?open=` is the panel's
+ * own state, so the viewer's choices there are kept).
  */
 export type SubmittalPanelPreferences = {
   /** The panel's width in px, or "full" (to the sidebar's edge). */

@@ -209,6 +209,26 @@ describe("what another Company's report leaves out (scenarios RP-677-1, RP-677-2
     expect(k1Text).not.toContain("Haddad");
   });
 
+  it("RP-677-1 (RP-1078): the database takes the api's rows of a closed Snag, a Draft with no number and one In Progress", async () => {
+    const closed = await snag("Socket cover missing", at.buildingA);
+    await ok(at.c1Pm.post(`/v1/work-items/${closed}/pick-up`));
+    await take(at.c1Pm, closed, "resolve", { answers: { resolution_note: "Fitted" } });
+    await take(at.k1Manager, closed, "close");
+    expect((await detail(at.k1Manager, closed)).stage.key).toBe("closed");
+    const draft = (
+      await ok(at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, { type: "SNG", title: "Draft gland plate", answers: { description: "Draft", trade: at.electrical, location: at.buildingA } }), 201)
+    ).json().id as string;
+    const working = await snag("Conduit not saddled", at.buildingA);
+    await ok(at.c1Pm.post(`/v1/work-items/${working}/pick-up`));
+    await take(at.c1Pm, working, "start_work");
+    const k1Text = await printed(await pdfOf(await report(at.k1Manager, { ids: [closed, draft, working], language: "en" })));
+    expect(k1Text).toContain("Socketcovermissing");
+    expect(k1Text).toContain("Draftglandplate");
+    expect(k1Text).toContain("Conduitnotsaddled");
+    const c1Report = await report(at.c1Pm, { ids: [closed, working], language: "en" });
+    expect(c1Report.count).toBe(2);
+  });
+
   it("RP-677-2: a Member of no Project gets the plain 404 for a report by id, and for its Project's reports", async () => {
     const mine = await report(at.c1Pm, { ids: [first], language: "en" });
     const outsider = await api.projectCreator();
