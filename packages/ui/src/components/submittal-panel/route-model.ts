@@ -144,6 +144,27 @@ export function submittalRoute({ definition, stages, position }: SubmittalRouteI
   };
 }
 
+/**
+ * What a row of the rail's vertical Step list says under a stop (RP-1093, README §4.9): the
+ * viewer's own Step where its Participant holds the item; the Company the API names where another
+ * Company does (never one of its Steps, V14); the outcome on the raiser's closing stop; otherwise
+ * how many Steps the stop has.
+ */
+export type RouteStopLine =
+  | { kind: "step"; name: BilingualText }
+  | { kind: "company"; name: BilingualText }
+  | { kind: "outcome" }
+  | { kind: "steps"; count: number };
+
+export function submittalRouteStopLine(route: SubmittalRoute, index: number): RouteStopLine {
+  const stop = route.stops[index]!;
+  if (stop.companyName) return { kind: "company", name: stop.companyName };
+  const own = route.steps.find((s) => s.stop === index && s.current);
+  if (own) return { kind: "step", name: own.step.name };
+  if (stop.stepKeys.length === 0) return { kind: "outcome" };
+  return { kind: "steps", count: stop.stepKeys.length };
+}
+
 /** A stop's state, by its place against the stop holding the item (`current`, null when unknown). */
 function stateAt(i: number, current: number | null): RouteStopState {
   if (current === null || i > current) return "upcoming";
