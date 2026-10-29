@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, envClaims, projectInUseNow, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
-import { changedSinceListed, choosePrune, listedClaims, type PruneWorktree } from "./worktrees-pruning.ts";
+import { composeProjectOfEnv, envClaims, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
+import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import type { LocalBranch } from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
@@ -297,23 +297,51 @@ describe("worktrees:prune and a lane a live worktree's .env names (RP-1073)", ()
     expect(p.kept).toEqual([{ project, path: live, reason: `its .env names ${project} (on ${branch}), so the lane is still in use` }]);
   });
 
-  it("keeps the project when the .env is written after listing, just before the removal", () => {
+  /** worktrees:prune's last step on what list() chose, reading the .env files through readWorktreeEnv each time; returns what it removed and logged. */
+  const removeNow = (p: ReturnType<typeof list>, onRemove: (project: string) => void = () => {}) => {
+    const removed: string[] = [];
+    const logged: string[] = [];
+    removeProjectsNow({
+      projects: p.projects,
+      removedPaths: [],
+      listed: { worktrees: [listLive()], containers },
+      readNow: () => ({ claims: claimsNow(), containers, postgres: undefined }),
+      exists: existsSync,
+      remove: (x) => {
+        removed.push(x.project);
+        onRemove(x.project);
+      },
+      log: (line) => logged.push(line),
+      platform: "win32",
+    });
+    return { removed, logged };
+  };
+
+  it("keeps the project when the .env is written after listing, while an earlier project is being removed", () => {
+    // Lane 11's stack is orphaned too, and goes first; lane:env 12 runs in the live worktree meanwhile.
+    containers.push(container("rabaed-lane11-db-1", "rabaed-lane11", join(root, "gone-too")));
     const p = list();
-    // At listing nothing named it: the stack looked orphaned.
-    expect(p.projects.map((x) => [x.project, x.reason])).toEqual([[project, `worktree gone (${labelled})`]]);
-    const listed = listedClaims([listLive()]);
+    // At listing nothing named lane 12: the stack looked orphaned.
+    expect(p.projects.map((x) => [x.project, x.reason])).toEqual([
+      ["rabaed-lane11", `worktree gone (${join(root, "gone-too")})`],
+      [project, `worktree gone (${labelled})`],
+    ]);
 
-    writeFileSync(join(live, ".env"), `COMPOSE_PROJECT_NAME=${project}\n`);
+    const { removed, logged } = removeNow(p, (x) => {
+      if (x === "rabaed-lane11") writeFileSync(join(live, ".env"), `COMPOSE_PROJECT_NAME=${project}\n`);
+    });
 
-    const now = { claims: claimsNow(), containers, postgres: undefined };
-    expect(projectInUseNow(project, { listedClaims: listed, listedContainers: containers, now, exists: existsSync })).toBe(
-      `the .env of ${live} (on ${branch}) holds it now`,
-    );
+    expect(removed).toEqual(["rabaed-lane11"]);
+    expect(logged).toEqual([`Kept compose project ${project}: the .env of ${live} (on ${branch}) holds it now.`]);
   });
 
   it("removes it still when nothing names or uses it now", () => {
+    expect(removeNow(list())).toEqual({ removed: [project], logged: [] });
+  });
+
+  it("keeps a removed worktree's project while that worktree was not removed after all", () => {
     const p = list();
-    const now = { claims: claimsNow(), containers, postgres: undefined };
-    expect(projectInUseNow(p.projects[0]!.project, { listedClaims: [], listedContainers: containers, now, exists: existsSync })).toBeUndefined();
+    const waiting = { ...p, projects: p.projects.map((x) => ({ ...x, waitsFor: [live] })) };
+    expect(removeNow(waiting)).toEqual({ removed: [], logged: [`Kept compose project ${project}: ${live} was not removed.`] });
   });
 });

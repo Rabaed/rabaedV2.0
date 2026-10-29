@@ -1,6 +1,19 @@
 import { holdReason, type Holders } from "./claude-sessions.ts";
 import { openSessionReason } from "./desktop-sessions.ts";
-import { chooseMerged, keptByClaims, staleProjects, type Container, type EnvClaim, type KeptProject, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
+import {
+  chooseMerged,
+  claimOf,
+  keptByClaims,
+  projectInUseNow,
+  staleProjects,
+  type Container,
+  type EnvClaim,
+  type KeptProject,
+  type ProjectNow,
+  type StaleProject,
+  type Volume,
+  type WorktreeLane,
+} from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
@@ -98,13 +111,58 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
     .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && b.inTarget &&(b.ownCommit || b.upstreamGone))
     .map((b) => b.branch);
 
-  const projects = docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, holders, platform }) : { chosen: [], kept: [] };
-  return { remove, skipped, branches: branchesToDelete, projects: projects.chosen, kept: projects.kept };
+  const projectChoice = docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, holders, platform }) : { chosen: [], kept: [] };
+  return { remove, skipped, branches: branchesToDelete, projects: projectChoice.chosen, kept: projectChoice.kept };
 }
 
 /** The listed worktrees' .env claims on rabaed-* projects, as envClaims reads them (RP-1007), for projectInUseNow. */
-export const listedClaims = (worktrees: PruneWorktree[]): EnvClaim[] =>
-  worktrees.flatMap((w) => (w.project?.startsWith("rabaed-") ? [{ path: w.path, branch: w.branch, project: w.project }] : []));
+export const listedClaims = (worktrees: PruneWorktree[]): EnvClaim[] => worktrees.flatMap((w) => claimOf(w, w.project));
+
+type RemoveProjectsInput = {
+  /** choosePrune's projects, in its order. */
+  projects: PruneProject[];
+  /** The worktrees this run has removed. */
+  removedPaths: string[];
+  /** The worktrees and containers as listed before the prompt. */
+  listed: { worktrees: PruneWorktree[]; containers: Container[] };
+  /** Reads a project's state now (lanes.ts readProjectNow): called for each project just before it goes. */
+  readNow: (project: string) => ProjectNow;
+  /** Whether a folder exists now. */
+  exists: (dir: string) => boolean;
+  /** Removes one project; it may throw, which the caller counts. */
+  remove: (project: PruneProject) => void;
+  log: (line: string) => void;
+  platform?: NodeJS.Platform;
+};
+
+/**
+ * worktrees:prune's last step for its compose projects, one at a time. A worktree's project goes
+ * only once that worktree is removed (orphans go regardless). Then each is judged again just
+ * before it goes (RP-1073: removing the worktrees can take minutes, and a session may run
+ * lane:env or start the lane meanwhile): projectInUseNow on what readNow reads now keeps it.
+ */
+export function removeProjectsNow({ projects, removedPaths, listed, readNow, exists, remove, log, platform }: RemoveProjectsInput): void {
+  const removed = (path: string) => removedPaths.some((r) => samePath(r, path, platform));
+  for (const p of projects) {
+    const waiting = p.waitsFor.filter((path) => !removed(path));
+    if (waiting.length > 0) {
+      log(`Kept compose project ${p.project}: ${waiting.join(", ")} was not removed.`);
+      continue;
+    }
+    const inUse = projectInUseNow(p.project, {
+      listedClaims: listedClaims(listed.worktrees),
+      listedContainers: listed.containers,
+      now: readNow(p.project),
+      exists: (dir) => exists(dir) && !removed(dir),
+      platform,
+    });
+    if (inUse !== undefined) {
+      log(`Kept compose project ${p.project}: ${inUse}.`);
+      continue;
+    }
+    remove(p);
+  }
+}
 
 /**
  * Why a worktree chosen for removal stays after all, judged on its facts gathered
@@ -169,7 +227,7 @@ function projectsToRemove(input: ProjectsInput): { chosen: PruneProject[]; kept:
   return { chosen, kept };
 }
 
-function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { containers, volumes, currentProject }, holders, platform }: ProjectsInput) {
+function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { containers, volumes, currentProject }, holders, platform }: ProjectsInput): { prune: StaleProject[]; kept: KeptProject[] } {
   const lanes: WorktreeLane[] = worktrees.map((w) => ({ path: w.path, branch: w.branch, merged: removed(w.path), project: w.project }));
   const exists = (dir: string) => !removed(dir) && folderExists(dir);
   const all = [

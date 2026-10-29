@@ -23,7 +23,7 @@
 // names in its .env stays, and is listed with that worktree. Just before removing each
 // project it checks again (RP-1073: a run can take minutes): a worktree's .env naming it
 // now, a container of it started from an existing folder, Docker not answering, or a
-// client connected to its Postgres keeps it. It lists everything and asks first.
+// connection to its Postgres keeps it. It lists everything and asks first.
 //
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
@@ -32,10 +32,10 @@
 import { existsSync } from "node:fs";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, envClaims, listContainers, listVolumes, projectInUseNow, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
+import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
-import { changedSinceListed, choosePrune, listedClaims, type PruneWorktree } from "./worktrees-pruning.ts";
+import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
   CURRENT_WORKTREE,
   currentRoot,
@@ -155,33 +155,19 @@ for (const w of chosen.remove) {
     removedPaths.push(w.path);
   });
 }
-for (const p of chosen.projects) {
-  // A worktree's project goes only once that worktree is removed; orphans go regardless.
-  const kept = p.waitsFor.filter((path) => !removedPaths.some((r) => samePath(r, path)));
-  if (kept.length > 0) {
-    console.log(`Kept compose project ${p.project}: ${kept.join(", ")} was not removed.`);
-    continue;
-  }
-  // RP-1073: read again just before, as the worktree removals can take minutes and lane:env may have run meanwhile.
-  const claimsNow = envClaims(
-    listWorktrees(mainRoot).filter((w) => existsSync(w.path)),
-    { cwd: here, readEnv: readWorktreeEnv },
-  );
-  const inUse = projectInUseNow(p.project, {
-    listedClaims: listedClaims(worktrees),
-    listedContainers: docker?.containers ?? [],
-    now: readProjectNow(p.project, claimsNow),
-    exists: (dir) => existsSync(dir) && !removedPaths.some((r) => samePath(r, dir)),
-  });
-  if (inUse !== undefined) {
-    console.log(`Kept compose project ${p.project}: ${inUse}.`);
-    continue;
-  }
-  attempt(p.project, () => {
-    removeProject(p);
-    console.log(`Removed compose project ${p.project}.`);
-  });
-}
+removeProjectsNow({
+  projects: chosen.projects,
+  removedPaths,
+  listed: { worktrees, containers: docker?.containers ?? [] },
+  readNow: (project) => readProjectNow(project, { worktrees: listWorktrees(mainRoot), cwd: here }),
+  exists: existsSync,
+  remove: (p) =>
+    attempt(p.project, () => {
+      removeProject(p);
+      console.log(`Removed compose project ${p.project}.`);
+    }),
+  log: (line) => console.log(line),
+});
 for (const b of chosen.branches) {
   attempt(`branch ${b}`, () => {
     // removeLinkedWorktree may have deleted it already (a worktree-agent-* branch).

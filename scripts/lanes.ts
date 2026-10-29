@@ -109,12 +109,12 @@ export function envClaims(
   worktrees: { path: string; branch: string | undefined }[],
   { cwd, readEnv, platform }: { cwd: string; readEnv: (dir: string) => string | undefined; platform?: NodeJS.Platform },
 ): EnvClaim[] {
-  return worktrees.flatMap((w) => {
-    if (samePath(w.path, cwd, platform)) return [];
-    const project = composeProjectOfEnv(readEnv(w.path) ?? "");
-    return project?.startsWith("rabaed-") ? [{ path: w.path, branch: w.branch, project }] : [];
-  });
+  return worktrees.flatMap((w) => (samePath(w.path, cwd, platform) ? [] : claimOf(w, composeProjectOfEnv(readEnv(w.path) ?? ""))));
 }
+
+/** The worktree's claim when its .env's project is a rabaed-* one: none, or one. */
+export const claimOf = (w: { path: string; branch: string | undefined }, project: string | undefined): EnvClaim[] =>
+  project?.startsWith("rabaed-") ? [{ path: w.path, branch: w.branch, project }] : [];
 
 type ClashInput = {
   containers: Container[];
@@ -359,9 +359,12 @@ export type ProjectNow = {
   claims: EnvClaim[];
   /** The containers, listed again; undefined when Docker did not answer. */
   containers: Container[] | undefined;
-  /** The client connections to the project's running db container (postgresClients), or why it could not be asked; undefined when it has none running. */
-  postgres: { container: string; clients: number | string } | undefined;
+  /** The connections to the project's running db container's Postgres (postgresConnections); undefined when it has none running. */
+  postgres: { container: string; connections: PostgresConnections } | undefined;
 };
+
+/** How many connections a Postgres has to the lane databases, or why it could not be asked. */
+export type PostgresConnections = { count: number } | { unanswered: string };
 
 type InUseInput = {
   /** The .env claims as listed before the prompt. */
@@ -379,20 +382,22 @@ type InUseInput = {
  * (RP-1073): the prune can take minutes between reading the .env files and removing a stack,
  * and a session may run lane:env or start the lane meanwhile. In order: a worktree's .env
  * names it now; Docker did not answer; one of its containers runs now from a folder that
- * exists and did not run it at listing; something is connected to its Postgres, or Postgres
- * could not be asked. Undefined when it still goes.
+ * exists, and that container did not run from there at listing; something is connected to
+ * its Postgres, or Postgres could not be asked. Undefined when it still goes.
  */
 export function projectInUseNow(project: string, { listedClaims, listedContainers, now, exists, platform }: InUseInput): string | undefined {
   const claimant = newClaimant(project, listedClaims, now.claims, platform);
   if (claimant !== undefined) return `the .env of ${claimant.path} (on ${claimant.branch ?? "a detached HEAD"}) holds it now`;
   if (now.containers === undefined) return "Docker did not answer when it was checked again";
-  const ranFrom = (dir: string) => listedContainers.some((c) => c.project === project && c.state === "running" && samePath(c.workingDir, dir, platform));
-  const started = now.containers.find((c) => c.project === project && c.state === "running" && exists(c.workingDir) && !ranFrom(c.workingDir));
+  const ranBefore = (c: Container) => listedContainers.some((l) => l.name === c.name && l.state === "running" && samePath(l.workingDir, c.workingDir, platform));
+  const started = now.containers.find((c) => c.project === project && c.state === "running" && exists(c.workingDir) && !ranBefore(c));
   if (started !== undefined) return `a container of it runs from ${started.workingDir} now (${started.name})`;
   if (now.postgres === undefined) return undefined;
-  const { container, clients } = now.postgres;
-  if (typeof clients === "string") return `its Postgres (${container}) could not be asked who is connected: ${clients}`;
-  return clients > 0 ? `${clients} connection${clients === 1 ? "" : "s"} to its Postgres (${container}) now` : undefined;
+  const { container, connections } = now.postgres;
+  // A db that never answers would keep its stack on every run: a stopped one is judged without asking it.
+  if ("unanswered" in connections) return `its Postgres (${container}) could not be asked who is connected (${connections.unanswered}); \`docker stop ${container}\` and re-run if the lane is unused`;
+  const n = connections.count;
+  return n > 0 ? `${n} connection${n === 1 ? "" : "s"} to its Postgres (${container}) now; stop what uses it (\`pnpm servers:stop --yes\` in its worktree) and re-run` : undefined;
 }
 
 /** lanes:prune --lane N: only lane N's compose project among the candidates (all of them without --lane). */
@@ -676,12 +681,12 @@ export async function takenLanePorts(): Promise<Set<number>> {
   return new Set(ports.filter((_, i) => taken[i]));
 }
 
-const docker = (args: string[]) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const docker = (args: string[], timeout?: number) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout });
 
-/** All containers, or undefined when Docker is not installed or not running. */
-export function listContainers(): Container[] | undefined {
+/** All containers, or undefined when Docker is not installed or not running (or, with timeout ms, did not answer in time). */
+export function listContainers(timeout?: number): Container[] | undefined {
   try {
-    return parseContainers(docker(["ps", "-a", "--format", psFormat]));
+    return parseContainers(docker(["ps", "-a", "--format", psFormat], timeout));
   } catch {
     return undefined;
   }
@@ -691,28 +696,37 @@ export function listVolumes(): Volume[] {
   return parseVolumes(docker(["volume", "ls", "--format", volumeFormat]));
 }
 
-/** Client connections to the lane databases (rabaed*), not counting the asking session itself. */
-const CLIENTS_SQL = "select count(*) from pg_stat_activity where backend_type = 'client backend' and pid <> pg_backend_pid() and datname like 'rabaed%'";
+/**
+ * Connections to the lane databases (rabaed*; the app, its tests and the dev servers use only those),
+ * not counting the asking one. One to the `postgres` database, such as a psql by hand, is not counted.
+ */
+const CONNECTIONS_SQL = "select count(*) from pg_stat_activity where backend_type = 'client backend' and pid <> pg_backend_pid() and datname like 'rabaed%'";
 
-/** How many clients are connected to the db container's Postgres right now, or why it could not be asked (30 s at most: a stuck container must not hang the prune). */
-export function postgresClients(container: string): number | string {
+/** A stuck container or daemon must not hang the prune: each Docker call of the last check waits this long at most. */
+const RECHECK_TIMEOUT_MS = 30_000;
+
+/** How many connections the db container's Postgres has now (CONNECTIONS_SQL), or why it could not be asked. */
+export function postgresConnections(container: string, run: (container: string, sql: string) => string[] = (c, sql) => psql(c, sql, RECHECK_TIMEOUT_MS)): PostgresConnections {
   try {
-    const out = execFileSync("docker", ["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-At", "-c", CLIENTS_SQL], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 30_000,
-    }).trim();
-    return /^\d+$/.test(out) ? Number(out) : `psql answered "${out}"`;
+    const out = run(container, CONNECTIONS_SQL).join("\n").trim();
+    return /^\d+$/.test(out) ? { count: Number(out) } : { unanswered: `psql answered "${out}"` };
   } catch (error) {
-    return (error as { stderr?: string }).stderr?.trim() || (error as Error).message;
+    return { unanswered: (error as { stderr?: string }).stderr?.trim() || (error as Error).message };
   }
 }
 
-/** What projectInUseNow judges a project on, read now: the containers again, and its running db container's clients (RP-1073). */
-export function readProjectNow(project: string, claims: EnvClaim[]): ProjectNow {
-  const containers = listContainers();
+/**
+ * What projectInUseNow judges a project on, read now (RP-1073): the .env claims of the worktrees
+ * other than cwd whose folder exists, the containers, and its running db container's connections.
+ */
+export function readProjectNow(project: string, { worktrees, cwd }: { worktrees: { path: string; branch: string | undefined }[]; cwd: string }): ProjectNow {
+  const claims = envClaims(
+    worktrees.filter((w) => existsSync(w.path)),
+    { cwd, readEnv: readWorktreeEnv },
+  );
+  const containers = listContainers(RECHECK_TIMEOUT_MS);
   const db = containers && dbContainers(containers).find((c) => c.project === project);
-  return { claims, containers, postgres: db && { container: db.name, clients: postgresClients(db.name) } };
+  return { claims, containers, postgres: db && { container: db.name, connections: postgresConnections(db.name) } };
 }
 
 /** Removes a project's containers, volumes and networks (what `docker compose down -v` would, without its compose file). */
@@ -811,7 +825,7 @@ export function parseConnections(lines: string[]): Map<string, number> {
 export const dbContainers = (containers: Container[], lane?: number): Container[] =>
   containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name) && (lane === undefined || c.project === laneProject(lane)));
 
-/** Runs SQL as the superuser inside a db container and returns one value per line. */
-export function psql(container: string, sql: string): string[] {
-  return lines(docker(["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-At", "-c", sql]));
+/** Runs SQL as the superuser inside a db container and returns one value per line; with timeout, waits that many ms at most. */
+export function psql(container: string, sql: string, timeout?: number): string[] {
+  return lines(docker(["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-At", "-c", sql], timeout));
 }

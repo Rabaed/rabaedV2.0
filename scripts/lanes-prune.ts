@@ -9,7 +9,7 @@
 // worktree's project is never removed, nor, in any mode, one that another existing worktree's .env
 // names while it is not running or has only volumes left (RP-1007): that worktree is named instead.
 // Just before each removal it checks again (RP-1073): a worktree's .env naming it now, a container of
-// it started from an existing folder, Docker not answering, or a client connected to its Postgres
+// it started from an existing folder, Docker not answering, or a connection to its Postgres
 // keeps it. With --lane N such a keep at listing exits 1.
 //
 //   pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
@@ -58,8 +58,7 @@ if (!containers) {
 const currentProject = composeProjectOfEnv(readWorktreeEnv(".") ?? "");
 const volumes = listVolumes();
 /** Every other worktree's .env claim (RP-1007), read now; a project one names is not pruned as stale. */
-const readClaims = () => envClaims(listWorktrees().filter((w) => existsSync(w.path)), { cwd: process.cwd(), readEnv: readWorktreeEnv });
-const claims = readClaims();
+const claims = envClaims(listWorktrees().filter((w) => existsSync(w.path)), { cwd: process.cwd(), readEnv: readWorktreeEnv });
 const { prune: stale, kept: claimed } = keptByClaims(staleProjects({ containers, volumes, cwd: process.cwd(), currentProject, exists: existsSync }), claims);
 const inScope = (project: string) => lane === undefined || project === laneProject(lane);
 /** The projects --merged adds (none without it); a claimed project it adds is not reported as kept. */
@@ -128,7 +127,7 @@ for (const s of candidates) {
     continue;
   }
   // RP-1007, RP-1073: and since the prompt a lane:env may have written a .env naming it, or a session started or connected to it.
-  const inUse = projectInUseNow(s.project, { listedClaims: claims, listedContainers: containers, now: readProjectNow(s.project, readClaims()), exists: existsSync });
+  const inUse = projectInUseNow(s.project, { listedClaims: claims, listedContainers: containers, now: readProjectNow(s.project, { worktrees: listWorktrees(), cwd: process.cwd() }), exists: existsSync });
   if (inUse !== undefined) {
     console.log(`Kept ${s.project}: ${inUse}.`);
     continue;
