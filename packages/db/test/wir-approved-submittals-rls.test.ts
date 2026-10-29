@@ -115,7 +115,7 @@ async function submit(item: string, number: string) {
 const answers = (as: string, item: string) =>
   call<{ answers: Record<string, unknown> | null }>(as, sql`select app.work_item_answers(${item}::uuid) as answers`).then((rows) => rows[0]!.answers);
 
-const setRequired = (as: string, project: string, type: string, required: boolean) =>
+const setRequired = (as: string, project: string, type: string, required: boolean | null) =>
   outcome(as, sql`select app.set_project_required_field(${project}::uuid, ${type}, 'approved_submittals', ${required}, now()) as outcome`);
 const requiredRows = (as: string) =>
   call<{ project_id: string; field_key: string }>(as, sql`select project_id, field_key from project_required_field order by project_id`);
@@ -257,8 +257,8 @@ describe("RP-82-2: which link questions a Project makes required", () => {
   it("writes one setup_event per change, with from and to, and none for a repeat or a refusal", async () => {
     const events = async (project: string) =>
       (
-        await migrator.query<{ kind: string; type: string; actor_member_id: string; payload: unknown }>(
-          "select kind, type, actor_member_id, payload from setup_event where project_id = $1 and type = 'required_field_changed' order by created_at, id",
+        await migrator.query<{ kind: string; type: string; actor_member_id: string; company_id: string | null; payload: unknown }>(
+          "select kind, type, actor_member_id, company_id, payload from setup_event where project_id = $1 and type = 'required_field_changed' order by created_at, id",
           [project],
         )
       ).rows;
@@ -267,21 +267,35 @@ describe("RP-82-2: which link questions a Project makes required", () => {
       kind: "project_setting",
       type: "required_field_changed",
       actor_member_id: c1.ap,
+      company_id: null,
       payload: { work_item_type_id: typeId, field_key: "approved_submittals", from, to },
     });
-    // On here since the beforeAll's change, then off and on again in the test before.
-    expect(await events(projectId)).toEqual([change(false, true), change(true, false), change(false, true)]);
-    // The other Project: its one change; the refusal on its Closed Project wrote nothing.
-    expect(await events(otherProjectId)).toHaveLength(1);
+    // Start from off, whatever the tests before left.
+    await setRequired(c1.ap, projectId, TYPE, false);
+    const before = (await events(projectId)).length;
 
+    expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
+    expect((await events(projectId)).slice(before)).toEqual([change(false, true)]);
+    // The same value again, and refusals, write nothing.
     expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
     expect(await setRequired(k1.ap, projectId, TYPE, false)).toBe("not_found");
     expect(await setRequired(c1.ap, projectId, "ZZZ", false)).toBe("type_not_found");
-    expect(await events(projectId)).toHaveLength(3);
+    expect(await setRequired(c1.ap, projectId, TYPE, null)).toBe("not_found");
+    expect((await events(projectId)).slice(before)).toHaveLength(1);
+    expect(await requiredRows(k1.ap)).toEqual([{ project_id: projectId, field_key: "approved_submittals" }]);
 
     expect(await setRequired(c1.ap, projectId, TYPE, false)).toBe("set");
-    expect((await events(projectId)).at(-1)).toEqual(change(true, false));
-    expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
-    expect(await events(projectId)).toHaveLength(5);
+    expect(await setRequired(c1.ap, projectId, TYPE, false)).toBe("set");
+    expect((await events(projectId)).slice(before)).toEqual([change(false, true), change(true, false)]);
+
+    // A Closed Project's refusal writes nothing.
+    await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [otherProjectId]);
+    const otherBefore = (await events(otherProjectId)).length;
+    expect(await setRequired(other.ap, otherProjectId, TYPE, false)).toBe("project_closed");
+    expect(await events(otherProjectId)).toHaveLength(otherBefore);
+
+    // Read by nobody through the app role, the Project Admin who made the change included (RP-450-1).
+    await expect(call(c1.ap, sql<object>`select 1 from setup_event where project_id = ${projectId}::uuid`)).rejects.toThrow(/permission denied/);
+    await setRequired(c1.ap, projectId, TYPE, true);
   });
 });

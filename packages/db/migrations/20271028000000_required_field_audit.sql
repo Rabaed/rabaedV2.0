@@ -8,10 +8,13 @@
 --   setting the value it already has stays 'set' and writes nothing, and so does a refusal. Two
 --   Project Admins setting the same value at once write one row: the second insert finds the first's
 --   row (on conflict do nothing), the second delete finds it gone.
+-- * A null p_required is 'not_found', as a null is for "Show Inspections in Submittals" (it used to
+--   delete the row like false; the API sends a boolean only).
 -- * Read by nobody through the app role, like every setup_event (visibility.md RP-450-1).
 --
--- Redefined from their newest bodies on main: app.setup_event_kind and the two checks
--- (20271025000000_show_inspections_setting_audit.sql), app.set_project_required_field
+-- Redefined from their newest bodies on main: app.setup_event_kind and setup_event_type_check
+-- (20271025000000_show_inspections_setting_audit.sql; setup_event_kind_check already lists
+-- project_setting and is left as it is), app.set_project_required_field
 -- (20270601000000_project_required_field.sql). Everything already there is kept.
 
 alter table setup_event drop constraint setup_event_type_check;
@@ -44,8 +47,8 @@ revoke all on function app.setup_event_kind(text) from public;
 -- A Project Admin makes the field p_field_key of the Type p_type_code required on their
 -- Project (p_required) or not. The Type is the Project's own of that code, else the Rabaed
 -- Default. Outcome: 'set' (also when it already was so), 'not_found' (not a Project the acting
--- Member is a Project Admin of, whether or not it exists), 'project_closed' or
--- 'type_not_found'. Only a change writes a setup_event.
+-- Member is a Project Admin of, whether or not it exists, or a null p_required, which used to
+-- count as off), 'project_closed' or 'type_not_found'. Only a change writes a setup_event.
 create or replace function app.set_project_required_field(p_project_id uuid, p_type_code text, p_field_key text, p_required boolean, p_now timestamptz)
   returns text
   language plpgsql volatile security definer
@@ -55,7 +58,7 @@ create or replace function app.set_project_required_field(p_project_id uuid, p_t
       v_type_id uuid;
       v_changed integer;
     begin
-      if not exists (select 1 from app.current_admin_project_ids() x where x = p_project_id) then
+      if p_required is null or not exists (select 1 from app.current_admin_project_ids() x where x = p_project_id) then
         return 'not_found';
       end if;
       -- The Project row, shared, so it can't close between this check and the write.
