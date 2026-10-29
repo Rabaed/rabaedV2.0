@@ -1,5 +1,6 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { createServer as createTlsServer } from "node:tls";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { publicFetch, refusedAddress, type Resolver } from "./public-fetch.ts";
 
@@ -29,6 +30,9 @@ describe("which addresses are refused", () => {
     ["224.0.0.1", "a multicast or reserved address"],
     ["255.255.255.255", "a multicast or reserved address"],
     ["ff02::1", "a multicast or reserved address"],
+    // Local-use NAT64 reaches IPv4 addresses the network itself chooses.
+    ["64:ff9b:1::a00:5", "a private address"],
+    ["2001:0:4136:e378:8000:63bf:3fff:fdd2", "a tunnel address"],
   ])("refuses %s: %s", (address, reason) => {
     expect(refusedAddress(address)).toBe(reason);
   });
@@ -39,6 +43,7 @@ describe("which addresses are refused", () => {
     ["::ffff:10.1.2.3", "a private address"],
     ["::ffff:127.0.0.1", "a loopback address"],
     ["::127.0.0.1", "a loopback address"],
+    ["::ffff:0:a9fe:a9fe", "the metadata endpoint"],
     ["64:ff9b::a9fe:a9fe", "the metadata endpoint"],
     ["2002:c0a8:0101::1", "a private address"],
   ])("reads the IPv4 address inside an IPv6 one: %s is %s", (address, reason) => {
@@ -87,6 +92,9 @@ describe("fetching from an address a certificate names", () => {
     const get = publicFetch({ resolve });
     await expect(get("http://[::ffff:a9fe:a9fe]/latest/meta-data")).rejects.toThrow("a local address: ::ffff:a9fe:a9fe is the metadata endpoint");
     await expect(get("http://172.20.1.1/ca.crl")).rejects.toThrow("a local address: 172.20.1.1 is a private address");
+    // Decimal and hex forms are read as the dotted address they are, then refused.
+    await expect(get("http://2130706433/ca.crl")).rejects.toThrow("a local address: 127.0.0.1 is a loopback address");
+    await expect(get("http://0xa9.0xfe.0xa9.0xfe/")).rejects.toThrow("a local address: 169.254.169.254 is the metadata endpoint");
     expect(resolve.asked).toEqual([]);
     await expect(get("http://nowhere.example.com/ca.crl")).rejects.toThrow("nowhere.example.com resolves to no address");
   });
@@ -145,5 +153,45 @@ describe("connecting to the address it checked", () => {
     answer = (res) => res.writeHead(200).end("x".repeat(64));
     const get = publicFetch({ resolve: fakeResolver({ "crl.ca.test": ["127.0.0.1"] }), refuse: () => null, maxBytes: 16 });
     await expect(get(`http://crl.ca.test:${port}/ca.crl`)).rejects.toThrow("answered more than 16 bytes");
+  });
+
+  it("gives up when the signal ends, even while the name is still resolving", async () => {
+    const never: Resolver = () => new Promise(() => {});
+    await expect(publicFetch({ resolve: never })("http://crl.ca.test/ca.crl", { signal: AbortSignal.timeout(20) })).rejects.toThrow(/timed out|aborted/i);
+  });
+});
+
+describe("what a CA's server may answer", () => {
+  const local = { resolve: fakeResolver({ "crl.ca.test": ["127.0.0.1"] }), refuse: () => null };
+
+  it("fails the fetch, not the worker, on a status no Response can carry", async () => {
+    const odd = createNetServer((socket) => {
+      socket.once("data", () => socket.end("HTTP/1.1 799 Odd\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"));
+    });
+    await new Promise<void>((done) => odd.listen(0, "127.0.0.1", done));
+    try {
+      const at = (odd.address() as AddressInfo).port;
+      await expect(publicFetch(local)(`http://crl.ca.test:${at}/ca.crl`)).rejects.toThrow("answered 799");
+    } finally {
+      await new Promise<void>((done) => odd.close(() => done()));
+    }
+  });
+
+  it("names the URL's host to TLS (SNI), not the address it connects to", async () => {
+    const names: string[] = [];
+    const tls = createTlsServer({
+      SNICallback: (servername, done) => {
+        names.push(servername);
+        done(new Error("no certificate here"));
+      },
+    });
+    await new Promise<void>((done) => tls.listen(0, "127.0.0.1", done));
+    try {
+      const at = (tls.address() as AddressInfo).port;
+      await expect(publicFetch(local)(`https://crl.ca.test:${at}/ca.crl`)).rejects.toThrow();
+      expect(names).toEqual(["crl.ca.test"]);
+    } finally {
+      await new Promise<void>((done) => tls.close(() => done()));
+    }
   });
 });

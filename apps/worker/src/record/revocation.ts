@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { certificateDer, commonNameOf, distinct, OID, parseCertificate, pkijs, toArrayBuffer, toBytes } from "./pki.ts";
-import { hostOf, refusedHost } from "./public-fetch.ts";
+import { hostOf, MAX_ANSWER_BYTES, refusedHost } from "./public-fetch.ts";
 
 // The seal's revocation data (RP-669): what makes it PAdES B-LT and not only
 // B-T. For every certificate of the sealing chain and of the timestamp
@@ -244,13 +244,10 @@ export async function longTermProblems(chain: readonly Uint8Array[], data: Revoc
   return problems;
 }
 
-/** The most a certificate, an OCSP answer or a CRL may be: large public CRLs run to a few MB. */
-const MAX_BYTES = 20 * 1024 * 1024;
-
 /**
  * The bytes at `url`, an address a certificate names: plain http(s) only, never a local address
  * (`refusedHost`: the metadata endpoint, the VPC, the worker itself), never redirected, and no
- * larger than MAX_BYTES. In AWS `fetchImpl` is `publicFetch`, which also checks what a name
+ * larger than MAX_ANSWER_BYTES (20 MB). In AWS `fetchImpl` is `publicFetch`, which also checks what a name
  * resolves to and connects to that checked address only (RP-1085).
  */
 async function get(fetchImpl: typeof fetch, url: string, init: RequestInit = {}): Promise<Uint8Array> {
@@ -260,9 +257,9 @@ async function get(fetchImpl: typeof fetch, url: string, init: RequestInit = {})
   if (refused) throw new Error(`a local address: ${refused}`);
   const res = await fetchImpl(url, { ...init, redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`answered ${res.status}`);
-  if (Number(res.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error("answered more than 20 MB");
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_ANSWER_BYTES) throw new Error("answered more than 20 MB");
   const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.length > MAX_BYTES) throw new Error("answered more than 20 MB");
+  if (bytes.length > MAX_ANSWER_BYTES) throw new Error("answered more than 20 MB");
   return bytes;
 }
 
