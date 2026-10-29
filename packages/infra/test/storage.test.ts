@@ -1,3 +1,4 @@
+import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
 import { environmentTemplates, references, render, type Resource } from "./support.ts";
@@ -103,7 +104,7 @@ describe("Project files", () => {
   // Every S3 statement on the Project files bucket, in any stack, per role it is attached to.
   function projectFilesGrants() {
     const projectBucket = bucketLogicalId("ProjectFiles");
-    const grants: { role: string; actions: string[]; resources: unknown[] }[] = [];
+    const grants: { role: string; effect: string; actions: string[]; resources: unknown[] }[] = [];
     for (const part of Object.keys(stackNames(environments.dev)) as (keyof ReturnType<typeof stackNames>)[]) {
       for (const policy of Object.values(env.template(part).findResources("AWS::IAM::Policy")) as Resource[]) {
         for (const statement of (policy.Properties?.PolicyDocument as { Statement: Statement[] }).Statement) {
@@ -112,7 +113,7 @@ describe("Project files", () => {
           const resources = [statement.Resource].flat().filter(onBucket);
           if (resources.length === 0) continue;
           for (const role of policy.Properties?.Roles as unknown[]) {
-            grants.push({ role: String(env.resolve(role, part).resource.Properties?.RoleName), actions: actions(statement), resources });
+            grants.push({ role: String(env.resolve(role, part).resource.Properties?.RoleName), effect: statement.Effect, actions: actions(statement), resources });
           }
         }
       }
@@ -127,7 +128,7 @@ describe("Project files", () => {
 
   it("the api reads, writes and removes Signatures, logos and Stamps where it stores them, and no other object outside projects/ (RP-951)", () => {
     const objects = projectFilesGrants()
-      .filter((g) => g.role === "rabaed-dev-api-task" && !g.actions.includes("s3:ListBucket"))
+      .filter((g) => g.role === "rabaed-dev-api-task" && g.effect === "Allow" && !g.actions.includes("s3:ListBucket"))
       .flatMap((g) => g.resources.map((r) => ({ actions: [...g.actions].sort(), key: objectKey(r) })));
     // Each object grant is a key pattern under the bucket, never the bucket itself nor every object in it.
     for (const { key } of objects) expect(key).not.toMatch(/^(\*)?$/);
@@ -136,6 +137,61 @@ describe("Project files", () => {
     // Put stores the image, Get signs its download link, Delete removes an image nothing recorded (apps/api/src/identity).
     for (const action of ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]) expect(keys(action)).toEqual(stored);
     expect([...new Set(objects.flatMap((o) => o.actions))].sort()).toEqual(["s3:DeleteObject", "s3:GetObject", "s3:PutObject"]);
+  });
+
+  // Whether the role's own policies let it do `action` on `key`, as IAM decides: some Allow
+  // matches and no Deny does. `*` in an action or key pattern matches anything, `/` included.
+  function roleMay(role: string, action: string, key: string): boolean {
+    const matching = grantsMatching(role, action, key);
+    return matching.some((g) => g.effect === "Allow") && !matching.some((g) => g.effect === "Deny");
+  }
+  // Whether an explicit Deny refuses it, whatever any Allow (today's or a later, wider one) grants.
+  const roleDenied = (role: string, action: string, key: string) => grantsMatching(role, action, key).some((g) => g.effect === "Deny");
+  function grantsMatching(role: string, action: string, key: string) {
+    return projectFilesGrants().filter(
+      (g) =>
+        g.role === role &&
+        g.actions.some((a) => iamPatternMatches(a, action)) &&
+        g.resources.some((r) => objectKey(r) !== "" && iamPatternMatches(objectKey(r), key)),
+    );
+  }
+
+  // A signed URL carries the api role's permissions, so one wrong key in a signed PUT or a delete
+  // must not reach what only the worker writes (ADR 0017, ADR 0023).
+  describe("the api may not write or delete what only the worker writes, but still reads it for download links (RP-1084)", () => {
+    const api = "rabaed-dev-api-task";
+    const workerOnly = [
+      "projects/p1/work-items/w1/documental-record/record.pdf",
+      "projects/p1/work-items/w1/documental-record/record-data.xml",
+      "projects/p1/work-items/w1/documental-record/replaced/ab12.pdf",
+      "projects/p1/work-items/w1/documental-record/working-copies/c1.pdf",
+      "projects/p1/snag-reports/r1/snag-report.pdf",
+    ];
+
+    it.each(workerOnly)("%s: no Put, no Delete, but Get", (key) => {
+      expect(roleMay(api, "s3:PutObject", key)).toBe(false);
+      expect(roleMay(api, "s3:DeleteObject", key)).toBe(false);
+      expect(roleMay(api, "s3:GetObject", key)).toBe(true);
+    });
+
+    it("explicitly refuses every Put and Delete variant there, so a wider Allow later can't let a tag, ACL or version change slip past", () => {
+      for (const key of workerOnly) {
+        for (const action of ["s3:PutObject", "s3:PutObjectTagging", "s3:PutObjectAcl", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:DeleteObjectTagging"]) {
+          expect(roleDenied(api, action, key)).toBe(true);
+        }
+        expect(roleDenied(api, "s3:GetObject", key)).toBe(false);
+      }
+    });
+
+    it.each([
+      "projects/p1/work-items/w1/documents/d1",
+      "projects/p1/register-imports/i1/f1",
+      "members/m1/signatures/s1",
+      "companies/c1/logo/l1",
+      "companies/c1/stamp/s1",
+    ])("still writes, reads and removes %s, which it stores itself", (key) => {
+      for (const action of ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]) expect(roleMay(api, action, key)).toBe(true);
+    });
   });
 
   it("only the api and worker task roles are granted object access: the worker reading under projects/ and writing only records (RP-620)", () => {

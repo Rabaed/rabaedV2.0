@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
-import type { Container, Volume } from "./lanes.ts";
-import { changedSinceListed, choosePrune, type PruneWorktree } from "./worktrees-pruning.ts";
+import { composeProjectOfEnv, envClaims, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
+import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import type { LocalBranch } from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
@@ -251,5 +254,94 @@ describe("changedSinceListed", () => {
     expect(changedSinceListed(wt("/w/done"), { ...none, desktopSession: () => ({ kind: "unknown", reason: "list unreadable" }) })).toBe(
       "a Claude desktop session may hold it: list unreadable",
     );
+  });
+});
+
+// RP-1073: on 2026-10-28 `worktrees:prune --yes` read the .env files, spent ten minutes removing
+// worktrees, then removed rabaed-lane12 as "worktree gone (hopeful-chaum-f50d70)": its containers
+// were labelled with RP-1052's archived worktree. Meanwhile RP-921's live worktree had run
+// `lane:env 12`, so its .env named rabaed-lane12. Real folders, real .env files.
+describe("worktrees:prune and a lane a live worktree's .env names (RP-1073)", () => {
+  let root: string;
+  let live: string;
+  let labelled: string;
+  let containers: Container[];
+  const project = "rabaed-lane12";
+  const branch = "RP-921-list-headers-glossary";
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "rp-1073-"));
+    // The app's folder is lowercase; its branch, renamed to the key, is not.
+    live = join(root, "rp-921-list-headers-glossary-a8ff7e");
+    mkdirSync(live);
+    labelled = join(root, "hopeful-chaum-f50d70"); // archived: no folder
+    containers = [container("rabaed-lane12-files-1", project, labelled), container("rabaed-lane12-mailpit-1", project, labelled)];
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  const runningIn = (path: string): Holders => ({ ...none, runningSession: (p) => (p === path ? 'a running Claude session is in it: session "Main 1, lane b – RP-921"' : undefined) });
+  const listLive = () => wt(live, { branch, ahead: 2, project: composeProjectOfEnv(readWorktreeEnv(live) ?? "") });
+  const list = () =>
+    choose([listLive()], {
+      docker: { containers, volumes: [volume(project)], currentProject: "rabaed-lane2" },
+      exists: existsSync,
+      holders: runningIn(live),
+      platform: "win32",
+    });
+  const claimsNow = () => envClaims([{ path: live, branch }], { cwd: here, readEnv: readWorktreeEnv });
+
+  it("keeps the project when the .env names it at listing, though its containers name a gone worktree, and says why", () => {
+    writeFileSync(join(live, ".env"), `POSTGRES_PORT=5552\r\nCOMPOSE_PROJECT_NAME=${project}\r\n`);
+    const p = list();
+    expect(p.projects).toEqual([]);
+    expect(p.kept).toEqual([{ project, path: live, reason: `its .env names ${project} (on ${branch}), so the lane is still in use` }]);
+  });
+
+  /** worktrees:prune's last step on what list() chose, reading the .env files through readWorktreeEnv each time; returns what it removed and logged. */
+  const removeNow = (p: ReturnType<typeof list>, onRemove: (project: string) => void = () => {}) => {
+    const removed: string[] = [];
+    const logged: string[] = [];
+    removeProjectsNow({
+      projects: p.projects,
+      removedPaths: [],
+      listed: { worktrees: [listLive()], containers },
+      readNow: () => ({ claims: claimsNow(), containers, postgres: undefined }),
+      exists: existsSync,
+      remove: (x) => {
+        removed.push(x.project);
+        onRemove(x.project);
+      },
+      log: (line) => logged.push(line),
+      platform: "win32",
+    });
+    return { removed, logged };
+  };
+
+  it("keeps the project when the .env is written after listing, while an earlier project is being removed", () => {
+    // Lane 11's stack is orphaned too, and goes first; lane:env 12 runs in the live worktree meanwhile.
+    containers.push(container("rabaed-lane11-db-1", "rabaed-lane11", join(root, "gone-too")));
+    const p = list();
+    // At listing nothing named lane 12: the stack looked orphaned.
+    expect(p.projects.map((x) => [x.project, x.reason])).toEqual([
+      ["rabaed-lane11", `worktree gone (${join(root, "gone-too")})`],
+      [project, `worktree gone (${labelled})`],
+    ]);
+
+    const { removed, logged } = removeNow(p, (x) => {
+      if (x === "rabaed-lane11") writeFileSync(join(live, ".env"), `COMPOSE_PROJECT_NAME=${project}\n`);
+    });
+
+    expect(removed).toEqual(["rabaed-lane11"]);
+    expect(logged).toEqual([`Kept compose project ${project}: the .env of ${live} (on ${branch}) holds it now.`]);
+  });
+
+  it("removes it still when nothing names or uses it now", () => {
+    expect(removeNow(list())).toEqual({ removed: [project], logged: [] });
+  });
+
+  it("keeps a removed worktree's project while that worktree was not removed after all", () => {
+    const p = list();
+    const waiting = { ...p, projects: p.projects.map((x) => ({ ...x, waitsFor: [live] })) };
+    expect(removeNow(waiting)).toEqual({ removed: [], logged: [`Kept compose project ${project}: ${live} was not removed.`] });
   });
 });

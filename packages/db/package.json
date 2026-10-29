@@ -5,8 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./storage-keys": "./src/storage-keys.ts",
     "./task-flags": "./src/task-flags.ts",
-    "./test-support": "./test-support/index.ts"
+    "./test-support": "./test-support/index.ts",
+    "./test-support/iam-pattern": "./test-support/iam-pattern.ts"
   },
   "scripts": {
     "setup": "tsx --env-file-if-exists=../../.env src/setup.ts",

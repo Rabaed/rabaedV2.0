@@ -6,7 +6,7 @@ import { changedSince } from "./docs-only.ts";
 // required check on main, so .github/workflows/dependency-audit.yml runs on every pull request and
 // merge-group entry: a workflow skipped by `paths` reports nothing, and its required check would stay
 // pending (RP-984). This decides whether the job audits or passes at once. It audits a change that can
-// move what `pnpm audit --prod` finds or how it is judged: the lockfile, any package.json, pnpm's
+// move what `pnpm audit` finds or how it is judged: the lockfile, any package.json, pnpm's
 // workspace settings (overrides can live there), .npmrc (it can name another registry), the
 // allow-list, the audit's scripts, the code this decision runs on (scripts/docs-only.ts's
 // `changedSince`) and its workflow. Other changes skip it, an empty change included, so an advisory
