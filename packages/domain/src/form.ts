@@ -3,7 +3,7 @@ import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
 import { contentType, photoContentTypes } from "./document.ts";
 import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
-import { moduleKeySchema } from "./module.ts";
+import { moduleKeySchema, type ModuleKey } from "./module.ts";
 import { OPTION_LIST_MAX_LEVELS, isChoosable, optionPath, reachesDepth, type OptionList } from "./option-list.ts";
 import { outcomeCode } from "./outcome.ts";
 
@@ -241,12 +241,12 @@ const linkAcceptsSchema = z
 export type LinkAccepts = z.infer<typeof linkAcceptsSchema>;
 
 /** An item as `accepts` reads it: its Type's Module and code, its outcome, and whether it is closed. */
-export type LinkCandidate = { module: string; type: string; outcome: string | null; closed: boolean };
+export type LinkCandidate = { module: ModuleKey; type: string; outcome: string | null; closed: boolean };
 
 /** Whether a link question's `accepts` takes the item: any item without it. */
 export function linkAccepts(accepts: LinkAccepts | undefined, item: LinkCandidate): boolean {
   if (!accepts) return true;
-  if (accepts.modules && !(accepts.modules as readonly string[]).includes(item.module)) return false;
+  if (accepts.modules && !accepts.modules.includes(item.module)) return false;
   if (accepts.types && !accepts.types.includes(item.type)) return false;
   return !accepts.outcomes || (item.closed && item.outcome !== null && accepts.outcomes.includes(item.outcome));
 }

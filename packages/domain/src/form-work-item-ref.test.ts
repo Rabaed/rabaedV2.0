@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatFormValue } from "./form-display.ts";
-import { formSchema, linkAccepts, requiredByProject, validateAnswers, type FormSchema, type ValidationContext } from "./form.ts";
+import { formSchema, linkAccepts, requiredByProject, validateAnswers, type FormSchema, type LinkAccepts, type LinkCandidate, type ValidationContext } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
 
 // Seam 3: the link question, `work_item_ref` (RP-293, spec RP-289; form-engine.md
@@ -106,7 +106,7 @@ describe("the work_item_ref field's settings", () => {
 });
 
 describe("linkAccepts: whether a link question's `accepts` takes an item (RP-82)", () => {
-  const closedA = { module: "submittals", type: "MAR", outcome: "A", closed: true };
+  const closedA: LinkCandidate = { module: "submittals", type: "MAR", outcome: "A", closed: true };
 
   it("takes any item without `accepts`", () => {
     expect(linkAccepts(undefined, { module: "submittals", type: "MAR", outcome: null, closed: false })).toBe(true);
@@ -130,8 +130,8 @@ describe("linkAccepts: whether a link question's `accepts` takes an item (RP-82)
 
   // RP-1080: a WIR closes with Code A–D too (RP-673), so the WIR's Approved submittals names its Module.
   it("with Modules, takes only an item of a Type in one of them; outcomes narrow it as ever", () => {
-    const closedWirA = { module: "inspections", type: "WIR", outcome: "A", closed: true };
-    const accepts = { modules: ["submittals" as const], outcomes: ["A", "B"] };
+    const closedWirA: LinkCandidate = { module: "inspections", type: "WIR", outcome: "A", closed: true };
+    const accepts = { modules: ["submittals"], outcomes: ["A", "B"] } satisfies LinkAccepts;
     expect(linkAccepts(accepts, closedA)).toBe(true);
     expect(linkAccepts(accepts, closedWirA)).toBe(false);
     expect(linkAccepts(accepts, { ...closedA, outcome: "C" })).toBe(false);

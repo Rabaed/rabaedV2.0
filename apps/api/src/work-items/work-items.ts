@@ -288,7 +288,7 @@ async function linkableIds(
   const ids = fields.flatMap((f) => idsIn(given[f.key]));
   if (ids.length === 0) return Object.fromEntries(fields.map((f) => [f.key, new Set<string>()]));
   const kept = fields.flatMap((f) => keptIn(f.key));
-  const { rows } = await sql<{ id: string; module: string; type: string; outcome: string | null; closed: boolean; submitted: boolean }>`
+  const { rows } = await sql<{ id: string; module: ModuleKey; type: string; outcome: string | null; closed: boolean; submitted: boolean }>`
     select t.id, ty.module_key as module, ty.code as type, t.outcome, t.closed_at is not null as closed, app.work_item_submitted(t.id) as submitted
     from work_item t
     join work_item_type ty on ty.id = t.work_item_type_id
