@@ -2971,6 +2971,21 @@
     },
     "checkAnother": "Verify another record"
   },
+  "submittalPanelChat": {
+    "tab": "Chat",
+    "loading": "Reading Chat…",
+    "unavailable": "Chat couldn't be read.",
+    "closedTitle": "Chat isn't open yet",
+    "closedBody": "Chat opens once the item is Submitted to the next Participant.",
+    "none": "No one has written in Chat yet.",
+    "composer": "Write in Chat",
+    "send": "Send",
+    "keys": "Enter to send · Shift+Enter for a new line",
+    "tooLong": "At most {max} characters.",
+    "notSubmitted": "Chat opens once the item is Submitted.",
+    "projectClosed": "The Project is closed.",
+    "sendFailed": "Couldn't send. Try again."
+  },
   "submittalPanelDetails": {
     "tabs": "Submittal",
     "details": "Details",
