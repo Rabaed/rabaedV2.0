@@ -321,6 +321,8 @@ export {
   type SubmittalPanelPreferences,
 } from "./components/submittal-panel/panel-preferences.ts";
 export { SubmittalPanelTabs, type SubmittalPanelTabItem, type SubmittalPanelTabsProps } from "./components/submittal-panel/panel-tabs.tsx";
+export { SubmittalPanelChat, type SubmittalPanelChatLabels, type SubmittalPanelChatProps } from "./components/submittal-panel/panel-chat.tsx";
+export { submittalPanelChatAuthor, submittalPanelChatDraft, submittalPanelChatOpen, submittalPanelChatSends, type SubmittalPanelChatAuthor } from "./components/submittal-panel/panel-chat-model.ts";
 export {
   SubmittalPanelFields,
   SubmittalPanelItems,
