@@ -283,9 +283,11 @@ export const linkSearchQuery = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(linkSearchPageMax).default(linkSearchPageMax),
   /**
-   * A link question's `accepts` (RP-82, form.ts linkAccepts): only items of these
-   * Types, and only closed items with these outcomes. Either absent: no limit.
+   * A link question's `accepts` (RP-82, form.ts linkAccepts): only items of a Type
+   * in these Modules (RP-1080), only items of these Types, and only closed items
+   * with these outcomes. Any absent: no limit by it.
    */
+  modules: queryList(moduleKeySchema),
   types: queryList(workItemTypeCode),
   outcomes: queryList(workItemOutcome),
 });
