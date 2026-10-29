@@ -7,8 +7,9 @@ import { IconButton } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
 import { EmptyState } from "../feedback/states.tsx";
 import { Textarea } from "../form/textarea.tsx";
-import { Icon, type IconName } from "../icon/icon.tsx";
+import { Icon } from "../icon/icon.tsx";
 import { submittalPanelChatAuthor, submittalPanelChatDraft, submittalPanelChatSends } from "./panel-chat-model.ts";
+import { RoleIcon } from "./route-strip.tsx";
 
 export type SubmittalPanelChatLabels = {
   /** Names the thread for screen readers: "Chat". */
@@ -37,20 +38,11 @@ export type SubmittalPanelChatProps = {
   onSend: (body: string) => Promise<string | null>;
 };
 
-/** A Project Role's badge colours and icon (README §4.4: Contractor orange, Consultant blue, Owner green). */
-const roleLook: Record<BaseRole, { icon: IconName; tint: string; fg: string }> = {
-  contractor: { icon: "crane", tint: "var(--trade-su-bg)", fg: "var(--trade-su-fg)" },
-  consultant: { icon: "ruler", tint: "var(--info-tint)", fg: "var(--info-fg)" },
-  owner: { icon: "building", tint: "var(--success-tint)", fg: "var(--success-fg)" },
-  owner_representative: { icon: "buildings", tint: "var(--stage-pending-bg)", fg: "var(--stage-pending-fg)" },
-};
-
-/** A Company, in its Project Role's colour and icon. */
+/** A Company, with its Project Role's tile from the route strip (`RoleIcon`, RP-1093): the panel's one role colour map. */
 function ChatCompanyBadge({ company, baseRole }: { company: string; baseRole: BaseRole }) {
-  const look = roleLook[baseRole];
   return (
-    <span className="inline-flex h-[22px] max-w-full items-center gap-1 rounded-[7px] px-1.5 font-medium" style={{ background: look.tint, color: look.fg }}>
-      <Icon name={look.icon} size={13} className="shrink-0" />
+    <span data-role-badge={baseRole} className="inline-flex h-[22px] max-w-full items-center gap-1.5 font-medium">
+      <RoleIcon role={baseRole} size={20} />
       <span dir="auto" className="truncate">
         {company}
       </span>
