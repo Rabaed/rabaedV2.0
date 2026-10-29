@@ -19,7 +19,7 @@ export type SubmittalPanelTabsProps = {
   locale: Locale;
   /** Names the set of tabs for screen readers. */
   label: string;
-  /** The tabs this item offers the viewer: Details, then Internal Communication only to a Member of a Participant with internal history on it (V5). */
+  /** The tabs this item offers the viewer: Details, Chat, then Internal Communication only to a Member of a Participant with internal history on it (V5). */
   tabs: readonly SubmittalPanelTabItem[];
   /** The open tab's key (`submittalPanelTab`). */
   value: string;
@@ -30,7 +30,6 @@ export type SubmittalPanelTabsProps = {
  * The Submittal Panel's tabs (RP-1066, README §4.6): sticky at the top of the panel's scrolling
  * body, so they stay in reach while the sections scroll under them. The kit's Tabs, so the arrow
  * keys move along the reading direction (flipped in Arabic) and Home and End reach the ends.
- * Chat joins them in RP-1069.
  */
 export function SubmittalPanelTabs({ locale, label, tabs, value, onValueChange }: SubmittalPanelTabsProps) {
   return (
