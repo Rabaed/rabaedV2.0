@@ -17,7 +17,7 @@ function event(over: Partial<Event> & Pick<Event, "type" | "audience">): Event {
   return {
     seq,
     at: `2026-10-${String(seq).padStart(2, "0")}T09:00:00.000Z`,
-    by: { companyName: null, memberName: null },
+    by: { companyName: null, memberName: null, positions: [] },
     transition: null,
     fromStep: null,
     toStep: null,
@@ -36,9 +36,9 @@ function event(over: Partial<Event> & Pick<Event, "type" | "audience">): Event {
 
 describe("the approval log", () => {
   it("keeps only the shared moves, newest first", () => {
-    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi") } });
-    const note = event({ type: "internal_note", audience: "internal", internalNote: "Check the datasheet", by: { companyName: contractor, memberName: b("Sara Al Harbi") } });
-    const code = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad") } });
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi"), positions: [] } });
+    const note = event({ type: "internal_note", audience: "internal", internalNote: "Check the datasheet", by: { companyName: contractor, memberName: b("Sara Al Harbi"), positions: [] } });
+    const code = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
 
     const log = submittalApprovalLog({ events: [submit, note, code], viewerCompany: contractor, creationDate: null });
 
@@ -47,7 +47,7 @@ describe("the approval log", () => {
 
   // Visibility "Creation Date" row: only the raiser's Participant reads when the item got its number.
   it("starts at Created for the raiser's Participant, and at the Submit for everyone else", () => {
-    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null } });
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null, positions: [] } });
 
     const raiser = submittalApprovalLog({ events: [submit], viewerCompany: contractor, creationDate: "2026-10-01T08:00:00.000Z" });
     const consultantView = submittalApprovalLog({ events: [submit], viewerCompany: consultant, creationDate: null });
@@ -63,22 +63,22 @@ describe("the approval log", () => {
       type: "transition",
       audience: "shared",
       transition: b("Submit"),
-      by: { companyName: contractor, memberName: b("Sara Al Harbi") },
+      by: { companyName: contractor, memberName: b("Sara Al Harbi"), positions: [] },
       answers: { cover_note: "Lighting fixtures, Level 3", internal_note: "never here" },
     });
     // Even were a shared Send Back to name a Consultant person, the log would show the Company only.
-    const sendBack = event({ type: "transition", audience: "shared", transition: b("Send Back"), reason: "Wrong sheet", by: { companyName: consultant, memberName: b("Khalid Engineer") } });
-    const resubmit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi") } });
+    const sendBack = event({ type: "transition", audience: "shared", transition: b("Send Back"), reason: "Wrong sheet", by: { companyName: consultant, memberName: b("Khalid Engineer"), positions: [] } });
+    const resubmit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi"), positions: [] } });
     // The Consultant's internal moves and Recommended Code, as the Consultant's read would give them.
-    const internalMove = event({ type: "transition", audience: "internal", transition: b("Send to Manager"), by: { companyName: consultant, memberName: b("Khalid Engineer") } });
-    const recommend = event({ type: "recommend_code", audience: "internal", recommendedCode: "B", by: { companyName: consultant, memberName: b("Khalid Engineer") } });
+    const internalMove = event({ type: "transition", audience: "internal", transition: b("Send to Manager"), by: { companyName: consultant, memberName: b("Khalid Engineer"), positions: [] } });
+    const recommend = event({ type: "recommend_code", audience: "internal", recommendedCode: "B", by: { companyName: consultant, memberName: b("Khalid Engineer"), positions: [] } });
     const code = event({
       type: "issue_code",
       audience: "shared",
       transition: b("Code B"),
       outcome: "B",
       remarks: "Use the revised fixings",
-      by: { companyName: consultant, memberName: b("Omar Haddad") },
+      by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] },
     });
 
     const log = submittalApprovalLog({ events: [submit, sendBack, resubmit, internalMove, recommend, code], viewerCompany: contractor, creationDate: null });
@@ -96,10 +96,30 @@ describe("the approval log", () => {
     ]);
   });
 
+  // Scenario RP-1091-1 (V14): the viewer's own people with the Positions the read gives; the final Code's
+  // signer of another Company by name, with none, and another Company's turn with no one.
+  it("gives the viewer's own people their Positions, as the read gives them, and nobody else any", () => {
+    const engineer = b("Engineer", "مهندس");
+    const pm = b("Project Manager", "مدير المشروع");
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi"), positions: [engineer, pm] } });
+    const sendBack = event({ type: "transition", audience: "shared", transition: b("Send Back"), by: { companyName: consultant, memberName: null, positions: [] } });
+    // Even were the read to give the signer's Position, the log would show the name only.
+    const code = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [b("Manager")] } });
+
+    const log = submittalApprovalLog({ events: [submit, sendBack, code], viewerCompany: contractor, creationDate: null });
+    const shown = log.flatMap((e) => (e.kind === "event" ? [[e.person?.en ?? null, e.positions.map((p) => p.en)]] : []));
+
+    expect(shown).toEqual([
+      ["Omar Haddad", []],
+      [null, []],
+      ["Sara Al Harbi", ["Engineer", "Project Manager"]],
+    ]);
+  });
+
   // Until `GET /v1/me` answers (or if it fails), the viewer's own turns are never drawn as another Company's.
   it("takes no turn for another Company's while the viewer's Company is unknown", () => {
-    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi") } });
-    const code = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad") } });
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi"), positions: [] } });
+    const code = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
 
     const log = submittalApprovalLog({ events: [submit, code], viewerCompany: null, creationDate: null });
 
@@ -108,11 +128,11 @@ describe("the approval log", () => {
   });
 
   it("colours each move by its Code, and a Send Back amber", () => {
-    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null } });
-    const sendBack = event({ type: "transition", audience: "shared", transition: b("Send Back"), reason: "Wrong sheet", by: { companyName: consultant, memberName: null } });
-    const codeA = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad") } });
-    const codeB = event({ type: "issue_code", audience: "shared", transition: b("Code B"), outcome: "B", by: { companyName: consultant, memberName: b("Omar Haddad") } });
-    const codeC = event({ type: "issue_code", audience: "shared", transition: b("Code C"), outcome: "C", by: { companyName: consultant, memberName: b("Omar Haddad") } });
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null, positions: [] } });
+    const sendBack = event({ type: "transition", audience: "shared", transition: b("Send Back"), reason: "Wrong sheet", by: { companyName: consultant, memberName: null, positions: [] } });
+    const codeA = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
+    const codeB = event({ type: "issue_code", audience: "shared", transition: b("Code B"), outcome: "B", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
+    const codeC = event({ type: "issue_code", audience: "shared", transition: b("Code C"), outcome: "C", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
 
     const tones = [submit, sendBack, codeA, codeB, codeC].map((e) => {
       const [entry] = submittalApprovalLog({ events: [e], viewerCompany: contractor, creationDate: null, outcomes: reviewCodes });
@@ -124,7 +144,7 @@ describe("the approval log", () => {
 
   // Gap A8: Code B's chip counts the Comments the item read counts for the viewer, and none is no chip.
   it("puts the Comments the viewer sees on Code B's chip", () => {
-    const codeB = event({ type: "issue_code", audience: "shared", transition: b("Code B"), outcome: "B", by: { companyName: consultant, memberName: b("Omar Haddad") } });
+    const codeB = event({ type: "issue_code", audience: "shared", transition: b("Code B"), outcome: "B", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
     const comments = (raisedItems: { type: { code: string }; open: number; closed: number }[]) => {
       const [entry] = submittalApprovalLog({ events: [codeB], viewerCompany: contractor, creationDate: null, outcomes: reviewCodes, raisedItems });
       return entry?.kind === "event" ? entry.comments : undefined;
@@ -139,12 +159,12 @@ describe("Internal Communication", () => {
   // Scenario RP-1067-3 (V5): the tab holds the viewer's own Participant's internal entries only, never a
   // shared move or another Participant's; the positive control is the Consultant's own Recommended Code.
   it("holds only the internal entries the read gives the viewer, newest first, with their own text", () => {
-    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null } });
-    const move = event({ type: "transition", audience: "internal", transition: b("Send to Manager"), by: { companyName: consultant, memberName: b("Khalid Engineer") } });
-    const note = event({ type: "internal_note", audience: "internal", transition: b("Send to Manager"), internalNote: "Datasheet page 4 differs", by: { companyName: consultant, memberName: b("Khalid Engineer") } });
-    const recommend = event({ type: "recommend_code", audience: "internal", recommendedCode: "B", by: { companyName: consultant, memberName: b("Khalid Engineer") } });
-    const returned = event({ type: "transition", audience: "internal", transition: b("Return"), reason: "Add the fixing detail", by: { companyName: consultant, memberName: b("Omar Haddad") } });
-    const code = event({ type: "issue_code", audience: "shared", transition: b("Code B"), outcome: "B", by: { companyName: consultant, memberName: b("Omar Haddad") } });
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null, positions: [] } });
+    const move = event({ type: "transition", audience: "internal", transition: b("Send to Manager"), by: { companyName: consultant, memberName: b("Khalid Engineer"), positions: [] } });
+    const note = event({ type: "internal_note", audience: "internal", transition: b("Send to Manager"), internalNote: "Datasheet page 4 differs", by: { companyName: consultant, memberName: b("Khalid Engineer"), positions: [] } });
+    const recommend = event({ type: "recommend_code", audience: "internal", recommendedCode: "B", by: { companyName: consultant, memberName: b("Khalid Engineer"), positions: [] } });
+    const returned = event({ type: "transition", audience: "internal", transition: b("Return"), reason: "Add the fixing detail", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
+    const code = event({ type: "issue_code", audience: "shared", transition: b("Code B"), outcome: "B", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [] } });
 
     const log = submittalInternalLog([submit, move, note, recommend, returned, code], reviewCodes);
 
@@ -152,6 +172,14 @@ describe("Internal Communication", () => {
     expect(log.map((e) => e.texts)).toEqual([[{ kind: "reason", text: "Add the fixing detail" }], [], [{ kind: "internalNote", text: "Datasheet page 4 differs" }], []]);
     expect(log.map((e) => e.tone)).toEqual(["warn", "warn", "neutral", "neutral"]);
     expect(log.map((e) => e.person?.en)).toEqual(["Omar Haddad", "Khalid Engineer", "Khalid Engineer", "Khalid Engineer"]);
+  });
+
+  // Scenario RP-1091-2: the viewer's own people with the Positions the read gives.
+  it("gives each internal entry's person their Positions, as the read gives them", () => {
+    const manager = b("Manager", "مدير");
+    const note = event({ type: "internal_note", audience: "internal", internalNote: "Fixings differ", by: { companyName: consultant, memberName: b("Omar Haddad"), positions: [manager] } });
+
+    expect(submittalInternalLog([note]).map((e) => [e.person?.en, e.positions])).toEqual([["Omar Haddad", [manager]]]);
   });
 });
 
