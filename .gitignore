@@ -20,6 +20,10 @@ secrets/
 design/reference/claude-design/assets/fonts/thmanyah/*.woff2
 design/reference/claude-design/assets/fonts/thmanyah/*.otf
 design/reference/claude-design/uploads/
+# The owner's Claude Design exports, dropped at the top of design/reference/: they embed
+# the fonts, Thmanyah too (RP-663). Only the top level: the kit (claude-design/) and the
+# committed reference pages in their own folders (sign-in/, submittal-panel/) stay tracked.
+design/reference/*.[hH][tT][mM][lL]
 # Private Thmanyah files supplied at build time (RP-211) and the CSS generated from them.
 packages/ui/fonts/
 packages/ui/src/styles/arabic-font.css

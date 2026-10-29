@@ -123,6 +123,15 @@ describe("filesWithEmbeddedFonts", () => {
     expect(filesWithEmbeddedFonts(repo).sort()).toEqual(["a.css", "b.js", "c.html"]);
   });
 
+  it("finds a Thmanyah @font-face inlined in an exported page, renamed and moved out of design/reference/ (RP-663)", () => {
+    const thmanyahPage = `<style>@font-face { font-family: "Thmanyah Sans"; src: url(data:${font("woff2")};base64,${fakeBase64}) format("woff2"); }</style>`;
+    commit({ "docs/notes/submittals-page.htm": thmanyahPage });
+    expect(filesWithEmbeddedFonts(repo)).toEqual(["docs/notes/submittals-page.htm"]);
+    writeFileSync(join(repo, "board.html"), thmanyahPage);
+    git("add", "board.html");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["board.html"]);
+  });
+
   it("finds a manifest font however its mime type is cased, JSON-escaped inside a script string, or the old IE type", () => {
     const fontEntry = (mime: string) => JSON.stringify({ a1: { mime, data: fakeBase64 } });
     commit({
