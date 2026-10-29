@@ -19,7 +19,9 @@ import { exportWorkItems } from "./query.ts";
 // as the viewer, through the Snag List's own Export read (so the filters, the order, V3 and V14 are the
 // List's), narrowed to the chosen ids when some were chosen; an id the viewer does not see is simply not
 // in the report. Each photo is looked up through row-level security on Documents as the viewer. The worker
-// prints this snapshot and reads nothing else about the items.
+// prints this snapshot and reads nothing else about the items. The database refuses a row that is not exactly
+// what the List shows the viewer (app.request_snag_report, 20271030000000_snag_hardening.sql, RP-1078): a
+// change here or to the List's row (query.ts visibleRows and toRow) changes that function too.
 
 /** The one name a row's holder shows as the viewer reads it (V14): their own person, else the Company only. */
 function withOf(row: WorkItemRow): SnagReportItem["with"] {

@@ -103,9 +103,10 @@ create function app.request_snag_report(p_project_id uuid, p_language text, p_co
                   else w.holder_company_name
                 end,
                 -- Weeks at the Step it is seen at (stepAgeWeeks): none once closed, nor for a Draft with no number.
+                -- To the millisecond, as the api reads the time, so a week's edge falls the same on both sides.
                 'stepAgeWeeks', case
                   when st.category in ('draft', 'in_progress') and w.document_number is not null
-                    then greatest(0, floor(extract(epoch from p_now - w.entered_at) / 604800))::integer + 1
+                    then greatest(0, floor(extract(epoch from p_now - date_trunc('milliseconds', w.entered_at)) / 604800))::integer + 1
                 end
               ) as printed
             from app.work_items_seen(p_project_id, array['snag_list'], true, v_ids) w
