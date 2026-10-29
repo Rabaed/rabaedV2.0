@@ -958,68 +958,72 @@
   },
   "UX-26": {
     "status": "fail",
+    "ranAt": "2026-10-28T23:44:14.069Z",
     "checks": [
       {
-        "text": "Record of a closed MAR downloaded as Ali (6 pages, bilingual)",
+        "text": "Record of a closed MAR downloaded as Ali (5 pages, bilingual)",
         "ok": true,
-        "detail": "TWR-MAR-01-0001 at Code A"
+        "detail": "TWR-MAR-01-0649 at Code A, printed 29 Oct 2026 after RP-1059 (main 9b9c6ca0c)"
+      },
+      {
+        "text": "The Document Number prints its revision once",
+        "ok": true,
+        "detail": "Working Copy of TWR-MAR-01-0003 Rev 1 reads 'TWR-MAR-01-0003 Rev 1' in the title block and running header"
+      },
+      {
+        "text": "The revision line is a paired bilingual row with one date format",
+        "ok": true,
+        "detail": "Arabic and English rows paired, both Oct 22, 2026, Latin digits"
       },
       {
         "text": "Page 1 order: logos/Companies, title block, Parties, Classification, Final decision with chips, QR and Verification Code",
         "ok": true,
-        "detail": "Matches docs/form-engine.md section 6 elements 1-5; Document Number and Verification Code left to right; Latin digits"
+        "detail": "docs/form-engine.md section 6 elements 1-5; Document Number and Verification Code left to right"
       },
       {
-        "text": "Form body, Signature cards with signature image, Stamps, Disclaimer, Appendix present",
+        "text": "The Documents list shares a page with the next block",
         "ok": true,
-        "detail": "Pages 2 to 6; the Disclaimer is the placeholder '‹Disclaimer: the owner's text to come›'"
+        "detail": "Page 3: Documents, then Signature cards 1 and 2"
+      },
+      {
+        "text": "The Approval flow follows the Final decision without a forced break",
+        "ok": true,
+        "detail": "It may start on page 1 and runs by whole rows; here its first row does not fit in the 56 mm left, so it starts on page 2"
+      },
+      {
+        "text": "No page is mostly blank while the next block fits",
+        "ok": false,
+        "detail": "Page 3 about 45% blank: Signature card 3 (about 44 mm) moves to page 4 with about 120 mm free. Page 5 about 85% blank: only the Appendix's one-row file table, its heading and intro left on page 4. RP-1076"
       },
       {
         "text": "Compared with the owner samples of RP-151",
         "ok": false,
-        "detail": "The sample files are not in the repo or D:Artifacts; compared with the spec text instead. A person must compare with the samples"
-      },
-      {
-        "text": "Working Copy",
-        "ok": true,
-        "detail": "Download PDF on a Pending item gives a 2-page 'Not Final' watermarked copy, Companies by name only"
+        "detail": "The samples are not in the repo; a person must compare"
       }
     ],
     "screenshots": [
-      "ux/UX-26-rec-1.png",
-      "ux/UX-26-rec-2.png",
-      "ux/UX-26-rec-4.png",
-      "ux/UX-26-wc-1.png"
+      "ux/UX-26-r0b-rec-page-1.png",
+      "ux/UX-26-r0b-rec-page-2.png",
+      "ux/UX-26-r0b-rec-page-3.png",
+      "ux/UX-26-r0b-rec-page-4.png",
+      "ux/UX-26-r0b-rec-page-5.png",
+      "ux/UX-26-r0b-wc-page-1.png"
     ],
-    "notes": "Arabic-only and English-only record language not run (needs the Project's record setting changed).",
+    "notes": "Round 0b, 29 Oct 2026, re-test after RP-1059. Arabic-only and English-only record language not run (needs the Project's record setting changed). On a local stack the api reuses a printed Working Copy until APP_VERSION changes (default 'local'); the Working Copy was printed with APP_VERSION=9b9c6ca0c.",
     "uiIssues": [
       {
-        "element": "Working Copy title block",
-        "reference": "docs/form-engine.md section 6 element 1",
-        "expected": "'TWR-MAR-01-0003 Rev 1'",
-        "actual": "Document Number prints 'TWR-MAR-01-0003 Rev 1 Rev 1'",
-        "screenshot": "ux/UX-26-wc-1.png"
-      },
-      {
-        "element": "Working Copy revision line",
-        "reference": "form-engine.md section 6 element 1",
-        "expected": "Arabic and English lines paired like other rows",
-        "actual": "Arabic line sits right, English 'Revision of TWR-MAR-01-0003, closed at Code C ...' sits alone on the left under the rule; Arabic date is 2026/10/22 while elsewhere 'Oct 22, 2026'",
-        "screenshot": "ux/UX-26-wc-1.png"
-      },
-      {
         "element": "Record page 3",
-        "reference": "form-engine.md section 6 element 9",
-        "expected": "Documents list shares a page with the next block",
-        "actual": "Page 3 holds only the 1-row Documents table, ~90% blank",
-        "screenshot": "ux/UX-26-rec-3.png"
+        "reference": "form-engine.md section 6; RP-1059",
+        "expected": "Signature card 3 prints on page 3 when it fits",
+        "actual": "Card 3 moves to page 4 with about 120 mm free; page 3 about 45% blank (RP-1076)",
+        "screenshot": "ux/UX-26-r0b-rec-page-3.png"
       },
       {
-        "element": "Record page 1",
-        "reference": "form-engine.md section 6",
-        "expected": "Approval flow follows the Final decision",
-        "actual": "~190px blank at the foot of page 1 while the Approval flow starts on page 2",
-        "screenshot": "ux/UX-26-rec-1.png"
+        "element": "Record page 5",
+        "reference": "form-engine.md section 6 element 15; RP-1059",
+        "expected": "Appendix heading and intro stay with its file table",
+        "actual": "Page 5 holds only the one-row file table, about 85% blank (RP-1076)",
+        "screenshot": "ux/UX-26-r0b-rec-page-5.png"
       }
     ],
     "uxRecommendations": [
