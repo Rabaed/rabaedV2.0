@@ -46,6 +46,8 @@ const allowedInText: string[] = [
   "follows the project", // a numbering pattern that inherits the Project's, not a Watch.
   "phase 2", // "Riyadh Gate Tower – Phase 2", a demo Project's own name.
   "legal name", // a Company's legal name (`company.legal_name`).
+  "check them", // the verb, asking the reader to look again (sign-in: "Check them and try again."), not an Inspection.
+  "in the name of", // the idiom "on behalf of" (sign-in: "dated in the name of whoever took it"), not a Subject.
   "full name", // a Member's full name (`member.full_name`).
   "project name", // a Project's name, which no Subject replaces.
   "pkg number or name", // the Packages view's search: a Package's own name (GLOSSARY.md Package), which no Subject replaces.
