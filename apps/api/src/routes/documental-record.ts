@@ -12,8 +12,8 @@ const linkParams = z.object({ workItemId: z.string(), linkId: z.string() });
 
 type RecordFile = { storage_key: string; file_name: string };
 
-/** The one row a record read gives as Member `memberId`, or null. */
-const recordFile = (db: Db, memberId: string, read: ReturnType<typeof sql<RecordFile>>) =>
+/** The record file a record read (`app.documental_record_file` or `app.linked_documental_record_file`) gives Member `memberId`, or null. */
+const firstRecordFile = (db: Db, memberId: string, read: ReturnType<typeof sql<RecordFile>>) =>
   withMember(db, memberId, async (trx) => (await read.execute(trx)).rows[0] ?? null);
 
 // "Download PDF" on a closed item (RP-620; ADR 0023; visibility.md V7, the
@@ -27,7 +27,7 @@ export const documentalRecordRoutes =
     app.get("/v1/work-items/:workItemId/documental-record", { schema: { params, response: { 200: signedUrl } } }, async (request) => {
       const memberId = ctx.requireMember(request);
       const id = idOrNotFound(request.params.workItemId);
-      const file = await recordFile(ctx.db, memberId, sql<RecordFile>`select storage_key, file_name from app.documental_record_file(${id}::uuid)`);
+      const file = await firstRecordFile(ctx.db, memberId, sql<RecordFile>`select storage_key, file_name from app.documental_record_file(${id}::uuid)`);
       return visibleOrNotFound(
         Promise.resolve(file ? ctx.files.signDownload(file.storage_key, { fileName: file.file_name, contentType: "application/pdf" }, ctx.now()) : null),
       );
@@ -48,14 +48,16 @@ export const documentalRecordRoutes =
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
         const linkId = idOrNotFound(request.params.linkId);
-        const file = await recordFile(
+        const file = await firstRecordFile(
           ctx.db,
           memberId,
           sql<RecordFile>`select storage_key, file_name from app.linked_documental_record_file(${id}::uuid, ${linkId}::uuid)`,
         );
         if (!file) throw notFound();
-        const body = request.method === "HEAD" ? null : await ctx.files.stream(file.storage_key);
-        if (request.method !== "HEAD" && !body) throw notFound();
+        // HEAD checks the stored file too, so the Link's page never offers a download that 404s.
+        const head = request.method === "HEAD";
+        const body = head ? null : await ctx.files.stream(file.storage_key);
+        if (head ? !(await ctx.files.stat(file.storage_key)) : !body) throw notFound();
         reply
           .header("content-type", "application/pdf")
           .header("content-disposition", contentDisposition(file.file_name, "application/pdf"))

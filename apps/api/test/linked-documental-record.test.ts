@@ -35,6 +35,9 @@ let yNumber = "";
 let z = "";
 let xToY = "";
 let xToZ = "";
+/** V: another Mechanical item the viewer sees, whose Link to Y the removal test removes, so no other test depends on it. */
+let v = "";
+let vToY = "";
 
 const onboard = async (legalName: string): Promise<Company> => {
   const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
@@ -71,6 +74,8 @@ beforeAll(async () => {
   x = await draft(at, at.c1Engineer, "Cable trays", { trade: at.mechanical });
   xToY = await addLink(x, y);
   xToZ = await addLink(x, z);
+  v = await draft(at, at.c1Engineer, "Ducts", { trade: at.mechanical });
+  vToY = await addLink(v, y);
   yNumber = (await detail(at.c1Engineer, y)).documentNumber!;
   await closeWithRecord(y, "RPKB-1087");
 });
@@ -118,8 +123,9 @@ describe("scenario RP-1087-2: no record through the Link otherwise", () => {
   });
 
   it("is 404 once the Link is removed", async () => {
-    await ok(at.c1Engineer.delete(`/v1/work-items/${x}/links/${xToY}`));
-    await expectHidden(viaLink(viewer, x, xToY));
-    await expectHidden(viaLink(at.c1Engineer, x, xToY));
+    await ok(viaLink(viewer, v, vToY), 200);
+    await ok(at.c1Engineer.delete(`/v1/work-items/${v}/links/${vToY}`));
+    await expectHidden(viaLink(viewer, v, vToY));
+    await expectHidden(viaLink(at.c1Engineer, v, vToY));
   });
 });

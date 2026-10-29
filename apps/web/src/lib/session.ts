@@ -332,10 +332,19 @@ export function linkedRecordPath(workItemId: string, linkId: string): string {
   return `/v1/work-items/${encodeURIComponent(workItemId)}/links/${encodeURIComponent(linkId)}/documental-record`;
 }
 
-/** Whether the signed-in Member can open a Link's target's record through the Link (a HEAD, so no PDF is read); false on any failure. */
+/**
+ * Whether the signed-in Member can open a Link's target's record through the Link (a HEAD, so no
+ * PDF is read). 404 is "no record for you"; any other failure is logged, as apiRead does (RP-1049),
+ * and the page then offers no download.
+ */
 export async function hasLinkedRecord(workItemId: string, linkId: string): Promise<boolean> {
   const cookie = (await cookies()).toString();
   if (!cookie) return false;
+  // The route's shape only, never its ids.
+  const failed = (why: string) => {
+    console.error(`api read HEAD /v1/work-items/:id/links/:linkId/documental-record failed: ${why}`);
+    return false;
+  };
   try {
     const res = await fetch(`${apiUrl}${linkedRecordPath(workItemId, linkId)}`, {
       method: "HEAD",
@@ -343,9 +352,10 @@ export async function hasLinkedRecord(workItemId: string, linkId: string): Promi
       cache: "no-store",
       signal: AbortSignal.timeout(readTimeouts.small),
     });
-    return res.ok;
-  } catch {
-    return false;
+    if (res.ok) return true;
+    return [401, 403, 404].includes(res.status) ? false : failed(`status ${res.status}`);
+  } catch (error) {
+    return failed(error instanceof Error ? error.name : "unknown error");
   }
 }
 
