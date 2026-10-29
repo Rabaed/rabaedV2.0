@@ -154,3 +154,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271023 | RP-1062 | 54 | work_item_chat |
 | 20271026 | RP-1075 | 22 | package_owner_before_lock |
 | 20271025 | RP-664 | 42 | show_inspections_setting_audit |
+| 20271030 | RP-1078 | 32 | snag_hardening |

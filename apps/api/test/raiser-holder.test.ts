@@ -140,6 +140,29 @@ describe("a Consultant's Snag on the Contractor, on the same Version (seam 1)", 
   });
 });
 
+// RP-622-2: the Workflow map names the raiser's Steps by the raiser's role (app.work_item_raiser_role),
+// read only by those who see the item: C1 of both Snags, K1 of its own only while C1's is a Draft, C2 of
+// neither (the plain 404, as for a made-up id).
+describe("RP-622-2: the raiser's role on the map is read only by those who see the item (seam 1)", () => {
+  const actors = async (by: Caller, id: string) => {
+    const map = (await ok(by.get(`/v1/work-items/${id}/workflow`), 200)).json();
+    const steps = new Map(map.definition.steps.map((s: WorkflowDefinition["steps"][number]) => [s.key, s.actor]));
+    return { draft: steps.get("draft"), verify: steps.get("verify") };
+  };
+  const as = (role: string) => ({ draft: { role, permission: "create" }, verify: { role, permission: "close" } });
+
+  it("C1 reads its own as the Contractor's and K1's as the Consultant's; K1 its own only; C2 neither", async () => {
+    const own = await draftSnag(at.c1Pm, "Raiser role, C1's own");
+    const onC1 = await draftSnag(at.k1Manager, "Raiser role, K1's on C1");
+    await take(at.k1Manager, onC1, "raise");
+    expect(await actors(at.c1Pm, own)).toEqual(as("contractor"));
+    expect(await actors(at.c1Pm, onC1)).toEqual(as("consultant"));
+    expect(await actors(at.k1Manager, onC1)).toEqual(as("consultant"));
+    await expectHidden(at.k1Manager.get(`/v1/work-items/${own}/workflow`), "K1, C1's Draft");
+    for (const id of [own, onC1, crypto.randomUUID()]) await expectHidden(c2Engineer.get(`/v1/work-items/${id}/workflow`), `C2, ${id}`);
+  });
+});
+
 describe("a Snag started on a Version whose Steps name roles (seam 1)", () => {
   const readWorkflow = async (id: string): Promise<WorkflowRead> => (await ok(c1.caller.get(`/v1/workflows/${id}`), 200)).json();
   let workflowId = "";

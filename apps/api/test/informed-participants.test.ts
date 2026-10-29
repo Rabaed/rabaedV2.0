@@ -182,4 +182,21 @@ describe("what an informed Consultant reads (scenarios RP-625-1 to RP-625-3)", (
     expect((await detail(k2Engineer.caller, id)).stage.key).toBe("open");
     expect((await snags(k2Engineer.caller)).items.map((i) => i.id)).toContain(id);
   });
+
+  it("RP-625-4: K1's own Raise on C1 informs no other Consultant: K2, covering Building C, never reads it, nor C2", async () => {
+    const answers = { description: "Missing fire stopping on C: see the photos", trade: at.electrical, location: buildingC };
+    const id = (await ok(at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, { type: "SNG", title: "Missing fire stopping on C", answers }), 201)).json().id as string;
+    await take(at.k1Manager, id, "raise");
+    // C1 holds it and K1 raised it.
+    expect((await detail(at.c1Pm, id)).stage.key).toBe("open");
+    expect((await detail(at.k1Manager, id)).id).toBe(id);
+    for (const other of [k2Engineer.caller, c2Engineer]) {
+      await expectHidden(other.get(`/v1/work-items/${id}`));
+      await expectHidden(other.get(`/v1/work-items/${id}/history`));
+      expect((await snags(other)).items.map((i) => i.id)).not.toContain(id);
+    }
+    // Positive control: K2 reads one C1 raised on Building C (RP-625-2).
+    const byC1 = await raisedByC1("Missing label on C, by C1", buildingC);
+    expect((await detail(k2Engineer.caller, byC1)).id).toBe(byC1);
+  });
 });
