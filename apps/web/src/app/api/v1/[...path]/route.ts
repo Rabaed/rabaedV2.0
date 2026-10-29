@@ -27,10 +27,14 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
   });
 
   const response = new Headers();
-  const contentType = upstream.headers.get("content-type");
-  if (contentType) response.set("content-type", contentType);
+  // A file the API sends itself (a linked item's record, RP-1087) keeps its name and caching.
+  for (const name of ["content-type", "content-disposition", "cache-control"]) {
+    const value = upstream.headers.get(name);
+    if (value) response.set(name, value);
+  }
   for (const cookie of upstream.headers.getSetCookie()) response.append("set-cookie", cookie);
-  const body = upstream.status === 204 ? null : await upstream.arrayBuffer();
+  // Streamed, so a large PDF isn't held in memory here.
+  const body = upstream.status === 204 ? null : upstream.body;
   return new Response(body, { status: upstream.status, headers: response });
 }
 

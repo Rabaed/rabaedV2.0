@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { POST } from "./route.ts";
+import { GET, POST } from "./route.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -27,5 +27,24 @@ describe("the /api/v1 proxy", () => {
     const sent = await forwardedHeaders(["session"], { headers: { authorization: "Bearer x", "x-other": "y" } });
     expect(sent.get("authorization")).toBeNull();
     expect(sent.get("x-other")).toBeNull();
+  });
+
+  it("passes a file the API sends itself back with its name and caching, byte for byte (a linked item's record, RP-1087)", async () => {
+    const pdf = new TextEncoder().encode("%PDF-1.7 record");
+    const upstream = {
+      "content-type": "application/pdf",
+      "content-disposition": 'inline; filename="RST-MAR-01-0001.pdf"',
+      "cache-control": "private, no-store",
+      "x-other": "y",
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(pdf, { status: 200, headers: upstream })));
+    const path = ["work-items", "x", "links", "l", "documental-record"];
+    const res = await GET(new NextRequest(`http://web.test/api/v1/${path.join("/")}`), { params: Promise.resolve({ path }) });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-disposition")).toBe(upstream["content-disposition"]);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.get("x-other")).toBeNull();
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(pdf);
   });
 });
