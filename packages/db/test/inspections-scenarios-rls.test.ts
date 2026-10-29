@@ -7,7 +7,7 @@
 // * RP-656-1: an annotated photo on a MAR is read exactly where its original is: by C1 and K1, linked to the
 //   untouched original; C2 reads neither row and can't annotate it.
 // * RP-170-1 and RP-673-1: the real WIR Workflow Versions 2 (Recommended Result) and 3 (Recommended Code), pinned
-//   as items started on them are. The recommendation and its Internal Note are internal to K1; C1 and the Owner
+//   as items started on them are. The Recommended Code or Result and its Internal Note are internal to K1; C1 and the Owner
 //   read none of it before or after the outcome; C2 reads no part of the item.
 //
 // The seam suites' global setup runs the demo seed, which publishes the Rabaed Defaults (the WIR's Versions 1-4).
@@ -114,8 +114,8 @@ async function itemAsRead(as: string, id: string) {
   };
 }
 
-/** The recommendation as `as` reads it: the recommend_code events' payloads and the history's Internal Notes. */
-async function recommendationAsRead(as: string, id: string) {
+/** The Recommended Code or Result as `as` reads it: the recommend_code events' payloads and the history's Internal Notes. */
+async function recommendedCodeAsRead(as: string, id: string) {
   const read = await itemAsRead(as, id);
   return {
     recommended: read.events.filter((e) => e.type === "recommend_code").map((e) => e.payload),
@@ -124,11 +124,11 @@ async function recommendationAsRead(as: string, id: string) {
   };
 }
 
-/** C1's and the Owner's readers, who never read K1's recommendation. */
+/** C1's and the Owner's readers, who never read K1's Recommended Code or Result. */
 const outsideK1 = () => [tower.c1.members.engineer, tower.c1.members.project_manager, tower.ow.members.representative];
 
-/** Nothing of K1's recommendation in what `as` reads: no recommend_code event, Recommended Code or Internal Note. */
-async function expectNoRecommendation(as: string, id: string): Promise<void> {
+/** Nothing of K1's Recommended Code or Result in what `as` reads: no recommend_code event, Recommended Code or Internal Note. */
+async function expectNoRecommendedCode(as: string, id: string): Promise<Awaited<ReturnType<typeof itemAsRead>>> {
   const read = await itemAsRead(as, id);
   expect(read.item).toHaveLength(1);
   expect(read.events.map((e) => e.type)).not.toContain("recommend_code");
@@ -137,6 +137,7 @@ async function expectNoRecommendation(as: string, id: string): Promise<void> {
   expect(JSON.stringify(read)).not.toContain(INTERNAL_NOTE);
   // Numbered 1, 2, 3… as they see them: no gap counts K1's internal events (V5).
   expect(read.history.map((e) => e.seq)).toEqual(read.history.map((_, i) => i + 1));
+  return read;
 }
 
 /** C2 reads no part of item `id` (V3), and still reads its own. */
@@ -160,11 +161,11 @@ describe("RP-170-1: a WIR on Workflow Version 2, K1's Engineer recommends Failed
     expect(await takeWith(k1.members.engineer, id, "send_to_manager", { note: INTERNAL_NOTE, recommended: "failed" })).toBe("applied");
     expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
 
-    // Before the Result, C1 and the Owner read what they read before the recommendation: K1's Steps are internal.
+    // Before the Result, C1 and the Owner read what they read before K1 recommended: K1's Steps are internal.
     for (const as of outsideK1()) expect(await itemAsRead(as, id)).toEqual(before.get(as));
-    // K1 reads both recommendations and their Internal Notes.
+    // K1 reads both Recommended Results and their Internal Notes.
     for (const as of [k1.members.engineer, k1.members.manager]) {
-      expect(await recommendationAsRead(as, id)).toEqual({
+      expect(await recommendedCodeAsRead(as, id)).toEqual({
         recommended: [{ recommended_code: "failed" }, { recommended_code: "failed" }],
         inHistory: ["failed", "failed"],
         notes: 2,
@@ -177,10 +178,12 @@ describe("RP-170-1: a WIR on Workflow Version 2, K1's Engineer recommends Failed
       }),
     ).toBe("applied");
     for (const as of outsideK1()) {
-      await expectNoRecommendation(as, id);
-      expect((await itemAsRead(as, id)).item).toEqual([{ id, outcome: "passed_with_comments" }]);
+      const read = await expectNoRecommendedCode(as, id);
+      expect(read.item).toEqual([{ id, outcome: "passed_with_comments" }]);
+      // The Result and the Manager's shared reply.
+      expect(JSON.stringify(read.events)).toContain("Fix the cover");
     }
-    expect((await recommendationAsRead(k1.members.manager, id)).notes).toBe(2);
+    expect((await recommendedCodeAsRead(k1.members.manager, id)).notes).toBe(2);
     await expectC2ReadsNothing(id);
     // Stored internal to K1 only: the migrator reads the rows.
     const { rows } = await migrator.query(
@@ -202,7 +205,7 @@ describe("RP-673-1: a WIR on Workflow Version 3, K1's Engineer recommends Code C
     expect(await takeWith(k1.members.engineer, id, "send_to_manager", { note: INTERNAL_NOTE, recommended: "C" })).toBe("applied");
     for (const as of outsideK1()) expect(await itemAsRead(as, id)).toEqual(before.get(as));
     for (const as of [k1.members.engineer, k1.members.manager]) {
-      expect(await recommendationAsRead(as, id)).toEqual({ recommended: [{ recommended_code: "C" }], inHistory: ["C"], notes: 1 });
+      expect(await recommendedCodeAsRead(as, id)).toEqual({ recommended: [{ recommended_code: "C" }], inHistory: ["C"], notes: 1 });
     }
 
     expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
@@ -210,8 +213,7 @@ describe("RP-673-1: a WIR on Workflow Version 3, K1's Engineer recommends Code C
       await takeWith(k1.members.manager, id, "revise_c", { answers: { sample_checked: true, matches_specification: true, remarks: "Spacing out of tolerance" } }),
     ).toBe("applied");
     for (const as of outsideK1()) {
-      await expectNoRecommendation(as, id);
-      const read = await itemAsRead(as, id);
+      const read = await expectNoRecommendedCode(as, id);
       expect(read.item).toEqual([{ id, outcome: "C" }]);
       expect(read.count).toBe(before.get(as)!.count + 1);
     }
@@ -254,9 +256,10 @@ describe("RP-652-1: the Project shows Inspections in its Submittals tab", () => 
       expect(submittalStages).toContain(row!.stage_key);
     }
     expect((await seen(c2.members.engineer, ["submittals", "inspections"])).map((r) => r.id)).toEqual([c2Own]);
-    // Need My Action reads through the same check: nothing for C2.
-    const need = await tower.call<{ need: string | null }>(c2.members.engineer, sql`select app.need_my_action(${wir}::uuid) as need`);
-    expect(need).toEqual([{ need: null }]);
+    // Need My Action reads through the same check: K1's Engineer, who holds the WIR, needs to act; C2 gets nothing.
+    const need = (as: string) => tower.call<{ need: string | null }>(as, sql`select app.need_my_action(${wir}::uuid) as need`);
+    expect((await need(k1.members.engineer))[0]!.need).not.toBeNull();
+    expect(await need(c2.members.engineer)).toEqual([{ need: null }]);
     await expectC2ReadsNothing(wir);
   });
 });
@@ -323,6 +326,7 @@ describe("RP-656-1: C1's engineer annotates a photo on a MAR, then C1 Submits it
         sql`select outcome from app.start_annotated_copy_upload(${id}::uuid, ${documentId}::uuid, 'mine.jpg', 2048, 'image/jpeg', now())`,
       ).then((rows) => rows.map((r) => r.outcome));
     expect(await annotate(original)).toEqual(["not_found"]);
+    expect(await annotate(copy)).toEqual(["not_found"]);
     expect(await annotate(randomUUID())).toEqual(["not_found"]);
     const { rows } = await migrator.query("select count(*)::integer as n from document where work_item_id = $1", [id]);
     expect(rows[0].n).toBe(2);

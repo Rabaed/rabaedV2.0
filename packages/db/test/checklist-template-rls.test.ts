@@ -286,9 +286,8 @@ describe("the copy on a WIR is keyed by its Project", () => {
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(row.project_id).toBe(row.item_project_id);
     // Another Project's id is refused: the composite key to work_item (id, project_id).
-    await expect(
-      migrator.query("update work_item_checklist set project_id = $1 where work_item_id = $2", [(await migrator.query("select id from project where id <> $1 limit 1", [projectId])).rows[0].id, wir]),
-    ).rejects.toThrow(/foreign key/);
+    const otherProjectId = (await migrator.query("select id from project where id <> $1 limit 1", [projectId])).rows[0].id as string;
+    await expect(migrator.query("update work_item_checklist set project_id = $1 where work_item_id = $2", [otherProjectId, wir])).rejects.toThrow(/foreign key/);
   });
 
   it("is read only on a Project the reader is on, and the item they see", async () => {
