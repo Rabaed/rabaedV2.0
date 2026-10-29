@@ -48,6 +48,10 @@ export type SubmittalPanelProps = {
   onClose: () => void;
   /** The panel's width in px (Normal, 640, unless the viewer chose another), never wider than the screen. */
   width?: number;
+  /** Its width is being dragged (or first painted): no width transition (RP-1063). */
+  resizing?: boolean;
+  /** On its inline-start edge: the drag edge (`SubmittalPanelGrip`, RP-1063). */
+  edge?: ReactNode;
   /** The ids of what names the panel for screen readers: the identity's number and Subject. */
   labelledBy?: string;
   /** Its name while there is no identity to name it (the item is being read, or couldn't be). */
@@ -60,7 +64,7 @@ export type SubmittalPanelProps = {
   facts?: ReactNode;
   /** The tabs, sticky at the top of the scrolling body (RP-1066). */
   tabs?: ReactNode;
-  /** The side rail of the Wide and Full bands (RP-1063, RP-1064). */
+  /** The side rail of the Wide and Full bands, 300px and 360px wide (`.sdp-rail`; RP-1064, RP-1067 fill it). */
   rail?: ReactNode;
   /** The fixed footer's actions; the primary one last. */
   actions?: ReactNode;
@@ -88,6 +92,8 @@ export function SubmittalPanel({
   onNext,
   onClose,
   width = submittalPanelNormalWidth,
+  resizing = false,
+  edge,
   labelledBy,
   label,
   busy = false,
@@ -141,6 +147,7 @@ export function SubmittalPanel({
       tabIndex={-1}
       dir={directionOf(locale)}
       data-submittal-panel=""
+      data-resizing={resizing || undefined}
       style={{ width: `min(${width}px, 100vw)` }}
       className={cn(
         "sdp @container/sdp fixed inset-y-0 end-0 z-40 flex flex-col border-s border-border bg-surface text-text outline-none",
@@ -148,14 +155,16 @@ export function SubmittalPanel({
         className,
       )}
     >
+      {edge}
       <div className="sdp-top flex h-[52px] shrink-0 items-center gap-1 border-b border-border-subtle ps-4 pe-2.5">
         <p className="sdp-crumb me-auto flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
           <Icon name="file-text" size={15} className="shrink-0" />
-          <span className="whitespace-nowrap">{labels.module}</span>
-          <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="shrink-0" />
+          {/* The Module and the place are left out in the Compact band (`.sdp-crumb-label`). */}
+          <span className="sdp-crumb-label whitespace-nowrap">{labels.module}</span>
+          <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="sdp-crumb-label shrink-0" />
           <span className="truncate font-bold text-text">{crumb}</span>
           {position && position.index >= 0 && (
-            <span className="whitespace-nowrap tabular-nums">
+            <span className="sdp-crumb-label whitespace-nowrap tabular-nums">
               {/* "3 / 42" reads left to right in Arabic too, like a page count. */}· <bdi dir="ltr">{labels.position(n(position.index + 1), n(position.total))}</bdi>
             </span>
           )}
@@ -182,7 +191,8 @@ export function SubmittalPanel({
             {tabs}
             {children}
           </div>
-          {rail}
+          {/* Shown from the Wide band up; an empty slot until RP-1064 and RP-1067 fill it. */}
+          <div className="sdp-rail">{rail}</div>
         </div>
       </div>
       <div className="sdp-actions flex shrink-0 flex-wrap items-center gap-2 border-t border-border-subtle bg-surface px-4 py-3">

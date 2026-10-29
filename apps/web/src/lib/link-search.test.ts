@@ -13,10 +13,11 @@ const link = (id: string, documentNumber: string, workItemId: string | null, fie
 });
 
 describe("linkSearchParams", () => {
-  it("asks for the words and the page, and a link question's accepts as types and outcomes (RP-82)", () => {
+  it("asks for the words and the page, and a link question's accepts as modules, types and outcomes (RP-82, RP-1080)", () => {
     expect(linkSearchParams("MAR", 2).toString()).toBe("q=MAR&page=2");
     expect(linkSearchParams("MAR", 1, { outcomes: ["A", "B"] }).toString()).toBe("q=MAR&page=1&outcomes=A%2CB");
     expect(linkSearchParams("x", 1, { types: ["MAR", "SAR"], outcomes: ["A"] }).toString()).toBe("q=x&page=1&types=MAR%2CSAR&outcomes=A");
+    expect(linkSearchParams("x", 1, { modules: ["submittals"], outcomes: ["A", "B"] }).toString()).toBe("q=x&page=1&modules=submittals&outcomes=A%2CB");
   });
 });
 

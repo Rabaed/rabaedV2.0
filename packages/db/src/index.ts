@@ -10,6 +10,7 @@ export * from "./migrate.ts";
 export * from "./numbering.ts";
 export * from "./object-store.ts";
 export * from "./outbox.ts";
+export * from "./participant-invitation-email.ts";
 export * from "./password-reset.ts";
 export * from "./reset-database.ts";
 export * from "./scheduled-jobs.ts";
