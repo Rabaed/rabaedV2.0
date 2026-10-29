@@ -3,7 +3,8 @@ import { parseAllowlist, parseAudit, report, summary, workflowCommands } from ".
 
 // RP-1023: `pnpm audit --prod` in CI, reporting first. RP-635 checked a new
 // library by hand, and the audit then showed 7 findings (2 high, in apps/web's
-// `next`) that nothing in CI reported.
+// `next`) that nothing in CI reported. RP-1032 made it fail on high and above;
+// RP-1070 audits the dev dependencies too.
 
 const advisory = (id: number, severity: string, module_name: string, title: string, paths: string[], patched_versions = ">=16.3.8", url = `https://github.com/advisories/GHSA-${id}`) => ({
   id,
@@ -108,7 +109,7 @@ describe("summary", () => {
   it("counts the findings at and below the level, and tables the ones at it", () => {
     const text = summary(parseAudit(today), "high");
     expect(text).toContain("## Package audit failed: 2 at high or above, not allow-listed");
-    expect(text).toContain("2 high, 1 moderate, 1 low in 392 production packages.");
+    expect(text).toContain("`pnpm audit`: 2 high, 1 moderate, 1 low in 392 packages.");
     expect(text).toContain("| high | next | [Next.js has Server-Side Request Forgery in Image Optimization](https://github.com/advisories/GHSA-1241496) | >=16.3.8 | apps/web › next |");
     expect(text).toContain("The job fails on an advisory at high or above that `.audit-allowlist.json` does not list (RP-1032).");
   });
