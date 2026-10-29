@@ -26,8 +26,16 @@ ts.run("order-by-tiebreaker", rabaed.rules["order-by-tiebreaker"], {
     `db.selectFrom("x").orderBy(sql\`coalesce(a, b)\`).execute();`,
     `db.selectFrom("x").orderBy((eb) => eb.ref("at")).execute();`,
     `db.selectFrom("x").orderBy(column).execute();`,
-    // The tiebreaker after other calls in between.
+    // The tiebreaker after other calls in between, or after a cast.
     `db.selectFrom("x").orderBy("created_at", "desc").limit(10).orderBy("id", "desc").execute();`,
+    `(db.selectFrom("x").orderBy("at") as Query).orderBy("id").execute();`,
+    `db.selectFrom("x").orderBy("at")!.orderBy("id").execute();`,
+    // SQL in a string or a template, tie broken or no timestamp last.
+    "sql`select a.reason from admin_action a where a.target_id = ${id} order by a.at, a.id`.execute(db);",
+    `migrator.query("select type from setup_event where project_id = $1 order by created_at, id", [id]);`,
+    "sql`select id from x order by ${column}`;",
+    "sql`select id from x order by document_number collate \"C\"`;",
+    `const text = "no sort here";`,
   ],
   invalid: [
     { code: `db.selectFrom("admin_action").select("reason").orderBy("at").execute();`, errors: [{ messageId: "untied", data: { key: "at" } }] },
@@ -42,5 +50,15 @@ ts.run("order-by-tiebreaker", rabaed.rules["order-by-tiebreaker"], {
     { code: `db.selectFrom("x").orderBy("created_at", "desc").limit(1).executeTakeFirst();`, errors: [{ messageId: "untied", data: { key: "created_at" } }] },
     // The query built in a helper and returned.
     { code: `const actionsOn = (id) => db.selectFrom("admin_action").where("target_id", "=", id).orderBy("at");`, errors: [{ messageId: "untied", data: { key: "at" } }] },
+    // A tie broken in a later statement, or only in a branch, is not seen: write the tiebreaker in the same chain.
+    { code: `const q = db.selectFrom("x").orderBy("at"); q.orderBy("id");`, errors: [{ messageId: "untied", data: { key: "at" } }] },
+    { code: `db.selectFrom("x").orderBy("at").$if(all, (qb) => qb.orderBy("id"));`, errors: [{ messageId: "untied", data: { key: "at" } }] },
+    // SQL in a template or a string.
+    {
+      code: "sql`select a.action from admin_action a\n  where a.engineer_id = ${id}\n  order by a.at\n`.execute(migrator);",
+      errors: [{ messageId: "untiedSql", data: { key: "a.at" } }],
+    },
+    { code: `migrator.query("select id from outbox where kind = $1 order by created_at desc limit 1", [kind]);`, errors: [{ messageId: "untiedSql", data: { key: "created_at" } }] },
+    { code: "const q = `select id from x order by updated_at`;", errors: [{ messageId: "untiedSql", data: { key: "updated_at" } }] },
   ],
 });

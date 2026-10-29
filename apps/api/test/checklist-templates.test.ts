@@ -156,7 +156,8 @@ describe("only a Project Admin writes a template (seam 1 of RP-651-1)", () => {
       .select(["kind", "type"])
       .where("project_id", "=", tower.projectId)
       .where(({ eb, ref }) => eb(eb.fn<string>("jsonb_extract_path_text", [ref("payload"), eb.val("checklist_template_id")]), "=", id))
-      .orderBy("created_at").orderBy("id")
+      .orderBy("created_at")
+      .orderBy("id")
       .execute();
     expect(audited).toEqual([
       { kind: "checklist_template", type: "checklist_template_created" },

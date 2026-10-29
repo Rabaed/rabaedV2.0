@@ -581,7 +581,7 @@ describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps
     (
       await sql<{ run_kind: string; passed: boolean; problems: string[] }>`
         select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
-        where r.work_item_id = ${id}::uuid order by c.ran_at
+        where r.work_item_id = ${id}::uuid order by c.ran_at, c.id
       `.execute(migrator)
     ).rows;
   let engineer: Awaited<ReturnType<typeof admin.signedInEngineer>>;

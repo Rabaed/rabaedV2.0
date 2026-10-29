@@ -325,7 +325,8 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .select(["action", "reason"])
       .where("engineer_id", "=", engineer.id)
       .where("action", "in", ["add_default_outcome", "change_default_outcome", "reorder_default_outcomes"])
-      .orderBy("at").orderBy("id")
+      .orderBy("at")
+      .orderBy("id")
       .execute();
     expect(logged).toEqual([
       { action: "add_default_outcome", reason: "Add an outcome" },
@@ -368,7 +369,8 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .select(["action", "reason"])
       .where("engineer_id", "=", engineer.id)
       .where("action", "in", ["add_default_stage", "rename_default_stage", "reorder_default_stages"])
-      .orderBy("at").orderBy("id")
+      .orderBy("at")
+      .orderBy("id")
       .execute();
     expect(logged.map((l) => l.action)).toEqual(["add_default_stage", "rename_default_stage", "reorder_default_stages"]);
   });
@@ -483,8 +485,9 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", definitionId).where("action", "=", "publish_workflow").execute();
   /**
    * The Type's refused publishes in admin_action: each with its reason and how many Projects lack which outcomes and Stages (V9),
-   * in no order. Each was its own transaction, so its `at` is its own reading of the database's clock, which can step back
-   * under load (RP-1105: two came back swapped); a test compares them as a set, the ones it made by id.
+   * in no order. Each was its own transaction with its own `at`, and two written one after the other came back swapped
+   * under load (RP-1105; the database's clock, in Docker's VM, is the likely cause), so a test compares them as a set, the
+   * ones it made by id.
    */
   const refusedPublishes = () =>
     adminDb

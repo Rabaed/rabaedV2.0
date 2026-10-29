@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { orderByEnd, splitComments } from "../packages/eslint-plugin/src/sql-sorts.ts";
 import { hiddenColumns } from "./hidden-columns.ts";
 import { migrationNames, migrationSql } from "./migrations.ts";
 
@@ -45,76 +46,12 @@ export interface HiddenSortKey {
 
 const exceptionComment = /hidden-sort-key:\s*\S/;
 const sortClauseStart = /\b(?<order>order\s+by)\b|\b(?<distinct>distinct\s+on)\s*\(/gi;
-// Words that end an `order by` clause when met outside parentheses.
-const clauseEnd = new Set(["limit", "offset", "fetch", "for", "union", "intersect", "except", "rows", "range", "groups", "window", "returning", "loop", "into", "then", "else", "end", "when"]);
 // Words that can follow a table name and are not its alias.
 const notAlias = new Set([
   "where", "join", "inner", "left", "right", "full", "cross", "natural", "lateral", "on", "using", "order", "group", "having", "limit",
   "offset", "set", "union", "except", "intersect", "window", "returning", "for", "values", "select", "and", "or", "then", "loop", "into",
   "default", "fetch", "as", "with", "is", "in", "not", "from", "to", "add", "alter", "drop", "column", "enable", "disable", "owner",
 ]);
-
-/**
- * The SQL with each comment blanked out (newlines kept, so offsets and line
- * numbers still match), and each comment's text by line. A `'…'` literal or a
- * `"…"` identifier is skipped over, so `--` inside one starts no comment; its
- * contents stay in the code, so dynamic SQL in a literal is checked like any
- * other. A `$$` body is code, not skipped.
- */
-export function splitComments(sql: string): { code: string; comments: Map<number, string> } {
-  const comments = new Map<number, string>();
-  let code = "";
-  let line = 1;
-  const blank = (text: string) => {
-    for (const [i, part] of text.split("\n").entries()) {
-      if (i > 0) line++;
-      comments.set(line, (comments.get(line) ?? "") + part);
-    }
-    return text.replace(/[^\n]/g, " ");
-  };
-  for (let i = 0; i < sql.length; ) {
-    const two = sql.slice(i, i + 2);
-    let end: number;
-    if (two === "--") {
-      end = sql.indexOf("\n", i);
-      if (end === -1) end = sql.length;
-      code += blank(sql.slice(i, end));
-    } else if (two === "/*") {
-      end = sql.indexOf("*/", i + 2);
-      end = end === -1 ? sql.length : end + 2;
-      code += blank(sql.slice(i, end));
-    } else if (sql[i] === "'" || sql[i] === '"') {
-      // A doubled quote inside is an escaped one.
-      const quote = sql[i];
-      end = i + 1;
-      while (end < sql.length && !(sql[end] === quote && sql[end + 1] !== quote)) end += sql[end] === quote ? 2 : 1;
-      end = Math.min(end + 1, sql.length);
-      const literal = sql.slice(i, end);
-      line += literal.split("\n").length - 1;
-      code += literal;
-    } else {
-      end = i + 1;
-      if (sql[i] === "\n") line++;
-      code += sql[i];
-    }
-    i = end;
-  }
-  return { code, comments };
-}
-
-/** Where the sort clause starting at `start` (just after `order by`) ends: a `;`, `$$`, an unmatched `)` or a word that ends it. */
-export function orderByEnd(code: string, start: number): number {
-  const token = /\$\$|[();]|[a-z_]\w*/gi;
-  token.lastIndex = start;
-  let depth = 0;
-  for (let match = token.exec(code); match; match = token.exec(code)) {
-    const word = match[0].toLowerCase();
-    if (word === "(") depth++;
-    else if (word === ")" && depth-- === 0) return match.index;
-    else if (word === ";" || word === "$$" || (depth === 0 && clauseEnd.has(word))) return match.index;
-  }
-  return code.length;
-}
 
 /** Where the `distinct on (` list starting at `start` (just after its `(`) ends. */
 function parenEnd(code: string, start: number): number {
