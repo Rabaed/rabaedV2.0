@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./storage-keys": "./src/storage-keys.ts",
     "./task-flags": "./src/task-flags.ts",
     "./test-support": "./test-support/index.ts"
   },

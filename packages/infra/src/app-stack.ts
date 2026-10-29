@@ -4,6 +4,7 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
+import { PROJECT_FILES_PREFIX, RECORD_OBJECTS, SNAG_REPORT_OBJECTS } from "@rabaed/db/storage-keys";
 import type { Construct } from "constructs";
 import { checkDomain, resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
@@ -11,7 +12,7 @@ import { grantToDeployRole } from "./deploy-grants.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
-import { FONTS_PREFIX, PROJECT_FILES_PREFIX, RECORD_IMAGE_OBJECTS, RECORD_OBJECTS, SEALING_PREFIX, SNAG_REPORT_OBJECTS, type StorageStack } from "./storage-stack.ts";
+import { FONTS_PREFIX, RECORD_IMAGE_OBJECTS, SEALING_PREFIX, type StorageStack } from "./storage-stack.ts";
 
 /**
  * The free public RFC 3161 timestamp authority the Documental Records' seals use (ADR 0023).
@@ -104,6 +105,16 @@ export class AppStack extends Stack {
       new iam.PolicyStatement({
         actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
         resources: [`${PROJECT_FILES_PREFIX}*`, ...RECORD_IMAGE_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
+      }),
+    );
+    // Except what only the worker writes: the sealed Documental Records, their Working Copies and the
+    // Snag reports (ADR 0017, ADR 0023, RP-1084). The api still reads them, to sign download links;
+    // a wrong key in a signed PUT or a delete can never overwrite or remove one.
+    apiTaskRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.DENY,
+        actions: ["s3:PutObject*", "s3:DeleteObject*"],
+        resources: [RECORD_OBJECTS, SNAG_REPORT_OBJECTS].map((key) => storage.projectFiles.arnForObjects(key)),
       }),
     );
     // So S3 answers 404, not 403, for a file not uploaded yet: confirming a

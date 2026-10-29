@@ -1,4 +1,4 @@
-import { saveSnagReport, snagReportJob, type OutboxHandler } from "@rabaed/db";
+import { saveSnagReport, snagReportJob, snagReportPrefix, type OutboxHandler } from "@rabaed/db";
 import { inlinePhotos } from "../record/assets.ts";
 import type { RecordFiles } from "../record/files.ts";
 import type { RecordFonts } from "../record/fonts.ts";
@@ -20,9 +20,9 @@ export interface SnagReportJobDeps {
   readonly now?: () => Date;
 }
 
-/** Where a report lives, under its Project (the worker may write only here and under the records). */
+/** Where a report lives, under its Project (the worker may write only here and under the records; the api only reads here, RP-1084). */
 export function snagReportKey(projectId: string, reportId: string): string {
-  return `projects/${projectId}/snag-reports/${reportId}/snag-report.pdf`;
+  return `${snagReportPrefix(projectId)}${reportId}/snag-report.pdf`;
 }
 
 export function snagReportHandler(deps: SnagReportJobDeps): OutboxHandler {
