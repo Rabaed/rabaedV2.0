@@ -2992,6 +2992,14 @@
     "previous": "Previous submittal",
     "next": "Next submittal",
     "close": "Close",
+    "size": {
+      "group": "Size",
+      "compact": "Compact",
+      "normal": "Normal",
+      "wide": "Wide",
+      "full": "Full",
+      "grip": "Drag to resize · double-click to switch Normal and Wide"
+    },
     "hint": "Esc to close · ↑ ↓ to move through the list",
     "with": "With",
     "stepAge": "Step Age",
