@@ -70,7 +70,7 @@ const broken = (definition: WorkflowDefinition): WorkflowDefinition => ({
   transitions: definition.transitions.filter((t) => t.key !== "send_for_review"),
 });
 const actionsOn = (targetId: string) =>
-  adminDb.selectFrom("admin_action").select(["engineer_id", "action", "reason"]).where("target_id", "=", targetId).orderBy("at").execute();
+  adminDb.selectFrom("admin_action").select(["engineer_id", "action", "reason"]).where("target_id", "=", targetId).orderBy("at").orderBy("id").execute();
 
 beforeAll(async () => {
   const existing = await sql<{ workflow_definition_id: string }>`
@@ -325,7 +325,7 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .select(["action", "reason"])
       .where("engineer_id", "=", engineer.id)
       .where("action", "in", ["add_default_outcome", "change_default_outcome", "reorder_default_outcomes"])
-      .orderBy("at")
+      .orderBy("at").orderBy("id")
       .execute();
     expect(logged).toEqual([
       { action: "add_default_outcome", reason: "Add an outcome" },
@@ -368,7 +368,7 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .select(["action", "reason"])
       .where("engineer_id", "=", engineer.id)
       .where("action", "in", ["add_default_stage", "rename_default_stage", "reorder_default_stages"])
-      .orderBy("at")
+      .orderBy("at").orderBy("id")
       .execute();
     expect(logged.map((l) => l.action)).toEqual(["add_default_stage", "rename_default_stage", "reorder_default_stages"]);
   });
@@ -481,14 +481,17 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
   const latestVersionNo = async () => (await readLatestPublishedDefinition(adminDb, definitionId))!.versionNo;
   const publishActions = () =>
     adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", definitionId).where("action", "=", "publish_workflow").execute();
-  /** The Type's refused publishes in admin_action: each with its reason and how many Projects lack which outcomes and Stages (V9). */
+  /**
+   * The Type's refused publishes in admin_action: each with its reason and how many Projects lack which outcomes and Stages (V9),
+   * in no order. Each was its own transaction, so its `at` is its own reading of the database's clock, which can step back
+   * under load (RP-1105: two came back swapped); a test compares them as a set, the ones it made by id.
+   */
   const refusedPublishes = () =>
     adminDb
       .selectFrom("admin_action")
-      .select(["engineer_id", "reason", "after"])
+      .select(["id", "engineer_id", "reason", "after"])
       .where("target_id", "=", definitionId)
       .where("action", "=", "refuse_workflow_publish")
-      .orderBy("at")
       .execute();
   /** The outcomes and Stages of the Version a new item of the Type on Project `projectId` starts on that the Project's own sets lack. */
   const outsideSets = async (db: Db, projectId: string) =>
@@ -515,7 +518,7 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     // Every other Active Project already holds it, so `existing` is the one that lacks it (a Closed Project raises nothing).
     await copyIntoEveryProjectBut(migrator, [existing.projectId, closed], { outcome: code });
     const logged = (await publishActions()).length;
-    const refusals = (await refusedPublishes()).length;
+    const earlierRefusals = new Set((await refusedPublishes()).map((r) => r.id));
 
     const refused = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
     expect(refused.statusCode, refused.body).toBe(422);
@@ -530,10 +533,14 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
       ok: false, reason: "projects_lack_entries", ...lacking,
     });
     // Each refusal is logged with the Engineer's reason, the count and the entries, and nothing else (V9).
-    expect((await refusedPublishes()).slice(refusals)).toEqual([
-      { engineer_id: engineer.id, reason: "Close with the new outcome", after: { typeCode: TYPE, ...lacking } },
-      { engineer_id: engineer.id, reason: "From the CLI", after: { typeCode: TYPE, ...lacking } },
-    ]);
+    const refusals = (await refusedPublishes()).filter((r) => !earlierRefusals.has(r.id)).map(({ id: _id, ...r }) => r);
+    expect(refusals).toHaveLength(2);
+    expect(refusals).toEqual(
+      expect.arrayContaining([
+        { engineer_id: engineer.id, reason: "Close with the new outcome", after: { typeCode: TYPE, ...lacking } },
+        { engineer_id: engineer.id, reason: "From the CLI", after: { typeCode: TYPE, ...lacking } },
+      ]),
+    );
     expect(await outsideSets(migrator, existing.projectId)).toEqual([]);
 
     const added = await withMember(appDb, existing.memberId, (trx) =>

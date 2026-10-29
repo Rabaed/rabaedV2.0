@@ -63,7 +63,7 @@ const csvOf = (rows: string[][]) => ({
 });
 const reasonsByRow = (preview: RegisterImport) => Object.fromEntries(preview.rows.map((r) => [r.rowNo, r.reasons]));
 const actionsOf = async (engineerId: string) =>
-  adminDb.selectFrom("admin_action").select(["action", "target_kind", "target_id", "reason", "after"]).where("engineer_id", "=", engineerId).orderBy("at").execute();
+  adminDb.selectFrom("admin_action").select(["action", "target_kind", "target_id", "reason", "after"]).where("engineer_id", "=", engineerId).orderBy("at").orderBy("id").execute();
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
