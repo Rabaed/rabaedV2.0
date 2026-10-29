@@ -40,6 +40,7 @@ export function SubmittalPanelNumberCard({ segments, labels, className }: Submit
   const card = submittalNumberCard(segments);
   const id = useId();
   const [open, setOpen] = useState(false);
+  const wrapper = useRef<HTMLSpanElement>(null);
   const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stay = () => clearTimeout(leaving.current);
   useEffect(() => () => clearTimeout(leaving.current), []);
@@ -61,12 +62,15 @@ export function SubmittalPanelNumberCard({ segments, labels, className }: Submit
     stay();
     setOpen(true);
   };
+  // The pointer leaving closes it, unless the keyboard's focus is still on the ⓘ.
   const hideSoon = () => {
     stay();
+    if (wrapper.current?.contains(document.activeElement)) return;
     leaving.current = setTimeout(() => setOpen(false), leaveDelay);
   };
   return (
     <span
+      ref={wrapper}
       className={cn("sdp-number-info inline-flex shrink-0", className)}
       onPointerEnter={show}
       onPointerLeave={hideSoon}
@@ -81,7 +85,8 @@ export function SubmittalPanelNumberCard({ segments, labels, className }: Submit
         aria-label={labels.title}
         aria-describedby={id}
         className="w-8 px-0 text-muted hover:text-text pointer-coarse:min-w-11"
-        onClick={() => setOpen((was) => !was)}
+        // A tap opens it too (a touch screen has no hover); a tap elsewhere or Esc closes it.
+        onClick={show}
       >
         <Icon name="info-circle" size={18} />
       </Button>
