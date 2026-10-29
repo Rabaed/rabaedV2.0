@@ -21,6 +21,8 @@ export type SnagReportRequest = z.infer<typeof snagReportRequest>;
 
 /** One item as the viewer read it. */
 export const snagReportItem = z.object({
+  /** The item, so the database checks the row against what the Snag List shows the viewer (RP-1078). */
+  id: z.uuid(),
   documentNumber: z.string().nullable(),
   subject: z.string(),
   type: bilingualText,

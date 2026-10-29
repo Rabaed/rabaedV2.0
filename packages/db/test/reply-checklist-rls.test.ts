@@ -351,6 +351,47 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
   });
 });
 
+// RP-1078: the check item's text is the Inspection's, so app.raised_from_check_item gives it only to
+// a reader who sees the Inspection too, and only through a Link not taken away. Today the Snag copies
+// the Inspection's readers and the Link is never removed; these hold the rule in the database on its
+// own. The migrator makes each case: the Owner's oversight row taken off the Inspection alone (as when
+// the Snag's built-ins changed), then the Link marked removed.
+describe("RP-1078: a Snag's check item is read only by those who see its Inspection, through a Link not removed", () => {
+  let id = "";
+  let snag = "";
+  const formwork = { key: "formwork", text: bilingual("Formwork tight") };
+  const checkItem = async (as: string) =>
+    (await call<{ item: unknown }>(as, sql`select app.raised_from_check_item(${snag}::uuid) as item`))[0]!.item;
+  const sees = async (as: string, item: string) => (await call<{ id: string }>(as, sql`select id from work_item where id = ${item}::uuid`)).length === 1;
+
+  beforeAll(async () => {
+    ({ id } = await atManager("Slab pour, Level 9"));
+    expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
+    const raised = await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from'", [id]);
+    snag = raised.rows[0].from_id as string;
+  });
+
+  it("is null to the Owner once it sees the Snag but not the Inspection; C1 still reads it", async () => {
+    const owner = ow.members.representative;
+    expect(await checkItem(owner)).toEqual(formwork);
+    await migrator.query("delete from work_item_access where work_item_id = $1 and participant_id = $2", [id, ow.participantId]);
+    expect(await sees(owner, snag)).toBe(true);
+    expect(await sees(owner, id)).toBe(false);
+    expect(await checkItem(owner)).toBeNull();
+    // Positive control: C1 sees both and reads it.
+    expect(await checkItem(c1.members.engineer)).toEqual(formwork);
+  });
+
+  it("is null to everyone once the Link is removed", async () => {
+    await migrator.query("update work_item_link set removed_at = now() where from_id = $1 and kind = 'raised_from'", [snag]);
+    for (const reader of [c1.members.engineer, k1.members.manager]) {
+      expect(await sees(reader, snag), reader).toBe(true);
+      expect(await sees(reader, id), reader).toBe(true);
+      expect(await checkItem(reader), reader).toBeNull();
+    }
+  });
+});
+
 // RP-981 (INSP-12): the Engineer annotates a checklist item's photo with RP-656's tool. The
 // annotated copy is a reply Document of the same field and check item, never a Form Document, so
 // it is K1's until the code exactly as its original is (V19, ADR 0024).
