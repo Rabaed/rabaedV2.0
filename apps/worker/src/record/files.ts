@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { GetObjectCommand, ListObjectsV2Command, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { objectStoreClientConfig, objectStoreFromEnv, PROJECT_FILES_ENV, type ObjectStoreSettings } from "@rabaed/db";
+import { documentalRecordPrefix, objectStoreClientConfig, objectStoreFromEnv, PROJECT_FILES_ENV, type ObjectStoreSettings } from "@rabaed/db";
 
 // Where the worker keeps a record's files: the Project files bucket, under the
 // item's own prefix (ADR 0007), the same store the api signs Document links for
@@ -73,13 +73,16 @@ export async function filesUnder(client: S3Client, bucket: string, prefix: strin
   return out;
 }
 
-/** Where an item's record lives: one location, name and URL for good (ADR 0023). */
+/**
+ * Where an item's record lives: one location, name and URL for good (ADR 0023). Under the item's
+ * Documental Record folder, which the api may read but never write (RP-1084).
+ */
 export function recordKeys(projectId: string, workItemId: string): { pdf: string; recordData: string } {
-  const base = `projects/${projectId}/work-items/${workItemId}/documental-record`;
-  return { pdf: `${base}/record.pdf`, recordData: `${base}/record-data.xml` };
+  const base = documentalRecordPrefix(projectId, workItemId);
+  return { pdf: `${base}record.pdf`, recordData: `${base}record-data.xml` };
 }
 
 /** Where a Working Copy's PDF is kept: beside the item's record, one file for each content printed (RP-621). */
 export function workingCopyKey(projectId: string, workItemId: string, workingCopyId: string): string {
-  return `projects/${projectId}/work-items/${workItemId}/documental-record/working-copies/${workingCopyId}.pdf`;
+  return `${documentalRecordPrefix(projectId, workItemId)}working-copies/${workingCopyId}.pdf`;
 }
