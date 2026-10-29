@@ -219,6 +219,8 @@ export type SubmittalPanelIdentityProps = {
   /** The ids `labelledBy` names: the number's and the Subject's. */
   numberId?: string;
   subjectId?: string;
+  /** Next to the number: the ⓘ "How this number is built" card (`SubmittalPanelNumberCard`, RP-1065). */
+  numberInfo?: ReactNode;
 };
 
 /**
@@ -226,26 +228,29 @@ export type SubmittalPanelIdentityProps = {
  * in Arabic too, with a Revision's revision word inline after it in brand orange (`DocNo`'s
  * wording: "Rev 1", «مراجعة 1»; Rev 0 shows nothing), then the Subject and the chips.
  */
-export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId }: SubmittalPanelIdentityProps) {
+export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId, numberInfo }: SubmittalPanelIdentityProps) {
   return (
     <div className="sdp-identity px-5 pt-[18px] pb-4">
-      <p id={numberId} className="sdp-number text-[26px] leading-[1.1] font-extrabold break-all text-text tabular-nums">
-        {number ? (
-          number.revisionNo === null ? (
-            <DocNo value={number.number} className="font-extrabold whitespace-normal" />
+      <div className="relative flex items-center gap-1">
+        <p id={numberId} className="sdp-number min-w-0 text-[26px] leading-[1.1] font-extrabold break-all text-text tabular-nums">
+          {number ? (
+            number.revisionNo === null ? (
+              <DocNo value={number.number} className="font-extrabold whitespace-normal" />
+            ) : (
+              <DocNo
+                value={number.number}
+                rev={formatNumber(number.revisionNo, locale)}
+                locale={locale}
+                className="font-extrabold whitespace-normal"
+                revClassName="sdp-rev text-brand-fg"
+              />
+            )
           ) : (
-            <DocNo
-              value={number.number}
-              rev={formatNumber(number.revisionNo, locale)}
-              locale={locale}
-              className="font-extrabold whitespace-normal"
-              revClassName="sdp-rev text-brand-fg"
-            />
-          )
-        ) : (
-          <span className="text-[21px] text-muted">{noNumber}</span>
-        )}
-      </p>
+            <span className="text-[21px] text-muted">{noNumber}</span>
+          )}
+        </p>
+        {numberInfo}
+      </div>
       <h2 id={subjectId} dir="auto" className="sdp-subject mt-2 mb-2.5 text-[20px] leading-tight font-bold text-pretty">
         {subject}
       </h2>

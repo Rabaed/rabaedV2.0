@@ -6,6 +6,7 @@ import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 import { handoverReasons } from "./handover.ts";
 import { listColumnLayout } from "./list-columns.ts";
 import { moduleKeySchema } from "./module.ts";
+import { documentNumberSegments } from "./numbering.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 import { workItemPackage } from "./package.ts";
 import { replyChecklistRead } from "./reply-checklist.ts";
@@ -702,6 +703,12 @@ export const workItemDetail = workItemSummary.extend({
    * numbered (cancel and raise a new one). Empty for a Draft never numbered.
    */
   fixedByNumber: z.array(z.enum(["trade", "location"])),
+  /**
+   * Its Document Number part by part (RP-1065), from the pattern Version it was numbered
+   * under, for the "How this number is built" card. Left out for a Draft, and for a number
+   * its pattern doesn't rebuild exactly (one brought in, or a code renamed since).
+   */
+  numberSegments: documentNumberSegments.optional(),
   /**
    * The Form's answers by field key, exactly as typed. The Built-in Fields hold
    * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.

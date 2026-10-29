@@ -276,3 +276,21 @@ export function documentNumbering(pattern: NumberingPattern, item: NumberingAttr
     number: (seq: number) => sequencedNumber(prefix, pattern.separator, pattern.seqDigits, seq),
   };
 }
+
+/** What a part of an issued Document Number is: a pattern segment's kind, or its sequence. */
+export const documentNumberSegmentKinds = ["project", "type", "trade", "participant", "location", "text", "sequence"] as const;
+export type DocumentNumberSegmentKind = (typeof documentNumberSegmentKinds)[number];
+
+/**
+ * An issued Document Number, part by part (RP-1065), from the pattern Version it was
+ * numbered under: each part as the number prints it, with its kind (a Location part with
+ * its level, 1 = Zone), in order, the sequence last; joined by `separator` they make the
+ * number. A Revision's " Rev n" is none of them. Only what the number prints: no counter.
+ */
+export const documentNumberSegments = z.object({
+  separator: z.enum(numberingSeparators),
+  segments: z
+    .array(z.object({ kind: z.enum(documentNumberSegmentKinds), value: z.string(), level: z.number().int().min(1).max(3).optional() }))
+    .min(1),
+});
+export type DocumentNumberSegments = z.infer<typeof documentNumberSegments>;

@@ -3072,6 +3072,31 @@
     "noNumber": "No number yet",
     "loading": "Opening the submittal…",
     "unavailable": "This submittal couldn't be opened.",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "numberCard": {
+      "title": "How this number is built",
+      "footnote": "Set by the Project's Numbering Pattern. The number never changes; Revisions add Rev 1, Rev 2…",
+      "kinds": {
+        "project": "Project",
+        "type": "Work Item Type",
+        "trade": "Trade",
+        "participant": "Participant Code",
+        "location": "Location",
+        "text": "Fixed text",
+        "sequence": "Sequence"
+      },
+      "levels": {
+        "zone": "Zone",
+        "building": "Building",
+        "floor": "Floor"
+      },
+      "lines": {
+        "project": "the Project's code",
+        "participant": "{company}'s Participant Code",
+        "location": "its {level}",
+        "text": "the same on every number",
+        "sequence": "the running number, given when it first left Draft"
+      }
+    }
   }
 }

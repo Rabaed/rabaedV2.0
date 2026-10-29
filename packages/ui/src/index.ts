@@ -310,6 +310,8 @@ export {
   type SubmittalPanelSizeLabels,
   type SubmittalPanelSizeState,
 } from "./components/submittal-panel/panel-resize.tsx";
+export { SubmittalPanelNumberCard, type SubmittalPanelNumberCardLabels, type SubmittalPanelNumberCardProps } from "./components/submittal-panel/number-card.tsx";
+export { submittalNumberCard, submittalNumberPlace, type SubmittalNumberSegment } from "./components/submittal-panel/number-card-model.ts";
 export { submittalPanelSizes, type SubmittalPanelSize, type SubmittalPanelWidth } from "./components/submittal-panel/panel-size.ts";
 export { submittalPanelKey, submittalPanelNumber, submittalPanelPosition, submittalPanelWith, type SubmittalPanelKeyPress, type SubmittalPanelWith } from "./components/submittal-panel/panel-model.ts";
 export {

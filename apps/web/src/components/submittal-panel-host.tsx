@@ -33,6 +33,7 @@ import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { SubmittalPanelDetails } from "@/components/submittal-panel-details";
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
+import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { useCreateRevision } from "@/components/work-item-revision";
@@ -201,6 +202,7 @@ export function SubmittalPanelHost({
             subject={item.title}
             numberId={ids.numberId}
             subjectId={ids.subjectId}
+            numberInfo={<SubmittalPanelNumber item={item} locale={locale} place={place} />}
             chips={
               <>
                 <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
