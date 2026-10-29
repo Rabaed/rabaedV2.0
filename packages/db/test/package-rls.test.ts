@@ -1049,6 +1049,8 @@ describe("RP-1075: a non-owner's Package writes check ownership before any lock,
   let inPackage = ""; // Submitted, in C1's Package: K1 and the Owner see it.
   let outside = ""; // Submitted, in no Package: K1 and the Owner see it.
   let draftIn = ""; // C1's Draft in the Package, still to Submit.
+  let openPackageId = ""; // C1's Package of Drafts only, so still Open.
+  let loose = ""; // C1's Draft in it.
 
   /** C1 Submits Draft `id`, so K1 and the Owner see it. */
   async function submitted(title: string): Promise<string> {
@@ -1081,6 +1083,9 @@ describe("RP-1075: a non-owner's Package writes check ownership before any lock,
     draftIn = await draft(c1.member, "Still to Submit");
     expect(await addItem(c1.member, packageId, inPackage)).toBe("added");
     expect(await addItem(c1.member, packageId, draftIn)).toBe("added");
+    openPackageId = (await createPackage(c1Pm, "Drafts only")).package_id;
+    loose = await draft(c1.member, "Loose Draft");
+    expect(await addItem(c1.member, openPackageId, loose)).toBe("added");
   });
 
   it("K1 and the Owner Company add or remove an item they see: 'not_found', as for no Package at all, with no lock held on C1's item", async () => {
@@ -1095,7 +1100,9 @@ describe("RP-1075: a non-owner's Package writes check ownership before any lock,
   });
 
   it("C1, the Package's owner, still locks the item (RP-973's order: the item, then the Package)", async () => {
-    expect(await whileOpen(c1.member, remove(packageId, inPackage), inPackage)).toEqual({ outcome: "removed", locked: true });
+    // Removing needs an Open Package: the other is In Progress since a Submitted item joined it.
+    expect(await whileOpen(c1.member, remove(openPackageId, loose), loose)).toEqual({ outcome: "removed", locked: true });
+    expect(await whileOpen(c1.member, add(openPackageId, loose), loose)).toEqual({ outcome: "added", locked: true });
     expect(await whileOpen(c1.member, add(packageId, inPackage), inPackage)).toEqual({ outcome: "added", locked: true });
   });
 
