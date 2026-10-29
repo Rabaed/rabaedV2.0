@@ -1167,9 +1167,8 @@
       "issuedBy": "أصدره {by} · {when}",
       "privacy": "لا يرى إجاباتك إلا {company} حتى ترسلها.",
       "internal": "داخلي",
-      "unavailable": "لا يمكن تنفيذ هذا الآن. حاول مرة أخرى.",
       "coverNote": "خطاب التغطية",
-      "reply": "الرد",
+      "remarks": "الملاحظات",
       "revisionBanner": "يجب مراجعة طلب الفحص هذا: أنشئ مراجعة لإعادة الفحص. تحتفظ بالتفاصيل وبقالب قائمة التحقق.",
       "waiting": "لدى {company}. تقرأ إجابات قائمة التحقق بعد إصدار الرمز.",
       "save": {
@@ -1203,10 +1202,10 @@
       },
       "send": {
         "recommendedCode": "الرمز الموصى به",
-        "internal": "يبقى رمزك الموصى به وملاحظتك الداخلية داخل {company}. لا ترى {raiser} إلا الرمز والرد.",
+        "internal": "يبقى رمزك الموصى به وملاحظتك الداخلية داخل {company}. لا ترى {raiser} إلا الرمز وملاحظاته.",
         "snags": "{tickedCount, plural, one {بند واحد غير مطابق محدد عليه «إنشاء عيب»} other {{ticked} بنود غير مطابقة محدد عليها «إنشاء عيب»}} · {untickedCount, plural, one {بند واحد غير محدد} other {{unticked} غير محددة}}"
       },
-      "sentCode": {
+      "recommendedCode": {
         "title": "الرمز الموصى به من المهندس",
         "sent": "أُرسلت {when}",
         "internalOnly": "داخل {company} فقط: لا ترى {raiser} هذا أبدًا."

@@ -1,6 +1,6 @@
 import type { ChecklistCopy, ChecklistTemplateItem, FormSchema, ReplyChecklistRead, WorkItemActions, WorkItemHistory } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { changedItems, codeReply, coverNote, inspectionActions, inspectionTally, itemsShown, sentCode, requestedForText, sharedChecklists, snagsToRaise } from "./inspection.ts";
+import { changedItems, codeRemarks, coverNote, inspectionActions, inspectionTally, itemsShown, recommendedCodeSent, requestedForText, sharedChecklists, snagsToRaise } from "./inspection.ts";
 
 // The WIR screens' own reading of the Consultant Engineer's checklist (RP-655): what the summary
 // bar, the tiles, the filter chips, the Send to Manager sheet and the code pop-up show.
@@ -167,8 +167,8 @@ describe("what the WIR page reads from its history", () => {
   });
 
   it("the code's reply: its Remarks, who issued it and when", () => {
-    expect(codeReply(history)).toEqual({ text: "Move the tray", by: { companyName: text("Design Consultants LLC"), memberName: text("Mohammed Al Shamsi") }, at: "2026-10-22T11:10:00.000Z" });
-    expect(codeReply(history.slice(0, 2))).toBeNull();
+    expect(codeRemarks(history)).toEqual({ text: "Move the tray", by: { companyName: text("Design Consultants LLC"), memberName: text("Mohammed Al Shamsi") }, at: "2026-10-22T11:10:00.000Z" });
+    expect(codeRemarks(history.slice(0, 2))).toBeNull();
   });
 
   it("the Engineer's Recommended Code, internal to the Consultant: the last one, who sent it and when, and the Internal Note sent with it", () => {
@@ -178,9 +178,9 @@ describe("what the WIR page reads from its history", () => {
       event("internal_note", { audience: "internal", transition: text("Send to Manager"), at: "2026-10-22T08:05:00.000Z", by: sent, internalNote: "Hold it" }),
       event("recommend_code", { audience: "internal", at: "2026-10-22T08:05:00.000Z", by: sent, recommendedCode: "C" }),
     ];
-    expect(sentCode(events)).toEqual({ code: "C", by: sent, at: "2026-10-22T08:05:00.000Z", internalNote: "Hold it" });
-    expect(sentCode([events[2]!])).toMatchObject({ internalNote: null });
-    expect(sentCode(events.slice(0, 2))).toBeNull();
+    expect(recommendedCodeSent(events)).toEqual({ code: "C", by: sent, at: "2026-10-22T08:05:00.000Z", internalNote: "Hold it" });
+    expect(recommendedCodeSent([events[2]!])).toMatchObject({ internalNote: null });
+    expect(recommendedCodeSent(events.slice(0, 2))).toBeNull();
   });
 
   it("the checklist the code shared, matched to the copy it answered; none before the code", () => {

@@ -161,9 +161,9 @@ function PhotoInputs({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex gap-2 sm:max-w-md">
-        {/* On a phone, straight to the back camera. On a desktop's width, Upload alone, as the design has it. */}
+        {/* On a phone, straight to the back camera. On a desktop (wide, with a mouse), Upload alone, as the design has it; a tablet keeps its camera. */}
         <OutsideField>
-          <label className={cn(asButton(true), "md:hidden")}>
+          <label className={cn(asButton(true), "md:pointer-fine:hidden")}>
             <Icon name="camera" size={20} />
             {text.takePhoto}
             <input
@@ -179,7 +179,7 @@ function PhotoInputs({
           </label>
         </OutsideField>
         {/* The Field's own input: the gallery or files, several at once. */}
-        <label className={cn(asButton(false), "md:flex-none")}>
+        <label className={cn(asButton(false), "md:pointer-fine:flex-none")}>
           <Icon name="upload" size={20} />
           {text.upload}
           <input

@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDate, formatNumber, workItemListHref, type BilingualText, type Locale, type WorkItemDetail } from "@rabaed/domain";
-import { cn, DocNo, Icon, type IconName } from "@rabaed/ui";
+import { cn, DocNo, focusRing, Icon, type IconName } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
@@ -54,7 +54,7 @@ export function InspectionMeta({ item, locale }: { item: WorkItemDetail; locale:
 }
 
 /** Beside the code's badge: who issued it, named to everyone who sees it (V14, scenario RP-588-4), and when. */
-export function InspectionIssued({ issued, locale }: { issued: HistoryText | null; locale: Locale }) {
+export function InspectionIssued({ issued, locale }: { issued: Pick<HistoryText, "by" | "at"> | null; locale: Locale }) {
   const t = useTranslations("workItems.inspection");
   if (!issued) return null;
   return <span className="text-sm text-muted">{t("issuedBy", { by: byName(issued.by, locale), when: when(issued.at, locale) })}</span>;
@@ -76,7 +76,7 @@ function CountCard({ icon, title, counts, href }: { icon: IconName; title: strin
   );
   const box = "flex min-h-16 items-center gap-3 rounded-lg border border-border bg-surface p-4";
   return href ? (
-    <Link href={href} className={cn(box, "hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus")}>
+    <Link href={href} className={cn(box, "hover:bg-hover", focusRing)}>
       {body}
     </Link>
   ) : (
@@ -161,25 +161,25 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
           </Link>
         </p>
       )}
-      {counts?.items
-        .filter((f) => f.type.code === "SNG")
-        .map((f) => (
-          <section key={f.type.code} aria-labelledby="inspection-previous-snags" className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+      {counts?.items.map((f) => (
+          <section key={f.type.code} aria-labelledby={`inspection-previous-${f.type.code}`} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
             <div>
-              <h2 id="inspection-previous-snags" className="font-semibold">
-                {t("fields.previousRaisedItems", { type: t("fields.raisedItemTypes.SNG"), revision })}
+              <h2 id={`inspection-previous-${f.type.code}`} className="font-semibold">
+                {t("fields.previousRaisedItems", { type: t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale], revision })}
               </h2>
               <p className="font-semibold" data-testid={`previous-raised-item-counts-${f.type.code}`}>
                 {t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) })}
               </p>
             </div>
-            <p className="flex items-start gap-2 rounded-md bg-info-tint p-3 text-sm text-info-fg">
-              <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
-              {tInspection("revision.neverBlocks")}
-            </p>
+            {f.type.code === "SNG" && (
+              <p className="flex items-start gap-2 rounded-md bg-info-tint p-3 text-sm text-info-fg">
+                <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
+                {tInspection("revision.neverBlocks")}
+              </p>
+            )}
             {counts.documentNumber && (
               <Link
-                href={workItemListHref(item.projectId, { module: "snag_list", type: ["SNG"], raisedFrom: [counts.documentNumber] })}
+                href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [counts.documentNumber] })}
                 className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md bg-surface-subtle px-3 text-sm font-semibold hover:bg-hover md:min-h-9"
               >
                 <Icon name="filter" size={16} />

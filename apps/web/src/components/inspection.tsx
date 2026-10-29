@@ -1,12 +1,12 @@
 "use client";
 
 import { formatDate, formatNumber, type BilingualText, type Locale, type WorkItemActions } from "@rabaed/domain";
-import { Badge, Button, CodeBadge, cn, Icon } from "@rabaed/ui";
+import { Badge, Button, CodeBadge, cn, Icon, reviewCodes, type ReviewCode } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ReplyChecklistsRead } from "@/components/reply-checklists";
-import { phoneBarClass, useTransitionOpener } from "@/components/work-item-actions";
-import { InspectionChips, InspectionTiles, tallyOf, useInspection } from "@/components/inspection-context";
+import { OpenerAlert, phoneBarClass, useTransitionOpener } from "@/components/work-item-actions";
+import { InspectionChips, InspectionTiles, liveTally, tallyOf, useInspection } from "@/components/inspection-context";
 import { inspectionActions, itemsShown, type ItemFilter, type SharedChecklist } from "@/lib/inspection";
 
 // A WIR's own page parts (RP-655, from the owner's Inspections (WIR) Screen Board): the Consultant
@@ -27,7 +27,7 @@ export function InspectionSummaryBar({ workItemId, actions, locale }: { workItem
   const opener = useTransitionOpener(workItemId, actions, locale);
   const { send } = inspectionActions(actions.transitions);
   if (!inspection || inspection.checklists.length === 0) return null;
-  const tally = tallyOf(inspection.checklists.map((c) => ({ items: c.items, answers: inspection.answers[c.fieldKey] ?? {} })));
+  const tally = liveTally(inspection);
   const left = tally.total - tally.answered;
   return (
     <section aria-label={t("summary.label")} className={cn("flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 md:sticky md:bottom-4 md:shadow-md", phoneBarClass, "max-md:rounded-none")}>
@@ -79,28 +79,24 @@ export function InspectionSummaryBar({ workItemId, actions, locale }: { workItem
           )}
         </>
       )}
-      {(opener.failed || (opener.calls.error && !opener.asking)) && (
-        <p role="alert" className="text-sm text-danger-fg">
-          {opener.failed ? t("unavailable") : opener.calls.error}
-        </p>
-      )}
+      <OpenerAlert opener={opener} />
       {opener.dialogs}
     </section>
   );
 }
 
 /** The Engineer's Recommended Code, on the Manager's page (RP-433, RP-86): internal to the Consultant (V5). */
-export type SentCode = { code: string; by: { companyName: BilingualText | null; memberName: BilingualText | null }; at: string; internalNote: string | null };
+export type RecommendedCodeSent = { code: string; by: { companyName: BilingualText | null; memberName: BilingualText | null }; at: string; internalNote: string | null };
 
-function RecommendedCodeCard({ sentCode, holder, raiser, locale }: { sentCode: SentCode; holder: BilingualText | null; raiser: BilingualText; locale: Locale }) {
+function RecommendedCodeCard({ sent, holder, raiser, locale }: { sent: RecommendedCodeSent; holder: BilingualText | null; raiser: BilingualText; locale: Locale }) {
   const t = useTranslations("workItems.inspection");
-  const code = sentCode.code.toLowerCase();
-  const name = sentCode.by.memberName?.[locale] ?? sentCode.by.companyName?.[locale] ?? "";
+  const code = reviewCodes.find((c) => c === sent.code.toLowerCase());
+  const name = sent.by.memberName?.[locale] ?? sent.by.companyName?.[locale] ?? "";
   return (
     <section aria-labelledby="inspection-recommended-code" className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
         <h2 id="inspection-recommended-code" className="text-caption font-semibold tracking-wide text-muted uppercase">
-          {t("sentCode.title")}
+          {t("recommendedCode.title")}
         </h2>
         <Badge tone="neutral">
           <Icon name="lock" size={14} />
@@ -110,17 +106,17 @@ function RecommendedCodeCard({ sentCode, holder, raiser, locale }: { sentCode: S
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col">
           <p className="font-semibold">{name}</p>
-          <p className="text-sm text-muted">{t("sentCode.sent", { when: formatDate(new Date(sentCode.at), locale, { dateStyle: "medium", timeStyle: "short" }) })}</p>
+          <p className="text-sm text-muted">{t("recommendedCode.sent", { when: formatDate(new Date(sent.at), locale, { dateStyle: "medium", timeStyle: "short" }) })}</p>
         </div>
-        {(code === "a" || code === "b" || code === "c" || code === "d") && <CodeBadge code={code} locale={locale} size="sm" />}
+        {code && <CodeBadge code={code satisfies ReviewCode} locale={locale} size="sm" />}
       </div>
-      {sentCode.internalNote && (
+      {sent.internalNote && (
         <p className="flex items-start gap-2 rounded-md bg-surface-subtle p-3 text-sm">
           <Icon name="lock" size={16} className="mt-0.5 shrink-0 text-muted" />
-          <bdi className="whitespace-pre-wrap">{sentCode.internalNote}</bdi>
+          <bdi className="whitespace-pre-wrap">{sent.internalNote}</bdi>
         </p>
       )}
-      {holder && <p className="text-sm text-muted">{t("sentCode.internalOnly", { company: holder[locale], raiser: raiser[locale] })}</p>}
+      {holder && <p className="text-sm text-muted">{t("recommendedCode.internalOnly", { company: holder[locale], raiser: raiser[locale] })}</p>}
     </section>
   );
 }
@@ -134,12 +130,12 @@ function RecommendedCodeCard({ sentCode, holder, raiser, locale }: { sentCode: S
 export function InspectionManager({
   workItemId,
   actions,
-  sentCode,
+  recommendedCode,
   locale,
 }: {
   workItemId: string;
   actions: WorkItemActions;
-  sentCode: SentCode | null;
+  recommendedCode: RecommendedCodeSent | null;
   locale: Locale;
 }) {
   const t = useTranslations("workItems.inspection");
@@ -155,16 +151,18 @@ export function InspectionManager({
   return (
     <div className="flex flex-col gap-4 pb-28 md:pb-0">
       <InspectionTiles tally={tally} locale={locale} />
-      {sentCode && inspection && <RecommendedCodeCard sentCode={sentCode} holder={inspection.holder} raiser={inspection.raiser} locale={locale} />}
+      {recommendedCode && inspection && <RecommendedCodeCard sent={recommendedCode} holder={inspection.holder} raiser={inspection.raiser} locale={locale} />}
       {checklists.map((c) => (
         <section key={c.fieldKey} aria-label={c.label[locale]} className="flex flex-col gap-3">
           <InspectionChips items={c.items} answers={c.answers} filter={filter} locale={locale} onFilter={setFilter} />
           <ReplyChecklistsRead workItemId={workItemId} checklists={[c]} locale={locale} shown={new Set(itemsShown(c.items, c.answers, filter))} heading={false} />
         </section>
       ))}
-      <section aria-label={t("decision.label")} className={cn("flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface p-4 md:sticky md:bottom-4 md:shadow-md", phoneBarClass)}>
+      <section aria-labelledby="inspection-decision" className={cn("flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface p-4 md:sticky md:bottom-4 md:shadow-md", phoneBarClass)}>
         <div className="flex flex-col">
-          <p className="font-semibold">{t("decision.title")}</p>
+          <h2 id="inspection-decision" className="font-semibold">
+            {t("decision.title")}
+          </h2>
           {proposed && <p className="text-sm text-muted">{t("decision.proposed", { code: proposedCode.label[locale] })}</p>}
         </div>
         <div className="flex flex-1 flex-wrap justify-end gap-2 max-md:flex-nowrap">
@@ -179,11 +177,7 @@ export function InspectionManager({
             {t("decision.issue")}
           </Button>
         </div>
-        {(opener.failed || (opener.calls.error && !opener.asking)) && (
-          <p role="alert" className="w-full text-sm text-danger-fg">
-            {opener.failed ? t("unavailable") : opener.calls.error}
-          </p>
-        )}
+        <OpenerAlert opener={opener} className="w-full" />
         {opener.dialogs}
       </section>
     </div>

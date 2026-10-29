@@ -35,7 +35,7 @@ import { InspectionProvider } from "@/components/inspection-context";
 import { InspectionCounts, InspectionIssued, InspectionMeta, InspectionTextCard, InspectionRevision, InspectionWaiting } from "@/components/inspection-page-parts";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
-import { codeReply, coverNote, inspectionActions, sentCode, sharedChecklists } from "@/lib/inspection";
+import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, sharedChecklists } from "@/lib/inspection";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
 import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
@@ -111,20 +111,21 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   // A Revision's previous item's follow-ups (RP-653); null for any other item.
   const previous = item.previousRaisedItems;
 
-  const split = inspectionActions(item.actions.transitions);
+  const offered = inspectionActions(item.actions.transitions);
   const events = history?.events ?? [];
-  const engineer = wir && item.replyChecklists.length > 0 && split.send !== null;
-  const manager = wir && split.codes.length > 0;
+  // The viewer answers the checklist and sends it on (the Engineer), or issues the code it takes (the Manager).
+  const answering = wir && item.replyChecklists.length > 0 && offered.send !== null;
+  const issuing = wir && offered.codes.length > 0;
   // A WIR's page lists only the actions its bars don't hold: Send to Manager is in the Engineer's bar, Return and the codes in the Manager's.
-  const actions = !wir ? item.actions : { ...item.actions, transitions: manager ? [] : split.others };
+  const actions = !wir ? item.actions : { ...item.actions, transitions: issuing ? [] : answering || !offered.send ? offered.others : [...offered.others, offered.send] };
   const issued = wir && item.outcome ? (events.findLast((e) => e.type === "issue_code") ?? null) : null;
   const shared = wir && item.outcome ? sharedChecklists(events, item.checklistCopies) : [];
-  const reply = wir ? codeReply(events) : null;
+  const remarks = wir ? codeRemarks(events) : null;
   const cover = wir ? coverNote(events) : null;
   const revisedFrom = chain?.revisions.find((r) => r.revisionNo === item.revisionNo - 1) ?? null;
   // Another Company holds it with the checklist, which its readers read once the code shares it (V19).
   const waiting =
-    wir && !item.outcome && !engineer && !manager && item.checklistCopies.length > 0 && item.documentNumber !== null && item.heldBy?.memberName === null && item.heldBy.pool === null
+    wir && !item.outcome && !answering && !issuing && item.checklistCopies.length > 0 && item.documentNumber !== null && item.heldBy?.memberName === null && item.heldBy.pool === null
       ? item.heldBy.companyName
       : null;
 
@@ -151,7 +152,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       autosave={item.autosave}
     >
       {/* On a phone a Snag List item ends above its bar of actions (RP-630). */}
-      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24", engineer && "max-md:pb-52")}>
+      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24", answering && "max-md:pb-52")}>
         {/* On a phone a Snag List item opens with its first photo, as the kit does (RP-630). */}
         {snag && <SnagHeroPhoto workItemId={item.id} subject={item.title} photos={beforePhotos(form.schema, documents.documents)} />}
         <div className="space-y-2">
@@ -206,7 +207,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                   locale={locale}
                   cancelled={watchOutcomeNames.cancelled[locale]}
                 />
-                <InspectionIssued issued={issued && { text: "", by: issued.by, at: issued.at }} locale={locale} />
+                <InspectionIssued issued={issued} locale={locale} />
               </>
             )}
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
@@ -250,13 +251,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             )}
             <InspectionRevision item={item} previous={revisedFrom} locale={locale} />
             {waiting && <InspectionWaiting company={waiting} locale={locale} />}
-            {reply && item.outcome && <InspectionTextCard icon="message" title={t("inspection.reply")} text={reply} locale={locale} />}
+            {remarks && item.outcome && <InspectionTextCard icon="message" title={t("inspection.remarks")} text={remarks} locale={locale} />}
             {cover && <InspectionTextCard icon="file-text" title={t("inspection.coverNote")} text={cover} locale={locale} />}
             <InspectionShared workItemId={item.id} checklists={shared} locale={locale} />
             {/* The Consultant's checklist, any of its Members may add to it (ADR 0024); the holder's bar sends it on. */}
-            <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />
-            {engineer && <InspectionSummaryBar workItemId={item.id} actions={item.actions} locale={locale} />}
-            {manager && <InspectionManager workItemId={item.id} actions={item.actions} sentCode={sentCode(events)} locale={locale} />}
+            {!issuing && <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />}
+            {answering && <InspectionSummaryBar workItemId={item.id} actions={item.actions} locale={locale} />}
+            {issuing && <InspectionManager workItemId={item.id} actions={item.actions} recommendedCode={recommendedCodeSent(events)} locale={locale} />}
           </>
         )}
         <WorkItemRevision

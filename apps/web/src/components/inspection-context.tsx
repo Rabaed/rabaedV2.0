@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, type BilingualText, type ChecklistAnswers, type Locale, type ReplyChecklistRead } from "@rabaed/domain";
-import { cn } from "@rabaed/ui";
+import { cn, focusRing } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { inspectionTally, itemFilters, itemsShown, type InspectionTally, type ItemFilter } from "@/lib/inspection";
@@ -44,6 +44,10 @@ export function InspectionProvider({
   const value = useMemo(() => ({ raiser, holder, checklists, answers, setAnswers }), [raiser, holder, checklists, answers, setAnswers]);
   return <InspectionContext.Provider value={value}>{children}</InspectionContext.Provider>;
 }
+
+/** The tally over the Engineer's answers as typed now: every reply checklist on the page. */
+export const liveTally = (inspection: Inspection): InspectionTally =>
+  tallyOf(inspection.checklists.map((c) => ({ items: c.items, answers: inspection.answers[c.fieldKey] ?? {} })));
 
 /** The tally over several checklists: the sum of each one's. */
 export function tallyOf(checklists: readonly { items: ReplyChecklistRead["items"]; answers: ChecklistAnswers }[]): InspectionTally {
@@ -108,7 +112,7 @@ export function InspectionChips({
           onClick={() => onFilter(f)}
           className={cn(
             "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold md:min-h-9",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+            focusRing,
             filter === f ? "border-inverse bg-inverse text-on-inverse" : "border-border bg-surface text-text hover:bg-hover",
           )}
         >

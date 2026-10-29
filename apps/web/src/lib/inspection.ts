@@ -7,7 +7,7 @@ import { checklistAnswerSets, formatDate, isNegativeAnswer, snagTick, type Bilin
 /** How a checklist stands: passed (Pass, Yes), failed (Fail, No), N/A, how many are answered, of how many. */
 export type InspectionTally = { passed: number; failed: number; na: number; answered: number; total: number };
 
-/** `entry`'s answer when its item offers it; undefined when not answered (a comment alone, or an answer the set doesn't take). */
+/** `item`'s answer in `answers` when its answer set offers it; undefined when not answered (a comment alone, or an answer the set doesn't take). */
 function answerOf(item: ChecklistItem, answers: ChecklistAnswers): string | undefined {
   const answer = answers[item.key]?.answer;
   return answer !== undefined && (checklistAnswerSets[item.answers] as readonly string[]).includes(answer) ? answer : undefined;
@@ -63,9 +63,11 @@ export function requestedForText(value: unknown, locale: Locale): string | null 
   const date = (["day", "month", "year"] as const)
     .map((part) => formatDate(at, locale, { [part]: part === "month" ? "short" : "numeric" }))
     .join(" ");
-  const time = formatDate(at, locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  return `${date} · ${time}`;
+  return `${date} · ${timeOfDay(at, locale)}`;
 }
+
+/** A time of day as the WIR screens write it, 24-hour, Latin digits: 09:00. */
+export const timeOfDay = (at: Date, locale: Locale): string => formatDate(at, locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 type HistoryEvent = WorkItemHistory["events"][number];
 
@@ -81,7 +83,7 @@ export function coverNote(events: readonly HistoryEvent[]): HistoryText | null {
 }
 
 /** The code's reply: its Remarks, its signer (named to everyone who sees it, V14) and when; null before the code or without Remarks. */
-export function codeReply(events: readonly HistoryEvent[]): HistoryText | null {
+export function codeRemarks(events: readonly HistoryEvent[]): HistoryText | null {
   const code = lastEvent(events, (e) => e.type === "issue_code");
   return code?.remarks ? { text: code.remarks, by: code.by, at: code.at } : null;
 }
@@ -91,11 +93,12 @@ export function codeReply(events: readonly HistoryEvent[]): HistoryText | null {
  * (V5): the last Recommended Code, who sent it and when, and the Internal Note sent with the same
  * move. Null when the viewer reads none (every other Company, and before one is sent).
  */
-export function sentCode(
+export function recommendedCodeSent(
   events: readonly HistoryEvent[],
 ): { code: NonNullable<HistoryEvent["recommendedCode"]>; by: HistoryEvent["by"]; at: string; internalNote: string | null } | null {
   const sent = lastEvent(events, (e) => e.type === "recommend_code" && e.recommendedCode !== null);
   if (!sent) return null;
+  // One Transition writes both in one transaction, so they carry the same time.
   const withIt = lastEvent(events, (e) => e.type === "internal_note" && e.at === sent.at && e.internalNote !== null);
   return { code: sent.recommendedCode!, by: sent.by, at: sent.at, internalNote: withIt?.internalNote ?? null };
 }

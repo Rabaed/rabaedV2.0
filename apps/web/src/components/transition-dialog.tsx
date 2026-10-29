@@ -15,10 +15,10 @@ import {
   type ReplyChecklistRead,
   type WorkItemActions,
 } from "@rabaed/domain";
-import { ActionForm, Badge, Button, CodeBadge, cn, Field, Icon, Select, type FormFiles } from "@rabaed/ui";
+import { ActionForm, Badge, Button, CodeBadge, cn, Field, Icon, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { InspectionTiles, tallyOf, useInspection, type Inspection } from "@/components/inspection-context";
+import { InspectionTiles, liveTally, tallyOf, useInspection, type Inspection } from "@/components/inspection-context";
 import { ReplyChecklistsRead } from "@/components/reply-checklists";
 import { useDocuments, useImageUrls } from "@/components/use-documents";
 import { useWorkItemForm } from "@/components/work-item-form";
@@ -222,7 +222,7 @@ function useReplyFiles(workItemId: string, actionForm: FormSchema | null) {
  * and the Draft is finished on its page.
  */
 export function TransitionDialog({
-  transition: first,
+  transition: pickedFirst,
   choices,
   calls,
   locale,
@@ -234,7 +234,7 @@ export function TransitionDialog({
   transition: TransitionChoice;
   /**
    * Transitions to pick from in the one pop-up, `transition` picked first (a WIR's codes, RP-655):
-   * each keeps what was written for it, and the pop-up takes the one picked.
+   * each keeps its own Action Form answers (the Internal Note is the pop-up's), and the pop-up takes the one picked.
    */
   choices?: TransitionChoice[];
   calls: WorkItemCalls;
@@ -253,8 +253,8 @@ export function TransitionDialog({
   // On a WIR's page, its own pop-ups (RP-655); null on any other item's.
   const inspection = useInspection();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [picked, setPicked] = useState(first.key);
-  const transition = choices?.find((c) => c.key === picked) ?? first;
+  const [picked, setPicked] = useState(pickedFirst.key);
+  const transition = choices?.find((c) => c.key === picked) ?? pickedFirst;
   // Each Transition's own answers, pre-filled from the reply that brought the item here, inside the viewer's own Company (RP-437).
   const [answersByKey, setAnswersByKey] = useState<Record<string, Record<string, unknown>>>({});
   const answers = answersByKey[transition.key] ?? transition.prefill ?? {};
@@ -455,11 +455,6 @@ export function TransitionDialog({
   );
 }
 
-/** The tiles over the Engineer's answers as typed now: every reply checklist on the page. */
-function liveTally(inspection: Inspection) {
-  return tallyOf(inspection.checklists.map((c) => ({ items: c.items, answers: inspection.answers[c.fieldKey] ?? {} })));
-}
-
 /**
  * Send to Manager on a WIR (RP-655): the summary tiles, then the Recommended Code as cards with
  * their Code badges, from the codes the Transition offers, internal to the Consultant (V5).
@@ -546,8 +541,8 @@ function ChoiceCard({ name, value, checked, onPick, children }: { name: string; 
 
 /** A Review Code as the design draws it: its badge, A to D, with its name. */
 function CodeOf({ code, name, locale }: { code: string; name: { en: string; ar: string }; locale: Locale }) {
-  const letter = code.toLowerCase();
-  return letter === "a" || letter === "b" || letter === "c" || letter === "d" ? <CodeBadge code={letter} locale={locale} size="sm" /> : <span>{name[locale]}</span>;
+  const letter = reviewCodes.find((c) => c === code.toLowerCase());
+  return letter ? <CodeBadge code={letter} locale={locale} size="sm" /> : <span>{name[locale]}</span>;
 }
 
 /**
@@ -609,7 +604,7 @@ function CodeChoice({
 function CodeRaises({ transition, raiser, locale }: { transition: TransitionChoice; raiser: BilingualText; locale: Locale }) {
   const t = useTranslations("workItems.inspection");
   const rows = transition.actionForm ? formFields(transition.actionForm).some((f) => f.key === "items_to_create") : false;
-  const snags = (transition.checklists ?? []).flatMap((c) => snagsToRaise(c.items, c.answers).ticked);
+  const snags = (transition.checklists ?? []).flatMap((c) => snagsToRaise(c.items, c.answers).ticked.map((snag) => ({ ...snag, id: `${c.fieldKey}:${snag.key}` })));
   return (
     <>
       {rows && <p className="text-sm text-muted">{t("code.commentRows", { company: raiser[locale] })}</p>}
@@ -624,7 +619,7 @@ function CodeRaises({ transition, raiser, locale }: { transition: TransitionChoi
         ) : (
           <ul className="flex flex-col gap-2">
             {snags.map((snag) => (
-              <li key={snag.key} className="flex flex-col gap-0.5 rounded-md border border-border p-3">
+              <li key={snag.id} className="flex flex-col gap-0.5 rounded-md border border-border p-3">
                 <p className="font-semibold">
                   <bdi>{snag.text[locale]}</bdi>
                 </p>

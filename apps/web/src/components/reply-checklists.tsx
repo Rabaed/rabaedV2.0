@@ -3,7 +3,6 @@
 import {
   checklistItemFilesKey,
   checklistOfRead,
-  formatDate,
   type ChecklistAnswers,
   type DocumentList,
   type DocumentSummary,
@@ -18,7 +17,7 @@ import { InspectionChips, useInspection } from "@/components/inspection-context"
 import { useDocuments, useImageUrls } from "@/components/use-documents";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useFormRendererLabels } from "@/lib/form-labels";
-import { changedItems, itemsShown, type ItemFilter } from "@/lib/inspection";
+import { changedItems, itemsShown, timeOfDay, type ItemFilter } from "@/lib/inspection";
 
 // A reply Screen's checklist (RP-86; ADR 0024 amended 2026-10-19; form-engine.md §3.3): the
 // Participant holding the item answers it at the Steps on its way to the Transition that takes it,
@@ -90,7 +89,7 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
   // A refused Send to Manager names this checklist's items among the Form's errors.
   const shown = [...errors, ...(itemForm?.errors ?? []).filter((e) => e.key === checklist.fieldKey && e.item !== undefined)];
 
-  const store = useCallback(async () => {
+  const saveNow = useCallback(async () => {
     setSave({ status: "saving" });
     const sending = latest.current;
     const res = await fetch(`/api/v1/work-items/${workItemId}/reply-checklists/${checklist.fieldKey}`, {
@@ -116,36 +115,53 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  // The page read again (a refresh after another Member's save, a Return): its answers, unless some typed here are still to save.
+  const read = JSON.stringify(checklist.answers);
+  useEffect(() => {
+    if (timer.current || changedItems(saved.current, latest.current).length > 0) return;
+    const fresh = JSON.parse(read) as ChecklistAnswers;
+    saved.current = fresh;
+    latest.current = fresh;
+    setAnswers(fresh);
+  }, [read]);
+
+  // The summary bar and Send to Manager read the answers as typed (RP-655).
+  const publish = inspection?.setAnswers;
+  useEffect(() => publish?.(checklist.fieldKey, answers), [publish, checklist.fieldKey, answers]);
+
   function change(next: ChecklistAnswers | undefined) {
     const value = next ?? {};
     setAnswers(value);
     latest.current = value;
-    inspection?.setAnswers(checklist.fieldKey, value);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void store(), SAVE_MS);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      void saveNow();
+    }, SAVE_MS);
   }
 
   const status = save?.status;
-  const unsaved = new Set(status === "saving" || status === "offline" || status === "refused" ? changedItems(saved.current, answers) : []);
+  // The items changed since the API last took them: waiting to save, saving, or left unsaved.
+  const unsaved = new Set(changedItems(saved.current, answers));
 
   /** An item's own line on the WIR's page: Saved, Saving…, or Not saved with Retry. */
   const itemFooter = (key: string) => {
     if (status === "offline" && unsaved.has(key)) {
       return (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger-fg/40 bg-danger-tint p-3 text-sm text-danger-fg">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger-fg/40 bg-danger-tint p-3 text-sm text-danger-fg">
           <p className="flex items-start gap-2">
             <Icon name="alert-triangle" size={16} className="mt-0.5 shrink-0" />
             <span>{tInspection("save.offline")}</span>
           </p>
-          <Button variant="secondary" size="sm" className="min-h-11 md:min-h-8" onClick={() => void store()}>
+          <Button variant="secondary" size="sm" className="min-h-11 md:min-h-8" onClick={() => void saveNow()}>
             <Icon name="refresh" size={16} />
             {tInspection("save.retry")}
           </Button>
         </div>
       );
     }
-    if (unsaved.has(key) && status === "saving") return <p className="text-sm text-muted">{t("saving")}</p>;
-    if (unsaved.has(key)) return <p className="text-sm text-danger-fg">{tInspection("save.notSaved")}</p>;
+    if (unsaved.has(key) && status === "refused") return <p className="text-sm text-danger-fg">{tInspection("save.notSaved")}</p>;
+    if (unsaved.has(key)) return <p className="text-sm text-muted">{t("saving")}</p>;
     if (answers[key] === undefined) return null;
     return (
       <p className="flex items-center gap-1 text-sm font-medium text-success-fg">
@@ -185,10 +201,16 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
           {checklist.label[locale]} · <bdi>{checklist.name[locale]}</bdi>
         </h2>
         <div className="flex flex-col gap-1 text-sm">
-          {status === "saved" && save?.status === "saved" && (
+          {/* One alert when the signal drops; each unsaved item then offers Retry. */}
+          {status === "offline" && (
+            <p role="alert" className="sr-only">
+              {tInspection("save.offline")}
+            </p>
+          )}
+          {save?.status === "saved" && (
             <p role="status" className="flex items-center gap-1 font-semibold text-success-fg">
               <Icon name="check" size={16} />
-              {tInspection("save.savedAt", { time: formatDate(save.at, locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) })}
+              {tInspection("save.savedAt", { time: timeOfDay(save.at, locale) })}
             </p>
           )}
           {inspection.holder && (

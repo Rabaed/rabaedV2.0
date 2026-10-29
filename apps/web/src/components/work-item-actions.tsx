@@ -66,6 +66,17 @@ export function useTransitionOpener(workItemId: string, actions: Actions, locale
   return { calls, open, waiting: gate.show === "wait", failed: gateFailed && !asking, asking: asking !== null, dialogs };
 }
 
+/** Why the last Transition couldn't open or was refused, once its pop-up is closed. */
+export function OpenerAlert({ opener, className }: { opener: ReturnType<typeof useTransitionOpener>; className?: string }) {
+  const t = useTranslations("workItems.actions");
+  if (!opener.failed && !(opener.calls.error && !opener.asking)) return null;
+  return (
+    <p role="alert" className={cn("text-sm text-danger-fg", className)}>
+      {opener.failed ? t("gateUnavailable") : opener.calls.error}
+    </p>
+  );
+}
+
 /**
  * Exactly the buttons the viewer may press on a Work Item, as the API lists them.
  * Each Transition opens its pop-up first (`TransitionDialog`, the same one a
@@ -120,11 +131,7 @@ export function WorkItemActions({
           </Button>
         )}
       </div>
-      {(opener.failed || (calls.error && !opener.asking)) && (
-        <p role="alert" className="text-sm text-danger-fg">
-          {opener.failed ? t("gateUnavailable") : calls.error}
-        </p>
-      )}
+      <OpenerAlert opener={opener} />
       {opener.dialogs}
     </section>
   );

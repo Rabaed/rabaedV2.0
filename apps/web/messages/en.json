@@ -1167,9 +1167,8 @@
       "issuedBy": "Issued by {by} · {when}",
       "privacy": "Only {company} sees your answers until you send them.",
       "internal": "Internal",
-      "unavailable": "This can't be done right now. Try again.",
       "coverNote": "Cover Note",
-      "reply": "Reply",
+      "remarks": "Remarks",
       "revisionBanner": "This WIR is to be revised: create a Revision for re-inspection. It keeps the details and the Checklist Template.",
       "waiting": "With {company}. You read the checklist's answers once the code is issued.",
       "save": {
@@ -1203,10 +1202,10 @@
       },
       "send": {
         "recommendedCode": "Recommended Code",
-        "internal": "Your Recommended Code and Internal Note stay inside {company}. {raiser} sees only the code and the reply.",
+        "internal": "Your Recommended Code and Internal Note stay inside {company}. {raiser} sees only the code and its Remarks.",
         "snags": "{tickedCount, plural, one {1 failed item ticked “Raise a Snag”} other {{ticked} failed items ticked “Raise a Snag”}} · {untickedCount, plural, one {1 unticked} other {{unticked} unticked}}"
       },
-      "sentCode": {
+      "recommendedCode": {
         "title": "Engineer's Recommended Code",
         "sent": "Sent {when}",
         "internalOnly": "Inside {company} only: {raiser} never sees this."
