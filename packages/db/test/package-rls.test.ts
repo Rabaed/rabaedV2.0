@@ -1042,3 +1042,73 @@ describe("scenario RP-588-2 (RP-643: email and digest): what a Package Submit's 
     expect(await ofPackage(emails, eng.digest)).toEqual([]);
   });
 });
+
+describe("RP-1075: a non-owner's Package writes check ownership before any lock, and learn nothing", () => {
+  let packageId = "";
+  let inPackage = ""; // Submitted, in C1's Package: K1 and the Owner see it.
+  let outside = ""; // Submitted, in no Package: K1 and the Owner see it.
+  let draftIn = ""; // C1's Draft in the Package, still to Submit.
+
+  /** C1 Submits Draft `id`, so K1 and the Owner see it. */
+  async function submitted(title: string): Promise<string> {
+    const id = await draft(c1.member, title);
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    return id;
+  }
+
+  /** Whether another session finds item `id` locked (asking without waiting). */
+  async function locked(id: string): Promise<boolean> {
+    await migrator.query("begin");
+    try {
+      await migrator.query("select 1 from work_item where id = $1 for update nowait", [id]);
+      return false;
+    } catch (e) {
+      if ((e as { code?: string }).code === "55P03") return true;
+      throw e;
+    } finally {
+      await migrator.query("rollback");
+    }
+  }
+
+  /** `query`'s outcome as `as`, and whether item `id` is locked while `as`'s transaction is still open. */
+  const whileOpen = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>, id: string) =>
+    withMember(app, as, async (trx) => {
+      const { rows } = await query.execute(trx);
+      return { outcome: rows[0]!.outcome, locked: await locked(id) };
+    });
+  const add = (pkg: string, id: string) => sql<{ outcome: string }>`select app.add_package_item(${pkg}::uuid, ${id}::uuid, now()) as outcome`;
+  const remove = (pkg: string, id: string) => sql<{ outcome: string }>`select app.remove_package_item(${pkg}::uuid, ${id}::uuid, now()) as outcome`;
+  const toSubmit = (as: string, pkg: string) =>
+    call<{ id: string }>(as, sql`select i as id from app.package_items_to_submit(${pkg}::uuid) i`).then((rows) => rows.map((r) => r.id));
+
+  beforeAll(async () => {
+    packageId = (await createPackage(c1Pm, "Owner checked first")).package_id;
+    inPackage = await submitted("In the Package");
+    outside = await submitted("In no Package");
+    draftIn = await draft(c1.member, "Still to Submit");
+    expect(await addItem(c1.member, packageId, inPackage)).toBe("added");
+    expect(await addItem(c1.member, packageId, draftIn)).toBe("added");
+  });
+
+  it("K1 and the Owner add or remove an item they see: 'not_found', as for no Package at all, with no lock held on C1's item", async () => {
+    const none = randomUUID();
+    for (const who of [k1.ap, k1.member, ow.member]) {
+      expect(await whileOpen(who, add(packageId, outside), outside), who).toEqual({ outcome: "not_found", locked: false });
+      expect(await whileOpen(who, remove(packageId, inPackage), inPackage), who).toEqual({ outcome: "not_found", locked: false });
+      // The same answer as for a Package that doesn't exist.
+      expect(await whileOpen(who, add(none, outside), outside), who).toEqual({ outcome: "not_found", locked: false });
+    }
+  });
+
+  it("C1, the owner, still locks the item first (RP-973's order)", async () => {
+    expect(await whileOpen(c1.member, remove(packageId, inPackage), inPackage)).toEqual({ outcome: "removed", locked: true });
+    expect(await whileOpen(c1.member, add(packageId, inPackage), inPackage)).toEqual({ outcome: "added", locked: true });
+  });
+
+  it("app.package_items_to_submit answers the owner only", async () => {
+    for (const who of [c1.member, c1Pm]) expect(await toSubmit(who, packageId), who).toEqual([draftIn]);
+    for (const who of [k1.ap, k1.member, ow.member, c2.member]) expect(await toSubmit(who, packageId), who).toEqual([]);
+  });
+});
