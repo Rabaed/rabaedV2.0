@@ -2989,6 +2989,21 @@
     "banner": "داخلي: لا يراه إلا {company}. لا يظهر أبداً {role, select, contractor {للاستشاري أو المالك} consultant {للمقاول أو المالك} owner_representative {للمقاول أو الاستشاري أو المالك} other {للمقاول أو الاستشاري}}.",
     "unavailable": "تعذّرت قراءة سجل الاعتماد."
   },
+  "submittalPanelChat": {
+    "tab": "المحادثة",
+    "loading": "جارٍ قراءة المحادثة…",
+    "unavailable": "تعذّرت قراءة المحادثة.",
+    "closedTitle": "المحادثة لم تُفتح بعد",
+    "closedBody": "تُفتح المحادثة بعد تقديم العنصر إلى المشارك التالي.",
+    "none": "لم يكتب أحد في المحادثة بعد.",
+    "composer": "اكتب في المحادثة",
+    "send": "إرسال",
+    "keys": "Enter للإرسال · Shift+Enter لسطر جديد",
+    "tooLong": "{max} حرف على الأكثر.",
+    "notSubmitted": "تُفتح المحادثة بعد تقديم العنصر.",
+    "projectClosed": "المشروع مغلق.",
+    "sendFailed": "تعذّر الإرسال. حاول مرة أخرى."
+  },
   "submittalPanelDetails": {
     "tabs": "التقديم",
     "details": "التفاصيل",
