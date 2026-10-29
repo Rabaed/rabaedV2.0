@@ -149,6 +149,14 @@ export function useSubmittalPanelSize({
     };
     stopDrag.current?.();
     stopDrag.current = stop;
+    // The edge keeps the pointer, so a release outside the window still ends the drag. A
+    // pointer the browser doesn't know (a test's made-up event) can't be captured: the window
+    // listeners below still see it.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Not captured: fine.
+    }
     addEventListener("pointermove", move);
     addEventListener("pointerup", end);
     addEventListener("pointercancel", end);
@@ -179,9 +187,9 @@ export function SubmittalPanelGrip({ size, locale, labels }: { size: SubmittalPa
   return (
     <div aria-hidden="true" title={labels.grip} data-dragging={size.dragging || undefined} className="sdp-grip" onPointerDown={size.startDrag} onDoubleClick={size.toggle}>
       <span className="sdp-grip-pill">
-        <b />
-        <b />
-        <b />
+        <span />
+        <span />
+        <span />
       </span>
       {size.dragging && (
         <span className="sdp-grip-tip">
@@ -195,6 +203,8 @@ export function SubmittalPanelGrip({ size, locale, labels }: { size: SubmittalPa
 /**
  * The size switch (README §2): four buttons, each pressed when the panel is at its preset, with a
  * rectangle glyph whose inline-end part is filled; from 880px up they show their names too.
+ * Not `SegmentedControl`: a dragged width between two sizes presses none, which a radio group
+ * (one value always chosen) can't say.
  */
 export function SubmittalPanelSizeSwitch({ size, labels }: { size: SubmittalPanelSizeState; labels: SubmittalPanelSizeLabels }) {
   return (

@@ -20,7 +20,7 @@ export const submittalPanelSizes: readonly { key: SubmittalPanelSize; width: Sub
 ];
 
 export const submittalPanelMinWidth = 380;
-const wideWidth = 960;
+const widthOf = (key: SubmittalPanelSize) => submittalPanelSizes.find((s) => s.key === key)!.width as number;
 
 /** A drag this close to a preset lands on it. */
 const snapDistance = 12;
@@ -78,7 +78,7 @@ export function submittalPanelDragWidth({
 
 /** A double-click on the edge: Normal (or near it) goes Wide, any other width back to Normal. */
 export function submittalPanelToggledWidth(width: number): number {
-  return Math.abs(width - submittalPanelNormalWidth) < normalDistance ? wideWidth : submittalPanelNormalWidth;
+  return Math.abs(width - submittalPanelNormalWidth) < normalDistance ? widthOf("wide") : submittalPanelNormalWidth;
 }
 
 /** The layout band a drawn width falls in (README §3); the band CSS in `submittal-panel.css` uses the same edges. */

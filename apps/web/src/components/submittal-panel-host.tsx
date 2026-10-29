@@ -66,7 +66,7 @@ export function useOpenSubmittal() {
   return { openId, open: showInUrl, close: () => showInUrl(null) };
 }
 
-/** The kept width, as one value, so reading it again gives the same snapshot. */
+/** The kept width, as one value, so reading it again gives the same snapshot (a small read: one short string). */
 const keptWidth = () => readSubmittalPanelPreferences(submittalPanelStorage()).width;
 /** Nothing to follow: the width is read when the panel opens. */
 const noStorageEvents = () => () => {};

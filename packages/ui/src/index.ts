@@ -310,18 +310,7 @@ export {
   type SubmittalPanelSizeLabels,
   type SubmittalPanelSizeState,
 } from "./components/submittal-panel/panel-resize.tsx";
-export {
-  submittalPanelAvailableWidth,
-  submittalPanelBandOf,
-  submittalPanelDragWidth,
-  submittalPanelMinWidth,
-  submittalPanelSizeOf,
-  submittalPanelSizes,
-  submittalPanelToggledWidth,
-  submittalPanelWidthOf,
-  type SubmittalPanelSize,
-  type SubmittalPanelWidth,
-} from "./components/submittal-panel/panel-size.ts";
+export { submittalPanelSizes, type SubmittalPanelSize, type SubmittalPanelWidth } from "./components/submittal-panel/panel-size.ts";
 export { submittalPanelKey, submittalPanelNumber, submittalPanelPosition, submittalPanelWith, type SubmittalPanelKeyPress, type SubmittalPanelWith } from "./components/submittal-panel/panel-model.ts";
 export {
   defaultSubmittalPanelPreferences,
