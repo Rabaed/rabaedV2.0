@@ -43,8 +43,8 @@ import {
   type KeptProject,
   type StaleProject,
 } from "./lanes.ts";
-import { bareMergedYesRefusal, isShallowRepo, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, splitProtected, type JudgedLane } from "./prune-guards.ts";
-import { gitChanges, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
+import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, type JudgedLane } from "./prune-guards.ts";
+import { gitChanges, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 
 const options = parsePruneArgs(process.argv.slice(2));
 if (!options) {
@@ -120,13 +120,9 @@ for (const k of claimed) if (!fresh.some((m) => m.project === k.project)) keep(k
 const laneRefused = laneKeptByClaim(lane, claimed, fresh);
 
 // RP-1101: never lane 7, nor a project whose existing folder a Claude session works in.
-const { prune: unprotected, kept: uat } = splitProtected(onlyLane(stale, lane), containers);
-uat.forEach(keep);
-const candidates = unprotected.filter((s) => {
-  const held = sessionHeldProject(s, containers, holders, existsSync);
-  if (held !== undefined) keep(held);
-  return held === undefined;
-});
+const guarded = guardCandidates(onlyLane(stale, lane), containers, holders, existsSync);
+guarded.kept.forEach(keep);
+const candidates = guarded.prune;
 if (candidates.length === 0) {
   console.log(lane === undefined ? "Nothing to prune." : `Nothing to prune for lane ${lane}.`);
   printKept();
@@ -136,11 +132,11 @@ console.log("Compose projects to prune:");
 for (const s of candidates) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
-if (kept.length > 0) console.log(`(${kept.length} kept: listed at the end, with why.)`);
+// The reasons before the prompt, so the choice is made seeing them; again last (RP-1101).
+printKept();
 
 if (options.dryRun) {
   console.log("Dry run: nothing removed.");
-  printKept();
   process.exit(0);
 }
 

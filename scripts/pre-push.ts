@@ -66,8 +66,7 @@ export async function prePush(stdin: string, seam: PrePushSeam): Promise<{ ok: b
   const branches = parsePushedRefs(stdin).filter((ref) => ref.remoteRef.startsWith("refs/heads/") && !ZERO.test(ref.localSha));
   if (branches.length === 0) return { ok: true, message: "pre-push: no branch pushed, lint and typecheck skipped." };
   const merging = mergeRefusal(seam.mergeState(), "Push");
-  if (merging !== undefined) return { ok: false, message: `${merging}
-(pre-push, RP-1101)` };
+  if (merging !== undefined) return { ok: false, message: `${merging}\n(pre-push, RP-1101)` };
   const mix = mixWarning(branches, seam);
   // Rule 12 first, docs-only pushes too (the rule files are shared modules): a refusal needs a claim, not a fix (RP-1008).
   const claims = await Promise.all(branches.map((ref) => seam.claims(ref)));

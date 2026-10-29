@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
-import { longPath } from "./worktrees.ts";
+import { longPath, rdLongPath } from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
 const path = `${main}/.claude/worktrees/hopeful-thompson`;
@@ -15,6 +15,7 @@ const target = (t: Partial<RemoveTarget> = {}): RemoveTarget => ({
   currentRoot: `${main}/.claude/worktrees/jolly-ellis`,
   registered: { path, head: "abc", branch: "RP-9-done", locked: undefined },
   exists: true,
+  readable: true,
   changes: [],
   unpushed: 0,
   project: undefined,
@@ -46,9 +47,16 @@ describe("removalRefusal", () => {
   });
 
   it("takes a folder git no longer reads (its .git gone) only under .claude/worktrees/", () => {
-    const lost = target({ registered: undefined, changes: undefined, unpushed: undefined });
+    const lost = target({ registered: undefined, readable: false, changes: undefined, unpushed: undefined });
     expect(removalRefusal(lost, { force: false, platform: "win32" })).toBeUndefined();
     expect(removalRefusal({ ...lost, path: "G:/elsewhere/x" }, { force: false, platform: "win32" })).toContain("not a worktree of this clone");
+  });
+
+  it("keeps a worktree git should read but could not, unless --force", () => {
+    const unread = target({ changes: undefined });
+    expect(removalRefusal(unread, { force: false, platform: "win32" })).toContain("git could not read its changes or commits");
+    expect(removalRefusal(target({ unpushed: undefined }), { force: false, platform: "win32" })).toContain("git could not read");
+    expect(removalRefusal(unread, { force: true, platform: "win32" })).toBeUndefined();
   });
 
   it("says when there is nothing to remove", () => {
@@ -63,6 +71,26 @@ describe("longPath", () => {
   });
 });
 
+describe("rdLongPath", () => {
+  it.runIf(process.platform === "win32")("deletes a real folder with a space in its path, deeper than MAX_PATH", () => {
+    const root = mkdtempSync(join(tmpdir(), "rd long "));
+    try {
+      let deep = join(root, "left behind");
+      while (deep.length < 300) deep = join(deep, "node_modules-segment");
+      mkdirSync(deep, { recursive: true });
+      writeFileSync(join(deep, "file.txt"), "x");
+      rdLongPath(join(root, "left behind"));
+      expect(existsSync(join(root, "left behind"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === "win32")("throws with rd's message when it fails", () => {
+    expect(() => rdLongPath(join(tmpdir(), "rd-long-no-such-folder-rp1101"))).toThrow();
+  });
+});
+
 describe("removeWorktreeFolder", () => {
   /** A fake shell: records each command, and the folder is gone only once `goneAfter` has run. */
   const shell = (goneAfter: "worktree" | "rd" | "never", failing: string[] = []) => {
@@ -74,26 +102,32 @@ describe("removeWorktreeFolder", () => {
         const line = [command, ...args].join(" ");
         ran.push(line);
         if (failing.some((f) => line.includes(f))) throw Object.assign(new Error("failed"), { stderr: "error: Filename too long" });
-        if ((goneAfter === "worktree" && line.includes("worktree remove")) || (goneAfter === "rd" && (command === "cmd" || command === "rm"))) gone = true;
+        if ((goneAfter === "worktree" && line.includes("worktree remove")) || (goneAfter === "rd" && command === "rm")) gone = true;
         return "";
+      },
+      rd: (folder: string) => {
+        ran.push(`rd /s /q "${longPath(folder)}"`);
+        if (goneAfter === "rd") gone = true;
+        else throw Object.assign(new Error("rd failed"), { stderr: "Access is denied." });
       },
       exists: () => !gone,
     };
   };
+  const steps = (s: ReturnType<typeof shell>, platform: NodeJS.Platform = "win32") => ({ run: s.run, rd: s.rd, exists: s.exists, platform });
 
   it("removes with core.longpaths, then prunes git's record", () => {
     const s = shell("worktree");
-    const result = removeWorktreeFolder(target(), { run: s.run, exists: s.exists, platform: "win32" });
+    const result = removeWorktreeFolder(target(), steps(s));
     expect(s.ran).toEqual([`git -c core.longpaths=true worktree remove --force ${path}`, "git worktree prune"]);
     expect(result).toEqual({ removed: true, steps: ["git worktree remove: done"] });
   });
 
   it("deletes what git left (Filename too long) with rd /s /q on the \\\\?\\ path, then prunes", () => {
     const s = shell("rd", ["worktree remove"]);
-    const result = removeWorktreeFolder(target(), { run: s.run, exists: s.exists, platform: "win32" });
+    const result = removeWorktreeFolder(target(), steps(s));
     expect(s.ran).toEqual([
       `git -c core.longpaths=true worktree remove --force ${path}`,
-      `cmd /d /s /c rd /s /q "${longPath(path)}"`,
+      `rd /s /q "${longPath(path)}"`,
       "git worktree prune",
     ]);
     expect(result.removed).toBe(true);
@@ -102,17 +136,18 @@ describe("removeWorktreeFolder", () => {
 
   it("unlocks a locked worktree first, and skips git's remove for a folder git no longer reads", () => {
     const locked = shell("worktree");
-    removeWorktreeFolder(target({ registered: { path, head: "abc", branch: "x", locked: "claude agent" } }), { run: locked.run, exists: locked.exists, platform: "win32" });
+    removeWorktreeFolder(target({ registered: { path, head: "abc", branch: "x", locked: "claude agent" } }), steps(locked));
     expect(locked.ran[0]).toBe(`git worktree unlock ${path}`);
     const lost = shell("rd");
-    removeWorktreeFolder(target({ registered: undefined }), { run: lost.run, exists: lost.exists, platform: "win32" });
-    expect(lost.ran).toEqual([`cmd /d /s /c rd /s /q "${longPath(path)}"`, "git worktree prune"]);
+    removeWorktreeFolder(target({ registered: undefined }), steps(lost));
+    expect(lost.ran).toEqual([`rd /s /q "${longPath(path)}"`, "git worktree prune"]);
   });
 
   it("says the folder is still there when rd could not delete it either", () => {
     const s = shell("never", ["worktree remove"]);
-    const result = removeWorktreeFolder(target(), { run: s.run, exists: s.exists, platform: "win32" });
+    const result = removeWorktreeFolder(target(), steps(s));
     expect(result.removed).toBe(false);
+    expect(result.steps.at(-1)).toBe("rd /s /q: Access is denied.");
     expect(s.ran.at(-1)).toBe("git worktree prune");
   });
 
@@ -136,7 +171,7 @@ describe("removeWorktreeFolder", () => {
 
   it("uses rm -rf off Windows", () => {
     const s = shell("rd", ["worktree remove"]);
-    const result = removeWorktreeFolder(target(), { run: s.run, exists: s.exists, platform: "linux" });
+    const result = removeWorktreeFolder(target(), steps(s, "linux"));
     expect(s.ran[1]).toBe(`rm -rf ${path}`);
     expect(result.removed).toBe(true);
   });

@@ -39,7 +39,7 @@ import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { isShallowRepo, keptLast, shallowRefusal } from "./prune-guards.ts";
+import { keptLast, shallowRefusal } from "./prune-guards.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
@@ -50,6 +50,7 @@ import {
   gatherFacts,
   gitError,
   inTarget,
+  isShallowRepo,
   listWorktrees,
   localBranches,
   pruneWorktrees,
@@ -128,7 +129,8 @@ if (chosen.remove.length + chosen.branches.length + chosen.projects.length === 0
   printKept();
   process.exit(0);
 }
-if (kept.length > 0) console.log(`(${kept.length} kept: listed at the end, with why.)`);
+// The reasons before the prompt, so the choice is made seeing them; again last (RP-1101).
+printKept();
 if (chosen.projects.length > 0) {
   console.log("Compose projects to remove, with their volumes:");
   for (const p of chosen.projects) console.log(`  ${p.project}: ${p.reason}`);

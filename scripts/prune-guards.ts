@@ -1,6 +1,5 @@
-import { spawnSync } from "node:child_process";
 import { holdReason, type Holders } from "./claude-sessions.ts";
-import type { Container, KeptProject, StaleProject, WorktreeLane } from "./lanes.ts";
+import { laneProject, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
 
 // RP-1101: the guards worktrees:prune and lanes:prune share, after 2026-10-29's prunes removed
 // live work. A session working in a stale project's folder keeps it; lane 7 (the live UAT stack
@@ -30,8 +29,10 @@ export function splitProtected<P extends StaleProject>(candidates: P[], containe
 }
 
 /** lanes:prune `--lane N` refused for a protected lane, or undefined. */
-export const laneRefusal = (lane: number | undefined): string | undefined =>
-  lane === undefined ? undefined : PROTECTED[`rabaed-lane${lane}`] && `lanes:prune refused: ${PROTECTED[`rabaed-lane${lane}`]}.`;
+export const laneRefusal = (lane: number | undefined): string | undefined => {
+  const reason = lane === undefined ? undefined : protectedLaneReason(laneProject(lane));
+  return reason === undefined ? undefined : `lanes:prune refused: ${reason}.`;
+};
 
 /** RP-1007: `lanes:prune --merged --yes` with no `--lane N` (and not a dry run) is refused. */
 export const bareMergedYesRefusal = (options: { merged: boolean; yes: boolean; dryRun: boolean; lane?: number }): string | undefined =>
@@ -53,10 +54,18 @@ export function sessionHeldProject(project: StaleProject, containers: Container[
   return undefined;
 }
 
-/** Whether the clone at cwd is shallow (`git rev-parse --is-shallow-repository`); a git that cannot tell counts as shallow. */
-export function isShallowRepo(cwd: string): boolean {
-  const result = spawnSync("git", ["rev-parse", "--is-shallow-repository"], { cwd, encoding: "utf8" });
-  return result.status !== 0 || result.stdout.trim() !== "false";
+/**
+ * Both prunes' last word on their candidate projects: never a protected lane (splitProtected), nor
+ * one whose existing folder a Claude session works in (sessionHeldProject); those are kept, with why.
+ */
+export function guardCandidates<P extends StaleProject>(candidates: P[], containers: Container[], holders: Holders, exists: (dir: string) => boolean): { prune: P[]; kept: KeptProject[] } {
+  const { prune: unprotected, kept } = splitProtected(candidates, containers);
+  const prune = unprotected.filter((p) => {
+    const held = sessionHeldProject(p, containers, holders, exists);
+    if (held !== undefined) kept.push(held);
+    return held === undefined;
+  });
+  return { prune, kept };
 }
 
 /** A prune refused on a shallow clone, or undefined. */
@@ -90,6 +99,9 @@ export function mergedLanes(judged: JudgedLane[]): { worktrees: WorktreeLane[]; 
   return { worktrees, kept };
 }
 
-/** The kept items with their reasons, then lines a later step logged, as a prune's last lines (nothing when none was kept). */
+/**
+ * The kept items with their reasons, then lines a later step logged (nothing when none was kept).
+ * A prune prints it before its prompt and again as its last lines, so a `| tail` keeps the reasons.
+ */
 export const keptLast = (kept: { what: string; reason: string }[], logged: string[] = []): string[] =>
-  kept.length + logged.length === 0 ? [] : ["Kept, with why (printed last):", ...kept.map((k) => `  ${k.what}: ${k.reason}`), ...logged.map((line) => `  ${line}`)];
+  kept.length + logged.length === 0 ? [] : ["Kept, with why:", ...kept.map((k) => `  ${k.what}: ${k.reason}`), ...logged.map((line) => `  ${line}`)];

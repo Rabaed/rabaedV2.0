@@ -24,8 +24,9 @@ if (paths.length !== 1 || paths[0]!.startsWith("--")) {
   process.exit(1);
 }
 const path = resolve(paths[0]!);
-const mainRoot = listWorktrees()[0]!.path;
-const registered = listWorktrees(mainRoot).find((w) => samePath(w.path, path));
+const worktrees = listWorktrees();
+const mainRoot = worktrees[0]!.path;
+const registered = worktrees.find((w) => samePath(w.path, path));
 const exists = existsSync(path);
 /** git reads the worktree only while its .git is there. */
 const readable = exists && existsSync(join(path, ".git"));
@@ -43,16 +44,12 @@ const target: RemoveTarget = {
   currentRoot: currentRoot(),
   registered,
   exists,
+  readable,
   changes: readable ? attempt(() => gitChanges(path)) : undefined,
   unpushed: readable && registered ? attempt(() => unpushedCount(registered.head, mainRoot)) : undefined,
   project: exists ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined,
   held: holdReason(path, systemHolders()),
 };
-// A worktree git can still read but whose state it could not tell is kept, as the prunes keep it.
-if (readable && !force && (target.changes === undefined || (registered && target.unpushed === undefined))) {
-  console.error(`Not removed: git could not read ${path}'s changes or commits; \`--force\` removes it anyway.`);
-  process.exit(1);
-}
 const refused = removalRefusal(target, { force });
 if (refused !== undefined) {
   console.error(refused);

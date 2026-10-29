@@ -1,7 +1,7 @@
 import { isAppWorktree } from "./worktrees-pruning.ts";
 import { samePath } from "./paths.ts";
 import { listedChanges, protectedLaneReason } from "./prune-guards.ts";
-import { longPath, type Worktree } from "./worktrees.ts";
+import { rdLongPath, type Worktree } from "./worktrees.ts";
 
 // `pnpm worktree:remove <path>` (RP-1101). On 2026-10-29 Main 4 three times had to finish by hand a
 // `git worktree remove` that failed with "Filename too long" or "Function not implemented" after it
@@ -19,6 +19,8 @@ export type RemoveTarget = {
   /** Its entry in `git worktree list`, or undefined when git no longer lists it. */
   registered: Worktree | undefined;
   exists: boolean;
+  /** Its .git is still there, so git should read its changes and commits. */
+  readable: boolean;
   /** `git status --porcelain` lines; undefined when git cannot read it (its .git is gone). */
   changes: string[] | undefined;
   /** Commits on HEAD no origin branch has; undefined when git cannot tell. */
@@ -48,6 +50,8 @@ export function removalRefusal(t: RemoveTarget, { force, platform }: { force: bo
   if (t.registered === undefined && !isAppWorktree(t.path, t.mainRoot, platform)) return refuse("not a worktree of this clone (and not under .claude/worktrees/)");
   if (force) return undefined;
   const again = "; `--force` removes it anyway";
+  // A worktree git should read but whose state it could not tell is kept, as the prunes keep it.
+  if (t.readable && (t.changes === undefined || (t.registered !== undefined && t.unpushed === undefined))) return refuse(`kept: git could not read its changes or commits${again}`);
   if (t.changes !== undefined && t.changes.length > 0) return refuse(`kept for its uncommitted changes${listedChanges(t.changes)}${again}`);
   if (t.unpushed !== undefined && t.unpushed > 0) return refuse(`kept for its ${plural(t.unpushed, "commit")} on no origin branch${again}`);
   return undefined;
@@ -56,6 +60,8 @@ export function removalRefusal(t: RemoveTarget, { force, platform }: { force: bo
 type Steps = {
   /** Runs a command; throws (with stderr) when it fails. */
   run: (command: string, args: string[]) => string;
+  /** Deletes a folder on Windows (worktrees.ts rdLongPath); throws when it fails. */
+  rd?: (path: string) => void;
   exists: (path: string) => boolean;
   platform?: NodeJS.Platform;
 };
@@ -67,11 +73,11 @@ const stderrOf = (error: unknown) => (error as { stderr?: string }).stderr?.trim
  * folder is left with `rd /s /q \\?\…` (rm -rf off Windows), then `git worktree prune` for git's
  * record. removed: the folder is gone. steps: what each step said.
  */
-export function removeWorktreeFolder(t: RemoveTarget, { run, exists, platform = process.platform }: Steps): { removed: boolean; steps: string[] } {
+export function removeWorktreeFolder(t: RemoveTarget, { run, rd = rdLongPath, exists, platform = process.platform }: Steps): { removed: boolean; steps: string[] } {
   const steps: string[] = [];
-  const step = (label: string, command: string, args: string[]) => {
+  const step = (label: string, action: () => void) => {
     try {
-      run(command, args);
+      action();
       steps.push(`${label}: done`);
     } catch (error) {
       steps.push(`${label}: ${stderrOf(error)}`);
@@ -84,10 +90,10 @@ export function removeWorktreeFolder(t: RemoveTarget, { run, exists, platform = 
       // Unlocked already, or git cannot read it: the remove below says what is wrong.
     }
   }
-  if (t.registered !== undefined) step("git worktree remove", "git", ["-c", "core.longpaths=true", "worktree", "remove", "--force", t.path]);
+  if (t.registered !== undefined) step("git worktree remove", () => run("git", ["-c", "core.longpaths=true", "worktree", "remove", "--force", t.path]));
   if (exists(t.path)) {
-    if (platform === "win32") step("rd /s /q", "cmd", ["/d", "/s", "/c", `rd /s /q "${longPath(t.path)}"`]);
-    else step("rm -rf", "rm", ["-rf", t.path]);
+    if (platform === "win32") step("rd /s /q", () => rd(t.path));
+    else step("rm -rf", () => run("rm", ["-rf", t.path]));
   }
   try {
     run("git", ["worktree", "prune"]);

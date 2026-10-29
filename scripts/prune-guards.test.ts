@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
 import type { Container, StaleProject } from "./lanes.ts";
+import { isShallowRepo } from "./worktrees.ts";
 import {
   bareMergedYesRefusal,
-  isShallowRepo,
+  guardCandidates,
   keptLast,
   laneRefusal,
   listedChanges,
@@ -77,6 +78,19 @@ describe("sessionHeldProject", () => {
   });
 });
 
+describe("guardCandidates", () => {
+  it("keeps lane 7 and a stale project a session works in, and passes the rest", () => {
+    const containers = [container("rabaed-lane7-db-1", "rabaed-lane7", "G:/uat"), container("rabaed-lane52-db-1", "rabaed-lane52", "G:/w/held"), container("rabaed-lane53-db-1", "rabaed-lane53", "G:/w/free")];
+    const holders: Holders = { runningSession: (p) => (p === "G:/w/held" ? "a running Claude session is in it" : undefined), desktopSession: () => undefined };
+    const { prune, kept } = guardCandidates([stale("rabaed-lane7"), stale("rabaed-lane52"), stale("rabaed-lane53")], containers, holders, () => true);
+    expect(prune.map((p) => p.project)).toEqual(["rabaed-lane53"]);
+    expect(kept.map((k) => [k.project, k.path])).toEqual([
+      ["rabaed-lane7", "G:/uat"],
+      ["rabaed-lane52", "G:/w/held"],
+    ]);
+  });
+});
+
 describe("shallow clones", () => {
   let repo: string;
   const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -133,11 +147,11 @@ describe("listedChanges", () => {
 describe("keptLast", () => {
   it("prints each kept item with its reason as the last lines, so `| tail` keeps them", () => {
     expect(keptLast([{ what: "rabaed-lane12 of G:/w/a", reason: "a running Claude session is in it" }])).toEqual([
-      "Kept, with why (printed last):",
+      "Kept, with why:",
       "  rabaed-lane12 of G:/w/a: a running Claude session is in it",
     ]);
     expect(keptLast([])).toEqual([]);
     // Lines a later step logged (removeProjectsNow's "Kept compose project …") follow, under the same heading.
-    expect(keptLast([], ["Kept compose project rabaed-lane12: /w/a was not removed."])).toEqual(["Kept, with why (printed last):", "  Kept compose project rabaed-lane12: /w/a was not removed."]);
+    expect(keptLast([], ["Kept compose project rabaed-lane12: /w/a was not removed."])).toEqual(["Kept, with why:", "  Kept compose project rabaed-lane12: /w/a was not removed."]);
   });
 });

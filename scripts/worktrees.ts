@@ -203,6 +203,15 @@ export const gitChanges = (dir: string): string[] =>
     .map((line) => line.trim())
     .filter((line) => line !== "");
 
+/** Whether the clone at cwd is shallow (`git rev-parse --is-shallow-repository`); a git that cannot tell counts as shallow (RP-1101). */
+export function isShallowRepo(cwd: string): boolean {
+  try {
+    return git(["rev-parse", "--is-shallow-repository"], cwd).trim() !== "false";
+  } catch {
+    return true;
+  }
+}
+
 /** The current worktree's top folder. */
 export const currentRoot = (): string => git(["rev-parse", "--show-toplevel"]).trim();
 
@@ -349,8 +358,18 @@ export function removeWorktree(w: Worktree, mainRoot: string, target: string): R
 /** A Windows path as `\\?\G:\…`, which rd follows past MAX_PATH (260 characters). */
 export const longPath = (path: string): string => (path.startsWith("\\\\?\\") ? path : `\\\\?\\${path.replace(/\//g, "\\")}`);
 
+/**
+ * Deletes a Windows folder with `rd /s /q "\\?\<path>"` (RP-1101), which reaches past MAX_PATH where
+ * git and rmSync stop. Verbatim arguments: Node would otherwise escape the quotes as \" and rd would get
+ * an invalid path. Throws with rd's message when it fails.
+ */
+export function rdLongPath(path: string, spawn: typeof spawnSync = spawnSync): void {
+  const result = spawn("cmd", ["/d", "/s", "/c", `"rd /s /q "${longPath(path)}""`], { encoding: "utf8", windowsVerbatimArguments: true });
+  if (result.status !== 0) throw Object.assign(new Error(`rd failed (exit ${result.status})`), { stderr: `${result.stderr ?? ""}${result.error?.message ?? ""}`.trim() || `rd exited ${result.status}` });
+}
+
 /** What removeWorktree left: branches it kept, and why its folder is still there. Empty when it removed everything. */
-export type Removal ={ branchesKept?: { branch: string; reason: string }[]; folderLeft?: string };
+export type Removal = { branchesKept?: { branch: string; reason: string }[]; folderLeft?: string };
 
 /**
  * removeWorktree for any worktree but the main checkout (worktrees:prune decides which).
@@ -378,7 +397,11 @@ export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: stri
   } catch (error) {
     folderLeft = (error as { code?: string }).code ?? String(error);
     if (process.platform === "win32") {
-      spawnSync("cmd", ["/d", "/s", "/c", `rd /s /q "${longPath(w.path)}"`], { stdio: "ignore" });
+      try {
+        rdLongPath(w.path);
+      } catch (rdError) {
+        folderLeft = `${folderLeft}; ${gitError(rdError)}`;
+      }
       if (!existsSync(w.path)) folderLeft = undefined;
     }
   }

@@ -25,12 +25,8 @@ export function mergeRefusal(state: MergeState, what: string): string | undefine
   /* eslint-disable rabaed/no-avoid-terms -- git's own words for the paths of a merge, not Rabaed Files. */
   const files =
     state.conflicted.length > 0
-      ? ["Conflicted files:", ...state.conflicted.map((f) => `  ${f}`)]
-      : ["No conflicted file is left, but the merge is not committed."];
+      ? ["Conflicted files:", ...state.conflicted.map((f) => `  ${f}`), "Resolve them and `git commit` to finish the merge, or `git merge --abort` to undo it, then run it again."]
+      : ["No conflicted file is left, but the merge is not committed: `git commit` to finish it, or `git merge --abort` to undo it, then run it again."];
   /* eslint-enable rabaed/no-avoid-terms */
-  return [
-    `${what} refused: a merge is in progress (MERGE_HEAD exists).`,
-    ...files,
-    "Resolve them and `git commit` to finish the merge, or `git merge --abort` to undo it, then run it again.",
-  ].join("\n");
+  return [`${what} refused: a merge is in progress (MERGE_HEAD exists).`, ...files].join("\n");
 }

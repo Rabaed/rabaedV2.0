@@ -15,7 +15,7 @@ import {
   type WorktreeLane,
 } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { listedChanges, protectedLaneReason, sessionHeldProject, splitProtected } from "./prune-guards.ts";
+import { guardCandidates, listedChanges, protectedLaneReason } from "./prune-guards.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
@@ -240,13 +240,7 @@ function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { conta
   ];
   const unique = all.filter((p, i) => all.findIndex((q) => q.project === p.project) === i).sort((a, b) => a.project.localeCompare(b.project));
   // RP-1101: never lane 7, nor a stale project whose existing folder a Claude session works in.
-  const { prune: unprotected, kept: uat } = splitProtected(unique, containers);
-  const held: KeptProject[] = [];
-  const free = unprotected.filter((p) => {
-    const keep = sessionHeldProject(p, containers, holders, exists);
-    if (keep !== undefined) held.push(keep);
-    return keep === undefined;
-  });
-  const claimed = keptByClaims(free, listedClaims(worktrees.filter((w) => !removed(w.path))));
-  return { prune: claimed.prune, kept: [...uat, ...held, ...claimed.kept] };
+  const guarded = guardCandidates(unique, containers, holders, exists);
+  const claimed = keptByClaims(guarded.prune, listedClaims(worktrees.filter((w) => !removed(w.path))));
+  return { prune: claimed.prune, kept: [...guarded.kept, ...claimed.kept] };
 }
