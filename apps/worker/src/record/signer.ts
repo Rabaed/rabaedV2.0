@@ -1,6 +1,7 @@
 import { KMSClient, SignCommand } from "@aws-sdk/client-kms";
 import { localCertificateAuthority } from "./local-ca.ts";
 import { subtle, toArrayBuffer, toBytes } from "./pki.ts";
+import { publicFetch } from "./public-fetch.ts";
 import { fetchRevocationData, type RevocationData } from "./revocation.ts";
 
 // The sealing signer (ADR 0023), one of the seal's two adapters: in AWS the KMS
@@ -46,11 +47,14 @@ export interface KmsSealSignerSettings {
   readonly certificates: readonly Uint8Array[];
 }
 
-/** The signer in AWS: KMS signs; the private key never leaves it. Its revocation data comes from the addresses its certificates name. */
+/**
+ * The signer in AWS: KMS signs; the private key never leaves it. Its revocation data comes from
+ * the addresses its certificates name, public ones only (`publicFetch`, RP-1085).
+ */
 export function kmsSealSigner(
   settings: KmsSealSignerSettings,
   client = new KMSClient({ region: settings.region }),
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = publicFetch(),
 ): SealSigner {
   return {
     certificates: settings.certificates,
