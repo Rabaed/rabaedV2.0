@@ -10,7 +10,8 @@
 // RP-82-2: which link questions a Project makes required (project_required_field) is
 // read by every Project Member of every Participant, never by another Project's, and
 // changed only by its Project Admins, through app.set_project_required_field; the app
-// role reads no one who set it, and writes no row itself.
+// role reads no one who set it, and writes no row itself. Each change is audited in
+// setup_event (RP-664), which the app role does not read.
 //
 // The WIR here is a test-only Type on the WIR's Workflow whose Form is the WIR Form
 // document itself (apps/admin/forms/WIR.json), so this suite needs no `pnpm defaults:publish`.
@@ -114,7 +115,7 @@ async function submit(item: string, number: string) {
 const answers = (as: string, item: string) =>
   call<{ answers: Record<string, unknown> | null }>(as, sql`select app.work_item_answers(${item}::uuid) as answers`).then((rows) => rows[0]!.answers);
 
-const setRequired = (as: string, project: string, type: string, required: boolean) =>
+const setRequired = (as: string, project: string, type: string, required: boolean | null) =>
   outcome(as, sql`select app.set_project_required_field(${project}::uuid, ${type}, 'approved_submittals', ${required}, now()) as outcome`);
 const requiredRows = (as: string) =>
   call<{ project_id: string; field_key: string }>(as, sql`select project_id, field_key from project_required_field order by project_id`);
@@ -250,5 +251,51 @@ describe("RP-82-2: which link questions a Project makes required", () => {
     expect(await requiredRows(k1.ap)).toEqual([{ project_id: projectId, field_key: "approved_submittals" }]);
     await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [otherProjectId]);
     expect(await setRequired(other.ap, otherProjectId, TYPE, false)).toBe("project_closed");
+  });
+
+  // RP-664 (RP-1082 item 5): each change is audited in setup_event, kind project_setting; a repeat or a refusal writes nothing.
+  it("writes one setup_event per change, with from and to, and none for a repeat or a refusal", async () => {
+    const events = async (project: string) =>
+      (
+        await migrator.query<{ kind: string; type: string; actor_member_id: string; company_id: string | null; payload: unknown }>(
+          "select kind, type, actor_member_id, company_id, payload from setup_event where project_id = $1 and type = 'required_field_changed' order by created_at, id",
+          [project],
+        )
+      ).rows;
+    const typeId = (await migrator.query("select id from work_item_type where code = $1", [TYPE])).rows[0].id as string;
+    const change = (from: boolean, to: boolean) => ({
+      kind: "project_setting",
+      type: "required_field_changed",
+      actor_member_id: c1.ap,
+      company_id: null,
+      payload: { work_item_type_id: typeId, field_key: "approved_submittals", from, to },
+    });
+    // Start from off, whatever the tests before left.
+    await setRequired(c1.ap, projectId, TYPE, false);
+    const before = (await events(projectId)).length;
+
+    expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
+    expect((await events(projectId)).slice(before)).toEqual([change(false, true)]);
+    // The same value again, and refusals, write nothing.
+    expect(await setRequired(c1.ap, projectId, TYPE, true)).toBe("set");
+    expect(await setRequired(k1.ap, projectId, TYPE, false)).toBe("not_found");
+    expect(await setRequired(c1.ap, projectId, "ZZZ", false)).toBe("type_not_found");
+    expect(await setRequired(c1.ap, projectId, TYPE, null)).toBe("not_found");
+    expect((await events(projectId)).slice(before)).toHaveLength(1);
+    expect(await requiredRows(k1.ap)).toEqual([{ project_id: projectId, field_key: "approved_submittals" }]);
+
+    expect(await setRequired(c1.ap, projectId, TYPE, false)).toBe("set");
+    expect(await setRequired(c1.ap, projectId, TYPE, false)).toBe("set");
+    expect((await events(projectId)).slice(before)).toEqual([change(false, true), change(true, false)]);
+
+    // A Closed Project's refusal writes nothing.
+    await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [otherProjectId]);
+    const otherBefore = (await events(otherProjectId)).length;
+    expect(await setRequired(other.ap, otherProjectId, TYPE, false)).toBe("project_closed");
+    expect(await events(otherProjectId)).toHaveLength(otherBefore);
+
+    // Read by nobody through the app role, the Project Admin who made the change included (RP-450-1).
+    await expect(call(c1.ap, sql<object>`select 1 from setup_event where project_id = ${projectId}::uuid`)).rejects.toThrow(/permission denied/);
+    await setRequired(c1.ap, projectId, TYPE, true);
   });
 });

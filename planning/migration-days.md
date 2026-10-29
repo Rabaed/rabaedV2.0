@@ -158,3 +158,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271101 | RP-1079 | 23 | reply_files_event_audience |
 | 20271030 | RP-1078 | 32 | snag_hardening |
 | 20271103 | RP-1081 | 32 | raised_from_check_item_photos |
+| 20271103 | RP-664 | 42 | required_field_audit |
