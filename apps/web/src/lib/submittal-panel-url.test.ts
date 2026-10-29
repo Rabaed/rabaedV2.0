@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openIdFrom, submittalPanelHref } from "./submittal-panel-url.ts";
+import { openIdFrom, sizeFrom, submittalPanelHref } from "./submittal-panel-url.ts";
 
 // RP-1061: the Submittal Panel's state is `?open=<id>` on the List and the Kanban, so a reload
 // or a shared link reopens it. Every other part of the URL (filters, page, view) is kept.
@@ -20,6 +20,24 @@ describe("the Submittal Panel's URL", () => {
   it("drops it on close, leaving the rest", () => {
     expect(submittalPanelHref("/en/projects/p/submittals", `?page=2&open=${id}`, null)).toBe("/en/projects/p/submittals?page=2");
     expect(submittalPanelHref("/en/projects/p/submittals", `?open=${id}`, null)).toBe("/en/projects/p/submittals");
+  });
+
+  it("drops the link's size with it on close, so the next item opened is an ordinary view", () => {
+    expect(submittalPanelHref("/en/projects/p/submittals", `?open=${id}&size=wide&page=2`, null)).toBe("/en/projects/p/submittals?page=2");
+    expect(submittalPanelHref("/en/projects/p/submittals", `?open=${id}&size=wide`, "0a0b0c0d-0000-4000-8000-000000000001")).toBe(
+      "/en/projects/p/submittals?open=0a0b0c0d-0000-4000-8000-000000000001&size=wide",
+    );
+  });
+
+  // RP-1063: a link that sets the panel's size (`?open=<id>&size=wide`) opens it at that size,
+  // and never keeps it as the viewer's own (README §2).
+  it("reads a size the link sets: one of the four presets, nothing else", () => {
+    expect(sizeFrom(new URLSearchParams(`open=${id}&size=compact`))).toBe(440);
+    expect(sizeFrom(new URLSearchParams(`open=${id}&size=normal`))).toBe(640);
+    expect(sizeFrom(new URLSearchParams(`open=${id}&size=wide`))).toBe(960);
+    expect(sizeFrom(new URLSearchParams(`open=${id}&size=full`))).toBe("full");
+    expect(sizeFrom(new URLSearchParams(`open=${id}&size=9999`))).toBeNull();
+    expect(sizeFrom(new URLSearchParams(`open=${id}`))).toBeNull();
   });
 
   it("reads only an id that can be an item's (a uuid), so an edited link asks the api nothing odd", () => {
