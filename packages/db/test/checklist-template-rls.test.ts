@@ -278,3 +278,42 @@ describe("RP-651-2: the copy on a WIR", () => {
     expect(await sync(c1.ap)).toBe("not_editable");
   });
 });
+
+// RP-1082 (epic review RP-676; CODING_STANDARDS "Row-level security on every Project table, keyed by project_id").
+describe("the copy on a WIR is keyed by its Project", () => {
+  it("carries its item's Project, which the database holds it to", async () => {
+    const { rows } = await migrator.query("select c.project_id, w.project_id as item_project_id from work_item_checklist c join work_item w on w.id = c.work_item_id");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.project_id).toBe(row.item_project_id);
+    // Another Project's id is refused: the composite key to work_item (id, project_id).
+    await expect(
+      migrator.query("update work_item_checklist set project_id = $1 where work_item_id = $2", [(await migrator.query("select id from project where id <> $1 limit 1", [projectId])).rows[0].id, wir]),
+    ).rejects.toThrow(/foreign key/);
+  });
+
+  it("is read only on a Project the reader is on, and the item they see", async () => {
+    const { rows } = await migrator.query(
+      "select qual from pg_policies where tablename = 'work_item_checklist' and policyname = 'member_reads_work_item_checklists'",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].qual).toMatch(/project_id IN \( SELECT app\.current_project_ids/);
+    expect(rows[0].qual).toMatch(/app\.sees_work_item\(work_item_id\)/);
+  });
+});
+
+describe("the definer helpers no app role runs (RP-1082)", () => {
+  it("run as their caller: each is security invoker, and the app role may not run it", async () => {
+    const { rows } = await migrator.query(
+      `select p.oid::regprocedure::text as fn, p.prosecdef as definer, has_function_privilege('rabaed_app', p.oid, 'EXECUTE') as app_runs
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'app' and p.proname in ('reply_checklist_item', 'reply_files_waiting', 'is_project_trade', 'reply_field_refusal')
+       order by 1`,
+    );
+    expect(rows).toEqual([
+      { fn: "app.is_project_trade(uuid,uuid)", definer: false, app_runs: false },
+      { fn: "app.reply_checklist_item(uuid,jsonb,text)", definer: false, app_runs: false },
+      { fn: "app.reply_field_refusal(uuid,text,text,text,uuid)", definer: false, app_runs: false },
+      { fn: "app.reply_files_waiting(uuid,text,text,uuid)", definer: false, app_runs: false },
+    ]);
+  });
+});
