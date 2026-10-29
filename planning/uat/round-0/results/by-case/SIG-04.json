@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "the record is made",
@@ -16,8 +16,8 @@
     },
     {
       "text": "the first entry is dated at the raiser's last send, not the Returned one",
-      "ok": false,
-      "detail": "first send Oct 27, 2026, 9:46 PM, last send Oct 27, 2026, 9:48 PM; approval flow reads: Approval flow د ﺎ ﻤ ﺘ ﻋ ﻻ ا ر ﺎ ﺴ ﻣ # Step اء ﺮ ﺟ ﻹ ا Member ﻮ ﻀ ﻌ ﻟ ا Company ﺔ ﻛ رش ﻟ ا Date ﺦ ﻳ ر ﺎ ﺘ ﻟ ا ى ﻮ ﺘ ﺤ ﻤ ﻟ ا ﺔ ﻤ ﺼ ﺑ Content hash 1 ّ ﺪ ﻋ ُ أ Prepared ان ﺪ ﻤ ﺣ ﻆ ﻓ ﺎ ﺣ Hafiz Hamdan س ﺪ ﻨ ﻬ ﻣ Engineer ءات ﺎ ﺸ ﻧ ﻺ ﻟ يس إم يت TMC Constructions ول ﺎ ﻘ ﻤ ﻟ ا Contractor Oct 27, 2026, 9:46 PM 5a05c7815edb53187b02 9c137981cf6f5a0eb9005 64c58363dd8b9a878c02 bfc 2 ﻢ ﻳ ﺪ ﻘ ﺗ Submit ر ﻮ ﻨ ﺳ ﻲ ﻠ ﻋ Ali Sonour وع رش ﻤ"
+      "ok": true,
+      "detail": "first send Oct 29, 2026, 2:36 AM, last send Oct 29, 2026, 2:38 AM; approval flow reads: Approval flow د ﺎ ﻤ ﺘ ﻋ ﻻ ا ر ﺎ ﺴ ﻣ # Step اء ﺮ ﺟ ﻹ ا Member ﻮ ﻀ ﻌ ﻟ ا Company ﺔ ﻛ رش ﻟ ا Date ﺦ ﻳ ر ﺎ ﺘ ﻟ ا ى ﻮ ﺘ ﺤ ﻤ ﻟ ا ﺔ ﻤ ﺼ ﺑ Content hash 1 ّ ﺪ ﻋ ُ أ Prepared ان ﺪ ﻤ ﺣ ﻆ ﻓ ﺎ ﺣ Hafiz Hamdan س ﺪ ﻨ ﻬ ﻣ Engineer ءات ﺎ ﺸ ﻧ ﻺ ﻟ يس إم يت TMC Constructions ول ﺎ ﻘ ﻤ ﻟ ا Contractor Oct 29, 2026, 2:38 AM 3815ba30806f5627e580e 742eb76cfbf833c8c42c7f ba2937fa1879f87753be5 2 ﻢ ﻳ ﺪ ﻘ ﺗ Submit ر ﻮ ﻨ ﺳ ﻲ ﻠ ﻋ Ali Sonour وع رش ﻤ "
     },
     {
       "text": "a Return is not printed (no Return step, no reason)",
@@ -40,5 +40,5 @@
     "evidence/SIG-04-1-history-with-two-sends.jpg"
   ],
   "notes": "Chat is not built, so its absence cannot be tried.",
-  "ranAt": "2026-10-27T18:48:19.094Z"
+  "ranAt": "2026-10-28T23:38:13.477Z"
 }

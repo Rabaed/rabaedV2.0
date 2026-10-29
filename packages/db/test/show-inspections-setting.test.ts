@@ -2,7 +2,8 @@
 // RP-649). Off by default. Only the Project's Admin turns it on or off, through
 // app.set_show_inspections_in_submittals; anyone else is told 'not_found' and nothing changes. The
 // app role cannot write the column itself, and the Project's Members read it (it is a column of
-// the Project they are on; a Company outside it reads no row, as ever).
+// the Project they are on; a Company outside it reads no row, as ever). Each change is audited in
+// setup_event (RP-664), which the app role does not read.
 import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -122,10 +123,49 @@ describe("the setting Show Inspections in the Submittals tab", () => {
     await setAs(creator, false);
   });
 
+  // RP-664: each change is audited in setup_event, kind project_setting; a repeat or a refusal writes nothing.
+  it("writes one setup_event per change, with from and to, and none for a repeat or a refusal", async () => {
+    const events = async () =>
+      (
+        await migrator.query<{ kind: string; type: string; actor_member_id: string; company_id: string | null; payload: unknown }>(
+          "select kind, type, actor_member_id, company_id, payload from setup_event where project_id = $1 and kind = 'project_setting' order by created_at, id",
+          [projectId],
+        )
+      ).rows;
+    const before = (await events()).length;
+    expect(await shown()).toBe(false);
+
+    expect(await setAs(creator, true)).toBe("set");
+    const after = await events();
+    expect(after).toHaveLength(before + 1);
+    expect(after.at(-1)).toEqual({
+      kind: "project_setting",
+      type: "show_inspections_in_submittals_changed",
+      actor_member_id: creator,
+      company_id: null,
+      payload: { from: false, to: true },
+    });
+
+    expect(await setAs(creator, true)).toBe("set");
+    expect(await setAs(consultant, false)).toBe("not_found");
+    expect(await events()).toHaveLength(before + 1);
+
+    expect(await setAs(creator, false)).toBe("set");
+    expect((await events()).at(-1)?.payload).toEqual({ from: true, to: false });
+
+    // Read by nobody through the app role, the Project Admin who made the change included (RP-450-1).
+    await expect(withMember(app, creator, (trx) => sql`select 1 from setup_event where project_id = ${projectId}::uuid`.execute(trx))).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+
   it("is refused on a closed Project", async () => {
+    const audited = async () => (await migrator.query("select 1 from setup_event where project_id = $1 and kind = 'project_setting'", [projectId])).rowCount;
+    const before = await audited();
     await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [projectId]);
     expect(await setAs(creator, true)).toBe("project_closed");
     expect(await shown()).toBe(false);
+    expect(await audited()).toBe(before);
     await migrator.query("update project set status = 'active', closed_at = null where id = $1", [projectId]);
   });
 });
