@@ -8,7 +8,7 @@ import { headingHtml, html, ltr, texts, WORDS, type RecordLanguage, type RecordT
 import type { WorkingCopyData } from "./working-copy.ts";
 
 // The one Rabaed layout (form-engine.md §6; ADR 0023), printed from the Record
-// Data only. Page 1 is the Companies, the title block, the Parties and
+// Data only. Page 1 is the Companies, the title block, the Participants and
 // Classification boxes, the Final decision box (outcome, chips, who issued it,
 // dates, Review Comments, the QR and Verification Code), the reply's first
 // lines and the approval flow; the Form's sections and the shared Documents
@@ -512,10 +512,10 @@ ${copy ? `<div class="watermark">${txt(copy.watermark)}</div>` : ""}
 </section>
 <div class="two">
   <section class="box">
-    <h2>${heading("parties")}</h2>
+    <h2>${heading("participants")}</h2>
     <dl>
       <dt>${heading("project")}</dt><dd>${txt(data.projectName)}</dd>
-      ${data.parties.map((c) => `<dt>${txt(c.role)}</dt><dd>${txt(c.name)}</dd>`).join("")}
+      ${data.participants.map((c) => `<dt>${txt(c.role)}</dt><dd>${txt(c.name)}</dd>`).join("")}
     </dl>
   </section>
   <section class="box">

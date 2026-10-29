@@ -11,7 +11,7 @@ import { recordDataXml, type RecordData, type RecordImages } from "./record-data
 // same pages, and write the same document, as what was stored. Whoever adds to
 // recordDataXml (RP-650, RP-147) extends the reader until these pass again. They run over
 // the golden records (RP-151): every Code, in each record language, with the Form, tables,
-// checklists, photos, Parties and the approval flow.
+// checklists, photos, Participants and the approval flow.
 
 const codes: GoldenCode[] = ["A", "B", "C", "D", "owner", "cancelled", "rabaed-cancelled", "wir"];
 const languages = ["bilingual", "ar", "en"] as const;

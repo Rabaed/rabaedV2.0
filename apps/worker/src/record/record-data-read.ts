@@ -340,7 +340,8 @@ export function parseRecord(xml: string, photos: PhotoKeys = { keyOf: () => null
     confirmedBy: confirmedBy ? personOf(confirmedBy) : null,
     reviewComments: Number(child(decision, "reviewComments").text),
     companies,
-    parties: companyLines(child(root, "parties")),
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the Record Data's stored element name (record-data.ts keeps it).
+    participants: companyLines(child(root, "parties")),
     trades,
     location: named(maybe(classification, "location")),
     scopes: named(maybe(classification, "scopes")),

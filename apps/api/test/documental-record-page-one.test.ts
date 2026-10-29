@@ -437,9 +437,10 @@ describe("page 1 of a Code B record with Comments, in both languages", () => {
     expect(recordB.xml).not.toContain("<revisionOf");
   });
 
-  it("has a Parties box: the Project, then the Companies by role", () => {
-    const parties = /<parties>([\s\S]*?)<\/parties>/.exec(recordB.xml)![1]!;
-    for (const name of [c1Name, K1_NAME, OWNER_NAME]) expect(parties, name).toContain(name);
+  // The Record Data element keeps its stored name `parties` (RP-1086); the box prints "Participants".
+  it("has a Participants box: the Project, then the Companies by role", () => {
+    const participants = /<parties>([\s\S]*?)<\/parties>/.exec(recordB.xml)![1]!;
+    for (const name of [c1Name, K1_NAME, OWNER_NAME]) expect(participants, name).toContain(name);
     expect(recordB.text).toContain(squeeze(projectName));
     // In role order: the Owner, the Consultant, the Contractor.
     const order = [OWNER_NAME, K1_NAME, c1Name].map((n) => parties.indexOf(n));
