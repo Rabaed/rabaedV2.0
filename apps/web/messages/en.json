@@ -1280,6 +1280,23 @@
     "notFound": "This item is no longer available to you.",
     "unavailable": "That didn't work. Try again."
   },
+  "submittalRoute": {
+    "route": "Route",
+    "states": {
+      "done": "done",
+      "current": "current",
+      "upcoming": "upcoming"
+    },
+    "outcome": "Receives the outcome",
+    "steps": "{count, plural, one {1 Step} other {{n} Steps}}",
+    "title": "Workflow",
+    "version": "{name} · Version {version}",
+    "step": "Step {n} · {role}",
+    "youAreHere": "You are here",
+    "happens": "What happens here",
+    "newOnly": "Changes apply to new submittals only.",
+    "openSettings": "Open in Workflow settings"
+  },
   "workflowMap": {
     "line": "Workflow: {name} · Version {version}",
     "view": "View workflow",
