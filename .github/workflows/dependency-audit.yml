@@ -1,5 +1,6 @@
 name: Dependency audit
-# `pnpm audit --prod` (RP-1023, RP-1032): known advisories in the production packages.
+# `pnpm audit` (RP-1023, RP-1032, RP-1070): known advisories in every package, dev dependencies
+# included (why: scripts/dependency-audit.ts's header).
 # Meant as a required check on main's ruleset ("pnpm audit", which the owner adds once this
 # workflow is on main). The job fails on an advisory at high or above that
 # `.audit-allowlist.json` does not list, with an error on the run and the PR's checks and a
@@ -44,9 +45,9 @@ jobs:
       # Reads pnpm-lock.yaml only: no install, so no package script runs. Every severity goes
       # into the JSON; the report splits it at --level. pnpm exits 1 on any finding and on a
       # failed request alike, so the report tells them apart.
-      - name: pnpm audit --prod
+      - name: pnpm audit
         if: steps.needed.outputs.needed == 'true'
-        run: pnpm audit --prod --json > audit.json || true
+        run: pnpm audit --json > audit.json || true
       - name: Report
         if: steps.needed.outputs.needed == 'true'
         run: node scripts/dependency-audit.ts audit.json --level high

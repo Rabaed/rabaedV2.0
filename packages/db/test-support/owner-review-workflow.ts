@@ -15,10 +15,14 @@ import { approveBActionForm } from "./test-workflow.ts";
  * Code B's Recommendation carries its table of items (approveBActionForm), from which
  * the Owner's Confirm creates the Comments. The Owner review is held by the Owner, or by
  * an Owner Representative covering the item where the Project has one. It passes every
- * publish check. `run` executes SQL as the migrator; the result is the Workflow's id.
+ * publish check. `screens` pins a published Screen Version to a Transition, by its key
+ * (addTestScreen). `run` executes SQL as the migrator; the result is the Workflow's id.
  */
-export function addOwnerReviewWorkflow(run: (text: string) => Promise<{ rows: unknown[] }>): Promise<string> {
-  return insertTestWorkflow(run, { en: "Owner's review (test)", ar: "مراجعة المالك (اختبار)" }, ownerReviewSteps, ownerReviewTransitions);
+export function addOwnerReviewWorkflow(
+  run: (text: string) => Promise<{ rows: unknown[] }>,
+  { screens = {} }: { screens?: Record<string, string> } = {},
+): Promise<string> {
+  return insertTestWorkflow(run, { en: "Owner's review (test)", ar: "مراجعة المالك (اختبار)" }, ownerReviewSteps, ownerReviewTransitions, screens);
 }
 
 const name = (en: string, ar: string) => ({ en, ar });

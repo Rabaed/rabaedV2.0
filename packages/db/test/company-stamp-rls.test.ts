@@ -1,4 +1,5 @@
-// Seam 2 for the Company's logo and Stamp (RP-617, spec RP-632; ADR 0023): `company.logo_file_id`
+// Seam 2 for the Company's logo and Stamp (RP-617, spec RP-632; ADR 0023; visibility.md scenario
+// RP-617-1, the Company logo and Stamp row): `company.logo_file_id`
 // and `company.stamp_file_id`, and the stored_file rows they point at, as the app role. Every
 // Member of the Company reads them; another Company's Member reads neither the row nor its files.
 // Only the Company's Authorized Person saves them, through app.set_company_image; the app role
@@ -83,7 +84,7 @@ afterAll(async () => {
   await migrator?.end();
 });
 
-describe("app.set_company_image", () => {
+describe("scenario RP-617-1: app.set_company_image", () => {
   it("saves the Stamp and the logo for the Company's Authorized Person", async () => {
     expect(await save(people.ap, companies.a, "stamp")).toBe("set");
     expect(await save(people.ap, companies.a, "logo")).toBe("set");
@@ -144,7 +145,7 @@ describe("app.set_company_image", () => {
   });
 });
 
-describe("app.member_company_has_stamp, as the app role", () => {
+describe("scenario RP-617-1: app.member_company_has_stamp, as the app role", () => {
   it("answers for the acting Member's own Company, and false for anyone else's", async () => {
     expect(await save(people.ap, companies.a, "stamp")).toBe("set");
     expect(await rowsAs(people.colleague, sql`select app.member_company_has_stamp(${people.colleague}::uuid) as has`)).toEqual([{ has: true }]);
@@ -155,7 +156,7 @@ describe("app.member_company_has_stamp, as the app role", () => {
   });
 });
 
-describe("company.logo_file_id and stamp_file_id", () => {
+describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
   it("are read by every Member of the Company, with the files they point at", async () => {
     const files = await filesOf(companies.a);
     for (const reader of [people.ap, people.colleague]) {

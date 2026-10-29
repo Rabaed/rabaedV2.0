@@ -141,7 +141,7 @@ beforeAll(async () => {
   await runWorker();
 }, 240_000);
 
-describe("scenario RP-23-3: C1's PM downloads a Working Copy while K1 reviews the MAR", () => {
+describe("scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy while K1 reviews the MAR", () => {
   let id = "";
   let copy: Uint8Array;
   let text = "";
