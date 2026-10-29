@@ -33,13 +33,12 @@ describe("the Project files keys the database builds (RP-1104)", () => {
     expect(iamPatternMatches(REGISTER_IMPORT_OBJECTS, rows[0]!.key)).toBe(true);
   });
 
-  it("are spelt out by those two functions and one check only: a new key needs its own grant (packages/infra/test/iam-grants.test.ts)", async () => {
-    // Every function in the live catalog that spells out a Project files key. request_snag_report builds none:
-    // it only checks that a photo's key (a Document's) is under the Project.
+  it("are spelt out by those two functions only: a new key needs its own grant (packages/infra/test/iam-grants.test.ts)", async () => {
+    // Every function in the live catalog that spells out a Project files key.
     const { rows } = await sql<{ name: string }>`
       select distinct p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('app', 'public') and p.prosrc like ${"%'projects/'%"}
       order by 1`.execute(migrator);
-    expect(rows.map((r) => r.name)).toEqual(["document_storage_key", "register_import_file_key", "request_snag_report"]);
+    expect(rows.map((r) => r.name)).toEqual(["document_storage_key", "register_import_file_key"]);
   });
 });
