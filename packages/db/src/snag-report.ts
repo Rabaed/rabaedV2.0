@@ -6,15 +6,19 @@ import type { Database } from "./schema.ts";
 // asks for a report and later for its state as the Member who asked (withMember); the worker's job
 // reads what to print and saves the PDF as the app role with no Member set.
 
-/** Asks for a report of `content` (read as the calling Member); its id, or null for a Project the Member is not on or a photo they may not read as a Document. */
+/**
+ * Asks for a report of `content` (read as the calling Member at `now`); its id, or null for a Project the Member is
+ * not on, a photo they may not read as a Document, or a row that is not what the Snag List shows them (RP-1078).
+ */
 export async function requestSnagReport(
   trx: Transaction<Database>,
   projectId: string,
   language: SnagReportLanguage,
   content: SnagReportContent,
+  now: Date,
 ): Promise<string | null> {
   const { rows } = await sql<{ id: string | null }>`
-    select app.request_snag_report(${projectId}::uuid, ${language}, ${JSON.stringify(content)}::jsonb) as id
+    select app.request_snag_report(${projectId}::uuid, ${language}, ${JSON.stringify(content)}::jsonb, ${now}::timestamptz) as id
   `.execute(trx);
   return rows[0]?.id ?? null;
 }

@@ -31,6 +31,8 @@ import {
   chooseTakeover,
   clashesAfterRemoval,
   holdsLaneProject,
+  postgresConnections,
+  projectInUseNow,
   pruneCommand,
   releaseContainers,
   staleProjects,
@@ -547,6 +549,99 @@ describe("chooseMerged (lanes:prune --merged)", () => {
   it("keeps a project with a container from a folder that is not a worktree of this clone", () => {
     const other = [container({ name: "rabaed-lane6-db-1", project: "rabaed-lane6", workingDir: "D:\\other-clone\\wt" })];
     expect(chooseMerged({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, holders: none, platform: "win32" }).merged).toEqual([]);
+  });
+});
+
+describe("projectInUseNow (lanes:prune and worktrees:prune, just before each removal, RP-1073)", () => {
+  const gone = "G:\\rabaed-wt\\hopeful-chaum";
+  const live = "G:\\rabaed-wt\\rp-921";
+  // A Windows disk: any case names the same folder.
+  const exists = (dir: string) => dir.toLowerCase() === live.toLowerCase();
+  const listedContainers = [container({ name: "rabaed-lane12-files-1", project: "rabaed-lane12", workingDir: gone })];
+  const check = (now: Partial<Parameters<typeof projectInUseNow>[1]["now"]>, more: { listedContainers?: Container[] } = {}) =>
+    projectInUseNow("rabaed-lane12", {
+      listedClaims: [],
+      listedContainers: more.listedContainers ?? listedContainers,
+      now: { claims: [], containers: listedContainers, postgres: undefined, ...now },
+      exists,
+      platform: "win32",
+    });
+
+  it("lets the project go when nothing changed", () => {
+    expect(check({})).toBeUndefined();
+  });
+
+  it("keeps it when a worktree's .env names it now, but not for a claim already listed or on another project", () => {
+    const claim = { path: live, branch: "RP-921-x", project: "rabaed-lane12" };
+    expect(check({ claims: [claim] })).toBe(`the .env of ${live} (on RP-921-x) holds it now`);
+    expect(check({ claims: [{ ...claim, project: "rabaed-lane13" }] })).toBeUndefined();
+    expect(projectInUseNow("rabaed-lane12", { listedClaims: [claim], listedContainers, now: { claims: [claim], containers: listedContainers, postgres: undefined }, exists })).toBeUndefined();
+  });
+
+  it("keeps it when a container of it runs now from a folder that exists and did not run it at listing", () => {
+    const started = container({ name: "rabaed-lane12-db-1", project: "rabaed-lane12", workingDir: live.toUpperCase() });
+    expect(check({ containers: [...listedContainers, started] })).toBe(`a container of it runs from ${live.toUpperCase()} now (rabaed-lane12-db-1)`);
+    // The same container, running from the same folder at listing: nothing new.
+    expect(check({ containers: [started] }, { listedContainers: [started] })).toBeUndefined();
+    // Started from a folder that is gone, or stopped, or another project's: nothing in use.
+    expect(check({ containers: [{ ...started, workingDir: gone }] })).toBeUndefined();
+    expect(check({ containers: [{ ...started, state: "exited" }] })).toBeUndefined();
+    expect(check({ containers: [{ ...started, project: "rabaed-lane13" }] })).toBeUndefined();
+  });
+
+  it("keeps it when another container of it starts from a folder one of its containers already ran from at listing", () => {
+    const files = container({ name: "rabaed-lane12-files-1", project: "rabaed-lane12", workingDir: live });
+    const db = container({ name: "rabaed-lane12-db-1", project: "rabaed-lane12", workingDir: live });
+    expect(check({ containers: [files, db] }, { listedContainers: [files, { ...db, state: "exited" }] })).toBe(`a container of it runs from ${live} now (rabaed-lane12-db-1)`);
+  });
+
+  it("keeps it when Docker does not answer: its containers cannot be checked", () => {
+    expect(check({ containers: undefined })).toBe("Docker did not answer when it was checked again");
+  });
+
+  it("keeps it while something is connected to its Postgres, saying what to stop", () => {
+    const db = "rabaed-lane12-db-1";
+    const stop = "stop what uses it (`pnpm servers:stop --yes` in its worktree) and re-run";
+    expect(check({ postgres: { container: db, connections: { count: 2 } } })).toBe(`2 connections to its Postgres (${db}) now; ${stop}`);
+    expect(check({ postgres: { container: db, connections: { count: 1 } } })).toBe(`1 connection to its Postgres (${db}) now; ${stop}`);
+    expect(check({ postgres: { container: db, connections: { count: 0 } } })).toBeUndefined();
+  });
+
+  it("keeps it when its Postgres cannot be asked, saying how to free a stuck lane", () => {
+    expect(check({ postgres: { container: "rabaed-lane12-db-1", connections: { unanswered: "timed out" } } })).toBe(
+      "its Postgres (rabaed-lane12-db-1) could not be asked who is connected (timed out); `docker stop rabaed-lane12-db-1` and re-run if the lane is unused",
+    );
+  });
+
+  it("names a new .env claim before anything else", () => {
+    const claim = { path: live, branch: "RP-921-x", project: "rabaed-lane12" };
+    expect(check({ claims: [claim], containers: undefined })).toBe(`the .env of ${live} (on RP-921-x) holds it now`);
+  });
+});
+
+describe("postgresConnections (RP-1073)", () => {
+  it("counts the connections to the lane databases, leaving out the asking one", () => {
+    let asked = "";
+    const run = (_container: string, sql: string) => {
+      asked = sql;
+      return ["3"];
+    };
+    expect(postgresConnections("rabaed-lane12-db-1", run)).toEqual({ count: 3 });
+    expect(asked).toContain("datname like 'rabaed%'");
+    expect(asked).toContain("pid <> pg_backend_pid()");
+    expect(asked).toContain("backend_type = 'client backend'");
+  });
+
+  it("says why when Postgres does not answer, or answers something else", () => {
+    const fails = () => {
+      throw Object.assign(new Error("spawnSync docker ETIMEDOUT"), { stderr: "" });
+    };
+    expect(postgresConnections("x", fails)).toEqual({ unanswered: "spawnSync docker ETIMEDOUT" });
+    const refused = () => {
+      throw Object.assign(new Error("Command failed"), { stderr: "psql: error: connection refused\n" });
+    };
+    expect(postgresConnections("x", refused)).toEqual({ unanswered: "psql: error: connection refused" });
+    expect(postgresConnections("x", () => [])).toEqual({ unanswered: 'psql answered ""' });
   });
 });
 
