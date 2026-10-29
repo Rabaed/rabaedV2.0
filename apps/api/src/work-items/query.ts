@@ -672,14 +672,28 @@ function raisedFromOf(r: SourceRow): RaisedFromSource | null {
 /**
  * The item `workItemId` was raised from, as its Snag List row names it (RP-628, the item page's
  * Raised from card), with the failed check item a code raised it from (RP-577,
- * app.raised_from_check_item); null when it was raised by hand. Read as the Member, like the row.
+ * app.raised_from_check_item) and its photos (RP-1081): the source's images the function names,
+ * read through the documents policy (V19), in upload order (app.document_times); null when it was
+ * raised by hand. Read as the Member, like the row.
  */
 export async function itemRaisedFrom(trx: Trx, workItemId: string): Promise<WorkItemDetail["raisedFrom"]> {
   const { rows } = await sql<SourceRow & { check_item: { key: string; text: BilingualText } | null }>`
     select ${sourceColumns}, app.raised_from_check_item(r.id) as check_item from (select ${workItemId}::uuid as id) r ${sourceJoins}
   `.execute(trx);
   const source = rows[0] ? raisedFromOf(rows[0]) : null;
-  return source && { ...source, checkItem: rows[0]!.check_item };
+  if (!source) return null;
+  const item = rows[0]!.check_item;
+  if (!item || !source.workItemId) return { ...source, checkItem: null };
+  const photos = await sql<{ id: string; file_name: string; content_type: string }>`
+    select d.id, d.file_name, d.content_type from app.document_times(${source.workItemId}::uuid) t
+    join document d on d.id = t.document_id
+    where d.id in (select p.document_id from app.raised_from_check_item_photos(${workItemId}::uuid) p) and d.content_type like 'image/%'
+    order by t.seq
+  `.execute(trx);
+  return {
+    ...source,
+    checkItem: { key: item.key, text: item.text, photos: photos.rows.map((p) => ({ id: p.id, fileName: p.file_name, contentType: p.content_type })) },
+  };
 }
 
 /**

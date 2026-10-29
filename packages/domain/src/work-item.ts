@@ -663,9 +663,21 @@ export const workItemDetail = workItemSummary.extend({
   /**
    * The item it was raised from, as its Snag List row names it (RP-628). Null when it was raised
    * by hand, and for an item of another Module. `checkItem`: the failed check item a code raised
-   * it from (RP-577), by its key and text as the source's copy holds it; null otherwise.
+   * it from (RP-577), by its key and text as the source's copy holds it, with its photos (RP-1081):
+   * the source's own Documents the code took for it, in upload order, each one the viewer reads
+   * on the source (`raisedFrom.workItemId`); null otherwise.
    */
-  raisedFrom: raisedFromSource.extend({ checkItem: z.object({ key: z.string(), text: bilingualText }).nullable() }).nullable(),
+  raisedFrom: raisedFromSource
+    .extend({
+      checkItem: z
+        .object({
+          key: z.string(),
+          text: bilingualText,
+          photos: z.array(documentSummary.pick({ id: true, fileName: true, contentType: true })),
+        })
+        .nullable(),
+    })
+    .nullable(),
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
   /**

@@ -204,8 +204,20 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
     expect(await bytesOf(hafiz.caller, snag.id, named("formwork-annotated.png").id)).toEqual(DRAWN);
   });
 
-  it("its Raised from read carries the check item's key and text", async () => {
-    expect(snag.raisedFrom?.checkItem).toEqual({ key: "formwork", text: { en: "Formwork tight", ar: "القوالب محكمة" } });
+  it("its Raised from read carries the check item's key, text and photos: the WIR's own, in upload order, the annotated copy too (RP-1081)", async () => {
+    const wirPhotos = (await documentsOf(hafiz.caller, wir)).documents.filter((d) => d.itemKey === "formwork");
+    expect(wirPhotos).toHaveLength(3);
+    const ofWir = (fileName: string) => wirPhotos.find((d) => d.fileName === fileName)!;
+    expect(snag.raisedFrom?.checkItem).toEqual({
+      key: "formwork",
+      text: { en: "Formwork tight", ar: "القوالب محكمة" },
+      photos: ["formwork.jpg", "formwork-joint.jpg", "formwork-annotated.png"].map((fileName) => {
+        const d = ofWir(fileName);
+        return { id: d.id, fileName: d.fileName, contentType: d.contentType };
+      }),
+    });
+    // Each one downloads from the WIR, where the reader sees it.
+    expect(await bytesOf(hafiz.caller, wir, ofWir("formwork-joint.jpg").id)).toEqual(SECOND_PHOTO);
   });
 
   it("its history starts with the Raise, shared, by the Consultant", async () => {
@@ -292,6 +304,8 @@ describe("RP-577-1: who sees the Snags raised at the code", () => {
       expect(list.find((i) => i.id === snag)!.raisedFrom, reader.id).toMatchObject({ documentNumber: number, workItemId: wir });
       expect((await raisedFrom(reader.caller, wir, "SNG")).map((i) => i.id), reader.id).toEqual([snag]);
       expect((await documentsOf(reader.caller, snag)).documents.map((d) => d.fileName), reader.id).toEqual(["formwork.jpg"]);
+      // The card's check item photo is the WIR's, which they see too (RP-1081-1).
+      expect((await detail(reader.caller, snag)).raisedFrom?.checkItem?.photos.map((p) => p.fileName), reader.id).toEqual(["formwork.jpg"]);
       expect(await snagCount(reader.caller, wir), reader.id).toEqual({ open: 1, closed: 0 });
     }
   });
