@@ -33,6 +33,7 @@ import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { SubmittalPanelDetails } from "@/components/submittal-panel-details";
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
+import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { useCreateRevision } from "@/components/work-item-revision";
 import { openIdFrom, sizeFrom, submittalPanelHref } from "@/lib/submittal-panel-url";
@@ -157,6 +158,8 @@ export function SubmittalPanelHost({
   const place = item?.location ? (placesOf(filters.locations).get(item.location.id)?.map((p) => p.name[locale]) ?? [item.location.name[locale]]) : [];
   // The approval log, in the side rail from 880px and in-flow below, and Internal Communication (RP-1067).
   const log = useSubmittalPanelLog({ item, locale, refreshKey, outcomes: filters.outcomes });
+  // The route strip and the Workflow map (RP-1064).
+  const { route } = useSubmittalPanelRoute(item, locale, refreshKey);
 
   return (
     <SubmittalPanel
@@ -211,6 +214,7 @@ export function SubmittalPanelHost({
           />
         )
       }
+      route={route}
       facts={
         item && (
           <SubmittalPanelFacts

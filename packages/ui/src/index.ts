@@ -381,6 +381,9 @@ export {
 } from "./components/register-import/register-import-wizard.tsx";
 export { WorkflowChangeList, WorkflowCompareDialog, type WorkflowCompareDialogProps } from "./components/workflow/workflow-changes.tsx";
 export { WorkflowStepList, type WorkflowStepListProps } from "./components/workflow/workflow-step-list.tsx";
+export { submittalRoute, type RouteStep, type RouteStop, type RouteStopState, type SubmittalRoute } from "./components/submittal-panel/route-model.ts";
+export { RoleIcon, SubmittalRouteStrip, type SubmittalRouteLabels, type SubmittalRouteStripProps } from "./components/submittal-panel/route-strip.tsx";
+export { SubmittalWorkflowMap, type SubmittalWorkflowMapLabels, type SubmittalWorkflowMapProps } from "./components/submittal-panel/workflow-map.tsx";
 export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";
 export type { WorkflowRuleLabels } from "./components/workflow/workflow-rule-labels.ts";
 export type { MapStage } from "./components/workflow/workflow-map.ts";
