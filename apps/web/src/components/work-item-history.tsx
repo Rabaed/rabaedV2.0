@@ -12,6 +12,7 @@ import {
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
+import { historyMoveLabel } from "@/lib/history-move-label";
 
 type Event = History["events"][number];
 type Change = NonNullable<Event["changes"]>[number];
@@ -57,31 +58,7 @@ export async function WorkItemHistory({
   const t = await getTranslations("workItems.history");
   const format = await getFormatter();
 
-  const what = (e: Event) => {
-    if ((e.type === "transition" || e.type === "issue_code") && e.transition) return e.transition[locale];
-    if (e.type === "internal_note") {
-      return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
-    }
-    // A reply's answers internal to the viewer's own Participant (RP-516, V5).
-    if (e.type === "internal_answers" && e.transition) return t("internalAnswersWith", { transition: e.transition[locale] });
-    if (e.type === "recommend_code") return t("recommendedCode");
-    if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
-    if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");
-    // A Handover (RP-108): from whom to whom and why, internal to the holding Participant.
-    if (e.type === "assigned" && e.handover?.because === "reassigned") {
-      // Reassigned within the Company (RP-629): from the holder, or from the pool when nobody had picked it up.
-      const to = e.handover.to?.[locale] ?? "";
-      return e.handover.from ? t("reassigned", { from: e.handover.from[locale], to }) : t("reassignedFromPool", { to });
-    }
-    if (e.type === "assigned" && e.handover) {
-      return t("handedOver", { from: e.handover.from?.[locale] ?? "", to: e.handover.to?.[locale] ?? "", because: e.handover.because });
-    }
-    // A pool of one (§3.3 rule 4): its actor is the holder, internal to their own Participant.
-    if (e.type === "assigned" && e.by.memberName) return t("assignedOnlyMember", { name: e.by.memberName[locale] });
-    if (e.type === "created") return t("created");
-    if (e.type === "answers_changed") return t("answersChanged");
-    return t("other");
-  };
+  const what = (e: Event) => historyMoveLabel(e, locale, t);
   const fields = new Map(answerFields(schema).map((f) => [f.key, f]));
   const value = (change: Change, v: unknown) => {
     const field = fields.get(change.field);
