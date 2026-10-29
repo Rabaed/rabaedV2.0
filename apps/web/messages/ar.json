@@ -900,7 +900,7 @@
       "raisedBy": "أنشأه",
       "package": "الحزمة",
       "issuedCode": "الرمز الصادر",
-      "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب", "OBS": "ملاحظات الموقع", "QSN": "الأسئلة إلى الاستشاري", "QSC": "الأسئلة إلى المقاول" },
+      "raisedItemTypes": { "CMT": "الملاحظات", "SNG": "العيوب", "OBS": "ملاحظات الموقع", "QSN": "الأسئلة إلى الاستشاري", "QSC": "الأسئلة إلى المقاول", "QSO": "الأسئلة إلى المالك" },
       "raisedItemCounts": "{open} مفتوحة / {closed} مغلقة",
       "previousRaisedItems": "{type} من المراجعة {revision}",
       "previousRaisedItemCounts": "{closed} مغلقة / {open} مفتوحة"

@@ -189,7 +189,7 @@ A Work Item in the Snag List recording something on site that needs to be put ri
 _Avoid_: housekeeping item, NCR
 
 **Question**:
-A Work Item in the Snag List asking another Participant something, with no reviewed item behind it.
+A Work Item in the Snag List asking another Participant something, with no reviewed item behind it. Any Participant asks one of another role than its own: a Question to Consultant, to Contractor or to Owner (answered by the Owner Representative where the Project has one). No Contractor asks another Contractor.
 _Avoid_: Comment (reserved for Code B)
 
 **Comment**:

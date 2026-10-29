@@ -576,6 +576,8 @@ export interface WorkItemTypeTable {
   adds_approved_supplier: Generated<boolean>;
   /** RP-668: created only from another item, never raised directly: the Rabaed Default CMT (Code B's Comments). */
   raised_from_item_only: Generated<boolean>;
+  /** RP-1108: the role a Question Type asks (QSN, QSC, QSO), which no Participant of that role may raise. */
+  asks_role: "consultant" | "contractor" | "owner" | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -805,6 +807,8 @@ export interface PositionPermissionTable {
   position_id: string;
   module_key: "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
   permission: "view" | "create" | "submit" | "review" | "approve" | "assign" | "close" | "attach";
+  /** RP-1108: a Type of the Module the permission is for alone; null for the whole Module. */
+  work_item_type_id: string | null;
 }
 
 export interface ProjectMemberPositionTable {
