@@ -51,7 +51,14 @@ async function readJson<T>(path: string, signal: AbortSignal): Promise<T | null>
   return res.ok ? ((await res.json()) as T) : null;
 }
 
-/** The Form's text answer by key, when it asks one: the Description, the Specification section. */
+/**
+ * The Subject section's Form answers, by the field keys the Rabaed Default Forms give them
+ * (`apps/admin/forms/`), as the design's Subject section shows them. A Form without the key
+ * shows no such field.
+ */
+const subjectFieldKeys = { description: "description", specification: "specification_section" } as const;
+
+/** The Form's text answer by key, when it asks one. */
 function textAnswer(form: FormToFill, answers: WorkItemDetail["answers"], key: string): string | null {
   const field = formFields(form.schema).find((f) => f.key === key);
   const value = answers[key];
@@ -81,7 +88,8 @@ export function SubmittalPanelDetails({
   const t = useTranslations("submittalPanelDetails");
   const [read, setRead] = useState<DetailsRead | null>(null);
   const [prefs, setPrefs] = useState<Pick<SubmittalPanelPreferences, "collapsed" | "tab">>(() => readSubmittalPanelPreferences(submittalPanelStorage()));
-  const keep = (change: Partial<Pick<SubmittalPanelPreferences, "collapsed" | "tab">>) => {
+  /** Shows the viewer's choice and keeps it in this browser. */
+  const remember = (change: Partial<Pick<SubmittalPanelPreferences, "collapsed" | "tab">>) => {
     setPrefs((now) => ({ ...now, ...change }));
     writeSubmittalPanelPreferences(submittalPanelStorage(), change);
   };
@@ -90,13 +98,15 @@ export function SubmittalPanelDetails({
     const controller = new AbortController();
     const { signal } = controller;
     const id = item.id;
+    // A read again that fails keeps the details already shown; a new item's says it couldn't be read.
+    const failed = () => setRead((shown) => (shown?.id === id && shown.ok ? shown : { id, ok: false }));
     void (async () => {
       const [form, links, history] = await Promise.all([
         readJson<FormToFill>(`/work-items/${id}/form`, signal),
         readJson<WorkItemLinks>(`/work-items/${id}/links`, signal),
         readJson<WorkItemHistory>(`/work-items/${id}/history`, signal),
       ]);
-      if (!form || !links || !history) return setRead({ id, ok: false });
+      if (!form || !links || !history) return failed();
       // The names its answers need, only when its Form asks them.
       const fields = formFields(form.schema);
       const [suppliers, lists] = await Promise.all([
@@ -109,18 +119,17 @@ export function SubmittalPanelDetails({
         form,
         links,
         history,
-        suppliers: (suppliers?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name })),
+        suppliers: suppliers?.suppliers ?? [],
         optionLists: lists?.optionLists ?? [],
       });
     })().catch(() => {
-      if (!signal.aborted) setRead({ id, ok: false });
+      if (!signal.aborted) failed();
     });
     return () => controller.abort();
   }, [item.id, item.projectId, refreshKey]);
 
   const ready = read?.id === item.id ? read : null;
   const internal = ready?.ok ? submittalPanelInternalCount(ready.history.events) : 0;
-  const offered = internal > 0 ? ["details", "internal"] : ["details"];
   const shown = ready?.ok ? submittalPanelSectionKeys(ready.form.schema) : [];
 
   const details: ReactNode = !ready ? (
@@ -135,23 +144,23 @@ export function SubmittalPanelDetails({
     <SubmittalPanelSections
       locale={locale}
       labels={{
-        count: (n) => t("sectionCount", { count: shown.length, n }),
+        count: (n, count) => t("sectionCount", { count, n }),
         collapseAll: t("collapseAll"),
         expandAll: t("expandAll"),
       }}
       sections={shown.map((key) => section(key, ready))}
       collapsed={prefs.collapsed}
-      onCollapsedChange={(collapsed) => keep({ collapsed })}
+      onCollapsedChange={(collapsed) => remember({ collapsed })}
     />
   );
 
   function section(key: SubmittalPanelSectionKey, data: Extract<DetailsRead, { ok: true }>): SubmittalPanelSectionItem {
-    const n = (value: number) => formatNumber(value, locale);
-    const none = <span className="text-faint">{t("none")}</span>;
+    const latin = (value: number) => formatNumber(value, locale);
+    const empty = <span className="text-faint">{t("none")}</span>;
     switch (key) {
       case "subject": {
-        const description = textAnswer(data.form, item.answers, "description");
-        const specification = textAnswer(data.form, item.answers, "specification_section");
+        const description = textAnswer(data.form, item.answers, subjectFieldKeys.description);
+        const specification = textAnswer(data.form, item.answers, subjectFieldKeys.specification);
         return {
           key,
           icon: "file-text",
@@ -163,9 +172,8 @@ export function SubmittalPanelDetails({
                 { key: "subject", label: t("subject"), value: <span dir="auto">{item.title}</span>, full: true },
                 ...(description ? [{ key: "description", label: t("description"), value: <span dir="auto" className="whitespace-pre-line">{description}</span>, full: true }] : []),
                 { key: "type", label: t("type"), value: item.type.name[locale] },
-                ...(item.revisionNo > 0 ? [{ key: "revision", label: t("revision"), value: n(item.revisionNo) }] : []),
+                ...(item.revisionNo > 0 ? [{ key: "revision", label: t("revision"), value: latin(item.revisionNo) }] : []),
                 ...(specification ? [{ key: "specification", label: t("specification"), value: <span dir="auto">{specification}</span> }] : []),
-                ...(item.paperRef ? [{ key: "paperRef", label: t("paperRef"), value: <bdi dir="ltr">{item.paperRef}</bdi> }] : []),
               ]}
             />
           ),
@@ -184,9 +192,9 @@ export function SubmittalPanelDetails({
                 { key: "trade", label: t("trade"), value: <TradeChip code={item.trade.code} name={item.trade.name[locale]} /> },
                 // Its Package only where the viewer sees it: the item read leaves it out otherwise.
                 ...(item.package
-                  ? [{ key: "package", label: t("package"), value: <span><DocNo value={item.package.number} /> {item.package.name[locale]}</span> }]
+                  ? [{ key: "package", label: t("package"), value: <span><DocNo value={item.package.number} /> <span dir="auto">{item.package.name[locale]}</span></span> }]
                   : []),
-                { key: "scopes", label: t("scopes"), value: scopes.length === 0 ? none : <SubmittalPanelTags tags={scopes} />, full: true },
+                { key: "scopes", label: t("scopes"), value: scopes.length === 0 ? empty :<SubmittalPanelTags tags={scopes} />, full: true },
               ]}
             />
           ),
@@ -198,7 +206,7 @@ export function SubmittalPanelDetails({
           icon: "map-pin",
           title: t("location"),
           summary: place.length === 0 ? t("none") : place.join(levelSeparator[locale]),
-          children: place.length === 0 ? none : <SubmittalPanelPath locale={locale} label={t("location")} levels={place} />,
+          children: place.length === 0 ? empty : <SubmittalPanelPath locale={locale} label={t("location")} levels={place} />,
         };
       case "supplier": {
         const supplier = submittalPanelSupplier(data.form.schema, item.answers, data.suppliers, locale, data.optionLists);
@@ -207,10 +215,10 @@ export function SubmittalPanelDetails({
           key,
           icon: "buildings",
           title: t("supplier"),
-          summary: [named, t("itemCount", { count: supplier.itemCount, n: n(supplier.itemCount) })].filter(Boolean).join(" · "),
+          summary: [named, t("itemCount", { count: supplier.itemCount, n: latin(supplier.itemCount) })].filter(Boolean).join(" · "),
           children: (
             <div className="flex flex-col gap-3">
-              <SubmittalPanelFields fields={[{ key: "supplier", label: t("approvedSupplier"), value: named || none }]} />
+              <SubmittalPanelFields fields={[{ key: "supplier", label: t("approvedSupplier"), value: named ? <span dir="auto">{named}</span> : empty }]} />
               {supplier.tables.map((table) => (
                 <SubmittalPanelItems key={table.key} table={table} none={t("noRows")} />
               ))}
@@ -223,7 +231,7 @@ export function SubmittalPanelDetails({
           key,
           icon: "link",
           title: t("links"),
-          summary: t("linkCount", { count: data.links.links.length, n: n(data.links.links.length) }),
+          summary: t("linkCount", { count: data.links.links.length, n: latin(data.links.links.length) }),
           children: <SubmittalPanelLinks links={submittalPanelLinks(item.id, data.links.links)} none={t("noLinks")} linkAs={Link} />,
         };
     }
@@ -237,5 +245,5 @@ export function SubmittalPanelDetails({
       : []),
   ];
 
-  return <SubmittalPanelTabs locale={locale} label={t("tabs")} tabs={tabs} value={submittalPanelTab(prefs.tab, offered)} onValueChange={(tab) => keep({ tab })} />;
+  return <SubmittalPanelTabs locale={locale} label={t("tabs")} tabs={tabs} value={submittalPanelTab(prefs.tab, tabs.map((tab) => tab.key))} onValueChange={(tab) => remember({ tab })} />;
 }

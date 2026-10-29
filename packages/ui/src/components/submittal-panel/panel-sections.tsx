@@ -4,7 +4,9 @@ import { formatNumber, type Locale } from "@rabaed/domain";
 import { useId, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../data/table.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { allSubmittalPanelSectionsCollapsed, withAllSubmittalPanelSections, type SubmittalPanelItemsTable } from "./panel-sections-model.ts";
 
@@ -19,8 +21,8 @@ export type SubmittalPanelSectionItem = {
 };
 
 export type SubmittalPanelSectionsLabels = {
-  /** "5 sections": how many are shown. */
-  count: (n: string) => string;
+  /** "5 sections": how many are shown, formatted (`n`) and as a number for the plural (`count`). */
+  count: (n: string, count: number) => string;
   collapseAll: string;
   expandAll: string;
 };
@@ -47,7 +49,7 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
   return (
     <div className="sdp-sections">
       <div className="sdp-section-controls flex items-center gap-1.5 px-5 pt-3.5 pb-2 text-[12px] text-muted @[880px]/sdp:px-7">
-        <span className="me-auto font-semibold">{labels.count(formatNumber(sections.length, locale))}</span>
+        <span className="me-auto font-semibold">{labels.count(formatNumber(sections.length, locale), sections.length)}</span>
         <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-[12.5px]" onClick={() => onCollapsedChange(withAllSubmittalPanelSections(keys, collapsed, !allFolded))}>
           <Icon name={allFolded ? "chevron-down" : "chevron-up"} size={15} />
           {allFolded ? labels.expandAll : labels.collapseAll}
@@ -67,7 +69,9 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
                   onClick={() => onCollapsedChange({ ...collapsed, [section.key]: open })}
                   className={cn(
                     "sdp-section-head flex min-h-12 w-full items-center gap-2.5 rounded-[12px] px-3.5 text-start hover:bg-hover",
-                    "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+                    focusRing,
+                    // Inside the section's own outline, where an outside ring would sit on the next section.
+                    "focus-visible:-outline-offset-2",
                     open && "rounded-b-none",
                   )}
                 >
@@ -139,42 +143,39 @@ export function SubmittalPanelPath({ locale, label, levels }: { locale: Locale; 
   );
 }
 
-/** An items table, as the Form's table field holds it (`submittalPanelSupplier`). */
+/** An items table, as the Form's table field holds it (`submittalPanelSupplier`), in the kit's Table: a named region that scrolls, by keyboard too. */
 export function SubmittalPanelItems({ table, none }: { table: SubmittalPanelItemsTable; none: string }) {
   return (
-    <div className="overflow-x-auto rounded-[10px] shadow-[inset_0_0_0_1px_var(--border-subtle)]">
-      <table className="w-full text-[13px]">
-        <caption className="sr-only">{table.label}</caption>
-        <thead className="bg-surface-subtle text-[11.5px] text-muted">
-          <tr>
-            {table.columns.map((c) => (
-              <th key={c.key} scope="col" className={cn("px-3 py-2 font-semibold", c.numeric ? "text-end" : "text-start")}>
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {table.rows.length === 0 ? (
-            <tr className="border-t border-border-subtle">
-              <td colSpan={table.columns.length} className="px-3 py-2 text-muted">
-                {none}
-              </td>
-            </tr>
-          ) : (
-            table.rows.map((row, r) => (
-              <tr key={r} className="border-t border-border-subtle">
-                {row.map((cell, c) => (
-                  <td key={table.columns[c]!.key} dir={table.columns[c]!.numeric ? undefined : "auto"} className={cn("px-3 py-2", table.columns[c]!.numeric && "text-end tabular-nums")}>
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+    <Table label={table.label} containerClassName="rounded-[10px] border-border-subtle" className="text-[13px]">
+      <TableHeader>
+        <TableRow>
+          {table.columns.map((c) => (
+            <TableHead key={c.key} align={c.numeric ? "end" : "start"} className="h-9 text-[11.5px]">
+              {c.label}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {table.rows.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={table.columns.length} className="h-9 text-muted">
+              {none}
+            </TableCell>
+          </TableRow>
+        ) : (
+          table.rows.map((row, r) => (
+            <TableRow key={r}>
+              {row.map((cell, c) => (
+                <TableCell key={table.columns[c]!.key} align={table.columns[c]!.numeric ? "end" : "start"} dir={table.columns[c]!.numeric ? undefined : "auto"} className="h-9">
+                  {cell}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -203,7 +204,7 @@ export function SubmittalPanelLinks({ links, none, linkAs: Anchor = "a" }: { lin
       {links.map((link) => (
         <li key={link.id}>
           {/* 28px high, a comfortable target beside the next Link. */}
-          <Anchor href={link.href} data-link={link.id} className="flex min-h-7 min-w-0 items-center gap-2 rounded-xs text-[13px] hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+          <Anchor href={link.href} data-link={link.id} className={cn("flex min-h-7 min-w-0 items-center gap-2 rounded-xs text-[13px] hover:underline", focusRing)}>
             <Icon name="link" size={15} className="shrink-0 text-muted" />
             <DocNo value={link.documentNumber} className="font-bold" />
             <span dir="auto" className="min-w-0 truncate text-muted">

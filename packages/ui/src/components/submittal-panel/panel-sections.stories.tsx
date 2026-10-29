@@ -33,7 +33,7 @@ const copy = {
   tabs: bi("Submittal", "التقديم"),
   details: bi("Details", "التفاصيل"),
   internal: bi("Internal Communication", "التواصل الداخلي"),
-  internalOnly: bi("Only your Company sees this.", "لا تراه إلا شركتك."),
+  internalOnly: bi("Internal Notes, internal Step moves and Returns on this submittal.", "الملاحظات الداخلية وتنقلات الخطوات الداخلية والإرجاعات على هذا التقديم."),
   collapseAll: bi("Collapse all", "طي الكل"),
   expandAll: bi("Expand all", "فتح الكل"),
   subject: bi("Subject", "الموضوع"),
