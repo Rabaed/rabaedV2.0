@@ -9,7 +9,8 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } fro
 //
 //   node scripts/uat-deploy.ts migrate            bootstrap and migrate UAT's database (session pooler)
 //   node scripts/uat-deploy.ts app-role-check     as rabaed_app: RLS applies, the audit trail can't be rewritten (packages/db/src/check-app-role.ts)
-//   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again
+//   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again;
+//                                                 with the file store (FILE_STORE_*), ensure also stores any missing demo image (RP-672)
 //   node scripts/uat-deploy.ts project <web|api|admin>   apply the project's settings and Sensitive variables
 //   node scripts/uat-deploy.ts bypass admin       print Admin's Protection Bypass for Automation secret while it has
 //                                                 Password Protection, else an empty line (mask it first)
@@ -94,15 +95,33 @@ function uatServer(env: NodeJS.ProcessEnv): { superuser: string; database: strin
 }
 
 /** The deploy's secrets a migration or demo command never needs. */
-const NOT_FOR_COMMANDS = ["VERCEL_TOKEN", "ADMIN_VERCEL_PASSWORD", "SENDGRID_API_KEY", "CRON_SECRET", "SUPABASE_PUBLISHABLE_KEY", "FONTS_ACCESS_KEY_ID", "FONTS_SECRET_ACCESS_KEY", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_SECRET_ACCESS_KEY"];
+const NOT_FOR_COMMANDS = ["VERCEL_TOKEN", "ADMIN_VERCEL_PASSWORD", "SENDGRID_API_KEY", "CRON_SECRET", "SUPABASE_PUBLISHABLE_KEY", "FONTS_ACCESS_KEY_ID", "FONTS_SECRET_ACCESS_KEY"];
+/** UAT's file store (R2), as the api reaches it: for the demo command only. */
+const FILE_STORE = ["PROJECT_FILES_BUCKET", "FILE_STORE_ENDPOINT", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_SECRET_ACCESS_KEY", "FILE_STORE_REGION"];
 
-/** The environment `pnpm --filter @rabaed/db run setup` and the demo command run in: UAT's session-pooler URLs, on-create passwords, a demo environment. */
-export function commandEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+/**
+ * The environment `pnpm --filter @rabaed/db run setup` and the demo command run in: UAT's
+ * session-pooler URLs, on-create passwords, a demo environment. The demo command (`demo`)
+ * also gets UAT's file store when the step passes its key, so the api it builds stores the
+ * demo's images as it stores anyone's (ADR 0007, RP-672); no other command gets any of it.
+ */
+export function commandEnv(env: NodeJS.ProcessEnv, command?: string): NodeJS.ProcessEnv {
   const { session } = uatDatabase(env);
-  const command: NodeJS.ProcessEnv = { ...env };
-  for (const name of NOT_FOR_COMMANDS) delete command[name];
+  const child: NodeJS.ProcessEnv = { ...env };
+  for (const name of [...NOT_FOR_COMMANDS, ...FILE_STORE]) delete child[name];
+  const fileStore = command === "demo" && env.FILE_STORE_ACCESS_KEY_ID && env.FILE_STORE_SECRET_ACCESS_KEY;
   return {
-    ...command,
+    ...child,
+    // R2 takes the region `auto`, as the api's own variables say (projectEnv).
+    ...(fileStore
+      ? {
+          PROJECT_FILES_BUCKET: required(env, "PROJECT_FILES_BUCKET"),
+          FILE_STORE_ENDPOINT: httpsUrl(env, "FILE_STORE_ENDPOINT"),
+          FILE_STORE_ACCESS_KEY_ID: env.FILE_STORE_ACCESS_KEY_ID,
+          FILE_STORE_SECRET_ACCESS_KEY: env.FILE_STORE_SECRET_ACCESS_KEY,
+          FILE_STORE_REGION: "auto",
+        }
+      : {}),
     DATABASE_SUPERUSER_URL: session.superuser,
     DATABASE_MIGRATOR_URL: session.migrator,
     DATABASE_APP_URL: session.app,
@@ -307,7 +326,7 @@ export function pnpmCommand(command: string | undefined, argument?: string): str
 async function main([command, argument]: string[]): Promise<void> {
   const env = process.env;
   const pnpmArgs = pnpmCommand(command, argument);
-  if (pnpmArgs) return run("pnpm", pnpmArgs, commandEnv(env));
+  if (pnpmArgs) return run("pnpm", pnpmArgs, commandEnv(env, command));
   if (command === "project") {
     await applyProject(project(argument), env, required(env, "VERSION"));
     // A GitHub Actions notice: Admin is not behind Password Protection from this deploy.

@@ -9,6 +9,11 @@
 // Every demo person signs in with DEMO_PASSWORD, which ECS injects from Secrets
 // Manager; it is never in the repo. A demo environment holds demo data only:
 // there is no way to import anything else.
+//
+// With the environment's file store (UAT's R2, which scripts/uat-deploy.ts passes to this
+// command alone), the api it builds stores the demo's images itself (ADR 0007), and `ensure`
+// puts back any demo Signature, logo or Stamp the store lacks (RP-672: UAT's demo was seeded
+// with none). Without one, the demo is seeded with its images recorded but not stored.
 import { createDb, databaseUrlsFromEnv, resetDatabase } from "@rabaed/db";
 import { DEMO_FLAG, DEMO_ON, ROLE_PASSWORDS_ON_CREATE } from "@rabaed/db/task-flags";
 import { z } from "zod";
@@ -16,6 +21,8 @@ import { buildApp } from "../app.ts";
 import { apiConfigFromEnv } from "../config.ts";
 import { ensureDemo } from "../demo/ensure.ts";
 import { seedingConfig } from "../demo/mailbox.ts";
+import { restoreDemoImages } from "../demo/restore-images.ts";
+import { createFileStore, fileStoreSettingsFromEnv } from "../documents/file-store.ts";
 
 const parsed = z
   .object({
@@ -38,16 +45,26 @@ if (action === "reset") {
   console.log(`demo: dropped and migrated ${database}`);
 }
 
+// The settings name the bucket and endpoint only; the key stays in the environment, never logged.
+const files = process.env.PROJECT_FILES_BUCKET ? createFileStore(fileStoreSettingsFromEnv()) : undefined;
+
 const migrator = createDb(urls.migrator, { max: 2 });
 const db = createDb(urls.app, { max: 2 });
 const adminDb = createDb(urls.admin, { max: 1 });
 try {
   const result = await ensureDemo(
     { migrator, admin: adminDb },
-    (mailer) => buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, mailer }),
+    (mailer) => buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, mailer, ...(files ? { files } : {}) }),
     password,
+    { files: files !== undefined },
   );
   console.log(result === "seeded" ? "demo: seeded Riyadh Gate Tower – Phase 2 and Jeddah Corniche Villas" : "demo: already seeded");
+  if (!files) {
+    console.log("demo: no file store, so the demo's images are recorded but not stored");
+  } else if (result === "present") {
+    const { restored, unmatched } = await restoreDemoImages(migrator, files);
+    console.log(`demo: stored ${restored} missing demo image(s)${unmatched ? `; ${unmatched} missing image(s) match no demo image and stay missing` : ""}`);
+  }
 } finally {
   await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);
 }
