@@ -441,9 +441,11 @@ describe("page 1 of a Code B record with Comments, in both languages", () => {
   it("has a Participants box: the Project, then the Companies by role", () => {
     const participants = /<parties>([\s\S]*?)<\/parties>/.exec(recordB.xml)![1]!;
     for (const name of [c1Name, K1_NAME, OWNER_NAME]) expect(participants, name).toContain(name);
+    expect(recordB.text).toContain("Participants");
+    expect(recordB.text).not.toContain("Parties");
     expect(recordB.text).toContain(squeeze(projectName));
     // In role order: the Owner, the Consultant, the Contractor.
-    const order = [OWNER_NAME, K1_NAME, c1Name].map((n) => parties.indexOf(n));
+    const order = [OWNER_NAME, K1_NAME, c1Name].map((n) => participants.indexOf(n));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     for (const role of ["Consultant", "Contractor"]) expect(recordB.text, role).toContain(role);
   });
