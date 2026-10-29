@@ -10,6 +10,7 @@ import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { SnagReportState, StartedDocumentUpload } from "@rabaed/domain";
 import { chromiumRenderer, fallbackFonts, imageCountOf, projectFilesFromEnv, s3RecordFiles } from "@rabaed/worker/record";
 import { snagReportHandler } from "@rabaed/worker/snag-report";
+import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
@@ -20,11 +21,14 @@ const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
 // The worker connects as the app role, with no Member set.
 const worker = createDb(urls.app, { max: 2 });
+// Moves a Snag to another Location as no route does once it is raised (RP-1110-2).
+const migrator = createDb(urls.migrator, { max: 1 });
 const renderer = chromiumRenderer();
 afterAll(async () => {
   await renderer.close();
   await api.close();
   await worker.destroy();
+  await migrator.destroy();
 });
 
 let at: Tower;
@@ -33,6 +37,8 @@ let c2Engineer: Caller;
 let first = "";
 let second = "";
 let c2Snag = "";
+let k1: Company;
+let buildingB = "";
 
 const reportsPath = () => `/v1/projects/${at.projectId}/snag-list/reports`;
 const handlers = (): Record<string, OutboxHandler> => ({
@@ -84,10 +90,10 @@ async function printed(bytes: Uint8Array): Promise<string> {
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  const k1 = await api.authorizedPerson();
+  k1 = await api.authorizedPerson();
   const c2 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "SRP");
-  const buildingB = (await ok(c1.caller.post(`/v1/projects/${at.projectId}/locations`, { code: "BB", name: bilingual("Building B"), parentId: null }), 201)).json().id;
+  buildingB = (await ok(c1.caller.post(`/v1/projects/${at.projectId}/locations`, { code: "BB", name: bilingual("Building B"), parentId: null }), 201)).json().id;
   await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/visibility`, { trade: all, location: only(at.buildingA) }));
   const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: only(buildingB) }));
@@ -236,5 +242,77 @@ describe("what another Company's report leaves out (scenarios RP-677-1, RP-677-2
     // Even under a Project of its own.
     const own = (await api.createProject(outsider.caller, { code: "SRO" })).id;
     await expectHidden(outsider.caller.get(`/v1/projects/${own}/snag-list/reports/${mine.id}`));
+  });
+});
+
+// RP-1110 (decision RP-1077): a report is checked again every time its download link is made. Once its asker no
+// longer sees an item or a photo it holds, their own report answers 410 with no link, never saying which or why;
+// anyone else and a made-up id still get the plain 404.
+describe("a report checked again at every download (RP-1110)", () => {
+  const reportUrl = (id: string) => `${reportsPath()}/${id}`;
+  /** Asks after report `id` as `by`: it answers 410, with no file link. */
+  async function expectGone(by: Caller, id: string): Promise<void> {
+    const res = await by.get(reportUrl(id));
+    expect({ status: res.statusCode, body: res.body }).toEqual({ status: 410, body: JSON.stringify({ error: "no_longer_available" }) });
+  }
+
+  it("RP-1110-1: K1's engineer asks a report over Buildings A and B, is narrowed to A, then asks for the download: 410, no file link", async () => {
+    const engineer = await memberOnProject(api, k1, at.k1ParticipantId!, ["engineer"]);
+    const both = await report(engineer.caller, { ids: [first, c2Snag], language: "en" });
+    expect(both.count).toBe(2);
+    expect(both.url).toBeTruthy();
+    const onlyA = await report(engineer.caller, { ids: [first], language: "en" });
+    await ok(k1.caller.request("PUT", `/v1/participants/${at.k1ParticipantId}/members/${engineer.id}/visibility`, { trade: all, location: only(at.buildingA) }));
+    await expectGone(engineer.caller, both.id);
+    // Positive control: their report of Building A only still downloads.
+    expect((await ok(engineer.caller.get(reportUrl(onlyA.id)), 200)).json().url).toBeTruthy();
+    // Anyone else still gets the plain 404, as does a made-up id.
+    await expectHidden(at.k1Manager.get(reportUrl(both.id)));
+    await expectHidden(engineer.caller.get(reportUrl("00000000-0000-4000-8000-000000000000")));
+  });
+
+  it("RP-1110-2: a Snag in the report moves to a Location the asker doesn't cover: 410", async () => {
+    const moving = await snag("Bracket bent", at.buildingA);
+    const mine = await report(at.c1Pm, { ids: [moving, second], language: "en" });
+    const control = await report(at.c1Pm, { ids: [second], language: "en" });
+    await sql`
+      update work_item_dimension_value set dimension_value_id = ${buildingB}::uuid
+      where work_item_id = ${moving}::uuid and dimension_id = (select dimension_id from dimension_value where id = ${buildingB}::uuid)
+    `.execute(migrator);
+    await expectHidden(at.c1Pm.get(`/v1/work-items/${moving}`));
+    await expectGone(at.c1Pm, mine.id);
+    expect((await ok(at.c1Pm.get(reportUrl(control.id)), 200)).json().url).toBeTruthy();
+  });
+
+  it("RP-1110-3: a photo the report printed is removed: 410", async () => {
+    const draftId = (
+      await ok(at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, { type: "SNG", title: "Hatch stiff", answers: { description: "Hatch stiff", trade: at.electrical, location: at.buildingA } }), 201)
+    ).json().id as string;
+    const photo = await uploadDocument(at.k1Manager, draftId, { fieldKey: "photos", fileName: "before.jpg", contentType: "image/jpeg", body: jpegWithExif() });
+    const mine = await report(at.k1Manager, { ids: [draftId], language: "en" });
+    expect(await imageCountOf(await pdfOf(mine))).toBe(1);
+    await ok(at.k1Manager.request("DELETE", `/v1/work-items/${draftId}/documents/${photo}`));
+    await expectGone(at.k1Manager, mine.id);
+    // Positive control: a new report of the same item, with no photo now, downloads.
+    const again = await report(at.k1Manager, { ids: [draftId], language: "en" });
+    expect(await imageCountOf(await pdfOf(again))).toBe(0);
+  });
+
+  it("RP-1110-4: a report whose items and photos are all still seen downloads as before; another Member and a made-up id get 404", async () => {
+    const mine = await report(at.c1Pm, { ids: [first, second], language: "en" });
+    const again: SnagReportState = (await ok(at.c1Pm.get(reportUrl(mine.id)), 200)).json();
+    expect(again.status).toBe("ready");
+    expect(await imageCountOf(await pdfOf(again))).toBe(1);
+    await expectHidden(at.c1Engineer.get(reportUrl(mine.id)));
+    await expectHidden(at.c1Pm.get(reportUrl("00000000-0000-4000-8000-000000000000")));
+  });
+
+  it("RP-1110-1: a report still being made answers 410 once its asker is narrowed", async () => {
+    const engineer = await memberOnProject(api, k1, at.k1ParticipantId!, ["engineer"]);
+    const asked: SnagReportState = (await ok(engineer.caller.post(reportsPath(), { ids: [c2Snag], language: "en" }), 202)).json();
+    await ok(k1.caller.request("PUT", `/v1/participants/${at.k1ParticipantId}/members/${engineer.id}/visibility`, { trade: all, location: only(at.buildingA) }));
+    await expectGone(engineer.caller, asked.id);
+    await drainOutbox(worker, handlers());
+    await expectGone(engineer.caller, asked.id);
   });
 });
