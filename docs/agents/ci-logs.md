@@ -15,8 +15,9 @@ If the Update screenshots workflow's `Refuse stories that render differently twi
 
 Screenshots are compared only on Linux CI, so a story failure that passes locally (for example "Could not capture a stable screenshot") shows up only in this log.
 
-## Story screenshot baselines: three lessons (RP-970)
+## Story screenshot baselines: four lessons (RP-970, RP-1027)
 
 - **Wait for the previous push's update-screenshots run to commit before pushing again.** A push while that run is committing cancels it, and its baselines never land. If its "Update story screenshot baselines" commit is missing from the branch, run the workflow by hand (`gh workflow run`, on the PR's branch).
 - **A box edge can flip as well as text.** A fractional height (a Dialog's, RP-616) put an input's edge 1/64 px from a pixel boundary, so the edge moved between runs. Keep boxes on whole pixels, as dialogs now are.
 - **Before trusting the "changed again" warning, check the render-twice job.** If `Refuse stories that render differently twice` was skipped or passed, the change was intended (a redesign), not an unstable story.
+- **A focus ring can come and go between runs.** When a screenshot diff is only a focus ring, or a few pixels at a box's corners, the story's last click left something focused, and whether Chrome paints the ring follows the page's focus, which no story controls. End the play with the click target blurred, or put focus in a known place by keyboard, and give the element a designed focus style rather than the browser's `outline: auto` (RP-1000: 48 pixels, six failures).
