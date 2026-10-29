@@ -2,7 +2,7 @@ import { documentalRecordPrefix, snagReportPrefix } from "@rabaed/db/storage-key
 import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
-import { environmentTemplates, references, render, type Resource } from "./support.ts";
+import { constructId, environmentTemplates, objectKey, references, render, type Resource, type StackPart } from "./support.ts";
 
 // Every IAM role the stacks define, and what each may do in S3: which actions, on which bucket and
 // key prefix. The expected list below is written out by hand, so any grant that is added, widened
@@ -11,14 +11,12 @@ import { environmentTemplates, references, render, type Resource } from "./suppo
 // the keys the code builds, so it is no wider than the code needs.
 
 const env = environmentTemplates();
-type StackPart = keyof ReturnType<typeof stackNames>;
 const parts = Object.keys(stackNames(environments.dev)) as StackPart[];
 const API = "rabaed-dev-api-task";
 const WORKER = "rabaed-dev-worker-task";
 const DEPLOY = "rabaed-dev-github-deploy";
 
 type Statement = {
-  Sid?: string;
   Effect: "Allow" | "Deny";
   Action?: string | string[];
   NotAction?: string | string[];
@@ -28,17 +26,14 @@ type Statement = {
 };
 type PolicyDocument = { Statement: Statement[] };
 
-// CDK's logical IDs end in an 8-character hash; the construct ID before it is stable.
-const constructId = (logicalId: string) => logicalId.replace(/[0-9A-F]{8}$/, "");
-
 // A role's name: its RoleName, or for one CDK names itself, `<stack part>/<construct ID>`.
 const roleName = (part: StackPart, logicalId: string, role: Resource) => String(role.Properties?.RoleName ?? `${part}/${constructId(logicalId)}`);
 
 /** Every role the stacks define, by name. */
-const roles = new Map<string, { part: StackPart; logicalId: string; role: Resource }>();
+const roles = new Map<string, { part: StackPart; role: Resource }>();
 for (const part of parts) {
   for (const [logicalId, role] of Object.entries(env.template(part).findResources("AWS::IAM::Role")) as [string, Resource][]) {
-    roles.set(roleName(part, logicalId, role), { part, logicalId, role });
+    roles.set(roleName(part, logicalId, role), { part, role });
   }
 }
 
@@ -74,7 +69,7 @@ function statementsByRole(): Map<string, { part: StackPart; statement: Statement
   return byRole;
 }
 
-// The buckets, by construct ID (ProjectFiles, BuildAssets, Logs).
+// The buckets: logical ID → construct ID (ProjectFiles, BuildAssets, Logs).
 const buckets = new Map<string, string>();
 for (const part of parts) {
   for (const logicalId of Object.keys(env.template(part).findResources("AWS::S3::Bucket"))) buckets.set(logicalId, constructId(logicalId));
@@ -89,8 +84,7 @@ function s3Resource(resource: unknown, part: StackPart): string {
     .map((logicalId) => (logicalId ? buckets.get(logicalId) : undefined))
     .find(Boolean);
   if (!bucket) return String(render(resource));
-  const join = (resource as { "Fn::Join"?: [string, unknown[]] })["Fn::Join"];
-  const key = join ? join[1].filter((piece) => typeof piece === "string").join(join[0]).replace(/^\//, "") : "";
+  const key = objectKey(resource);
   return key === "" ? bucket : `${bucket}/${key}`;
 }
 
@@ -98,33 +92,47 @@ function s3Resource(resource: unknown, part: StackPart): string {
 const mayBeS3 = (action: string) => action === "*" || action.toLowerCase().startsWith("s3:");
 
 /**
- * Each role's S3 grants, one line per effect, action and resource: `Allow s3:GetObject ProjectFiles/projects/*`,
- * with ` if s3:prefix fonts/*` when a condition narrows it. A statement with NotAction or NotResource is
- * shown as such, since it reaches everything it does not name.
+ * One S3 permission a role's policies state: an effect, one action and one resource. A NotAction or
+ * NotResource statement reaches everything it does not name, so it is kept apart (`notAction`, `notResource`).
  */
-function s3Grants(): Record<string, string[]> {
-  const grants: Record<string, string[]> = {};
-  for (const [name, statements] of statementsByRole()) {
-    const lines: string[] = [];
-    for (const { part, statement: s } of statements) {
-      if (s.NotAction) {
-        lines.push(`${s.Effect} NotAction ${[s.NotAction].flat().join(",")}`);
-        continue;
-      }
-      const actions = [s.Action ?? []].flat().filter(mayBeS3);
-      if (actions.length === 0) continue;
-      const resources = s.NotResource ? [`NotResource ${JSON.stringify(render(s.NotResource))}`] : [s.Resource].flat().map((r) => s3Resource(r, part));
-      const condition = s.Condition ? ` if ${conditionText(s.Condition)}` : "";
-      for (const action of actions) for (const resource of resources) lines.push(`${s.Effect} ${action} ${resource}${condition}`);
-    }
-    grants[name] = [...new Set(lines)].sort();
-  }
-  return grants;
-}
+type Grant = { effect: "Allow" | "Deny"; action: string; resource: string; condition?: string; notAction?: true; notResource?: true };
+
+/** How a grant reads in the expected list: `Allow s3:GetObject ProjectFiles/projects/*`, ` if s3:prefix fonts/*` when a condition narrows it. */
+const grantLine = (g: Grant) =>
+  `${g.effect} ${g.notAction ? "NotAction " : ""}${g.action} ${g.notResource ? "NotResource " : ""}${g.resource}${g.condition ? ` if ${g.condition}` : ""}`;
+
 const conditionText = (condition: Record<string, Record<string, unknown>>) =>
   Object.values(condition)
     .flatMap((byKey) => Object.entries(byKey).map(([key, value]) => `${key} ${[render(value)].flat().join(",")}`))
     .join(" and ");
+
+/** Each role's S3 grants, one per effect, action and resource. */
+function s3Grants(): Map<string, Grant[]> {
+  const grants = new Map<string, Grant[]>();
+  for (const [name, statements] of statementsByRole()) {
+    const found: Grant[] = [];
+    for (const { part, statement } of statements) {
+      const condition = statement.Condition ? conditionText(statement.Condition) : undefined;
+      const actions = statement.NotAction ? [statement.NotAction].flat() : [statement.Action ?? []].flat().filter(mayBeS3);
+      if (actions.length === 0) continue;
+      const resources = statement.NotResource ? [JSON.stringify(render(statement.NotResource))] : [statement.Resource].flat().map((r) => s3Resource(r, part));
+      for (const action of actions) {
+        for (const resource of resources) {
+          found.push({
+            effect: statement.Effect,
+            action,
+            resource,
+            ...(condition ? { condition } : {}),
+            ...(statement.NotAction ? { notAction: true as const } : {}),
+            ...(statement.NotResource ? { notResource: true as const } : {}),
+          });
+        }
+      }
+    }
+    grants.set(name, found);
+  }
+  return grants;
+}
 
 // Managed policies AWS defines: their content isn't in the templates, so each one used is named here
 // with why it grants no S3.
@@ -192,11 +200,13 @@ const EXPECTED: Record<string, string[]> = {
   "network/CustomVpcRestrictDefaultSGCustomResourceProviderRole": [],
 };
 
-describe("every IAM role's S3 grants (RP-1104)", () => {
-  const grants = s3Grants();
+const grants = s3Grants();
+const allows = [...grants].flatMap(([role, found]) => found.filter((g) => g.effect === "Allow").map((grant) => ({ role, grant, line: grantLine(grant) })));
 
+describe("every IAM role's S3 grants (RP-1104)", () => {
   it("are exactly the expected list: a new role, a new grant or a wider one fails here", () => {
-    expect(grants).toEqual(EXPECTED);
+    const lines = Object.fromEntries([...grants].map(([role, found]) => [role, [...new Set(found.map(grantLine))].sort()]));
+    expect(lines).toEqual(EXPECTED);
   });
 
   it("use only the AWS managed policies named here, none of which grants S3", () => {
@@ -220,28 +230,50 @@ describe("every IAM role's S3 grants (RP-1104)", () => {
     expect(unattached.map((p) => p.name).sort()).toEqual(["ExecutionPolicy", "PermissionsBoundary"]);
     const boundaryS3 = unattached
       .find((p) => p.name === "PermissionsBoundary")!
-      .statements.flatMap((s) => [s.Action ?? []].flat())
+      .statements.flatMap((statement) => [statement.Action ?? []].flat())
       .filter(mayBeS3)
       .sort();
     expect(boundaryS3).toEqual(["s3:DeleteObject", "s3:GetObject", "s3:ListBucket", "s3:PutObject"]);
-    const boundaryArn = (role: Resource) => role.Properties?.PermissionsBoundary;
-    expect(boundaryArn(roles.get(API)!.role)).toBeDefined();
-    expect(boundaryArn(roles.get(WORKER)!.role)).toBeDefined();
+    for (const role of [API, WORKER]) expect(roles.get(role)!.role.Properties?.PermissionsBoundary).toBeDefined();
+  });
+
+  it("name each role once, so two with one construct ID can't hide each other", () => {
+    const count = parts.reduce((n, part) => n + Object.keys(env.template(part).findResources("AWS::IAM::Role")).length, 0);
+    expect(roles.size).toBe(count);
+  });
+
+  // A bucket policy may grant a role more than its own policies do; the list above sees only those. So no bucket
+  // policy Allows a role or this account: the only Allows are on the logs bucket, to what delivers logs to it.
+  it("are never widened by a bucket policy, which Allows only log delivery into the logs bucket", () => {
+    const bucketAllows = parts.flatMap((part) =>
+      (Object.values(env.template(part).findResources("AWS::S3::BucketPolicy")) as Resource[]).flatMap((policy) =>
+        (policy.Properties?.PolicyDocument as { Statement: (Statement & { Principal?: Record<string, unknown> })[] }).Statement.filter(
+          (statement) => statement.Effect === "Allow",
+        ).map((statement) => ({ bucket: buckets.get(env.resolve(policy.Properties?.Bucket, part).logicalId), principal: render(statement.Principal) })),
+      ),
+    );
+    expect(new Set(bucketAllows.map((a) => a.bucket))).toEqual(new Set(["Logs"]));
+    const principals = new Set(bucketAllows.flatMap(({ principal }) => Object.entries(principal as Record<string, unknown>).flatMap(([kind, ids]) => [ids].flat().map((id) => `${kind} ${id}`))));
+    expect(principals).toEqual(
+      new Set([
+        "Service logging.s3.amazonaws.com",
+        "Service delivery.logs.amazonaws.com",
+        "Service cloudtrail.amazonaws.com",
+        // Elastic Load Balancing's own account for eu-central-1, which writes the load balancers' access logs.
+        "AWS arn:aws:iam::054676820928:root",
+      ]),
+    );
   });
 
   describe("allow no wildcard", () => {
-    const allows = Object.entries(grants).flatMap(([role, lines]) => lines.filter((l) => l.startsWith("Allow ")).map((line) => ({ role, line })));
-
-    it.each(allows)("$role: $line names one action, never s3:* or a pattern", ({ line }) => {
-      const action = line.split(" ")[1]!;
-      expect(action).not.toMatch(/\*/);
-      expect(action).not.toBe("NotAction");
+    it.each(allows)("$role: $line names one action, never s3:* or a pattern", ({ grant }) => {
+      expect(grant.notAction).toBeUndefined();
+      expect(grant.action).not.toMatch(/\*/);
     });
 
-    it.each(allows)("$role: $line names a bucket of ours and a key prefix, never every object in it", ({ line }) => {
-      const resource = line.split(" ")[2]!;
-      expect(resource).not.toMatch(/^NotResource/);
-      const [bucket, ...key] = resource.split("/");
+    it.each(allows)("$role: $line names a bucket of ours and a key prefix, never every object in it", ({ grant }) => {
+      expect(grant.notResource).toBeUndefined();
+      const [bucket, ...key] = grant.resource.split("/");
       expect([...buckets.values()]).toContain(bucket);
       // An object grant names a prefix: never `<bucket>/*`.
       if (key.length > 0) expect(key.join("/")).toMatch(/^[a-z-]+\//);
@@ -253,103 +285,104 @@ describe("every IAM role's S3 grants (RP-1104)", () => {
 // Keys the worker writes come from the shared builders (@rabaed/db/storage-keys); a Document's and a register
 // import file's are built in SQL (`app.document_storage_key`, `app.register_import_file_key`), and
 // packages/db/test/storage-keys-sql.test.ts checks those stay inside DOCUMENT_OBJECTS and REGISTER_IMPORT_OBJECTS.
-const record = documentalRecordPrefix("p1", "w1");
-const keys = {
+const recordFolder = documentalRecordPrefix("p1", "w1");
+const sampleKeys = {
   document: "ProjectFiles/projects/p1/work-items/w1/documents/d1",
   registerImport: "ProjectFiles/projects/p1/register-imports/i1/f1",
   signature: "ProjectFiles/members/m1/signatures/s1.png",
   logo: "ProjectFiles/companies/c1/logo/l1.png",
   stamp: "ProjectFiles/companies/c1/stamp/s1.png",
-  record: `ProjectFiles/${record}record.pdf`,
-  recordData: `ProjectFiles/${record}record-data.xml`,
-  replacedRecord: `ProjectFiles/${record}replaced/ab12.pdf`,
-  workingCopy: `ProjectFiles/${record}working-copies/c1.pdf`,
+  record: `ProjectFiles/${recordFolder}record.pdf`,
+  recordData: `ProjectFiles/${recordFolder}record-data.xml`,
+  replacedRecord: `ProjectFiles/${recordFolder}replaced/ab12.pdf`,
+  workingCopy: `ProjectFiles/${recordFolder}working-copies/c1.pdf`,
   snagReport: `ProjectFiles/${snagReportPrefix("p1")}r1/snag-report.pdf`,
   font: "BuildAssets/fonts/thmanyah/Thmanyah-Regular.ttf",
   sealingCertificate: "BuildAssets/sealing/pdf-sealing.pem",
 };
 const [Get, Put, Delete, List] = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"];
 
-const USES: { role: string; actions: string[]; resource: string; where: string }[] = [
+/** Some S3 actions a role takes, or must never take, on one resource, and why. */
+type Use = { role: string; actions: string[]; resource: string; why: string };
+
+const USES: Use[] = [
   // apps/api/src/documents: a signed PUT for the upload, HeadObject and GetObject to confirm it, a signed GET to
   // download, CopyObject (Get + Put) for Revisions and raised items, DeleteObject to roll a copy back.
-  { role: API, actions: [Put, Get, Delete], resource: keys.document, where: "api documents" },
-  { role: API, actions: [Put, Get, Delete], resource: keys.registerImport, where: "api register-import" },
-  { role: API, actions: [Put, Get, Delete], resource: keys.signature, where: "api identity/signature.ts" },
-  { role: API, actions: [Put, Get, Delete], resource: keys.logo, where: "api identity/company-image.ts" },
-  { role: API, actions: [Put, Get, Delete], resource: keys.stamp, where: "api identity/company-image.ts" },
+  { role: API, actions: [Put, Get, Delete], resource: sampleKeys.document, why: "api documents" },
+  { role: API, actions: [Put, Get, Delete], resource: sampleKeys.registerImport, why: "api register-import" },
+  { role: API, actions: [Put, Get, Delete], resource: sampleKeys.signature, why: "api identity/signature.ts" },
+  { role: API, actions: [Put, Get, Delete], resource: sampleKeys.logo, why: "api identity/company-image.ts" },
+  { role: API, actions: [Put, Get, Delete], resource: sampleKeys.stamp, why: "api identity/company-image.ts" },
   // Signed download links only (routes/documental-record.ts, routes/working-copy.ts, work-items/snag-report.ts).
-  ...[keys.record, keys.workingCopy, keys.snagReport].map((resource) => ({ role: API, actions: [Get], resource, where: "api download links" })),
+  ...[sampleKeys.record, sampleKeys.workingCopy, sampleKeys.snagReport].map((resource) => ({ role: API, actions: [Get], resource, why: "api download links" })),
   // HeadObject on a file not uploaded yet answers 404, not 403 (RP-269).
-  { role: API, actions: [List], resource: "ProjectFiles", where: "api documents confirm" },
+  { role: API, actions: [List], resource: "ProjectFiles", why: "api documents confirm" },
 
   // apps/worker/src/record: the appendix and the images a record prints; reproduce.ts reads the record it replaces.
-  ...[keys.document, keys.signature, keys.logo, keys.stamp, keys.record, keys.recordData, keys.replacedRecord].map((resource) => ({
+  ...[sampleKeys.document, sampleKeys.signature, sampleKeys.logo, sampleKeys.stamp, sampleKeys.record, sampleKeys.recordData, sampleKeys.replacedRecord].map(
+    (resource) => ({ role: WORKER, actions: [Get], resource, why: "worker record" }),
+  ),
+  ...[sampleKeys.record, sampleKeys.recordData, sampleKeys.replacedRecord, sampleKeys.workingCopy].map((resource) => ({
     role: WORKER,
-    actions: [Get],
+    actions: [Put],
     resource,
-    where: "worker record",
+    why: "worker record",
   })),
-  ...[keys.record, keys.recordData, keys.replacedRecord, keys.workingCopy].map((resource) => ({ role: WORKER, actions: [Put], resource, where: "worker record" })),
-  { role: WORKER, actions: [Put], resource: keys.snagReport, where: "worker snag-report/job.ts" },
+  { role: WORKER, actions: [Put], resource: sampleKeys.snagReport, why: "worker snag-report/job.ts" },
   // record/from-env.ts: the fonts (listed, then read) and the sealing certificate.
-  { role: WORKER, actions: [Get], resource: keys.font, where: "worker fonts" },
-  { role: WORKER, actions: [List], resource: "BuildAssets", where: "worker fonts" },
-  { role: WORKER, actions: [Get], resource: keys.sealingCertificate, where: "worker sealing" },
+  { role: WORKER, actions: [Get], resource: sampleKeys.font, why: "worker fonts" },
+  { role: WORKER, actions: [List], resource: "BuildAssets", why: "worker fonts" },
+  { role: WORKER, actions: [Get], resource: sampleKeys.sealingCertificate, why: "worker sealing" },
 
   // The deploy workflow builds the images with the licensed fonts.
-  { role: DEPLOY, actions: [Get], resource: keys.font, where: "deploy workflow" },
-  { role: DEPLOY, actions: [List], resource: "BuildAssets", where: "deploy workflow" },
+  { role: DEPLOY, actions: [Get], resource: sampleKeys.font, why: "deploy workflow" },
+  { role: DEPLOY, actions: [List], resource: "BuildAssets", why: "deploy workflow" },
 ];
 
 // What a role must never do, whatever a later grant adds: each is a leak or a lost record if it could.
-const REFUSED: { role: string; actions: string[]; resource: string; why: string }[] = [
+const REFUSED: Use[] = [
   // RP-1084: a signed PUT or a delete with a wrong key can never overwrite or remove what only the worker writes.
-  ...[keys.record, keys.recordData, keys.replacedRecord, keys.workingCopy, keys.snagReport].map((resource) => ({
+  ...[sampleKeys.record, sampleKeys.recordData, sampleKeys.replacedRecord, sampleKeys.workingCopy, sampleKeys.snagReport].map((resource) => ({
     role: API,
     actions: [Put, Delete, "s3:PutObjectAcl", "s3:PutObjectTagging", "s3:DeleteObjectVersion"],
     resource,
     why: "only the worker writes it",
   })),
   { role: API, actions: [Get, Put, Delete], resource: "ProjectFiles/projects/p1/anything-else", why: "no key the code builds" },
-  { role: API, actions: [Get], resource: keys.sealingCertificate, why: "the worker seals, not the api" },
-  { role: WORKER, actions: [Delete], resource: keys.document, why: "the worker never deletes" },
-  { role: WORKER, actions: [Delete], resource: keys.record, why: "the worker never deletes" },
-  { role: WORKER, actions: [Put], resource: keys.document, why: "Documents are uploaded through the api" },
-  { role: WORKER, actions: [Put], resource: keys.signature, why: "the worker only reads the images it prints" },
-  { role: WORKER, actions: [Get], resource: keys.registerImport, why: "register imports are the api's alone" },
+  { role: API, actions: [Get], resource: sampleKeys.sealingCertificate, why: "the worker seals, not the api" },
+  { role: WORKER, actions: [Delete], resource: sampleKeys.document, why: "the worker never deletes" },
+  { role: WORKER, actions: [Delete], resource: sampleKeys.record, why: "the worker never deletes" },
+  { role: WORKER, actions: [Put], resource: sampleKeys.document, why: "Documents are uploaded through the api" },
+  { role: WORKER, actions: [Put], resource: sampleKeys.signature, why: "the worker only reads the images it prints" },
+  { role: WORKER, actions: [Get], resource: sampleKeys.registerImport, why: "register imports are the api's alone" },
   { role: WORKER, actions: [Get, Put], resource: "ProjectFiles/projects/p1/anything-else", why: "no key the code builds" },
-  { role: DEPLOY, actions: [Get], resource: keys.sealingCertificate, why: "the deploy role reads only the fonts" },
-  { role: DEPLOY, actions: [Get], resource: keys.document, why: "the deploy role reads no Project files" },
+  { role: DEPLOY, actions: [Get], resource: sampleKeys.sealingCertificate, why: "the deploy role reads only the fonts" },
+  { role: DEPLOY, actions: [Get], resource: sampleKeys.document, why: "the deploy role reads no Project files" },
 ];
 
-describe("the grants match what the code does in S3 (RP-1104)", () => {
-  const grants = s3Grants();
-  const parsed = (role: string) =>
-    (grants[role] ?? []).map((line) => {
-      const [effect, action, resource] = line.split(" ") as [string, string, string];
-      return { line, effect, action, resource };
-    });
-  // As IAM decides on the role's own policies: an Allow matches and no Deny does. A conditional Allow
-  // (ListBucket by prefix) counts as allowing, so a refusal here holds whatever the condition.
-  const matching = (role: string, action: string, resource: string) =>
-    parsed(role).filter((g) => iamPatternMatches(g.action, action) && iamPatternMatches(g.resource, resource));
-  const may = (role: string, action: string, resource: string) =>
-    matching(role, action, resource).some((g) => g.effect === "Allow") && !matching(role, action, resource).some((g) => g.effect === "Deny");
-
-  it.each(USES.flatMap((u) => u.actions.map((action) => ({ ...u, action }))))("$role may $action $resource ($where)", ({ role, action, resource }) => {
-    expect(may(role, action, resource)).toBe(true);
-  });
-
-  it.each(REFUSED.flatMap((r) => r.actions.map((action) => ({ ...r, action }))))("$role may not $action $resource: $why", ({ role, action, resource }) => {
-    expect(may(role, action, resource)).toBe(false);
-  });
-
-  it.each(Object.keys(grants).flatMap((role) => parsed(role).filter((g) => g.effect === "Allow").map((g) => ({ role, ...g }))))(
-    "$role: $line is used by the code, so no grant is wider than what it does",
-    ({ role, action, resource }) => {
-      const used = USES.filter((u) => u.role === role && u.actions.includes(action) && iamPatternMatches(resource, u.resource));
-      expect(used).not.toEqual([]);
-    },
+// Whether the role's own policies let it take `action` on `resource`, as IAM decides: an Allow matches and no
+// Deny does. A conditional Allow (ListBucket by prefix) counts as allowing, so a refusal here holds whatever
+// the condition. A NotAction or NotResource grant would fail the wildcard checks above before it mattered here.
+function roleMay(role: string, action: string, resource: string): boolean {
+  const matching = (grants.get(role) ?? []).filter(
+    (g) => !g.notAction && !g.notResource && iamPatternMatches(g.action, action) && iamPatternMatches(g.resource, resource),
   );
+  return matching.some((g) => g.effect === "Allow") && !matching.some((g) => g.effect === "Deny");
+}
+
+const each = (uses: Use[]) => uses.flatMap((use) => use.actions.map((action) => ({ ...use, action })));
+
+describe("the grants match what the code does in S3 (RP-1104)", () => {
+  it.each(each(USES))("$role may $action $resource ($why)", ({ role, action, resource }) => {
+    expect(roleMay(role, action, resource)).toBe(true);
+  });
+
+  it.each(each(REFUSED))("$role may not $action $resource: $why", ({ role, action, resource }) => {
+    expect(roleMay(role, action, resource)).toBe(false);
+  });
+
+  it.each(allows)("$role: $line is used by the code, so no grant is wider than what it does", ({ role, grant }) => {
+    const used = USES.filter((u) => u.role === role && u.actions.includes(grant.action) && iamPatternMatches(grant.resource, u.resource));
+    expect(used).not.toEqual([]);
+  });
 });

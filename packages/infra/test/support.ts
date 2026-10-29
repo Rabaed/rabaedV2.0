@@ -45,8 +45,17 @@ export const ksa: EnvironmentConfig = (({ monthlyBudgetUsd: _, ...withoutBudget 
   environments.dev,
 );
 
-type StackPart = keyof ReturnType<typeof stackNames>;
+export type StackPart = keyof ReturnType<typeof stackNames>;
 export type Resource = { Type: string; Properties?: Record<string, unknown> };
+
+/** A logical ID without the 8-character hash CDK appends: the construct ID, which stays put. */
+export const constructId = (logicalId: string) => logicalId.replace(/[0-9A-F]{8}$/, "");
+
+/** The key pattern an IAM resource names after a bucket's ARN (`projects/*`), or "" for the bucket itself. */
+export function objectKey(resource: unknown): string {
+  const join = (resource as { "Fn::Join"?: [string, unknown[]] })["Fn::Join"];
+  return join ? join[1].filter((piece) => typeof piece === "string").join(join[0]).replace(/^\//, "") : "";
+}
 
 /** Every template of one environment, looked up by stack (`network`, `data`, `app`, …). */
 export function environmentTemplates(config: EnvironmentConfig = environments.dev) {

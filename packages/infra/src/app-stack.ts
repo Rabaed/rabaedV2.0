@@ -107,8 +107,8 @@ export class AppStack extends Stack {
     // links; nothing else (RP-1104), since a signed URL carries the signer's permissions.
     apiTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], resources: apiStoredObjects }));
     apiTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: workerWrittenObjects }));
-    // Except what only the worker writes (RP-1084). The api still reads it, to sign download links;
-    // a wrong key in a signed PUT or a delete can never overwrite or remove a record.
+    // And an explicit refusal of every Put and Delete on what only the worker writes (RP-1084), so a
+    // later, wider Allow still can't let a signed PUT or a delete with a wrong key overwrite or remove a record.
     apiTaskRole.addToPolicy(
       new iam.PolicyStatement({ effect: iam.Effect.DENY, actions: ["s3:PutObject*", "s3:DeleteObject*"], resources: workerWrittenObjects }),
     );

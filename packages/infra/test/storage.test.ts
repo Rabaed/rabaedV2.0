@@ -1,7 +1,7 @@
 import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
-import { environmentTemplates, references, render, type Resource } from "./support.ts";
+import { constructId, environmentTemplates, objectKey, references, render, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const storage = env.template("storage");
@@ -9,7 +9,7 @@ const storage = env.template("storage");
 // Resources of a type by their construct ID (the logical ID without CDK's hash).
 function byName(type: string): Record<string, { logicalId: string; resource: Resource }> {
   return Object.fromEntries(
-    Object.entries(storage.findResources(type)).map(([logicalId, resource]) => [logicalId.replace(/[0-9A-F]{8}$/, ""), { logicalId, resource: resource as Resource }]),
+    Object.entries(storage.findResources(type)).map(([logicalId, resource]) => [constructId(logicalId), { logicalId, resource: resource as Resource }]),
   );
 }
 const bucketsByName = byName("AWS::S3::Bucket");
@@ -120,11 +120,6 @@ describe("Project files", () => {
     }
     return grants;
   }
-  // The key pattern a resource names after the bucket's ARN: "" for the bucket itself.
-  const objectKey = (resource: unknown) => {
-    const join = (resource as { "Fn::Join"?: [string, unknown[]] })["Fn::Join"];
-    return join ? join[1].filter((part) => typeof part === "string").join(join[0]).replace(/^\//, "") : "";
-  };
 
   it("the api reads, writes and removes Signatures, logos, Stamps, Documents and register imports where it stores them, and nothing else (RP-951, RP-1104)", () => {
     const objects = projectFilesGrants()
