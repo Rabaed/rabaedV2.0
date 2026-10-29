@@ -1,9 +1,9 @@
 import type { Locale } from "@rabaed/domain";
-import { DocNo, Icon } from "@rabaed/ui";
+import { buttonVariants, DocNo, Icon } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getWorkItemLink } from "@/lib/session";
+import { getMe, getWorkItemLink, hasLinkedRecord, linkedRecordPath } from "@/lib/session";
 
 /**
  * Where a Link opens (RP-521; visibility.md E1, the Links row), by the Link's own
@@ -11,16 +11,19 @@ import { getMe, getWorkItemLink } from "@/lib/session";
  * sees opens the item itself; one they can't is its Document Number and Subject,
  * and says only that they may not see its details: the API never gave its id, so
  * neither has the browser, and the item's own URL is still 404 to them. A Link
- * not theirs to read is not found, like one that doesn't exist.
+ * not theirs to read is not found, like one that doesn't exist. When the linked
+ * item has closed with its Documental Record, the page offers "Download PDF"
+ * through the Link (E1, RP-1087), and the PDF comes from the api itself.
  */
 export default async function WorkItemLinkPage({ params }: { params: Promise<{ locale: Locale; workItemId: string; linkId: string }> }) {
   const { locale, workItemId, linkId } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations("workItems.links");
+  const [t, tRecord] = await Promise.all([getTranslations("workItems.links"), getTranslations("documentalRecord")]);
   const [me, link] = await Promise.all([getMe(), getWorkItemLink(workItemId, linkId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!link) notFound();
   if (link.workItemId) return redirect({ href: `/work-items/${link.workItemId}`, locale });
+  const hasRecord = await hasLinkedRecord(workItemId, linkId);
 
   return (
     <div className="max-w-3xl space-y-6" data-testid="hidden-link">
@@ -37,6 +40,16 @@ export default async function WorkItemLinkPage({ params }: { params: Promise<{ l
           <Icon name="lock" size={16} className="shrink-0" />
           {t("hidden")}
         </p>
+        {hasRecord && (
+          <a
+            href={`/api${linkedRecordPath(workItemId, linkId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonVariants({ variant: "secondary", size: "sm", className: "self-start" })}
+          >
+            {tRecord("download")}
+          </a>
+        )}
       </div>
     </div>
   );

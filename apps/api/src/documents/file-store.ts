@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Readable } from "node:stream";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -37,6 +38,11 @@ export interface FileStore {
   stat(key: string): Promise<{ sizeBytes: number; contentType: string } | null>;
   /** The stored file's bytes (a photo's, to read its EXIF), or null when nothing is stored under `key`. */
   read(key: string): Promise<Uint8Array | null>;
+  /**
+   * The stored file's bytes as a stream, or null when nothing is stored under `key`: for a file the
+   * api sends itself because a signed URL would name its key (a linked item's record, RP-1087).
+   */
+  stream(key: string): Promise<Readable | null>;
   /**
    * Stores `bytes` under `key` as `contentType`: a small image the api itself received and
    * checked, through `storeImage` (a Member's Signature, RP-85; a Company's logo or Stamp, RP-617).
@@ -135,6 +141,11 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
       return (await body?.transformToByteArray()) ?? null;
     },
 
+    async stream(key) {
+      // In Node the SDK's body is a Readable.
+      return ((await getObjectBody(key)) as Readable | null) ?? null;
+    },
+
     async sha256(key) {
       const body = await getObjectBody(key);
       if (!body) return null;
@@ -198,6 +209,7 @@ export const noFileStore: FileStore = {
   signDownload: () => Promise.reject(new Error("No file store configured")),
   stat: () => Promise.reject(new Error("No file store configured")),
   read: () => Promise.reject(new Error("No file store configured")),
+  stream: () => Promise.reject(new Error("No file store configured")),
   put: () => Promise.reject(new Error("No file store configured")),
   sha256: () => Promise.reject(new Error("No file store configured")),
   copy: () => Promise.reject(new Error("No file store configured")),
