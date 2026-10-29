@@ -475,7 +475,10 @@ ol.numbered > li { border-bottom: none; padding: 0.4mm 0; }
 li > .n { font-weight: 700; min-width: 6mm; }
 .card { border: 0.75pt solid #777; border-radius: 1.5mm; padding: 2.5mm 4mm; margin-bottom: 3mm; break-inside: avoid; }
 .card.flows { break-inside: auto; }
-.card-head, .card-body, .alabel { break-inside: avoid; break-after: avoid; }
+/* A card's head keeps with its body, and its body with its first answer. A body with no answer after it
+   is the card's last child: its break-after would pass to the card and chain it to the next (RP-1076). */
+.card-head, .card-body, .alabel { break-inside: avoid; }
+.card-head, .card-body:not(:last-child), .alabel { break-after: avoid; }
 .card > .card-head { border-bottom: 0.5pt solid #ccc; padding-bottom: 1.2mm; margin-bottom: 2mm; }
 .card .num { display: inline-block; min-width: 5mm; height: 5mm; border-radius: 1mm; background: #111; color: #fff; text-align: center; font-weight: 700; font-size: 8pt; }
 .card-body { display: grid; grid-template-columns: 1fr 48mm; gap: 4mm; align-items: start; }

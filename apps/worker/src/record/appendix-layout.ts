@@ -15,6 +15,8 @@ export const APPENDIX_FRAME_MM = { top: 16 + 8, left: 13, width: 184, height: 24
 
 export const APPENDIX_CSS = `
 .appendix .lead { color: #444; font-size: 8pt; margin-bottom: 3mm; }
+/* The heading and intro print as one, with the list's head and its first Document (RP-1076). */
+.appendix-head { break-inside: avoid; break-after: avoid; }
 .appendix td.fp { font-size: 6.5pt; word-break: break-all; width: 52mm; }
 .appendix td.where { width: 38mm; }
 .appendix-page { break-before: page; height: ${8 + APPENDIX_FRAME_MM.height}mm; overflow: hidden; }
@@ -65,8 +67,8 @@ export function appendixHtml(data: RecordData, withPages = true): string {
     }
   };
 
-  const list = `<section class="appendix"><h2 class="part">${heading("appendix")}</h2>
-<div class="lead">${sentence((l) => html(WORDS.howToOpen[l]))}</div>
+  const list = `<section class="appendix"><div class="appendix-head"><h2 class="part">${heading("appendix")}</h2>
+<div class="lead">${sentence((l) => html(WORDS.howToOpen[l]))}</div></div>
 <table><thead><tr><th>#</th><th>${heading("documentName")}</th><th>${heading("fingerprint")}</th><th>${heading("inThisRecord")}</th></tr></thead><tbody>${data.appendix
     .map(
       (f, i) =>

@@ -485,10 +485,10 @@ export interface WorkflowDefinitionTable {
   updated_at: Generated<Timestamp>;
 }
 
-/** A setup change (Workflow, Form, Screen, Stage, Outcome set, Company default, Checklist Template), append-only (RP-450). Not granted to the app role. */
+/** A setup change (Workflow, Form, Screen, Stage, Outcome set, Company default, Checklist Template, Project setting), append-only (RP-450). Not granted to the app role. */
 export interface SetupEventTable {
   id: Generated<string>;
-  kind: "workflow" | "form" | "screen" | "stage" | "outcome_set" | "company_default" | "checklist_template";
+  kind: "workflow" | "form" | "screen" | "stage" | "outcome_set" | "company_default" | "checklist_template" | "project_setting";
   workflow_definition_id: string | null;
   /** Exactly one of project_id and company_id is set. */
   project_id: string | null;
