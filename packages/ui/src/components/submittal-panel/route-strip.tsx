@@ -131,7 +131,7 @@ export function SubmittalRouteSteps({ locale, labels, route, className }: { loca
             key={i}
             data-state={stop.state}
             aria-current={stop.state === "current" ? "step" : undefined}
-            className={cn("relative grid grid-cols-[20px_minmax(0,1fr)] gap-2.5", !last && "pb-3.5")}
+            className={cn("relative grid grid-cols-[20px_minmax(0,1fr)] gap-2.5", !last && "pb-3")}
           >
             {/* The line down to the next stop: green once this one is done. */}
             {!last && (
