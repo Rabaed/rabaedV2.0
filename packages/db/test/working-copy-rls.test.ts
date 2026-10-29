@@ -348,10 +348,8 @@ describe("scenarios RP-23-3 and RP-1083-3: what a Working Copy prints", () => {
   });
 
   // V5 and V19 (visibility.md, the Documental Record row): a reply Document only an internal event took (the
-  // Owner's review's Recommendation) stays K1's and the Owner's. RP-1079 found it reaching everyone who sees
-  // the item once the review starts; unskip this test when RP-1079 is fixed. Run unskipped on 2026-10-29
-  // (RP-1083), it failed as RP-1079 says: C1's Working Copy listed reply.jpg.
-  it.skip("RP-1083-3: prints no reply Document only an internal event took, as the Recommendation to the Owner (skipped until RP-1079 is fixed)", async () => {
+  // Owner's review's Recommendation) stays K1's and the Owner's (RP-1079).
+  it("RP-1083-3: prints no reply Document only an internal event took, as the Recommendation to the Owner", async () => {
     const { c1, k1 } = copyTower;
     const screen = await addTestScreen(
       run,
