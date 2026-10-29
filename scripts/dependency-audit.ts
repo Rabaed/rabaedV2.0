@@ -1,10 +1,19 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// Reports `pnpm audit --prod --json` in a CI job summary (RP-1023). Run by
-// .github/workflows/dependency-audit.yml on pull requests that change the lockfile or
-// a package.json, and nightly on main. RP-635 checked a new library's advisories by
-// hand, and the audit then showed 7 findings, 2 of them high, that no check reported.
+// Reports `pnpm audit --json` in a CI job summary (RP-1023). Run by
+// .github/workflows/dependency-audit.yml, the required check "pnpm audit": on every pull
+// request and merge-group entry, which audit only when scripts/dependency-audit-needed.ts
+// says the change can move the audit (the lockfile, a package.json, the allow-list, ...),
+// and nightly on main and by hand, which always audit. RP-635 checked a new library's
+// advisories by hand, and the audit then showed 7 findings, 2 of them high, that no check
+// reported.
+//
+// Dev dependencies count as production ones do (RP-1070): they ship to no customer, but
+// they run on every developer machine, in CI and in the lane stacks, and the repo is
+// public. A `--prod` audit missed a critical Storybook advisory (code injection into the
+// Storybook preview from a malicious website). One level, one allow-list and one failing
+// exit for both, so no finding sits in a report nobody reads.
 //
 // Fails on new findings (RP-1032): an advisory at the level or above exits 1, with an
 // error line and a table, unless `.audit-allowlist.json` at the repo root lists its id
@@ -37,7 +46,7 @@ export interface Advisory {
 export interface Audit {
   advisories: Advisory[];
   counts: Partial<Record<Severity, number>>;
-  /** The production packages pnpm audited. */
+  /** The packages pnpm audited. */
   packages: number;
 }
 
@@ -217,7 +226,7 @@ export function summary(audit: Audit, level: Severity, allowance: Allowance = no
       ? `## Package audit failed: ${failing.length} at ${level} or above, not allow-listed`
       : `## Package audit: nothing at ${level} or above${allowed.some(({ advisory }) => atLevel(advisory, level)) ? " outside the allow-list" : ""}`,
     "",
-    `\`pnpm audit --prod\`: ${counts.length > 0 ? counts.join(", ") : "no findings"} in ${audit.packages} production packages.`,
+    `\`pnpm audit\`: ${counts.length > 0 ? counts.join(", ") : "no findings"} in ${audit.packages} packages.`,
     "",
   ];
   if (failing.length > 0) lines.push(...table(failing), "");

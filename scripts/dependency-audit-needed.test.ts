@@ -77,6 +77,7 @@ const workflow = parse(readFileSync(join(dirname(import.meta.filename), "..", ".
 };
 const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
 const decide = steps.find((step) => step.run === "node scripts/dependency-audit-needed.ts");
+const audit = steps.find((step) => /^pnpm audit .*--json/.test(step.run ?? ""));
 const gate = "steps.needed.outputs.needed == 'true'";
 
 // The workflow runs this script, so it changes in its own PR after this one (rule 3); until then these wait for it.
@@ -95,9 +96,19 @@ describe.skipIf(decide === undefined)("dependency-audit.yml runs on every change
   });
 
   it("audits and reports only when the decision says so", () => {
-    const audit = steps.find((step) => step.run?.startsWith("pnpm audit --prod --json"));
     const report = steps.find((step) => step.run === "node scripts/dependency-audit.ts audit.json --level high");
     expect(audit?.if).toBe(gate);
     expect(report?.if).toBe(gate);
+  });
+});
+
+// RP-1070: the dev dependencies are audited too (why: scripts/dependency-audit.ts's header). The workflow drops
+// `--prod` and renames the step in its own PR after this one (rule 3). Until then this waits for it, skipping only
+// while both are as before, so a workflow that changes one without the other fails here.
+const beforeRp1070 = audit?.name === "pnpm audit --prod" && audit.run?.includes("--prod") === true;
+describe.skipIf(beforeRp1070)("dependency-audit.yml audits the dev dependencies too", () => {
+  it("runs pnpm audit without --prod, every severity into the JSON the report reads", () => {
+    expect(audit?.name).toBe("pnpm audit");
+    expect(audit?.run).toBe("pnpm audit --json > audit.json || true");
   });
 });

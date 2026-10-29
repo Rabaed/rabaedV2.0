@@ -20,20 +20,22 @@
 // deleted is skipped too: its commits are on no origin branch, and a deleted remote
 // branch is no proof of a merge. A merged local branch with no commit of its own and
 // no upstream is kept: it may be a session just starting. A project a kept worktree
-// names in its .env stays. It lists everything and asks first.
+// names in its .env stays, and is listed with that worktree. Just before removing each
+// project it checks again (RP-1073: a run can take minutes): a worktree's .env naming it
+// now, a container of it started from an existing folder, Docker not answering, or a
+// connection to its Postgres keeps it. It lists everything and asks first.
 //
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
 //   pnpm worktrees:prune [--stale-days <n>] [--yes]     --yes skips the confirmation
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, removeProject } from "./lanes.ts";
+import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
-import { changedSinceListed, choosePrune, type PruneWorktree } from "./worktrees-pruning.ts";
+import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
   CURRENT_WORKTREE,
   currentRoot,
@@ -83,10 +85,6 @@ if (!refExists(TARGET, mainRoot)) {
   process.exit(1);
 }
 
-const readEnv = (dir: string) => {
-  const file = join(dir, ".env");
-  return existsSync(file) ? readFileSync(file, "utf8") : undefined;
-};
 const here = currentRoot();
 const branches = localBranches(TARGET, mainRoot);
 const gone = new Set(branches.filter((b) => b.upstreamGone).map((b) => b.branch));
@@ -96,11 +94,11 @@ const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
     unpushed: unpushedCount(w.head, mainRoot),
-    project: composeProjectOfEnv(readEnv(w.path) ?? ""),
+    project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? ""),
   }));
 const worktrees = pruneFacts(listWorktrees(mainRoot));
 const containers = listContainers();
-const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readEnv(here) ?? "") };
+const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readWorktreeEnv(here) ?? "") };
 const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync, holders: live.holders });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
@@ -111,6 +109,7 @@ if (listed.length > 0) {
   for (const s of listed) console.log(`  ${name(s.worktree)}: ${s.reason}`);
   printStale(listed, staleDays);
 }
+for (const k of chosen.kept) console.log(`Not pruned: ${k.project} of ${k.path}: ${k.reason}.`);
 if (!docker) console.log("Docker is not running: compose projects are not checked (run `pnpm lanes:prune` later).");
 if (chosen.remove.length + chosen.branches.length + chosen.projects.length === 0) {
   console.log("Nothing to prune.");
@@ -156,18 +155,19 @@ for (const w of chosen.remove) {
     removedPaths.push(w.path);
   });
 }
-for (const p of chosen.projects) {
-  // A worktree's project goes only once that worktree is removed; orphans go regardless.
-  const kept = p.waitsFor.filter((path) => !removedPaths.some((r) => samePath(r, path)));
-  if (kept.length > 0) {
-    console.log(`Kept compose project ${p.project}: ${kept.join(", ")} was not removed.`);
-    continue;
-  }
-  attempt(p.project, () => {
-    removeProject(p);
-    console.log(`Removed compose project ${p.project}.`);
-  });
-}
+removeProjectsNow({
+  projects: chosen.projects,
+  removedPaths,
+  listed: { worktrees, containers: docker?.containers ?? [] },
+  readNow: (project) => readProjectNow(project, { worktrees: listWorktrees(mainRoot), cwd: here }),
+  exists: existsSync,
+  remove: (p) =>
+    attempt(p.project, () => {
+      removeProject(p);
+      console.log(`Removed compose project ${p.project}.`);
+    }),
+  log: (line) => console.log(line),
+});
 for (const b of chosen.branches) {
   attempt(`branch ${b}`, () => {
     // removeLinkedWorktree may have deleted it already (a worktree-agent-* branch).

@@ -13,13 +13,14 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, publishProblems, type FormVersion, type LinkSearchResults, type ProjectRequiredFields } from "@rabaed/domain";
+import { formSchema, publishProblems, type FormVersion, type LinkAccepts, type LinkSearchResults, type ProjectRequiredFields } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { pinToWorkflowVersion } from "./support/pin-version.ts";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { bilingual, buildTower, detail, ok, take, tryTake, type Company, type Tower } from "./support/tower.ts";
+import { bilingual, buildTower, detail, ok, projectMember, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -93,6 +94,30 @@ async function search(by: Caller, q: string, extra: Record<string, string> = {})
   return (res.json() as LinkSearchResults).links.map((l) => l.id);
 }
 
+/** A link question's `accepts` as Link search takes it, as the link question passes it on (apps/web link-search.ts). */
+const acceptsQuery = (accepts: LinkAccepts | undefined): Record<string, string> =>
+  Object.fromEntries(Object.entries(accepts ?? {}).map(([k, v]) => [k, (v as string[]).join(",")]));
+
+/** The Form a new WIR gets. */
+const wirForm = async (): Promise<FormVersion> => (await ok(tower.c1Engineer.get(`/v1/projects/${tower.projectId}/work-item-types/WIR/form`), 200)).json();
+
+/**
+ * A WIR of C1's closed by K1's manager at Code A (RP-673), on the WIR Workflow Version 3, whose
+ * code Screen asks for the final verification only (Version 4 adds the checklist). K1's Engineer
+ * holds the Consultant Engineer Step; added here, so the submittals above keep their Step Pools.
+ */
+async function wirClosedWithCodeA(title: string): Promise<string> {
+  const k1Engineer = await projectMember(api, k1, tower.k1ParticipantId!, ["engineer"]);
+  const id = (await ok(tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, { type: "WIR", title, answers: wirAnswers() }), 201)).json().id as string;
+  await take(tower.c1Engineer, id, "send_for_review");
+  await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(tower.c1Pm, id, "submit", { answers: { cover_note: "Ready on site from 09:00" } });
+  await pinToWorkflowVersion(migrator, "WIR", 3, id);
+  await take(k1Engineer, id, "send_to_manager", { recommendedCode: "A" });
+  await take(tower.k1Manager, id, "approve_a", { answers: { sample_checked: true, matches_specification: true } });
+  return id;
+}
+
 /** The WIR Form's published Versions, oldest first, as stored. */
 async function wirVersions() {
   const { rows } = await sql<{ version_no: number; schema: unknown }>`
@@ -142,7 +167,7 @@ describe("the WIR Form Version 2 (`pnpm defaults:publish`)", () => {
     expect(latest.sections[0]!.fields.map((f) => f.key)).toEqual(["description", "specification_section", "requested_for"]);
     expect(latest.sections[0]!.fields[2]).toMatchObject({ type: "datetime", required: true, label: { en: "Requested for" } });
     expect(latest.sections[2]!.fields).toEqual([
-      expect.objectContaining({ key: "approved_submittals", type: "work_item_ref", required: false, accepts: { outcomes: ["A", "B"] } }),
+      expect.objectContaining({ key: "approved_submittals", type: "work_item_ref", required: false, accepts: { modules: ["submittals"], outcomes: ["A", "B"] } }),
     ]);
     expect(v1.sections.flatMap((s) => s.fields.map((f) => f.key))).toEqual([
       "description", "specification_section", "attachments", "photos", "trade", "location", "scopes",
@@ -177,8 +202,8 @@ describe("Link search with a link question's `accepts`", () => {
     expect(new Set(await search(tower.c1Engineer, "Cable"))).toEqual(new Set([item.a, item.b, item.c, item.open]));
   });
 
-  it("refuses a Type or outcome that isn't one", async () => {
-    for (const extra of [{ types: "mar" }, { outcomes: "1A" }] as Record<string, string>[]) {
+  it("refuses a Module, Type or outcome that isn't one", async () => {
+    for (const extra of [{ types: "mar" }, { outcomes: "1A" }, { modules: "made_up" }] as Record<string, string>[]) {
       const res = await tower.c1Engineer.get(`/v1/projects/${tower.projectId}/work-items/link-search?${new URLSearchParams({ q: "Cable", ...extra }).toString()}`);
       expect(res.statusCode).toBe(400);
     }
@@ -199,6 +224,31 @@ describe("a WIR's Approved submittals", () => {
     const created = await createWir({ approved_submittals: [item.c] });
     expect(created.statusCode).toBe(422);
     expect(created.json().fields).toEqual([{ key: "approved_submittals", code: "unknown_option" }]);
+  });
+
+  // RP-1080: since RP-673 a WIR itself closes with Code A–D, so outcomes alone would take one.
+  // The field takes submittals only (`accepts.modules`): a WIR closed at Code A is neither
+  // offered nor taken, and naming it reads like an unknown option.
+  it("takes submittals only: a WIR closed at Code A is neither offered nor taken", async () => {
+    const closedWir = await wirClosedWithCodeA("Cable trays, inspected at Code A");
+    expect(await detail(tower.c1Engineer, closedWir)).toMatchObject({ outcome: "A" });
+    const field = (await wirForm()).schema.sections.flatMap((s) => s.fields).find((f) => f.key === "approved_submittals")!;
+    const accepts = field.type === "work_item_ref" ? field.accepts : undefined;
+    // Link search with the field's `accepts`, as the link question asks it.
+    expect(new Set(await search(tower.c1Engineer, "Cable", acceptsQuery(accepts)))).toEqual(new Set([item.a, item.b]));
+
+    const created = await createWir({ approved_submittals: [item.a, closedWir] });
+    expect({ status: created.statusCode, body: created.json() }).toEqual({
+      status: 422,
+      body: { error: "invalid_answers", fields: [{ key: "approved_submittals", code: "unknown_option" }] },
+    });
+    const id = (await ok(createWir({ approved_submittals: [item.a] }), 201)).json().id as string;
+    const saved = await saveWir(id, { approved_submittals: [item.a, closedWir] });
+    expect({ status: saved.statusCode, body: saved.json() }).toEqual({
+      status: 422,
+      body: { error: "invalid_answers", fields: [{ key: "approved_submittals", code: "unknown_option" }] },
+    });
+    expect(accepts).toEqual({ modules: ["submittals"], outcomes: ["A", "B"] });
   });
 
   it("is optional: a WIR without one is sent for review", async () => {
