@@ -306,9 +306,9 @@ export const AsTheContractor: Story = {
       name(context, copy.coverNote),
     ]);
     await expect(log).not.toContain("another model");
-    const chip = section.querySelector<HTMLAnchorElement>('[data-chip="comments"]')!;
+    const chip = section.querySelector<HTMLElement>('[data-chip="comments"]')!;
     await expect(chip).toHaveTextContent(comments("3", storyLocale(context)));
-    await expect(chip.getAttribute("href")).toBe("#snag-list");
+    await expect(chip.closest("a")?.getAttribute("href")).toBe("#snag-list");
     await expectNoChat(context);
   },
 };

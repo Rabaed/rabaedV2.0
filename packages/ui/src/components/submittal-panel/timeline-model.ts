@@ -36,12 +36,15 @@ export type SubmittalLogEntry =
 export type SubmittalApprovalLogInput = {
   /** The history read's events, oldest first, as it gives them. */
   events: readonly SubmittalTimelineEvent[];
-  /** The viewer's own Company (`GET /v1/me`), by the legal name the history names Companies by. */
+  /**
+   * The viewer's own Company (`GET /v1/me`), by the legal name the history names Companies by (the
+   * read gives no Company id). Null when unknown: then no event is taken for another Company's, so
+   * there are no review blocks and each person shows as the read names them.
+   */
   viewerCompany: BilingualText | null;
   /** The item read's Creation Date: given to the raiser's Participant only, null for everyone else. */
   creationDate: string | null;
-  /** The item's Type's outcomes on the Project (the List's `filters.outcomes`), to colour a Code by its place in the set. */
-  outcomes?: readonly Pick<Outcome, "code" | "polarity" | "actions">[];
+  outcomes?: SubmittalTimelineOutcomes;
   /** The item read's `raisedItems`: the items raised from it per Type, counting only those the viewer sees. */
   raisedItems?: readonly { type: { code: string }; open: number; closed: number }[];
 };
@@ -49,7 +52,16 @@ export type SubmittalApprovalLogInput = {
 /** A timeline entry's dot (README §5): neutral, ok (green), warn (amber) or bad (red). */
 export type SubmittalTimelineTone = "neutral" | "ok" | "warn" | "bad";
 
+/** The item's Type's outcomes on the Project (the List's `filters.outcomes`), to colour a Code by its place in the set. */
+export type SubmittalTimelineOutcomes = readonly Pick<Outcome, "code" | "polarity" | "actions">[];
+
 const toneOfLook: Record<OutcomeLook, SubmittalTimelineTone> = { a: "ok", b: "warn", c: "bad", d: "bad" };
+
+/** A Code's dot, by its place in its set (`outcomeLook`); null for a code the set doesn't have. */
+function toneOfCode(code: string | null, outcomes: SubmittalTimelineOutcomes): SubmittalTimelineTone | null {
+  const outcome = code === null ? undefined : outcomes.find((o) => o.code === code);
+  return outcome ? toneOfLook[outcomeLook(outcome, outcomes)] : null;
+}
 
 export type SubmittalTimelineText = { kind: "coverNote" | "remarks" | "internalNote" | "reason"; text: string };
 
@@ -67,7 +79,7 @@ function sharedTexts(event: SubmittalTimelineEvent): SubmittalTimelineText[] {
   ];
 }
 
-const sameName =(a: BilingualText | null, b: BilingualText | null) => a !== null && b !== null && a.en === b.en && a.ar === b.ar;
+const sameName = (a: BilingualText | null, b: BilingualText | null) => a !== null && b !== null && a.en === b.en && a.ar === b.ar;
 
 /**
  * The approval log, newest first: the shared moves only (internal ones are Internal Communication),
@@ -76,15 +88,10 @@ const sameName =(a: BilingualText | null, b: BilingualText | null) => a !== null
  * nothing) gets no block.
  */
 export function submittalApprovalLog({ events, viewerCompany, creationDate, outcomes = [], raisedItems = [] }: SubmittalApprovalLogInput): SubmittalLogEntry[] {
-  const outcomeOf = (event: SubmittalTimelineEvent) => (event.outcome === null ? undefined : outcomes.find((o) => o.code === event.outcome));
-  const tone = (event: SubmittalTimelineEvent): SubmittalTimelineTone => {
-    const outcome = outcomeOf(event);
-    if (outcome) return toneOfLook[outcomeLook(outcome, outcomes)];
-    // A shared move with a reason given is a Send Back: the item goes back.
-    return event.reason !== null ? "warn" : "neutral";
-  };
+  // A shared move with a reason given is a Send Back: the item goes back.
+  const tone = (event: SubmittalTimelineEvent): SubmittalTimelineTone => toneOfCode(event.outcome, outcomes) ?? (event.reason !== null ? "warn" : "neutral");
   const comments = (event: SubmittalTimelineEvent) => {
-    const outcome = outcomeOf(event);
+    const outcome = event.outcome === null ? undefined : outcomes.find((o) => o.code === event.outcome);
     const typeCode = outcome ? itemsToCreate(outcome) : null;
     const raised = typeCode === null ? undefined : raisedItems.find((r) => r.type.code === typeCode);
     const count = raised ? raised.open + raised.closed : 0;
@@ -96,7 +103,7 @@ export function submittalApprovalLog({ events, viewerCompany, creationDate, outc
   for (const event of events) {
     if (event.audience !== "shared") continue;
     const company = event.by.companyName;
-    const another = company !== null && !sameName(company, viewerCompany);
+    const another = company !== null && viewerCompany !== null && !sameName(company, viewerCompany);
     if (another && previous !== null && !sameName(previous.by.companyName, company)) oldestFirst.push({ kind: "review", companyName: company });
     // Another Company by name only, but for whoever issued the Code (V14); never more than the read gives.
     const person = another && event.type !== "issue_code" ? null : event.by.memberName;
@@ -108,7 +115,7 @@ export function submittalApprovalLog({ events, viewerCompany, creationDate, outc
 
 export type SubmittalInternalEntry = {
   event: SubmittalTimelineEvent;
-  /** Who acted, as the read names them: the viewer's own people; another Company's (the Consultant's Recommendation the Owner reads, ADR 0022) by its name only. */
+  /** Who acted, as the read names them: the viewer's own people; another Company's (the Consultant's Recommended Code the Owner reads, ADR 0022) by its name only. */
   person: BilingualText | null;
   /** An Internal Note, or a Return's reason. */
   texts: SubmittalTimelineText[];
@@ -120,13 +127,10 @@ export type SubmittalInternalEntry = {
  * viewer, which are their own Participant's only (Internal Notes, internal Step moves, Returns,
  * internal approvals, a Recommended Code). A shared move is the approval log's, never here.
  */
-export function submittalInternalLog(events: readonly SubmittalTimelineEvent[], outcomes: readonly Pick<Outcome, "code" | "polarity" | "actions">[] = []): SubmittalInternalEntry[] {
-  const tone = (event: SubmittalTimelineEvent): SubmittalTimelineTone => {
-    const recommended = event.recommendedCode === null ? undefined : outcomes.find((o) => o.code === event.recommendedCode);
-    if (recommended) return toneOfLook[outcomeLook(recommended, outcomes)];
-    // A Return goes back with its reason.
-    return event.reason !== null && event.type !== "assigned" ? "warn" : "neutral";
-  };
+export function submittalInternalLog(events: readonly SubmittalTimelineEvent[], outcomes: SubmittalTimelineOutcomes = []): SubmittalInternalEntry[] {
+  // A Return goes back with its reason.
+  const tone = (event: SubmittalTimelineEvent): SubmittalTimelineTone =>
+    toneOfCode(event.recommendedCode, outcomes) ?? (event.reason !== null && event.type !== "assigned" ? "warn" : "neutral");
   return events
     .filter((event) => event.audience === "internal")
     .map((event) => ({

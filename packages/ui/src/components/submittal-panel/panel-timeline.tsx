@@ -1,8 +1,9 @@
 "use client";
 
-import { formatNumber, intlLocaleOf, timeZone, type Locale } from "@rabaed/domain";
+import { formatDate, formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { Badge } from "../data/badge.tsx";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import type { SubmittalInternalEntry, SubmittalLogEntry, SubmittalTimelineEvent, SubmittalTimelineText, SubmittalTimelineTone } from "./timeline-model.ts";
 
@@ -35,11 +36,6 @@ const dotTone: Record<SubmittalTimelineTone, string> = {
   warn: "bg-warning-tint text-warning-fg",
   bad: "bg-danger-tint text-danger-fg",
 };
-
-/** "29 Oct 2026, 09:40": Saudi time, Latin digits in Arabic too. */
-function formatWhen(at: string, locale: Locale): string {
-  return new Intl.DateTimeFormat(intlLocaleOf(locale), { timeZone, dateStyle: "medium", timeStyle: "short", numberingSystem: "latn" }).format(new Date(at));
-}
 
 export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale: Locale; items: readonly SubmittalTimelineItem[]; empty: string; label?: string }) {
   if (items.length === 0) return <p className="text-[12.5px] text-muted">{empty}</p>;
@@ -82,7 +78,7 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
             {item.chip && <div className="mt-2">{item.chip}</div>}
             {item.at && (
               <time dateTime={item.at} className="mt-1.5 block text-[11px] text-muted tabular-nums">
-                {formatWhen(item.at, locale)}
+                {formatDate(new Date(item.at), locale, { dateStyle: "medium", timeStyle: "short" })}
               </time>
             )}
           </div>
@@ -113,7 +109,22 @@ const toneIcon: Record<SubmittalTimelineTone, IconName> = { neutral: "send", ok:
 const iconOf = (event: SubmittalTimelineEvent, tone: SubmittalTimelineTone): IconName =>
   event.outcome !== null ? (tone === "bad" ? "circle-x" : "circle-check") : toneIcon[tone];
 
-const chipClass = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold";
+/** What every event entry shows alike: its key, move, who acted, its texts and its time. */
+function eventItem(
+  event: SubmittalTimelineEvent,
+  person: BilingualText | null,
+  texts: readonly SubmittalTimelineText[],
+  labels: SubmittalTimelineLabels,
+  locale: Locale,
+): Pick<SubmittalTimelineItem, "key" | "move" | "who" | "texts" | "at"> {
+  return {
+    key: String(event.seq),
+    move: labels.move(event),
+    who: { person: person?.[locale] ?? null, company: event.by.companyName?.[locale] ?? null },
+    texts: texts.map((t) => ({ label: labels.texts[t.kind], text: t.text })),
+    at: event.at,
+  };
+}
 
 /**
  * The approval log (gaps A6–A8): the shared moves between Participants as the history read gives
@@ -141,26 +152,23 @@ export function SubmittalApprovalLog({
     }
     const { event, comments } = entry;
     const href = comments ? commentsHref?.(comments.typeCode) : undefined;
-    const chipText = comments ? `${labels.comments(formatNumber(comments.count, locale), comments.count)}` : null;
+    const chip = comments && (
+      <Badge tone="danger" data-chip="comments" className="h-auto gap-1 px-2 py-0.5 text-[11.5px]">
+        {labels.comments(formatNumber(comments.count, locale), comments.count)}
+        {href && <Icon name="arrow-up-right" size={13} />}
+      </Badge>
+    );
     return {
-      key: String(event.seq),
+      ...eventItem(event, entry.person, entry.texts, labels, locale),
       tone: entry.tone,
       icon: iconOf(event, entry.tone),
-      move: labels.move(event),
-      who: { person: entry.person?.[locale] ?? null, company: event.by.companyName?.[locale] ?? null },
-      texts: entry.texts.map((t) => ({ label: labels.texts[t.kind], text: t.text })),
-      chip:
-        chipText === null ? undefined : href ? (
-          <Anchor href={href} data-chip="comments" className={cn(chipClass, "bg-danger-tint text-danger-fg hover:underline")}>
-            {chipText}
-            <Icon name="arrow-up-right" size={13} />
-          </Anchor>
-        ) : (
-          <span data-chip="comments" className={cn(chipClass, "bg-danger-tint text-danger-fg")}>
-            {chipText}
-          </span>
-        ),
-      at: event.at,
+      chip: chip && href ? (
+        <Anchor href={href} className="inline-flex rounded-full hover:underline">
+          {chip}
+        </Anchor>
+      ) : (
+        chip || undefined
+      ),
     };
   });
   return <SubmittalPanelTimeline locale={locale} items={items} empty={labels.empty} />;
@@ -183,18 +191,14 @@ export function SubmittalInternalCommunication({
   entries: readonly SubmittalInternalEntry[];
 }) {
   const items = entries.map(({ event, person, texts, tone }): SubmittalTimelineItem => ({
-    key: String(event.seq),
+    ...eventItem(event, person, texts, labels, locale),
     tone,
     icon: event.type === "internal_note" ? "message" : event.recommendedCode !== null ? "gavel" : toneIcon[tone],
-    move: labels.move(event),
-    who: { person: person?.[locale] ?? null, company: event.by.companyName?.[locale] ?? null },
-    texts: texts.map((t) => ({ label: labels.texts[t.kind], text: t.text })),
     chip: event.recommendedCode ? (
-      <span data-chip="recommended-code" className={cn(chipClass, "bg-surface-subtle text-text-secondary shadow-[inset_0_0_0_1px_var(--border-subtle)]")}>
+      <Badge data-chip="recommended-code" className="h-auto px-2 py-0.5 text-[11.5px]">
         {labels.recommendedCode(event.recommendedCode)}
-      </span>
+      </Badge>
     ) : undefined,
-    at: event.at,
   }));
   return (
     <div className="sdp-internal flex flex-col gap-4 px-5 py-4 @[880px]/sdp:px-7">

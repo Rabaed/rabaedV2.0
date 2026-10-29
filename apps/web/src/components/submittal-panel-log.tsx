@@ -16,6 +16,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
+import { historyMoveLabel } from "@/lib/history-move-label";
 
 /** One read for one url: what came back, or null when it couldn't be read. */
 type Read<T> = { url: string; value: T | null };
@@ -78,31 +79,14 @@ export function useSubmittalPanelLog({
   const project = useRead<ProjectSummary>(item ? `/api/v1/projects/${item.projectId}` : null);
 
   const railLabels: SubmittalPanelRailLabels = { workflow: t("workflow"), map: t("map"), log: t("log") };
-  if (!item || !history) return { rail: <SubmittalPanelRail labels={railLabels} workflow={workflow} onOpenMap={openMap} log={null} />, section: null, internal: null };
+  // The log waits for `/me` too, so the viewer's own turns are never drawn as another Company's meanwhile.
+  if (!item || !history || !me) return { rail: <SubmittalPanelRail labels={railLabels} workflow={workflow} onOpenMap={openMap} log={null} />, section: null, internal: null };
 
-  /** A move as the item page's history words it (`work-item-history.tsx`). */
-  const move = (e: SubmittalTimelineEvent): string => {
-    if ((e.type === "transition" || e.type === "issue_code") && e.transition) return e.transition[locale];
-    if (e.type === "internal_note") return e.transition ? tHistory("internalNoteWith", { transition: e.transition[locale] }) : tHistory("internalNote");
-    if (e.type === "internal_answers" && e.transition) return tHistory("internalAnswersWith", { transition: e.transition[locale] });
-    if (e.type === "recommend_code") return tHistory("recommendedCode");
-    if (e.type === "picked_up" || e.type === "claimed") return tHistory("pickedUp");
-    if (e.type === "returned_to_pool" || e.type === "released") return tHistory("returnedToPool");
-    if (e.type === "assigned" && e.handover?.because === "reassigned") {
-      const to = e.handover.to?.[locale] ?? "";
-      return e.handover.from ? tHistory("reassigned", { from: e.handover.from[locale], to }) : tHistory("reassignedFromPool", { to });
-    }
-    if (e.type === "assigned" && e.handover) {
-      return tHistory("handedOver", { from: e.handover.from?.[locale] ?? "", to: e.handover.to?.[locale] ?? "", because: e.handover.because });
-    }
-    if (e.type === "assigned" && e.by.memberName) return tHistory("assignedOnlyMember", { name: e.by.memberName[locale] });
-    if (e.type === "answers_changed") return tHistory("answersChanged");
-    return tHistory("other");
-  };
   const labels: SubmittalTimelineLabels = {
     created: t("created"),
     review: (company) => t("review", { company }),
-    move,
+    // As the item page's history words it.
+    move: (e: SubmittalTimelineEvent) => historyMoveLabel(e, locale, tHistory),
     texts: { coverNote: t("coverNote"), remarks: t("remarks"), internalNote: t("internalNote"), reason: t("reason") },
     comments: (n, count) => t("comments", { n, count }),
     recommendedCode: (code) => t("recommendedCode", { code }),
@@ -113,7 +97,7 @@ export function useSubmittalPanelLog({
   const events = history.value?.events ?? [];
   const entries = submittalApprovalLog({
     events,
-    viewerCompany: me?.value?.company.legalName ?? null,
+    viewerCompany: me.value?.company.legalName ?? null,
     creationDate: item.creationDate,
     outcomes: typeOutcomes,
     raisedItems: item.raisedItems,
@@ -135,7 +119,7 @@ export function useSubmittalPanelLog({
   );
 
   const internalEntries = submittalInternalLog(events, typeOutcomes);
-  const company = me?.value?.company.legalName[locale];
+  const company = me.value?.company.legalName[locale];
   const role = project?.value?.projectRole.baseRole;
   const internal =
     internalEntries.length === 0
@@ -153,7 +137,8 @@ export function useSubmittalPanelLog({
           ),
         };
 
-  const count = entries.length;
+  // "N entries": the moves and Created; a "<Company> review" block stands for moves the viewer doesn't see.
+  const count = entries.filter((e) => e.kind !== "review").length;
   return {
     rail: <SubmittalPanelRail labels={railLabels} workflow={workflow} onOpenMap={openMap} log={log} />,
     section: {

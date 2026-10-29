@@ -96,6 +96,17 @@ describe("the approval log", () => {
     ]);
   });
 
+  // Until `GET /v1/me` answers (or if it fails), the viewer's own turns are never drawn as another Company's.
+  it("takes no turn for another Company's while the viewer's Company is unknown", () => {
+    const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: b("Sara Al Harbi") } });
+    const code = event({ type: "issue_code", audience: "shared", transition: b("Code A"), outcome: "A", by: { companyName: consultant, memberName: b("Omar Haddad") } });
+
+    const log = submittalApprovalLog({ events: [submit, code], viewerCompany: null, creationDate: null });
+
+    expect(log.map((e) => e.kind)).toEqual(["event", "event"]);
+    expect(log.map((e) => (e.kind === "event" ? e.person?.en : null))).toEqual(["Omar Haddad", "Sara Al Harbi"]);
+  });
+
   it("colours each move by its Code, and a Send Back amber", () => {
     const submit = event({ type: "transition", audience: "shared", transition: b("Submit"), by: { companyName: contractor, memberName: null } });
     const sendBack = event({ type: "transition", audience: "shared", transition: b("Send Back"), reason: "Wrong sheet", by: { companyName: consultant, memberName: null } });
