@@ -76,13 +76,16 @@ export function scenarioRows(sources: ScenarioSource[]): ScenarioRow[] {
 
 const keyNumber = (name: string) => Number(/^RP-(\d+)\.md$/.exec(name)?.[1] ?? Number.POSITIVE_INFINITY);
 
-/** docs/visibility.md, then every file in docs/visibility/scenarios/ by ticket number (anything else after, by name). */
+/**
+ * docs/visibility.md, then every entry of docs/visibility/scenarios/ by ticket number (anything else after, by
+ * name). A folder in it is listed with no text, so the check names it as out of place.
+ */
 export function scenarioSources(repo: string): ScenarioSource[] {
   const read = (file: string) => ({ file, markdown: readFileSync(join(repo, file), "utf8") });
   const dir = join(repo, scenariosDir);
-  const names = existsSync(dir) ? readdirSync(dir) : [];
-  names.sort((a, b) => keyNumber(a) - keyNumber(b) || (a < b ? -1 : a > b ? 1 : 0));
-  return [read(matrixFile), ...names.map((name) => read(`${scenariosDir}/${name}`))];
+  const entries = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }) : [];
+  entries.sort((a, b) => keyNumber(a.name) - keyNumber(b.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return [read(matrixFile), ...entries.map((entry) => (entry.isFile() ? read(`${scenariosDir}/${entry.name}`) : { file: `${scenariosDir}/${entry.name}`, markdown: "" }))];
 }
 
 /** Every scenario in the repository at `repo`. */

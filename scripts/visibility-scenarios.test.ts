@@ -69,12 +69,15 @@ describe("scenarioSources and readScenarioRows", () => {
     writeFileSync(join(repo, scenarioFile("RP-1083")), ticketFile("RP-1083", ["| RP-1083-1 | a | b | c |"]));
     writeFileSync(join(repo, scenarioFile("RP-108")), ticketFile("RP-108", ["| RP-108-1 | a | b | c |"]));
     writeFileSync(join(repo, scenariosDir, "notes.txt"), "a stray file");
+    mkdirSync(join(repo, scenariosDir, "old"));
 
-    expect(scenarioSources(repo).map((source) => source.file)).toEqual([
-      "docs/visibility.md",
-      "docs/visibility/scenarios/RP-108.md",
-      "docs/visibility/scenarios/RP-1083.md",
-      "docs/visibility/scenarios/notes.txt",
+    expect(scenarioSources(repo).map((source) => [source.file, source.markdown.length > 0])).toEqual([
+      ["docs/visibility.md", true],
+      ["docs/visibility/scenarios/RP-108.md", true],
+      ["docs/visibility/scenarios/RP-1083.md", true],
+      ["docs/visibility/scenarios/notes.txt", true],
+      // A folder is listed with no text, so the check names it rather than crashing on it.
+      ["docs/visibility/scenarios/old", false],
     ]);
     expect(readScenarioRows(repo).map((row) => row.id)).toEqual(["1", "2", "RP-108-1", "RP-1083-1"]);
   });
