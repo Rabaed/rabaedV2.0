@@ -3,13 +3,21 @@ import {
   registerImportCleanupJob,
   notificationDigestHandler,
   notificationEmailHandler,
+  participantInvitationHandler,
   passwordResetHandler,
   stepAgeReportHandler,
   weeklyStepAgeReportJob,
   type OutboxHandler,
   type ScheduledJob,
 } from "@rabaed/db";
-import { notificationDigestMessage, notificationMessage, passwordResetMessage, stepAgeReportMessage, type Mailer } from "@rabaed/mailer";
+import {
+  notificationDigestMessage,
+  notificationMessage,
+  participantInvitationMessage,
+  passwordResetMessage,
+  stepAgeReportMessage,
+  type Mailer,
+} from "@rabaed/mailer";
 
 // What the worker does besides delivering in-app notifications: its scheduled
 // jobs, and the outbox handlers that send what they and delivery queue. On
@@ -30,5 +38,6 @@ export function outboxHandlers(mailer: () => Mailer, webUrl: string): Record<str
     digest: notificationDigestHandler((digest) => mailer().send(notificationDigestMessage(digest, webUrl))),
     step_age_report: stepAgeReportHandler((report) => mailer().send(stepAgeReportMessage(report, webUrl))),
     password_reset: passwordResetHandler((email) => mailer().send(passwordResetMessage(email, webUrl))),
+    participant_invitation: participantInvitationHandler((email) => mailer().send(participantInvitationMessage(email, webUrl))),
   };
 }

@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { mailerFromEnv, notificationDigestMessage, notificationMessage, renderEmail, stepAgeReportMessage } from "../src/index.ts";
+import {
+  mailerFromEnv,
+  notificationDigestMessage,
+  notificationMessage,
+  participantInvitationMessage,
+  renderEmail,
+  stepAgeReportMessage,
+} from "../src/index.ts";
 
 // Sends through the real mailer, as the services will, to the local Mailpit
 // (docker-compose.yml; a service in CI), and reads it back through
@@ -114,6 +121,26 @@ describe("the mailer, against the local catcher", () => {
     expect(caughtMessage!.HTML).toContain(`<bdi dir="ltr">TWR-MAR-01-0003</bdi>`);
     expect(caughtMessage!.Text).toContain(`http://127.0.0.1:3000/${language}/work-items/${workItemId}`);
     expect(caughtMessage!.Text).not.toContain("documental-record");
+  });
+
+  it.each(["en", "ar"] as const)("delivers a Participant Invitation in %s intact: the Project, Host Company and Project Role, the link (RP-1072)", async (language) => {
+    const to = recipient();
+    const names = {
+      projectName: { en: "Riyadh Gate Tower", ar: "برج بوابة الرياض" },
+      hostCompanyName: { en: "Test Constructions", ar: "إنشاءات الاختبار" },
+      roleName: { en: "Consultant", ar: "الاستشاري" },
+    };
+    const message = participantInvitationMessage({ to, language, ...names }, "http://127.0.0.1:3000");
+    await mailer.send(message);
+
+    const [caughtMessage, ...more] = await caught(to);
+    const expected = renderEmail("participant-invitation", language, message.values);
+    expect(more).toEqual([]);
+    expect(caughtMessage).toMatchObject({ Subject: expected.subject, Tags: ["participant-invitation"] });
+    expect(caughtMessage!.Text.trim()).toBe(expected.text.trim());
+    expect(caughtMessage!.HTML).toContain(`<html lang="${language}" dir="${language === "ar" ? "rtl" : "ltr"}">`);
+    expect(caughtMessage!.HTML).toContain(`href="http://127.0.0.1:3000/${language}/participants"`);
+    for (const name of Object.values(names)) expect(caughtMessage!.Text).toContain(name[language]);
   });
 
   it("delivers an Arabic invitation intact: Arabic subject, right-to-left body, the link", async () => {

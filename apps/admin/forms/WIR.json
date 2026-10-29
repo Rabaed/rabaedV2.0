@@ -48,7 +48,7 @@
           "key": "approved_submittals",
           "type": "work_item_ref",
           "required": false,
-          "accepts": { "outcomes": ["A", "B"] },
+          "accepts": { "modules": ["submittals"], "outcomes": ["A", "B"] },
           "label": { "en": "Approved submittals", "ar": "الاعتمادات الموافق عليها" },
           "help": {
             "en": "The submittals approved with Code A or B that this work relies on, such as its materials and drawings.",

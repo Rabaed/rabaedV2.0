@@ -24,7 +24,10 @@ let outsider = "";
 let outsidersProjectId = "";
 let tower: SeamTwoTower<{ otherProject: true }>;
 
-const content = { projectName: { en: "P", ar: "م" }, items: [], capped: false };
+/** A report with no items of a Project named `projectName` (the Tower's, unless another is given). */
+let content: { projectName: unknown; items: unknown[]; capped: boolean };
+/** Each Project's name, which a report must print as it is (RP-1078). */
+const projectNames = new Map<string, unknown>();
 const sha = (s: string) => createHash("sha256").update(s).digest();
 
 /** The error code `query` fails with as Member `memberId` (or as the worker, with none), or null. */
@@ -40,7 +43,8 @@ async function failure(memberId: string | null, query: ReturnType<typeof sql>): 
 
 const request = (memberId: string, project: string) =>
   withMember(app, memberId, async (trx) => {
-    const { rows } = await sql<{ id: string | null }>`select app.request_snag_report(${project}::uuid, 'en', ${JSON.stringify(content)}::jsonb) as id`.execute(trx);
+    const c = { ...content, projectName: projectNames.get(project) };
+    const { rows } = await sql<{ id: string | null }>`select app.request_snag_report(${project}::uuid, 'en', ${JSON.stringify(c)}::jsonb, now()) as id`.execute(trx);
     return rows[0]!.id;
   });
 
@@ -53,10 +57,46 @@ const state = (memberId: string, id: string, project = projectId) =>
   );
 
 /** A report's content holding one item with the photo stored under `key`. */
-const withPhoto = (key: string) => ({ ...content, items: [{ photo: { storageKey: key, contentType: "image/jpeg", size: 1 } }] });
+const withPhoto = (key: string, row: object = {}) => ({ ...content, items: [{ ...row, photo: { storageKey: key, contentType: "image/jpeg", size: 1 } }] });
 /** `memberId` asks for a report of `c` on the Tower's Project: its id, or null when refused. */
 const ask = (memberId: string, c: unknown) =>
-  withMember(app, memberId, async (trx) => (await sql<{ id: string | null }>`select app.request_snag_report(${projectId}::uuid, 'en', ${JSON.stringify(c)}::jsonb) as id`.execute(trx)).rows[0]!.id);
+  withMember(app, memberId, async (trx) => (await sql<{ id: string | null }>`select app.request_snag_report(${projectId}::uuid, 'en', ${JSON.stringify(c)}::jsonb, now()) as id`.execute(trx)).rows[0]!.id);
+/**
+ * Item `id`'s row as the Snag List shows it to `as` (RP-1078), read here from the tables for the plain cases these
+ * tests make (no Owner review, no Send Back): its Stage as app.step_as_seen gives it, who it is with as
+ * app.work_item_holder gives it (the Member's own person, else the Company by name), Step Age at `now`.
+ */
+async function rowOf(as: string, id: string, now = new Date()) {
+  const [step] = await tower.call<{ stage_key: string; entered_at: Date }>(as, sql`select stage_key, entered_at from app.step_as_seen(${id}::uuid)`);
+  const [holder] = await tower.call<{ participant_id: string; assignee_member_id: string | null }>(as, sql`select * from app.work_item_holder(${id}::uuid)`);
+  const own = await tower.call<{ id: string }>(as, sql`select app.current_participant_ids() as id`);
+  const { rows } = await migrator.query(
+    `select w.id, w.document_number, w.title, t.name as type, tv.name as trade, lv.name as location, st.name as stage, st.category,
+       (select co.legal_name from participant p join company co on co.id = p.company_id where p.id = $3) as company,
+       (select m.full_name from member m where m.id = $4) as person
+     from work_item w
+     join work_item_type t on t.id = w.work_item_type_id
+     join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = $2
+     join work_item_dimension_value dt on dt.work_item_id = w.id join dimension_value tv on tv.id = dt.dimension_value_id and tv.id = $5
+     left join work_item_dimension_value dl on dl.work_item_id = w.id and dl.dimension_value_id = $6 left join dimension_value lv on lv.id = dl.dimension_value_id
+     where w.id = $1`,
+    [id, step!.stage_key, holder?.participant_id ?? null, holder?.assignee_member_id ?? null, tower.tradeId, tower.buildingA],
+  );
+  const r = rows[0];
+  const open = r.category === "draft" || r.category === "in_progress";
+  const ownHolder = holder && own.some((p) => p.id === holder.participant_id);
+  return {
+    id,
+    documentNumber: r.document_number,
+    subject: r.title,
+    type: r.type,
+    trade: r.trade,
+    location: r.location,
+    stage: r.stage,
+    with: !open || !holder ? null : ownHolder ? (r.person ?? r.company) : r.company,
+    stepAgeWeeks: open && r.document_number ? Math.floor((now.getTime() - step!.entered_at.getTime()) / (7 * 24 * 3600 * 1000)) + 1 : null,
+  };
+}
 const storageKey = async (documentId: string) =>
   (await migrator.query<{ storage_key: string }>("select storage_key from document where id = $1", [documentId])).rows[0]!.storage_key;
 
@@ -72,6 +112,9 @@ beforeAll(async () => {
   colleague = tower.c1.members.engineer;
   outsider = tower.other.ap;
   outsidersProjectId = tower.other.projectId;
+  const names = await migrator.query<{ id: string; name: unknown }>("select id, name from project where id = any($1::uuid[])", [[projectId, outsidersProjectId]]);
+  for (const r of names.rows) projectNames.set(r.id, r.name);
+  content = { projectName: projectNames.get(projectId), items: [], capped: false };
 });
 
 afterAll(async () => {
@@ -196,15 +239,15 @@ describe("a report's photos are only ones its asker reads as Documents (RP-1003,
   }
 
   it("refuses another Company's Draft photo, though its key is under the Project's own prefix; C1's Members ask with it", async () => {
-    const { key } = await draftPhoto("Chipped column");
+    const { id, key } = await draftPhoto("Chipped column");
     expect(key.startsWith(`projects/${projectId}/`)).toBe(true);
     for (const other of [tower.k1.members.engineer, tower.ow.members.representative, tower.c2.members.engineer]) {
       expect(await ask(other, withPhoto(key))).toBeNull();
       // Positive control: the same Member asks for a report without it.
       expect(await ask(other, content)).toBeTruthy();
     }
-    expect(await ask(asker, withPhoto(key))).toBeTruthy();
-    expect(await ask(colleague, withPhoto(key))).toBeTruthy();
+    expect(await ask(asker, withPhoto(key, await rowOf(asker, id)))).toBeTruthy();
+    expect(await ask(colleague, withPhoto(key, await rowOf(colleague, id)))).toBeTruthy();
   });
 
   it("refuses a waiting After photo to the raiser and the Owner, who see the Snag; C1, holding it, asks with it", async () => {
@@ -222,16 +265,83 @@ describe("a report's photos are only ones its asker reads as Documents (RP-1003,
     const key = await confirmed(asker, id, started!.document_id);
     for (const other of [k1, tower.ow.members.representative]) {
       expect(await tower.call<{ id: string }>(other, sql`select id from work_item where id = ${id}::uuid`)).toEqual([{ id }]);
-      expect(await ask(other, withPhoto(key))).toBeNull();
+      expect(await ask(other, withPhoto(key, await rowOf(other, id)))).toBeNull();
+      // Positive control: the same row with no photo is theirs to print.
+      expect(await ask(other, { ...content, items: [{ ...(await rowOf(other, id)), photo: null }] })).toBeTruthy();
     }
-    expect(await ask(asker, withPhoto(key))).toBeTruthy();
+    expect(await ask(asker, withPhoto(key, await rowOf(asker, id)))).toBeTruthy();
   });
 
   it("refuses a key under the Project's prefix that is no Document, and a removed photo", async () => {
-    expect(await ask(asker, withPhoto(`projects/${projectId}/work-items/${randomUUID()}/documents/${randomUUID()}`))).toBeNull();
     const { id, documentId, key } = await draftPhoto("Loose cover plate");
-    expect(await ask(asker, withPhoto(key))).toBeTruthy();
+    expect(await ask(asker, withPhoto(`projects/${projectId}/work-items/${randomUUID()}/documents/${randomUUID()}`, await rowOf(asker, id)))).toBeNull();
+    expect(await ask(asker, withPhoto(key, await rowOf(asker, id)))).toBeTruthy();
     expect(await tower.outcome(asker, sql`select app.remove_document(${id}::uuid, ${documentId}::uuid, now()) as outcome`)).toBe("removed");
-    expect(await ask(asker, withPhoto(key))).toBeNull();
+    expect(await ask(asker, withPhoto(key, await rowOf(asker, id)))).toBeNull();
+  });
+});
+
+// RP-1078: the database alone holds "a report holds only the items its asker reads through the Snag List"
+// (RP-677-1). Each row names its item, and must be exactly what the List shows the asker for it; anything
+// else is refused, whoever calls it. K1 raises a Snag on C1: C1 and K1 see it, C2 (Building B only) does not.
+describe("RP-1078: a report's rows are only what the Snag List shows its asker", () => {
+  let snag = "";
+  const k1 = () => tower.k1.members.engineer;
+  const c2 = () => tower.c2.members.engineer;
+  const report = (...items: object[]) => ({ ...content, items });
+
+  beforeAll(async () => {
+    const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+      k1(),
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', 'Fire stopping missing', app.latest_form_version('SNG'), ${JSON.stringify({ description: "Fire stopping missing" })}::jsonb,
+        ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
+    );
+    snag = created!.work_item_id;
+    expect(await tower.take(k1(), snag, "raise")).toBe("applied");
+  });
+
+  it("holds the item as C1 and as K1 each read it", async () => {
+    const asC1 = await rowOf(asker, snag);
+    const asK1 = await rowOf(k1(), snag);
+    // With C1: by Company name to K1 (V14), and by Company to C1 too while no one of C1 has picked it up.
+    expect(asK1.with).toEqual(asC1.with);
+    expect(asK1.stepAgeWeeks).toBe(1);
+    expect(await ask(asker, report({ ...asC1, photo: null }))).toBeTruthy();
+    expect(await ask(k1(), report({ ...asK1, photo: null }))).toBeTruthy();
+  });
+
+  it("refuses an item the asker does not see: C2 asks with C1's row of K1's Snag", async () => {
+    expect(await ask(c2(), report(await rowOf(asker, snag)))).toBeNull();
+    // Positive control: C2 asks for a report with no rows.
+    expect(await ask(c2(), content)).toBeTruthy();
+  });
+
+  it("refuses a row whose printed fields are not the item's", async () => {
+    const row = await rowOf(asker, snag);
+    for (const changed of [
+      { subject: "Another Company's Subject" },
+      { documentNumber: "RST-SNG-9999" },
+      { stage: { en: "Closed", ar: "مغلق" } },
+      { location: null },
+      { with: { en: "K1", ar: "K1" } },
+      { stepAgeWeeks: 9 },
+      { extra: "printed too" },
+    ]) {
+      expect(await ask(asker, report({ ...row, ...changed })), JSON.stringify(changed)).toBeNull();
+    }
+    // One item's fields under another's id.
+    const other = await tower.call<{ id: string }>(asker, sql`select id from work_item where project_id = ${projectId}::uuid and id <> ${snag}::uuid limit 1`);
+    expect(await ask(asker, report({ ...row, id: other[0]!.id }))).toBeNull();
+    // Positive control: the row as it is.
+    expect(await ask(asker, report(row))).toBeTruthy();
+  });
+
+  it("refuses a row with no id, a made-up id, and another Project's name", async () => {
+    const { id: _id, ...noId } = await rowOf(asker, snag);
+    expect(await ask(asker, report(noId))).toBeNull();
+    expect(await ask(asker, report({ ...noId, id: "not-a-uuid" }))).toBeNull();
+    expect(await ask(asker, report({ ...noId, id: randomUUID() }))).toBeNull();
+    expect(await ask(asker, { ...content, projectName: projectNames.get(outsidersProjectId) })).toBeNull();
   });
 });
