@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { queuePr, queuePrWhenChecksPass, realSeam, verifiedCommits, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
-import { finalLine } from "./verify-steps.ts";
+import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { stampLine } from "./verify-gate.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
@@ -22,7 +22,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     check: () => ({ status: 0, output: "ok\n" }),
     labels: () => ["reviewed"],
     // Verified at whatever head the test gives the PR, unless a test says otherwise (RP-1017).
-    body: (pr) => `## Summary\n\npnpm verify passed on ${seam.pullRequest(pr).headRefOid}: lint, typecheck, unit.\n`,
+    body: (pr) => `## Summary\n\n${stampLine(`pnpm verify passed on ${seam.pullRequest(pr).headRefOid}: lint, typecheck, unit.`)}\n`,
     parents: () => [],
     onMain: () => false,
     tree: () => "tree1",
@@ -173,7 +173,7 @@ describe("queuePr", () => {
 
   // RP-1017: PR #288's old head was labelled and green, but `pnpm verify` had found a visibility leak on it.
   describe("verify line (RP-1017)", () => {
-    const verifiedOn = (sha: string) => () => `Closes RP-1\n\npnpm verify passed on ${sha}: lint, typecheck, unit.`;
+    const verifiedOn = (sha: string) => () => `Closes RP-1\n\n${stampLine(`pnpm verify passed on ${sha}: lint, typecheck, unit.`)}`;
     const fix = "Fix: run `pnpm verify` on abc1234";
 
     it("refuses a PR whose body has no verify line, naming the head that needs a run", () => {
@@ -210,15 +210,15 @@ describe("queuePr", () => {
       expect(queuePr(149, seam).ok).toBe(false);
     });
 
-    it("reads back exactly what pnpm verify prints: a clean run counts, a dirty or unknown one does not", () => {
-      const steps = ["lint", "typecheck"];
-      expect(verifiedCommits(finalLine({ sha: "abc1234", dirty: false, steps }))).toEqual(["abc1234"]);
-      expect(verifiedCommits(finalLine({ sha: "abc1234", dirty: true, steps }))).toEqual([]);
-      expect(verifiedCommits(finalLine({ sha: "", dirty: false, steps }))).toEqual([]);
-    });
-
-    it("does not count a run resumed with --from, which skipped steps (RP-1019)", () => {
-      expect(verifiedCommits(finalLine({ sha: "abc1234", dirty: false, steps: ["test:seam2"], from: { step: "test:seam2", notRun: ["lint", "test:seam1"] } }))).toEqual([]);
+    // Which lines count is scripts/verify-gate.test.ts's; here only that the queue applies the same gate (RP-1094).
+    it("refuses a line without the verify gate's stamp, such as one edited by hand (PR #466)", () => {
+      const { seam, enqueued } = fakeSeam({ body: () => "pnpm verify passed on abc1234: lint, typecheck, unit (re-ran 6 timed-out files)." });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      const text = result.lines.join("\n");
+      expect(text).toContain("no valid stamp");
+      expect(text).toContain(fix);
+      expect(enqueued).toEqual([]);
     });
 
     it("queues when the verified commit is followed only by clean merges of main", () => {
@@ -239,7 +239,7 @@ describe("queuePr", () => {
     });
 
     it("queues when any of several verify lines names the head (a later run after fixes)", () => {
-      const { seam } = fakeSeam({ body: () => "pnpm verify passed on 5356b95: lint.\n\n`pnpm verify passed on abc1234: lint, typecheck.`" });
+      const { seam } = fakeSeam({ body: () => `${stampLine("pnpm verify passed on 5356b95: lint.")}\n\n\`${stampLine("pnpm verify passed on abc1234: lint, typecheck.")}\`` });
       expect(queuePr(149, seam).ok).toBe(true);
     });
 
