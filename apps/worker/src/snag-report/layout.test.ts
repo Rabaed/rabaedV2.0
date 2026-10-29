@@ -9,6 +9,7 @@ import { snagReportHtml } from "./layout.ts";
 const fonts = fallbackFonts();
 
 const item = (over: Partial<SnagReportItem> = {}): SnagReportItem => ({
+  id: "00000000-0000-4000-8000-000000000001",
   documentNumber: "PRJ-SNG-001-0001",
   subject: "Cable tray not bonded <b>",
   type: { en: "Snag", ar: "ملاحظة" },

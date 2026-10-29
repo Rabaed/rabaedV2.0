@@ -78,7 +78,9 @@ function browser(app: FastifyInstance): Call {
 const bi = (en: string, ar: string): BilingualText => ({ en, ar });
 const all: VisibilityGrant = { isAll: true, valueIds: [] };
 const only = (...valueIds: string[]): VisibilityGrant => ({ isAll: false, valueIds });
-const email = (local: string, domain: string) => `${local}@${domain}.demo.rabaed.test`;
+/** What every demo person's email ends with (the reserved .test domain): only the demo's people have it. */
+export const DEMO_EMAIL_SUFFIX = ".demo.rabaed.test";
+const email = (local: string, domain: string) => `${local}@${domain}${DEMO_EMAIL_SUFFIX}`;
 
 interface Person {
   key: string;

@@ -10,6 +10,7 @@ import {
   type NotificationDigestItem,
   type NotificationEmailContent,
   type NotificationEmailKind,
+  type ParticipantInvitationEmail,
   type StepAgeReportItem,
   type StepAgeReportWeeks,
 } from "@rabaed/domain";
@@ -36,6 +37,11 @@ export interface EmailTemplateValues {
   "sign-in-locked": { minutes: number };
   /** A Member asked to reset their password (RP-1058): the link opens reset-password, once, for `validMinutes`. */
   "password-reset": { link: string; validMinutes: number };
+  /**
+   * A Company was invited to a Project (RP-1072; ADR 0009): what its Authorized Person sees of the
+   * invitation before accepting, and the link to their Company's Projects, where they accept or decline.
+   */
+  "participant-invitation": Omit<ParticipantInvitationEmail, "to" | "language"> & { link: string };
   /** A Step reached the Member or their Step Pool. */
   "notification-step-reached": NotificationEmailValues;
   /** Something happened on an item the Member watches. */
@@ -192,6 +198,35 @@ const passwordResetTemplates: { "password-reset": Template<EmailTemplateValues["
             [{ ltr: url, link: true }],
             [`The link works once, for ${minutes} minutes. Changing your password signs you out on every other device.`],
             ["If you didn't ask for this, ignore this email: your password stays as it is."],
+          ],
+          signOff: signOff.en,
+        };
+  },
+};
+
+// A Participant Invitation (RP-1072; visibility.md "Participant Invitation emails"). It names only
+// what the Authorized Person sees of the invitation before accepting: the Project's name, the Host
+// Company and the offered Project Role (V15), never another Participant.
+const participantInvitationTemplates: { "participant-invitation": Template<EmailTemplateValues["participant-invitation"]> } = {
+  "participant-invitation": (locale, { projectName, hostCompanyName, roleName, link }) => {
+    const url = webLink(link);
+    const [project, host, role] = [projectName[locale], hostCompanyName[locale], roleName[locale]];
+    return locale === "ar"
+      ? {
+          subject: `دعوة للمشاركة في ${project} على ربائد`,
+          paragraphs: [
+            [`تدعو ${host} شركتكم للمشاركة في ${project} على ربائد بصفة ${role}.`],
+            ["لا تنضم شركتكم إلى المشروع إلا إذا قبلتم. افتح دعوات شركتكم لقبولها أو رفضها:"],
+            [{ ltr: url, link: true }],
+          ],
+          signOff: signOff.ar,
+        }
+      : {
+          subject: `Invitation to ${project} on Rabaed`,
+          paragraphs: [
+            [`${host} invites your Company to take part in ${project} on Rabaed as ${role}.`],
+            ["Your Company joins the Project only if you accept. Open your Company's invitations to accept or decline:"],
+            [{ ltr: url, link: true }],
           ],
           signOff: signOff.en,
         };
@@ -423,6 +458,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
 const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = {
   ...adminTemplates,
   ...passwordResetTemplates,
+  ...participantInvitationTemplates,
   ...notificationTemplates,
   ...digestTemplates,
   ...reportTemplates,
