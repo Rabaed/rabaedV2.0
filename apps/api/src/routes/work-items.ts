@@ -54,6 +54,7 @@ import { takeBulkTransition } from "../work-items/bulk-transitions.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
+import { withNumberSegments } from "../work-items/number-segments.ts";
 import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, saveListColumns, type QueryScope } from "../work-items/query.ts";
 import { saveReplyChecklist } from "../work-items/reply-checklists.ts";
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
@@ -195,7 +196,7 @@ export const workItemRoutes =
       { schema: { params: workItemParams, response: { 200: workItemDetail } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now()));
+        return visibleOrNotFound(withNumberSegments(ctx.db, memberId, getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now())));
       },
     );
 
