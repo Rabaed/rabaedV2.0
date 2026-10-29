@@ -17,6 +17,7 @@ describe("owner design exports in design/reference/", () => {
     "design/reference/Rabaed Admin Import Register.html",
     "design/reference/Rabaed Packages.html",
     "design/reference/Any New Export.HTML",
+    "design/reference/Board.htm",
   ])("ignores %s", (path) => {
     expect(ignored(path)).toBe(true);
   });
@@ -26,6 +27,9 @@ describe("owner design exports in design/reference/", () => {
     "design/reference/submittal-panel/Submittals List (standalone).html",
     "design/reference/sign-in/sign-in.html",
     "design/reference/README.md",
+    // A new reference folder is trackable too: a stripped page may be committed
+    // there, and the font check (check-no-fonts.ts) refuses one that is not.
+    "design/reference/new-screen/new-screen.html",
   ])("keeps %s trackable", (path) => {
     expect(ignored(path)).toBe(false);
   });
