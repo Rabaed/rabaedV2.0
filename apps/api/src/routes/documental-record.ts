@@ -40,8 +40,9 @@ export const documentalRecordRoutes =
     // HEAD answers the same with no body, so the Link's page knows to offer it. A removed Link, a
     // target not closed or with no published record, and a Member who doesn't see the item all get
     // the plain 404; the linked item's own URL stays 404 to them.
+    // Fastify adds the HEAD route from this GET (with no body, errors included); the handler sees its method.
     app.route({
-      method: ["GET", "HEAD"],
+      method: "GET",
       url: "/v1/work-items/:workItemId/links/:linkId/documental-record",
       schema: { params: linkParams },
       handler: async (request, reply) => {

@@ -105,7 +105,8 @@ describe("scenario RP-1087-1: a linked item's record, through the Link", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("application/pdf");
     expect(res.rawPayload.length).toBe(0);
-    await expectHidden(viewer.request("HEAD", `/v1/work-items/${x}/links/${xToZ}/documental-record`));
+    const hidden = await viewer.request("HEAD", `/v1/work-items/${x}/links/${xToZ}/documental-record`);
+    expect({ status: hidden.statusCode, body: hidden.body }).toEqual({ status: 404, body: "" });
   });
 });
 
