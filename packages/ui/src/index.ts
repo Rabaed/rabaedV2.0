@@ -320,6 +320,31 @@ export {
   writeSubmittalPanelPreferences,
   type SubmittalPanelPreferences,
 } from "./components/submittal-panel/panel-preferences.ts";
+export { SubmittalPanelTabs, type SubmittalPanelTabItem, type SubmittalPanelTabsProps } from "./components/submittal-panel/panel-tabs.tsx";
+export {
+  SubmittalPanelFields,
+  SubmittalPanelItems,
+  SubmittalPanelLinks,
+  SubmittalPanelPath,
+  SubmittalPanelSections,
+  SubmittalPanelTags,
+  type SubmittalPanelLinkItem,
+  type SubmittalPanelSectionItem,
+  type SubmittalPanelSectionsLabels,
+  type SubmittalPanelSectionsProps,
+} from "./components/submittal-panel/panel-sections.tsx";
+export {
+  allSubmittalPanelSectionsCollapsed,
+  submittalPanelInternalCount,
+  submittalPanelSectionKeys,
+  submittalPanelSectionOrder,
+  submittalPanelSupplier,
+  submittalPanelTab,
+  withAllSubmittalPanelSections,
+  type SubmittalPanelItemsTable,
+  type SubmittalPanelSectionKey,
+  type SubmittalPanelSupplier,
+} from "./components/submittal-panel/panel-sections-model.ts";
 export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
 export {
   WorkflowBuilder,

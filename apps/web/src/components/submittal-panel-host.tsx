@@ -31,6 +31,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
+import { SubmittalPanelDetails } from "@/components/submittal-panel-details";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { useCreateRevision } from "@/components/work-item-revision";
@@ -153,6 +154,7 @@ export function SubmittalPanelHost({
   const item = read?.item ?? null;
   const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
+  const place = item?.location ? (placesOf(filters.locations).get(item.location.id)?.map((p) => p.name[locale]) ?? [item.location.name[locale]]) : [];
   // The route strip and the Workflow map (RP-1064).
   const { route } = useSubmittalPanelRoute(item, locale, refreshKey);
 
@@ -217,10 +219,11 @@ export function SubmittalPanelHost({
             labels={{ with: t("with"), stepAge: t("stepAge"), location: t("location"), more: (n) => t("more", { n }), none: "—" }}
             with={submittalPanelWith(item.heldBy, locale)}
             stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
-            place={item.location ? (placesOf(filters.locations).get(item.location.id)?.map((p) => p.name[locale]) ?? [item.location.name[locale]]) : []}
+            place={place}
           />
         )
       }
+      tabs={item && <SubmittalPanelDetails item={item} locale={locale} place={place} refreshKey={refreshKey} />}
       actions={
         item &&
         !loading && (
