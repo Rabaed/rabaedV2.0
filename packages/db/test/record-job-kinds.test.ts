@@ -42,8 +42,16 @@ describe("the record-job kinds", () => {
     expect(await item("email", { work_item_id: id })).toBeNull();
   });
 
-  it("are not the app role's to read", async () => {
-    for (const fn of ["app.record_job_payload_keys()", "app.record_job_kinds()", "app.record_job_pending('documental_record', gen_random_uuid())"]) {
+  it("are not the app role's to run, nor are the record's facts helpers", async () => {
+    for (const fn of [
+      "app.record_job_payload_keys()",
+      "app.record_job_kinds()",
+      "app.record_job_pending('documental_record', gen_random_uuid())",
+      // The record's facts read every Participant on an item: only the worker's app.documental_record_facts calls them.
+      "app.record_fact_companies(gen_random_uuid())",
+      "app.record_fact_comments(gen_random_uuid())",
+      "app.record_fact_transitions(gen_random_uuid())",
+    ]) {
       await expect(app.query(`select ${fn}`), fn).rejects.toThrow(/permission denied/);
     }
   });

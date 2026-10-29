@@ -11,42 +11,52 @@
 --    places: app.record_job_item's case, the literals passed to app.record_job_pending, the kind
 --    lists of app.record_jobs, app.retry_record_job and app.documental_record_alerts, and the
 --    coalesce of both keys in app.save_documental_record_face. app.record_job_payload_keys is now
---    the one place: a third kind is one entry there. app.record_job_kinds and app.record_job_item
---    read it, and every function above reads those two. app.record_job_pending drops its key
---    argument, and app.retry_record_job uses it instead of its own copy of the query.
+--    the one place they are read from: the kind lists and every read of a job's item go through it
+--    (app.record_job_kinds, app.record_job_item, app.record_job_pending). What is one kind's own
+--    stays written with it: the writers that build a payload (the close trigger, 20270709, and
+--    app.request_documental_record_reproduction), a Re-produce's admin_action_id and lock in
+--    app.retry_record_job, and app.documental_record_item, which is the 'documental_record' job's.
+--    app.record_job_pending drops its key argument, and app.retry_record_job uses it instead of its
+--    own copy of the query.
 
 -- The record-job kinds, each with the payload key that holds the id of its item: a 'documental_record'
 -- job (queued when an item closes, 20270709) and a 'documental_record_reproduce' job (a Re-produce,
 -- 20270805). The one place they are written.
 create function app.record_job_payload_keys() returns jsonb
-  language sql immutable
+  language plpgsql immutable
   set search_path = pg_catalog, public
   as $$
-    select '{"documental_record": "closed_work_item_id", "documental_record_reproduce": "work_item_id"}'::jsonb
+    begin
+      return '{"documental_record": "closed_work_item_id", "documental_record_reproduce": "work_item_id"}'::jsonb;
+    end
   $$;
 revoke all on function app.record_job_payload_keys() from public;
 
 -- The record-job kinds (app.record_job_payload_keys). Immutable, so `o.kind = any (app.record_job_kinds())`
 -- is a constant list to the planner.
 create function app.record_job_kinds() returns text[]
-  language sql immutable
+  language plpgsql immutable
   set search_path = pg_catalog, public
   as $$
-    select array(select k from jsonb_object_keys(app.record_job_payload_keys()) k order by k)
+    begin
+      return array(select k from jsonb_object_keys(app.record_job_payload_keys()) k order by k);
+    end
   $$;
 revoke all on function app.record_job_kinds() from public;
 
 -- The item a record job (an outbox row of `p_kind` with `p_payload`) is for, by its kind's payload key
 -- (app.record_job_payload_keys); null for any other kind.
 create or replace function app.record_job_item(p_kind text, p_payload jsonb) returns uuid
-  language sql immutable
+  language plpgsql immutable
   set search_path = pg_catalog, public
   as $$
-    select (p_payload ->> (app.record_job_payload_keys() ->> p_kind))::uuid
+    begin
+      return (p_payload ->> (app.record_job_payload_keys() ->> p_kind))::uuid;
+    end
   $$;
 
 -- Whether a record job of `p_kind` for item `p_work_item_id` is waiting or running. The key that holds
--- the item is the kind's own (app.record_job_item), no longer an argument.
+-- the item is the kind's own (app.record_job_payload_keys), no longer an argument.
 drop function app.record_job_pending(text, text, uuid);
 create function app.record_job_pending(p_kind text, p_work_item_id uuid) returns boolean
   language plpgsql stable security definer
@@ -55,7 +65,8 @@ create function app.record_job_pending(p_kind text, p_work_item_id uuid) returns
     begin
       return exists (
         select 1 from outbox o
-        where o.kind = p_kind and app.record_job_item(o.kind, o.payload) = p_work_item_id
+        -- Compared as text, as before: a payload that is no uuid is no match, never an error.
+        where o.kind = p_kind and o.payload ->> (app.record_job_payload_keys() ->> p_kind) = p_work_item_id::text
           and o.processed_at is null and o.dead_at is null
       );
     end
@@ -254,10 +265,11 @@ create or replace function app.documental_record_alerts()
 -- `p_work_item_id` (the raiser, the Companies a Step was given to and every Company whose Member took
 -- a Transition), each with its Project Role, and its logo and Stamp in force when the item closed.
 create function app.record_fact_companies(p_work_item_id uuid) returns jsonb
-  language sql stable
+  language plpgsql stable
   set search_path = pg_catalog, public
   as $$
-    select coalesce((
+    begin
+      return (select coalesce((
       select jsonb_agg(jsonb_build_object(
           'participantId', p.id, 'name', co.legal_name, 'roleName', r.name, 'baseRole', r.base_role,
           'logo', app.company_image_at(co.id, 'logo', w.closed_at),
@@ -277,7 +289,8 @@ create function app.record_fact_companies(p_work_item_id uuid) returns jsonb
         )
     ), '[]'::jsonb)
     from work_item w
-    where w.id = p_work_item_id
+    where w.id = p_work_item_id);
+    end
   $$;
 revoke all on function app.record_fact_companies(uuid) from public;
 
@@ -285,10 +298,11 @@ revoke all on function app.record_fact_companies(uuid) from public;
 -- `p_work_item_id` raised, in the order its reply listed them: made by its closing (created when it
 -- closed), each with who raised it as they were then.
 create function app.record_fact_comments(p_work_item_id uuid) returns jsonb
-  language sql stable
+  language plpgsql stable
   set search_path = pg_catalog, public
   as $$
-    select coalesce((
+    begin
+      return (select coalesce((
       select jsonb_agg(jsonb_build_object(
           'documentNumber', c.document_number,
           'comment', coalesce(nullif(btrim(c.data ->> 'comment'), ''), c.title),
@@ -314,17 +328,19 @@ create function app.record_fact_comments(p_work_item_id uuid) returns jsonb
         and e.seq = (select min(x.seq) from work_item_event x where x.work_item_id = c.id and x.type = 'transition')
     ), '[]'::jsonb)
     from work_item w
-    where w.id = p_work_item_id
+    where w.id = p_work_item_id);
+    end
   $$;
 revoke all on function app.record_fact_comments(uuid) from public;
 
 -- The record's 'transitions' fact (20271015): every Transition and issued Code of item
 -- `p_work_item_id`, in order, each with who took it as the event's signer row kept them.
 create function app.record_fact_transitions(p_work_item_id uuid) returns jsonb
-  language sql stable
+  language plpgsql stable
   set search_path = pg_catalog, public
   as $$
-    select coalesce((
+    begin
+      return (select coalesce((
       -- The Owner's review writes one copy of a move for each side of it: one is enough.
       select jsonb_agg(x.fact order by x.seq)
       from (
@@ -376,7 +392,8 @@ create function app.record_fact_transitions(p_work_item_id uuid) returns jsonb
         where e.work_item_id = p_work_item_id and e.type in ('transition', 'issue_code')
         order by e.transition_id, e.created_at, e.actor_member_id, e.seq
       ) x
-    ), '[]'::jsonb)
+    ), '[]'::jsonb));
+    end
   $$;
 revoke all on function app.record_fact_transitions(uuid) from public;
 

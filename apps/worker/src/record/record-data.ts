@@ -637,7 +637,7 @@ export function recordDataXml(data: RecordData): string {
     ...(data.submittedAt ? [`    <submitted${at(data.submittedAt)}/>`] : []),
     "  </item>",
     // The element keeps its version 2 name: stored records hold it and a Re-produce reads them back (RP-1086).
-    // eslint-disable-next-line rabaed/no-avoid-terms -- the Record Data's stored element name, which no one reads; the box prints "Participants".
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the Record Data's stored element name, read back only by code (record-data-read.ts); no page prints it, and the box prints "Participants".
     "  <parties>",
     ...data.participants.flatMap((c) => ["    <company>", ...lang("name", c.name, "      "), ...lang("role", c.role, "      "), "    </company>"]),
     // eslint-disable-next-line rabaed/no-avoid-terms -- as above.
