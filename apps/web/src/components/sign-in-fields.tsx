@@ -13,7 +13,10 @@ export const tallInput = [
   "h-11.5 rounded-md ps-10.5 text-[14.5px] border-border hover:border-border",
   "focus-visible:outline-none focus-visible:border-brand",
   "focus-visible:shadow-[inset_0_0_0_0.5px_var(--brand),0_0_0_4px_color-mix(in_srgb,var(--brand)_15%,transparent)]",
-  "aria-invalid:shadow-[inset_0_0_0_0.5px_var(--danger-fg)]",
+  // The design's error outline (`.f.er input`): the kit's red (no token for its lighter #e5484d), which stays while the field has focus.
+  "aria-invalid:border-danger-fg aria-invalid:hover:border-danger-fg aria-invalid:shadow-[inset_0_0_0_0.5px_var(--danger-fg)]",
+  "aria-invalid:focus-visible:border-danger-fg",
+  "aria-invalid:focus-visible:shadow-[inset_0_0_0_0.5px_var(--danger-fg),0_0_0_4px_color-mix(in_srgb,var(--danger-fg)_15%,transparent)]",
 ].join(" ");
 
 /** An email field's extra classes: an LTR address in an RTL page keeps the icon's side free and reads from the start. */

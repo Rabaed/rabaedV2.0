@@ -36,7 +36,7 @@ export function SignInForm() {
       const res = await fetch("/api/v1/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, locale: browserLanguage(locale) }),
+        body: JSON.stringify({ email, password, locale: browserLanguage(locale) }),
       });
       if (res.ok) {
         router.replace("/");
