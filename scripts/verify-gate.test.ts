@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewedGit } from "./reviewed-label.ts";
-import { gateEvent, needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
+import { needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
 
 const steps = ["lint", "typecheck", "test:unit"];
@@ -39,6 +39,17 @@ describe("verifiedCommits", () => {
 
   it("reads every stamped line in a body, inside code spans or blocks too", () => {
     expect(verifiedCommits(`## Verify\n\n\`${line("5356b95")}\`\n\n\`\`\`\n${line("abc1234")}\n\`\`\`\n`)).toEqual(["5356b95", "abc1234"]);
+  });
+
+  it("reads a stamped line followed by markdown: bold, a table cell, a closing parenthesis", () => {
+    expect(verifiedCommits(`**${line("abc1234")}**`)).toEqual(["abc1234"]);
+    expect(verifiedCommits(`| verify | ${line("abc1234")}|`)).toEqual(["abc1234"]);
+    expect(verifiedCommits(`(${line("abc1234")})`)).toEqual(["abc1234"]);
+  });
+
+  it("does not count a stamp moved from one line onto another", () => {
+    const stamp = / Stamp [0-9a-f]{16}\.$/.exec(line("abc1234"))?.[0] ?? "";
+    expect(verifiedCommits(`pnpm verify passed on abc1234: lint.${stamp}`)).toEqual([]);
   });
 
   it("does not count a sha shorter than git's short form", () => {
@@ -91,14 +102,6 @@ describe("needsVerify", () => {
     expect(needsVerify(["docs-only", "reviewed"], ["docs/a.md"])).toBe(false);
     expect(needsVerify(["docs-only"], ["docs/a.md", "scripts/x.ts"])).toBe(true);
     expect(needsVerify(["reviewed"], ["docs/a.md"])).toBe(true);
-  });
-});
-
-describe("gateEvent", () => {
-  it("reads a pull_request event and a merge_group event", () => {
-    const pr = { pull_request: { number: 7, draft: false, head: { sha: "abc1234", repo: { full_name: "Rabaed/rabaedV2.0" } } } };
-    expect(gateEvent("pull_request", pr, "Rabaed/rabaedV2.0")).toEqual({ kind: "pull_request", pr: 7, headSha: "abc1234", sameRepo: true, draft: false });
-    expect(gateEvent("merge_group", { merge_group: { head_ref: "refs/heads/gh-readonly-queue/main/pr-7-abc" } }, "Rabaed/rabaedV2.0")).toEqual({ kind: "merge_group", headRef: "refs/heads/gh-readonly-queue/main/pr-7-abc" });
   });
 });
 

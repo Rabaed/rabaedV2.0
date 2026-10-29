@@ -34,22 +34,27 @@ const stampOf = (line: string) => createHash("sha256").update(SALT + line).diges
 /** The line with its stamp: what `pnpm verify` prints after a full, clean pass. */
 export const stampLine = (line: string): string => `${line} Stamp ${stampOf(line)}.`;
 
-/** A full run's line (`git rev-parse --short`: 7 characters or more), its steps, and its stamp if any. */
-const LINE = /pnpm verify passed on ([0-9a-f]{7,40}): ([^\n`]*?\.)(?: Stamp ([0-9a-f]{16})\.)?(?=[\s`]|$)/g;
+/**
+ * A full run's line (`git rev-parse --short`: 7 characters or more), its steps, and its stamp if any. It may end
+ * the body's line or be followed by markdown (a code span, bold, a table cell), never by more words.
+ */
+const LINE = /pnpm verify passed on ([0-9a-f]{7,40}): ([^\n`]*?\.)(?: Stamp ([0-9a-f]{16})\.)?(?=\W|$)/g;
 
 function readLines(body: string): { commit: string; stamped: boolean }[] {
   return [...body.matchAll(LINE)].map(([, commit = "", steps = "", stamp]) => ({ commit, stamped: stamp !== undefined && stamp === stampOf(`pnpm verify passed on ${commit}: ${steps}`) }));
 }
 
+const stampedCommits = (lines: { commit: string; stamped: boolean }[]) => lines.flatMap(({ commit, stamped }) => (stamped ? [commit] : []));
+
 /** The commits the body's stamped verify lines name; a line without a valid stamp is left out. */
-export const verifiedCommits = (body: string): string[] => readLines(body).flatMap(({ commit, stamped }) => (stamped ? [commit] : []));
+export const verifiedCommits = (body: string): string[] => stampedCommits(readLines(body));
 
 export type VerifyGate = { ok: true; commit: string } | { ok: false; reason: string };
 
 /** Passes when a stamped line names `head` or a commit only clean merges of main led to it from. */
 export function verifyGate(body: string, head: string, git: ReviewedGit): VerifyGate {
   const lines = readLines(body);
-  const verified = lines.filter(({ stamped }) => stamped).map(({ commit }) => commit);
+  const verified = stampedCommits(lines);
   const commit = verified.find((candidate) => onlyMainMergedSince(candidate, head, git));
   if (commit !== undefined) return { ok: true, commit };
   if (lines.length === 0) return { ok: false, reason: `its body has no \`pnpm verify passed on <sha>:\` line, so nothing shows \`pnpm verify\` passed on its head ${head}` };
@@ -75,9 +80,6 @@ export interface GateSeam extends ReviewedGit {
   /** Paths `head` changes against main: `git diff --name-only origin/main...<head>`. */
   changedFiles(head: string): string[];
 }
-
-/** The event the workflow ran for: the same shapes as reviewed-required's. */
-export const gateEvent = requiredEvent;
 
 export async function requireVerified(event: RequiredEvent, seam: GateSeam): Promise<{ ok: boolean; summary: string }> {
   let pr: number;
@@ -138,7 +140,8 @@ async function main() {
   const repository = process.env.GITHUB_REPOSITORY;
   const eventName = process.env.GITHUB_EVENT_NAME;
   if (!token || !repository || !eventName) throw new Error("GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_NAME must be set");
-  const event = gateEvent(eventName, JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")), repository);
+  // The same event shapes as reviewed-required's.
+  const event = requiredEvent(eventName, JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")), repository);
   const result = await requireVerified(event, { ...realGateGit(), ...overHttp(repository, token) });
   (result.ok ? console.log : console.error)(result.summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${result.summary}\n`);
