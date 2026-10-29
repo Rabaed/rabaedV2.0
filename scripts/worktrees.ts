@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { holdReason, systemHolders, tryReadTimedProcessList, type Holders, type TimedProcessList } from "./claude-sessions.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
@@ -346,29 +346,41 @@ export function removeWorktree(w: Worktree, mainRoot: string, target: string): R
   return removeLinkedWorktree(w, mainRoot, target);
 }
 
+/** A Windows path as `\\?\G:\…`, which rd follows past MAX_PATH (260 characters). */
+export const longPath = (path: string): string => (path.startsWith("\\\\?\\") ? path : `\\\\?\\${path.replace(/\//g, "\\")}`);
+
 /** What removeWorktree left: branches it kept, and why its folder is still there. Empty when it removed everything. */
-export type Removal = { branchesKept?: { branch: string; reason: string }[]; folderLeft?: string };
+export type Removal ={ branchesKept?: { branch: string; reason: string }[]; folderLeft?: string };
 
 /**
  * removeWorktree for any worktree but the main checkout (worktrees:prune decides which).
- * The folder removal retries while Windows briefly locks node_modules; a folder still
- * there afterwards is returned as folderLeft, with why. Once the worktree is removed,
+ * git removes with core.longpaths (RP-1101: "Filename too long"); a remove that fails after
+ * deleting the worktree's .git ("Function not implemented") goes on to the folder. The folder
+ * removal retries while Windows briefly locks node_modules, then tries `rd /s /q \\?\<path>`
+ * on Windows; a folder still there afterwards is returned as folderLeft, with why. Once the worktree is removed,
  * a branch git will not delete is kept and named, not thrown.
  */
 export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: string): Removal {
   if (samePath(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: the main checkout`);
   if (w.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   try {
-    git(["worktree", "remove", "--force", w.path], mainRoot);
+    git(["-c", "core.longpaths=true", "worktree", "remove", "--force", w.path], mainRoot);
   } catch (error) {
-    // "Directory not empty" leaves the worktree deregistered and its folder behind; any other failure leaves it listed.
-    if (listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
+    // "Directory not empty" leaves the worktree deregistered and its folder behind; a failure after git
+    // deleted its .git leaves a folder git can no longer read (`git worktree prune` drops the record);
+    // any other failure leaves it listed and readable.
+    const gitGone = existsSync(w.path) && !existsSync(join(w.path, ".git"));
+    if (!gitGone && listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
   }
   let folderLeft: string | undefined;
   try {
     if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   } catch (error) {
     folderLeft = (error as { code?: string }).code ?? String(error);
+    if (process.platform === "win32") {
+      spawnSync("cmd", ["/d", "/s", "/c", `rd /s /q "${longPath(w.path)}"`], { stdio: "ignore" });
+      if (!existsSync(w.path)) folderLeft = undefined;
+    }
   }
   const branchesKept: { branch: string; reason: string }[] = [];
   const deleteIfInTarget = (branch: string) => {
