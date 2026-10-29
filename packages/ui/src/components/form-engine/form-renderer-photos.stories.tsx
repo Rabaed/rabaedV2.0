@@ -35,6 +35,7 @@ const schema = formSchema.parse({
 const copy = {
   label: { en: "Sample photos", ar: "صور العينة" },
   takePhoto: { en: "Take a photo", ar: "التقط صورة" },
+  upload: { en: "Upload", ar: "رفع" },
   none: { en: "No photos yet.", ar: "لا توجد صور بعد." },
   notYet: { en: "Photos can be added once the Draft is saved.", ar: "يمكن إضافة الصور بعد حفظ المسودة." },
   nothingRecorded: { en: "No time/location recorded", ar: "لم يُسجَّل وقت أو موقع" },

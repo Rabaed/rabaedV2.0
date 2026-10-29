@@ -35,6 +35,8 @@ export type PhotosFieldLabels = {
   notYet: string;
   uploading: string;
   takePhoto: string;
+  /** The button that picks photos from the gallery or files. */
+  upload: string;
   open: (name: string) => string;
   remove: (name: string) => string;
   frozen: string;
@@ -147,43 +149,52 @@ function PhotoInputs({
     if (files.length > 0) onUpload?.(files);
     if (input) input.value = "";
   };
+  // The photo tool's two buttons (RP-656, RP-655): Take photo and Upload side by side, each a thumb's height.
+  const asButton = (dark: boolean) =>
+    cn(
+      buttonVariants({ variant: "secondary" }),
+      "min-h-11 flex-1 cursor-pointer",
+      dark ? "bg-inverse text-on-inverse hover:bg-inverse/90 active:bg-inverse/80" : "border border-border bg-surface text-text",
+      "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus",
+      pending && "pointer-events-none opacity-50",
+    );
   return (
     <div className="flex flex-col gap-2">
-      <input
-        {...props}
-        ref={choose}
-        type="file"
-        multiple
-        accept={accept}
-        aria-label={label}
-        disabled={pending}
-        onChange={() => picked(choose.current)}
-        className="block w-full text-sm text-text pointer-coarse:min-h-11 file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
-      />
-      {/* On a phone, straight to the back camera; elsewhere it chooses a file, as the input above. */}
-      <OutsideField>
-        <label
-          className={cn(
-            buttonVariants({ variant: "secondary" }),
-            "w-full cursor-pointer sm:w-fit",
-            "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus",
-            pending && "pointer-events-none opacity-50",
-          )}
-        >
-          <Icon name="camera" size={20} />
-          {text.takePhoto}
+      <div className="flex gap-2 sm:max-w-md">
+        {/* On a phone, straight to the back camera. On a desktop's width, Upload alone, as the design has it. */}
+        <OutsideField>
+          <label className={cn(asButton(true), "md:hidden")}>
+            <Icon name="camera" size={20} />
+            {text.takePhoto}
+            <input
+              ref={camera}
+              type="file"
+              accept={accept}
+              capture="environment"
+              aria-label={label && `${text.takePhoto}: ${label}`}
+              disabled={pending}
+              onChange={() => picked(camera.current)}
+              className="sr-only"
+            />
+          </label>
+        </OutsideField>
+        {/* The Field's own input: the gallery or files, several at once. */}
+        <label className={cn(asButton(false), "md:flex-none")}>
+          <Icon name="upload" size={20} />
+          {text.upload}
           <input
-            ref={camera}
+            {...props}
+            ref={choose}
             type="file"
+            multiple
             accept={accept}
-            capture="environment"
-            aria-label={label && `${text.takePhoto}: ${label}`}
+            aria-label={label}
             disabled={pending}
-            onChange={() => picked(camera.current)}
+            onChange={() => picked(choose.current)}
             className="sr-only"
           />
         </label>
-      </OutsideField>
+      </div>
       {pending && (
         <p role="status" className="text-sm text-muted">
           {text.uploading}

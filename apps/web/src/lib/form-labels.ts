@@ -85,6 +85,10 @@ export function useFormRendererLabels(): FormRendererLabels {
       raiseSnag: t("checklistField.raiseSnag"),
       snagRaised: t("checklistField.snagRaised"),
       noSnagRaised: t("checklistField.noSnagRaised"),
+      raiseSnagTicked: t("checklistField.raiseSnagTicked"),
+      raiseSnagUnticked: t("checklistField.raiseSnagUnticked"),
+      addComment: t("checklistField.addComment"),
+      addPhoto: t("checklistField.addPhoto"),
       photosField: photosLabels(t),
     },
     table: {
@@ -136,6 +140,7 @@ function photosLabels(t: Translate): FormRendererLabels["photos"] {
     notYet: t("photosField.notYet"),
     uploading: t("photosField.uploading"),
     takePhoto: t("photosField.takePhoto"),
+    upload: t("photosField.upload"),
     open: (name) => t("photosField.open", { name }),
     remove: (name) => t("photosField.remove", { name }),
     frozen: t("photosField.frozen"),
