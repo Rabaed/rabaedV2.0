@@ -234,7 +234,7 @@ beforeAll(async () => {
   };
 }, SETUP_MS);
 
-describe("scenario RP-23-4: a visitor not signed in scans the record's QR", { timeout: SETUP_MS }, () => {
+describe("scenarios RP-23-4 and RP-1083-4: a visitor not signed in scans the record's QR", { timeout: SETUP_MS }, () => {
   let shown: RecordVerification;
 
   it("opens the record by the long link, with no session and no cookie", async () => {
@@ -313,7 +313,7 @@ describe("scenario RP-23-4: a visitor not signed in scans the record's QR", { ti
   });
 });
 
-describe("a record that isn't published", { timeout: SETUP_MS }, () => {
+describe("scenario RP-1083-4: a record that isn't published", { timeout: SETUP_MS }, () => {
   // A record saved 'preparing' exists only inside the job's own transaction until its checks have run, so no
   // visitor's request can meet one here; seam 2 (documental-record-verification-rls.test.ts) covers it.
   it("is the record that doesn't exist when its checks failed, by link or by code", async () => {
@@ -350,7 +350,7 @@ describe("a record replaced by a corrected copy (Re-produce, RP-155)", { timeout
   });
 });
 
-describe("typing codes is limited per visitor", { timeout: SETUP_MS }, () => {
+describe("scenario RP-1083-4: typing codes is limited per visitor", { timeout: SETUP_MS }, () => {
   it("refuses a visitor's attempts past the limit, the right pair too, and only that visitor's", async () => {
     const v = visitor();
     const tries = VERIFICATION_ATTEMPTS.perVisitor;
@@ -386,7 +386,7 @@ describe("typing codes is limited per visitor", { timeout: SETUP_MS }, () => {
   });
 });
 
-describe("every refusal is one answer", { timeout: SETUP_MS }, () => {
+describe("scenario RP-1083-4: every refusal is one answer", { timeout: SETUP_MS }, () => {
   const long = "X".repeat(5000);
   for (const path of ["/v1/verification/link", "/v1/verification/code"]) {
     it(`gives the plain 404 for a body that is too long, malformed or not JSON at ${path}, never a 400, 413 or 415`, async () => {
