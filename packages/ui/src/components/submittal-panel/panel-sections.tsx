@@ -48,7 +48,7 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
   const allFolded = allSubmittalPanelSectionsCollapsed(keys, collapsed);
   return (
     <div className="sdp-sections">
-      <div className="sdp-section-controls flex items-center gap-1.5 px-5 pt-3.5 pb-2 text-[12px] text-muted @[880px]/sdp:px-7">
+      <div className="sdp-section-controls flex items-center gap-1.5 px-5 pt-3 pb-2 text-[12px] text-muted @[880px]/sdp:px-7">
         <span className="me-auto font-semibold">{labels.count(formatNumber(sections.length, locale), sections.length)}</span>
         <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-[12.5px]" onClick={() => onCollapsedChange(withAllSubmittalPanelSections(keys, collapsed, !allFolded))}>
           <Icon name={allFolded ? "chevron-down" : "chevron-up"} size={15} />
@@ -68,7 +68,7 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
                   aria-controls={open ? bodyId : undefined}
                   onClick={() => onCollapsedChange({ ...collapsed, [section.key]: open })}
                   className={cn(
-                    "sdp-section-head flex min-h-12 w-full items-center gap-2.5 rounded-[12px] px-3.5 text-start hover:bg-hover",
+                    "sdp-section-head flex min-h-12 w-full items-center gap-2.5 rounded-[12px] px-3 text-start hover:bg-hover",
                     focusRing,
                     // Inside the section's own outline, where an outside ring would sit on the next section.
                     "focus-visible:-outline-offset-2",
@@ -87,7 +87,7 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
                 </button>
               </h3>
               {open && (
-                <div id={bodyId} className="sdp-section-body ps-[52px] pe-4 pt-0.5 pb-4 @max-[479px]/sdp:ps-4">
+                <div id={bodyId} className="sdp-section-body ps-[50px] pe-4 pt-0.5 pb-4 @max-[479px]/sdp:ps-4">
                   {section.children}
                 </div>
               )}
@@ -102,7 +102,7 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
 /** A section's fields: one column, two from 560px, three from 1160px (README §3). */
 export function SubmittalPanelFields({ fields }: { fields: readonly { key: string; label: string; value: ReactNode; full?: boolean }[] }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3.5 @[560px]/sdp:grid-cols-2 @[1160px]/sdp:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 @[560px]/sdp:grid-cols-2 @[1160px]/sdp:grid-cols-3">
       {fields.map((field) => (
         <div key={field.key} data-field={field.key} className={cn("min-w-0", field.full && "col-span-full")}>
           <dt className="mb-1 text-[11.5px] text-muted">{field.label}</dt>
