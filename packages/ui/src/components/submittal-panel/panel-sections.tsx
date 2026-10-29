@@ -18,6 +18,8 @@ export type SubmittalPanelSectionItem = {
   /** The one line its header shows while it is folded (README §4.8). */
   summary: string;
   children: ReactNode;
+  /** Shown below 880px only, where the side rail is hidden (the in-flow "Workflow & approval log", RP-1067). */
+  inflowOnly?: boolean;
 };
 
 export type SubmittalPanelSectionsLabels = {
@@ -46,10 +48,13 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
   const id = useId();
   const keys = sections.map((s) => s.key);
   const allFolded = allSubmittalPanelSectionsCollapsed(keys, collapsed);
+  // From 880px an in-flow-only section is the rail's, so it isn't counted there.
+  const wideCount = sections.filter((s) => !s.inflowOnly).length;
   return (
     <div className="sdp-sections">
       <div className="sdp-section-controls flex items-center gap-1.5 px-5 pt-3 pb-2 text-[12px] text-muted @[880px]/sdp:px-7">
-        <span className="me-auto font-semibold">{labels.count(formatNumber(sections.length, locale), sections.length)}</span>
+        <span className={cn("me-auto font-semibold", wideCount !== sections.length && "@[880px]/sdp:hidden")}>{labels.count(formatNumber(sections.length, locale), sections.length)}</span>
+        {wideCount !== sections.length && <span className="me-auto hidden font-semibold @[880px]/sdp:inline">{labels.count(formatNumber(wideCount, locale), wideCount)}</span>}
         <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-[12.5px]" onClick={() => onCollapsedChange(withAllSubmittalPanelSections(keys, collapsed, !allFolded))}>
           <Icon name={allFolded ? "chevron-down" : "chevron-up"} size={15} />
           {allFolded ? labels.expandAll : labels.collapseAll}
@@ -60,7 +65,11 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
           const open = collapsed[section.key] !== true;
           const bodyId = `${id}-${section.key}`;
           return (
-            <section key={section.key} data-section={section.key} className="sdp-section rounded-[12px] bg-surface shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+            <section
+              key={section.key}
+              data-section={section.key}
+              className={cn("sdp-section rounded-[12px] bg-surface shadow-[inset_0_0_0_1px_var(--border-subtle)]", section.inflowOnly && "sdp-inflow")}
+            >
               <h3>
                 <button
                   type="button"

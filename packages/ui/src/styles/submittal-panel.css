@@ -197,6 +197,8 @@
 @container sdp (min-width: 1160px) {
   .sdp-rail {
     flex-basis: 360px;
+    /* At the panel's end, as the design's grid puts it: any room past the 1040px column sits before it. */
+    margin-inline-start: auto;
   }
   .sdp-fields {
     grid-template-columns: repeat(3, minmax(0, 1fr));

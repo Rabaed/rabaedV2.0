@@ -11,7 +11,6 @@ import {
   type OptionList,
   type SupplierChoice,
   type WorkItemDetail,
-  type WorkItemHistory,
   type WorkItemLinks,
 } from "@rabaed/domain";
 import {
@@ -25,7 +24,6 @@ import {
   SubmittalPanelTags,
   TradeChip,
   readSubmittalPanelPreferences,
-  submittalPanelInternalCount,
   submittalPanelSectionKeys,
   submittalPanelStorage,
   submittalPanelSupplier,
@@ -39,12 +37,13 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState, type ReactNode } from "react";
 import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
+import type { SubmittalPanelLog } from "@/components/submittal-panel-log";
 import { Link } from "@/i18n/navigation";
 import { submittalPanelLinks } from "@/lib/submittal-panel-links";
 
-/** What the Details tab reads for one item, beside the item read: its Form, Links and history, and the names its answers need. */
+/** What the Details tab reads for one item, beside the item read: its Form and Links, and the names its answers need. */
 type DetailsRead =
-  | { id: string; ok: true; form: FormToFill; links: WorkItemLinks; history: WorkItemHistory; suppliers: SupplierChoice[]; optionLists: OptionList[] }
+  | { id: string; ok: true; form: FormToFill; links: WorkItemLinks; suppliers: SupplierChoice[]; optionLists: OptionList[] }
   | { id: string; ok: false };
 
 async function readJson<T>(path: string, signal: AbortSignal): Promise<T | null> {
@@ -69,9 +68,10 @@ function textAnswer(form: FormToFill, answers: WorkItemDetail["answers"], key: s
 /**
  * The Submittal Panel's tabs and Details sections (RP-1066, spec RP-1054): read from the reads the
  * item page uses, so it shows exactly what the viewer may see. Chat is always offered (RP-1069):
- * before the Submission Date it shows its empty state. Internal Communication is offered
- * only to a Member of a Participant with internal history on the item: the history read gives
- * internal events only within the viewer's own Participant (V5). The open tab and the folded
+ * before the Submission Date it shows its empty state. The approval log's in-flow section and
+ * Internal Communication come from the history read (`useSubmittalPanelLog`, RP-1067): Internal
+ * Communication is offered only to a Member of a Participant with internal history on the item,
+ * which the read gives within the viewer's own Participant only (V5). The open tab and the folded
  * sections are kept in this browser, across submittals.
  */
 export function SubmittalPanelDetails({
@@ -79,6 +79,7 @@ export function SubmittalPanelDetails({
   locale,
   place,
   refreshKey,
+  log,
 }: {
   item: WorkItemDetail;
   locale: Locale;
@@ -86,6 +87,8 @@ export function SubmittalPanelDetails({
   place: string[];
   /** Changes when the item is read again: its details are read again too. */
   refreshKey: unknown;
+  /** The in-flow "Workflow & approval log" section and the Internal Communication tab (RP-1067). */
+  log: Pick<SubmittalPanelLog, "section" | "internal">;
 }) {
   const t = useTranslations("submittalPanelDetails");
   const chat = useSubmittalPanelChatTab({ item, locale, refreshKey });
@@ -104,12 +107,11 @@ export function SubmittalPanelDetails({
     // A read again that fails keeps the details already shown; a new item's says it couldn't be read.
     const failed = () => setRead((shown) => (shown?.id === id && shown.ok ? shown : { id, ok: false }));
     void (async () => {
-      const [form, links, history] = await Promise.all([
+      const [form, links] = await Promise.all([
         readJson<FormToFill>(`/work-items/${id}/form`, signal),
         readJson<WorkItemLinks>(`/work-items/${id}/links`, signal),
-        readJson<WorkItemHistory>(`/work-items/${id}/history`, signal),
       ]);
-      if (!form || !links || !history) return failed();
+      if (!form || !links) return failed();
       // The names its answers need, only when its Form asks them.
       const fields = formFields(form.schema);
       const [suppliers, lists] = await Promise.all([
@@ -121,7 +123,6 @@ export function SubmittalPanelDetails({
         ok: true,
         form,
         links,
-        history,
         suppliers: suppliers?.suppliers ?? [],
         optionLists: lists?.optionLists ?? [],
       });
@@ -132,7 +133,6 @@ export function SubmittalPanelDetails({
   }, [item.id, item.projectId, refreshKey]);
 
   const ready = read?.id === item.id ? read : null;
-  const internal = ready?.ok ? submittalPanelInternalCount(ready.history.events) : 0;
   const shown = ready?.ok ? submittalPanelSectionKeys(ready.form.schema) : [];
 
   const details: ReactNode = !ready ? (
@@ -151,7 +151,8 @@ export function SubmittalPanelDetails({
         collapseAll: t("collapseAll"),
         expandAll: t("expandAll"),
       }}
-      sections={shown.map((key) => section(key, ready))}
+      // The approval log's own section first (README §4.8), shown below 880px only.
+      sections={[...(log.section ? [log.section] : []), ...shown.map((key) => section(key, ready))]}
       collapsed={prefs.collapsed}
       onCollapsedChange={(collapsed) => remember({ collapsed })}
     />
@@ -243,10 +244,7 @@ export function SubmittalPanelDetails({
   const tabs: SubmittalPanelTabItem[] = [
     { key: "details", label: t("details"), content: details },
     chat,
-    // Its timeline comes with the approval log (RP-1067).
-    ...(internal > 0
-      ? [{ key: "internal", label: t("internal"), icon: "lock" as const, count: internal, content: <p className="px-5 py-4 text-sm text-muted">{t("internalOnly")}</p> }]
-      : []),
+    ...(log.internal ? [{ key: "internal", label: t("internal"), icon: "lock" as const, count: log.internal.count, content: log.internal.content }] : []),
   ];
 
   return <SubmittalPanelTabs locale={locale} label={t("tabs")} tabs={tabs} value={submittalPanelTab(prefs.tab, tabs.map((tab) => tab.key))} onValueChange={(tab) => remember({ tab })} />;
