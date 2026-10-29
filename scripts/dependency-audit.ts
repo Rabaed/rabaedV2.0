@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 // .github/workflows/dependency-audit.yml, the required check "pnpm audit": on every pull
 // request and merge-group entry, which audit only when scripts/dependency-audit-needed.ts
 // says the change can move the audit (the lockfile, a package.json, the allow-list, ...),
-// and nightly and by hand on main, which always audit. RP-635 checked a new library's
+// and nightly on main and by hand, which always audit. RP-635 checked a new library's
 // advisories by hand, and the audit then showed 7 findings, 2 of them high, that no check
 // reported.
 //

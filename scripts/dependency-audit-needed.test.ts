@@ -102,9 +102,11 @@ describe.skipIf(decide === undefined)("dependency-audit.yml runs on every change
   });
 });
 
-// RP-1070: dev dependencies run on every developer machine, in CI and in the lane stacks, so they are audited
-// too. The workflow drops `--prod` (and renames the step) in its own PR after this one (rule 3); until then this waits for it.
-describe.skipIf(audit?.name === "pnpm audit --prod")("dependency-audit.yml audits the dev dependencies too", () => {
+// RP-1070: the dev dependencies are audited too (why: scripts/dependency-audit.ts's header). The workflow drops
+// `--prod` and renames the step in its own PR after this one (rule 3). Until then this waits for it, skipping only
+// while both are as before, so a workflow that changes one without the other fails here.
+const beforeRp1070 = audit?.name === "pnpm audit --prod" && audit.run?.includes("--prod") === true;
+describe.skipIf(beforeRp1070)("dependency-audit.yml audits the dev dependencies too", () => {
   it("runs pnpm audit without --prod, every severity into the JSON the report reads", () => {
     expect(audit?.name).toBe("pnpm audit");
     expect(audit?.run).toBe("pnpm audit --json > audit.json || true");
