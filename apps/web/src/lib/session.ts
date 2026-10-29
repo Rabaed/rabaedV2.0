@@ -327,6 +327,28 @@ export function getWorkItemLink(workItemId: string, linkId: string): Promise<Wor
   return apiGet<WorkItemLink>(`/v1/work-items/${encodeURIComponent(workItemId)}/links/${encodeURIComponent(linkId)}`);
 }
 
+/** Where a Link's target's Documental Record opens, through the Link (E1, RP-1087): the api sends the PDF itself. */
+export function linkedRecordPath(workItemId: string, linkId: string): string {
+  return `/v1/work-items/${encodeURIComponent(workItemId)}/links/${encodeURIComponent(linkId)}/documental-record`;
+}
+
+/** Whether the signed-in Member can open a Link's target's record through the Link (a HEAD, so no PDF is read); false on any failure. */
+export async function hasLinkedRecord(workItemId: string, linkId: string): Promise<boolean> {
+  const cookie = (await cookies()).toString();
+  if (!cookie) return false;
+  try {
+    const res = await fetch(`${apiUrl}${linkedRecordPath(workItemId, linkId)}`, {
+      method: "HEAD",
+      headers: { cookie },
+      cache: "no-store",
+      signal: AbortSignal.timeout(readTimeouts.small),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** The Submitted items linking to a Work Item, hidden ones as number and Subject only (E3); null if the Member can't see the item. */
 export function getLinkedFrom(workItemId: string): Promise<LinkedFrom | null> {
   return apiGet<LinkedFrom>(`/v1/work-items/${encodeURIComponent(workItemId)}/linked-from`);
