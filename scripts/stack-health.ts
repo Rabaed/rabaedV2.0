@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { connect } from "node:net";
+import { fileURLToPath } from "node:url";
 import { isValidLane, lanePorts } from "./lanes.ts";
 
 // Is a lane's stack up? The api answers GET /health with 200 (it pings the database too), and
@@ -11,7 +12,7 @@ import { isValidLane, lanePorts } from "./lanes.ts";
 //   shows the owner a message box while lane 7's api or db is down.
 //
 // node scripts/stack-health.ts [--lane <n>] [--alert]
-// Without --lane it reads API_URL and POSTGRES_PORT from this folder's .env (lane 7's when unset).
+// Without --lane it reads API_URL and POSTGRES_PORT from the worktree's .env (lane 7's when unset).
 // Exit code 0 when the stack is up, 1 when it is down, 2 for a bad argument.
 
 export type StackTarget = { apiUrl: string; dbHost: string; dbPort: number };
@@ -29,11 +30,11 @@ export function targetOfLane(n: number): StackTarget {
 /** The stack a worktree's .env names (API_URL, POSTGRES_PORT); lane 7's for what it leaves out. */
 export function targetOfEnv(env: Record<string, string | undefined>): StackTarget {
   const uat = targetOfLane(UAT_LANE);
-  return {
-    apiUrl: (env.API_URL ?? uat.apiUrl).replace(/\/+$/, ""),
-    dbHost: uat.dbHost,
-    dbPort: env.POSTGRES_PORT ? Number(env.POSTGRES_PORT) : uat.dbPort,
-  };
+  const apiUrl = env.API_URL ?? uat.apiUrl;
+  if (!/^https?:\/\/[^/]/.test(apiUrl)) throw new Error(`API_URL "${apiUrl}" is not an http address; fix .env (pnpm lane:env writes it).`);
+  const port = env.POSTGRES_PORT ?? String(uat.dbPort);
+  if (!/^[1-9][0-9]{0,4}$/.test(port) || Number(port) > 65535) throw new Error(`POSTGRES_PORT "${port}" is not a port; fix .env (pnpm lane:env writes it).`);
+  return { apiUrl: apiUrl.replace(/\/+$/, ""), dbHost: uat.dbHost, dbPort: Number(port) };
 }
 
 const seconds = (ms: number) => `${ms / 1000} s`;
@@ -91,10 +92,10 @@ export async function stackProblems(target: StackTarget, { timeoutMs = DEFAULT_T
   return found.filter((p): p is string => p !== undefined);
 }
 
-/** What the UAT harness prints when it stops; `afterCase` is the case whose result it held back. */
-export function stoppedMessage(problems: string[], afterCase?: string): string {
-  const head = afterCase
-    ? `UAT stopped after ${afterCase}: the stack is down, so nothing was written for ${afterCase}. What was written before it is kept.`
+/** What the UAT harness prints when it stops; `at` is the case or fixture it wrote nothing for. */
+export function stoppedMessage(problems: string[], at?: string): string {
+  const head = at
+    ? `UAT stopped at ${at}: the stack is down, so nothing was written for ${at}. What was written before it is kept.`
     : "UAT stopped: the stack is down, so no Pass or Fail was written.";
   return [
     head,
@@ -132,6 +133,16 @@ export function parseHealthArgs(argv: string[]): HealthArgs {
   return args;
 }
 
+/** The worktree's .env, found from this script's folder, so the check is the same from any folder. */
+function loadRootEnv(): void {
+  try {
+    process.loadEnvFile(fileURLToPath(new URL("../.env", import.meta.url)));
+  } catch (error) {
+    // No .env: lane 7's ports.
+    if ((error as { code?: string }).code !== "ENOENT") throw error;
+  }
+}
+
 async function main(): Promise<void> {
   let args: HealthArgs;
   try {
@@ -140,14 +151,14 @@ async function main(): Promise<void> {
     console.error((error as Error).message);
     process.exit(2);
   }
-  if (args.lane === undefined) {
-    try {
-      process.loadEnvFile(".env");
-    } catch {
-      // No .env: lane 7's ports.
-    }
+  let target: StackTarget;
+  try {
+    if (args.lane === undefined) loadRootEnv();
+    target = args.lane === undefined ? targetOfEnv(process.env) : targetOfLane(args.lane);
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(2);
   }
-  const target = args.lane === undefined ? targetOfEnv(process.env) : targetOfLane(args.lane);
   const name = args.lane === undefined ? "This worktree's stack" : `Lane ${args.lane}`;
   const problems = await stackProblems(target);
   const stamp = new Date().toISOString();

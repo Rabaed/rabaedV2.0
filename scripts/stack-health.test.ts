@@ -54,50 +54,88 @@ async function closedPort(): Promise<number> {
   return port;
 }
 
+/** A Postgres port that answers the SSLRequest with `byte`, or closes the connection at once (null). */
+const answers = (byte: string | null) =>
+  listen(
+    createServer((socket) => {
+      sockets.push(socket);
+      if (byte === null) socket.destroy();
+      else socket.once("data", () => socket.write(byte));
+    }),
+  );
+
+/** An api whose /health answers 200 with a body that is not JSON. */
+const notJson = () =>
+  listen(
+    createHttpServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("<html>Bad gateway</html>");
+    }),
+  );
+
 const healthy = { status: "ok", database: "ok", version: "test" };
 const fast = { timeoutMs: 400 };
+const target = (apiPort: number, dbPort: number) => ({ apiUrl: `http://127.0.0.1:${apiPort}`, dbHost: "127.0.0.1", dbPort });
 
 describe("stackProblems", () => {
   it("finds none when the api's /health is ok and Postgres answers", async () => {
     const [a, db] = await Promise.all([api(200, healthy), postgres()]);
-    expect(await stackProblems({ apiUrl: `http://127.0.0.1:${portOf(a)}`, dbHost: "127.0.0.1", dbPort: portOf(db) }, fast)).toEqual([]);
+    expect(await stackProblems(target(portOf(a), portOf(db)), fast)).toEqual([]);
   });
 
   it("names the api when nothing answers on its port", async () => {
     const [port, db] = await Promise.all([closedPort(), postgres()]);
-    const problems = await stackProblems({ apiUrl: `http://127.0.0.1:${port}`, dbHost: "127.0.0.1", dbPort: portOf(db) }, fast);
+    const problems = await stackProblems(target(port, portOf(db)), fast);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(new RegExp(`^api at http://127\\.0\\.0\\.1:${port} is not answering`));
   });
 
   it("says the api cannot reach the database when /health answers 503", async () => {
     const [a, db] = await Promise.all([api(503, { status: "degraded", database: "unavailable", version: "test" }), postgres()]);
-    const problems = await stackProblems({ apiUrl: `http://127.0.0.1:${portOf(a)}`, dbHost: "127.0.0.1", dbPort: portOf(db) }, fast);
+    const problems = await stackProblems(target(portOf(a), portOf(db)), fast);
     expect(problems).toEqual([`api at http://127.0.0.1:${portOf(a)} answers /health with 503: database unavailable`]);
   });
 
   it("names the api when /health times out", async () => {
     const [a, db] = await Promise.all([silent(), postgres()]);
-    const problems = await stackProblems({ apiUrl: `http://127.0.0.1:${portOf(a)}`, dbHost: "127.0.0.1", dbPort: portOf(db) }, fast);
+    const problems = await stackProblems(target(portOf(a), portOf(db)), fast);
     expect(problems).toEqual([`api at http://127.0.0.1:${portOf(a)} is not answering (no answer in 0.4 s)`]);
   });
 
   it("names the db when nothing answers on its port", async () => {
     const [a, port] = await Promise.all([api(200, healthy), closedPort()]);
-    const problems = await stackProblems({ apiUrl: `http://127.0.0.1:${portOf(a)}`, dbHost: "127.0.0.1", dbPort: port }, fast);
+    const problems = await stackProblems(target(portOf(a), port), fast);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(new RegExp(`^db at 127\\.0\\.0\\.1:${port} is not answering`));
   });
 
   it("names the db when its port takes the connection but never answers as Postgres", async () => {
     const [a, db] = await Promise.all([api(200, healthy), silent()]);
-    const problems = await stackProblems({ apiUrl: `http://127.0.0.1:${portOf(a)}`, dbHost: "127.0.0.1", dbPort: portOf(db) }, fast);
+    const problems = await stackProblems(target(portOf(a), portOf(db)), fast);
     expect(problems).toEqual([`db at 127.0.0.1:${portOf(db)} is not answering (no answer in 0.4 s)`]);
+  });
+
+  it("names the api when /health answers 200 but not ok, or not JSON", async () => {
+    const [degraded, html, db] = await Promise.all([api(200, { status: "degraded", database: "ok", version: "test" }), notJson(), postgres()]);
+    expect(await stackProblems(target(portOf(degraded), portOf(db)), fast)).toEqual([`api at http://127.0.0.1:${portOf(degraded)} answers /health with 200: status degraded`]);
+    expect(await stackProblems(target(portOf(html), portOf(db)), fast)).toEqual([`api at http://127.0.0.1:${portOf(html)} answers /health with 200: status missing`]);
+  });
+
+  it("takes S (SSL offered) as Postgres too", async () => {
+    const [a, db] = await Promise.all([api(200, healthy), answers("S")]);
+    expect(await stackProblems(target(portOf(a), portOf(db)), fast)).toEqual([]);
+  });
+
+  it("names the db when its port answers something other than Postgres, or closes at once", async () => {
+    const [a, other, closing] = await Promise.all([api(200, healthy), answers("H"), answers(null)]);
+    expect(await stackProblems(target(portOf(a), portOf(other)), fast)).toEqual([`db at 127.0.0.1:${portOf(other)} is not answering (not Postgres: answered "H")`]);
+    const [problem] = await stackProblems(target(portOf(a), portOf(closing)), fast);
+    expect(problem).toMatch(new RegExp(`^db at 127\\.0\\.0\\.1:${portOf(closing)} is not answering \\((closed the connection|read ECONNRESET)\\)$`));
   });
 
   it("names both when the whole stack is down", async () => {
     const [apiPort, dbPort] = await Promise.all([closedPort(), closedPort()]);
-    const problems = await stackProblems({ apiUrl: `http://127.0.0.1:${apiPort}`, dbHost: "127.0.0.1", dbPort }, fast);
+    const problems = await stackProblems(target(apiPort, dbPort), fast);
     expect(problems.map((p) => p.split(" ")[0])).toEqual(["api", "db"]);
   });
 });
@@ -110,6 +148,11 @@ describe("targets", () => {
   it("reads API_URL and POSTGRES_PORT from a lane's .env, and falls back to lane 7", () => {
     expect(targetOfEnv({ API_URL: "http://127.0.0.1:4530/", POSTGRES_PORT: "5962" })).toEqual({ apiUrl: "http://127.0.0.1:4530", dbHost: "127.0.0.1", dbPort: 5962 });
     expect(targetOfEnv({})).toEqual(targetOfLane(7));
+  });
+
+  it("refuses an .env value that names no stack, instead of checking a wrong one", () => {
+    expect(() => targetOfEnv({ POSTGRES_PORT: "abc" })).toThrow(/POSTGRES_PORT "abc" is not a port/);
+    expect(() => targetOfEnv({ API_URL: "" })).toThrow(/API_URL "" is not an http address/);
   });
 });
 
@@ -136,7 +179,7 @@ describe("stoppedMessage", () => {
 
   it("names the case it wrote nothing for", () => {
     expect(stoppedMessage(["db at 127.0.0.1:6132 is not answering (connect ECONNREFUSED)"], "VIS-03")).toContain(
-      "UAT stopped after VIS-03: the stack is down, so nothing was written for VIS-03. What was written before it is kept.",
+      "UAT stopped at VIS-03: the stack is down, so nothing was written for VIS-03. What was written before it is kept.",
     );
   });
 });

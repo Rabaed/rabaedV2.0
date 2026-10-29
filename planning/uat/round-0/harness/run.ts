@@ -1,19 +1,17 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { stackProblems, stoppedMessage, targetOfEnv } from "../../../../scripts/stack-health.ts";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
 import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
+import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02] [--fixtures]
 //
 // Loads cases/<part>.ts, runs the cases in sequence, and merges each result into
 // results/results.json as it finishes. A thrown error is "error" (a script problem), never "fail".
-// The api and db are checked before the run and again before each result is saved: a result taken
-// against a down stack is not written (RP-1099).
-
-/** The lane's api and db (API_URL and POSTGRES_PORT from .env, which browser.ts loaded; lane 7 by default). */
-const stack = targetOfEnv(process.env);
+// The api and db are checked before and after each case (RP-1099): when either is down the run
+// stops and that case's result is not written. An outage that starts and ends inside one case
+// is not seen.
 
 const resultsFile = resolve(round, "results", "results.json");
 const casesDir = resolve(round, "cases");
@@ -85,9 +83,9 @@ async function runCase(id: string, body: (t: CaseRun) => Promise<void>): Promise
 
 async function main() {
   const argv = process.argv.slice(2);
-  const down = await stackProblems(stack);
-  if (down.length > 0) {
-    console.error(stoppedMessage(down));
+  const down = await stackDown();
+  if (down) {
+    console.error(down);
     process.exitCode = 1;
     return;
   }
@@ -108,17 +106,22 @@ async function main() {
   const todo = registry.filter((c) => !ids || ids.includes(c.id));
   if (ids) for (const id of ids) if (!registry.some((c) => c.id === id)) console.warn(`No case ${id} in the loaded files.`);
   const counts: Record<string, number> = {};
+  let ran = 0;
+  let stopped = false;
   try {
     for (const c of todo) {
       if (!known.has(c.id) && !c.id.startsWith("SMOKE")) console.warn(`Warning: ${c.id} is not in test-cases.json.`);
-      const result = await runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
-      const wentDown = await stackProblems(stack);
-      if (wentDown.length > 0) {
-        console.error(stoppedMessage(wentDown, c.id));
+      const downBefore = await stackDown(c.id);
+      const result = downBefore ? undefined : await runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
+      const down = downBefore ?? (await stackDown(c.id));
+      if (down || !result) {
+        console.error(down);
         process.exitCode = 1;
+        stopped = true;
         break;
       }
       saveResult(c.id, result);
+      ran++;
       counts[result.status] = (counts[result.status] ?? 0) + 1;
       const failed = result.checks.filter((k) => !k.ok).length;
       const why = result.status === "pass" ? "" : ` ${result.notes.split("\n").pop() ?? ""}`;
@@ -127,7 +130,7 @@ async function main() {
   } finally {
     await closeBrowser();
   }
-  console.log(`Done: ${todo.length} cases (${Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none"}). Results: ${resultsFile}`);
+  console.log(`${stopped ? `Stopped: ${ran} of ${todo.length}` : `Done: ${todo.length}`} cases written (${Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none"}). Results: ${resultsFile}`);
 }
 
 main().catch((error: unknown) => {
