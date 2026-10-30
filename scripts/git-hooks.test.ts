@@ -95,7 +95,7 @@ describe("pre-push", { timeout: 60_000 }, () => {
 
   beforeEach(() => {
     copyFileSync(join(here, "..", ".githooks", "pre-push"), join(repo, ".githooks", "pre-push"));
-    for (const script of ["pre-push.ts", "shared-files.ts", "reviewed-required.ts", "reviewed-label.ts", "check-claims.ts", "claims.ts"]) copyFileSync(join(here, script), join(repo, "scripts", script));
+    for (const script of ["pre-push.ts", "shared-files.ts", "reviewed-required.ts", "reviewed-label.ts", "check-claims.ts", "claims.ts", "merge-in-progress.ts"]) copyFileSync(join(here, script), join(repo, "scripts", script));
     git("add", "-A");
     git("commit", "-q", "--no-verify", "-m", "hooks");
     git("init", "-q", "--bare", `${repo}-remote`);
