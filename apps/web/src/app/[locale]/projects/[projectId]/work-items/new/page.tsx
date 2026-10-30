@@ -82,7 +82,8 @@ export default async function NewWorkItemPage({
             {moduleKey === "submittals" ? t("title") : tabs(moduleKey)}
           </Link>
         )}
-        <h1 className="text-h4 font-semibold">{request ? t("inspection.request.title") : t("newItem")}</h1>
+        {/* The WIR request is headed by its Type's own name ("Work Inspection Request"). */}
+        <h1 className="text-h4 font-semibold">{request && chosen ? chosen.name[locale] : t("newItem")}</h1>
       </div>
       {!chosen || !form ? (
         <p className="text-muted">{t("noRaisableType")}</p>

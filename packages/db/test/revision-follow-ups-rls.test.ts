@@ -213,12 +213,12 @@ describe("RP-655-1: a Revision lists only the previous item's follow-ups the vie
   });
 
   it("a discarded follow-up is never listed", async () => {
-    // A discarded item is a closed one (work_item_discarded_closed); both go back afterwards.
-    await migrator.query("update work_item set closed_at = now(), discarded_at = now() where id = $1", [snagB]);
+    // A discarded item is a closed one (work_item_discarded_closed), and a closed one has an outcome; all go back afterwards.
+    await migrator.query("update work_item set outcome = 'cancelled', closed_at = now(), discarded_at = now() where id = $1", [snagB]);
     try {
       expect(ids(await previousRows(c1.members.engineer, rev1))).toEqual([snagA]);
     } finally {
-      await migrator.query("update work_item set closed_at = null, discarded_at = null where id = $1", [snagB]);
+      await migrator.query("update work_item set outcome = null, closed_at = null, discarded_at = null where id = $1", [snagB]);
     }
   });
 });
