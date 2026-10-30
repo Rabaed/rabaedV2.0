@@ -13,7 +13,7 @@ apps/api/test/after-send-back.test.ts empty 1
 apps/api/test/annotated-photos.test.ts empty 13
 apps/api/test/answers-history.test.ts empty 3
 apps/api/test/answers-history.test.ts text 5
-apps/api/test/approved-suppliers.test.ts empty 9
+apps/api/test/approved-suppliers.test.ts empty 5
 apps/api/test/built-in-fields.test.ts empty 3
 apps/api/test/bulk-transitions.test.ts empty 9
 apps/api/test/bulk-transitions.test.ts text 5
@@ -84,7 +84,7 @@ apps/api/test/mar-form-v3.test.ts text 1
 apps/api/test/mar-form-v4.test.ts empty 2
 apps/api/test/mar-form-v6.test.ts empty 1
 apps/api/test/mar-form-v6.test.ts text 1
-apps/api/test/mar-v3.test.ts empty 9
+apps/api/test/mar-v3.test.ts empty 5
 apps/api/test/may-raise-type.test.ts empty 1
 apps/api/test/members.test.ts empty 13
 apps/api/test/members.test.ts text 3
@@ -101,7 +101,7 @@ apps/api/test/numbering-counters.test.ts empty 6
 apps/api/test/numbering.test.ts empty 14
 apps/api/test/numbering.test.ts text 1
 apps/api/test/option-lists.test.ts text 1
-apps/api/test/outcome-sets.test.ts empty 9
+apps/api/test/outcome-sets.test.ts empty 8
 apps/api/test/owner-review.test.ts empty 3
 apps/api/test/owner-review.test.ts text 2
 apps/api/test/package-notifications.test.ts empty 9
@@ -124,7 +124,6 @@ apps/api/test/projects.test.ts text 4
 apps/api/test/questions-any-role.test.ts empty 11
 apps/api/test/questions.test.ts empty 15
 apps/api/test/raisable-types.test.ts empty 3
-apps/api/test/raised-item-counts.test.ts empty 4
 apps/api/test/raiser-holder.test.ts empty 8
 apps/api/test/random-ids.test.ts text 2
 apps/api/test/reads-at-scale.test.ts empty 1
@@ -239,8 +238,6 @@ packages/db/test/cancel-recommended-code-rls.test.ts empty 4
 packages/db/test/chat-rls.test.ts empty 4
 packages/db/test/checklist-template-rls.test.ts empty 3
 packages/db/test/checklist-template-rls.test.ts text 1
-packages/db/test/code-b-comments-rls.test.ts empty 13
-packages/db/test/code-b-comments-rls.test.ts text 1
 packages/db/test/company-defaults-rls.test.ts empty 2
 packages/db/test/company-defaults-rls.test.ts text 1
 packages/db/test/definer-access.test.ts empty 4
@@ -281,7 +278,6 @@ packages/db/test/numbering-pattern-in-effect.test.ts text 1
 packages/db/test/numbering-pattern-rls.test.ts empty 4
 packages/db/test/option-list-rls.test.ts empty 2
 packages/db/test/outbox-crash.test.ts empty 2
-packages/db/test/outcome-sets.test.ts empty 1
 packages/db/test/owner-review-rls.test.ts empty 6
 packages/db/test/package-rls.test.ts empty 15
 packages/db/test/package-rls.test.ts text 9
@@ -305,8 +301,6 @@ packages/db/test/revision-follow-ups-rls.test.ts text 1
 packages/db/test/revision-rls.test.ts empty 16
 packages/db/test/revision-rls.test.ts text 1
 packages/db/test/rls.test.ts empty 4
-packages/db/test/sar-adds-supplier-rls.test.ts empty 6
-packages/db/test/sar-adds-supplier-rls.test.ts text 2
 packages/db/test/scheduled-jobs.test.ts empty 2
 packages/db/test/scope-rls.test.ts empty 4
 packages/db/test/screens-rls.test.ts empty 12
