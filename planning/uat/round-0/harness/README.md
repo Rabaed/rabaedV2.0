@@ -11,6 +11,8 @@ node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02]
 
 In Git Bash prefix `MSYS_NO_PATHCONV=1` (it rewrites a `/work-items/...` argument). Results merge into `results/results.json`, fixtures into `results/fixtures.json`, screenshots go to `evidence/<ID>-<n>-<what>.jpg`.
 
+**Down stack, no results (RP-1099).** Before the run, before and after each case, and after each fixture, the harness checks the lane's api (`API_URL`, `GET /health`) and Postgres (`POSTGRES_PORT`) with `scripts/stack-health.ts` (`harness/stack.ts`). If either is down, it prints what is down and stops. Nothing is written for the case or fixture it stopped at; what was written before is kept. An outage that starts and ends inside one case is not seen, so a Fail with 500s or a refused database in its checks still gets a re-run. Report it; don't start or restart Docker yourself. `node scripts/stack-health.ts` runs the same check by hand.
+
 ## Write a case
 
 `cases/<PART>.ts` (file name = Part, e.g. `VIS.ts`), one `defineCase` per Test Case id of `test-cases.json`:
