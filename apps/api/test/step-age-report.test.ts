@@ -11,12 +11,12 @@
 // removes it again at the end (Positions are shared by every Project).
 import { randomUUID } from "node:crypto";
 import { createDb, processOutbox, runScheduledJobs, stepAgeReportHandler, weeklyStepAgeReportJob, withMember } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationSettings, NotificationSettingsView, StepAgeReport, VisibilityGrant, WorkItemRow } from "@rabaed/domain";
 import { stepAgeReportMessage } from "@rabaed/mailer";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, buildTower, ok, only, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -99,9 +99,23 @@ async function sendWeek() {
 const reportsTo = (p: Person, projectId = at.projectId) => sent.filter((r) => r.to === p.email && r.projectId === projectId);
 const reportTo = (p: Person) => {
   const reports = reportsTo(p);
-  expect(reports).toHaveLength(1);
+  expect(reports).toHaveLength(1); // not hidden-from: one report to one Member, of their own Project
   return reports[0]!;
 };
+
+/** Who a Person is, in a failure. */
+const nameOf = (p: Person) =>
+  p === c1Lead ? "C1 lead" : p === c1Engineer ? "C1 engineer" : p === c1Pm ? "C1 PM" : p === k1Lead ? "K1 lead" : p === c2Lead ? "C2 lead" : p === orLead ? "OR lead" : p.email;
+/** Each in `seenBy` got a report of `projectId` in `sent` first, and none in `hidden` did (RP-1095). */
+const reportHides = (seenBy: Person | Person[], hidden: Person | Person[], label: string, projectId = at.projectId) =>
+  expectHiddenFrom({ read: async (p: Person) => reportsTo(p, projectId).map((r) => ({ id: r.projectId })), target: projectId, seenBy, hiddenFrom: hidden, name: nameOf, label });
+/** Something that names items, for expectHiddenFrom: a report's items, or what a Member reads of one. */
+type Items = { name: string; rows: () => Promise<{ id: string }[]> };
+const reportItems = (p: Person): Items => ({ name: `${nameOf(p)}'s report`, rows: async () => reportTo(p).items.map((i) => ({ id: i.workItemId })) });
+const itemPage = (p: Person, id: string): Items => ({ name: `${nameOf(p)}'s item page`, rows: () => readById(`/v1/work-items/${id}`)(p.caller) });
+/** Item `target` is in each of `seenBy` first, and in none of `hidden`. */
+const itemHides = (target: string, seenBy: Items | Items[], hidden: Items | Items[], label: string) =>
+  expectHiddenFrom({ read: (r: Items) => r.rows(), target, seenBy, hiddenFrom: hidden, name: (r) => r.name, label });
 
 /** The rows of the List `by` opens from the report's link. */
 async function listFromLink(by: Caller, link: string): Promise<WorkItemRow[]> {
@@ -204,12 +218,14 @@ describe("one week's reports", () => {
     await sendWeek();
   });
 
-  it("scenario 21: sends the C1 lead C1's open items only, aged from C1's view, never C2's", () => {
+  it("scenario 21: sends the C1 lead C1's open items only, aged from C1's view, never C2's", async () => {
     const report = reportTo(c1Lead);
     const ids = report.items.map((i) => i.workItemId);
     expect(ids).toEqual(expect.arrayContaining([oldTrays, pumps]));
-    expect(ids).not.toContain(c2Item);
-    expect(ids).not.toContain(closed);
+    // C2's item is in the C2 lead's report, never in C1's.
+    await itemHides(c2Item, reportItems(c2Lead), reportItems(c1Lead), "C2's item");
+    // The closed item is the C1 lead's to read, but no open item: not in the report.
+    await itemHides(closed, itemPage(c1Lead, closed), reportItems(c1Lead), "the closed item");
     const trays = report.items.find((i) => i.workItemId === oldTrays)!;
     // 23 days since the Submit: its 4th week; K1's internal move doesn't reset it.
     expect(trays).toMatchObject({ subject: "Old cable trays", stepAgeWeeks: 4, with: { kind: "company" } });
@@ -217,7 +233,7 @@ describe("one week's reports", () => {
   });
 
   it("scenario 76: lists no un-numbered Draft, which has no Step Age, though the C1 lead sees it", async () => {
-    expect(reportTo(c1Lead).items.map((i) => i.workItemId)).not.toContain(valves);
+    await itemHides(valves, itemPage(c1Lead, valves), reportItems(c1Lead), "C1's Draft");
     expect((await ok(c1Lead.caller.get(`/v1/work-items/${valves}`), 200)).json()).toMatchObject({ documentNumber: null });
   });
 
@@ -231,9 +247,8 @@ describe("one week's reports", () => {
     expect(oldest.map((r) => r.id)).toContain(oldTrays);
   });
 
-  it("sends nothing to a C1 engineer or PM without Assign", () => {
-    expect(reportsTo(c1Engineer)).toEqual([]);
-    expect(reportsTo(c1Pm)).toEqual([]);
+  it("sends nothing to a C1 engineer or PM without Assign", async () => {
+    await reportHides(c1Lead, [c1Engineer, c1Pm], "no Assign");
   });
 
   it("sends the C2 lead C2's item and nothing of C1's", () => {
@@ -252,10 +267,11 @@ describe("one week's reports", () => {
     expect(rows.map((r) => r.id)).toEqual(report.items.map((i) => i.workItemId));
   });
 
-  it("ages the trays for K1 from K1's own internal Step", () => {
+  it("ages the trays for K1 from K1's own internal Step", async () => {
     const report = reportTo(k1Lead);
     expect(report.items.find((i) => i.workItemId === oldTrays)).toMatchObject({ stepAgeWeeks: 2, with: { kind: "own" } });
-    expect(report.items.map((i) => i.workItemId)).not.toContain(valves);
+    // C1's Draft is C1's (V1): neither K1's report nor its item page has it.
+    await itemHides(valves, itemPage(c1Lead, valves), [reportItems(k1Lead), itemPage(k1Lead, valves)], "C1's Draft");
   });
 
   it("sends each report once: the job queues once per Sunday, and a sent report is not sent again", async () => {
@@ -278,8 +294,14 @@ describe("who gets no report", () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/members/${c1Lead.id}/positions`, { positions: [LEAD] }));
     sent = [];
     await sendWeek();
-    expect(reportsTo(c1Lead, empty)).toEqual([]);
-    expect(reportsTo(c1Lead)).toHaveLength(1);
+    // The C1 lead's report of the Project with items, and none of the empty one.
+    await expectHiddenFrom({
+      read: async (projectId: string) => reportsTo(c1Lead, projectId).map(() => ({ id: "a report" })),
+      target: "a report",
+      seenBy: at.projectId,
+      hiddenFrom: empty,
+      name: (projectId) => (projectId === empty ? "the empty Project" : "the Project"),
+    });
   });
 
   it("follows the Weekly report group's email setting, Pause all email and the Project's mute", async () => {
@@ -289,10 +311,7 @@ describe("who gets no report", () => {
     try {
       sent = [];
       await sendWeek();
-      expect(reportsTo(c1Lead)).toEqual([]);
-      expect(reportsTo(c2Lead)).toEqual([]);
-      expect(reportsTo(orLead)).toEqual([]);
-      expect(reportsTo(k1Lead)).toHaveLength(1);
+      await reportHides(k1Lead, [c1Lead, c2Lead, orLead], "email off, paused or muted");
     } finally {
       await saveSettings(c1Lead.caller, { settings: { weekly_report: { email: "immediate" } } });
       await saveSettings(c2Lead.caller, { emailPaused: false });
@@ -301,15 +320,33 @@ describe("who gets no report", () => {
   });
 
   it("sends nothing for a closed Project, nor for one closed between queueing and sending", async () => {
+    // While it is active, the week's reports have it.
+    sent = [];
+    await sendWeek();
+    // Each week is its own copy: `sent` is pushed into, so holding the array itself would make
+    // the later weeks read the earlier ones' reports (and "closed between" always empty).
+    const active = { reports: [...sent] };
     await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
     try {
       sent = [];
       await sendWeek();
+      const closedWeek = { reports: [...sent] };
       await sql`update project set status = 'active', closed_at = null where id = ${at.projectId}`.execute(migrator);
       await queueWeek();
       await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
+      sent = [];
       await drain();
-      expect(sent.filter((r) => r.projectId === at.projectId)).toEqual([]);
+      const closedBetween = { reports: [...sent] };
+      // The re-queue did queue this Project's reports again: the drain had something to leave out.
+      expect(active.reports.filter((r) => r.projectId === at.projectId).length).toBeGreaterThan(0);
+      await expectHiddenFrom({
+        read: async (week: { reports: StepAgeReport[] }) => week.reports.filter((r) => r.projectId === at.projectId).map((r) => ({ id: r.projectId })),
+        target: at.projectId,
+        seenBy: active,
+        hiddenFrom: [closedWeek, closedBetween],
+        name: (week) => (week === active ? "the active week" : week === closedWeek ? "the closed week" : "closed between queueing and sending"),
+        label: "a closed Project",
+      });
     } finally {
       await sql`update project set status = 'active', closed_at = null where id = ${at.projectId}`.execute(migrator);
     }
@@ -321,8 +358,7 @@ describe("who gets no report", () => {
     try {
       sent = [];
       await drain();
-      expect(reportsTo(c2Lead)).toEqual([]);
-      expect(reportsTo(c1Lead)).toHaveLength(1);
+      await reportHides(c1Lead, c2Lead, "removed after queueing");
     } finally {
       await sql`update project_member set status = 'active' where member_id = ${c2Lead.id} and project_id = ${at.projectId}`.execute(migrator);
     }
@@ -344,10 +380,10 @@ describe("a failed send", () => {
     sent = [];
     // Not retried at once: only after its retry delay.
     await drain();
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([]); // not hidden-from: the retry delay; no reader is involved
     await sql`update outbox set available_at = now() where kind = 'step_age_report' and processed_at is null and dead_at is null`.execute(migrator);
     await drain();
-    expect(reportsTo(c1Lead)).toHaveLength(1);
+    expect(reportsTo(c1Lead)).toHaveLength(1); // not hidden-from: the C1 lead's own report, sent once after the retry
   });
 
   it("can't be queued or taken by the app role with a Member set", async () => {
