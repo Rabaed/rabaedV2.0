@@ -109,6 +109,11 @@ describe("staleReport", () => {
     expect(lines).toContain("rabaed-lane7 (G:/wt/rabaed-lane7): rabaed-lane7-db-1 exited; Main 7's, never stop or prune it");
   });
 
+  it("says a container with no working folder label has no folder, not that its folder is gone", () => {
+    const lines = staleReport({ containers: [container("rabaed-lane22", "exited", "rabaed-lane22-db-1", "")], volumes: [], exists: () => false, max: 8 }).join("\n");
+    expect(lines).toContain("rabaed-lane22 (no folder): rabaed-lane22-db-1 exited");
+  });
+
   it("says so when there is nothing stale", () => {
     const lines = staleReport({ containers: running([11]), volumes: [], exists, max: 8 });
     expect(lines.join("\n")).toContain("No stopped stacks, dead containers, volume-only projects or stray containers.");

@@ -120,7 +120,9 @@ describe("waitForLock", () => {
     const time = clock((sleeps) => sleeps === 40 && releaseLock(file, first.pid));
     const result = await waitForLock(file, second, { isAlive: alive, ...time, report: (l) => lines.push(l), pollMs: 30_000, reportEveryMs: 600_000 });
     expect(result).toEqual({ waitedMs: 40 * 30_000 });
-    expect(lines[0]).toBe("Waiting for the machine's verify slot: verify already running (pid 4100, started 09:05, `pnpm verify`). One verify runs at a time (RP-1096).");
+    expect(lines[0]).toBe(
+      `Waiting for the machine's verify slot: verify already running (pid 4100, started 09:05, \`pnpm verify\`). One verify runs at a time (RP-1096); if that pid is not a verify run, delete ${file}.`,
+    );
     // Then a line every 10 minutes, not every poll.
     expect(lines.slice(1)).toEqual(["Still waiting for the machine's verify slot (10 min)."]);
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ pid: second.pid });

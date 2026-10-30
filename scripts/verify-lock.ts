@@ -140,7 +140,8 @@ export async function waitForLock(
     const result = acquireLock(file, self, isAlive);
     if (result.acquired) return { waitedMs: now() - start, ...(result.tookOver === undefined ? {} : { tookOver: result.tookOver }) };
     if (result.message !== said) {
-      report(`Waiting for the machine's verify slot: ${result.message} One verify runs at a time (RP-1096).`);
+      // A hard-killed run never releases its lock, and Windows reuses pids: say which file to delete then.
+      report(`Waiting for the machine's verify slot: ${result.message} One verify runs at a time (RP-1096); if that pid is not a verify run, delete ${file}.`);
       said = result.message;
       nextReport = now() + reportEveryMs;
     } else if (now() >= nextReport) {

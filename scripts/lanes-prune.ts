@@ -63,7 +63,7 @@ if (argv.includes("--stale")) {
   const listed = listContainers(DOCKER_TIMEOUT_MS);
   let volumes: Volume[] | undefined;
   try {
-    volumes = listed && listVolumes();
+    volumes = listed && listVolumes(DOCKER_TIMEOUT_MS);
   } catch {
     volumes = undefined;
   }

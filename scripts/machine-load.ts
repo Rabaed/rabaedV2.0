@@ -81,7 +81,8 @@ export function staleReport({ containers, volumes, exists, max }: StaleReportInp
     const mine = containers.filter((c) => c.project === project);
     const notRunning = mine.filter((c) => c.state !== "running");
     if (notRunning.length === 0) continue;
-    const dirs = [...new Set(mine.map((c) => c.workingDir))].map((dir) => (exists(dir) ? dir : `${dir}, folder gone`)).join("; ");
+    // A container with no working_dir label names no folder, so it is not "gone".
+    const dirs = [...new Set(mine.map((c) => c.workingDir))].map((dir) => (dir === "" ? "no folder" : exists(dir) ? dir : `${dir}, folder gone`)).join("; ");
     const line = `  - ${project} (${dirs}): ${notRunning.map((c) => `${c.name} ${c.state}`).join(", ")}${protectedLaneReason(project) === undefined ? "" : MAIN_7}`;
     (notRunning.length === mine.length ? stopped : dead).push(line);
   }
