@@ -5,9 +5,10 @@
 //
 // One Project with a Participant of every base role; on each, a Member with each Rabaed
 // Position of that role, and one with none.
+import { rabaedDefaultTypes } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { BaseRole } from "@rabaed/domain";
+import { baseRoles, type BaseRole } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
@@ -20,13 +21,14 @@ afterAll(async () => {
   await migrator.destroy();
 });
 
-/** The Rabaed Default Types raised directly (a Comment is raised from an item only), by Module. */
-const modules = ["submittals", "snag_list", "inspections"] as const;
-const defaults = ["MAR", "SAR", "DAR", "SNG", "OBS", "QSC", "QSN", "WIR"];
-const roles: BaseRole[] = ["contractor", "consultant", "owner", "owner_representative"];
-
 type Raiser = { label: string; caller: Caller };
 
+/**
+ * The Rabaed Default Types raised directly (a Comment is raised from an item only) and their
+ * Modules. Not every Rabaed Type of the test database: other tests add their own.
+ */
+let defaults: string[] = [];
+let modules: string[] = [];
 let c1: Company;
 let projectId = "";
 let trade = "";
@@ -41,11 +43,17 @@ beforeAll(async () => {
   trade = await post("trades", { code: "EL", name: bilingual("Electrical") });
   location = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
 
+  const { rows: types } = await sql<{ code: string; module_key: string }>`
+    select code, module_key from work_item_type
+    where owner_kind = 'rabaed' and not raised_from_item_only and code = any(${rabaedDefaultTypes.map((t) => t.type)}::text[])
+  `.execute(migrator);
+  defaults = types.map((t) => t.code);
+  modules = [...new Set(types.map((t) => t.module_key))];
   const { rows: positions } = await sql<{ base_role: BaseRole; key: string }>`
     select base_role, key from position where owner_kind = 'rabaed' order by base_role, key
   `.execute(migrator);
 
-  for (const role of roles) {
+  for (const role of baseRoles) {
     let company: Company = c1;
     let participantId: string;
     if (role === "contractor") {

@@ -59,6 +59,7 @@ create function app.raisable_type_ids(p_project_id uuid, p_module_key text) retu
         join participant p on p.id = pm.participant_id
         where t.owner_kind = 'rabaed' and t.module_key = p_module_key and not t.raised_from_item_only
           and pm.project_id = p_project_id and pm.member_id = app.current_member_id() and pm.status = 'active'
+          and p_project_id in (select app.current_project_ids())
           and pm.participant_id in (select app.current_participant_ids())
           and p.status = 'active' and p.company_id = app.current_company_id()
           and exists (
@@ -87,17 +88,15 @@ create or replace function app.create_work_item(
       v_at timestamptz := greatest(p_now, now());
       v_project_member_id uuid;
       v_participant_id uuid;
-      v_base_role text;
       v_type record;
       v_version_id uuid;
       v_step record;
       v_item_id uuid;
       v_outcome text;
     begin
-      select pm.id, pm.participant_id, r.base_role into v_project_member_id, v_participant_id, v_base_role
+      select pm.id, pm.participant_id into v_project_member_id, v_participant_id
       from project_member pm
       join participant p on p.id = pm.participant_id
-      join project_role r on r.id = p.project_role_id
       where pm.project_id = p_project_id and pm.member_id = app.current_member_id() and pm.status = 'active'
         and p.status = 'active' and p.company_id = app.current_company_id()
         and p_project_id in (select app.current_project_ids());
