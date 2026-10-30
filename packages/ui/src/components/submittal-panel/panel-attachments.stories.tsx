@@ -265,8 +265,9 @@ export const Preview: Story = {
     await expect(within(preview).getByText("3 / 3")).toBeVisible();
     await expect(within(thumbs).getAllByRole("button")[2]).toHaveAttribute("aria-current", "page");
 
-    // Page 3 is drawn once it comes near the view.
+    // Page 3 is drawn once it comes near the view; page 1, now away from it, gives its bitmap back.
     await drawn(preview);
+    await waitFor(() => expect([page1 as HTMLCanvasElement].map((c) => [c.width, c.height])).toEqual([[0, 0]]));
     within(preview).getByRole("group", { name: "LED-1200_Datasheet.pdf" }).focus();
     await userEvent.keyboard("{ArrowDown}");
     await expect(output(context).moved).toBe("0");

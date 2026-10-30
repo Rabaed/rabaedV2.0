@@ -252,7 +252,7 @@ function PdfPages({
 
 /**
  * One PDF page `width` CSS pixels wide (whole pixels, so its box never lands between two), drawn
- * while `draw` (near the view); away from it, it keeps what it last drew, stretched to its new size.
+ * while `draw` (near the view); away from it, its bitmap is released and the box stays, blank.
  */
 function PdfCanvas({
   pdf,
@@ -277,7 +277,14 @@ function PdfCanvas({
   const drawn = useEffectEvent(onDrawn);
   useEffect(() => {
     const canvas = ref.current;
-    if (!canvas || !draw) return;
+    if (!canvas) return;
+    if (!draw) {
+      // Away from the view: its bitmap (up to 16M pixels) is given back, and drawn again when it comes near.
+      canvas.width = 0;
+      canvas.height = 0;
+      drawnAt.current = 0;
+      return;
+    }
     if (drawnAt.current === width) return drawn();
     const render = pdf.render(page, canvas, width);
     render.done.then(
