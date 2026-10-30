@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -249,14 +249,14 @@ describe("app.set_numbering_pattern (RP-313)", () => {
     ] as const) {
       expect(await save(who, projectId, { segments: [project, participantCode], seqScope: [0, 1] }), who).toBe("not_found");
     }
-    expect(await saved(t.projectId)).toEqual([]);
+    expect(await saved(t.projectId)).toEqual([]); // not hidden-from: nothing was saved, read as the table owner (state)
   });
 
   it("refuses a sequence not counted by the Participant Code until the warning is accepted, then records who accepted it and when", async () => {
     const t = await tower("NSW");
     const shared = { segments: [project, type, participantCode], seqScope: [0, 1] };
     expect(await save(t.c1.ap, t.projectId, shared)).toBe("shared_counter_not_accepted");
-    expect(await saved(t.projectId)).toEqual([]);
+    expect(await saved(t.projectId)).toEqual([]); // not hidden-from: nothing was saved, read as the table owner (state)
     expect(await save(t.c1.ap, t.projectId, { ...shared, accepted: true })).toBe("saved");
     const [row] = await saved(t.projectId);
     expect(row!.set_by_member_id).toBe(t.c1.ap);
@@ -284,7 +284,7 @@ describe("app.set_numbering_pattern (RP-313)", () => {
     expect(await save(t.c1.ap, t.projectId, { type: randomUUID(), segments: [project, participantCode], seqScope: [0, 1] })).toBe(
       "type_not_found",
     );
-    expect(await saved(t.projectId)).toEqual([]);
+    expect(await saved(t.projectId)).toEqual([]); // not hidden-from: nothing was saved, read as the table owner (state)
   });
 });
 
@@ -451,6 +451,13 @@ describe("app.numbering_pattern_versions (visibility.md RP-412-3)", () => {
     const t = await tower("TWO");
     const other = await tower("TWQ");
     await t.pattern({ segments: [project, participantCode], seqScope: [0, 1] });
-    expect(await versions(other.c1.ap, t.projectId)).toEqual([]);
+    // A version has no id of its own: within this one Project's read, its Type and number name it.
+    await expectHiddenFrom({
+      read: (as: string) => versions(as, t.projectId),
+      target: "project pattern v1",
+      idOf: (v) => `${v.work_item_type_id ?? "project"} pattern v${v.version_no}`,
+      seenBy: [t.c1.ap, t.c1.member],
+      hiddenFrom: other.c1.ap,
+    });
   });
 });

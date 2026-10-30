@@ -8,13 +8,6 @@
 RP-82-1 api  # C1's WIR in Building A names under Approved submittals (a link question that accepts only 
 RP-82-2 api  # Tower's Project Admin (C1) turns on "Approved submittals required" (Project Settings → Req
 
-# RP-85
-RP-85-1 db  # C1's engineer has no Signature and opens Send for Review on their Draft, whose Form isn't 
-RP-85-2 db  # C1's engineer adds a Signature, takes Send for Review, then replaces it; the PM Returns th
-
-# RP-381
-RP-381-1 db  # The Tower has three Participants, none with a Participant Code; K1's manager and a C1 engi
-
 # RP-392
 RP-392-1 db  # C1 engineer saves a Draft on day 1; it is numbered on day 3, and later sent back (to its D
 RP-392-2 db  # C1 creates a Revision on day 5 and sends it for review on day 7
@@ -121,18 +114,12 @@ RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
 # RP-651
 RP-651-2 api  # C1's engineer raises a Civil WIR picking "Concrete pour": its Version 1 items are copied o
 
-# RP-1058
-RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
-
 # RP-1062
 RP-1062-1 api  # C1 Submits a WIR (a MAR at seam 1) to K1 and its Members post in its Chat; C2 Submits one 
 RP-1062-2 api  # K1's manager covers Building B only (seam 2), or Mechanical only (seam 1); C1's Submitted 
 RP-1062-3 api  # C1's engineer posts on an item still in C1's internal review
 RP-1062-4 api  # C1's engineer, K1's engineer (K1's manager at seam 1) and the Owner's Representative post 
 RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager (seam 1), reads an item's 
-
-# RP-1072
-RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
 
 # RP-1079
 RP-1079-1 api  # K1's PM adds a site photo to the Screen of its Recommendation to the Owner (a reply photos

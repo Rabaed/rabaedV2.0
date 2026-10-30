@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -144,7 +144,14 @@ describe("app.work_item_named_answers", () => {
   });
 
   it("answers nothing for an item the caller can't see", async () => {
-    expect(await named(b.ap, a.itemId)).toEqual([]);
+    // Each named answer is of the item: A reads its own, B none.
+    await expectHiddenFrom({
+      read: async (as: string) => (await named(as, a.itemId)).map(() => ({ id: a.itemId })),
+      target: a.itemId,
+      seenBy: a.ap,
+      hiddenFrom: b.ap,
+      name: (as) => (as === a.ap ? "A" : "B"),
+    });
   });
 });
 
@@ -171,17 +178,34 @@ describe("reading the answers", () => {
 
   it("strips another Company's Member and a Participant the caller may not see, wherever they are", async () => {
     // Written as the owner: the API never offers these, but the database mustn't rely on it.
-    await write({ who: b.ap, through: b.participantId });
+    const hidden = { who: b.ap, through: b.participantId };
+    await write(hidden);
     try {
+      // A reads each answer's id when it names A's own Member and Participant, and neither id, anywhere, once it names B's.
+      const idsInAnswers = async (data: Record<string, string>) => {
+        await write(data);
+        const json = JSON.stringify(await answers(a.ap, a.itemId));
+        return Object.entries(data)
+          .filter(([, id]) => json.includes(id))
+          .map(([key]) => ({ id: key }));
+      };
+      for (const key of ["who", "through"]) {
+        await expectHiddenFrom({
+          read: idsInAnswers,
+          target: key,
+          seenBy: { who: own.who(), through: own.through() },
+          hiddenFrom: hidden,
+          name: (data) => (data.who === b.ap ? "B's Member and Participant" : "A's own"),
+          label: "A reads the answers",
+        });
+      }
       const read = await answers(a.ap, a.itemId);
       expect(read).not.toHaveProperty("who");
       expect(read).not.toHaveProperty("through");
-      expect(JSON.stringify(read)).not.toContain(b.ap);
-      expect(JSON.stringify(read)).not.toContain(b.participantId);
       // No other channel gives them either.
       const named = JSON.stringify(await call(a.ap, sql`select * from app.work_item_named_answers(${a.itemId}::uuid)`));
-      expect(named).not.toContain(b.ap);
-      expect(named).not.toContain(b.participantId);
+      expect(named).not.toContain(b.ap); // not hidden-from: named answers carry names, never ids; B's are proven unnamed in "names no Company the caller may not see"
+      expect(named).not.toContain(b.participantId); // not hidden-from: named answers carry names, never ids; B's are proven unnamed in "names no Company the caller may not see"
     } finally {
       await write({ who: own.who(), through: own.through() });
     }
@@ -230,8 +254,17 @@ describe("app.form_participant_choices", () => {
   });
 
   it("offers nothing on a Project the caller isn't on, and nothing of another Project's item", async () => {
-    expect(await choices(b.ap, a.projectId, null)).toEqual([]);
-    expect(await choices(b.ap, a.projectId, a.itemId)).toEqual([]);
+    for (const itemId of [null, a.itemId]) {
+      await expectHiddenFrom({
+        read: (as: string) => choices(as, a.projectId, itemId),
+        target: a.participantId,
+        idOf: (r) => r.participant_id,
+        seenBy: a.ap,
+        hiddenFrom: b.ap,
+        name: (as) => (as === a.ap ? "A" : "B"),
+        label: itemId === null ? "a new item" : "A's item",
+      });
+    }
     expect((await choices(b.ap, b.projectId, a.itemId)).map((r) => r.participant_id)).toEqual([b.participantId]);
   });
 });
@@ -267,32 +300,35 @@ describe("reading the answers as another Company on the item", () => {
   const write = (data: Record<string, unknown>) =>
     migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify(data), a.itemId]);
 
-  /** Everything K1 can read of the item: its answers, named answers, history, row, events and assignments. */
-  const everythingK1Reads = async () =>
+  /** Everything `as` (K1 when left out) can read of the item: its answers, named answers, history, row, events and assignments. */
+  const everythingRead = async (as: string = k.ap) =>
     JSON.stringify([
-      await call(k.ap, sql`select app.work_item_answers(${a.itemId}::uuid) as answers`),
-      await call(k.ap, sql`select app.answers_sha256(${a.itemId}::uuid) as hash`),
-      await call(k.ap, sql`select * from app.work_item_named_answers(${a.itemId}::uuid)`),
-      await call(k.ap, sql`select * from app.work_item_history(${a.itemId}::uuid)`),
+      await call(as, sql`select app.work_item_answers(${a.itemId}::uuid) as answers`),
+      await call(as, sql`select app.answers_sha256(${a.itemId}::uuid) as hash`),
+      await call(as, sql`select * from app.work_item_named_answers(${a.itemId}::uuid)`),
+      await call(as, sql`select * from app.work_item_history(${a.itemId}::uuid)`),
       await call(
-        k.ap,
+        as,
         sql`select id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, workflow_version_id,
           form_version_id, document_number, outcome, closed_at, submitted_at from work_item where id = ${a.itemId}::uuid`,
       ),
       // Every column the app role reads: the hashes are not among them (RP-448 review).
       await call(
-        k.ap,
+        as,
         sql`select id, project_id, work_item_id, seq, type, actor_member_id, actor_engineer_id, actor_participant_id, transition_id,
           from_step_id, to_step_id, payload, audience, audience_participant_id, created_at
           from work_item_event where work_item_id = ${a.itemId}::uuid`,
       ),
       await call(
-        k.ap,
+        as,
         sql`select id, project_id, work_item_id, step_id, participant_id, assignee_member_id, status, done_at
           from step_assignment where work_item_id = ${a.itemId}::uuid`,
       ),
-      await call(k.ap, sql`select * from app.work_item_holder(${a.itemId}::uuid)`),
+      await call(as, sql`select * from app.work_item_holder(${a.itemId}::uuid)`),
     ]);
+  /** For expectHiddenFrom: `[{ id: text }]` when `text` is anywhere in what `as` reads of the item, `[]` when it isn't. */
+  const foundInReads = (text: string) => async (as: string) => ((await everythingRead(as)).includes(text) ? [{ id: text }] : []);
+  const whoIs = (as: string) => (as === k.ap ? "K1" : as === a.ap ? "C1 (A)" : as);
 
   beforeAll(async () => {
     const companyId: string = (await migrator.query("select company_id from member where id = $1", [a.ap])).rows[0].company_id;
@@ -347,16 +383,29 @@ describe("reading the answers as another Company on the item", () => {
     expect(answers).toMatchObject({ through: a.participantId });
     expect(answers).not.toHaveProperty("who");
     await expect(call(k.ap, sql`select data from work_item where id = ${a.itemId}::uuid`)).rejects.toThrow(/permission denied/);
-    expect(await everythingK1Reads()).not.toContain(engineer);
+    // C1 reads its Member's id in the same reads; K1 reads it in none.
+    await expectHiddenFrom({ read: foundInReads(engineer), target: engineer, seenBy: a.ap, hiddenFrom: k.ap, name: whoIs });
   });
 
   it("gets no id of a Participant on the Project but not on the item", async () => {
     // Written as the owner: the API never offers L1 here, but the database mustn't rely on it.
-    await write({ who: engineer, through: l.participantId });
+    // No reader of the item reads L1's id in it, so the answer itself is K1's viewer: K1 reads the Participant
+    // named when it is C1's, on the item, and not when it is L1's.
+    const throughRead = async (through: string) => {
+      await write({ who: engineer, through });
+      return (await everythingRead()).includes(through) ? [{ id: "through" }] : [];
+    };
     try {
-      const reads = await everythingK1Reads();
-      expect(reads).not.toContain(l.participantId);
-      expect(reads).not.toContain(engineer);
+      await expectHiddenFrom({
+        read: throughRead,
+        target: "through",
+        seenBy: a.participantId,
+        hiddenFrom: l.participantId,
+        name: (through) => (through === l.participantId ? "L1, not on the item" : "C1, on the item"),
+        label: "K1's reads",
+      });
+      // The answer names L1 now: C1 still reads its Member's id, K1 still doesn't.
+      await expectHiddenFrom({ read: foundInReads(engineer), target: engineer, seenBy: a.ap, hiddenFrom: k.ap, name: whoIs, label: "with L1 named" });
     } finally {
       await write({ who: engineer, through: a.participantId });
     }

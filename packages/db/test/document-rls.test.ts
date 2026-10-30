@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -89,6 +89,10 @@ async function insertDocument(
 }
 
 const documentIds = (as: string) => call<{ id: string }>(as, sql`select id from document`).then((rows) => rows.map((r) => r.id));
+/** The Documents a Member reads, as rows with ids, for expectHiddenFrom (RP-1095). */
+const documents = (as: string) => call<{ id: string }>(as, sql`select id from document`);
+/** Who a reader is, in a failure. */
+const who = (as: string | null) => (as === a.ap ? "A's Authorized Person" : as === b.ap ? "B's Authorized Person" : as === null ? "no Member set" : as);
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -113,9 +117,9 @@ describe("a Document", () => {
   });
 
   it("of Project B never returns with a Member of Project A set, even by its id", async () => {
-    expect(await documentIds(a.ap)).not.toContain(b.documentId);
-    const rows = await call<{ id: string }>(a.ap, sql`select id, storage_key from document where id = ${b.documentId}::uuid`);
-    expect(rows).toEqual([]);
+    await expectHiddenFrom({ read: documents, target: b.documentId, seenBy: b.ap, hiddenFrom: a.ap, name: who });
+    const byId = (as: string) => call<{ id: string }>(as, sql`select id, storage_key from document where id = ${b.documentId}::uuid`);
+    await expectHiddenFrom({ read: byId, target: b.documentId, seenBy: b.ap, hiddenFrom: a.ap, name: who, label: "by its id" });
     const pending = await call<{ key: string | null }>(
       a.ap,
       sql`select app.pending_document_upload(${b.itemId}::uuid, ${b.documentId}::uuid) as key`,
@@ -127,10 +131,11 @@ describe("a Document", () => {
     const participantId = (await migrator.query("select uploaded_by_participant_id as id from document where id = $1", [b.documentId]))
       .rows[0].id;
     const datasheet = await insertDocument(b.projectId, b.itemId, b.ap, participantId, { confirmed: true, fieldKey: "datasheet" });
-    expect(await documentIds(b.ap)).toContain(datasheet);
-    expect(await documentIds(a.ap)).not.toContain(datasheet);
-    const rows = await call<{ id: string }>(a.ap, sql`select id, field_key from document where field_key = 'datasheet'`);
-    expect(rows).toEqual([]);
+    await expectHiddenFrom({ read: documents, target: datasheet, seenBy: b.ap, hiddenFrom: a.ap, name: who });
+    const byField = (as: string) => call<{ id: string }>(as, sql`select id, field_key from document where field_key = 'datasheet'`);
+    await expectHiddenFrom({ read: byField, target: datasheet, seenBy: b.ap, hiddenFrom: a.ap, name: who, label: "by its Form field" });
+    // A has no datasheet of its own yet: by the field, A reads nothing at all.
+    expect(await byField(a.ap)).toEqual([]); // not hidden-from: A's read by the field, with no datasheet of A's yet; B's is proven hidden just above
   });
 
   it("tied to a Form field is in the hash a Transition checks; the Attachments System Field's isn't", async () => {
@@ -150,7 +155,11 @@ describe("a Document", () => {
 
   it("returns nothing with no Member set", async () => {
     const { rows } = await sql`select id from document`.execute(app);
-    expect(rows).toEqual([]);
+    // A's and B's Documents are there for their own Members, and not with no Member set.
+    const read = async (as: string | null) => (as === null ? (await sql<{ id: string }>`select id from document`.execute(app)).rows : documents(as));
+    await expectHiddenFrom({ read, target: a.documentId, seenBy: a.ap, hiddenFrom: null, name: who });
+    await expectHiddenFrom({ read, target: b.documentId, seenBy: b.ap, hiddenFrom: null, name: who });
+    expect(rows).toEqual([]); // not hidden-from: no row at all with no Member set; A's and B's are proven to exist just above
   });
 
   it("returns to nobody while its upload is pending, or once removed", async () => {
@@ -158,9 +167,15 @@ describe("a Document", () => {
       .rows[0].id;
     const pending = await insertDocument(a.projectId, a.itemId, a.ap, participantId, {});
     const removed = await insertDocument(a.projectId, a.itemId, a.ap, participantId, { confirmed: true, removed: true });
-    const seen = await documentIds(a.ap);
-    expect(seen).not.toContain(pending);
-    expect(seen).not.toContain(removed);
+    // Nobody may read them, so the table's owner proves each row is there; its uploader, who sees the item, doesn't read it.
+    const read = async (as: string) =>
+      as === "owner"
+        ? ((await migrator.query("select id from document where id = any($1::uuid[])", [[pending, removed]])).rows as { id: string }[])
+        : documents(as);
+    for (const target of [pending, removed]) {
+      await expectHiddenFrom({ read, target, seenBy: "owner", hiddenFrom: a.ap, name: (as) => (as === "owner" ? "the table's owner" : who(as)) });
+    }
+    expect(await documentIds(a.ap)).toContain(a.documentId);
   });
 });
 
