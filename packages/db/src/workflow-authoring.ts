@@ -81,6 +81,40 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
   };
 }
 
+/**
+ * Whether a Workflow that would pin Screen `screenId` on its next publish shows it on a
+ * Transition that doesn't close the item (form-engine.md §3.3, RP-1088): the latest
+ * published Version or the draft of a Workflow of the Screen's owner, or, for a Rabaed
+ * Default Screen, of any owner without a published Screen of its own with that key
+ * (app.workflow_screens' rule). Read with `db`'s row-level security.
+ */
+export async function readScreenShownOffClose(db: Db, screenId: string): Promise<boolean> {
+  const { rows } = await sql<{ shown: boolean }>`
+    select exists (
+      select 1
+      from screen s
+      join workflow_definition d
+        on (s.owner_kind = 'project' and d.owner_kind = 'project' and d.project_id = s.project_id)
+        or (s.owner_kind = 'company' and d.owner_kind = 'company' and d.company_id = s.company_id)
+        or (s.owner_kind = 'rabaed' and not exists (
+              select 1 from screen o
+              join screen_version ov on ov.screen_id = o.id and ov.status = 'published'
+              where o.key = s.key
+                and ((o.owner_kind = 'project' and d.owner_kind = 'project' and o.project_id = d.project_id)
+                  or (o.owner_kind = 'company' and d.owner_kind = 'company' and o.company_id = d.company_id))))
+      join workflow_version v on v.workflow_definition_id = d.id
+      join workflow_transition t on t.workflow_version_id = v.id
+      where s.id = ${screenId}::uuid
+        and t.screen_key = s.key
+        and t.kind <> 'close'
+        and (v.status = 'draft'
+          or v.version_no = (select max(p.version_no) from workflow_version p
+                             where p.workflow_definition_id = d.id and p.status = 'published'))
+    ) as shown
+  `.execute(db);
+  return rows[0]?.shown === true;
+}
+
 /** The rows' layout, Steps and Transitions as the app.* draft functions take them (jsonb text). */
 export type DraftArguments = { layout: string; steps: string; transitions: string };
 

@@ -886,6 +886,54 @@ describe("workflowPublishProblems", () => {
       expect(problems(d)).toEqual([]);
     });
 
+    describe("a reply checklist only on a Transition that closes the item (form-engine.md §3.3, RP-1088)", () => {
+      /** A code Screen holding the Inspection's reply checklist, as the Rabaed Default inspection_code_a does. */
+      const checklistScreens = new Map([
+        [
+          "inspection_code_a",
+          {
+            schema: formSchema.parse({
+              sections: [
+                {
+                  key: "checklist",
+                  title: { en: "Checklist", ar: "قائمة التحقق" },
+                  fields: [{ key: "inspection_checklist", type: "copied_checklist", copyOf: "checklist_template", label: { en: "Checklist", ar: "قائمة التحقق" }, required: true }],
+                },
+              ],
+            }),
+            internalFields: [],
+          },
+        ],
+      ]);
+      /** Transition `key` of `d` shows the checklist Screen instead of an Action Form of its own. */
+      const showing = (d: WorkflowDefinition, key: string) => Object.assign(transition(d, key), { actionForm: null, screen: "inspection_code_a" });
+
+      it("refuses one in the Screen of the Recommendation into the Owner's review: nothing raises its Snags or prints it at the Confirm", () => {
+        const d = ownerReview();
+        showing(d, "approve_a");
+        expect(problems(d, context({ screens: checklistScreens }))).toEqual([{ code: "reply_checklist_not_on_close", severity: "error", transition: "approve_a" }]);
+      });
+
+      it("takes one in the Screen of a close, the Owner's Confirm or a Consultant's code", () => {
+        const d = ownerReview();
+        showing(d, "confirm_a");
+        expect(problems(d, context({ screens: checklistScreens }))).toEqual([]);
+        const m = mar();
+        showing(m, "approve_a");
+        expect(problems(m, context({ screens: checklistScreens }))).toEqual([]);
+      });
+
+      it("refuses one on a Send inside the Participant too, naming the field, in English and Arabic", () => {
+        const d = mar();
+        showing(d, "send_for_review_again");
+        const found = workflowPublishProblems(d, context({ screens: checklistScreens }));
+        expect(found).toEqual([expect.objectContaining({ code: "reply_checklist_not_on_close", transition: "send_for_review_again", detail: "inspection_checklist" })]);
+        expect(found[0]!.message.en).toContain('"Send for Review"');
+        expect(found[0]!.message.en).toContain("inspection_checklist");
+        expect(found[0]!.message.ar).toContain('"إرسال للمراجعة"');
+      });
+    });
+
     it("says so in English and Arabic", () => {
       const d = ownerReview();
       transition(d, "approve_a").outcome = null;

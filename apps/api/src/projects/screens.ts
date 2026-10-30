@@ -1,4 +1,4 @@
-import { withMember, type Db } from "@rabaed/db";
+import { readScreenShownOffClose, withMember, type Db } from "@rabaed/db";
 import {
   formSchema,
   screenProblems,
@@ -170,7 +170,9 @@ async function publishIn(trx: Db, screenId: string, now: Date): Promise<PublishS
   const draft = (await sql<VersionRow>`select version_no, schema, internal_fields from app.screen_draft(${screenId}::uuid)`.execute(trx)).rows[0];
   if (draft) {
     const lists = await sql<{ id: string }>`select id from option_list`.execute(trx);
-    const problems = screenProblems(draft.schema, draft.internal_fields, { optionListIds: new Set(lists.rows.map((l) => l.id)) });
+    // A reply checklist only while every Workflow that would pin this Version shows it on a close (RP-1088).
+    const shownOffClose = await readScreenShownOffClose(trx, screenId);
+    const problems = screenProblems(draft.schema, draft.internal_fields, { optionListIds: new Set(lists.rows.map((l) => l.id)), shownOffClose });
     if (problems.length > 0) return { ok: false, reason: "screen_problems", problems };
   }
   const { rows } = await sql<{ outcome: string; version_no: number | null }>`

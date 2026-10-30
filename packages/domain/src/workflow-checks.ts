@@ -6,6 +6,7 @@ import { formFields, formSchema, type FormField, type FormSchema } from "./form.
 import { sectionSteps, type WorkflowStepHolder } from "./form-sections.ts";
 import { itemsToCreate, itemsToCreateKey, type Outcome, type OutcomeAction } from "./outcome.ts";
 import { isOpenStageCategory } from "./work-item.ts";
+import { replyChecklistKeys } from "./reply-checklist.ts";
 import { actorHolder, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 import { workflowKindProblems } from "./workflow-publish.ts";
 
@@ -84,6 +85,8 @@ export const workflowProblemCodes = [
   // Screens (ADR 0019, RP-516)
   "screen_not_found",
   "screen_with_action_form",
+  // A reply checklist only on a close (form-engine.md §3.3, RP-1088)
+  "reply_checklist_not_on_close",
   // Cancel (spec RP-423)
   "cancel_not_by_raiser",
   "cancel_not_to_cancelled_stage",
@@ -159,6 +162,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
   };
   const found = [
     ...screenNamingProblems(definition, context.screens),
+    ...replyChecklistProblems(definition, context.screens),
     ...structureProblems(input),
     ...graphProblems(input),
     ...stageProblems(input),
@@ -205,6 +209,19 @@ function screenNamingProblems({ transitions }: WorkflowDefinition, screens: Work
     if (t.screen === undefined) return [];
     if (t.actionForm !== null) return [{ code: "screen_with_action_form", transition: t.key, detail: t.screen }];
     return screens.has(t.screen) ? [] : [{ code: "screen_not_found", transition: t.key, detail: t.screen }];
+  });
+}
+
+/**
+ * A reply checklist sits only in the Screen of a close (form-engine.md §3.3, RP-1088): the
+ * close raises its Snags and the Documental Record prints it. A Recommendation into the
+ * Owner's review, or any other move, would take it with nothing to do either.
+ */
+function replyChecklistProblems(definition: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): FoundProblem[] {
+  return definition.transitions.flatMap((t): FoundProblem[] => {
+    const screen = screenOf(definition, screens, t.key);
+    if (screen === undefined || t.kind === "close") return [];
+    return replyChecklistKeys(screen.schema).map((key): FoundProblem => ({ code: "reply_checklist_not_on_close", transition: t.key, detail: key }));
   });
 }
 
@@ -842,6 +859,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   screen_not_found: (names) => ({
     en: `${names.transition.en} shows Screen "${names.detail}", which has no published Version this Workflow can use.`,
     ar: `يعرض ${names.transition.ar} الشاشة "${names.detail}"، وليس لها إصدار منشور يمكن لسير العمل هذا استخدامه.`,
+  }),
+  reply_checklist_not_on_close: (names) => ({
+    en: `${names.transition.en} shows the checklist ${names.detail} in its Screen but doesn't close the item: only a close takes a checklist, raising its Snags and printing it in the record.`,
+    ar: `${names.transition.ar} يعرض قائمة التحقق ${names.detail} في شاشته لكنه لا يُغلق العنصر: لا يأخذ قائمة التحقق إلا انتقال إغلاق، فيُنشئ عيوبها ويطبعها في السجل.`,
   }),
   screen_with_action_form: (names) => ({
     en: `${names.transition.en} shows Screen "${names.detail}" and has an Action Form of its own: it takes one or the other.`,
