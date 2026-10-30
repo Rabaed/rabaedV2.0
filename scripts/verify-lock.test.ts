@@ -104,10 +104,10 @@ describe("acquireLock with a reused pid (RP-1136)", () => {
     });
   });
 
-  it("never waits on a lock naming a process this run was started from", () => {
+  it("never waits on a lock naming a process this run was started from, its parent's parent included", () => {
     const file = lockFile(worktree());
     acquireLock(file, { ...holder, pidStarted: undefined }, alive);
-    expect(acquireLock(file, waiter, runs(() => true, {}, [17880]))).toEqual({
+    expect(acquireLock(file, waiter, runs(() => true, {}, [3010, 17880]))).toEqual({
       acquired: true,
       tookOver: "took over a stale lock (pid 17880, started 11:47, `pnpm verify in rp-1096`): its pid is a process this run was started from.",
     });
@@ -118,6 +118,43 @@ describe("acquireLock with a reused pid (RP-1136)", () => {
     acquireLock(file, holder, alive);
     const sameRun = runs(() => true, { 17880: new Date(holder.pidStarted!.getTime() + 900) });
     expect(acquireLock(file, waiter, sameRun)).toEqual({ acquired: false, message: "verify already running (pid 17880, started 11:47, `pnpm verify in rp-1096`)." });
+  });
+
+  it("takes over a lock whose start time is just over 2 seconds off", () => {
+    for (const offset of [2_001, -2_001]) {
+      const file = lockFile(worktree());
+      acquireLock(file, holder, alive);
+      const reused = runs(() => true, { 17880: new Date(holder.pidStarted!.getTime() + offset) });
+      expect(acquireLock(file, waiter, reused)).toMatchObject({ acquired: true, tookOver: expect.stringContaining("is now another process") });
+    }
+  });
+
+  it("trusts the pid alone when the lock's stored start time is not a date", () => {
+    const file = lockFile(worktree());
+    writeFileSync(file, JSON.stringify({ pid: 17880, started: holder.started.toISOString(), pidStarted: "not a date", command: "pnpm verify" }));
+    expect(acquireLock(file, waiter, runs(() => true, { 17880: at(11, 46, 58) }))).toEqual({
+      acquired: false,
+      message: expect.stringContaining("Its lock records no process start time"),
+    });
+  });
+
+  it("takes over a lock from before RP-1136 (no start time) whose pid started after the lock was taken", () => {
+    // RP-1137's lock: pid 17880 took it at 11:47; the pid's process now started at 13:13, so it is another one.
+    const file = lockFile(worktree());
+    acquireLock(file, { ...holder, pidStarted: undefined }, alive);
+    expect(acquireLock(file, waiter, runs(() => true, { 17880: at(13, 13) }))).toEqual({
+      acquired: true,
+      tookOver: "took over a stale lock (pid 17880, started 11:47, `pnpm verify in rp-1096`): pid 17880 is now another process, started 13:13.",
+    });
+  });
+
+  it("keeps waiting on a lock from before RP-1136 whose pid started before the lock was taken, and says how to free it", () => {
+    const file = lockFile(worktree());
+    acquireLock(file, { ...holder, pidStarted: undefined }, alive);
+    expect(acquireLock(file, waiter, runs(() => true, { 17880: at(11, 46, 58) }))).toEqual({
+      acquired: false,
+      message: `verify already running (pid 17880, started 11:47, \`pnpm verify in rp-1096\`). Its lock records no process start time, so a reused pid can't be told apart: if pid 17880 is not a verify run, delete ${file}.`,
+    });
   });
 
   it("trusts the pid alone when the start time can't be read now, and says how to free it", () => {
@@ -203,7 +240,7 @@ describe("waitForLock", () => {
     const file = lockFile(worktree());
     acquireLock(file, first, alive);
     const time = clock((sleeps) => sleeps === 40 && releaseLock(file, first.pid));
-    const result = await waitForLock(file, second, { processes: alive, ...time, report: (l) => lines.push(l), slot: "Main 3's verify slot", pollMs: 30_000, reportEveryMs: 600_000 });
+    const result = await waitForLock(file, second, { processes: pids(() => true, () => new Date(2026, 9, 20, 9, 4)), ...time, report: (l) => lines.push(l), slot: "Main 3's verify slot", pollMs: 30_000, reportEveryMs: 600_000 });
     expect(result).toEqual({ waitedMs: 40 * 30_000 });
     // An old-format lock (no start time): the pid alone decides, and the line says how to free it by hand.
     expect(lines[0]).toBe(

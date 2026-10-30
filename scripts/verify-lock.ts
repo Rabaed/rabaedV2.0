@@ -6,8 +6,9 @@ import { join } from "node:path";
 // worktrees still runs side by side. The pid check is passed in, so it is unit-tested.
 // RP-1096 adds each Main's one verify slot (mainSlot): a second verify among a Main's lanes waits for it.
 // RP-1136: Windows reuses pids quickly, so a lock also records when its process started (pidStarted, as
-// the OS reports it). A lock is held only while its pid runs, is not the caller's own or its parent's,
-// and started at that time; a lock without the time, or a pid whose time can't be read, falls back to the pid alone.
+// the OS reports it). A lock is held only while its pid runs, is not the caller's own or an ancestor's,
+// and started at that time (a lock without the time: started before the lock was taken); a pid whose
+// start can't be read falls back to the pid alone, and only then does the message say how to free it by hand.
 
 /**
  * Who holds the lock: the verify process, when it took the lock, how it was started, and when the OS
@@ -109,23 +110,25 @@ const refuseCurrent = (file: string): LockResult => {
 };
 
 /** Whether `holder` still holds its lock: live (and why it can't be sure), or stale and why. */
-type Check = { live: true; unsure?: string } | { live: false; why: string };
+type HolderStatus = { live: true; unsure?: string } | { live: false; why: string };
 
-function check(holder: LockHolder, self: LockHolder, file: string, { isAlive, startOf, ancestors = [] }: Processes): Check {
+function holderStatus(holder: LockHolder, self: LockHolder, file: string, { isAlive, startOf, ancestors = [] }: Processes): HolderStatus {
   if (holder.pid === self.pid) return { live: false, why: "its pid is this run's own." };
   if (ancestors.includes(holder.pid)) return { live: false, why: "its pid is a process this run was started from." };
   if (!isAlive(holder.pid)) return { live: false, why: "that process is gone." };
-  const freeByHand = `so a reused pid can't be told apart: if pid ${holder.pid} is not a verify run, delete ${file}.`;
-  if (holder.pidStarted === undefined) return { live: true, unsure: `Its lock records no process start time, ${freeByHand}` };
   const now = startOf(holder.pid);
+  const reused = { live: false, why: `pid ${holder.pid} is now another process, started ${hhmm(now ?? holder.started)}.` } as const;
+  const freeByHand = `so a reused pid can't be told apart: if pid ${holder.pid} is not a verify run, delete ${file}.`;
   if (now === undefined) return { live: true, unsure: `This run could not read pid ${holder.pid}'s start time, ${freeByHand}` };
-  if (Math.abs(now.getTime() - holder.pidStarted.getTime()) <= START_TOLERANCE_MS) return { live: true };
-  return { live: false, why: `pid ${holder.pid} is now another process, started ${hhmm(now)}.` };
+  if (holder.pidStarted !== undefined) return Math.abs(now.getTime() - holder.pidStarted.getTime()) <= START_TOLERANCE_MS ? { live: true } : reused;
+  // A lock from before RP-1136 has no start time, but no process takes a lock before it starts.
+  if (now.getTime() > holder.started.getTime() + START_TOLERANCE_MS) return reused;
+  return { live: true, unsure: `Its lock records no process start time, ${freeByHand}` };
 }
 
 /**
  * Takes the lock for `self`, or refuses with a message naming the live run that holds it. A lock is
- * stale, and taken over once, when it can't be read or `check` finds its process gone, reused by
+ * stale, and taken over once, when it can't be read or `holderStatus` finds its process gone, reused by
  * another process (its start time differs) or the caller itself (RP-1136); if another run took it
  * over first, even between the read and the takeover, that run is the holder.
  */
@@ -133,7 +136,7 @@ export function acquireLock(file: string, self: LockHolder, processes: Processes
   if (create(file, self)) return { acquired: true };
   const staleText = readText(file);
   const stale = parseHolder(staleText);
-  const verdict = stale && check(stale, self, file, processes);
+  const verdict = stale && holderStatus(stale, self, file, processes);
   if (verdict && verdict.live) return { acquired: false, message: verdict.unsure ? `${refusal(stale)} ${verdict.unsure}` : refusal(stale) };
   if (!removeStale(file, staleText, self.pid) || !create(file, self)) return refuseCurrent(file);
   return { acquired: true, tookOver: stale && verdict ? `took over a stale lock (${describeHolder(stale)}): ${verdict.why}` : "took over an unreadable lock." };

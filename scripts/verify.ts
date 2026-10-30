@@ -7,7 +7,7 @@ import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
-import { processStart } from "./process-start.ts";
+import { processAncestors, processStart } from "./process-start.ts";
 import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock, type Processes } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
@@ -53,7 +53,7 @@ function stopEarly(message: string, code = 1): never {
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
 // Both locks record this process's OS start time and check a holder's, so a pid Windows reused is not taken for a live run (RP-1136).
-const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [process.ppid] };
+const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [process.ppid, ...processAncestors(process.ppid)] };
 const pidStarted = processStart(process.pid);
 const lock = lockFile(root);
 const taken = acquireLock(lock, { pid: process.pid, started: new Date(), pidStarted, command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, processes);
