@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { buildSeamTwoTower, c2Draft, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, expectHiddenFrom, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 
@@ -53,6 +53,23 @@ const afterPhotos = async (as: string, id: string) =>
   );
 const byId = async (as: string, documentId: string) =>
   (await call<{ id: string }>(as, sql`select id from document where id = ${documentId}::uuid`)).map((r) => r.id);
+const names = new Map<string, string>();
+const named = (as: string) => names.get(as) ?? as;
+/** The Documents `as` reads through app.work_item_shared_documents (what the Snag's Transitions shared). */
+const shared = async (as: string, id: string) =>
+  (await call<{ document_id: string }>(as, sql`select document_id from app.work_item_shared_documents(${id}::uuid) as document_id`)).map((r) => r.document_id).sort();
+
+/**
+ * Each of `documents` read by every one of `seenBy` first, by id, and by none of `hiddenFrom`: in
+ * item `id`'s After photos, and by the Document's own id.
+ */
+async function expectPhotosHidden(id: string, documents: string[], seenBy: string[], hiddenFrom: string[], label?: string) {
+  const listed = (as: string) => call<{ id: string }>(as, sql`select id from document where work_item_id = ${id}::uuid and field_key = 'after_photos'`);
+  for (const target of documents) {
+    const one = (as: string) => call<{ id: string }>(as, sql`select id from document where id = ${target}::uuid`);
+    for (const read of [listed, one]) await expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, ...(label === undefined ? {} : { label }) });
+  }
+}
 
 /** K1's engineer's Snag, raised on C1, held by C1's PM at In Progress. */
 async function inProgress(title: string): Promise<string> {
@@ -80,6 +97,14 @@ beforeAll(async () => {
     checklistTemplate: false,
   }));
   c1Pm = c1.members.project_manager;
+  const known: [string, string][] = [
+    [c1Pm, "C1 PM"],
+    [c1.members.engineer, "C1 engineer"],
+    [k1.members.engineer, "K1 engineer"],
+    [ow.members.representative, "the Owner"],
+    [c2.members.engineer, "C2 engineer"],
+  ];
+  for (const [as, name] of known) names.set(as, name);
 });
 
 afterAll(async () => {
@@ -97,13 +122,11 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
 
     expect(await afterPhotos(c1Pm, id)).toEqual([photo]);
     expect(await afterPhotos(c1.members.engineer, id)).toEqual([photo]);
-    for (const outsider of [k1.members.engineer, ow.members.representative]) {
-      // Both see the Snag itself (raised, oversight), never its in-progress files.
-      expect((await call<{ id: string }>(outsider, sql`select id from work_item where id = ${id}::uuid`)).length).toBe(1);
-      expect(await afterPhotos(outsider, id)).toEqual([]);
-      expect(await byId(outsider, photo)).toEqual([]);
-      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`)).toEqual([]);
-    }
+    const outsiders = [k1.members.engineer, ow.members.representative];
+    // Both see the Snag itself (raised, oversight), never its in-progress files.
+    for (const outsider of outsiders) expect((await call<{ id: string }>(outsider, sql`select id from work_item where id = ${id}::uuid`)).length).toBe(1);
+    await expectPhotosHidden(id, [photo], [c1Pm, c1.members.engineer], outsiders);
+    for (const outsider of outsiders) expect(await shared(outsider, id)).toEqual([]); // not hidden-from: nothing is shared before a Transition takes it, for anyone; RP-1002-1 reads it shared after the Resolve
     // Nobody else adds one: K1 doesn't hold it.
     expect(
       (await call<{ outcome: string }>(k1.members.engineer, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', null, 'k1.jpg', 10, 'image/jpeg', now())`))[0]!
@@ -114,11 +137,9 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
   it("RP-623-2: C2, another Contractor of the same Trade, reads them neither before nor after the Resolve", async () => {
     const id = await inProgress("Exposed rebar");
     const photo = await addAfterPhoto(c1Pm, id);
-    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
-    expect(await byId(c2.members.engineer, photo)).toEqual([]);
+    await expectPhotosHidden(id, [photo], [c1Pm], [c2.members.engineer], "before the Resolve");
     expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Covered" })).toBe("applied");
-    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
-    expect(await byId(c2.members.engineer, photo)).toEqual([]);
+    await expectPhotosHidden(id, [photo], [c1Pm, k1.members.engineer], [c2.members.engineer], "after the Resolve");
     expect(
       (await call<{ outcome: string }>(c2.members.engineer, sql`select outcome from app.start_reply_document_upload(${id}::uuid, 'after_photos', null, 'c2.jpg', 10, 'image/jpeg', now())`))[0]!
         .outcome,
@@ -147,10 +168,9 @@ describe("a Snag's After photos stay with C1 until its Resolve (V19)", () => {
     expect(await take(k1.members.engineer, id, "return_to_open", { reason: "Still dusty" })).toBe("applied");
     const next = await addAfterPhoto(c1Pm, id);
     expect(await afterPhotos(c1.members.engineer, id)).toEqual([photo, next].sort());
-    for (const outsider of [k1.members.engineer, ow.members.representative]) {
-      expect(await afterPhotos(outsider, id)).toEqual([photo]);
-      expect(await byId(outsider, next)).toEqual([]);
-    }
+    const outsiders = [k1.members.engineer, ow.members.representative];
+    for (const outsider of outsiders) expect(await afterPhotos(outsider, id)).toEqual([photo]);
+    await expectPhotosHidden(id, [next], [c1Pm, c1.members.engineer], outsiders, "the next round");
   });
 });
 
@@ -176,11 +196,8 @@ describe("an informed Consultant reads none of C1's After photos until its Resol
     const inProgress = await addAfterPhoto(c1.members.engineer, id);
 
     const outsiders = [k1.members.engineer, ow.members.representative];
-    for (const outsider of outsiders) {
-      expect(await afterPhotos(outsider, id)).toEqual([]);
-      for (const photo of [atOpen, inProgress]) expect(await byId(outsider, photo)).toEqual([]);
-      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`)).toEqual([]);
-    }
+    await expectPhotosHidden(id, [atOpen, inProgress], [c1Pm, c1.members.engineer], outsiders, "before the Resolve");
+    for (const outsider of outsiders) expect(await shared(outsider, id)).toEqual([]); // not hidden-from: nothing is shared before a Transition takes it, for anyone; read shared after the Resolve below
     expect(await afterPhotos(c1.members.engineer, id)).toEqual([atOpen, inProgress].sort());
     /** The files `as` reads on a shared event of the Snag (a Transition that took them). */
     const filesOnEvents = async (as: string) =>
@@ -192,17 +209,18 @@ describe("an informed Consultant reads none of C1's After photos until its Resol
         )
       ).map((r) => r.id);
     // No file on any history event K1 reads while C1 holds them.
-    expect(await filesOnEvents(k1.members.engineer)).toEqual([]);
+    expect(await filesOnEvents(k1.members.engineer)).toEqual([]); // not hidden-from: no Transition took them yet, so no event carries them for anyone; read below once one does
 
     expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Clipped and covered" })).toBe("applied");
     for (const outsider of outsiders) expect(await afterPhotos(outsider, id)).toEqual([atOpen, inProgress].sort());
+    for (const outsider of outsiders) expect(await shared(outsider, id)).toEqual(expect.arrayContaining([atOpen, inProgress]));
     expect(await filesOnEvents(k1.members.engineer)).toEqual([atOpen, inProgress].sort());
     const frozen = await call<{ frozen: boolean }>(
       k1.members.engineer,
       sql`select frozen_at is not null as frozen from document where work_item_id = ${id}::uuid and field_key = 'after_photos'`,
     );
     expect(frozen).toEqual([{ frozen: true }, { frozen: true }]);
-    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
+    await expectPhotosHidden(id, [atOpen, inProgress], outsiders, [c2.members.engineer], "after the Resolve");
     // Positive control (RP-995): C2 reads its own Draft.
     const own = await c2Draft({ projectId, tradeId: electrical, buildingB, c2, call }, { type: "SNG", title: "C2's own" });
     expect(await call(c2.members.engineer, sql<{ id: string }>`select id from work_item where id = ${own}::uuid`)).toEqual([{ id: own }]);
@@ -232,15 +250,13 @@ describe("RP-981: an annotated copy of an After photo goes with its original", (
     const copy = started.document_id!;
     const [row] = (await migrator.query("select reply, field_key, annotated_from_id from document where id = $1", [copy])).rows;
     expect(row).toEqual({ reply: true, field_key: "after_photos", annotated_from_id: photo });
-    for (const outsider of [k1.members.engineer, ow.members.representative, c2.members.engineer]) {
-      expect(await afterPhotos(outsider, id)).toEqual([]);
-      expect(await byId(outsider, copy)).toEqual([]);
-      expect((await startCopy(outsider, id, photo)).outcome).toBe("not_found");
-    }
+    const outsiders = [k1.members.engineer, ow.members.representative, c2.members.engineer];
+    await expectPhotosHidden(id, [photo, copy], [c1Pm, c1.members.engineer], outsiders, "before the Resolve");
+    for (const outsider of outsiders) expect((await startCopy(outsider, id, photo)).outcome).toBe("not_found");
 
     expect(await take(c1Pm, id, "resolve_in_progress", { resolution_note: "Bonded" })).toBe("applied");
     for (const reader of [k1.members.engineer, ow.members.representative, c1.members.engineer]) expect(await afterPhotos(reader, id)).toEqual([photo, copy].sort());
-    expect(await afterPhotos(c2.members.engineer, id)).toEqual([]);
+    await expectPhotosHidden(id, [photo, copy], [k1.members.engineer], [c2.members.engineer], "after the Resolve");
 
     expect(await take(k1.members.engineer, id, "return_to_open", { reason: "Label it" })).toBe("applied");
     expect((await startCopy(c1Pm, id, photo)).outcome).toBe("document_frozen");

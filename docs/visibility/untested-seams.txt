@@ -4,10 +4,6 @@
 # a line whose test now exists. Never add a line for a new scenario: write its test at both seams.
 # Grouped by the ticket that added the scenario; the comment after a line is the start of its Scenario cell.
 
-# RP-82
-RP-82-1 api  # C1's WIR in Building A names under Approved submittals (a link question that accepts only 
-RP-82-2 api  # Tower's Project Admin (C1) turns on "Approved submittals required" (Project Settings → Req
-
 # RP-85
 RP-85-1 db  # C1's engineer has no Signature and opens Send for Review on their Draft, whose Form isn't 
 RP-85-2 db  # C1's engineer adds a Signature, takes Send for Review, then replaces it; the PM Returns th
@@ -114,9 +110,6 @@ RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflow
 # RP-598
 RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
 RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
-
-# RP-651
-RP-651-2 api  # C1's engineer raises a Civil WIR picking "Concrete pour": its Version 1 items are copied o
 
 # RP-1058
 RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
