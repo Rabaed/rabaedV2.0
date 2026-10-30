@@ -1,7 +1,7 @@
 import { iamPatternMatches } from "@rabaed/db/test-support/iam-pattern";
 import { describe, expect, it } from "vitest";
 import { environments, stackNames } from "../src/config.ts";
-import { environmentTemplates, references, render, type Resource } from "./support.ts";
+import { constructId, environmentTemplates, objectKey, references, render, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const storage = env.template("storage");
@@ -9,7 +9,7 @@ const storage = env.template("storage");
 // Resources of a type by their construct ID (the logical ID without CDK's hash).
 function byName(type: string): Record<string, { logicalId: string; resource: Resource }> {
   return Object.fromEntries(
-    Object.entries(storage.findResources(type)).map(([logicalId, resource]) => [logicalId.replace(/[0-9A-F]{8}$/, ""), { logicalId, resource: resource as Resource }]),
+    Object.entries(storage.findResources(type)).map(([logicalId, resource]) => [constructId(logicalId), { logicalId, resource: resource as Resource }]),
   );
 }
 const bucketsByName = byName("AWS::S3::Bucket");
@@ -120,22 +120,19 @@ describe("Project files", () => {
     }
     return grants;
   }
-  // The key pattern a resource names after the bucket's ARN: "" for the bucket itself.
-  const objectKey = (resource: unknown) => {
-    const join = (resource as { "Fn::Join"?: [string, unknown[]] })["Fn::Join"];
-    return join ? join[1].filter((part) => typeof part === "string").join(join[0]).replace(/^\//, "") : "";
-  };
 
-  it("the api reads, writes and removes Signatures, logos and Stamps where it stores them, and no other object outside projects/ (RP-951)", () => {
+  it("the api reads, writes and removes Signatures, logos, Stamps, Documents and register imports where it stores them, and nothing else (RP-951, RP-1104)", () => {
     const objects = projectFilesGrants()
       .filter((g) => g.role === "rabaed-dev-api-task" && g.effect === "Allow" && !g.actions.includes("s3:ListBucket"))
       .flatMap((g) => g.resources.map((r) => ({ actions: [...g.actions].sort(), key: objectKey(r) })));
     // Each object grant is a key pattern under the bucket, never the bucket itself nor every object in it.
     for (const { key } of objects) expect(key).not.toMatch(/^(\*)?$/);
     const keys = (action: string) => objects.filter((o) => o.actions.includes(action)).map((o) => o.key).sort();
-    const stored = ["companies/*/logo/*", "companies/*/stamp/*", "members/*/signatures/*", "projects/*"];
-    // Put stores the image, Get signs its download link, Delete removes an image nothing recorded (apps/api/src/identity).
-    for (const action of ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]) expect(keys(action)).toEqual(stored);
+    const stored = ["companies/*/logo/*", "companies/*/stamp/*", "members/*/signatures/*", "projects/*/register-imports/*", "projects/*/work-items/*/documents/*"];
+    // Put stores the file, Get signs its download link, Delete removes one nothing recorded (apps/api/src/identity, documents).
+    for (const action of ["s3:PutObject", "s3:DeleteObject"]) expect(keys(action)).toEqual(stored);
+    // Get also signs the download links of what only the worker writes (RP-1084).
+    expect(keys("s3:GetObject")).toEqual([...stored, "projects/*/snag-reports/*", "projects/*/work-items/*/documental-record/*"].sort());
     expect([...new Set(objects.flatMap((o) => o.actions))].sort()).toEqual(["s3:DeleteObject", "s3:GetObject", "s3:PutObject"]);
   });
 
@@ -194,21 +191,22 @@ describe("Project files", () => {
     });
   });
 
-  it("only the api and worker task roles are granted object access: the worker reading under projects/ and writing only records (RP-620)", () => {
+  it("only the api and worker task roles are granted object access: the worker reading Documents and records, and writing only records (RP-620, RP-1104)", () => {
     const projectBucket = bucketLogicalId("ProjectFiles");
     const grants = projectFilesGrants();
     expect([...new Set(grants.map((g) => g.role))].sort()).toEqual(["rabaed-dev-api-task", "rabaed-dev-worker-task"]);
     const isList = (g: { actions: string[] }) => g.actions.includes("s3:ListBucket");
     const api = grants.filter((g) => g.role === "rabaed-dev-api-task");
-    // The worker reads Documents and the Signatures, logos and Stamps a record prints (RP-650), and writes
-    // nothing but each item's Documental Record; it never deletes or lists.
+    // The worker reads Documents, the record it replaces and the Signatures, logos and Stamps a record prints
+    // (RP-650), and writes nothing but each item's Documental Record; it never deletes or lists.
     // (CDK merges one action's statements, so a statement may also name the build assets bucket: projectFilesGrants keeps this bucket's.)
     const worker = grants
       .filter((g) => g.role === "rabaed-dev-worker-task")
       .flatMap((g) => g.resources.map((r) => [g.actions.join(","), String(render(r))]));
-    expect(worker).toHaveLength(6);
+    expect(worker).toHaveLength(7);
     expect(worker).toEqual(expect.arrayContaining([
-      ["s3:GetObject", expect.stringMatching(/\/projects\/\*$/)],
+      ["s3:GetObject", expect.stringMatching(/\/projects\/\*\/work-items\/\*\/documents\/\*$/)],
+      ["s3:GetObject", expect.stringMatching(/\/projects\/\*\/work-items\/\*\/documental-record\/\*$/)],
       ["s3:GetObject", expect.stringMatching(/\/members\/\*\/signatures\/\*$/)],
       ["s3:GetObject", expect.stringMatching(/\/companies\/\*\/logo\/\*$/)],
       ["s3:GetObject", expect.stringMatching(/\/companies\/\*\/stamp\/\*$/)],

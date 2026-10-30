@@ -2,6 +2,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { round } from "./browser.ts";
 import { Api, projectIdOf } from "./helpers.ts";
+import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts --fixtures [--only FX-C2,FX-OR]
 //
@@ -130,11 +131,20 @@ export async function applyFixtures(only?: string[]): Promise<void> {
   const record: Record<string, FixtureRecord> = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, FixtureRecord>) : {};
   for (const [name, apply] of Object.entries(fixtures)) {
     if (only && !only.includes(name)) continue;
+    let fixture: FixtureRecord;
     try {
-      record[name] = await apply();
+      fixture = await apply();
     } catch (error) {
-      record[name] = { status: "failed", detail: error instanceof Error ? error.message : String(error), at: new Date().toISOString() };
+      fixture = { status: "failed", detail: error instanceof Error ? error.message : String(error), at: new Date().toISOString() };
     }
+    // RP-1099: a fixture taken while the api or db went down is not written.
+    const down = await stackDown(name);
+    if (down) {
+      console.error(down);
+      process.exitCode = 1;
+      return;
+    }
+    record[name] = fixture;
     console.log(`${name.padEnd(7)} ${record[name]!.status.toUpperCase().padEnd(8)} ${record[name]!.detail}`);
     writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
   }
