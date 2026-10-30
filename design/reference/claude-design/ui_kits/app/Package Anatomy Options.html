@@ -1,0 +1,228 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Package anatomy options" subtitle="D chosen for Kanban, E for List · package full page + panel anatomy · bulk review pop-up" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="design_doc_mode" content="canvas">
+<title>Rabaed — Package anatomy options</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+body{font-family:var(--font-ui);color:var(--ui-text)}
+.wrap{position:absolute;top:40px;left:40px;display:flex;flex-direction:column;gap:40px}
+.top{display:flex;gap:40px;align-items:flex-start}
+.fr{width:800px;flex:none;background:var(--ui-bg,#f6f7f9);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 0 0 1px var(--ui-border);box-sizing:border-box}
+.fr.new{box-shadow:0 0 0 2px var(--tomato-500,#f8552f)}
+.bdg{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 8px;border-radius:7px;background:var(--ui-text);color:var(--ui-surface);font:700 12px var(--font-ui)}
+.nw{font-size:11px;font-weight:700;color:var(--tone-tomato-fg);background:var(--tone-tomato-tint);padding:3px 8px;border-radius:6px}
+.fh{display:flex;align-items:center;gap:10px}.fh h2{margin:0;font-size:20px}
+.why{margin:0;font-size:13.5px;line-height:1.55;color:var(--ui-text-2);text-wrap:pretty}
+.lbl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ui-muted)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+.c{min-width:0;display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:14px;background:var(--ui-surface);box-shadow:inset 0 0 0 1px var(--ui-border),0 1px 2px rgba(31,36,48,.05);position:relative;overflow:hidden}
+.ref{white-space:nowrap;font-size:11.5px;font-weight:700;color:var(--ui-muted);font-variant-numeric:tabular-nums}
+.nm{font-size:14.5px;font-weight:700;line-height:1.3;margin:0}
+.r{display:flex;align-items:center;gap:6px}.sp{flex:1}
+.pl{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:6px;font-size:11.5px;font-weight:600;white-space:nowrap}.pl .ti{font-size:13px}
+.av{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:600;flex:none}
+.meta{white-space:nowrap;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ui-text-2)}.meta .ti{font-size:13px;color:var(--ui-faint)}
+.ft{border-top:1px solid var(--ui-border-2);padding-top:10px}
+.tiles{display:flex;gap:3px}.tiles i{flex:1;height:18px;border-radius:4px}
+.m{background:transparent!important;box-shadow:inset 0 0 0 1.5px var(--tone-red-solid);background-image:repeating-linear-gradient(135deg,var(--tone-red-tint) 0 3px,transparent 3px 6px)!important}
+.sum{font-size:12px;color:var(--ui-text-2);display:flex;gap:4px 10px;flex-wrap:wrap}.sum span{white-space:nowrap}.sum b{font-variant-numeric:tabular-nums}
+.blk{display:flex;flex-direction:column;gap:2px;border-radius:10px;background:var(--ui-surface-2);padding:4px}
+.bi{display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:12px;border-radius:7px}.bi .ti{font-size:15px;flex:none}.bi b{font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bi span{color:var(--ui-muted);white-space:nowrap}
+.topbar{position:absolute;inset:0 0 auto 0;height:4px;display:flex;gap:1px}.topbar i{height:100%}
+.frac{font:800 22px/1 var(--font-ui);font-variant-numeric:tabular-nums;white-space:nowrap}.frac small{font-size:12px;font-weight:500;color:var(--ui-muted);margin-inline-start:4px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--ui-border-2);border-radius:10px;overflow:hidden}
+.g{background:var(--ui-surface);padding:8px 8px 7px;display:flex;flex-direction:column;gap:2px}.g b{font:800 20px/1.1 var(--font-ui);font-variant-numeric:tabular-nums}.g span{font-size:10.5px;color:var(--ui-muted);white-space:nowrap}.g.z b{color:var(--ui-faint)!important}
+/* D — type ledger */
+.led{display:flex;flex-direction:column;border-radius:10px;box-shadow:inset 0 0 0 1px var(--ui-border-2);overflow:hidden}
+.lr{display:grid;grid-template-columns:24px minmax(0,1fr) 72px 30px;gap:8px;align-items:center;padding:7px 10px;font-size:12px}.lr+.lr{border-top:1px solid var(--ui-border-2)}
+.tic{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.lr b{font-weight:700}.lr em{font-style:normal;color:var(--ui-muted);margin-inline-start:5px}
+.mb{display:flex;gap:2px;height:8px}.mb i{flex:1;border-radius:2px}
+.fx{font-weight:700;font-variant-numeric:tabular-nums;text-align:end;font-size:12px;white-space:nowrap}
+/* E — type chips */
+.ovb{display:flex;gap:2px;height:6px;border-radius:3px;overflow:hidden}.ovb i{height:100%}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.tc{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 8px 0 4px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap;position:relative}
+.tc .tic{width:20px;height:20px;font-size:12px;border-radius:6px;background:var(--ui-surface)}
+.tc b{font:800 13px var(--font-ui);font-variant-numeric:tabular-nums;color:var(--ui-text)}
+.tc .dt{width:7px;height:7px;border-radius:50%;box-shadow:0 0 0 2px var(--ui-surface)}
+.pick{font:700 11px var(--font-ui);color:#fff;background:var(--tone-green-solid);padding:4px 8px;border-radius:6px;vertical-align:3px;margin-inline-start:6px}
+.wf{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:24px;align-items:start}
+.scr{position:relative;background:var(--ui-surface);border-radius:14px;box-shadow:inset 0 0 0 1px var(--ui-border);padding:16px;display:flex;flex-direction:column;gap:10px;min-height:560px;overflow:hidden}
+.zb{position:relative;border-radius:10px;background:var(--ui-surface-2);box-shadow:inset 0 0 0 1px var(--ui-border-2);padding:10px 12px;font-size:12px;color:var(--ui-text-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.zb b{color:var(--ui-text)}.zb.hl{background:var(--tone-tomato-tint);box-shadow:inset 0 0 0 1.5px var(--tone-tomato-solid,#f8552f);color:var(--tone-tomato-fg)}
+.cn{width:22px;height:22px;border-radius:50%;background:var(--ui-text);color:var(--ui-surface);font:800 11px var(--font-ui);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.zrow{display:grid;grid-template-columns:1fr 1.6fr;gap:10px}
+.scr.pg{padding-right:calc(36% + 16px)}
+.sdz{position:absolute;top:0;right:0;bottom:0;width:36%;box-sizing:border-box;background:var(--ui-canvas,#fff);box-shadow:-8px 0 24px rgba(31,36,48,.12),inset 1px 0 0 var(--ui-border);padding:14px;display:flex;flex-direction:column;gap:8px}
+.leg{display:flex;flex-direction:column;gap:10px}.leg div{display:grid;grid-template-columns:22px 1fr;gap:10px;font-size:13px;line-height:1.5;color:var(--ui-text-2)}.leg b{color:var(--ui-text)}
+.mini-t{display:flex;flex-direction:column;gap:4px}.mini-t i{display:block;height:14px;border-radius:4px;background:var(--ui-press)}
+.note{width:380px;flex:none;padding:22px;border-radius:20px;background:var(--ui-surface);box-shadow:0 0 0 1px var(--ui-border);font-size:13.5px;line-height:1.55;color:var(--ui-text-2);box-sizing:border-box}
+.note h3{margin:0 0 8px;font-size:15px;color:var(--ui-text)}.note ul{margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:6px}
+/* big list */
+.lf{width:2520px;background:var(--ui-bg,#f6f7f9);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 0 0 1px var(--ui-border);box-sizing:border-box}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:var(--ui-surface);box-shadow:inset 0 0 0 1px var(--ui-border)}
+.seg button{border:0;background:transparent;height:30px;padding:0 12px;border-radius:7px;font:600 12.5px var(--font-ui);color:var(--ui-text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button:hover{background:var(--ui-hover)}.seg button.on{background:var(--ui-text);color:var(--ui-surface)}
+.tw{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:12px;overflow:auto}
+table.pk{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:13.5px}
+.pk th,.pk td{height:52px;padding:0 12px;border-bottom:1px solid var(--ui-border-2);text-align:start;white-space:nowrap;background:var(--ui-surface)}
+.pk thead th{height:40px;background:var(--ui-surface-2);font-size:12.5px;font-weight:600;color:var(--ui-text-2)}
+.pk thead tr.gr th{height:28px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ui-muted);border-bottom:0}
+.pk thead tr.gr th.span{text-align:center;box-shadow:inset 0 -2px 0 var(--ui-border)}
+.pk tbody tr:hover td{background:var(--ui-hover)}
+.pk .s1{position:sticky;inset-inline-start:0;z-index:2;box-sizing:border-box;width:44px;min-width:44px;max-width:44px;padding:0 0 0 16px}
+.pk .s2{position:sticky;inset-inline-start:44px;z-index:2;box-sizing:border-box;width:156px;min-width:156px;max-width:156px}
+.pk .s3{position:sticky;inset-inline-start:200px;z-index:2;box-shadow:inset -1px 0 0 var(--ui-border-2)}
+.pk .ca{position:sticky;inset-inline-end:0;z-index:2;width:28px;text-align:center;box-shadow:inset 1px 0 0 var(--ui-border-2)}
+.pk .n{text-align:center;font-weight:700;font-variant-numeric:tabular-nums;min-width:30px}
+.pk .n.z{color:var(--ui-faint);font-weight:500}
+.pk .bl{box-shadow:inset 1px 0 0 var(--ui-border-2)}
+.tn{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:24px;padding:0 6px;border-radius:7px;font-weight:800;font-size:12.5px}
+.ck{width:16px;height:16px;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--ctl-off,#c5c9d2);display:inline-block;vertical-align:middle}
+.ib{border:0;background:transparent;width:28px;height:28px;border-radius:7px;color:var(--ui-muted);cursor:pointer;font-size:16px}.ib:hover{background:var(--ui-hover)}
+.tt b{font-weight:600;display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.who{display:flex;align-items:center;gap:8px}
+.lnote{font-size:12.5px;color:var(--ui-muted);display:flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top"><div id="A" class="fr"></div><div id="B" class="fr"></div><div id="C" class="fr"></div><div id="D" class="fr new"></div><div id="E" class="fr new"></div>
+<div class="note"><h3>Notes</h3><ul><li><b>Decision:</b> Kanban uses <b>D</b>, List uses <b>E</b>, both live in packages.html. The package page and bulk review are documented below.</li><li><b>D</b> and <b>E</b> are new. Both count items by submittal type (MAR, SAR, DAR, MS, DAS).</li><li><b>D</b> shows status per type, so you can see which type is holding the package back.</li><li><b>E</b> shows the type mix as chips. Status is a single bar for the whole package.</li><li>The list view below is full-width like the Submittals list. Use the switch to put any anatomy in the Progress column.</li></ul></div></div>
+<div class="lf" id="PAGE"></div>
+<div class="lf" id="LIST"></div>
+</div>
+<script>
+const T={ok:'green',bad:'orange',open:'blue',miss:'red'};
+const TY={MAR:['Material','ti-box','blue'],SAR:['Shop drawing','ti-vector','violet'],DAR:['Document','ti-file-text','cyan'],MS:['Method statement','ti-list-check','green'],DAS:['Design','ti-ruler-2','amber']};
+const TYK=Object.keys(TY);
+const CO={tmc:['TMC Constructions','#f8552f','TC'],gdl:['Gulf Dryliners','#7a5af0','GD'],alc:['ALEC Engineering','#1fae66','AE'],dcl:['Design Consultants LLC','#3d6db5','DC']};
+const PPL={hh:['Hafiz Hamdan','#3d6db5','HH'],nk:['Nasser Al Kaabi','#e98b45','NK'],sm:['Sara Al Mansoori','#b5455a','SM'],ks:['Khalid Al Dhaheri','#6b5ad8','KD']};
+const DISC={EL:'Electrical',AR:'Architecture',ME:'Mechanical',CV:'Civil'};
+const PST={prog:['In progress','blue','ti-progress'],att:['Needs attention','orange','ti-alert-triangle'],done:['Complete','green','ti-circle-check'],late:['Overdue','red','ti-clock-exclamation']};
+const it=s=>s.split(';').map(x=>{const [ty,st,nm,code]=x.split('|');return {ty,st,nm,code}});
+const P=[
+ {no:'PKG-TWR-TMC-001',n:'Tower 1 — Electrical materials',co:'tmc',to:'dcl',due:'Week 40',left:'12 days left',st:'att',disc:'EL',bl:'Tower 1',own:'hh',cr:'02 Sep 2026',tg:'29 Oct 2026',dl:12,
+  it:it('MAR|ok|LV switchgear|A;MAR|ok|Cable trays|B;MAR|bad|Lighting fixtures|C;SAR|open|Distribution boards;SAR|open|Small power layout;SAR|miss|Cable schedule – LV;MS|miss|Earthing test method statement')},
+ {no:'PKG-TWR-GDL-002',n:'Façade & finishes – Tower 1',co:'gdl',to:'dcl',due:'Week 36',left:'Closed 10 Sep',st:'done',disc:'AR',bl:'Tower 1',own:'nk',cr:'14 Jul 2026',tg:'03 Sep 2026',dl:null,
+  it:it('SAR|ok|Curtain wall|A;MAR|ok|Cladding panels|B;MAR|ok|Gypsum ceilings|A;MAR|ok|Porcelain tiles|A;DAR|ok|Paint system data|B')},
+ {no:'PKG-TWR-TMC-003',n:'MEP coordination – Level 3',co:'tmc',to:'dcl',due:'Week 42',left:'26 days left',st:'prog',disc:'ME',bl:'Tower 1',own:'hh',cr:'21 Sep 2026',tg:'12 Nov 2026',dl:26,
+  it:it('SAR|ok|Ceiling void coordination|B;SAR|open|Ductwork L3;SAR|open|Sprinkler layout L3;MAR|open|Fire dampers;DAS|open|Combined services drawing;MS|miss|Installation sequence')},
+ {no:'PKG-POD-ALC-004',n:'Basement waterproofing',co:'alc',to:'dcl',due:'Week 38',left:'4 days overdue',st:'late',disc:'CV',bl:'Podium',own:'ks',cr:'05 Aug 2026',tg:'13 Oct 2026',dl:-4,
+  it:it('MAR|ok|Membrane system|A;MAR|bad|Protection board|D;MS|bad|Application method|C;DAR|miss|Warranty certificate')},
+ {no:'PKG-TWR-ALC-005',n:'Lift installation – Tower 1',co:'alc',to:'dcl',due:'Week 44',left:'34 days left',st:'prog',disc:'ME',bl:'Tower 1',own:'ks',cr:'30 Sep 2026',tg:'20 Nov 2026',dl:34,
+  it:it('MAR|open|Passenger lifts;MAR|open|Service lift;SAR|open|Lift shaft details;DAS|open|Traffic analysis;MS|open|Installation method')},
+ {no:'PKG-POD-TMC-006',n:'Concrete mix designs',co:'tmc',to:'dcl',due:'Week 30',left:'Closed 28 Jul',st:'done',disc:'CV',bl:'Podium',own:'nk',cr:'01 Jun 2026',tg:'24 Jul 2026',dl:null,
+  it:it('MAR|ok|C40 mix|A;MAR|ok|C50 mix|A;DAR|ok|Trial mix results|B')},
+ {no:'PKG-TWR-GDL-007',n:'Curtain wall shop drawings',co:'gdl',to:'dcl',due:'Week 43',left:'19 days left',st:'prog',disc:'AR',bl:'Tower 2',own:'sm',cr:'15 Sep 2026',tg:'05 Nov 2026',dl:19,
+  it:it('SAR|ok|Elevations N/S|B;SAR|ok|Elevations E/W|A;SAR|open|Typical details;SAR|open|Corner details;DAS|ok|Structural calcs|B;MAR|open|Glass samples')},
+ {no:'PKG-TWR-TMC-008',n:'Fire alarm & low current',co:'tmc',to:'dcl',due:'Week 41',left:'8 days left',st:'att',disc:'EL',bl:'Tower 2',own:'hh',cr:'08 Sep 2026',tg:'25 Oct 2026',dl:8,
+  it:it('MAR|ok|Fire alarm panel|A;MAR|bad|Detectors|C;SAR|open|FA riser diagram;SAR|bad|CCTV layout|C;DAR|ok|Cause & effect matrix|B;MS|miss|Testing & commissioning')}
+];
+const order=['ok','bad','open','miss'];
+const cnt=(items)=>{const c={ok:0,bad:0,open:0,miss:0};items.forEach(i=>c[i.st]++);c.tot=items.length;return c};
+const byType=p=>{const g={};p.it.forEach(i=>(g[i.ty]=g[i.ty]||[]).push(i));return TYK.filter(k=>g[k]).map(k=>[k,g[k]])};
+const sorted=a=>a.slice().sort((x,y)=>order.indexOf(x.st)-order.indexOf(y.st));
+const pill=k=>`<span class="pl" style="background:var(--tone-${PST[k][1]}-tint);color:var(--tone-${PST[k][1]}-fg)"><i class="ti ${PST[k][2]}"></i>${PST[k][0]}</span>`;
+const av=(o,s=20)=>`<span class="av" style="width:${s}px;height:${s}px;font-size:${Math.round(s*.4)}px;background:${o[1]}">${o[2]}</span>`;
+const route=p=>`<span class="meta">${av(CO[p.co])}<i class="ti ti-arrow-right"></i>${av(CO[p.to])}</span>`;
+const due=p=>`<span class="meta"><i class="ti ti-calendar-event"></i>${p.due} · ${p.left}</span>`;
+const head=(id,t,d,nw)=>`<div class="fh"><span class="bdg">${id}</span><h2>${t}</h2>${nw?'<span class="nw">New</span>':''}</div><p class="why">${d}</p>`;
+const cards=(fn)=>`<span class="lbl">Kanban card</span><div class="cards">${[P[0],P[1]].map(fn).join('')}</div>`;
+const seg=s=>`var(--tone-${T[s]}-solid)`;
+const tic=k=>`<span class="tic" style="background:var(--tone-${TY[k][2]}-tint);color:var(--tone-${TY[k][2]}-fg)"><i class="ti ${TY[k][1]}"></i></span>`;
+
+/* A */
+const tiles=p=>`<div class="tiles">${sorted(p.it).map(i=>`<i class="${i.st==='miss'?'m':''}" style="background:${seg(i.st)}"></i>`).join('')}</div>`;
+const sumA=p=>{const c=cnt(p.it);return `<div class="sum"><span><b>${c.ok}/${c.tot}</b> closed A/B</span>${c.bad?`<span style="color:var(--tone-orange-fg)"><b>${c.bad}</b> Code C/D</span>`:''}${c.miss?`<span style="color:var(--tone-red-fg)"><b>${c.miss}</b> missing</span>`:''}</div>`};
+A.innerHTML=head('A','Item strip','One tile per submittal, with missing items as striped outlines. You see the package’s size and state at a glance.')+cards(p=>`<div class="c"><div class="r"><span class="ref">${p.no}</span><span class="sp"></span>${pill(p.st)}</div><p class="nm">${p.n}</p>${tiles(p)}${sumA(p)}<div class="r ft">${route(p)}<span class="sp"></span>${due(p)}</div></div>`);
+
+/* B */
+const topbar=p=>{const c=cnt(p.it);return `<div class="topbar">${order.map(k=>c[k]?`<i style="width:${c[k]/c.tot*100}%;background:${seg(k)}"></i>`:'').join('')}</div>`};
+const blockers=p=>p.it.filter(i=>i.st==='miss'||i.st==='bad');
+const blkB=p=>{const b=blockers(p);if(!b.length)return `<div class="blk" style="background:var(--tone-green-tint)"><div class="bi" style="color:var(--tone-green-fg)"><i class="ti ti-circle-check"></i><b style="white-space:normal">All closed A/B — ready to close out</b></div></div>`;
+ return `<div class="blk">${b.slice(0,2).map(i=>i.st==='miss'?`<div class="bi"><i class="ti ti-circle-dashed" style="color:var(--tone-red-fg)"></i><b>${i.nm}</b><span>Not submitted</span></div>`:`<div class="bi"><i class="ti ti-refresh" style="color:var(--tone-orange-fg)"></i><b>${i.nm}</b><span>Code ${i.code}</span></div>`).join('')}${b.length>2?`<div class="bi" style="color:var(--ui-muted)"><i class="ti ti-alert-circle"></i><b style="font-weight:500">+${b.length-2} more blocking</b></div>`:''}</div>`};
+const frac=(p,sz)=>{const c=cnt(p.it);return `<span class="frac"${sz?` style="font-size:${sz}px"`:''}>${c.ok}/${c.tot}<small>closed</small></span>`};
+B.innerHTML=head('B','Blocker-first','Shows what is stopping the package: missing items and Code C/D are named on the card. Progress is a fraction plus a thin bar on the top edge.')+cards(p=>`<div class="c" style="padding-top:16px">${topbar(p)}<div class="r"><span class="ref">${p.no}</span><span class="sp"></span>${frac(p)}</div><p class="nm">${p.n}</p>${blkB(p)}<div class="r ft">${route(p)}<span class="sp"></span>${due(p)}</div></div>`);
+
+/* C */
+const LB={ok:'Closed A/B',bad:'Code C/D',open:'In review',miss:'Missing'};
+const grid=p=>{const c=cnt(p.it);return `<div class="grid4">${order.map(k=>`<div class="g${c[k]?'':' z'}" style="box-shadow:inset 0 -3px 0 ${c[k]?seg(k):'transparent'}"><b style="color:var(--tone-${T[k]}-fg)">${c[k]}</b><span>${LB[k]}</span></div>`).join('')}</div>`};
+C.innerHTML=head('C','Count grid','Four status counters, always in the same position on every card. Best for scanning and comparing numbers down a column.')+cards(p=>`<div class="c"><div class="r">${av(CO[p.co],24)}<span class="meta" style="font-weight:600;color:var(--ui-text)">${CO[p.co][0]}</span><span class="sp"></span>${pill(p.st)}</div><div><span class="ref">${p.no}</span><p class="nm">${p.n}</p></div>${grid(p)}<div class="r ft"><span class="meta"><i class="ti ti-arrow-right"></i>${av(CO[p.to])}${CO[p.to][0]}</span><span class="sp"></span><span class="meta">${p.due}</span></div></div>`);
+
+/* D — type ledger */
+const minibar=items=>`<div class="mb">${sorted(items).map(i=>`<i class="${i.st==='miss'?'m':''}" style="background:${seg(i.st)}"></i>`).join('')}</div>`;
+const ledger=p=>`<div class="led">${byType(p).map(([k,a])=>{const c=cnt(a);return `<div class="lr">${tic(k)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${k}</b><em>${TY[k][0]}</em></span>${minibar(a)}<span class="fx" style="color:${c.ok===c.tot?'var(--tone-green-fg)':'var(--ui-text)'}">${c.ok}/${c.tot}</span></div>`}).join('')}</div>`;
+D.innerHTML=head('D','Type ledger <span class="pick">Chosen · Kanban</span>','One row per submittal type with its count, a status bar and a closed fraction. You can see which type is late: here, the SAR drawings and the method statement.',1)+cards(p=>`<div class="c"><div class="r"><span class="ref">${p.no}</span><span class="sp"></span>${pill(p.st)}</div><p class="nm">${p.n}</p>${ledger(p)}<div class="r ft">${route(p)}<span class="sp"></span>${due(p)}</div></div>`);
+
+/* E — type chips */
+const ovb=p=>{const c=cnt(p.it);return `<div class="ovb">${order.map(k=>c[k]?`<i class="${k==='miss'?'m':''}" style="width:${c[k]/c.tot*100}%;background:${seg(k)}"></i>`:'').join('')}</div>`};
+const chip=(k,a)=>{const iss=a.some(i=>i.st==='miss')?'red':a.some(i=>i.st==='bad')?'orange':null;return `<span class="tc" style="background:var(--tone-${TY[k][2]}-tint);color:var(--tone-${TY[k][2]}-fg)" title="${TY[k][0]}">${tic(k).replace('class="tic" style="background:var(--tone-'+TY[k][2]+'-tint);','class="tic" style="')}${k}<b>${a.length}</b>${iss?`<span class="dt" style="background:var(--tone-${iss}-solid)"></span>`:''}</span>`};
+const chips=p=>`<div class="chips">${byType(p).map(([k,a])=>chip(k,a)).join('')}</div>`;
+E.innerHTML=head('E','Type chips <span class="pick">Chosen · List</span>','The type mix as compact chips with counts. A dot on a chip means that type has a missing or Code C/D item. Status is one bar for the whole package.',1)+cards(p=>{const c=cnt(p.it);return `<div class="c"><div class="r"><span class="ref">${p.no}</span><span class="sp"></span>${pill(p.st)}</div><p class="nm">${p.n}</p><div class="r" style="align-items:baseline"><span class="frac" style="font-size:18px">${c.tot}<small>submittals</small></span><span class="sp"></span><span class="meta"><b style="color:var(--ui-text)">${c.ok}</b> closed${c.miss?` · <b style="color:var(--tone-red-fg)">${c.miss}</b> missing`:''}</span></div>${ovb(p)}${chips(p)}<div class="r ft">${route(p)}<span class="sp"></span>${due(p)}</div></div>`});
+
+/* Big list */
+const MODES=[['A','Item strip'],['B','Blockers'],['C','Fraction'],['D','By type'],['E','Type chips']];
+let mode=localStorage.getItem('pk-anat-mode2')||'E';
+const prog=p=>{const b=blockers(p);
+ if(mode==='A')return `<div style="width:160px;display:flex;flex-direction:column;gap:5px">${tiles(p)}</div>`;
+ if(mode==='B')return b.length?`<span class="meta" style="color:var(--ui-text);font-size:13px"><i class="ti ${b[0].st==='miss'?'ti-circle-dashed':'ti-refresh'}" style="color:var(--tone-${T[b[0].st]}-fg)"></i>${b[0].nm}${b.length>1?`<span style="color:var(--ui-muted)">+${b.length-1} more</span>`:''}</span>`:`<span class="meta" style="color:var(--tone-green-fg);font-size:13px"><i class="ti ti-circle-check" style="color:inherit"></i>Ready to close out</span>`;
+ if(mode==='C'){const c=cnt(p.it);return `<div style="display:flex;align-items:center;gap:10px;width:180px"><div style="flex:1">${ovb(p)}</div><b style="font-variant-numeric:tabular-nums">${c.ok}/${c.tot}</b></div>`}
+ if(mode==='D')return `<div style="display:flex;gap:12px">${byType(p).map(([k,a])=>{const c=cnt(a);return `<span style="display:flex;flex-direction:column;gap:4px;width:52px"><span style="display:flex;justify-content:space-between;font-size:11.5px"><b>${k}</b><span style="color:var(--ui-muted)">${c.ok}/${c.tot}</span></span>${minibar(a)}</span>`}).join('')}</div>`;
+ return chips(p)};
+const tn=(n,k)=>n?`<span class="tn" style="background:var(--tone-${TY[k][2]}-tint);color:var(--tone-${TY[k][2]}-fg)">${n}</span>`:'<span style="color:var(--ui-faint)">–</span>';
+const person=o=>`<span class="who">${av(o,24)}${o[0]}</span>`;
+function list(){
+ const rows=P.map(p=>{const c=cnt(p.it);const tc={};p.it.forEach(i=>tc[i.ty]=(tc[i.ty]||0)+1);
+  return `<tr><td class="s1"><span class="ck"></span></td><td class="s2"><span class="ref" style="font-size:12.5px;color:var(--ui-text-2)">${p.no}</span></td><td class="s3 tt"><b>${p.n}</b></td><td>${pill(p.st)}</td><td>${prog(p)}</td><td class="n bl">${c.tot}</td>${TYK.map((k,i)=>`<td class="n${i?'':' bl'}">${tn(tc[k]||0,k)}</td>`).join('')}${order.map((k,i)=>`<td class="n${i?'':' bl'}${c[k]?'':' z'}" style="${c[k]?`color:var(--tone-${T[k]}-fg)`:''}">${c[k]||'–'}</td>`).join('')}<td class="bl">${DISC[p.disc]}</td><td>${person(CO[p.co])}</td><td>${person(CO[p.to])}</td><td>${p.bl}</td><td>${person(PPL[p.own])}</td><td>${p.cr}</td><td>${p.tg}</td><td style="font-weight:600;color:${p.dl==null?'var(--ui-muted)':p.dl<0?'var(--tone-red-fg)':p.dl<=10?'var(--tone-orange-fg)':'var(--ui-text)'}">${p.dl==null?'Closed':p.dl<0?Math.abs(p.dl)+' days overdue':p.dl+' days'}</td><td class="ca"><button class="ib"><i class="ti ti-dots-vertical"></i></button></td></tr>`}).join('');
+ LIST.innerHTML=`<div class="fh"><span class="bdg">List</span><h2>List view</h2><span class="sp"></span><span class="lnote">Progress column shows</span><div class="seg">${MODES.map(([k,l])=>`<button class="${mode===k?'on':''}" data-m="${k}">${k} · ${l}</button>`).join('')}</div></div>
+ <p class="why">Same table pattern as the Submittals list: 52px rows, a sticky number and title, grouped headers, and the actions column pinned on the right. The type and status counts are separate columns, so you can sort and filter by them.</p>
+ <div class="tw"><table class="pk"><thead><tr class="gr"><th class="s1"></th><th class="s2"></th><th class="s3"></th><th></th><th></th><th class="bl"></th><th class="span bl" colspan="5">Submittal types</th><th class="span bl" colspan="4">Status</th><th class="bl" colspan="8"></th><th class="ca"></th></tr>
+ <tr><th class="s1"><span class="ck"></span></th><th class="s2">Package No.</th><th class="s3">Title</th><th>Status</th><th>Progress</th><th class="n bl">Items</th>${TYK.map((k,i)=>`<th class="n${i?'':' bl'}" title="${TY[k][0]}">${k}</th>`).join('')}<th class="n bl">A/B</th><th class="n">C/D</th><th class="n">In review</th><th class="n">Missing</th><th class="bl">Discipline</th><th>Contractor</th><th>Consultant</th><th>Building</th><th>Package owner</th><th>Created</th><th>Target date</th><th>Time left</th><th class="ca"><i class="ti ti-settings"></i></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+PAGE.innerHTML=`<div class="fh"><span class="bdg">Page</span><h2>Package page — full page, not a slider</h2></div><p class="why">Opening a package replaces the board with a full page. Clicking a submittal opens it in a panel docked on the right, and the page stays usable next to it, so you can work through the whole package without leaving. Live in <a href="packages.html">packages.html</a> (filled bulk example: <a href="packages.html#bulk">packages.html#bulk</a>).</p>
+<div class="wf"><div class="scr pg">
+<div class="zb"><span class="cn">1</span>← Packages › <b>PKG-TWR-TMC-001</b></div>
+<div class="zb"><span class="cn">2</span><b>Tower 1 — Electrical materials</b> · Needs attention · TMC → DCL · Target Week 40<span style="flex:1"></span>Export · Add expected item · <b>Add submittals</b></div>
+<div class="zrow"><div class="zb" style="min-height:70px"><span class="cn">3</span>Progress ring + Closed / C/D / In review / Missing (click to filter)</div><div class="zb" style="min-height:70px"><span class="cn">4</span>By submittal type (D ledger tiles) · MAR · SAR · DAR · MS · DAS (click to filter)</div></div>
+<div class="zb hl"><span class="cn">5</span><b>Waiting my action 4</b> · All · Code C/D · Missing · In review · Closed A/B · Activity log</div>
+<div class="zb hl"><span class="cn">6</span>4 submittals are waiting for your review<span style="flex:1"></span>Review one by one · <b>Bulk review all</b></div>
+<div class="zb" style="flex:1;align-items:flex-start"><span class="cn">7</span><div style="flex:1;display:flex;flex-direction:column;gap:6px"><span>Submittals table · ☐ No. · Title · Type · Trade · Rev · Status · Code · Owner · Due</span><div class="mini-t"><i style="background:var(--tone-tomato-tint)"></i><i></i><i></i><i></i><i></i></div></div></div>
+<div class="sdz"><div class="zb"><span class="cn">8</span>PKG · item <b>3 of 7</b> ↑ ↓ · ⤢ · ✕</div><div class="zb"><b>SUB-1294 · Fire Suppression System</b></div><div class="zb">Review · Details · History</div><div class="zb hl" style="flex-direction:column;align-items:stretch"><span><span class="cn">9</span> Your review</span><span style="display:flex;gap:4px"><b>A</b> · <b>B</b> · <b>C</b> · <b>D</b></span><span>Comment (required for C/D)</span><span>☑ Go to next item that needs review</span></div><div class="zb">Documents · 3</div><span style="flex:1"></span><div class="zb"><span style="flex:1"></span><b>Submit Code B</b></div></div>
+</div>
+<div class="leg">
+<div><span class="cn">1</span><span><b>Breadcrumb</b>: back to the Packages board.</span></div>
+<div><span class="cn">2</span><span><b>Header</b>: number, status, title, description, from → to, target date, created by. Package-level actions on the right.</span></div>
+<div><span class="cn">3</span><span><b>Progress</b>: the closed fraction plus four status counters. Click a counter to filter the table.</span></div>
+<div><span class="cn">4</span><span><b>By type</b>: the D ledger tiles, each with a count, status bar and x/y closed. A dot means a missing or C/D item. Click a tile to filter by type.</span></div>
+<div><span class="cn">5</span><span><b>Waiting my action</b>: the first tab, with a highlighted count. The package opens on this tab when something is waiting for you.</span></div>
+<div><span class="cn">6</span><span><b>Action bar</b>: <i>Review one by one</i> opens the first item in the panel and moves to the next after each submit. <i>Bulk review</i> opens the pop-up below. Tick rows to bulk-review just those.</span></div>
+<div><span class="cn">7</span><span><b>Table</b>: problem items sort first. The open row is highlighted. Missing items are striped.</span></div>
+<div><span class="cn">8</span><span><b>Submittal panel</b>: docked on the right, with prev/next through the package's items. ⤢ opens the full submittal.</span></div>
+<div><span class="cn">9</span><span><b>Action area</b> depends on state. Waiting for review: pick a code A–D, add a comment (required for C/D), submit. Returned C/D: comment + remind contractor. Missing: link / request / remove. Closed: no action.</span></div>
+</div></div>
+<div class="fh" style="margin-top:12px"><span class="bdg">Pop-up</span><h2>Bulk review</h2></div>
+<div class="wf"><div class="scr" style="min-height:0">
+<div class="zb"><b>Bulk review</b> · PKG-TWR-TMC-001 · 4 submittals<span style="flex:1"></span>✕</div>
+<div class="zb hl"><span class="cn">a</span>☑ <b>4 selected</b> — set code <b>A B C D</b><span style="flex:1"></span><span class="cn">b</span>Comments: <b>One for all</b> | Per item</div>
+<div class="zb"><span class="cn">c</span>☑ SUB-1294 · DAR · Fire Suppression System<span style="flex:1"></span><b>[A]</b> B C D</div>
+<div class="zb" style="margin-top:-6px;padding-inline-start:40px;color:var(--ui-muted)">Comment (optional)</div>
+<div class="zb">☑ SUB-1308 · MAR · Fire Suppression System<span style="flex:1"></span>A <b>[B]</b> C D</div>
+<div class="zb" style="background:var(--tone-red-tint);color:var(--tone-red-fg)">☑ SUB-1323 · MAR · Lighting fixtures<span style="flex:1"></span>A B <b>[C]</b> D · comment required</div>
+<div class="zb"><span class="cn">d</span>1 × Code A · 2 × Code B · 1 × Code C<span style="flex:1"></span>Cancel · <b>Submit 4 reviews</b></div>
+</div><div class="leg">
+<div><span class="cn">a</span><span><b>Set code for the selection</b>: tick any rows (or all) and press A–D to apply one code to all of them.</span></div>
+<div><span class="cn">b</span><span><b>Comment mode</b>: <i>One for all</i> puts one comment on every submittal. <i>Per item</i> gives each row its own box. Switching copies the shared text into empty boxes.</span></div>
+<div><span class="cn">c</span><span><b>Per-row override</b>: each row has its own A–D buttons, so you can mix codes in one submit.</span></div>
+<div><span class="cn">d</span><span><b>Summary + checks</b>: totals per code. Submit is blocked until every row has a code and every C/D has a comment. Problem rows turn red.</span></div>
+</div></div>`;
+list();
+LIST.addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(!b)return;mode=b.dataset.m;localStorage.setItem('pk-anat-mode2',mode);list()});
+</script>
+</body>
+</html>

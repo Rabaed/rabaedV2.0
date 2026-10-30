@@ -1,0 +1,43 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Rabaed Admin — Import register" subtitle="Rabaed Engineer picks project, company (Participant), default raiser and a required reason, then runs the same wizard · EN / AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed Admin — Import register</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="snag/snag.css">
+<link rel="stylesheet" href="wf/wf.css">
+<link rel="stylesheet" href="bulk/bulk.css">
+<link rel="stylesheet" href="imp/imp.css">
+<link rel="stylesheet" href="imp/admin.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="imp/data.js"></script>
+<script src="imp/wizard.js"></script>
+<script>
+const S=RS.S;try{const o=JSON.parse(localStorage.getItem('rb-shell-v1')||'{}');if(o.lang)S.lang=o.lang}catch(e){}
+Object.assign(IMW.V,IMW.fresh('admin'));
+const L=(e,a)=>S.lang==='ar'?a:e;
+const MARK=(window.__resources&&window.__resources.markSvg)||'../../assets/brand/rabaed-mark.svg';
+const NAV=[['ti-layout-dashboard','Overview','نظرة عامة'],['ti-building','Companies','الشركات'],['ti-briefcase','Projects','المشاريع'],['ti-users','Users','المستخدمون'],['ti-upload','Imports','عمليات الاستيراد',1],['ti-clock','Audit log','سجل التدقيق']];
+const SCR=[['for','Company & reason','الشركة والسبب'],['upload','Upload','الرفع'],['sheet','Sheet','الورقة'],['map','Map fields','ربط الحقول'],['values','Map values','ربط القيم'],['setup','Assign & packages','الإسناد والحزم'],['validate','Validate','التحقق'],['result','Result','النتيجة']];
+function ready(){const V=IMW.V;if(!V.ctx.co){V.ctx.co='tmc';V.ctx.raiser='hafiz'}if(!V.ctx.reason)V.ctx.reason=L('TMC asked for help loading their Rev 4 register — ticket #4821','طلبت TMC المساعدة في تحميل سجلها Rev 4 — تذكرة #4821');if(!V.file)V.file='TMC_Submittal_Register_Rev4.xlsx'}
+function jump(k){const V=IMW.V;const i=IMW.STEPS().indexOf(k);if(i>0)ready();if(k==='result'&&!V.done){const st=IMW.stat();V.done={id:'IMP-014',ok:st.ok.length,bad:st.bad.length,nw:IMW.newPk(st.ok),ex:IMW.exPk(st.ok)}}V.step=i;if(k==='validate'){V.vst='done';V.vtab='err'}location.hash=k;render();scrollTo(0,0)}
+function revBar(){const c=IMW.cur();return `<div class="ir-rev" id="irrev"><span>${L('Screens','الشاشات')}</span>${SCR.map(s=>`<button class="${c===s[0]?'on':''}" data-jump="${s[0]}">${L(s[1],s[2])}</button>`).join('')}<i class="sep"></i><button class="${S.lang==='en'?'on':''}" data-rlang="en">EN</button><button class="${S.lang==='ar'?'on':''}" data-rlang="ar">ع</button><i class="sep"></i><a href="import-register.html" style="color:#d5d8de;text-decoration:none;padding:0 8px;white-space:nowrap">${L('Project app','تطبيق المشروع')} →</a></div>`}
+function body(){const V=IMW.V,t=V.toast;return `<div class="ir-ph"><div><h1>${L('Import register for a company','استيراد السجل لصالح شركة')}</h1><p>${L('Runs the same import a Member would run — the import belongs to the company you pick.','يشغّل نفس الاستيراد الذي يشغّله العضو — يعود الاستيراد للشركة التي تختارها.')}</p></div></div>${IMW.view()}${t?`<div class="toast"><i class="ti ti-circle-check"></i>${t}</div>`:''}`}
+function render(){document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.getElementById('app').innerHTML=`<div class="ad rs light" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}"><aside class="ad-sb"><div class="ad-br"><img src="${MARK}" alt=""><div><b>${L('Rabaed','ربائد')}</b><small><i class="ti ti-shield-check"></i>${L('Admin','الإدارة')}</small></div></div><h6>${L('Platform','المنصة')}</h6>${NAV.map(n=>`<button class="${n[3]?'on':''}"><i class="ti ${n[0]}"></i>${L(n[1],n[2])}</button>`).join('')}<span class="sp"></span><div class="ad-me"><span class="av" style="width:32px;height:32px;font-size:12px;background:#f8552f">YQ</span><div><b>${L('Yousef Al Qahtani','يوسف القحطاني')}</b><small>${L('Rabaed Engineer','مهندس ربائد')}</small></div></div></aside>
+ <div class="ad-mn"><header class="ad-hd"><div class="crumb"><span>${L('Imports','عمليات الاستيراد')}</span><i class="ti ti-chevron-right"></i><b>${L('New import','استيراد جديد')}</b></div><span class="sp"></span><span class="ad-env"><i class="ti ti-shield-check"></i>${L('Rabaed Admin','إدارة ربائد')}</span></header><main class="ad-ct" id="adroot">${body()}</main></div></div>${revBar()}`}
+const R=()=>{document.getElementById('adroot').innerHTML=body();const rb=document.getElementById('irrev');if(rb)rb.outerHTML=revBar()};
+document.addEventListener('click',e=>{const j=e.target.closest('[data-jump],[data-rlang]');if(!j)return;if(j.dataset.jump)return jump(j.dataset.jump);S.lang=j.dataset.rlang;try{const o=JSON.parse(localStorage.getItem('rb-shell-v1')||'{}');o.lang=S.lang;localStorage.setItem('rb-shell-v1',JSON.stringify(o))}catch(e){}render()});
+IMW.bind(document.getElementById('app'),R,{created:()=>{}});
+const h=location.hash.slice(1);if(h)jump(h);else render();
+</script>
+</body>
+</html>
