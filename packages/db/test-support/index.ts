@@ -31,6 +31,8 @@
  *                                   beside a refusal to C2 (RP-995). Returns its id.
  *   bilingual(en), digits(n)        seam-two-tower.ts: a name with the same text in both languages; n random digits for a unique code.
  *   joinProject(app, projectId, invite, authorizedPersonId)   join-project.ts: invites a Company and accepts as its Authorized Person.
+ *   expectHiddenFrom(options)       hidden-from.ts: a row is read, by id, first by each viewer who may see it, then by
+ *                                   none who may not (RP-1095); every "hidden from" assert, at both seams, uses it.
  * Every Member of the test database has a Signature, and every Company a Stamp, by default (RP-85,
  *   RP-617: no Signature or no Stamp, no Transition): test-defaults.ts installs both when the database is reset.
  * Defined below:
@@ -56,6 +58,7 @@ export { addOwnerReviewWorkflow } from "./owner-review-workflow.ts";
 export { runAsOwner, withSignature, withoutSignature, type RunAsOwner } from "./signature.ts";
 export { withStamp, withoutStamp } from "./stamp.ts";
 export { joinProject } from "./join-project.ts";
+export { expectHiddenFrom, type HiddenFromOptions } from "./hidden-from.ts";
 export {
   bilingual,
   buildSeamTwoTower,
