@@ -21,6 +21,8 @@ export type SubmittalLogEntry =
       event: SubmittalTimelineEvent;
       /** Who acted, by name: one of the viewer's own Company's people, or the Code's signer (V14); null for another Company's. */
       person: BilingualText | null;
+      /** The person's Positions, as the read gives them: for the viewer's own people only, never the signer of another Company (RP-1091). */
+      positions: readonly BilingualText[];
       /** The shared text written with it: the Cover Note with a Submit, the Remarks with a Code. */
       texts: SubmittalTimelineText[];
       tone: SubmittalTimelineTone;
@@ -107,7 +109,9 @@ export function submittalApprovalLog({ events, viewerCompany, creationDate, outc
     if (another && previous !== null && !sameName(previous.by.companyName, company)) oldestFirst.push({ kind: "review", companyName: company });
     // Another Company by name only, but for whoever issued the Code (V14); never more than the read gives.
     const person = another && event.type !== "issue_code" ? null : event.by.memberName;
-    oldestFirst.push({ kind: "event", event, person, texts: sharedTexts(event), tone: tone(event), comments: comments(event) });
+    // Only the read's, which gives them for the viewer's own Participant's people alone: never another Company's signer's (V14).
+    const positions = person === null || another ? [] : event.by.positions;
+    oldestFirst.push({ kind: "event", event, person, positions, texts: sharedTexts(event), tone: tone(event), comments: comments(event) });
     previous = event;
   }
   return oldestFirst.reverse();
@@ -117,6 +121,8 @@ export type SubmittalInternalEntry = {
   event: SubmittalTimelineEvent;
   /** Who acted, as the read names them: the viewer's own people; another Company's (the Consultant's Recommended Code the Owner reads, ADR 0022) by its name only. */
   person: BilingualText | null;
+  /** The person's Positions, as the read gives them (RP-1091). */
+  positions: readonly BilingualText[];
   /** An Internal Note, or a Return's reason. */
   texts: SubmittalTimelineText[];
   tone: SubmittalTimelineTone;
@@ -136,6 +142,7 @@ export function submittalInternalLog(events: readonly SubmittalTimelineEvent[], 
     .map((event) => ({
       event,
       person: event.by.memberName,
+      positions: event.by.memberName === null ? [] : event.by.positions,
       texts: [
         ...(written(event.internalNote) ? [{ kind: "internalNote" as const, text: event.internalNote }] : []),
         // An `assigned` event's reason is why it was handed over, which its label already says.

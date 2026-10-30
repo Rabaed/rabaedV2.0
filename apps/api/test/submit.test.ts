@@ -249,9 +249,10 @@ describe("Submit", () => {
     const events = await history(signer, id);
     expect(events.map((e) => [e.type, e.transition?.en ?? null, e.audience])).toEqual([["transition", "Submit", "shared"]]);
     expect(events[0]).toMatchObject({
-      by: { companyName: { en: "Test Constructions" }, memberName: null },
-      fromStep: { en: "Contractor review" },
-      toStep: { en: "Consultant review" },
+      by: { companyName: { en: "Test Constructions" }, memberName: null, positions: [] },
+      // Which of the Contractor's Steps held it is the Contractor's own (V14, RP-1091).
+      fromStep: null,
+      toStep: null,
       reason: null,
       outcome: null,
     });

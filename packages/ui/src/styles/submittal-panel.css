@@ -152,6 +152,10 @@
   .sdp-fields {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* The key facts are 2 × 2 here but number three: the last spans both columns, so no cell is empty (RP-1090). */
+  .sdp-facts > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Normal (560–879): fields in 2 columns. */
