@@ -1,20 +1,12 @@
 import { holdReason, type Holders } from "./claude-sessions.ts";
-import { laneProject, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
+import { laneProject, protectedLaneReason, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
 
 // RP-1101: the guards worktrees:prune and lanes:prune share, after 2026-10-29's prunes removed
-// live work. A session working in a stale project's folder keeps it; lane 7 (the live UAT stack
-// behind a Cloudflare Tunnel) is never a candidate, nor `--lane 7`; a bare `lanes:prune --merged
+// live work. A session working in a stale project's folder keeps it; lane 7 (Main 7's harness
+// data, lanes.ts protectedLaneReason) is never a candidate, nor `--lane 7`; a bare `lanes:prune --merged
 // --yes` is refused (RP-1007: it removed other Mains' live stacks); a shallow clone, whose missing
 // history makes merged branches look unmerged and the other way round, is refused; and what was
 // kept is printed last, so `| tail` does not cut the reasons off.
-
-/** The lanes no prune ever removes: lane 7 is Main 7's live UAT stack behind a Cloudflare Tunnel. */
-const PROTECTED: Record<string, string> = {
-  "rabaed-lane7": "lane 7 is the live UAT stack behind a Cloudflare Tunnel; no prune touches it (ask the Orchestrator)",
-};
-
-/** Why a prune never removes this compose project, or undefined. */
-export const protectedLaneReason = (project: string | undefined): string | undefined => (project === undefined ? undefined : PROTECTED[project]);
 
 /** The candidates without the protected lanes, which are kept with their reason and first folder. */
 export function splitProtected<P extends StaleProject>(candidates: P[], containers: Container[]): { prune: P[]; kept: KeptProject[] } {

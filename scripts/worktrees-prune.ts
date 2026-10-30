@@ -26,7 +26,7 @@
 // connection to its Postgres keeps it. It lists everything and asks first.
 //
 // RP-1101: it refuses on a shallow clone (missing history misjudges merged branches), never touches
-// lane 7 (the live UAT stack) or the worktree whose .env names it, lists a dirty worktree's files,
+// lane 7 (Main 7's harness data) or the worktree whose .env names it, lists a dirty worktree's files,
 // keeps a stale project whose existing folder a session works in, and prints what it kept, with
 // why, last, so a `| tail` keeps the reasons.
 //
