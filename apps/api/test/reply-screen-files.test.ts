@@ -8,12 +8,12 @@
 // empty, and the first round's photos stay on the first Resolve. Leaving the Contractor any
 // other way (here a Send Back, on a Project copy of the Workflow) discards them.
 import { createDb } from "@rabaed/db";
-import { expectedContentSha256, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
+import { expectedContentSha256, expectHiddenFrom, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
 import type { DocumentList, StartedDocumentUpload, WorkflowDefinition, WorkflowRead, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, ok, only, projectMember, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -32,6 +32,20 @@ const photo = jpegWithExif();
 const documentsOf = async (by: Caller, id: string): Promise<DocumentList> => (await ok(by.get(`/v1/work-items/${id}/documents`), 200)).json();
 const afterPhotos = async (by: Caller, id: string) => (await documentsOf(by, id)).documents.filter((d) => d.fieldKey === "after_photos");
 const history = async (by: Caller, id: string): Promise<WorkItemHistory["events"]> => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
+
+const names = new Map<Caller, string>();
+const named = (by: Caller) => names.get(by) ?? "someone";
+/**
+ * Each of `photos` read by every one of `seenBy` first, by id, and by none of `hiddenFrom`: in the
+ * item's After photos (an empty list, or the plain 404) and by its download link (the plain 404).
+ */
+async function expectPhotosHidden(id: string, photos: string[], seenBy: Caller[], hiddenFrom: Caller[], label?: string) {
+  const listed = async (by: Caller) => (await readById<DocumentList>(`/v1/work-items/${id}/documents`)(by)).flatMap((l) => l.documents.filter((d) => d.fieldKey === "after_photos"));
+  for (const target of photos) {
+    const downloaded = async (by: Caller) => (await readById<{ url: string }>(`/v1/work-items/${id}/documents/${target}/download`)(by)).map(() => ({ id: target }));
+    for (const read of [listed, downloaded]) await expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, ...(label === undefined ? {} : { label }) });
+  }
+}
 
 /** Starts an upload of `fileName` to the reply Screen field `fieldKey` of item `id`, as the browser does. */
 const startReplyUpload = (by: Caller, id: string, fileName: string, fieldKey = "after_photos") =>
@@ -105,6 +119,8 @@ beforeAll(async () => {
   };
   owner = await addOther("owner", "representative", all);
   c2Engineer = await addOther("contractor", "engineer", only(buildingB));
+  const known: [Caller, string][] = [[at.c1Pm, "C1 PM"], [at.c1Engineer, "C1 engineer"], [at.k1Manager, "K1 manager"], [owner, "the Owner"], [c2Engineer, "C2 engineer"]];
+  for (const [by, name] of known) names.set(by, name);
 });
 
 describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
@@ -130,11 +146,7 @@ describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
     expect((await afterPhotos(at.c1Pm, id)).map((d) => d.id)).toEqual([first, second]);
 
     // Nobody outside C1 reads them before the Resolve (RP-623-1, seam 2 too): K1, the Owner, C2.
-    expect(await afterPhotos(at.k1Manager, id)).toEqual([]);
-    expect(await afterPhotos(owner, id)).toEqual([]);
-    await expectHidden(at.k1Manager.get(`/v1/work-items/${id}/documents/${first}/download`));
-    await expectHidden(owner.get(`/v1/work-items/${id}/documents/${first}/download`));
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents`));
+    await expectPhotosHidden(id, [first, second], [at.c1Pm, at.c1Engineer], [at.k1Manager, owner, c2Engineer]);
     // Nor may they add one: K1 doesn't hold it.
     const k1Adds = await startReplyUpload(at.k1Manager, id, "k1.jpg");
     expect(k1Adds.statusCode, k1Adds.body).toBe(409);
@@ -203,7 +215,7 @@ describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
     const added = await addAfterPhoto(at.c1Pm, id, "wrong.jpg");
     const removed = await at.c1Pm.request("DELETE", `/v1/work-items/${id}/documents/${added}`);
     expect(removed.statusCode, removed.body).toBe(204);
-    expect(await afterPhotos(at.c1Pm, id)).toEqual([]);
+    expect(await afterPhotos(at.c1Pm, id)).toEqual([]); // not hidden-from: removed, for its uploader too
   });
 });
 
@@ -215,11 +227,8 @@ describe("who reads and adds a Snag's After photos (scenarios RP-623-1, RP-623-2
     await move(id, "put_on_hold_in_progress");
 
     for (const reader of [at.c1Pm, at.c1Engineer]) expect((await afterPhotos(reader, id)).map((d) => d.id)).toEqual([photo]);
-    for (const outsider of [at.k1Manager, owner]) {
-      expect((await detail(outsider, id)).id).toBe(id);
-      expect(await afterPhotos(outsider, id)).toEqual([]);
-      await expectHidden(outsider.get(`/v1/work-items/${id}/documents/${photo}/download`));
-    }
+    for (const outsider of [at.k1Manager, owner]) expect((await detail(outsider, id)).id).toBe(id);
+    await expectPhotosHidden(id, [photo], [at.c1Pm, at.c1Engineer], [at.k1Manager, owner]);
     const k1Adds = await startReplyUpload(at.k1Manager, id, "k1.jpg");
     expect({ status: k1Adds.statusCode, body: k1Adds.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
   });
@@ -227,17 +236,15 @@ describe("who reads and adds a Snag's After photos (scenarios RP-623-1, RP-623-2
   it("RP-623-2: C2 reads them neither before nor after the Resolve, and its upload is `not_found`, as for a made-up id", async () => {
     const id = await raised("Tray lid missing");
     const photo = await addAfterPhoto(at.c1Pm, id, "after.jpg");
-    const c2Reads = async (when: string) => {
-      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents`), when);
-      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents/${photo}/download`), when);
-      await expectHidden(startReplyUpload(c2Engineer, id, "c2.jpg"), when);
+    const c2Reads = async (seenBy: Caller[], when: string) => {
+      await expectPhotosHidden(id, [photo], seenBy, [c2Engineer], when);
+      await expectHidden(startReplyUpload(c2Engineer, id, "c2.jpg"), when); // not hidden-from: a refused write; the reads above prove the photo with expectHiddenFrom
     };
-    await c2Reads("before the Resolve");
+    await c2Reads([at.c1Pm], "before the Resolve");
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Lid fitted" } });
-    // Positive control: K1 now reads it.
-    expect((await afterPhotos(at.k1Manager, id)).map((d) => d.id)).toEqual([photo]);
-    await c2Reads("after the Resolve");
-    await expectHidden(startReplyUpload(c2Engineer, "00000000-0000-4000-8000-000000000000", "c2.jpg"), "a made-up id");
+    // K1 now reads it too.
+    await c2Reads([at.c1Pm, at.k1Manager], "after the Resolve");
+    await expectHidden(startReplyUpload(c2Engineer, "00000000-0000-4000-8000-000000000000", "c2.jpg"), "a made-up id"); // not hidden-from: no such item
   });
 });
 
@@ -254,19 +261,17 @@ describe("an informed Consultant and C1's After photos (scenario RP-1002-1)", ()
     await move(id, "start_work");
     const inProgress = await addAfterPhoto(at.c1Engineer, id, "in-progress.jpg");
 
-    for (const outsider of [at.k1Manager, owner]) {
-      expect(await afterPhotos(outsider, id)).toEqual([]);
-      for (const photo of [atOpen, inProgress]) await expectHidden(outsider.get(`/v1/work-items/${id}/documents/${photo}/download`));
-    }
-    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? [])).toEqual([]);
+    await expectPhotosHidden(id, [atOpen, inProgress], [at.c1Pm, at.c1Engineer], [at.k1Manager, owner]);
+    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? [])).toEqual([]); // not hidden-from: no Transition took them yet, so no event carries them for anyone; K1 reads them on the Resolve below
 
     await take(at.c1Pm, id, "resolve_in_progress", { answers: { resolution_note: "Clipped and covered" } });
+    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? []).sort()).toEqual([atOpen, inProgress].sort());
     expect((await afterPhotos(at.k1Manager, id)).map((d) => [d.id, d.frozen])).toEqual([
       [atOpen, true],
       [inProgress, true],
     ]);
     expect((await ok(at.k1Manager.get(`/v1/work-items/${id}/documents/${atOpen}/download`), 200)).json().url).toBeTruthy();
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents`));
+    await expectPhotosHidden(id, [atOpen, inProgress], [at.k1Manager], [c2Engineer], "after the Resolve");
   });
 });
 
@@ -338,15 +343,16 @@ describe("files no Transition took are discarded when the item leaves the Partic
     await take(at.c1Pm, id, "ask_raiser");
     expect((await detail(at.k1Manager, id)).step.key).toBe("draft");
 
-    expect(await afterPhotos(at.k1Manager, id)).toEqual([]);
-    expect(await afterPhotos(at.c1Pm, id)).toEqual([]);
-    await expectHidden(at.k1Manager.get(`/v1/work-items/${id}/documents/${added}/download`));
-    await expectHidden(at.c1Pm.get(`/v1/work-items/${id}/documents/${added}/download`));
+    // Discarded, so gone for C1 too: nobody reads it.
+    expect(await afterPhotos(at.k1Manager, id)).toEqual([]); // not hidden-from: discarded
+    expect(await afterPhotos(at.c1Pm, id)).toEqual([]); // not hidden-from: discarded, for its uploader too
+    await expectHidden(at.k1Manager.get(`/v1/work-items/${id}/documents/${added}/download`)); // not hidden-from: discarded
+    await expectHidden(at.c1Pm.get(`/v1/work-items/${id}/documents/${added}/download`)); // not hidden-from: discarded, for its uploader too
     expect(await eventHash(id, "ask_raiser")).toBe(await expectedHash(id, [before]));
 
     // Back with C1, it starts again from nothing.
     await take(at.k1Manager, id, "raise");
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
-    expect(await afterPhotos(at.c1Pm, id)).toEqual([]);
+    expect(await afterPhotos(at.c1Pm, id)).toEqual([]); // not hidden-from: a new round starts empty
   });
 });

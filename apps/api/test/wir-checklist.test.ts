@@ -12,12 +12,12 @@
 // The seam suites' global setup runs the migrations, then the demo seed, which publishes the
 // Rabaed Defaults.
 import { createDb, withMember } from "@rabaed/db";
-import { expectedContentSha256, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
-import type { ChecklistTemplates, DocumentList, WorkItemHistory } from "@rabaed/domain";
+import { expectedContentSha256, expectHiddenFrom, HASHED_DOCUMENT_COLUMNS, sha256Hex, testDatabaseUrls, type HashedDocument } from "@rabaed/db/test-support";
+import type { ChecklistTemplates, DocumentList, WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -40,16 +40,37 @@ const items = [
 ];
 const FAILED = { formwork: { answer: "fail", comment: "Gap at the joint" }, cover: { answer: "pass" }, clean: { answer: "na" } };
 
+type Member = { id: string; caller: Caller };
 let projectId = "";
 let electrical = "";
 let buildingA = "";
 let template = ""; // The Checklist Template Version a WIR picks.
-let hafiz: { id: string; caller: Caller }; // C1 Contractor Engineer: the author.
-let ali: { id: string; caller: Caller }; // C1's only Project Manager.
-let ahmed: { id: string; caller: Caller }; // K1 Consultant Engineer.
-let mohammed: { id: string; caller: Caller }; // K1's only Manager.
-let faisal: { id: string; caller: Caller }; // O1, Owner Representative: oversight.
-let yousef: { id: string; caller: Caller }; // C2, a second Contractor covering Mechanical only.
+let hafiz: Member; // C1 Contractor Engineer: the author.
+let ali: Member; // C1's only Project Manager.
+let ahmed: Member; // K1 Consultant Engineer.
+let mohammed: Member; // K1's only Manager.
+let faisal: Member; // O1, Owner Representative: oversight.
+let yousef: Member; // C2, a second Contractor covering Mechanical only.
+const names = new Map<Member, string>();
+const named = (m: Member) => names.get(m) ?? m.id;
+
+// Reads for expectHiddenFrom (RP-1095), by id; a plain 404 reads as nothing.
+/** WIR `id`'s reply checklists on its item page, to fill or in a code's Screen, known by their field. */
+const checklistsRead = (id: string) => async (m: Member) =>
+  (await readById<WorkItemDetail>(`/v1/work-items/${id}`)(m.caller)).flatMap((d) =>
+    [...d.replyChecklists, ...d.actions.transitions.flatMap((t) => t.checklists ?? [])].map((c) => ({ id: c.fieldKey })),
+  );
+/** WIR `id`'s Documents, as listed. */
+const documentsRead = (id: string) => async (m: Member) => (await readById<DocumentList>(`/v1/work-items/${id}/documents`)(m.caller)).flatMap((l) => l.documents);
+/** [the Document] when `m` gets its download link. */
+const downloadRead = (id: string, document: string) => async (m: Member) =>
+  (await readById<{ url: string }>(`/v1/work-items/${id}/documents/${document}/download`)(m.caller)).map(() => ({ id: document }));
+/** Each of `documents` listed and downloaded by every one of `seenBy` first, and by none of `hiddenFrom`. */
+async function expectDocumentsHidden(id: string, documents: string[], seenBy: Member[], hiddenFrom: Member[], label: string) {
+  for (const target of documents) {
+    for (const read of [documentsRead(id), downloadRead(id, target)]) await expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, label });
+  }
+}
 
 const answer = (by: Caller, id: string, answers: object) => by.request("PUT", `/v1/work-items/${id}/reply-checklists/${FIELD}`, { answers });
 const documentsOf = async (by: Caller, id: string): Promise<DocumentList> => (await ok(by.get(`/v1/work-items/${id}/documents`), 200)).json();
@@ -133,6 +154,8 @@ beforeAll(async () => {
   mohammed = await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Mohammed Al Shamsi" });
   faisal = await memberOnProject(api, o1, o1ParticipantId, ["engineer"], { name: "Faisal Al Otaibi" });
   yousef = await memberOnProject(api, c2, c2ParticipantId, ["engineer"], { name: "Yousef Karim" });
+  const known: [Member, string][] = [[hafiz, "Hafiz (C1)"], [ali, "Ali (C1)"], [ahmed, "Ahmed (K1)"], [mohammed, "Mohammed (K1)"], [faisal, "Faisal (O1)"], [yousef, "Yousef (C2)"]];
+  for (const [m, name] of known) names.set(m, name);
 });
 
 describe("the Consultant Engineer fills the checklist on site (seam 1)", () => {
@@ -153,7 +176,7 @@ describe("the Consultant Engineer fills the checklist on site (seam 1)", () => {
     ]);
     // Any Member of the Participant holding it may add to it (ADR 0024), the Manager too.
     expect((await detail(mohammed.caller, id)).replyChecklists.map((c) => c.fieldKey)).toEqual([FIELD]);
-    for (const other of [hafiz, ali, faisal]) expect((await detail(other.caller, id)).replyChecklists, other.id).toEqual([]);
+    await expectHiddenFrom({ read: checklistsRead(id), target: FIELD, seenBy: [ahmed, mohammed], hiddenFrom: [hafiz, ali, faisal], name: named });
   });
 
   it("saves the answers as they go, checked item by item", async () => {
@@ -165,7 +188,7 @@ describe("the Consultant Engineer fills the checklist on site (seam 1)", () => {
     expect(wrong.json()).toMatchObject({ error: "invalid_answers", fields: [{ key: FIELD, code: "unknown_option", item: "clean" }] });
     // Nobody outside K1 writes them; C2 doesn't even see the WIR.
     for (const other of [hafiz, ali, faisal]) expect((await answer(other.caller, id, FAILED)).statusCode, other.id).toBe(409);
-    await expectHidden(answer(yousef.caller, id, FAILED));
+    await expectHidden(answer(yousef.caller, id, FAILED)); // not hidden-from: a refused write; RP-86-1 below proves the WIR hidden from C2 with expectHiddenFrom
   });
 
   it("Send to Manager wants every item answered and a Fail's comment and photo, naming the item; the Manager then sees the summary, the Recommended Code and C proposed", async () => {
@@ -246,6 +269,12 @@ describe("RP-86-1: who reads the Consultant Engineer's checklist", () => {
   let formworkPhoto = "";
   const answersAs = (as: string) =>
     withMember(appDb, as, (trx) => sql<{ answers: unknown }>`select answers from reply_checklist where work_item_id = ${id}::uuid`.execute(trx).then((r) => r.rows));
+  /** As the app role (row-level security): the WIR's waiting checklist rows `m` reads, known by their field (only its holder reads one). */
+  const answersRead = (m: Member) =>
+    withMember(appDb, m.id, (trx) => sql<{ id: string }>`select field_key as id from reply_checklist where work_item_id = ${id}::uuid`.execute(trx).then((r) => r.rows));
+  /** As the app role: the WIR's code events `m` reads; the code carries the answers once it takes them. */
+  const codeRead = (m: Member) =>
+    withMember(appDb, m.id, (trx) => sql<{ id: string }>`select id from work_item_event where work_item_id = ${id}::uuid and type = 'issue_code'`.execute(trx).then((r) => r.rows));
 
   beforeAll(async () => {
     const made = await atManager("Visibility");
@@ -254,14 +283,16 @@ describe("RP-86-1: who reads the Consultant Engineer's checklist", () => {
   });
 
   it("before the code, C1 and the Owner read none of the answers or photos: item, lists, history, Document id; K1 does", async () => {
-    for (const outsider of [hafiz, ali, faisal]) {
-      expect((await detail(outsider.caller, id)).replyChecklists, outsider.id).toEqual([]);
-      expect(JSON.stringify(await history(outsider.caller, id)), outsider.id).not.toContain("Gap at the joint");
-      expect((await documentsOf(outsider.caller, id)).documents.map((d) => d.id), outsider.id).not.toContain(formworkPhoto);
-      await expectHidden(outsider.caller.get(`/v1/work-items/${id}/documents/${formworkPhoto}/download`));
-      expect(await answersAs(outsider.id), outsider.id).toEqual([]);
+    const [seenBy, hiddenFrom] = [[ahmed, mohammed], [hafiz, ali, faisal]];
+    const label = "before the code";
+    // At the Manager's Step, its holder reads the checklist on the item page.
+    await expectHiddenFrom({ read: checklistsRead(id), target: FIELD, seenBy: mohammed, hiddenFrom, name: named, label });
+    await expectHiddenFrom({ read: answersRead, target: FIELD, seenBy: mohammed, hiddenFrom, name: named, label: `${label}, as the app role` });
+    await expectDocumentsHidden(id, [formworkPhoto], seenBy, hiddenFrom, label);
+    for (const outsider of hiddenFrom) {
+      expect(JSON.stringify(await history(outsider.caller, id)), outsider.id).not.toContain("Gap at the joint"); // not hidden-from: no event carries the answers before the code, for K1 either; the next test reads them in the code's history
       const list = (await ok(outsider.caller.get(`/v1/projects/${projectId}/work-items`), 200)).body;
-      expect(list, outsider.id).not.toContain("Gap at the joint");
+      expect(list, outsider.id).not.toContain("Gap at the joint"); // not hidden-from: the List carries no checklist answers, for K1 either
     }
     expect(await answersAs(mohammed.id)).toEqual([{ answers: FAILED }]);
     expect((await documentsOf(mohammed.caller, id)).documents.map((d) => d.id)).toContain(formworkPhoto);
@@ -273,10 +304,15 @@ describe("RP-86-1: who reads the Consultant Engineer's checklist", () => {
       expect(codeOf(await history(reader.caller, id))?.answers?.[FIELD], reader.id).toEqual(FAILED);
       expect((await documentsOf(reader.caller, id)).documents.map((d) => d.id), reader.id).toContain(formworkPhoto);
     }
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}`));
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/history`));
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
-    expect(await answersAs(yousef.id)).toEqual([]);
+    const [seenBy, label] = [[hafiz, ali, faisal, mohammed], "after the code"];
+    const itemRead = (m: Member) => readById(`/v1/work-items/${id}`)(m.caller);
+    const historyRead = async (m: Member) => (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(m.caller)).map(() => ({ id }));
+    for (const read of [itemRead, historyRead]) await expectHiddenFrom({ read, target: id, seenBy, hiddenFrom: yousef, name: named, label });
+    // Taken, the checklist's own row is nobody's to read: the answers go with the code, which C1 reads and C2 doesn't.
+    const [code] = (await sql<{ id: string }>`select id from work_item_event where work_item_id = ${id}::uuid and type = 'issue_code'`.execute(migrator)).rows;
+    await expectHiddenFrom({ read: codeRead, target: code!.id, seenBy, hiddenFrom: yousef, name: named, label: `${label}, as the app role` });
+    for (const m of [mohammed, yousef]) expect(await answersAs(m.id), m.id).toEqual([]); // not hidden-from: a taken checklist row is read by nobody (holder_reads_waiting_reply_checklists); the code above carries it
+    await expectDocumentsHidden(id, [formworkPhoto], seenBy, [yousef], label);
   });
 });
 
@@ -310,11 +346,8 @@ describe("RP-981-1: the Consultant Engineer annotates a checklist item's photo",
   });
 
   it("before the code, C1, the Owner and C2 read neither, by the api or the file link, nor annotate the photo", async () => {
-    for (const outsider of [hafiz, ali, faisal]) {
-      expect((await documentsOf(outsider.caller, id)).documents, outsider.id).toEqual([]);
-    }
+    await expectDocumentsHidden(id, [original, copy], [ahmed, mohammed], [hafiz, ali, faisal, yousef], "before the code");
     for (const outsider of [hafiz, ali, faisal, yousef]) {
-      for (const document of [original, copy]) await expectHidden(download(outsider.caller, document));
       const refused = await outsider.caller.post(`/v1/work-items/${id}/documents`, {
         fileName: "leak.png",
         contentType: "image/png",
@@ -323,7 +356,6 @@ describe("RP-981-1: the Consultant Engineer annotates a checklist item's photo",
       });
       expect(refused.statusCode, outsider.id).toBe(404);
     }
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
   });
 
   it("the code freezes and shares both, and its content hash covers both; C1 then reads both, C2 never", async () => {
@@ -336,8 +368,7 @@ describe("RP-981-1: the Consultant Engineer annotates a checklist item's photo",
       ]);
       expect(await bytesOf(reader.caller, copy), reader.id).toEqual(drawn);
     }
-    for (const document of [original, copy]) await expectHidden(download(yousef.caller, document));
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/documents`));
+    await expectDocumentsHidden(id, [original, copy], [hafiz, ali, faisal], [yousef], "after the code");
 
     const { rows: item } = await sql<{ title: string; data: object }>`select title, data from work_item where id = ${id}::uuid`.execute(migrator);
     const { rows: documents } = await sql<HashedDocument>`
