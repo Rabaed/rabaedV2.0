@@ -40,10 +40,13 @@ export function committedFontFiles(repo: string, range?: string): string[] {
 // (apps/worker/src/record/fonts.ts) passes. gitleaks' inlined-font rule
 // (.gitleaks.toml) also finds the data URLs, but not the manifest entries.
 // The manifest may sit JSON-escaped inside a script string, its quotes backslashed.
+// An @font-face src whose data URL has any other mime type, or none, counts too:
+// its format() names it a font (a Thmanyah face renamed out of sight, RP-663).
 // POSIX EREs, read without regard to case, for git grep -E and git log -G, and
 // by JavaScript in isFontMime (design:strip-fonts).
 const fontMime = String.raw`(font/|application/(x-)?font|application/vnd\.ms-fontobject)`;
-export const embeddedFont = String.raw`\\?"mime\\?" *: *\\?"${fontMime}|data:${fontMime}[^,]*;base64,[A-Za-z0-9+/]{16}`;
+const fontFaceDataUrl = String.raw`data:[^,]*;base64,[A-Za-z0-9+/=]{16,}['"]?\) *format\(`;
+export const embeddedFont = String.raw`\\?"mime\\?" *: *\\?"${fontMime}|data:${fontMime}[^,]*;base64,[A-Za-z0-9+/]{16}|${fontFaceDataUrl}`;
 
 /** Whether a mime type is a font's: the one rule for the check and design:strip-fonts. */
 export const isFontMime = (mime: string) => new RegExp(`^${fontMime}`, "i").test(mime);

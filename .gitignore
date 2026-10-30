@@ -20,6 +20,11 @@ secrets/
 design/reference/claude-design/assets/fonts/thmanyah/*.woff2
 design/reference/claude-design/assets/fonts/thmanyah/*.otf
 design/reference/claude-design/uploads/
+# The owner's Claude Design exports, dropped at the top of design/reference/: they embed
+# the fonts, Thmanyah too (RP-663). Only the top level: the kit (claude-design/) and the
+# committed reference pages in their own folders (sign-in/, submittal-panel/) stay tracked.
+design/reference/*.[hH][tT][mM][lL]
+design/reference/*.[hH][tT][mM]
 # Private Thmanyah files supplied at build time (RP-211) and the CSS generated from them.
 packages/ui/fonts/
 packages/ui/src/styles/arabic-font.css
@@ -35,6 +40,9 @@ packages/ui/src/styles/arabic-font.css
 # pnpm verify's per-worktree lock (RP-996): the running verify's pid, start time and command; .verify.lock.* are its temp files.
 .verify.lock
 .verify.lock.*
+
+# A worktree's own compose override: lane 7's copy of docker-compose.uat.yml (RP-1099).
+/docker-compose.override.yml
 
 # --- Tooling ---
 node_modules/

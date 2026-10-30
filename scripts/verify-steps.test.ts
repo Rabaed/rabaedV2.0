@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stampLine } from "./verify-gate.ts";
 import { failureEnd, finalLine, isSeamStep, loadFailure, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
@@ -45,7 +46,7 @@ describe("startFrom", () => {
   it("is a complete run, with no --from on its last line, from the first step this diff runs", () => {
     expect(startFrom(codeOnly, "lint")).toEqual({ steps: codeOnly.steps });
     const done = startFrom(codeOnly, "lint");
-    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["lint"], ...("from" in done ? { from: done.from } : {}) })).toBe("pnpm verify passed on abc1234: lint.");
+    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["lint"], ...("from" in done ? { from: done.from } : {}) })).toBe(stampLine("pnpm verify passed on abc1234: lint."));
   });
 
   it("refuses a step this diff does not run, with the reason it is skipped and the steps it does run", () => {
@@ -72,8 +73,8 @@ describe("isSeamStep", () => {
 describe("finalLine", () => {
   const steps = ["lint", "typecheck"];
 
-  it("names the verified commit and the steps that passed", () => {
-    expect(finalLine({ sha: "abc1234", dirty: false, steps })).toBe("pnpm verify passed on abc1234: lint, typecheck.");
+  it("names the verified commit and the steps that passed, and ends with the verify gate's stamp (RP-1094)", () => {
+    expect(finalLine({ sha: "abc1234", dirty: false, steps })).toBe(stampLine("pnpm verify passed on abc1234: lint, typecheck."));
   });
 
   it("does not print an empty commit when git could not name it", () => {

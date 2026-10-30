@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
-import { onlyMainMergedSince, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
-import { DOCS_ONLY_LABEL, isDoc, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
+import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { sharedFilesMix } from "./shared-files.ts";
+import { needsVerify, verifyFix, verifyGate } from "./verify-gate.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -26,7 +27,8 @@ import { isAncestor } from "./worktrees.ts";
 // --no-review only names the docs-only label when it is missing; it no longer skips the rule.
 // A PR queued under `reviewed` also needs `pnpm verify passed on <sha>:` in its body, where <sha> is
 // its head or a commit only clean merges of main followed (the reviewed-label rule, RP-1017): PR #288's
-// labelled, green old head was queued after verify had found a visibility leak on it.
+// labelled, green old head was queued after verify had found a visibility leak on it. The line must
+// carry its stamp: the verify gate's rule (scripts/verify-gate.ts, RP-1094), the same as the check's.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -158,24 +160,10 @@ function labelRunState(pr: number, head: string, runs: { status: string; conclus
 /** Since RP-604 a PR's opening makes a run too; a PR opened before that and not pushed to since has none. */
 const NO_LABEL_RUN = " A PR opened before RP-604 and not pushed to since never gets one: merge origin/main in cleanly and push (the label stays).";
 
-/**
- * The commits the body's `pnpm verify passed on <sha>:` lines name (scripts/verify-steps.ts `finalLine`, with
- * `git rev-parse --short`: 7 characters or more). A dirty run has more before the colon and does not count.
- */
-export function verifiedCommits(body: string): string[] {
-  return [...body.matchAll(/pnpm verify passed on ([0-9a-f]{7,40}):/g)].map((match) => match[1] ?? "");
-}
-
-/** RP-1017: the refusal when no verify line names `head` or a commit only clean merges of main followed. */
+/** RP-1017: the refusal when no stamped verify line names `head` or a commit only clean merges of main followed (the verify gate, RP-1094). */
 function verifyRefusal(pr: number, head: string, seam: QueueSeam): QueueResult | undefined {
-  const verified = verifiedCommits(seam.body(pr));
-  if (verified.some((commit) => onlyMainMergedSince(commit, head, seam))) return undefined;
-  return fail(
-    verified.length === 0
-      ? `PR #${pr}: its body has no \`pnpm verify passed on <sha>:\` line, so nothing shows \`pnpm verify\` passed on its head ${head}.`
-      : `PR #${pr}: its body's verify line names ${verified.join(", ")}, which is neither the head ${head} nor a commit only clean merges of main led to it from.`,
-    `Fix: run \`pnpm verify\` on ${head} (a clean checkout of it), put its last line in the PR body (\`gh pr edit ${pr} --body-file <file>\`), then run \`pnpm queue ${pr}\` again.`,
-  );
+  const gate = verifyGate(seam.body(pr), head, seam);
+  return gate.ok ? undefined : fail(`PR #${pr}: ${gate.reason}.`, `${verifyFix(pr, head)}, then run \`pnpm queue ${pr}\` again.`);
 }
 
 /** The refusals, in order; on success, what to enqueue. `waitForLabelRun` (--wait) lets a reviewed-label run still going through. */
@@ -235,7 +223,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
     warnings.push("Warning: .github/workflows/reviewed-label.yml is not on origin/main yet, so the label could not be tied to the head; not checked.");
   }
   // A docs-only PR needs no verify run, whether or not it also carries `reviewed` (reviewGate then answers via reviewed).
-  if (!(labels.includes(DOCS_ONLY_LABEL) && changed.every(isDoc))) {
+  if (needsVerify(labels, changed)) {
     const unverified = verifyRefusal(pr, head, seam);
     if (unverified) return unverified;
   }
