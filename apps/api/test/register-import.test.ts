@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { drainOutbox, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import type {
   RegisterImport,
   RegisterImportFields,
@@ -20,7 +20,7 @@ import { registerSampleSheet, registerSampleWords, registerTemplateFields, regis
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildForeignProject, type ForeignProject } from "./support/foreign-project.ts";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, draft, memberOnProject, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -62,6 +62,30 @@ const listed = async (by: Caller): Promise<string[]> =>
   (await ok(by.get(`/v1/projects/${tower.projectId}/modules/submittals/work-items?pageSize=50`), 200)).json().items.map((i: { id: string }) => i.id);
 const reasonsByRow = (preview: RegisterImport) => Object.fromEntries(preview.rows.map((r) => [r.rowNo, r.reasons]));
 
+// Reads for expectHiddenFrom (RP-1095), each by id: `[{ id }]` when `by` may, `[]` for the plain 404.
+/** The import `importId`, as `by` reads it. */
+const importRead = (importId: string) => readById<{ id: string }>(`/v1/register-imports/${importId}`);
+/** A confirm of the import `importId`, already confirmed: answered again with the same import, creating nothing. */
+const confirmRead = (importId: string) => async (by: Caller) => {
+  const res = await confirm(by, importId);
+  if (res.statusCode === 200) return [{ id: importId }];
+  await expectHidden(res, `confirm of ${importId}`);
+  return [];
+};
+/** The imports on `by`'s Imports page of the Project `projectId`. */
+const importsListed = (projectId: string) => async (by: Caller) =>
+  (await ok(by.get(`/v1/projects/${projectId}/register-imports`), 200)).json().imports as { id: string }[];
+/** The original register of the import `importId`, as `by` downloads it (a file, not JSON). */
+const originalRead = (importId: string) => async (by: Caller) => {
+  const res = await by.get(`/v1/register-imports/${importId}/original`);
+  if (res.statusCode === 200) return [{ id: importId }];
+  await expectHidden(res, `original of ${importId}`);
+  return [];
+};
+/** Who a caller is, in a failure. */
+const names = new Map<Caller, string>();
+const whoIs = (by: Caller) => names.get(by) ?? "someone";
+
 beforeAll(async () => {
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
@@ -80,6 +104,17 @@ beforeAll(async () => {
   ownerPm = await projectMember(api, owner, ownerParticipantId, ["project_manager"]);
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   electricalOnly = await projectMember(api, c1, tower.c1ParticipantId, ["engineer"], { trade: only(tower.electrical) });
+  for (const [by, name] of [
+    [tower.c1Engineer, "C1 engineer"],
+    [tower.c1Pm, "C1 PM"],
+    [tower.k1Manager, "K1 manager"],
+    [k1Engineer, "K1 engineer"],
+    [c2Engineer, "C2"],
+    [ownerPm, "Owner"],
+    [electricalOnly, "C1 engineer narrowed to Electrical"],
+  ] as const) {
+    names.set(by, name);
+  }
 });
 
 describe("Reading a register", () => {
@@ -102,7 +137,7 @@ describe("Reading a register", () => {
     // The rows above the header too, empty ones included, to pick the header row from.
     expect(chosen.top.map((r) => r.rowNo)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(chosen.top[0]!.cells).toEqual(["C1 Contracting: Submittal Register"]);
-    expect(chosen.top[1]!.cells).toEqual([]);
+    expect(chosen.top[1]!.cells).toEqual([]); // not hidden-from: the sheet's empty row 2
   });
 
   it("suggests a field for each column from its heading, with how alike they are, and none for the rest (RP-639)", async () => {
@@ -130,8 +165,21 @@ describe("Reading a register", () => {
     expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 403, body: { error: "forbidden" } });
     const stranger = await api.projectCreator();
     const elsewhere = (await api.createProject(stranger.caller)).id;
-    await expectHidden(read(tower.c1Engineer, { file: xlsx }, elsewhere));
-    await expectHidden(read(tower.c1Engineer, { file: xlsx }, randomUUID()));
+    names.set(stranger.caller, "the other Project's creator");
+    await expectHiddenFrom({
+      read: async (by: Caller) => {
+        const res = await read(by, { file: xlsx }, elsewhere);
+        if (res.statusCode === 200) return [{ id: elsewhere }];
+        await expectHidden(res, "a register read on the other Project");
+        return [];
+      },
+      target: elsewhere,
+      seenBy: stranger.caller,
+      hiddenFrom: tower.c1Engineer,
+      name: whoIs,
+      label: "a register read on another Member's Project",
+    });
+    await expectHidden(read(tower.c1Engineer, { file: xlsx }, randomUUID())); // not hidden-from: a made-up Project id
   });
 });
 
@@ -165,8 +213,8 @@ describe("Previewing and confirming an import", () => {
 
   it("creates nothing before confirm: no Draft listed, no import on the Imports page, the preview hidden from colleagues", async () => {
     expect(await listed(tower.c1Engineer)).toEqual(before);
-    expect(await listImports(tower.c1Engineer)).toEqual([]);
-    await expectHidden(getImport(tower.c1Pm, previewed.id));
+    expect(await listImports(tower.c1Engineer)).toEqual([]); // not hidden-from: nothing confirmed yet, on the importer's own page
+    await expectHiddenFrom({ read: importRead(previewed.id), target: previewed.id, seenBy: tower.c1Engineer, hiddenFrom: tower.c1Pm, name: whoIs, label: "the preview" });
     await expectHidden(confirm(tower.c1Pm, previewed.id));
   });
 
@@ -202,7 +250,7 @@ describe("Previewing and confirming an import", () => {
         [10, false],
       ]);
       const ids = record.rows.flatMap((r) => (r.workItemId ? [r.workItemId] : []));
-      expect(ids).toHaveLength(3);
+      expect(ids).toHaveLength(3); // not hidden-from: the importer's own three Drafts
       expect((await listed(tower.c1Engineer)).filter((id) => !before.includes(id)).sort()).toEqual([...ids].sort());
     });
 
@@ -285,7 +333,7 @@ describe("The importer's Visibility", () => {
   it("makes a row bad whose Trade is outside it", async () => {
     const previewed = await preview(electricalOnly, register);
     expect(reasonsByRow(previewed)[5]).toEqual(["trade_outside_visibility"]);
-    expect(reasonsByRow(previewed)[4]).toEqual([]);
+    expect(reasonsByRow(previewed)[4]).toEqual([]); // not hidden-from: a good row has no reason
   });
 
   it("refuses the whole confirm when a good row no longer passes, and creates nothing: preview again", async () => {
@@ -319,25 +367,19 @@ describe("RP-589-1: no other Company reads anything of C1's import", () => {
   });
 
   it("gives C2, K1 and the Owner the plain 404 for the import, its rows and its confirm, as for a made-up id", async () => {
-    for (const [who, by] of [
-      ["C2", c2Engineer],
-      ["K1 manager", tower.k1Manager],
-      ["K1 engineer", k1Engineer],
-      ["Owner", ownerPm],
-    ] as const) {
-      await expectHidden(getImport(by, imported.id), `${who} reads the import`);
-      await expectHidden(confirm(by, imported.id), `${who} confirms the import`);
-      expect(await listImports(by), `${who} lists imports`).toEqual([]);
-    }
-    await expectHidden(getImport(tower.c1Engineer, randomUUID()));
-    await expectHidden(getImport(tower.c1Engineer, "not-an-id"));
+    const others = { target: imported.id, seenBy: [tower.c1Engineer, tower.c1Pm], hiddenFrom: [c2Engineer, tower.k1Manager, k1Engineer, ownerPm], name: whoIs };
+    await expectHiddenFrom({ ...others, read: importRead(imported.id), label: "the import" });
+    // Its importer's confirm is answered again with the same import, creating nothing.
+    await expectHiddenFrom({ ...others, seenBy: tower.c1Engineer, read: confirmRead(imported.id), label: "its confirm" });
+    await expectHiddenFrom({ ...others, read: importsListed(tower.projectId), label: "the Imports page" });
+    await expectHidden(getImport(tower.c1Engineer, randomUUID())); // not hidden-from: a made-up id
+    await expectHidden(getImport(tower.c1Engineer, "not-an-id")); // not hidden-from: not an id
   });
 
   it("leaves another Contractor's own preview and Imports page to itself", async () => {
     // C2 may raise Submittals too: its preview is its own, and C1 reads nothing of it.
     const theirs = await preview(c2Engineer, { ...register, mapping: { ...byColumns, trade: { value: tower.electrical } } });
-    await expectHidden(getImport(tower.c1Engineer, theirs.id));
-    await expectHidden(getImport(tower.c1Pm, theirs.id));
+    await expectHiddenFrom({ read: importRead(theirs.id), target: theirs.id, seenBy: c2Engineer, hiddenFrom: [tower.c1Engineer, tower.c1Pm], name: whoIs, label: "C2's preview" });
     expect((await listImports(tower.c1Engineer)).map((i: { id: string }) => i.id)).not.toContain(theirs.id);
   });
 });
@@ -443,7 +485,7 @@ describe("Values, optional fields and Paper ref (RP-639)", () => {
     expect(byKey.manufacturer).toMatchObject({ type: "text", types: expect.arrayContaining(["MAR"]) });
     // Never a field the register can't fill (files, tables, links, a Built-in Field), nor a section the Draft can't edit.
     for (const key of ["document", "items", "related_submittals", "trade", "location", "scopes", "verification_note"]) {
-      expect(byKey[key], key).toBeUndefined();
+      expect(byKey[key], key).toBeUndefined(); // not hidden-from: a field the register can't fill
     }
   });
 
@@ -575,7 +617,7 @@ describe("Values, optional fields and Paper ref (RP-639)", () => {
     );
     const previewed: RegisterImport = await (await ok(tryPreview(narrowed.caller, ofValues({ ...byHand, paperRef: undefined }), at.projectId), 201)).json();
     expect(reasonsByRow(previewed)[2]).toEqual(["location_outside_visibility"]);
-    expect(reasonsByRow(previewed)[4]).toEqual([]);
+    expect(reasonsByRow(previewed)[4]).toEqual([]); // not hidden-from: a good row has no reason
   });
 
   it("fills a Member field from the Member's email or name when only one matches, a multiple choice from its options", async () => {
@@ -651,7 +693,7 @@ describe("Values, optional fields and Paper ref (RP-639)", () => {
       const refused = await setRef(at.c1Engineer, numbered, "OLD-80");
       expect(refused.json()).toEqual({ error: "not_editable" });
       await expectHidden(setRef(at.k1Manager, mine, "OLD-81"));
-      await expectHidden(setRef(at.c1Engineer, randomUUID(), "OLD-82"));
+      await expectHidden(setRef(at.c1Engineer, randomUUID(), "OLD-82")); // not hidden-from: a made-up id
     });
   });
 });
@@ -732,20 +774,24 @@ describe("RP-589-3: a Rabaed Engineer's import for C1 (RP-645)", () => {
   it("never names the Engineer, nor when the import ran, to C1's Members", async () => {
     for (const by of [defaultMember.caller, tower.c1Pm]) {
       for (const body of await bodies(by)) {
-        expect(body).not.toContain(engineerName);
-        expect(body).not.toContain(engineer.email);
-        expect(body).not.toContain(engineer.id);
+        // A body each reads with a 200 (bodies): no row to prove first, a name it never carries.
+        expect(body).not.toContain(engineerName); // not hidden-from: text never in a body read with a 200
+        expect(body).not.toContain(engineer.email); // not hidden-from: text never in a body read with a 200
+        expect(body).not.toContain(engineer.id); // not hidden-from: text never in a body read with a 200
         expect(body).not.toMatch(/"(createdAt|confirmedAt|created_at|confirmed_at|importedAt)"/);
       }
     }
   });
 
   it("gives K1 nothing of it: the plain 404 for the import and its Drafts, an empty Imports page", async () => {
-    for (const by of [tower.k1Manager, k1Engineer]) {
-      await expectHidden(getImport(by, imported.id));
-      await expectHidden(confirm(by, imported.id));
-      expect(await listImports(by)).toEqual([]);
-      for (const row of imported.rows.filter((r) => r.workItemId)) await expectHidden(by.get(`/v1/work-items/${row.workItemId}`));
+    names.set(defaultMember.caller, "C1 default Member");
+    const k1s = { target: imported.id, seenBy: [defaultMember.caller, tower.c1Pm], hiddenFrom: [tower.k1Manager, k1Engineer], name: whoIs };
+    await expectHiddenFrom({ ...k1s, read: importRead(imported.id), label: "the Engineer's import" });
+    await expectHiddenFrom({ ...k1s, read: importsListed(tower.projectId), label: "the Imports page" });
+    for (const by of [tower.k1Manager, k1Engineer]) await expectHidden(confirm(by, imported.id));
+    for (const row of imported.rows.filter((r) => r.workItemId)) {
+      const id = row.workItemId!;
+      await expectHiddenFrom({ ...k1s, read: readById(`/v1/work-items/${id}`), target: id, label: "a Draft of the Engineer's import" });
     }
   });
 });
@@ -910,17 +956,17 @@ describe("Assign to (RP-640)", () => {
       expect(panels.stage.category).toBe("draft");
       // Not the importer's: it is in nobody else's Need My Action.
       const importers = (await ok(at.c1Pm.get(`/v1/projects/${at.projectId}/work-items?needMyAction=true`), 200)).json().items;
-      expect(importers.map((i: { id: string }) => i.id)).not.toContain(draftOf("Panels"));
+      expect(importers.map((i: { id: string }) => i.id)).not.toContain(draftOf("Panels")); // not hidden-from: Need My Action, not Visibility
     });
 
     it("tells nobody: no notification, email or digest entry, for an assignee or anyone else (owner, 2026-10-19)", async () => {
       // Its time would be the import's, when the Drafts were started (scenario 61).
-      expect(outboxOfConfirm).toEqual([]);
+      expect(outboxOfConfirm).toEqual([]); // not hidden-from: the confirm writes no outbox row
       const drafts = ["Panels", "Fans", "Doors"].map(draftOf);
       const notified = await sql<{ member_id: string }>`select member_id from notification where work_item_id = any(${drafts}::uuid[])`.execute(migrator);
-      expect(notified.rows).toEqual([]);
+      expect(notified.rows).toEqual([]); // not hidden-from: the migrator's read, no notification
       for (const by of [narrowed.caller, colleague.caller, noCreate.caller, at.c1Pm, k1Person.caller, at.k1Manager]) {
-        expect((await notifications(by)).filter((n) => drafts.includes(n.workItemId as string))).toEqual([]);
+        expect((await notifications(by)).filter((n) => drafts.includes(n.workItemId as string))).toEqual([]); // not hidden-from: no notification
       }
     });
   });
@@ -970,8 +1016,15 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
         { id: started.id, number: started.number, name: bilingual("Started set"), status: "in_progress" },
       ]),
     );
-    expect(offered.map((p) => p.id)).not.toContain(theirs.id);
     expect((await fields(c2Engineer)).packages.map((p) => p.id)).toEqual([theirs.id]);
+    await expectHiddenFrom({
+      read: async (by: Caller) => (await fields(by)).packages,
+      target: theirs.id,
+      seenBy: c2Engineer,
+      hiddenFrom: tower.c1Engineer,
+      name: whoIs,
+      label: "C2's Package, offered",
+    });
     const sheet: RegisterSheet = (await ok(read(tower.c1Engineer, { file: packageCsv }), 200)).json();
     expect(sheet.suggestions[3]?.field).toBe("package");
   });
@@ -1035,16 +1088,11 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       });
 
       it("RP-589-1: gives C2, K1 and the Owner nothing of the new Packages: the plain 404, and none listed", async () => {
-        for (const [who, by] of [
-          ["C2", c2Engineer],
-          ["K1 manager", tower.k1Manager],
-          ["K1 engineer", k1Engineer],
-          ["Owner", ownerPm],
-        ] as const) {
-          for (const id of [created, open.id]) await expectHidden(by.get(`/v1/packages/${id}`), `${who} reads ${id}`);
-          const listedPackages = (await ok(by.get(`/v1/projects/${tower.projectId}/packages`), 200)).json().packages.map((p: { id: string }) => p.id);
-          expect(listedPackages, who).not.toContain(created);
-          expect(listedPackages, who).not.toContain(open.id);
+        const listedPackages = async (by: Caller) => (await ok(by.get(`/v1/projects/${tower.projectId}/packages`), 200)).json().packages as { id: string }[];
+        for (const target of [created, open.id]) {
+          const others = { target, seenBy: [tower.c1Engineer, tower.c1Pm], hiddenFrom: [c2Engineer, tower.k1Manager, k1Engineer, ownerPm], name: whoIs };
+          await expectHiddenFrom({ ...others, read: readById(`/v1/packages/${target}`), label: "C1's Package" });
+          await expectHiddenFrom({ ...others, read: listedPackages, label: "C1's Package, listed" });
         }
       });
     });
@@ -1089,7 +1137,7 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
         expect(res.headers["content-type"]).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         expect(res.headers["content-disposition"]).toBe(`attachment; filename="import-register.xlsx"; filename*=UTF-8''import-register.xlsx`);
         // No import or upload time: only the response's own Date.
-        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined();
+        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined(); // not hidden-from: no time header
         const { date, ...rest } = res.headers;
         expect(date).toBeDefined();
         expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}|GMT|\d{2}:\d{2}/);
@@ -1097,8 +1145,15 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
     });
 
     it("is the plain 404 to C2, K1 and the Owner", async () => {
-      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${imported.id}/original`));
-      await expectHidden(tower.c1Engineer.get(`/v1/register-imports/${randomUUID()}/original`));
+      await expectHiddenFrom({
+        read: originalRead(imported.id),
+        target: imported.id,
+        seenBy: [tower.c1Engineer, tower.c1Pm],
+        hiddenFrom: [c2Engineer, tower.k1Manager, k1Engineer, ownerPm],
+        name: whoIs,
+        label: "the original register",
+      });
+      await expectHidden(tower.c1Engineer.get(`/v1/register-imports/${randomUUID()}/original`)); // not hidden-from: a made-up id
     });
 
     // RP-959: Rabaed Admin hands its Engineer's original over through the database (it has no
@@ -1112,8 +1167,17 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       const handedOver = async () =>
         (await sql<{ n: number }>`select count(*)::int as n from register_import_original_hand_over where import_id = ${done.importId}::uuid`.execute(migrator)).rows[0]!.n;
       // Nobody else's request stores it, nor takes it off the hand-over.
+      // The import, read by C1's Members first (a read that takes nothing off the hand-over); the
+      // original only after (the first download stores it).
+      await expectHiddenFrom({
+        read: importRead(done.importId),
+        target: done.importId,
+        seenBy: [defaultMember.caller, tower.c1Pm],
+        hiddenFrom: [c2Engineer, tower.k1Manager, k1Engineer, ownerPm],
+        name: whoIs,
+        label: "the Engineer's import",
+      });
       for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) {
-        await expectHidden(getImport(by, done.importId));
         await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
       }
       expect(await handedOver()).toBe(1);
@@ -1128,18 +1192,24 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
         const res = await ok(by.get(`/v1/register-imports/${done.importId}/original`), 200);
         expect(res.rawPayload.equals(Buffer.from(xlsx.content, "base64"))).toBe(true);
         expect(res.headers["content-disposition"]).toBe(`attachment; filename="import-register.xlsx"; filename*=UTF-8''import-register.xlsx`);
-        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined();
+        for (const header of ["last-modified", "etag", "expires", "x-amz-meta-uploaded"]) expect(res.headers[header], header).toBeUndefined(); // not hidden-from: no time header
         const { date: _date, ...rest } = res.headers;
         expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}|GMT|\d{2}:\d{2}/);
         expect(await handedOver()).toBe(0);
       }
-      for (const by of [c2Engineer, tower.k1Manager, k1Engineer, ownerPm]) await expectHidden(by.get(`/v1/register-imports/${done.importId}/original`));
+      await expectHiddenFrom({
+        read: originalRead(done.importId),
+        target: done.importId,
+        seenBy: [defaultMember.caller, tower.c1Pm, tower.c1Engineer],
+        hiddenFrom: [c2Engineer, tower.k1Manager, k1Engineer, ownerPm],
+        name: whoIs,
+        label: "the Engineer's import's original",
+      });
     });
 
     it("keeps a preview's file to its importer", async () => {
       const previewed = await preview(tower.c1Engineer, register);
-      await ok(tower.c1Engineer.get(`/v1/register-imports/${previewed.id}/original`), 200);
-      await expectHidden(tower.c1Pm.get(`/v1/register-imports/${previewed.id}/original`));
+      await expectHiddenFrom({ read: originalRead(previewed.id), target: previewed.id, seenBy: tower.c1Engineer, hiddenFrom: tower.c1Pm, name: whoIs, label: "the preview's file" });
     });
   });
 
@@ -1151,7 +1221,14 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       const saved = (await ok(save(tower.c1Engineer, "Monthly register"), 201)).json();
       expect(saved.mappings).toEqual([{ id: expect.any(String), name: "Monthly register", mapping: byPackage }]);
       expect((await fields(tower.c1Pm)).mappings).toEqual(saved.mappings);
-      for (const by of [c2Engineer]) expect((await fields(by)).mappings.map((m) => m.name)).not.toContain("Monthly register");
+      await expectHiddenFrom({
+        read: async (by: Caller) => (await fields(by)).mappings,
+        target: saved.mappings[0].id,
+        seenBy: [tower.c1Engineer, tower.c1Pm],
+        hiddenFrom: c2Engineer,
+        name: whoIs,
+        label: "the saved mapping",
+      });
       for (const by of [c2Engineer, ownerPm, tower.k1Manager]) {
         await expectHidden(by.request("PUT", `/v1/register-import-mappings/${saved.mappings[0].id}`, { name: "Taken over" }));
         await expectHidden(by.request("DELETE", `/v1/register-import-mappings/${saved.mappings[0].id}`));
@@ -1168,7 +1245,7 @@ describe("Packages, the original register and saved mappings (RP-644)", () => {
       expect(renamed.mappings.map((m: { name: string }) => m.name)).toEqual(["Long lead", "Monthly register"]);
       const deleted = (await ok(tower.c1Engineer.request("DELETE", `/v1/register-import-mappings/${id}`), 200)).json();
       expect(deleted.mappings.map((m: { name: string }) => m.name)).toEqual(["Monthly register"]);
-      await expectHidden(tower.c1Engineer.request("DELETE", `/v1/register-import-mappings/${id}`));
+      await expectHidden(tower.c1Engineer.request("DELETE", `/v1/register-import-mappings/${id}`)); // not hidden-from: deleted already
     });
   });
 });
@@ -1241,14 +1318,23 @@ describe("The Imports page and its Packages (story 32, RP-657)", () => {
           ],
         },
       ]);
-      expect((await ok(getImport(by, record.id), 200)).json().packages).toHaveLength(2);
+      const packages: RegisterImport["packages"] = (await ok(getImport(by, record.id), 200)).json().packages;
+      expect(packages.map((p) => p.package?.id).sort()).toEqual([lobby.id, bathrooms.id].sort());
     }
-    expect(await imports(at.k1Manager)).toEqual([]);
+    names.set(noCreate.caller, "C1 Member who may not import");
+    await expectHiddenFrom({
+      read: imports,
+      target: record.id,
+      seenBy: [at.c1Engineer, at.c1Pm, noCreate.caller],
+      hiddenFrom: at.k1Manager,
+      name: (by: Caller) => (by === at.c1Engineer ? "C1 engineer" : by === at.c1Pm ? "C1 PM" : by === at.k1Manager ? "K1 manager" : whoIs(by)),
+      label: "the Imports page",
+    });
   });
 
   it("tells nobody of the import or the Package it created: no outbox row, no notification", () => {
-    expect(outboxOfConfirm).toEqual([]);
-    expect(notifiedOfConfirm).toEqual([]);
+    expect(outboxOfConfirm).toEqual([]); // not hidden-from: the confirm writes no outbox row
+    expect(notifiedOfConfirm).toEqual([]); // not hidden-from: the confirm writes no notification
   });
 });
 
@@ -1308,6 +1394,7 @@ describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
   /** A C1 Draft raised by hand, and one of another import. */
   let byHand: string;
   let otherImport: string;
+  let otherImportId: string;
 
   const fileOf = (name: string, rows: string[][]) => ({
     fileName: `${name}.csv`,
@@ -1322,6 +1409,8 @@ describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
   /** The ids `by` lists on the Submittals List with `query`. */
   const listedWith = async (by: Caller, query: string): Promise<string[]> =>
     (await ok(by.get(`/v1/projects/${at.projectId}/modules/submittals/work-items?pageSize=50&${query}`), 200)).json().items.map((i: { id: string }) => i.id);
+  /** Those ids as rows, for expectHiddenFrom. */
+  const asRows = async (ids: Promise<string[]>) => (await ids).map((id) => ({ id }));
 
   beforeAll(async () => {
     c1Co = await api.projectCreator();
@@ -1339,7 +1428,9 @@ describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
     sender = await memberOnProject(api, c1Co, at.c1ParticipantId, ["engineer"]);
 
     byHand = await draft(at, at.c1Pm, "Raised by hand");
-    otherImport = (await importOf("Other", [["Another register's row", "MAR", "Electrical", ""]])).rows[0]!.workItemId!;
+    const other = await importOf("Other", [["Another register's row", "MAR", "Electrical", ""]]);
+    otherImportId = other.id;
+    otherImport = other.rows[0]!.workItemId!;
     imported = await importOf("Tower register", [
       ["Panels", LEGACY_MAR, "Electrical", sender.email],
       ["Pumps", "MAR", "Mechanical", ""],
@@ -1353,14 +1444,23 @@ describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
     expect(Object.keys(byTitle).sort()).toEqual(["Cables", "Panels", "Pumps"]);
     const ids = await listedWith(at.c1Pm, `importId=${imported.id}`);
     expect(ids.sort()).toEqual(Object.values(byTitle).sort());
-    expect(ids).not.toContain(byHand);
-    expect(ids).not.toContain(otherImport);
-    // Unfiltered, the PM lists them all.
+    // Unfiltered, the PM lists them all; filtered to the import, not the one raised by hand or by another import.
     expect(await listedWith(at.c1Pm, "")).toEqual(expect.arrayContaining([...ids, byHand, otherImport]));
+    const byFilter = { read: (query: string) => asRows(listedWith(at.c1Pm, query)), hiddenFrom: `importId=${imported.id}`, name: (query: string) => query || "unfiltered" };
+    await expectHiddenFrom({ ...byFilter, target: byHand, seenBy: "", label: "a Draft raised by hand" });
+    await expectHiddenFrom({ ...byFilter, target: otherImport, seenBy: ["", `importId=${otherImportId}`], label: "another import's Draft" });
   });
 
   it("lists only the ones the viewer sees: none outside their Visibility", async () => {
     expect((await listedWith(narrowed, `importId=${imported.id}`)).sort()).toEqual([byTitle.Panels, byTitle.Cables].sort());
+    await expectHiddenFrom({
+      read: (by: Caller) => asRows(listedWith(by, `importId=${imported.id}`)),
+      target: byTitle.Pumps!,
+      seenBy: at.c1Pm,
+      hiddenFrom: narrowed,
+      name: (by: Caller) => (by === at.c1Pm ? "C1 PM" : "C1 engineer narrowed to Electrical"),
+      label: "the import's Mechanical item",
+    });
   });
 
   it("lists nothing to another Company, even an item of the import it sees once Submitted, nor for a made-up id", async () => {
@@ -1373,8 +1473,25 @@ describe("RP-589-5: the List of one import's Drafts (RP-954)", () => {
     await ok(at.c1Pm.post(`/v1/work-items/${byTitle.Panels}/pick-up`));
     await take(at.c1Pm, byTitle.Panels!, "submit");
     expect(await listedWith(k1, "")).toContain(byTitle.Panels);
-    for (const by of [k1, c2]) expect(await listedWith(by, `importId=${imported.id}`)).toEqual([]);
-    expect(await listedWith(at.c1Pm, `importId=${randomUUID()}`)).toEqual([]);
+    const madeUp = `importId=${randomUUID()}`;
+    for (const target of Object.values(byTitle)) {
+      await expectHiddenFrom({
+        read: (by: Caller) => asRows(listedWith(by, `importId=${imported.id}`)),
+        target,
+        seenBy: at.c1Pm,
+        hiddenFrom: [k1, c2],
+        name: (by: Caller) => (by === at.c1Pm ? "C1 PM" : by === k1 ? "K1" : by === c2 ? "C2" : "someone"),
+        label: "an item of C1's import, filtered to it",
+      });
+      await expectHiddenFrom({
+        read: (query: string) => asRows(listedWith(at.c1Pm, query)),
+        target,
+        seenBy: `importId=${imported.id}`,
+        hiddenFrom: madeUp,
+        name: (query: string) => (query === madeUp ? "a made-up id" : "the import"),
+        label: "the PM's List",
+      });
+    }
     // The import's own Company still lists it, Submitted.
     expect(await listedWith(at.c1Pm, `importId=${imported.id}`)).toContain(byTitle.Panels);
   });
