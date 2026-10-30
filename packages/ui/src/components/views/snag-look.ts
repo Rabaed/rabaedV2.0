@@ -5,10 +5,15 @@ import type { placesOf } from "./work-item-board.tsx";
 // What the Snag List's views share, desktop (RP-94) and phone (RP-630).
 
 /** How a Type's chip looks: a shape and a colour, never colour alone. A Type the app doesn't know (a Project Type) is a neutral chip. */
-const typeLooks: Record<string, { icon: IconName; classes: string; mark: string }> = {
+type Look = { icon: IconName; classes: string; mark: string };
+/** Every Question Type's look, and the one "Questions" chip's (RP-1109). */
+export const questionLook: Look = { icon: "help-circle", classes: "bg-segment-type-tint text-segment-type-fg", mark: "text-segment-type-solid" };
+const typeLooks: Record<string, Look> = {
   SNG: { icon: "alert-triangle", classes: "bg-danger-tint text-danger-fg", mark: "text-danger" },
   OBS: { icon: "eye", classes: "bg-warning-tint text-warning-fg", mark: "text-warning-fg" },
-  QST: { icon: "help-circle", classes: "bg-segment-type-tint text-segment-type-fg", mark: "text-segment-type-solid" },
+  QSN: questionLook,
+  QSC: questionLook,
+  QSO: questionLook,
   CMT: { icon: "message-circle", classes: "bg-info-tint text-info-fg", mark: "text-info-fg" },
 };
 const otherType = { icon: "tag" as IconName, classes: "bg-neutral-tint text-neutral-fg", mark: "text-muted" };

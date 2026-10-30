@@ -259,3 +259,40 @@ describe("the Owner side asks (scenarios RP-1108-2 to RP-1108-4)", () => {
     expect(await reads(co.c2.member, id)).toEqual(nothing);
   });
 });
+
+describe("the Snag List's one Questions chip (RP-1109, scenario RP-1109-1)", () => {
+  /** The Questions `as` reads on the Project, by id: the rows the chip's filter lists. */
+  const questionIds = async (as: string) =>
+    (
+      await call<{ id: string }>(
+        as,
+        sql`select w.id from work_item w join work_item_type t on t.id = w.work_item_type_id
+            where w.project_id = ${projectId}::uuid and t.code in ('QSN', 'QSC', 'QSO') order by w.id`,
+      )
+    ).map((r) => r.id);
+  /** The chip's number: the Question Types' counts `as` reads, added up as the chip does. */
+  const chip = async (as: string) =>
+    (
+      await call<{ code: string; n: number }>(
+        as,
+        sql`select t.code, count(*)::int as n from work_item w join work_item_type t on t.id = w.work_item_type_id
+            where w.project_id = ${projectId}::uuid and t.code in ('QSN', 'QSC', 'QSO') group by t.code`,
+      )
+    ).reduce((sum, c) => sum + c.n, 0);
+
+  it("RP-1109-1: C2's chip counts its own Question only; C1's and K1's count what they read, never C2's", async () => {
+    const c1Qso = await asked(co.c1.member, "QSO", "Which façade lighting colour");
+    const k1Qsc = await asked(co.k1.member, "QSC", "Confirm cable tray route");
+    const c2Qsn = await asked(co.c2.member, "QSN", "Clarify socket height", buildingB);
+    // C2 reads its own Question and none of the Project's others (V3): an exact set, by id.
+    expect(await questionIds(co.c2.member)).toEqual([c2Qsn]);
+    expect(await chip(co.c2.member)).toBe(1);
+    const c1 = await questionIds(co.c1.member);
+    expect(c1).toEqual(expect.arrayContaining([c1Qso, k1Qsc]));
+    expect(c1.includes(c2Qsn), "C1 reads C2's Question").toBe(false);
+    expect(await chip(co.c1.member)).toBe(c1.length);
+    const k1 = await questionIds(co.k1.member);
+    expect(k1).toEqual(expect.arrayContaining([c1Qso, k1Qsc, c2Qsn]));
+    expect(await chip(co.k1.member)).toBe(k1.length);
+  });
+});
