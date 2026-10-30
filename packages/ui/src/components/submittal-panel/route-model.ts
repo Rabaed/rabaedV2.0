@@ -157,10 +157,16 @@ export type RouteStopLine =
   | { kind: "steps"; count: number };
 
 export function submittalRouteStopLine(route: SubmittalRoute, index: number): RouteStopLine {
-  const stop = route.stops[index]!;
+  return routeStopLine(route.stops[index]!, route.steps.find((s) => s.stop === index && s.current)?.step.name ?? null);
+}
+
+/**
+ * A stop's line from the stop alone, as the Workflow map's large strip says it (no Step of its own),
+ * or with `ownStep`, the viewer's own Step holding the item there.
+ */
+export function routeStopLine(stop: RouteStop, ownStep: BilingualText | null = null): RouteStopLine {
   if (stop.companyName) return { kind: "company", name: stop.companyName };
-  const own = route.steps.find((s) => s.stop === index && s.current);
-  if (own) return { kind: "step", name: own.step.name };
+  if (ownStep) return { kind: "step", name: ownStep };
   if (stop.stepKeys.length === 0) return { kind: "outcome" };
   return { kind: "steps", count: stop.stepKeys.length };
 }
@@ -171,10 +177,13 @@ function stateAt(i: number, current: number | null): RouteStopState {
   return i < current ? "done" : "current";
 }
 
-/** The index of the stop holding the item; null when the viewer may not know which. */
+/**
+ * The index of the stop holding the item; null when the viewer may not know which. A closed item
+ * is held by nobody: past the last stop, so every stop is done (the design's `wf()`).
+ */
 function currentStop(stops: Stop[], position: WorkItemMapPosition | null): number | null {
   if (position === null) return null;
-  if (position.kind === "closed") return stops.length - 1;
+  if (position.kind === "closed") return stops.length;
   if (position.kind === "own") {
     const i = stops.findIndex((s) => s.stepKeys.includes(position.stepKey));
     return i < 0 ? null : i;

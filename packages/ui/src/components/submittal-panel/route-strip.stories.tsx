@@ -180,12 +180,13 @@ export const WithOwnerReview: Story = {
   },
 };
 
-/** Closed: every stop done, the last one current, where the raiser receives the outcome. */
+/** Closed (here Approved): nobody holds it, so every stop is done, the raiser's closing one too (the design's `wf()`). */
 export const Closed: Story = {
-  args: { position: { kind: "closed", stepKey: "rejected" } },
+  args: { position: { kind: "closed", stepKey: "approved" } },
   play: async (context) => {
     const stops = [...stripOf(context).querySelectorAll<HTMLElement>("li[data-state]")];
-    await expect(stops.map((s) => s.dataset.state)).toEqual(["done", "done", "done", "current"]);
+    await expect(stops.map((s) => s.dataset.state)).toEqual(["done", "done", "done", "done"]);
+    await expect(currentStops(stripOf(context))).toHaveLength(0);
   },
 };
 

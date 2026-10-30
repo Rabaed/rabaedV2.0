@@ -4,7 +4,7 @@ import { formatNumber, type BaseRole, type Locale } from "@rabaed/domain";
 import { useId, type CSSProperties } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import { submittalRouteStopLine, type RouteStop, type RouteStopLine, type RouteStopState, type SubmittalRoute } from "./route-model.ts";
+import { routeStopLine, submittalRouteStopLine, type RouteStop, type RouteStopLine, type RouteStopState, type SubmittalRoute } from "./route-model.ts";
 
 /** The route strip's words, in the viewer's language, from the app's messages. */
 export type SubmittalRouteLabels = {
@@ -66,7 +66,7 @@ export type SubmittalRouteStripProps = {
 export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = false, className }: SubmittalRouteStripProps) {
   const listId = useId();
   const items = stops.map((stop, i) => {
-    const line = large ? stopLine(stop, labels, locale) : stop.companyName ? labels.withCompany(stop.companyName[locale]) : null;
+    const line = large ? lineText(routeStopLine(stop), labels, locale) : stop.companyName ? labels.withCompany(stop.companyName[locale]) : null;
     return (
       <li key={i} aria-current={stop.state === "current" ? "step" : undefined} data-state={stop.state} className="flex min-w-0 items-center gap-1">
         {/* Points along the flow: the icon turns round in Arabic by itself. */}
@@ -155,7 +155,7 @@ export function SubmittalRouteSteps({ locale, labels, route, className }: { loca
                 {labels.role(stop.role)}
               </b>
               <small dir="auto" className="block text-[12px] text-muted">
-                {rowLine(submittalRouteStopLine(route, i), labels, locale)}
+                {lineText(submittalRouteStopLine(route, i), labels, locale)}
               </small>
               <span className="sr-only">({labels.state(stop.state)})</span>
             </span>
@@ -166,7 +166,8 @@ export function SubmittalRouteSteps({ locale, labels, route, className }: { loca
   );
 }
 
-function rowLine(line: RouteStopLine, labels: SubmittalRouteLabels, locale: Locale): string {
+/** A stop's line in words: under the large strip's stops and the Step list's rows alike. */
+function lineText(line: RouteStopLine, labels: SubmittalRouteLabels, locale: Locale): string {
   switch (line.kind) {
     case "step":
       return line.name[locale];
@@ -177,11 +178,4 @@ function rowLine(line: RouteStopLine, labels: SubmittalRouteLabels, locale: Loca
     case "steps":
       return labels.steps(line.count, formatNumber(line.count, locale));
   }
-}
-
-/** The large strip's line under a stop: who holds it, or what it is. */
-function stopLine(stop: RouteStop, labels: SubmittalRouteLabels, locale: Locale): string {
-  if (stop.companyName) return labels.withCompany(stop.companyName[locale]);
-  if (stop.stepKeys.length === 0) return labels.outcome;
-  return labels.steps(stop.stepKeys.length, formatNumber(stop.stepKeys.length, locale));
 }

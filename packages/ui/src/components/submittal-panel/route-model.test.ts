@@ -2,7 +2,7 @@ import type { WorkflowDefinition, WorkflowStep, WorkflowTransition } from "@raba
 import { describe, expect, it } from "vitest";
 import { submittalOwnerWorkflow as definition } from "../../storybook/submittal-route.ts";
 import { workflowStages as stages, sameInBoth as name } from "../../storybook/workflow.ts";
-import { submittalRoute, submittalRouteStopLine } from "./route-model.ts";
+import { routeStopLine, submittalRoute, submittalRouteStopLine } from "./route-model.ts";
 
 const route = (position: Parameters<typeof submittalRoute>[0]["position"]) => submittalRoute({ definition, stages, position });
 const states = (r: ReturnType<typeof submittalRoute>) => r.stops.map((s) => `${s.role}:${s.state}`);
@@ -43,9 +43,12 @@ describe("the route strip's stops (RP-1064, README §4.4)", () => {
     expect(r.stops[2]!.companyName).toEqual(ownerReview);
   });
 
-  it("ends at the raiser's stop once closed, every stop before it done", () => {
-    const r = route({ kind: "closed", stepKey: "rejected" });
-    expect(states(r)).toEqual(["contractor:done", "consultant:done", "owner:done", "contractor:current"]);
+  it("marks every stop done once closed, the raiser's closing stop too (the design's wf(): nobody holds it)", () => {
+    for (const stepKey of ["approved", "rejected"]) {
+      const r = route({ kind: "closed", stepKey });
+      expect(states(r)).toEqual(["contractor:done", "consultant:done", "owner:done", "contractor:done"]);
+      expect(r.stops.every((s) => s.companyName === null)).toBe(true);
+    }
   });
 
   it("keeps a Company's Steps one stop when one of them can also skip ahead (review)", () => {
@@ -70,7 +73,7 @@ describe("the route strip's stops (RP-1064, README §4.4)", () => {
       layout: {},
     };
     const r = submittalRoute({ definition: snag, stages, position: { kind: "closed", stepKey: "closed" } });
-    expect(r.stops.map((s) => `${s.role}:${s.state}`)).toEqual(["consultant:done", "contractor:done", "consultant:current"]);
+    expect(r.stops.map((s) => `${s.role}:${s.state}`)).toEqual(["consultant:done", "contractor:done", "consultant:done"]);
 
     // The Contractor, while another Consultant holds it: its role has two stops, and the API names no Step, so neither is marked.
     const held = submittalRoute({ definition: snag, stages, position: { kind: "company", role: "consultant", companyName: name("Design Consultants LLC") } });
@@ -98,6 +101,11 @@ describe("the rail's Step list rows (RP-1093, README §4.9, V14)", () => {
     const r = route({ kind: "company", role: "consultant", companyName: company });
     expect(lines(r)).toEqual([{ kind: "steps", count: 3 }, { kind: "company", name: company }, { kind: "steps", count: 1 }, { kind: "outcome" }]);
     expect(JSON.stringify(lines(r))).not.toContain("Consultant Engineer");
+  });
+
+  it("gives the Workflow map's large strip, from the stop alone, the same line without the viewer's own Step", () => {
+    const r = route({ kind: "own", stepKey: "internal_review" });
+    expect(r.stops.map((s) => routeStopLine(s))).toEqual([{ kind: "steps", count: 3 }, { kind: "steps", count: 2 }, { kind: "steps", count: 1 }, { kind: "outcome" }]);
   });
 
   it("names no Step once closed: the raiser's stop receives the outcome", () => {

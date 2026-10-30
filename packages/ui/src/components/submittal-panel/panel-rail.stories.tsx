@@ -258,3 +258,18 @@ export const InsideAnotherCompany: Story = {
     await expect(block.textContent).not.toMatch(/Consultant Engineer|Consultant Manager|مهندس الاستشاري|مدير الاستشاري/);
   },
 };
+
+/**
+ * A closed item (here Approved, Code B): nobody holds it, so every row is done ✓ and none current,
+ * the raiser's closing stop too, in the Step list and the strip alike (the design's `wf()`).
+ */
+export const Closed: Story = {
+  args: { position: { kind: "closed", stepKey: "approved" } },
+  play: async (context) => {
+    const block = railOf(context).querySelector<HTMLElement>('[data-rail="workflow"]')!;
+    const ar = storyLocale(context) === "ar";
+    await expectWorkflow(context, block, 4, [ar ? "3 خطوات" : "3 Steps", ar ? "2 خطوات" : "2 Steps", ar ? "1 الخطوة" : "1 Step", storyText(context, copy.outcome)]);
+    await expect(block.querySelectorAll("[data-route-steps] .bg-brand")).toHaveLength(0);
+    await expect([...block.querySelectorAll<HTMLElement>(".sdp-route li[data-state]")].map((s) => s.dataset.state)).toEqual(["done", "done", "done", "done"]);
+  },
+};
