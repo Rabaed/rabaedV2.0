@@ -8,11 +8,11 @@
 //
 // The Type is test-only, on the test Workflow with a Send Back (addSendBackType).
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { SharedWorkItem } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
+import { createTestApi, readById, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
 
@@ -68,6 +68,10 @@ const pdf = (fileName: string): TestFile => ({ fieldKey: "datasheet", fileName, 
 const attachment = (fileName: string): TestFile => ({ fileName, contentType: "text/plain", body: `${fileName} (test)` });
 const shared = async (by: Caller, itemId: string): Promise<SharedWorkItem> => (await ok(by.get(`/v1/work-items/${itemId}/shared`), 200)).json();
 
+/** Who each caller is, in a failure. */
+const names = new Map<Caller, string>();
+const nameOf = (by: Caller) => names.get(by) ?? "a caller";
+
 async function otherParticipant(role: "contractor" | "consultant" | "owner" | "owner_representative") {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
@@ -112,6 +116,16 @@ beforeAll(async () => {
   owner = await projectMember(api, ow.company, ow.participantId, ["representative"]);
   const c2 = await otherParticipant("contractor");
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
+  for (const [by, name] of [
+    [engineer, "the C1 engineer"],
+    [pm, "the C1 PM"],
+    [k1Engineer, "the K1 engineer"],
+    [k1Pm, "K1's second engineer"],
+    [orEngineer, "the OR engineer"],
+    [owner, "the Owner's representative"],
+    [c2Engineer, "the C2 engineer"],
+  ] as const)
+    names.set(by, name);
 
   x = await draftOf("DLA-X");
   await submit(x);
@@ -155,7 +169,7 @@ describe("scenario RP-409-2: Download is the item as it last arrived, whoever ho
     const xNumber = (await detail(engineer, x)).documentNumber;
     expect(item.links.map((l) => `${l.kind}:${l.documentNumber}`).sort()).toEqual([`related:${xNumber}`, `relies_on:${xNumber}`]);
     expect(JSON.stringify(item)).not.toMatch(/DLA-Y|DLA-1 changed/);
-    expect(JSON.stringify(item)).not.toContain(x);
+    expect(JSON.stringify(item)).not.toContain(x); // not hidden-from: the Download names a linked item by number only, never by id; its reader sees x
     expect(item.answers).toMatchObject({ model: "DLA-1", trade: electrical });
     expect(item.trade.id).toBe(electrical);
   });
@@ -166,7 +180,14 @@ describe("scenario RP-409-2: Download is the item as it last arrived, whoever ho
   });
 
   it("is nothing for another Contractor", async () => {
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/shared`));
+    await expectHiddenFrom({
+      read: readById(`/v1/work-items/${id}/shared`),
+      target: id,
+      seenBy: [engineer, pm, k1Engineer, k1Pm, orEngineer, owner],
+      hiddenFrom: c2Engineer,
+      name: nameOf,
+      label: "the Download",
+    });
   });
 
   it("leaves out a Link to an item never numbered, and still downloads", async () => {
@@ -181,9 +202,11 @@ describe("scenario RP-409-2: Download is the item as it last arrived, whoever ho
       update work_item set data_as_arrived = jsonb_set(data_as_arrived, '{related}', (data_as_arrived -> 'related') || to_jsonb(${draft}::text))
       where id = ${id}::uuid
     `.execute(migrator);
+    // The Draft itself is C1's only (V1).
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${draft}`), target: draft, seenBy: [engineer, pm], hiddenFrom: [k1Pm, orEngineer, owner, c2Engineer], name: nameOf, label: "the Draft" });
     for (const viewer of [engineer, k1Pm]) {
       const item = await shared(viewer, id);
-      expect(JSON.stringify(item)).not.toContain("DLA-D");
+      expect(JSON.stringify(item)).not.toContain("DLA-D"); // not hidden-from: the Download leaves out a Link to an unnumbered item, for its raiser too; the Draft is proven hidden above
       expect(item.links.every((l) => l.documentNumber.length > 0)).toBe(true);
     }
   });
