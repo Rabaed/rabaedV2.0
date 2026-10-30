@@ -75,6 +75,18 @@ export function finalLine({ sha, dirty, steps, from }: { sha: string; dirty: boo
   return from || dirty || sha === "" ? line : stampLine(line);
 }
 
+/**
+ * Why `pnpm verify` stops when HEAD is no longer `started`, the commit the run began on (RP-1103): a pull, a merge of
+ * main or Auto-fix's push mid-run left its steps on two commits, and its line would name one it never fully tested.
+ * Undefined while HEAD has not moved, or when the start could not be read (the last line then says "unknown commit"
+ * and is never stamped). The caller puts it after `<command> stopped after <step>: ` (or `stopped at`, on a failure).
+ */
+export function headMoved(started: string, now: string): string | undefined {
+  if (started === "" || now === started) return undefined;
+  const short = (sha: string) => sha.slice(0, 9);
+  return `HEAD moved from ${short(started)} to ${now === "" ? "an unreadable HEAD" : short(now)} during the run (a pull, a merge of main, Auto-fix's push), so its steps did not all run on one commit and no verify line is printed. Wait for the branch to settle, then run pnpm verify again.`;
+}
+
 // A seam step that fails only on timeouts or a worker that never started (RP-607): what
 // several lanes' test runs on one machine at once look like, never a cause verify can see
 // in the diff. Every other error line (an AssertionError, a TypeError, ...) is a real failure.
