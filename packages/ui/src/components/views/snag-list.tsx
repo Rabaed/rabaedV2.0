@@ -36,7 +36,7 @@ import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
-import { lookOf, placeText, type Places } from "./snag-look.ts";
+import { lookOf, placeText, questionLook, type Places } from "./snag-look.ts";
 import { chipChosen, typeChipsOf } from "./snag-type-chips.ts";
 import { SnagPhoneList, type SnagPhoneLabels, type SnagSwipe } from "./snag-phone.tsx";
 import { saveFile } from "./work-item-export.ts";
@@ -45,8 +45,8 @@ import { locationLevels, WorkItemPager } from "./work-item-list.tsx";
 
 // The Snag List's desktop views (RP-94, SNAG-8; design/reference/claude-design/ui_kits/app/snag-list.html):
 // a toolbar ("+ New" with only the Types the viewer may raise, search, Filters, Need My Action,
-// List / Kanban), the type chips (All and each of the Module's Types, with how many the viewer
-// sees), the List grouped by Stage in folding groups, and the Kanban with a column per Stage.
+// List / Kanban), the type chips (All, each of the Module's Types and one "Questions" chip for
+// the Question Types, with how many the viewer sees), the List grouped by Stage in folding groups, and the Kanban with a column per Stage.
 // Every count is the API's, of the items the viewer sees (V1); "With" follows V14 (ownerOf).
 // No due date, deadline or "overdue": Step Age dots only.
 
@@ -576,7 +576,7 @@ function TypeChips({
       <ul className={cn("flex items-center gap-2", phone ? "flex-nowrap pb-1" : "flex-wrap")}>
         {chip("all", query.type.length === 0, [], labels.allTypes, all)}
         {typeChipsOf(list.filters.types, counts).map((c) => {
-          const look = lookOf(c.kind === "questions" ? "QST" : c.type.code);
+          const look = c.kind === "questions" ? questionLook : lookOf(c.type.code);
           return chip(
             c.key,
             chipChosen(c, query.type),
