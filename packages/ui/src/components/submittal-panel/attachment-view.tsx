@@ -3,10 +3,11 @@
 import { formatNumber, type Locale } from "@rabaed/domain";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { Button } from "../button/button.tsx";
+import { Button, IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import { attachmentPageAt, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
+import { onBar } from "../photo/photo-screen.tsx";
+import { attachmentPageAt, attachmentZoom, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import type { AttachmentLoad } from "./attachment-files.ts";
 import { isCancelled, type LoadedPdf } from "./pdf-loader.ts";
 
@@ -29,6 +30,40 @@ export function AttachmentTile({ kind, className }: { kind: SubmittalPanelAttach
  * cut at its end, never its start, and on the side the locale reads from (`drawer.css` `.dfile b`).
  */
 export const attachmentNameClass = "truncate [direction:ltr] text-left rtl:text-right";
+
+/**
+ * Zoom out, the zoom ("100%", left to right) and zoom in, on the preview's and Open large's dark
+ * bar: `step` per press (10% in the preview, 25% in Open large), kept between 50% and 300%.
+ */
+export function AttachmentZoom({
+  locale,
+  labels,
+  zoom,
+  step,
+  onZoom,
+  className,
+}: {
+  locale: Locale;
+  labels: { zoomIn: string; zoomOut: string };
+  zoom: number;
+  step: number;
+  onZoom: (zoom: number) => void;
+  className?: string;
+}) {
+  return (
+    <span className={cn("shrink-0 items-center", className)}>
+      <IconButton size="sm" label={labels.zoomOut} className={onBar} onClick={() => onZoom(attachmentZoom(zoom, -step))}>
+        <Icon name="zoom-out" size={16} />
+      </IconButton>
+      <span className="min-w-10 text-center tabular-nums">
+        <bdi dir="ltr">{formatNumber(zoom, locale)}%</bdi>
+      </span>
+      <IconButton size="sm" label={labels.zoomIn} className={onBar} onClick={() => onZoom(attachmentZoom(zoom, step))}>
+        <Icon name="zoom-in" size={16} />
+      </IconButton>
+    </span>
+  );
+}
 
 export type AttachmentViewLabels = {
   /** "Page 3": a page's and its thumbnail's name. */

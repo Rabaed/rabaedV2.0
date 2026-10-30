@@ -76,11 +76,11 @@ export type SubmittalPanelProps = {
 };
 
 /** A layer open over the panel (a pop-up, a menu, a drop-down): Esc and the arrows are its own until it closes. Radix marks an open one `data-state="open"`. */
-const layerSelector = ['dialog', 'alertdialog', 'menu', 'listbox'].map((role) => `[role="${role}"][data-state="open"]`).join(", ");
+export const layerSelector = ['dialog', 'alertdialog', 'menu', 'listbox'].map((role) => `[role="${role}"][data-state="open"]`).join(", ");
 /** Where the arrows already move something. */
 const widgetSelector = '[role="menu"], [role="menubar"], [role="listbox"], [role="grid"], [role="tablist"], [role="radiogroup"], [role="slider"], [role="tree"]';
 
-function isTyping(target: Element | null): boolean {
+export function isTyping(target: Element | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || target.matches("input, textarea, select");
 }

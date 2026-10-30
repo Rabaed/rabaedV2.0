@@ -7,9 +7,10 @@ import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import { printAttachment, saveAttachment, useAttachmentFiles, type AttachmentLoad } from "./attachment-files.ts";
-import { AttachmentTile, AttachmentView, attachmentIcon, attachmentNameClass, type AttachmentPageJump, type AttachmentViewLabels } from "./attachment-view.tsx";
-import { attachmentKind, attachmentLayerToClose, attachmentZoom, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
+import { AttachmentTile, AttachmentView, AttachmentZoom, attachmentIcon, attachmentNameClass, type AttachmentPageJump, type AttachmentViewLabels } from "./attachment-view.tsx";
+import { attachmentKind, attachmentLayerToClose, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import { SubmittalPanelAttachmentViewer } from "./panel-attachment-viewer.tsx";
+import { isTyping, layerSelector } from "./submittal-panel.tsx";
 
 export type SubmittalPanelAttachmentFile = {
   /** The Document's id: what `fileUrl` is asked for, never shown. */
@@ -61,8 +62,11 @@ export type SubmittalPanelAttachmentsProps = {
 export type AttachmentPlace = { zoom: number; page: number; jump: AttachmentPageJump | null };
 const start: AttachmentPlace = { zoom: 100, page: 1, jump: null };
 
-/** Another layer open over the panel that Esc is for first: a pop-up, a menu, the number card. */
-const otherLayer = '[role="dialog"][data-state="open"]:not([data-attachment-viewer]), [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"], [data-number-card]:not([hidden])';
+/** Another layer open over the panel that Esc is for first: the panel's own (a pop-up, a menu), or the number card. Open large is this section's. */
+function otherLayerOpen(): boolean {
+  const layers = [...document.querySelectorAll(layerSelector)].filter((layer) => !layer.matches("[data-attachment-viewer]"));
+  return layers.length > 0 || document.querySelector("[data-number-card]:not([hidden])") !== null;
+}
 
 /**
  * The Attachments section's body (RP-1068, README §7, owner decision C3): a card per Document with its
@@ -133,10 +137,9 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   // so the panel's own listener sees it taken. Another layer open (a menu, the number card) is first.
   const onEscape = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
-    if (document.querySelector(otherLayer)) return;
+    if (otherLayerOpen()) return;
     // Esc in a field being typed in is the field's, as the panel has it.
-    const focus = document.activeElement;
-    if (focus instanceof HTMLElement && (focus.isContentEditable || focus.matches("input, textarea, select"))) return;
+    if (isTyping(document.activeElement)) return;
     const layer = attachmentLayerToClose({ large: largeFile?.id ?? null, preview: previewFile?.id ?? null });
     if (!layer) return;
     event.preventDefault();
@@ -238,17 +241,14 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
                         <bdi dir="ltr">{labels.pageOf(n(previewPlace.page), n(fileLoad.file.pdf.pages))}</bdi>
                       </span>
                     )}
-                    <span className="hidden shrink-0 items-center @[560px]/sdp:flex">
-                      <IconButton size="sm" label={labels.zoomOut} className={onBar} onClick={() => setPreviewPlace((p) => ({ ...p, zoom: attachmentZoom(p.zoom, -attachmentZoomStep.preview) }))}>
-                        <Icon name="zoom-out" size={16} />
-                      </IconButton>
-                      <span className="min-w-10 text-center tabular-nums">
-                        <bdi dir="ltr">{n(previewPlace.zoom)}%</bdi>
-                      </span>
-                      <IconButton size="sm" label={labels.zoomIn} className={onBar} onClick={() => setPreviewPlace((p) => ({ ...p, zoom: attachmentZoom(p.zoom, attachmentZoomStep.preview) }))}>
-                        <Icon name="zoom-in" size={16} />
-                      </IconButton>
-                    </span>
+                    <AttachmentZoom
+                      locale={locale}
+                      labels={labels}
+                      zoom={previewPlace.zoom}
+                      step={attachmentZoomStep.preview}
+                      onZoom={(zoom) => setPreviewPlace((p) => ({ ...p, zoom }))}
+                      className="hidden @[560px]/sdp:flex"
+                    />
                     <span className="flex-1" />
                     <IconButton size="sm" label={labels.openLarge} className={cn(onBar, "shrink-0")} onClick={(event) => openLarge(file, event.currentTarget)}>
                       <Icon name="external-link" size={16} />

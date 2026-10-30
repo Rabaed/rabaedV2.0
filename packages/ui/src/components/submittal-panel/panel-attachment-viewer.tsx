@@ -9,8 +9,8 @@ import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import type { AttachmentLoad } from "./attachment-files.ts";
-import { AttachmentTile, AttachmentView, attachmentIcon, attachmentNameClass } from "./attachment-view.tsx";
-import { attachmentKind, attachmentZoom, attachmentZoomStep } from "./attachments-model.ts";
+import { AttachmentTile, AttachmentView, AttachmentZoom, attachmentIcon, attachmentNameClass } from "./attachment-view.tsx";
+import { attachmentKind, attachmentZoomStep } from "./attachments-model.ts";
 import type { AttachmentPlace, SubmittalPanelAttachmentFile, SubmittalPanelAttachmentsLabels } from "./panel-attachments.tsx";
 
 export type SubmittalPanelAttachmentViewerProps = {
@@ -57,7 +57,6 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
   const pages = load?.status === "ready" ? (load.file.pdf?.pages ?? null) : null;
   const index = files.findIndex((f) => f.id === file.id);
   const goTo = (page: number) => onPlace({ ...place, page, jump: { page, seq: (place.jump?.seq ?? 0) + 1 } });
-  const zoomBy = (delta: number) => onPlace({ ...place, zoom: attachmentZoom(place.zoom, delta) });
 
   // The keyboard focus goes round its own controls.
   const keepFocus = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -112,17 +111,7 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
           </span>
         )}
         {kind !== "other" && (
-          <span className="flex shrink-0 items-center">
-            <IconButton size="sm" label={labels.zoomOut} className={onBar} onClick={() => zoomBy(-attachmentZoomStep.large)}>
-              <Icon name="zoom-out" size={16} />
-            </IconButton>
-            <span className="min-w-10 text-center text-[12px] tabular-nums">
-              <bdi dir="ltr">{n(place.zoom)}%</bdi>
-            </span>
-            <IconButton size="sm" label={labels.zoomIn} className={onBar} onClick={() => zoomBy(attachmentZoomStep.large)}>
-              <Icon name="zoom-in" size={16} />
-            </IconButton>
-          </span>
+          <AttachmentZoom locale={locale} labels={labels} zoom={place.zoom} step={attachmentZoomStep.large} onZoom={(zoom) => onPlace({ ...place, zoom })} className="flex text-[12px]" />
         )}
         <IconButton size="sm" label={labels.download} className={cn(onBar, "shrink-0")} onClick={onDownload}>
           <Icon name="download" size={16} />
