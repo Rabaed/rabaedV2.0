@@ -220,6 +220,13 @@ describe("runWhileUp", () => {
     expect(log).toEqual(["check A", "run A", "check A", "save A: result A", "check B", "run B", "check B"]);
   });
 
+  it("stops before running the next item when the stack is down before it, keeping what was saved", async () => {
+    // Checks: 1 before A, 2 after A, 3 before B (down).
+    const { outcome, log } = await track(["A", "B"], (n) => (n === 3 ? "db down" : undefined));
+    expect(outcome).toEqual({ saved: 1, stopped: "db down" });
+    expect(log).toEqual(["check A", "run A", "check A", "save A: result A", "check B"]);
+  });
+
   it("tells the check whether it is before or after the item, so a fixture cut off midway can say it may be partial", async () => {
     const asked: string[] = [];
     const outcome = await runWhileUp(["FX-C2"], {

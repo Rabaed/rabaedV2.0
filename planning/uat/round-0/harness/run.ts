@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
 import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
-import { runWhileUp } from "../../../../scripts/stack-health.ts";
+import { runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
 import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02] [--fixtures]
@@ -11,7 +11,7 @@ import { stackDown } from "./stack.ts";
 // Loads cases/<part>.ts, runs the cases in sequence, and merges each result into
 // results/results.json as it finishes. A thrown error is "error" (a script problem), never "fail".
 // The api and db are checked before and after each case (RP-1099): when either is down the run
-// stops and that case's result is not written (runWhileUp in scripts/stack-health.ts). An outage that starts and ends inside one case
+// stops and that case's result is not written (runWhileUp, scripts/stack-health.ts). An outage that starts and ends inside one case
 // is not seen.
 
 const resultsFile = resolve(round, "results", "results.json");
@@ -107,7 +107,7 @@ async function main() {
   const todo = registry.filter((c) => !ids || ids.includes(c.id));
   if (ids) for (const id of ids) if (!registry.some((c) => c.id === id)) console.warn(`No case ${id} in the loaded files.`);
   const counts: Record<string, number> = {};
-  let outcome: Awaited<ReturnType<typeof runWhileUp>>;
+  let outcome: WhileUpOutcome;
   try {
     // A case the stack went down under is not saved, so its earlier result in results/ stays.
     outcome = await runWhileUp(todo, {

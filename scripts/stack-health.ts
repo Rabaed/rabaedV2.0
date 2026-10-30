@@ -113,11 +113,13 @@ export type WhileUpSteps<T, R> = {
 };
 
 /**
- * The UAT harness's loop: checks the stack before and after each item and saves its result only when
+ * The UAT harness's case and fixture loop (here so the unit suite reaches it): checks the stack before and after each item and saves its result only when
  * both pass. Stops at the first down check; what was saved before it is kept. An outage that starts
  * and ends inside one item is not seen.
  */
-export async function runWhileUp<T, R>(items: T[], { down, run, save }: WhileUpSteps<T, R>): Promise<{ saved: number; stopped: string | undefined }> {
+export type WhileUpOutcome = { saved: number; stopped: string | undefined };
+
+export async function runWhileUp<T, R>(items: T[], { down, run, save }: WhileUpSteps<T, R>): Promise<WhileUpOutcome> {
   let saved = 0;
   for (const item of items) {
     const before = await down(item, "before");

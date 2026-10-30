@@ -135,8 +135,9 @@ export async function applyFixtures(only?: string[]): Promise<void> {
   // of its data first; a re-run applies only what is missing.
   const { stopped } = await runWhileUp(chosen, {
     down: async ([name], when) => {
-      const down = await stackDown(name);
-      return down && when === "after" ? `${down}\n${name} may be partial: re-run it with --fixtures --only ${name} once the stack is back.` : down;
+      const why = await stackDown(name);
+      if (!why || when === "before") return why;
+      return `${why}\n${name} may be partial: it may have made some of its data before the stack went down. Re-run it with --fixtures --only ${name} once the stack is back; it applies only what is missing.`;
     },
     run: async ([, apply]): Promise<FixtureRecord> => {
       try {
