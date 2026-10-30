@@ -108,7 +108,7 @@ describe("inviting an Authorized Person again", () => {
     expect(sent).toHaveLength(2);
     expect(sent[1]!.values.link).not.toBe(sent[0]!.values.link);
 
-    const actions = await adminDb.selectFrom("admin_action").select(["action", "reason"]).where("target_id", "=", companyId).orderBy("at").execute();
+    const actions = await adminDb.selectFrom("admin_action").select(["action", "reason"]).where("target_id", "=", companyId).orderBy("at").orderBy("id").execute();
     expect(actions).toEqual([
       { action: "onboard_company", reason: body.reason },
       { action: "invite_authorized_person", reason: "The first invitation expired" },

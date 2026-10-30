@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
+import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
@@ -18,7 +19,8 @@ import { isRunning } from "./worktrees-stale.ts";
 // first step when its Postgres doesn't answer; a seam step whose Postgres was
 // terminated mid-run ends on one line saying so (RP-994). A branch that mixes root
 // shared files with code gets a warning first and again above the last line (RP-993).
-// A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008).
+// A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
+// and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 
@@ -62,6 +64,10 @@ try {
   stopEarly(error instanceof Error ? error.message : String(error));
 }
 if (taken.tookOver) out.info(`verify ${taken.tookOver}`);
+
+// Never on a half-done merge (RP-1101): Auto-fix twice left one, a file still conflicted.
+const merging = mergeRefusal(readMergeState(root), "pnpm verify");
+if (merging !== undefined) stopEarly(merging);
 
 // Rule 3 before anything runs (RP-993): root shared files (the lockfile, say) beside code
 // showed only at `pnpm queue`, by the same rule, after the whole branch was built. A warning,

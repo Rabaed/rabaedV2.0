@@ -432,35 +432,22 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
 /**
  * The Types of a Module (the Submittals unless named) the Member may raise on one of their
  * Projects (RP-590; the Snag List's "+ New", RP-94): each has a published Workflow bound for
- * their Participant (app.new_item_workflow_version), whose Draft Step their base role holds,
- * as app.create_work_item checks it. The MAR first, then the SAR and DAR; other Types by code.
- * Null when it isn't one of their Projects.
+ * their Participant (app.new_item_workflow_version) whose Draft Step's actor rule lets them
+ * raise it, app.may_raise_type, the rule app.create_work_item checks, read through
+ * app.raisable_type_ids (RP-1089). The MAR first,
+ * then the SAR and DAR; other Types by code. Null when it isn't one of their Projects.
  */
 export function getRaisableTypes(db: Db, memberId: string, projectId: string, module: ModuleKey = "submittals"): Promise<RaisableTypes | null> {
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
-    const { rows } = await sql<{ code: string; name: BilingualText; workflow_version_id: string | null; base_role: string }>`
-      select t.code, t.name, r.base_role,
-        app.new_item_workflow_version(${projectId}::uuid, t.id, pm.participant_id) as workflow_version_id
-      from work_item_type t
-      cross join project_member pm
-      join participant p on p.id = pm.participant_id
-      join project_role r on r.id = p.project_role_id
-      where t.owner_kind = 'rabaed' and t.module_key = ${module} and not t.raised_from_item_only
-        and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
-        and pm.participant_id in (select app.current_participant_ids())
-        and p.status = 'active' and p.company_id = app.current_company_id()
+    const { rows } = await sql<{ code: string; name: BilingualText }>`
+      select t.code, t.name
+      from app.raisable_type_ids(${projectId}::uuid, ${module}) r
+      join work_item_type t on t.id = r.work_item_type_id
       order by array_position(${[...submittalTypeCodes]}::text[], t.code::text), t.code
     `.execute(trx);
-    const versions = rows.flatMap((r) => (r.workflow_version_id ? [r.workflow_version_id] : []));
-    const steps = await workflowStepsOf(trx, [...new Set(versions)]);
-    const types = rows.filter((r) => {
-      const draft = r.workflow_version_id ? steps.get(r.workflow_version_id)?.steps.find((s) => s.draft) : undefined;
-      // A Draft held by the raiser is any Participant's (RP-622); app.create_work_item checks its permission.
-      return draft !== undefined && (draft.role === r.base_role || draft.role === "raiser");
-    });
-    return { types: types.map((r) => ({ code: r.code, name: r.name })) };
+    return { types: rows.map((r) => ({ code: r.code, name: r.name })) };
   });
 }
 
@@ -1863,6 +1850,8 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       answers: Record<string, unknown> | null;
       /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
       action_form: unknown;
+      /** The actor's Positions, for a Member of the viewer's own Participant only; null for anyone else (RP-1091, V14). */
+      member_positions: BilingualText[] | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     // The import that created it (RP-645, story 35), for its importing Company's Members only, with no time.
     const { rows: imports } = await sql<{ import_id: string; file_name: string; member_name: BilingualText | null; by_rabaed: boolean }>`
@@ -1892,7 +1881,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         type: r.type,
         at: r.created_at.toISOString(),
         audience: r.audience,
-        by: { companyName: r.company_name, memberName: r.member_name },
+        by: { companyName: r.company_name, memberName: r.member_name, positions: r.member_positions ?? [] },
         transition: r.transition_label,
         fromStep: r.from_step_name,
         toStep: r.to_step_name,

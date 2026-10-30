@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, envClaims, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
+import { composeProjectOfEnv, envClaims, protectedLaneReason, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import type { LocalBranch } from "./worktrees.ts";
 
@@ -219,15 +219,46 @@ describe("choosePrune", () => {
           container("rabaed-lane6-db-1", "rabaed-lane6", "/other-clone"),
           container("rabaed-lane2-db-1", "rabaed-lane2", here),
         ],
-        volumes: [volume("rabaed-lane7")],
+        volumes: [volume("rabaed-lane8")],
         currentProject: "rabaed-lane2",
       },
       exists: (dir) => dir !== "/gone",
     });
     expect(p.projects.map((x) => [x.project, x.reason, x.waitsFor])).toEqual([
       ["rabaed-lane5", "worktree gone (/gone)", []],
-      ["rabaed-lane7", "no containers, only volumes", []],
+      ["rabaed-lane8", "no containers, only volumes", []],
     ]);
+  });
+
+  it("lists a dirty worktree's uncommitted and untracked files, at most five (RP-1101)", () => {
+    const few = wt("/w/few", { dirty: true, changes: ["UU docs/visibility.md", "?? notes.md"] });
+    const many = wt("/w/many", { dirty: true, changes: ["?? a", "?? b", "?? c", "?? d", "?? e", "?? f", "?? g"] });
+    expect(reasons(choose([few, many])).slice(2)).toEqual([
+      ["/w/few", "uncommitted changes: UU docs/visibility.md, ?? notes.md"],
+      ["/w/many", "uncommitted changes: ?? a, ?? b, ?? c, ?? d, ?? e and 2 more"],
+    ]);
+  });
+
+  it("never touches lane 7, Main 7's harness data: not its project, not the worktree whose .env names it (RP-1101)", () => {
+    const harness = wt("/w/harness", { project: "rabaed-lane7" });
+    const p = choose([harness], {
+      docker: { containers: [container("rabaed-lane7-db-1", "rabaed-lane7", "/w/harness", "exited")], volumes: [volume("rabaed-lane7")], currentProject: "rabaed-lane2" },
+    });
+    expect(p.remove).toEqual([]);
+    expect(reasons(p)[2]?.[1]).toBe(protectedLaneReason("rabaed-lane7"));
+    expect(p.projects).toEqual([]);
+    expect(p.kept.map((k) => [k.project, k.path])).toEqual([["rabaed-lane7", "/w/harness"]]);
+    expect(p.kept[0]?.reason).toBe(protectedLaneReason("rabaed-lane7"));
+  });
+
+  it("keeps a stopped project whose folder a running Claude session works in, naming the session (RP-1101)", () => {
+    const session = 'a running Claude session is in it: session "lane 52" (pid 52)';
+    const p = choose([], {
+      docker: { containers: [container("rabaed-lane52-db-1", "rabaed-lane52", "/w/hopeful-thompson", "exited")], volumes: [], currentProject: "rabaed-lane2" },
+      holders: { runningSession: (path) => (path === "/w/hopeful-thompson" ? session : undefined), desktopSession: () => undefined },
+    });
+    expect(p.projects).toEqual([]);
+    expect(p.kept).toEqual([{ project: "rabaed-lane52", path: "/w/hopeful-thompson", reason: session }]);
   });
 
   it("chooses no compose project when Docker is not running", () => {
@@ -242,6 +273,7 @@ describe("changedSinceListed", () => {
 
   it("keeps one that got uncommitted changes or unpushed commits after it was listed, or is gone from git", () => {
     expect(changedSinceListed(wt("/w/done", { dirty: true }), none)).toBe("uncommitted changes since it was listed");
+    expect(changedSinceListed(wt("/w/done", { dirty: true, changes: ["?? new.ts"] }), none)).toBe("uncommitted changes since it was listed: ?? new.ts");
     expect(changedSinceListed(wt("/w/done", { unpushed: 1 }), none)).toBe("1 commit on no origin branch since it was listed");
     expect(changedSinceListed(undefined, none)).toBe("no longer a worktree");
   });

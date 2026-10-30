@@ -25,6 +25,11 @@
 // now, a container of it started from an existing folder, Docker not answering, or a
 // connection to its Postgres keeps it. It lists everything and asks first.
 //
+// RP-1101: it refuses on a shallow clone (missing history misjudges merged branches), never touches
+// lane 7 (Main 7's harness data) or the worktree whose .env names it, lists a dirty worktree's files,
+// keeps a stale project whose existing folder a session works in, and prints what it kept, with
+// why, last, so a `| tail` keeps the reasons.
+//
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
@@ -34,6 +39,7 @@ import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
+import { keptLast, shallowRefusal } from "./prune-guards.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
@@ -44,6 +50,7 @@ import {
   gatherFacts,
   gitError,
   inTarget,
+  isShallowRepo,
   listWorktrees,
   localBranches,
   pruneWorktrees,
@@ -74,6 +81,11 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const mainRoot = listWorktrees()[0]!.path;
+const shallow = shallowRefusal(isShallowRepo(mainRoot), "worktrees:prune");
+if (shallow !== undefined) {
+  console.error(shallow);
+  process.exit(1);
+}
 try {
   fetchPrune(mainRoot);
 } catch (error) {
@@ -104,17 +116,21 @@ const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, d
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
 const goesWithoutSaying = (reason: string) => reason === "the main checkout" || reason === CURRENT_WORKTREE;
 const listed = chosen.skipped.filter((s) => !goesWithoutSaying(s.reason));
-if (listed.length > 0) {
-  console.log("Skipped:");
-  for (const s of listed) console.log(`  ${name(s.worktree)}: ${s.reason}`);
-  printStale(listed, staleDays);
-}
-for (const k of chosen.kept) console.log(`Not pruned: ${k.project} of ${k.path}: ${k.reason}.`);
+/** What was kept, with why, and what later steps logged: printed last (RP-1101), so it is not cut off. */
+const kept = [...listed.map((s) => ({ what: name(s.worktree), reason: s.reason })), ...chosen.kept.map((k) => ({ what: `${k.project} of ${k.path}`, reason: k.reason }))];
+const logged: string[] = [];
+const printKept = () => {
+  for (const line of keptLast(kept, logged)) console.log(line);
+};
+printStale(listed, staleDays);
 if (!docker) console.log("Docker is not running: compose projects are not checked (run `pnpm lanes:prune` later).");
 if (chosen.remove.length + chosen.branches.length + chosen.projects.length === 0) {
   console.log("Nothing to prune.");
+  printKept();
   process.exit(0);
 }
+// The reasons before the prompt, so the choice is made seeing them; again last (RP-1101).
+printKept();
 if (chosen.projects.length > 0) {
   console.log("Compose projects to remove, with their volumes:");
   for (const p of chosen.projects) console.log(`  ${p.project}: ${p.reason}`);
@@ -147,7 +163,7 @@ for (const w of chosen.remove) {
   // prompt: the running and desktop sessions are read again each time (RP-956, RP-608).
   const changed = changedSinceListed(pruneFacts(listWorktrees(mainRoot).filter((x) => samePath(x.path, w.path)))[0], systemHolders());
   if (changed) {
-    console.log(`Kept ${name(w)}: ${changed}.`);
+    logged.push(`Kept ${name(w)}: ${changed}.`);
     continue;
   }
   attempt(w.path, () => {
@@ -166,7 +182,7 @@ removeProjectsNow({
       removeProject(p);
       console.log(`Removed compose project ${p.project}.`);
     }),
-  log: (line) => console.log(line),
+  log: (line) => logged.push(line),
 });
 for (const b of chosen.branches) {
   attempt(`branch ${b}`, () => {
@@ -183,4 +199,5 @@ try {
   failed++;
   console.error(`git worktree prune failed: ${gitError(error)}`);
 }
+printKept();
 if (failed > 0) process.exit(1);

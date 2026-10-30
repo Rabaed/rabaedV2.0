@@ -218,7 +218,7 @@ describe("app.set_numbering_pattern (RP-313)", () => {
   const saved = async (projectId: string) =>
     (
       await migrator.query(
-        "select work_item_type_id, set_by_member_id, shared_counter_accepted_at, effective_from from numbering_pattern where project_id = $1 order by created_at",
+        "select work_item_type_id, set_by_member_id, shared_counter_accepted_at, effective_from from numbering_pattern where project_id = $1 order by created_at, id",
         [projectId],
       )
     ).rows as Saved[];
@@ -363,7 +363,7 @@ describe("a Custom pattern given up (RP-412 rebuild)", () => {
     expect(await t.numbered(t.c1.member)).toBe("MAR-01-0001");
     expect(await use(t.c1.ap, t.projectId, await mar())).toBe("saved");
     expect(await t.numbered(t.c1.member)).toBe("TWU-01-0001");
-    const rows = (await migrator.query("select follows_project, segments from numbering_pattern where project_id = $1 order by created_at", [t.projectId]))
+    const rows = (await migrator.query("select follows_project, segments from numbering_pattern where project_id = $1 order by created_at, id", [t.projectId]))
       .rows;
     expect(rows.map((r) => [r.follows_project, r.segments === null])).toEqual([
       [false, false],

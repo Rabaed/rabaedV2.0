@@ -706,7 +706,7 @@ const sourceColumns = sql`rf.document_number as source_number, rf.subject as sou
   rfo.outcome as source_outcome, rfo.name as source_outcome_name, rfo.outcomes as source_outcomes`;
 const sourceJoins = sql`left join lateral (
     select l.document_number, l.subject, l.work_item_id from app.work_item_links(r.id) l
-    where l.kind = 'raised_from' order by l.created_at limit 1
+    where l.kind = 'raised_from' order by l.created_at, l.id limit 1
   ) rf on true
   left join lateral (
     select s.outcome, o.name, (

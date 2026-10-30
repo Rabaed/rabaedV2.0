@@ -54,6 +54,8 @@ UAT runs on **lane 7**, the Main 7 stack. Lane 7 is a legacy single-digit lane, 
 
 **Start and reset a round.** From the lane 7 worktree, in PowerShell: `pnpm lane:env 7`, then `pnpm demo`. It starts Postgres, Mailpit and the file store, resets the database, seeds the demo and runs web, api, worker and Rabaed Admin. The worker must run: it delivers notifications and makes the PDFs. Reset before each round so every tester starts from the same seed. The password for every demo person is the one in `.env.demo` (never written in this plan, never in a screenshot).
 
+**When Docker stops (RP-1099).** Lane 7's worktree has a `docker-compose.override.yml`, its copy of `docker-compose.uat.yml`, so Postgres, Mailpit and the file store restart on their own when Docker starts again; a new lane 7 worktree needs that copy again (`docker inspect rabaed-lane7-db-1 --format "{{.HostConfig.RestartPolicy.Name}}"` says `unless-stopped`). The apps are not containers: after a reboot, run `pnpm dev:apps` (not `pnpm demo`, which resets the database). A scheduled task, "Rabaed lane 7 health", runs `node scripts/stack-health.ts --lane 7 --alert` every 5 minutes, only while the owner is signed in, one run at a time, and shows the owner a message box while the api or the database is down. The UAT harness writes no result while either is down.
+
 **Scripted sign-in** (automated suite and API checks): `pnpm demo:session <name>` writes a Playwright storage-state file for `hafiz`, `ali`, `saeed`, `omar`, `yousef`, `ahmed`, `sara`, `mohammed`, `faisal`, `noura` or `nasser`. The record is sealed locally on lane 7 (`RECORD_SEALING=local`), so a PDF seal shows an unverified signer by design (ADR 0023).
 
 ### 2.2 Seed people
@@ -512,7 +514,7 @@ One Test Case per built page or flow, run with the ui-ux-tester agent (report on
 
 ## 6. Visibility block
 
-Visibility is the top requirement. This block is driven by `docs/visibility.md`: its **Scenario matrix** (176 rows: 1 to 81, then `RP-nnn-n`) and its **Leak channels** table.
+Visibility is the top requirement. This block is driven by `docs/visibility.md`: its **Scenario matrix** (rows 1 to 81 there, then the `RP-nnn-n` rows, one file per Jira key in `docs/visibility/scenarios/`) and its **Leak channels** table.
 
 ### 6.1 How the matrix becomes UAT
 
@@ -600,7 +602,7 @@ For every item or setup a scenario creates, log in as each Company that must NOT
 
 ### 6.4 Matrix coverage: every row and the scenario that covers it
 
-Rows 1 to 81 and the `RP-nnn-n` rows of `docs/visibility.md`, in the order of the matrix.
+Rows 1 to 81 of `docs/visibility.md`, then the `RP-nnn-n` rows of `docs/visibility/scenarios/`, by Jira key.
 
 | Row | Scenario (shortened) | Covered by |
 |---|---|---|

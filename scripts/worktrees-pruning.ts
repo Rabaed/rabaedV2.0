@@ -5,6 +5,7 @@ import {
   claimOf,
   keptByClaims,
   projectInUseNow,
+  protectedLaneReason,
   staleProjects,
   type Container,
   type EnvClaim,
@@ -15,6 +16,7 @@ import {
   type WorktreeLane,
 } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
+import { guardCandidates, listedChanges } from "./prune-guards.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
@@ -173,7 +175,7 @@ export function changedSinceListed(now: PruneWorktree | undefined, holders: Hold
   if (!now) return "no longer a worktree";
   const held = holdReason(now.path, holders, { sinceListed: true });
   if (held !== undefined) return held;
-  if (now.dirty) return "uncommitted changes since it was listed";
+  if (now.dirty) return `uncommitted changes since it was listed${listedChanges(now.changes)}`;
   if (now.unpushed > 0) return `${plural(now.unpushed, "commit")} on no origin branch since it was listed`;
   return undefined;
 }
@@ -182,12 +184,15 @@ export function changedSinceListed(now: PruneWorktree | undefined, holders: Hold
 function skipReason(w: PruneWorktree, holders: Holders, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
   if (samePath(w.path, mainRoot, platform)) return "the main checkout";
   if (samePath(w.path, currentPath, platform)) return CURRENT_WORKTREE;
+  // RP-1101: the worktree whose .env names lane 7 holds Main 7's harness data.
+  const harness = protectedLaneReason(w.project);
+  if (harness !== undefined) return harness;
   if (w.branch === "main") return "on main";
   if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return openSessionReason({ kind: "open", session: w.locked });
   const held = holdReason(w.path, holders);
   if (held !== undefined) return held;
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
-  if (w.dirty) return "uncommitted changes";
+  if (w.dirty) return `uncommitted changes${listedChanges(w.changes)}`;
   if (w.unpushed > 0) return `${plural(w.unpushed, "commit")} on no origin branch`;
   const merged = isFinished(w) || (w.upstreamGone && !isAppWorktree(w.path, mainRoot, platform));
   if (merged) return undefined;
@@ -235,5 +240,8 @@ function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { conta
     ...staleProjects({ containers, volumes, cwd, currentProject, exists, platform }),
   ];
   const unique = all.filter((p, i) => all.findIndex((q) => q.project === p.project) === i).sort((a, b) => a.project.localeCompare(b.project));
-  return keptByClaims(unique, listedClaims(worktrees.filter((w) => !removed(w.path))));
+  // RP-1101: never lane 7, nor a stale project whose existing folder a Claude session works in.
+  const guarded = guardCandidates(unique, containers, holders, exists);
+  const claimed = keptByClaims(guarded.prune, listedClaims(worktrees.filter((w) => !removed(w.path))));
+  return { prune: claimed.prune, kept: [...guarded.kept, ...claimed.kept] };
 }

@@ -29,6 +29,7 @@ beforeEach(() => {
   mkdirSync(join(repo, "scripts"));
   copyFileSync(join(here, "..", ".githooks", "pre-commit"), join(repo, ".githooks", "pre-commit"));
   copyFileSync(join(here, "check-no-fonts.ts"), join(repo, "scripts", "check-no-fonts.ts"));
+  copyFileSync(join(here, "check-secrets.ts"), join(repo, "scripts", "check-secrets.ts"));
   write({ "README.md": "# repo\n" });
   git("add", "-A");
   git("commit", "-q", "--no-verify", "-m", "start");
@@ -77,6 +78,24 @@ describe("pre-commit", () => {
     }
   });
 
+  // RP-1100: the token is built from parts, so this file holds none.
+  it("refuses a commit that stages a token, naming the file and line but not the token", () => {
+    const token = ["ATA", "TT3", "aB3dE5gH7k".repeat(18)].join("");
+    write({ "scripts/upload.sh": ["#!/bin/sh\ncurl -", `u someone@example.com:${token} https://example.atlassian.net\n`].join("") });
+    git("add", "-A");
+    const commit = tryGit("commit", "-q", "-m", "upload");
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain("scripts/upload.sh:2: Atlassian API token");
+    expect(commit.stdout + commit.stderr).not.toContain(token.slice(0, 12));
+    expect(git("log", "--format=%s")).toBe("start\n");
+  });
+
+  it("lets a commit through that reads the token from the environment", () => {
+    write({ "scripts/upload.ts": "const token = process.env.JIRA_API_TOKEN;\n" });
+    git("add", "-A");
+    expect(tryGit("commit", "-q", "-m", "upload").status).toBe(0);
+  });
+
   it("lets a commit through whose lines only have trailing spaces or a blank last line", () => {
     write({ "docs/notes.md": "A line with a hard break  \nnext\n\n" });
     git("add", "-A");
@@ -95,7 +114,7 @@ describe("pre-push", { timeout: 60_000 }, () => {
 
   beforeEach(() => {
     copyFileSync(join(here, "..", ".githooks", "pre-push"), join(repo, ".githooks", "pre-push"));
-    for (const script of ["pre-push.ts", "shared-files.ts", "reviewed-required.ts", "reviewed-label.ts", "check-claims.ts", "claims.ts"]) copyFileSync(join(here, script), join(repo, "scripts", script));
+    for (const script of ["pre-push.ts", "shared-files.ts", "reviewed-required.ts", "reviewed-label.ts", "check-claims.ts", "claims.ts", "merge-in-progress.ts"]) copyFileSync(join(here, script), join(repo, "scripts", script));
     git("add", "-A");
     git("commit", "-q", "--no-verify", "-m", "hooks");
     git("init", "-q", "--bare", `${repo}-remote`);

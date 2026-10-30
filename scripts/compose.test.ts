@@ -1,5 +1,31 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
+
+type Compose = { services: Record<string, { restart?: string }> };
+const composeFile = (name: string) => parse(readFileSync(new URL(`../${name}`, import.meta.url), "utf8")) as Compose;
+
+// RP-1099: a Docker Desktop update stopped every stack, and lane 7 (Main 7's UAT harness
+// stack) stayed down for over 2 hours. Lane 7 alone restarts on its own: it copies docker-compose.uat.yml to the
+// git-ignored docker-compose.override.yml, which compose reads beside docker-compose.yml. The
+// other lanes keep no restart policy, so Docker's start never brings back every old lane at once.
+describe("restart policy", () => {
+  it("restarts every service in docker-compose.uat.yml, and only docker-compose.yml's services", () => {
+    const services = Object.keys(composeFile("docker-compose.yml").services);
+    const uat = composeFile("docker-compose.uat.yml").services;
+    expect(Object.keys(uat).sort()).toEqual([...services].sort());
+    for (const s of services) expect(uat[s], s).toEqual({ restart: "unless-stopped" });
+  });
+
+  it("leaves the lanes' shared docker-compose.yml without one", () => {
+    for (const [name, s] of Object.entries(composeFile("docker-compose.yml").services)) expect(s.restart, name).toBeUndefined();
+  });
+
+  it("keeps docker-compose.override.yml out of git", () => {
+    const ignore = readFileSync(new URL("../.gitignore", import.meta.url), "utf8");
+    expect(ignore).toMatch(/^\/docker-compose\.override\.yml$/m);
+  });
+});
 
 // The local db service must time plpgsql functions, so a seam-1 slowdown can be diagnosed
 // from pg_stat_user_functions without a hand-run `alter system` (see README "Tests").

@@ -134,7 +134,7 @@ describe("the demo seed", () => {
       join rabaed_engineer e on e.id = a.engineer_id
       join company c on c.id = a.target_id
       where e.email = ${DEMO_ENGINEER_EMAIL}
-      order by a.at
+      order by a.at, a.id
     `.execute(migrator);
     expect(rows.map((r) => r.name)).toEqual(["TMC Constructions", "Beta Build", "Design Consultants LLC", "Al Waha PMC"]);
     expect(rows.every((r) => r.action === "onboard_company" && r.reason.startsWith("Demo seed:"))).toBe(true);
@@ -149,7 +149,7 @@ describe("the demo seed", () => {
       left join stored_file l on l.id = c.logo_file_id and l.uploaded_by_member_id = c.authorized_person_id
       left join stored_file s on s.id = c.stamp_file_id and s.uploaded_by_member_id = c.authorized_person_id
       where e.email = ${DEMO_ENGINEER_EMAIL}
-      order by a.at
+      order by a.at, a.id
     `.execute(migrator);
     expect(rows).toHaveLength(4);
     for (const row of rows) expect(row, row.name).toMatchObject({ logo: "image/png", stamp: "image/png" });
