@@ -7,7 +7,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, LEGACY_MAR, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, LEGACY_MAR, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -125,6 +125,29 @@ const seen = (as: string, table: string, column = "work_item_id") =>
   );
 
 const itemTables = ["work_item_dimension_value", "work_item_scope", "work_item_access", "step_assignment", "work_item_event"];
+/** The item's tables but its history: a Draft's only event, `created`, is read by nobody (scenario 61). */
+const draftTables = itemTables.filter((t) => t !== "work_item_event");
+
+/** How a Member is named in a failure. */
+const names = new Map<string, string>();
+const nameOf = (as: string) => names.get(as) ?? as;
+
+/**
+ * Item `target` read, by id, in `work_item` and in each of `tables`, by every one of `seenBy` first
+ * and by none of `hiddenFrom` (RP-1095).
+ */
+async function expectItemHidden(target: string, seenBy: string | string[], hiddenFrom: string | string[], tables: readonly string[] = itemTables, label = "") {
+  for (const [table, column] of [["work_item", "id"], ...tables.map((t) => [t, "work_item_id"])] as const) {
+    await expectHiddenFrom({
+      read: async (as: string) => (await seen(as, table, column)).map((id) => ({ id })),
+      target,
+      seenBy,
+      hiddenFrom,
+      name: nameOf,
+      label: `${label}${table}`,
+    });
+  }
+}
 
 let draft = "";
 
@@ -139,6 +162,16 @@ beforeAll(async () => {
   k1 = await company(engineer, "K1");
   or = await company(engineer, "OR");
   c1Narrow = await member(c1.id, "narrow");
+  for (const [co, name] of [
+    [c1, "C1"],
+    [c2, "C2"],
+    [k1, "K1"],
+    [or, "OR"],
+  ] as const) {
+    names.set(co.ap, `${name}'s Authorized Person`);
+    names.set(co.member, `${name}'s engineer`);
+  }
+  names.set(c1Narrow, "C1's Building B engineer");
   app = createDb(urls.app, { max: 2 });
 
   const [created] = await call<{ project_id: string }>(
@@ -222,14 +255,14 @@ describe("a Draft Work Item", () => {
     expect(await seen(c1.member, "work_item", "id")).toEqual([draft]);
     for (const table of itemTables.filter((t) => t !== "work_item_event")) expect(await seen(c1.member, table), table).toEqual([draft]);
     // Its only event so far is `created`, which nobody reads: when a Draft was started is audit only (scenario 61).
-    expect(await seen(c1.member, "work_item_event")).toEqual([]);
+    expect(await seen(c1.member, "work_item_event")).toEqual([]); // not hidden-from: a Draft's only event, created, is read by nobody, its raiser included (scenario 61)
   });
 
   it("is seen by nobody else, in any of its tables (V1, V3)", async () => {
-    for (const who of [c2.member, c2.ap, k1.member, or.member]) {
-      expect(await seen(who, "work_item", "id")).toEqual([]);
-      for (const table of itemTables) expect(await seen(who, table), table).toEqual([]);
-    }
+    const others = [c2.member, c2.ap, k1.member, or.member];
+    await expectItemHidden(draft, c1.member, others, draftTables);
+    // Its history is proved by id at Internal Review, once its raiser reads events (below).
+    for (const who of others) expect(await seen(who, "work_item_event"), nameOf(who)).not.toContain(draft); // not hidden-from: the Draft's only event, created, is read by nobody (scenario 61); "Send for Review and Return" proves work_item_event by id
   });
 
   it("stays hidden from another Participant even with an access row, while at the raiser's internal Steps (V1)", async () => {
@@ -238,7 +271,7 @@ describe("a Draft Work Item", () => {
       [draft, projectId, participant.k1],
     );
     try {
-      expect(await seen(k1.member, "work_item", "id")).toEqual([]);
+      await expectItemHidden(draft, c1.member, k1.member, [], "with K1's access row: ");
     } finally {
       await migrator.query("delete from work_item_access where work_item_id = $1 and participant_id = $2", [
         draft,
@@ -248,17 +281,23 @@ describe("a Draft Work Item", () => {
   });
 
   it("is not seen by a raising-Company Member whose Visibility excludes its Location (V4)", async () => {
-    expect(await seen(c1Narrow, "work_item", "id")).toEqual([]);
-    for (const table of itemTables) expect(await seen(c1Narrow, table), table).toEqual([]);
+    await expectItemHidden(draft, c1.member, c1Narrow, draftTables);
+    expect(await seen(c1Narrow, "work_item_event")).not.toContain(draft); // not hidden-from: the Draft's only event, created, is read by nobody (scenario 61)
   });
 
   it("is not seen by a Member of the raising Company who is not on the Project", async () => {
-    expect(await seen(await member(c1.id, "off-project"), "work_item", "id")).toEqual([]);
+    const offProject = await member(c1.id, "off-project");
+    names.set(offProject, "a C1 Member off the Project");
+    await expectItemHidden(draft, c1.member, offProject, draftTables);
   });
 
   it("is not seen with no Member set", async () => {
-    const rows = await app.transaction().execute((trx) => sql`select id from work_item`.execute(trx));
-    expect(rows.rows).toEqual([]);
+    /** The Work Items read as `as`, or with no Member set at all (null). */
+    const read = async (as: string | null) =>
+      as === null
+        ? (await app.transaction().execute((trx) => sql<{ id: string }>`select id from work_item`.execute(trx))).rows
+        : call<{ id: string }>(as, sql`select id from work_item`);
+    await expectHiddenFrom({ read, target: draft, seenBy: c1.member, hiddenFrom: null, name: (as) => (as === null ? "no Member set" : nameOf(as)) });
   });
 
   it("never gives the app role the current Step, Stage or their times directly: only app.step_as_seen (V14)", async () => {
@@ -288,7 +327,7 @@ describe("a Draft Work Item", () => {
     ]);
     expect(rows).toEqual([{ seq: 1, type: "created", audience: "internal", audience_participant_id: participant.c1 }]);
     // When the Draft was started is audit only, shown to nobody (scenario 61).
-    expect(await call(c1.member, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]);
+    expect(await call(c1.member, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]); // not hidden-from: the created event is read by nobody, its raiser included; the migrator reads it above
   });
 
   it("scenario RP-515-1: gives nobody, its author included, a time its Step began: a Draft has no Step Age (ADR 0020)", async () => {
@@ -339,7 +378,7 @@ describe("the app role", () => {
         where n.nspname not in ('pg_catalog', 'information_schema')
           and p.prosrc ~* '\mdelete\s+from\s+(only\s+)?(public\.)?work_item\M'`,
     );
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([]); // not hidden-from: no function's source deletes a Work Item, read from pg_proc
     const { rows: can } = await migrator.query("select has_table_privilege('rabaed_app', 'work_item', 'DELETE') as can");
     expect(can).toEqual([{ can: false }]);
   });
@@ -363,9 +402,9 @@ describe("work_item_event", () => {
   it("chains every event to the one before it", async () => {
     expect(await intact(draft)).toBe(true);
     const { rows } = await migrator.query("select seq, prev_hash, hash from work_item_event where work_item_id = $1", [draft]);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(1); // not hidden-from: the migrator's count of the Draft's events, its one created
     expect(rows[0].prev_hash).toBeNull();
-    expect(rows[0].hash).toHaveLength(32);
+    expect(rows[0].hash).toHaveLength(32); // not hidden-from: a sha256 is 32 bytes
   });
 
   it("is append-only even for the table's owner", async () => {
@@ -409,6 +448,7 @@ describe("Send for Review and Return", () => {
 
   beforeAll(async () => {
     pm = await member(c1.id, "pm");
+    names.set(pm, "C1's PM");
     await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now()) as outcome`);
     await grant(c1.ap, "member", [participant.c1, pm], "trade", "all");
     await grant(c1.ap, "member", [participant.c1, pm], "location", "all");
@@ -422,11 +462,7 @@ describe("Send for Review and Return", () => {
   });
 
   it("keeps the item and every row of it inside the raiser's Participant at Internal Review (V1, V5)", async () => {
-    expect(await seen(pm, "work_item", "id")).toContain(item);
-    for (const who of [c2.member, k1.member, or.member]) {
-      expect(await seen(who, "work_item", "id")).toEqual([]);
-      for (const table of itemTables) expect(await seen(who, table), table).toEqual([]);
-    }
+    await expectItemHidden(item, [pm, c1.member], [c2.member, k1.member, or.member]);
   });
 
   it("answers not_found to another Participant's Members, and writes nothing", async () => {
@@ -452,7 +488,10 @@ describe("Send for Review and Return", () => {
 
   it("never lets the app role read counters or idempotency keys, or write Positions", async () => {
     for (const table of ["numbering_counter", "command_idempotency"]) {
-      expect(await seen(c1.member, table, "project_id"), table).toEqual([]);
+      // The Tower's rows are there (the migrator reads them), so the empty read is the role's, not an empty table.
+      const { rows } = await migrator.query(`select count(*)::int as n from ${table} where project_id = $1`, [projectId]);
+      expect(rows[0].n, table).toBeGreaterThan(0);
+      expect(await seen(c1.member, table, "project_id"), table).toEqual([]); // not hidden-from: no Member reads these tables, any Company's; the migrator's count above proves the rows
     }
     for (const table of ["position", "position_permission", "project_member_position", "numbering_counter", "command_idempotency"]) {
       await expect(
@@ -463,10 +502,15 @@ describe("Send for Review and Return", () => {
   });
 
   it("shows a Participant's Project Member Positions only to that Participant's Company (V14)", async () => {
-    expect(await seen(c1.ap, "project_member_position", "project_member_id")).not.toEqual([]);
-    for (const who of [c2.ap, k1.ap, or.member]) {
-      expect(await seen(who, "project_member_position", "project_member_id")).toEqual([]);
-    }
+    const { rows } = await migrator.query("select id from project_member where participant_id = $1 and member_id = $2", [participant.c1, pm]);
+    await expectHiddenFrom({
+      read: async (as: string) => (await seen(as, "project_member_position", "project_member_id")).map((id) => ({ id })),
+      target: rows[0].id as string,
+      seenBy: [c1.ap, c1.member],
+      hiddenFrom: [c2.ap, k1.ap, or.member],
+      name: nameOf,
+      label: "the C1 PM's Positions",
+    });
   });
 
   // RP-300: the Action Form answers are checked by the API; the database still
@@ -557,9 +601,8 @@ describe("Submit and Code A", () => {
       [participant.k1]: "handling",
       [participant.or]: "oversight",
     });
-    for (const who of [k1.member, manager, or.member]) expect(await seen(who, "work_item", "id"), who).toContain(item);
-    expect(await seen(c2.member, "work_item", "id")).not.toContain(item);
-    for (const table of itemTables) expect(await seen(c2.member, table), table).not.toContain(item);
+    await expectItemHidden(item, [k1.member, manager, or.member, c1.member], c2.member, []);
+    await expectItemHidden(item, c1.member, c2.member, itemTables, "the raiser's rows: ");
   });
 
   it("shows the Consultant only the shared Submit of the Contractor's history (V5)", async () => {
@@ -619,7 +662,16 @@ describe("Submit and Code A", () => {
     // The raiser and the Consultant it was "With"; the Owner Representative's oversight names nobody.
     expect(await named(c1.member)).toEqual([participant.c1, participant.k1].sort());
     expect(await named(or.member)).toEqual([participant.c1, participant.k1].sort());
-    expect(await named(c2.member)).toEqual([]);
+    for (const target of [participant.c1, participant.k1]) {
+      await expectHiddenFrom({
+        read: async (as: string) => (await named(as)).map((id) => ({ id })),
+        target,
+        seenBy: [c1.member, or.member],
+        hiddenFrom: c2.member,
+        name: nameOf,
+        label: "app.work_item_companies",
+      });
+    }
   });
 
   it("keeps actor resolution out of the app role's reach", async () => {
@@ -659,10 +711,25 @@ describe("Internal Note", () => {
       sql`select type, payload from work_item_event where work_item_id = ${item}::uuid order by seq`,
     );
   const intact = async () => (await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok as boolean;
+  /** The item's event ids `as` reads, through RLS. */
+  const visibleIds = (as: string) => call<{ id: string }>(as, sql`select id from work_item_event where work_item_id = ${item}::uuid`);
+  /** The ids of the item's events of `type`, as the migrator reads them, in order; with `note`, the Internal Note of that text. */
+  const eventIds = async (type: string, note?: string) =>
+    (
+      await migrator.query("select id from work_item_event where work_item_id = $1 and type = $2 and ($3::text is null or payload ->> 'internal_note' = $3) order by seq", [
+        item,
+        type,
+        note ?? null,
+      ])
+    ).rows.map((r) => r.id as string);
+  const expectEventHidden = (target: string, seenBy: string[], hiddenFrom: string[], label: string) =>
+    expectHiddenFrom({ read: visibleIds, target, seenBy, hiddenFrom, name: nameOf, label });
 
   beforeAll(async () => {
     pm = await member(c1.id, "noting-pm");
     manager = await member(k1.id, "noting-manager");
+    names.set(pm, "C1's PM");
+    names.set(manager, "K1's manager");
     await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now())`);
     await call<{ outcome: string }>(k1.ap, sql`select app.add_project_member(${participant.k1}::uuid, ${manager}::uuid, now())`);
     for (const kind of ["trade", "location"]) {
@@ -698,20 +765,29 @@ describe("Internal Note", () => {
   });
 
   it("is read only by the writer's Participant: the Consultant and Owner Representative see just the Submit (scenario 34)", async () => {
-    expect((await visible(c1.member)).filter((e) => e.type === "internal_note")).toHaveLength(3);
+    expect((await visible(c1.member)).filter((e) => e.type === "internal_note").map((e) => e.payload)).toEqual([
+      { internal_note: "sent note" },
+      { internal_note: "returned note" },
+      { internal_note: "submitted note" },
+    ]);
     for (const who of [k1.member, manager, or.member]) {
       expect(await visible(who), who).toEqual([{ type: "transition", payload: {} }]);
     }
-    expect(await visible(c2.member)).toEqual([]);
+    const notes = await eventIds("internal_note");
+    expect(notes.length, "the item's Internal Notes").toBe(3);
+    for (const note of notes) await expectEventHidden(note, [c1.member, pm], [k1.member, manager, or.member, c2.member], "an Internal Note");
+    const [submit] = (
+      await migrator.query("select id from work_item_event where work_item_id = $1 and type = 'transition' and audience = 'shared'", [item])
+    ).rows.map((r) => r.id as string);
+    await expectEventHidden(submit!, [c1.member, k1.member, manager, or.member], [c2.member], "the Submit");
   });
 
   it("written with the Code, is read only by the Consultant (scenario 8)", async () => {
     expect(await pickUp(manager)).toBe("picked_up");
     expect(await take(manager, "approve_a", "coded note")).toBe("applied");
     expect((await visible(k1.member)).map((e) => e.payload.internal_note).filter(Boolean)).toEqual(["coded note"]);
-    for (const who of [c1.member, pm, or.member]) {
-      expect(JSON.stringify(await visible(who)), who).not.toContain("coded note");
-    }
+    const [coded] = await eventIds("internal_note", "coded note");
+    await expectEventHidden(coded!, [k1.member, manager], [c1.member, pm, or.member, c2.member], "the Code's Internal Note");
   });
 
   it("is in the hash chain: changing an Internal Note breaks it", async () => {
@@ -813,7 +889,7 @@ describe("a Draft's answers", () => {
     });
 
     it("are saved by the holder of a Step that edits the Form, never the PM at Internal Review, each change a diff internal to the raiser", async () => {
-      expect(await diffs()).toEqual([]);
+      expect(await diffs()).toEqual([]); // not hidden-from: no change recorded yet, as the migrator reads them
       expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("not_editable");
       expect(await save(c1.member, { description: "Later", model: "CT-300" })).toBe("not_editable");
       expect(await take(pm, "return", "Check the model")).toBe("applied");
@@ -821,7 +897,7 @@ describe("a Draft's answers", () => {
       expect(await save(c1.member, { description: "Later", model: "CT-300" })).toBe("saved");
       expect(await stored()).toEqual({ description: "Later", model: "CT-300" });
       const [diff, ...more] = await diffs();
-      expect(more).toEqual([]);
+      expect(more).toEqual([]); // not hidden-from: one change recorded, as the migrator reads them
       expect(diff).toMatchObject({
         actor_member_id: c1.member,
         actor_participant_id: participant.c1,
@@ -834,10 +910,10 @@ describe("a Draft's answers", () => {
           ],
         },
       });
-      expect(diff.content_sha256).toHaveLength(32);
+      expect(diff.content_sha256).toHaveLength(32); // not hidden-from: a sha256 is 32 bytes
       // A save that changes nothing records nothing.
       expect(await save(c1.member, { description: "Later", model: "CT-300" })).toBe("saved");
-      expect(await diffs()).toHaveLength(1);
+      expect(await diffs()).toHaveLength(1); // not hidden-from: the save that changed nothing recorded nothing, as the migrator reads them
     });
 
     it("are append-only for the app role, and in the hash chain", async () => {
@@ -894,6 +970,12 @@ describe("a Draft's answers", () => {
       for (const who of [k1.member, or.member]) {
         const visible = await call<{ type: string }>(who, sql`select type from work_item_event where work_item_id = ${item}::uuid`);
         expect(visible.map((e) => e.type), who).toEqual(["transition"]);
+      }
+      const read = (as: string) => call<{ id: string }>(as, sql`select id from work_item_event where work_item_id = ${item}::uuid`);
+      const changes = await diffs();
+      expect(changes.length).toBe(2);
+      for (const change of changes) {
+        await expectHiddenFrom({ read, target: change.id as string, seenBy: [c1.member, pm], hiddenFrom: [k1.member, or.member, c2.member], name: nameOf, label: "an answers diff" });
       }
     });
   });
