@@ -254,8 +254,9 @@ export const Preview: Story = {
     await expect(within(preview).getByText("3 / 3")).toBeVisible();
     await expect(within(thumbs).getAllByRole("button")[2]).toHaveAttribute("aria-current", "page");
 
-    const pages = preview.querySelector<HTMLElement>('[data-state="ready"]')!;
-    pages.focus();
+    // Page 3 is drawn once it comes near the view.
+    await drawn(preview);
+    within(preview).getByRole("group", { name: "LED-1200_Datasheet.pdf" }).focus();
     await userEvent.keyboard("{ArrowDown}");
     await expect(output(context).moved).toBe("0");
 
@@ -332,9 +333,16 @@ export const OpenLarge: Story = {
     await expect(button(large, context, copy.back)).toHaveFocus();
     await expect(large).toHaveTextContent(storyLocale(context) === "ar" ? "1 / 4 مرفقات · 2.4 م.ب" : "1 / 4 attachments · 2.4 MB");
 
-    await expect(button(large, context, copy.previousPage)).toBeDisabled();
+    await expect(button(large, context, copy.previousPage)).toHaveAttribute("aria-disabled", "true");
     await userEvent.click(button(large, context, copy.nextPage));
     await expect(within(large).getByText("2 / 3")).toBeVisible();
+    // The last page, however short: Next is then unavailable and keeps the focus, inside Open large.
+    await userEvent.click(button(large, context, copy.nextPage));
+    await expect(within(large).getByText("3 / 3")).toBeVisible();
+    await expect(button(large, context, copy.nextPage)).toHaveAttribute("aria-disabled", "true");
+    await expect(button(large, context, copy.nextPage)).toHaveFocus();
+    await userEvent.click(button(large, context, copy.nextPage));
+    await expect(within(large).getByText("3 / 3")).toBeVisible();
     await userEvent.click(button(large, context, copy.zoomIn));
     await expect(within(large).getByText("125%")).toBeVisible();
 

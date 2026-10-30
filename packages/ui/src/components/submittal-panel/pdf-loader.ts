@@ -18,6 +18,9 @@ function loadPdfJs(): Promise<PdfJs> {
   return pdfjs;
 }
 
+/** The most pixels one page's canvas is given. */
+const maxCanvasPixels = 16_000_000;
+
 /** A page drawing that can be stopped, when the zoom or the page changes before it is done. */
 export type PdfRender = { done: Promise<void>; cancel: () => void };
 
@@ -43,16 +46,16 @@ export async function openPdf(bytes: ArrayBuffer): Promise<LoadedPdf> {
   // pdf.js moves the bytes it is given to its worker: give it a copy, the caller keeps the file.
   const loading = lib.getDocument({ data: new Uint8Array(bytes.slice(0)) });
   let doc: PDFDocumentProxy;
+  const aspects: number[] = [];
   try {
     doc = await loading.promise;
+    for (let n = 1; n <= doc.numPages; n++) {
+      const viewport = (await doc.getPage(n)).getViewport({ scale: 1 });
+      aspects.push(viewport.width / viewport.height);
+    }
   } catch (error) {
     void loading.destroy();
     throw error;
-  }
-  const aspects: number[] = [];
-  for (let n = 1; n <= doc.numPages; n++) {
-    const viewport = (await doc.getPage(n)).getViewport({ scale: 1 });
-    aspects.push(viewport.width / viewport.height);
   }
   return {
     pages: doc.numPages,
@@ -63,8 +66,10 @@ export async function openPdf(bytes: ArrayBuffer): Promise<LoadedPdf> {
       const done = (async () => {
         const pdfPage = await doc.getPage(page);
         if (cancelled) throw new lib.RenderingCancelledException("cancelled");
-        const ratio = window.devicePixelRatio || 1;
-        const scale = (width / pdfPage.getViewport({ scale: 1 }).width) * ratio;
+        const base = pdfPage.getViewport({ scale: 1 });
+        const sharp = (width / base.width) * (window.devicePixelRatio || 1);
+        // No larger than a browser draws (Safari leaves a canvas over ~16.7M pixels blank): a big sheet zoomed in is a little softer instead.
+        const scale = Math.min(sharp, Math.sqrt(maxCanvasPixels / (base.width * base.height)));
         const viewport = pdfPage.getViewport({ scale });
         canvas.width = Math.round(viewport.width);
         canvas.height = Math.round(viewport.height);

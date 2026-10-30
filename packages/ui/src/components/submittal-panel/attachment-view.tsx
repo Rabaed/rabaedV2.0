@@ -70,12 +70,7 @@ const thumbnailWidth = 52;
  */
 export function AttachmentView({ locale, labels, name, kind, load, onRetry, zoom, onPage, jump, thumbnails = false }: AttachmentViewProps) {
   if (kind === "other") return <Message>{labels.noPreview}</Message>;
-  if (!load || load.status === "loading")
-    return (
-      <Message role="status" busy>
-        {labels.loading}
-      </Message>
-    );
+  if (!load || load.status === "loading") return <Message role="status">{labels.loading}</Message>;
   if (load.status === "failed")
     return (
       <Message role="alert">
@@ -85,16 +80,15 @@ export function AttachmentView({ locale, labels, name, kind, load, onRetry, zoom
         </Button>
       </Message>
     );
-  return load.file.pdf ? (
-    <PdfPages locale={locale} labels={labels} name={name} pdf={load.file.pdf} zoom={zoom} onPage={onPage} jump={jump} thumbnails={thumbnails} />
-  ) : (
-    <Photo url={load.file.url} name={name} zoom={zoom} />
-  );
+  if (kind === "image") return <Photo url={load.file.url} name={name} zoom={zoom} />;
+  // Read, but pdf.js can't open it (damaged, or locked with a password): Download still has it.
+  if (!load.file.pdf) return <Message role="alert">{labels.unavailable}</Message>;
+  return <PdfPages locale={locale} labels={labels} name={name} pdf={load.file.pdf} zoom={zoom} onPage={onPage} jump={jump} thumbnails={thumbnails} />;
 }
 
-function Message({ role, busy, children }: { role?: "status" | "alert"; busy?: boolean; children: ReactNode }) {
+function Message({ role, children }: { role?: "status" | "alert"; children: ReactNode }) {
   return (
-    <div role={role} aria-busy={busy || undefined} className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-on-inverse/80">
+    <div role={role} className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-on-inverse/80">
       {children}
     </div>
   );
@@ -149,11 +143,32 @@ function PdfPages({
   const scroller = useScrollerWidth();
   const pageWidth = Math.round((scroller.width * pageShare * zoom) / 100);
   const pages = Array.from({ length: pdf.pages }, (_, i) => i + 1);
-  // What is drawn, by "<page or thumb>-<page>-<width>": the view is ready once all of it is.
+  // The pages near the view: only they are drawn, so a long drawing set doesn't hold every page's canvas.
+  const [near, setNear] = useState<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    const box = scroller.ref.current;
+    if (!box || pageWidth === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) =>
+        setNear((all) => {
+          const next = new Set(all);
+          for (const entry of entries) {
+            const page = Number((entry.target as HTMLElement).dataset.page);
+            if (entry.isIntersecting) next.add(page);
+            else next.delete(page);
+          }
+          return next;
+        }),
+      { root: box, rootMargin: "50% 0px" },
+    );
+    for (const sheet of box.querySelectorAll("[data-page]")) observer.observe(sheet);
+    return () => observer.disconnect();
+  }, [scroller.ref, pageWidth, pdf]);
+  // What is drawn, by "<page or thumb>-<page>-<width>": the view is ready once the pages near it and the thumbnails are.
   const [drawn, setDrawn] = useState<ReadonlySet<string>>(new Set());
   const markDrawn = (key: string) => setDrawn((all) => (all.has(key) ? all : new Set(all).add(key)));
   const ready =
-    pageWidth > 0 && pages.every((n) => drawn.has(`page-${n}-${pageWidth}`)) && (!thumbnails || pages.every((n) => drawn.has(`thumb-${n}-${thumbnailWidth}`)));
+    near.size > 0 && [...near].every((n) => drawn.has(`page-${n}-${pageWidth}`)) && (!thumbnails || pages.every((n) => drawn.has(`thumb-${n}-${thumbnailWidth}`)));
   const [shown, setShown] = useState(1);
   const n = (value: number) => formatNumber(value, locale);
 
@@ -173,7 +188,9 @@ function PdfPages({
     const box = scroller.ref.current;
     if (!box) return;
     const tops = [...box.querySelectorAll<HTMLElement>("[data-page]")].map((sheet) => sheet.offsetTop - padding);
-    const page = attachmentPageAt(box.scrollTop + 1, tops);
+    // Scrolled to the end, the last page is shown, even one too short for its top to reach the top.
+    const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 1;
+    const page = atEnd ? tops.length : attachmentPageAt(box.scrollTop + 1, tops);
     if (page === shown) return;
     setShown(page);
     onPage(page);
@@ -220,6 +237,7 @@ function PdfPages({
                 pdf={pdf}
                 page={page}
                 width={pageWidth}
+                draw={near.has(page)}
                 label={labels.page(n(page))}
                 onDrawn={() => markDrawn(`page-${page}-${pageWidth}`)}
                 className="mx-auto shrink-0 shadow-lg"
@@ -232,20 +250,48 @@ function PdfPages({
   );
 }
 
-/** One PDF page drawn `width` CSS pixels wide (whole pixels, so its box never lands between two). */
-function PdfCanvas({ pdf, page, width, label, onDrawn, className }: { pdf: LoadedPdf; page: number; width: number; label?: string; onDrawn: () => void; className?: string }) {
+/**
+ * One PDF page `width` CSS pixels wide (whole pixels, so its box never lands between two), drawn
+ * while `draw` (near the view); away from it, it keeps what it last drew, stretched to its new size.
+ */
+function PdfCanvas({
+  pdf,
+  page,
+  width,
+  draw = true,
+  label,
+  onDrawn,
+  className,
+}: {
+  pdf: LoadedPdf;
+  page: number;
+  width: number;
+  draw?: boolean;
+  label?: string;
+  onDrawn: () => void;
+  className?: string;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // The width it was last drawn at: coming back near the view at the same size draws nothing again.
+  const drawnAt = useRef(0);
   const drawn = useEffectEvent(onDrawn);
   useEffect(() => {
     const canvas = ref.current;
-    if (!canvas) return;
+    if (!canvas || !draw) return;
+    if (drawnAt.current === width) return drawn();
     const render = pdf.render(page, canvas, width);
-    render.done.then(drawn, (error: unknown) => {
-      // A page that fails to draw stays blank; a cancelled one is drawn again at its new size.
-      if (!isCancelled(error)) drawn();
-    });
+    render.done.then(
+      () => {
+        drawnAt.current = width;
+        drawn();
+      },
+      (error: unknown) => {
+        // A page that fails to draw stays blank; a cancelled one is drawn again at its new size.
+        if (!isCancelled(error)) drawn();
+      },
+    );
     return () => render.cancel();
-  }, [pdf, page, width]);
+  }, [pdf, page, width, draw]);
   const height = Math.round(width / (pdf.aspects[page - 1] ?? 1));
   return (
     <canvas

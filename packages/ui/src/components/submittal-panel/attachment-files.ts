@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import { openPdf, type LoadedPdf } from "./pdf-loader.ts";
 
-/** A file read into this page: its bytes as a same-origin URL, and a PDF opened with pdf.js. */
+/** A file read into this page: its bytes as a same-origin URL, and a PDF opened with pdf.js (null if it can't be). */
 export type LoadedAttachment = { url: string; pdf: LoadedPdf | null };
 
 export type AttachmentLoad = { status: "loading" } | { status: "ready"; file: LoadedAttachment } | { status: "failed" };
@@ -48,7 +48,8 @@ export function useAttachmentFiles(fileUrl: (id: string) => Promise<string>) {
           const res = await fetch(await fileUrl(id));
           if (!res.ok) throw new Error(`file read answered ${res.status}`);
           const blob = await res.blob();
-          const pdf = kind === "pdf" ? await openPdf(await blob.arrayBuffer()) : null;
+          // A PDF pdf.js can't open (damaged, or locked with a password) is still read: Download and Print have it.
+          const pdf = kind === "pdf" ? await openPdf(await blob.arrayBuffer()).catch(() => null) : null;
           const file = { url: URL.createObjectURL(blob), pdf };
           if (gone.current) {
             pdf?.destroy();

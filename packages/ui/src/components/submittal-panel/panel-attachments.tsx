@@ -79,7 +79,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   const [large, setLarge] = useState<string | null>(null);
   const [previewPlace, setPreviewPlace] = useState(start);
   const [largePlace, setLargePlace] = useState(start);
-  const cards = useRef(new Map<string, HTMLButtonElement | null>());
+  const cards = useRef(new Map<string, HTMLDivElement | null>());
   // The control Open large was opened from, which has the focus back when it closes.
   const opener = useRef<HTMLElement | null>(null);
   const n = (value: number) => formatNumber(value, locale);
@@ -87,6 +87,9 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   // A file no longer listed (the item read again) has no preview.
   const previewFile = files.find((f) => f.id === preview) ?? null;
   const largeFile = files.find((f) => f.id === large) ?? null;
+  const previewIdOf = (fileId: string) => `${id}-${fileId}`;
+  /** A card's first button: Preview, or Download for a file with no preview. */
+  const focusCard = (fileId: string) => cards.current.get(fileId)?.querySelector("button")?.focus();
 
   const openPreview = (file: SubmittalPanelAttachmentFile) => {
     setPreview(file.id);
@@ -94,9 +97,12 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
     void load(file.id, kindOf(file));
   };
   const closePreview = () => {
-    const card = preview ? cards.current.get(preview) : null;
+    if (!preview) return;
+    // The focus goes back to the card only from the preview itself (it is about to go), never from elsewhere in the panel.
+    const focus = document.activeElement;
+    const fromPreview = !focus || focus === document.body || document.getElementById(previewIdOf(preview))?.contains(focus);
     setPreview(null);
-    card?.focus();
+    if (fromPreview) focusCard(preview);
   };
   const openLarge = (file: SubmittalPanelAttachmentFile, from?: HTMLElement | null) => {
     if (large === null) opener.current = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -105,9 +111,10 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
     void load(file.id, kindOf(file));
   };
   const closeLarge = () => {
-    const back = opener.current?.isConnected ? opener.current : large ? cards.current.get(large) : null;
+    const from = large;
     setLarge(null);
-    back?.focus();
+    if (opener.current?.isConnected) opener.current.focus();
+    else if (from) focusCard(from);
   };
   const download = async (file: SubmittalPanelAttachmentFile) => {
     const read = await load(file.id, kindOf(file));
@@ -124,6 +131,9 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   const onEscape = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     if (document.querySelector(otherLayer)) return;
+    // Esc in a field being typed in is the field's, as the panel has it.
+    const focus = document.activeElement;
+    if (focus instanceof HTMLElement && (focus.isContentEditable || focus.matches("input, textarea, select"))) return;
     const layer = attachmentLayerToClose({ large: largeFile?.id ?? null, preview: previewFile?.id ?? null });
     if (!layer) return;
     event.preventDefault();
@@ -152,7 +162,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
           const kind = kindOf(file);
           const viewable = kind !== "other";
           const open = previewFile?.id === file.id;
-          const previewId = `${id}-${file.id}`;
+          const previewId = previewIdOf(file.id);
           const fileLoad = loads[file.id];
           // A click on the card's own space opens or closes its preview, as the design's; its buttons say what they do.
           const onCard = (event: MouseEvent) => {
@@ -163,6 +173,9 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
           return (
             <Fragment key={file.id}>
               <div
+                ref={(row) => {
+                  cards.current.set(file.id, row);
+                }}
                 data-attachment={file.id}
                 data-active={open || undefined}
                 onClick={onCard}
@@ -177,7 +190,14 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
                   <p className="truncate text-[13px] font-semibold">
                     <bdi dir="ltr">{file.name}</bdi>
                   </p>
-                  <p className="truncate text-[11.5px] text-muted">{meta(file, fileLoad)}</p>
+                  {/* A Download or Print that couldn't read the file says so here; an open preview says it itself. */}
+                  {fileLoad?.status === "failed" && !open ? (
+                    <p role="alert" className="truncate text-[11.5px] text-danger-fg">
+                      {labels.unavailable}
+                    </p>
+                  ) : (
+                    <p className="truncate text-[11.5px] text-muted">{meta(file, fileLoad)}</p>
+                  )}
                 </div>
                 {viewable && (
                   <IconButton
@@ -185,9 +205,6 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
                     label={labels.preview}
                     aria-expanded={open}
                     aria-controls={open ? previewId : undefined}
-                    ref={(button) => {
-                      cards.current.set(file.id, button);
-                    }}
                     onClick={() => (open ? closePreview() : openPreview(file))}
                     className="shrink-0"
                   >

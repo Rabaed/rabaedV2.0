@@ -31,6 +31,12 @@ export type SubmittalPanelAttachmentViewerProps = {
 const focusable = 'button:not([disabled]), [tabindex="0"]';
 
 /**
+ * Previous and Next page at the first or last page: marked unavailable rather than disabled, so the
+ * focus stays on the button (a disabled one drops it out of the dialog), and drawn as a disabled one.
+ */
+const stayFocused = "aria-disabled:cursor-default aria-disabled:bg-transparent aria-disabled:text-on-inverse/40";
+
+/**
  * Open large (RP-1068, README §7): the file over the whole panel, not the screen, with "‹ Back",
  * the page and zoom controls (25% steps) and a strip to switch files. It is mounted inside the
  * panel, so it follows the panel's width and layout bands, and is a dialog layer the panel waits
@@ -96,13 +102,13 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
         </div>
         {pages !== null && (
           <span className="flex shrink-0 items-center">
-            <IconButton size="sm" label={labels.previousPage} disabled={place.page <= 1} className={onBar} onClick={() => goTo(place.page - 1)}>
+            <IconButton size="sm" label={labels.previousPage} aria-disabled={place.page <= 1 || undefined} className={cn(onBar, stayFocused)} onClick={() => place.page > 1 && goTo(place.page - 1)}>
               <Icon name="chevron-up" size={16} />
             </IconButton>
             <span className="min-w-10 text-center text-[12px] tabular-nums">
               <bdi dir="ltr">{labels.pageOf(n(place.page), n(pages))}</bdi>
             </span>
-            <IconButton size="sm" label={labels.nextPage} disabled={place.page >= pages} className={onBar} onClick={() => goTo(place.page + 1)}>
+            <IconButton size="sm" label={labels.nextPage} aria-disabled={place.page >= pages || undefined} className={cn(onBar, stayFocused)} onClick={() => place.page < pages && goTo(place.page + 1)}>
               <Icon name="chevron-down" size={16} />
             </IconButton>
           </span>
