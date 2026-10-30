@@ -7,6 +7,10 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const config: NextConfig = {
   transpilePackages: ["@rabaed/domain", "@rabaed/ui"],
+  // RP-1103: `next dev` otherwise rewrites AGENTS.md whenever its block differs from the running Next's own text
+  // (16.3 to 16.4 changed one heading), which dirtied the tree and voided verify lines. Off, it only removes its
+  // own block, and AGENTS.md keeps our text outside Next's markers (scripts/next-agent-files.test.ts).
+  agentRules: false,
   // Dev only: each worktree is opened at laneN.localhost:<port> (see README), which Next
   // treats as a different origin from plain localhost.
   allowedDevOrigins: ["*.localhost"],
