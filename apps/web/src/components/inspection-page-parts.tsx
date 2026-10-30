@@ -1,18 +1,19 @@
 "use client";
 
-import { formatDate, formatNumber, workItemListHref, type BilingualText, type Locale, type WorkItemDetail } from "@rabaed/domain";
+import { formatNumber, workItemListHref, type BilingualText, type Locale, type WorkItemDetail } from "@rabaed/domain";
 import { cn, DocNo, focusRing, Icon, type IconName } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
-import { requestedForText, type HistoryText } from "@/lib/inspection";
+import { plainDateTime, type HistoryText } from "@/lib/inspection";
 
 // A WIR's page parts that read only what the item read and its history give (RP-655, from the
 // owner's Inspections (WIR) Screen Board): the line under its Subject, who issued its code, the
 // Snags and Comments raised from it, its reply and Cover Note, and on a Revision what the one before
 // left. Counts are of the items the viewer sees only (visibility.md, RP-624).
 
-const when = (at: string, locale: Locale) => formatDate(new Date(at), locale, { dateStyle: "medium", timeStyle: "short" });
+/** A time on the WIR page, written as Requested for is: "30 Oct 2026 · 03:17". */
+const when = (at: string, locale: Locale) => plainDateTime(at, locale) ?? "";
 
 /** Whoever wrote a text, as the history names them: a person where it may (V14), else the Company. */
 const byName = (by: HistoryText["by"], locale: Locale) => [by.memberName?.[locale], by.companyName?.[locale]].filter(Boolean).join(" · ");
@@ -24,7 +25,7 @@ const byName = (by: HistoryText["by"], locale: Locale) => [by.memberName?.[local
  */
 export function InspectionMeta({ item, locale }: { item: WorkItemDetail; locale: Locale }) {
   const t = useTranslations("workItems.inspection");
-  const requested = requestedForText(item.answers.requested_for, locale);
+  const requested = plainDateTime(item.answers.requested_for, locale);
   return (
     <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text">
       {item.documentNumber && (

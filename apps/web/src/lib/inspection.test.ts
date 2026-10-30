@@ -1,6 +1,6 @@
 import type { ChecklistCopy, ChecklistTemplateItem, FormSchema, ReplyChecklistRead, WorkItemActions, WorkItemHistory } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { changedItems, codeRemarks, coverNote, inspectionActions, inspectionTally, itemsShown, recommendedCodeSent, requestedForText, sharedChecklists, snagsToRaise } from "./inspection.ts";
+import { changedItems, codeRemarks, coverNote, inspectionActions, inspectionTally, itemsShown, recommendedCodeSent, plainDateTime, sharedChecklists, snagsToRaise } from "./inspection.ts";
 
 // The WIR screens' own reading of the Consultant Engineer's checklist (RP-655): what the summary
 // bar, the tiles, the filter chips, the Send to Manager sheet and the code pop-up show.
@@ -191,13 +191,13 @@ describe("what the WIR page reads from its history", () => {
 
 describe("Requested for", () => {
   it("is a plain date and time in Riyadh, Latin digits in both languages: no countdown, no comparison with today", () => {
-    expect(requestedForText("2026-11-02T06:00:00.000Z", "en")).toBe("2 Nov 2026 · 09:00");
-    expect(requestedForText("2026-11-02T06:00:00.000Z", "ar")).toMatch(/^2 .+ 2026 · 09:00$/);
+    expect(plainDateTime("2026-11-02T06:00:00.000Z", "en")).toBe("2 Nov 2026 · 09:00");
+    expect(plainDateTime("2026-11-02T06:00:00.000Z", "ar")).toMatch(/^2 .+ 2026 · 09:00$/);
   });
 
   it("nothing for an answer that isn't a date and time", () => {
-    expect(requestedForText(undefined, "en")).toBeNull();
-    expect(requestedForText("soon", "en")).toBeNull();
+    expect(plainDateTime(undefined, "en")).toBeNull();
+    expect(plainDateTime("soon", "en")).toBeNull();
   });
 });
 

@@ -1169,7 +1169,7 @@
       "internal": "Internal",
       "coverNote": "Cover Note",
       "remarks": "Remarks",
-      "revisionBanner": "This WIR is to be revised: create a Revision for re-inspection. It keeps the details and the Checklist Template.",
+      "revisionBanner": "This WIR is to be revised: create a Revision for re-inspection.",
       "waiting": "With {company}. You read the checklist's answers once the code is issued.",
       "save": {
         "saved": "Saved",
@@ -1198,11 +1198,12 @@
         "na": "N/A",
         "answered": "<strong>{answered}</strong> of <strong>{total}</strong> answered",
         "progress": "Items answered",
-        "left": "{count, plural, one {1 item is left to answer.} other {{n} items are left to answer.}}"
+        "left": "{count, plural, one {1 item is left to answer.} other {{n} items are left to answer.}}",
+        "notSaved": "{count, plural, one {1 change not saved: Retry it before you send.} other {{n} changes not saved: Retry them before you send.}}"
       },
       "send": {
         "recommendedCode": "Recommended Code",
-        "internal": "Your Recommended Code and Internal Note stay inside {company}. {raiser} sees only the code and its Remarks.",
+        "internal": "Your Recommended Code and Internal Note stay inside {company}. {raiser} never sees them: only the code and what it shares.",
         "snags": "{tickedCount, plural, one {1 failed item ticked “Raise a Snag”} other {{ticked} failed items ticked “Raise a Snag”}} · {untickedCount, plural, one {1 unticked} other {{unticked} unticked}}"
       },
       "recommendedCode": {
@@ -1224,7 +1225,9 @@
         "commentRows": "Each row becomes a Comment in the Snag List, assigned to {company}.",
         "snagsTitle": "Snags that will be raised",
         "noSnags": "No failed item is ticked “Raise a Snag”.",
-        "snagTo": "Item {n} · to {company}"
+        "snagTo": "Item {n} · to {company}",
+        "unticked": "{count, plural, one {1 failed item raises no Snag: its tick was taken off.} other {{n} failed items raise no Snag: their ticks were taken off.}}",
+        "raisedBy": "Raised by {company}, assigned to {raiser}, whatever the code."
       },
       "return": {
         "kept": "The Engineer's answers, comments and photos stay on the WIR, to change and send to you again.",

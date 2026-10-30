@@ -213,6 +213,14 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               </>
             )}
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
+            {/* A WIR names who holds it beside its Stage: a person of the viewer's own Company, another Company by name (V14). */}
+            {wir && item.heldBy && (
+              <span className="flex items-center gap-1 text-sm" data-testid="wir-holder">
+                {/* eslint-disable-next-line rabaed/no-avoid-terms -- the icon's name */}
+                <Icon name="user" size={16} className="text-muted" />
+                <bdi>{item.heldBy.memberName?.[locale] ?? item.heldBy.companyName[locale]}</bdi>
+              </span>
+            )}
             {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
             {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null && (
               <>
@@ -310,7 +318,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <bdi>{item.title}</bdi>
           </dd>
           <dt className="text-muted">{t("fields.documentNumber")}</dt>
-          <dd className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <dd className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
             {/* A Revision's number carries its " Rev n", and reads left to right whole. */}
             <span>
               {item.documentNumber ? (
@@ -496,7 +504,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
 
   // A WIR's parts share who its follow-ups go to and the Engineer's answers as typed (RP-655).
   return wir ? (
-    <InspectionProvider raiser={item.raisedBy.companyName} holder={item.heldBy?.companyName ?? null} checklists={item.replyChecklists}>
+    <InspectionProvider raiser={item.raisedBy.companyName} holder={item.heldBy?.companyName ?? null} checklists={item.replyChecklists} documentNumber={item.documentNumber}>
       {page}
     </InspectionProvider>
   ) : (

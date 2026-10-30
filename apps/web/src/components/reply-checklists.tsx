@@ -143,6 +143,10 @@ function ReplyChecklist({ workItemId, checklist, documents, locale }: { workItem
   const status = save?.status;
   // The items changed since the API last took them: waiting to save, saving, or left unsaved.
   const unsaved = new Set(changedItems(saved.current, answers));
+  // Those a save failed to keep (not those waiting the moment before a save): the summary bar says so and Send waits.
+  const unsavedCount = save?.status === "offline" || save?.status === "refused" ? unsaved.size : 0;
+  const tellUnsaved = inspection?.setUnsaved;
+  useEffect(() => tellUnsaved?.(checklist.fieldKey, unsavedCount), [tellUnsaved, checklist.fieldKey, unsavedCount]);
 
   /** An item's own line on the WIR's page: Saved, Saving…, or Not saved with Retry. */
   const itemFooter = (key: string) => {

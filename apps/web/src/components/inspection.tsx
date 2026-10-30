@@ -1,13 +1,13 @@
 "use client";
 
-import { formatDate, formatNumber, type BilingualText, type Locale, type WorkItemActions } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type Locale, type WorkItemActions } from "@rabaed/domain";
 import { Badge, Button, CodeBadge, cn, Icon, reviewCodes, type ReviewCode } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ReplyChecklistsRead } from "@/components/reply-checklists";
 import { OpenerAlert, phoneBarClass, useTransitionOpener } from "@/components/work-item-actions";
 import { InspectionChips, InspectionTiles, liveTally, tallyOf, useInspection } from "@/components/inspection-context";
-import { inspectionActions, itemsShown, type ItemFilter, type SharedChecklist } from "@/lib/inspection";
+import { inspectionActions, itemsShown, plainDateTime, type ItemFilter, type SharedChecklist } from "@/lib/inspection";
 
 // A WIR's own page parts (RP-655, from the owner's Inspections (WIR) Screen Board): the Consultant
 // Engineer's checklist on a phone with its summary bar and Send to Manager, the Consultant
@@ -29,6 +29,8 @@ export function InspectionSummaryBar({ workItemId, actions, locale }: { workItem
   if (!inspection || inspection.checklists.length === 0) return null;
   const tally = liveTally(inspection);
   const left = tally.total - tally.answered;
+  // Send to Manager takes what the API holds: it waits for the answers still to save.
+  const notSaved = Object.values(inspection.unsaved).reduce((n, count) => n + count, 0);
   return (
     <section aria-label={t("summary.label")} className={cn("flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 md:sticky md:bottom-4 md:shadow-md", phoneBarClass, "max-md:rounded-none")}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -65,17 +67,23 @@ export function InspectionSummaryBar({ workItemId, actions, locale }: { workItem
         <>
           <Button
             className="min-h-11 w-full"
-            disabled={left > 0 || opener.calls.pending || opener.waiting}
-            aria-describedby={left > 0 ? "inspection-left" : undefined}
+            disabled={left > 0 || notSaved > 0 || opener.calls.pending || opener.waiting}
+            aria-describedby={left > 0 || notSaved > 0 ? "inspection-left" : undefined}
             onClick={() => opener.open(send)}
           >
             <Icon name="send" size={18} />
             {send.label[locale]}
           </Button>
-          {left > 0 && (
-            <p id="inspection-left" className="sr-only">
-              {t("summary.left", { n: formatNumber(left, locale), count: left })}
+          {notSaved > 0 ? (
+            <p id="inspection-left" className="text-sm font-semibold text-danger-fg">
+              {t("summary.notSaved", { n: formatNumber(notSaved, locale), count: notSaved })}
             </p>
+          ) : (
+            left > 0 && (
+              <p id="inspection-left" className="sr-only">
+                {t("summary.left", { n: formatNumber(left, locale), count: left })}
+              </p>
+            )
           )}
         </>
       )}
@@ -106,7 +114,7 @@ function RecommendedCodeCard({ sent, holder, raiser, locale }: { sent: Recommend
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col">
           <p className="font-semibold">{name}</p>
-          <p className="text-sm text-muted">{t("recommendedCode.sent", { when: formatDate(new Date(sent.at), locale, { dateStyle: "medium", timeStyle: "short" }) })}</p>
+          <p className="text-sm text-muted">{t("recommendedCode.sent", { when: plainDateTime(sent.at, locale) ?? "" })}</p>
         </div>
         {code && <CodeBadge code={code satisfies ReviewCode} locale={locale} size="sm" />}
       </div>

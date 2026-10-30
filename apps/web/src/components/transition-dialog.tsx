@@ -15,7 +15,7 @@ import {
   type ReplyChecklistRead,
   type WorkItemActions,
 } from "@rabaed/domain";
-import { ActionForm, Badge, Button, CodeBadge, cn, Field, Icon, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
+import { ActionForm, Badge, Button, CodeBadge, cn, DocNo, Field, Icon, IconButton, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { InspectionTiles, liveTally, tallyOf, useInspection, type Inspection } from "@/components/inspection-context";
@@ -328,7 +328,24 @@ export function TransitionDialog({
       )}
     >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <h2 className="text-h6 font-semibold">{title}</h2>
+        {inspection ? (
+          // A WIR's sheet: its title over the WIR's number, and a close button (RP-655).
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-h6 font-semibold">{title}</h2>
+              {inspection.documentNumber && (
+                <p className="text-sm text-muted">
+                  <DocNo value={inspection.documentNumber} />
+                </p>
+              )}
+            </div>
+            <IconButton label={t("cancel")} onClick={() => dialog.current?.close()}>
+              <Icon name="x" size={20} />
+            </IconButton>
+          </div>
+        ) : (
+          <h2 className="text-h6 font-semibold">{title}</h2>
+        )}
         {description && <p className="text-caption text-muted">{description}</p>}
         {sending && inspection && (
           <SendToManager
@@ -345,7 +362,7 @@ export function TransitionDialog({
         )}
         {returning && inspection?.holder && (
           <div className="flex flex-col gap-2 text-sm">
-            <p className="flex items-start gap-2 rounded-md bg-stage-pending-bg p-3 text-stage-pending-fg">
+            <p className="flex items-start gap-2 rounded-md bg-code-c-bg p-3 text-code-c-fg">
               <Icon name="alert-triangle" size={16} className="mt-0.5 shrink-0" />
               {tInspection("return.kept")}
             </p>
@@ -412,7 +429,7 @@ export function TransitionDialog({
           </p>
         )}
         {sending && inspection && <SendToManagerLines inspection={inspection} locale={locale} />}
-        {coding && inspection && <CodeRaises transition={transition} raiser={inspection.raiser} locale={locale} />}
+        {coding && inspection && <CodeRaises transition={transition} raiser={inspection.raiser} holder={inspection.holder} locale={locale} />}
         {transition.recommendCode && !sending && (
           <Field label={t("recommendCode")} help={t("recommendCodeHelp")} id={`${idPrefix}-recommend-code`}>
             <Select
@@ -442,7 +459,7 @@ export function TransitionDialog({
             {error}
           </p>
         )}
-        <div className={cn("flex justify-end gap-3", inspection && "max-md:sticky max-md:-bottom-6 max-md:-mb-6 max-md:bg-surface max-md:pt-2 max-md:pb-6")}>
+        <div className={cn("flex justify-end gap-3", inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6")}>
           <Button type="button" variant={inspection ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>
@@ -586,7 +603,7 @@ function CodeChoice({
         </div>
       </div>
       {proposal && proposal.key !== picked.key && (
-        <p className="flex items-start gap-2 rounded-md bg-stage-pending-bg p-3 text-sm font-medium text-stage-pending-fg">
+        <p className="flex items-start gap-2 rounded-md bg-code-c-bg p-3 text-sm font-medium text-code-c-fg">
           <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
           {tally.failed > 0
             ? t("code.failedProposal", { n: formatNumber(tally.failed, locale), count: tally.failed, proposed: proposal.label[locale], picked: picked.label[locale] })
@@ -601,10 +618,12 @@ function CodeChoice({
  * Under the code's Action Form on a WIR (RP-655): where its comment rows go (Code B's Comments),
  * and the Snags every code raises from the failed items still ticked, assigned to the raiser.
  */
-function CodeRaises({ transition, raiser, locale }: { transition: TransitionChoice; raiser: BilingualText; locale: Locale }) {
+function CodeRaises({ transition, raiser, holder, locale }: { transition: TransitionChoice; raiser: BilingualText; holder: BilingualText | null; locale: Locale }) {
   const t = useTranslations("workItems.inspection");
   const rows = transition.actionForm ? formFields(transition.actionForm).some((f) => f.key === "items_to_create") : false;
-  const snags = (transition.checklists ?? []).flatMap((c) => snagsToRaise(c.items, c.answers).ticked.map((snag) => ({ ...snag, id: `${c.fieldKey}:${snag.key}` })));
+  const raised = (transition.checklists ?? []).map((c) => ({ fieldKey: c.fieldKey, ...snagsToRaise(c.items, c.answers) }));
+  const snags = raised.flatMap((c) => c.ticked.map((snag) => ({ ...snag, id: `${c.fieldKey}:${snag.key}` })));
+  const unticked = raised.reduce((n, c) => n + c.unticked, 0);
   return (
     <>
       {rows && <p className="text-sm text-muted">{t("code.commentRows", { company: raiser[locale] })}</p>}
@@ -628,6 +647,8 @@ function CodeRaises({ transition, raiser, locale }: { transition: TransitionChoi
             ))}
           </ul>
         )}
+        {unticked > 0 && <p className="text-sm text-muted">{t("code.unticked", { n: formatNumber(unticked, locale), count: unticked })}</p>}
+        {holder && snags.length > 0 && <p className="text-sm text-muted">{t("code.raisedBy", { company: holder[locale], raiser: raiser[locale] })}</p>}
       </section>
     </>
   );

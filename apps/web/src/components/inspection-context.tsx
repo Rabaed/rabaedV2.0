@@ -21,6 +21,11 @@ export type Inspection = {
   /** Their answers as typed now, by field key: the summary bar and Send to Manager read these. */
   answers: Readonly<Record<string, ChecklistAnswers>>;
   setAnswers: (fieldKey: string, answers: ChecklistAnswers) => void;
+  /** How many items of each checklist the API doesn't hold yet, by field key: Send to Manager waits for them. */
+  unsaved: Readonly<Record<string, number>>;
+  setUnsaved: (fieldKey: string, count: number) => void;
+  /** The WIR's Document Number, under a pop-up's title. */
+  documentNumber: string | null;
 };
 
 const InspectionContext = createContext<Inspection | null>(null);
@@ -32,16 +37,26 @@ export function InspectionProvider({
   raiser,
   holder,
   checklists,
+  documentNumber,
   children,
 }: {
   raiser: BilingualText;
   holder: BilingualText | null;
   checklists: readonly ReplyChecklistRead[];
+  documentNumber: string | null;
   children: ReactNode;
 }) {
   const [answers, setAll] = useState<Record<string, ChecklistAnswers>>(() => Object.fromEntries(checklists.map((c) => [c.fieldKey, c.answers])));
   const setAnswers = useCallback((fieldKey: string, next: ChecklistAnswers) => setAll((current) => ({ ...current, [fieldKey]: next })), []);
-  const value = useMemo(() => ({ raiser, holder, checklists, answers, setAnswers }), [raiser, holder, checklists, answers, setAnswers]);
+  const [unsaved, setAllUnsaved] = useState<Record<string, number>>({});
+  const setUnsaved = useCallback(
+    (fieldKey: string, count: number) => setAllUnsaved((current) => (current[fieldKey] === count ? current : { ...current, [fieldKey]: count })),
+    [],
+  );
+  const value = useMemo(
+    () => ({ raiser, holder, checklists, answers, setAnswers, unsaved, setUnsaved, documentNumber }),
+    [raiser, holder, checklists, answers, setAnswers, unsaved, setUnsaved, documentNumber],
+  );
   return <InspectionContext.Provider value={value}>{children}</InspectionContext.Provider>;
 }
 

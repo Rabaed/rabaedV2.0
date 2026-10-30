@@ -51,11 +51,12 @@ export function inspectionActions(transitions: readonly Offered[]): { send: Offe
 }
 
 /**
- * "Requested for" as the page shows it: a plain date and time in Riyadh, Latin digits (RP-655). A
- * value only, never compared with today: no countdown, no colour, no "late" (CLAUDE.md, spec RP-649
- * story 3). Null for an answer that isn't a date and time.
+ * A date and time as the WIR page writes it, "Requested for" and every other: a plain date and
+ * time in Riyadh, Latin digits (RP-655). Requested for is a value only, never compared with today:
+ * no countdown, no colour, no "late" (CLAUDE.md, spec RP-649 story 3). Null for a value that isn't
+ * a date and time.
  */
-export function requestedForText(value: unknown, locale: Locale): string | null {
+export function plainDateTime(value: unknown, locale: Locale): string | null {
   if (typeof value !== "string") return null;
   const at = new Date(value);
   if (Number.isNaN(at.getTime())) return null;
