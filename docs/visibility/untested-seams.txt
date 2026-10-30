@@ -36,11 +36,6 @@ RP-412-1 db  # Tower's Project Admin (C1, the Host Company) saves the Project pa
 RP-412-2 db  # C1 has issued two MAR numbers; a C1 engineer, a C2 engineer and a K1 manager open Project 
 RP-412-3 api  # A C2 member who is also a Project Admin saves Tower's pattern; a Rabaed Engineer saves ano
 
-# RP-427
-RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
-RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
-RP-427-4 db  # The Project Admin binds C2's MARs to an exception Workflow named after C2's Company, then 
-
 # RP-430
 RP-430-1 api  # K1's manager sends a MAR to the Manager step, then picks it up; its Approve says "not the 
 RP-430-2 api  # A K1 Transition's rule asks whether the item has been through C1's Contractor review (whic
@@ -58,24 +53,6 @@ RP-436-1 db  # The C1 engineer sends a MAR for review, the C1 PM Returns it and 
 # RP-437
 RP-437-1 db  # A MAR on the Rabaed Default MAR Workflow Version 3: C1's PM Submits it with a Cover Note a
 
-# RP-438
-RP-438-1 db  # C1 Submits a MAR and the K1 engineer sends it to the K1 manager; C1 opens "View workflow" 
-
-# RP-439
-RP-439-1 db  # Tower's Project Admin copies the MAR Workflow into Tower; another Project's Project Admin 
-
-# RP-441
-RP-441-1 db  # Tower's Project Admin duplicates, publishes and binds a MAR Workflow as the Project copy, 
-
-# RP-442
-RP-442-1 db  # TMC's Authorized Person saves Tower's own Workflow to TMC's Library, edits the Library cop
-
-# RP-443
-RP-443-1 db  # A Rabaed Engineer duplicates MAR's Workflow into another Rabaed Default's draft, saves and
-
-# RP-450
-RP-450-1 api  # Tower's Project Admin duplicates and publishes a Workflow, adds a Stage and an outcome, an
-
 # RP-514
 RP-514-1 db  # C1 (TMC) runs a Workflow whose Draft Step is "Drafts visible to: the author only". Hafiz, 
 
@@ -87,9 +64,6 @@ RP-520-1 db  # Nasser opens a Riyadh Gate Tower URL (a Project or item he may no
 
 # RP-521
 RP-521-1 db  # As in 12: K1's Mechanical manager opens the Link from a Mechanical MAR to C1's Electrical 
-
-# RP-555
-RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
 
 # RP-580
 RP-580-1 db  # K1 Sends a Submitted item Back to C1's Draft Step, which says "After a Send Back: Comment 
