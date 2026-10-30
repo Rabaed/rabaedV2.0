@@ -32,8 +32,8 @@ export interface PostSeam {
 
 export function postReview(args: string[], seam: PostSeam): { ok: boolean; message: string } {
   const [prArg, file, ...rest] = args;
-  const pr = Number(prArg);
-  if (!Number.isInteger(pr) || pr <= 0 || file === undefined || rest.length > 0) return { ok: false, message: USAGE };
+  const pr = /^[1-9]\d*$/.test(prArg ?? "") ? Number(prArg) : 0;
+  if (pr === 0 || file === undefined || rest.length > 0) return { ok: false, message: USAGE };
   const summary = seam.read(file);
   if (summary.trim() === "") return { ok: false, message: `${file} is empty: put /code-review's summary in it.` };
   if (summary.includes("<!-- code-review:")) return { ok: false, message: `${file} already holds a code-review marker; this script writes the marker itself.` };

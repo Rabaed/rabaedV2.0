@@ -50,6 +50,7 @@ describe("postReview", () => {
     expect(postReview(["12", "s.md"], fakeSeam({ read: () => "  \n" }).seam).ok).toBe(false);
     expect(postReview(["12", "s.md"], fakeSeam({ read: () => reviewMarker("b".repeat(40)) }).seam).ok).toBe(false);
     expect(postReview(["x", "s.md"], fakeSeam().seam).message).toMatch(/Usage/);
+    expect(postReview(["0x10", "s.md"], fakeSeam().seam).message).toMatch(/Usage/);
     expect(postReview(["12"], fakeSeam().seam).message).toMatch(/Usage/);
   });
 });

@@ -112,7 +112,8 @@ async function waitFor(done: () => Promise<boolean>, sleep: (ms: number) => Prom
 }
 
 export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pollMs?: number; timeoutMs?: number } = {}): Promise<AddResult> {
-  // 1500 s, as reviewed-required waits for the same run (RP-984); reviewed-add.yml's timeout stays above it.
+  // 1500 s per wait, as reviewed-required waits for the same run (RP-984). There are two waits (the reviewed-label
+  // run, then the reviewed-required run), so reviewed-add.yml's timeout stays above 3000 s.
   const { pollMs = 10_000, timeoutMs = 1_500_000 } = options;
   const { pr } = event;
   const skip = (why: string): AddResult => ({ ok: true, added: false, summary: `PR #${pr}: ${why}` });
@@ -120,9 +121,9 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!first.open) return skip("closed: nothing to do.");
   if (!first.sameRepo) return skip("a fork's PR: not labelled here (the reviewed-label job skips forks too).");
   if (first.draft) return skip("a draft: checked again when marked ready.");
-  if (first.labels.includes(REVIEWED_LABEL)) return skip(`already has \`${REVIEWED_LABEL}\`.`);
   const head = first.headSha;
-  // That run may be about to remove a label left from an earlier head; adding before it finishes would race it.
+  // That run may be about to remove a label left from an earlier head, so the labels are read only once it has
+  // finished: a label seen before then may be gone a moment later, and adding before it finishes would race it.
   const settled = await waitFor(
     async () => {
       const runs = await seam.labelRuns(head);
@@ -152,7 +153,7 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   }
   // Labels added with GITHUB_TOKEN start no `labeled` run, so the head's reviewed-required check is re-run by hand.
   let latest: { id: number; status: string; conclusion: string | null } | undefined;
-  await waitFor(
+  const finished = await waitFor(
     async () => {
       latest = (await seam.requiredRuns(head))[0];
       return latest === undefined || latest.status === "completed";
@@ -161,10 +162,11 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
     pollMs,
     timeoutMs,
   );
-  const rerun = latest !== undefined && latest.status === "completed" && latest.conclusion !== "success";
+  const added = `PR #${pr}: added \`${REVIEWED_LABEL}\`: /code-review at ${review.commit} and \`pnpm verify\` on ${verify.commit}, for the head ${head}`;
+  if (!finished) return { ok: false, added: true, summary: `${added}, but its ${REQUIRED_CHECK} run ${latest?.id} did not finish within ${timeoutMs / 1000} s; re-run that check once it has.` };
+  const rerun = latest !== undefined && latest.conclusion !== "success";
   if (rerun && latest) await seam.rerun(latest.id);
-  const ran = rerun ? `; re-ran ${REQUIRED_CHECK} (run ${latest?.id})` : "";
-  return { ok: true, added: true, summary: `PR #${pr}: added \`${REVIEWED_LABEL}\`: /code-review at ${review.commit} and \`pnpm verify\` on ${verify.commit}, for the head ${head}${ran}.` };
+  return { ok: true, added: true, summary: `${added}${rerun ? `; re-ran ${REQUIRED_CHECK} (run ${latest?.id})` : ""}.` };
 }
 
 const PER_PAGE = 100;
@@ -182,7 +184,7 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
   };
   const runs = async (workflow: string, headSha: string) =>
     (await call("GET", `actions/workflows/${workflow}/runs?head_sha=${headSha}&event=pull_request`, undefined, true)) as
-      | { workflow_runs: { id: number; status: string; conclusion: string | null; created_at: string }[] }
+      | { workflow_runs: { id: number; status: string; conclusion: string | null }[] }
       | undefined;
   return {
     async pull(pr) {
@@ -220,8 +222,8 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       return (await runs("reviewed-label.yml", headSha))?.workflow_runs.map((run) => ({ status: run.status }));
     },
     async requiredRuns(headSha) {
-      const found = (await runs("reviewed-required.yml", headSha))?.workflow_runs ?? [];
-      return [...found].sort((a, b) => b.created_at.localeCompare(a.created_at)).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
+      // The API lists runs newest first.
+      return ((await runs("reviewed-required.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
     },
     addLabel: async (pr) => void (await call("POST", `issues/${pr}/labels`, { labels: [REVIEWED_LABEL] })),
     async removeLabel(pr) {

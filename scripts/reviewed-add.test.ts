@@ -184,6 +184,23 @@ describe("addReviewed", () => {
     expect(running.calls).toEqual(["fetch", "add", "rerun 42"]);
   });
 
+  it("reads the label only after the reviewed-label run: a stale label seen before it is about to be removed", async () => {
+    const { seam, calls } = fakeSeam({});
+    let reads = 0;
+    // The first read still shows the label left from the earlier head; the run then removed it.
+    const stale: AddSeam = { ...seam, pull: async () => ({ ...(await seam.pull(5)), labels: reads++ === 0 ? [REVIEWED_LABEL] : [] }) };
+    expect((await addReviewed({ pr: 5 }, stale)).added).toBe(true);
+    expect(calls).toContain("add");
+  });
+
+  it("reports a reviewed-required run that never finished instead of passing quietly", async () => {
+    const { seam, calls } = fakeSeam({ requiredRuns: [{ id: 43, status: "in_progress", conclusion: null }] });
+    const result = await addReviewed({ pr: 5 }, seam, { pollMs: 10, timeoutMs: 30 });
+    expect(result).toMatchObject({ ok: false, added: true });
+    expect(result.summary).toContain("43");
+    expect(calls).toEqual(["fetch", "add"]);
+  });
+
   it("stops when the head moved while it waited: that push's own run decides", async () => {
     const { seam, calls } = fakeSeam({});
     let reads = 0;
