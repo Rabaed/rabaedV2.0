@@ -7,7 +7,7 @@ import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import { printAttachment, saveAttachment, useAttachmentFiles, type AttachmentLoad } from "./attachment-files.ts";
-import { AttachmentTile, AttachmentView, attachmentIcon, type AttachmentPageJump, type AttachmentViewLabels } from "./attachment-view.tsx";
+import { AttachmentTile, AttachmentView, attachmentIcon, attachmentNameClass, type AttachmentPageJump, type AttachmentViewLabels } from "./attachment-view.tsx";
 import { attachmentKind, attachmentLayerToClose, attachmentZoom, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import { SubmittalPanelAttachmentViewer } from "./panel-attachment-viewer.tsx";
 
@@ -160,7 +160,13 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
 
   return (
     <>
-      <div className="sdp-att-files grid grid-cols-1 gap-2 @[560px]/sdp:grid-cols-2 @[880px]/sdp:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
+      {/*
+       * Cards side by side only where each is 320px or more: the design's two from 560px (and 220px
+       * cards from 880px) left a name and its "PDF · 3 pages" a few letters, so the Normal and Wide
+       * bands have one per row. Dense, as `drawer.css` has it: the card after an open preview fills
+       * the cell beside the preview's card, and the preview goes under both.
+       */}
+      <div className="sdp-att-files grid grid-flow-row-dense grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-2">
         {files.map((file) => {
           const kind = kindOf(file);
           const viewable = kind !== "other";
@@ -190,9 +196,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
               >
                 <AttachmentTile kind={kind} className="h-10 w-[34px]" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold">
-                    <bdi dir="ltr">{file.name}</bdi>
-                  </p>
+                  <p className={cn(attachmentNameClass, "text-[13px] font-semibold")}>{file.name}</p>
                   {/* A Download or Print that couldn't read the file says so here; an open preview says it itself. */}
                   {fileLoad?.status === "failed" && !open ? (
                     <p role="alert" className="truncate text-[11.5px] text-danger-fg">
@@ -227,9 +231,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
                 <section id={previewId} aria-label={file.name} data-attachment-preview={file.id} className="col-span-full overflow-hidden rounded-[12px] bg-inverse text-on-inverse">
                   <div className="flex h-11 min-w-0 items-center gap-1 border-b border-on-inverse/10 ps-3 pe-1.5 text-[12.5px]">
                     <Icon name={attachmentIcon[kind]} size={16} className="shrink-0" />
-                    <b className="min-w-0 truncate ps-1 font-semibold">
-                      <bdi dir="ltr">{file.name}</bdi>
-                    </b>
+                    <b className={cn(attachmentNameClass, "min-w-0 ps-1 font-semibold")}>{file.name}</b>
                     {/* The page and the zoom from the Normal band up; Compact scrolls (`drawer.css`), Open large has both. */}
                     {fileLoad?.status === "ready" && fileLoad.file.pdf && (
                       <span className="ms-1.5 hidden h-6 shrink-0 items-center rounded-full bg-on-inverse/10 px-2 text-[11.5px] font-semibold tabular-nums @[560px]/sdp:inline-flex">

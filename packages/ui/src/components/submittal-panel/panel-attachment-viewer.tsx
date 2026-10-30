@@ -9,7 +9,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import type { AttachmentLoad } from "./attachment-files.ts";
-import { AttachmentTile, AttachmentView, attachmentIcon } from "./attachment-view.tsx";
+import { AttachmentTile, AttachmentView, attachmentIcon, attachmentNameClass } from "./attachment-view.tsx";
 import { attachmentKind, attachmentZoom, attachmentZoomStep } from "./attachments-model.ts";
 import type { AttachmentPlace, SubmittalPanelAttachmentFile, SubmittalPanelAttachmentsLabels } from "./panel-attachments.tsx";
 
@@ -93,9 +93,7 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
         </Button>
         <AttachmentTile kind={kind} className="hidden h-10 w-[34px] @[560px]/sdp:flex" />
         <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-[13px] font-semibold">
-            <bdi dir="ltr">{file.name}</bdi>
-          </p>
+          <p className={cn(attachmentNameClass, "text-[13px] font-semibold")}>{file.name}</p>
           <p className="truncate text-[11.5px] text-on-inverse/70">
             <bdi dir="ltr">{labels.pageOf(n(index + 1), n(files.length))}</bdi> {labels.ofAttachments(files.length)} · {file.size}
           </p>

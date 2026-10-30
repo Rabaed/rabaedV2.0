@@ -24,6 +24,12 @@ export function AttachmentTile({ kind, className }: { kind: SubmittalPanelAttach
   );
 }
 
+/**
+ * A Document's name, cut to one line: left to right as a whole, in Arabic too, so a long one is
+ * cut at its end, never its start, and on the side the locale reads from (`drawer.css` `.dfile b`).
+ */
+export const attachmentNameClass = "truncate [direction:ltr] text-left rtl:text-right";
+
 export type AttachmentViewLabels = {
   /** "Page 3": a page's and its thumbnail's name. */
   page: (n: string) => string;

@@ -160,6 +160,17 @@ function AttachmentsDemo({ context, width = 640, refused = [], goneOnClose = fal
   );
 }
 
+/** The section alone in a 700px column: room for two cards side by side. */
+function SideBySideDemo({ context }: { context: StoryContext }) {
+  const locale = storyLocale(context);
+  const fileUrl = useFileUrl([]);
+  return (
+    <div className="w-[700px] p-4">
+      <SubmittalPanelAttachments locale={locale} labels={labels(locale)} files={filesIn(locale)} fileUrl={fileUrl} />
+    </div>
+  );
+}
+
 const meta = {
   title: "Views/Submittal Panel/Attachments",
   parameters: overlay,
@@ -192,6 +203,17 @@ async function pagesLeftToRight(scope: HTMLElement) {
   for (const canvas of canvases) await expect(getComputedStyle(canvas).direction).toBe("ltr");
 }
 
+/**
+ * A Document's name is left to right as a whole, in Arabic too, so a long one is cut at its end
+ * ("PANOS-INF…"), never its start, and sits on the side the locale reads from.
+ */
+async function nameLeftToRight(name: HTMLElement, context: PlayContext) {
+  let cut: HTMLElement | null = name;
+  while (cut && getComputedStyle(cut).textOverflow !== "ellipsis") cut = cut.parentElement;
+  const style = getComputedStyle(cut!);
+  await expect([style.direction, style.textAlign]).toEqual(["ltr", storyLocale(context) === "ar" ? "right" : "left"]);
+}
+
 /** Opens the datasheet's preview from its card. */
 async function openDatasheet(context: PlayContext) {
   await userEvent.click(button(cardOf(context, "datasheet"), context, copy.preview));
@@ -208,7 +230,7 @@ export const Files: Story = {
   play: async (context) => {
     const card = cardOf(context, "datasheet");
     await expect(card).toHaveTextContent(`LED-1200_Datasheet.pdfPDF · ${mb("2.4", storyLocale(context))}`);
-    await expect(getComputedStyle(within(card).getByText("LED-1200_Datasheet.pdf")).direction).toBe("ltr");
+    await nameLeftToRight(within(card).getByText("LED-1200_Datasheet.pdf"), context);
     await expect(within(card).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
       storyText(context, copy.preview),
       storyText(context, copy.openLarge),
@@ -216,8 +238,10 @@ export const Files: Story = {
     ]);
     await expect(button(cardOf(context, "datasheet"), context, copy.preview)).toHaveAttribute("aria-expanded", "false");
     await expect(within(cardOf(context, "drawing")).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([storyText(context, copy.download)]);
-    // Two columns from the Normal band.
-    await expect(cardOf(context, "compliance").getBoundingClientRect().top).toBe(card.getBoundingClientRect().top);
+    // One card per row in the Normal band, where two would cut the names short: a name and its
+    // type and size read in full.
+    await expect(cardOf(context, "compliance").getBoundingClientRect().top).toBeGreaterThan(card.getBoundingClientRect().top);
+    for (const text of card.querySelectorAll("p")) await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
     await expect(previewOf(context)).toBeNull();
   },
 };
@@ -243,6 +267,7 @@ export const Preview: Story = {
 
     await expect(within(preview).getByText("1 / 3")).toBeVisible();
     await expect(within(preview).getByText("100%")).toBeVisible();
+    await nameLeftToRight(within(preview).getByText("LED-1200_Datasheet.pdf"), context);
     for (const name of [copy.zoomOut, copy.zoomIn, copy.openLarge, copy.download, copy.print, copy.closePreview]) await expect(button(preview, context, name)).toBeVisible();
     const body = preview.lastElementChild!;
     await expect(body.getBoundingClientRect().height).toBe(440);
@@ -342,6 +367,26 @@ export const PreviewWide: Story = {
   },
 };
 
+/**
+ * Where two cards fit side by side (a main column 700px wide, as Full has on a large screen), the
+ * preview under the first leaves no hole: the next card fills the cell beside it, and the preview
+ * goes under both.
+ */
+export const SideBySide: Story = {
+  render: (_args, context) => <SideBySideDemo context={context} />,
+  play: async (context) => {
+    const card = (id: string) => context.canvasElement.querySelector<HTMLElement>(`[data-attachment="${id}"]`)!;
+    await expect(card("compliance").getBoundingClientRect().top).toBe(card("datasheet").getBoundingClientRect().top);
+    await userEvent.click(button(card("datasheet"), context, copy.preview));
+    const preview = context.canvasElement.querySelector<HTMLElement>("[data-attachment-preview]")!;
+    await drawn(preview);
+    const beside = card("compliance").getBoundingClientRect();
+    await expect(beside.top).toBe(card("datasheet").getBoundingClientRect().top);
+    await expect(preview.getBoundingClientRect().top).toBeGreaterThan(beside.bottom);
+    (document.activeElement as HTMLElement | null)?.blur();
+  },
+};
+
 /** An image's preview shows the photo, with zoom and no pages. */
 export const Photo: Story = {
   play: async (context) => {
@@ -368,6 +413,7 @@ export const OpenLarge: Story = {
     const large = within(panel).getByRole("dialog", { name: "LED-1200_Datasheet.pdf" });
     await drawn(large);
     await pagesLeftToRight(large);
+    await nameLeftToRight(within(large).getAllByText("LED-1200_Datasheet.pdf")[0]!, context);
     // The whole panel inside its border.
     const fill = large.getBoundingClientRect();
     const box = panel.getBoundingClientRect();
