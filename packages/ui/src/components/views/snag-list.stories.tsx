@@ -2,7 +2,10 @@ import { workItemQuery, workItemSearchParams, type Locale, type WorkItemBoard as
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
+import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { overlay } from "../../storybook/overlay.ts";
+import { StoryProjectPage } from "../../storybook/shell.tsx";
 import type { SnagBulkLabels } from "./snag-bulk.tsx";
 import type { SnagExportLabels } from "./snag-export.ts";
 import { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps } from "./snag-list.tsx";
@@ -255,17 +258,19 @@ const list: WorkItemListData = {
   ],
   filters,
 };
-const board: WorkItemBoardData = {
-  stages: list.stages,
+/** A Kanban of these items: a column per Stage, TMC's cards in one lane. */
+const boardOf = (of: WorkItemRow[]): WorkItemBoardData => ({
+  stages: counts(of),
   filters,
   typeCounts: list.typeCounts,
-  columns: list.stages.map((s) => {
-    const cards = items.filter((i) => i.stage.key === s.key);
+  columns: counts(of).map((s) => {
+    const cards = of.filter((i) => i.stage.key === s.key);
     return { stageKey: s.key, shown: cards.length, steps: [], lanes: cards.length ? [{ kind: "company" as const, participantId: tmcId, companyName: tmc, count: cards.length, cards }] : [] };
   }),
   moves: {},
   layout: { contractorName: false, location: true, creationDate: true },
-};
+});
+const board = boardOf(items);
 
 const defaults: WorkItemQuery = { ...workItemQuery.parse({}), module: "snag_list", sort: "stage", page: 1, pageSize: 25 };
 
@@ -404,6 +409,35 @@ export const Kanban: Story = {
     await expect(within(kanban).queryByRole("region", { name: stages.draft.name[storyLocale(context)] })).toBeNull();
     const open = within(kanban).getByRole("region", { name: stages.open.name[storyLocale(context)] });
     await expect(within(open).getAllByRole("listitem")).toHaveLength(2);
+  },
+};
+
+// Twelve open snags: a column taller than the window.
+const manyOpen = Array.from({ length: 12 }, (_, i) => row(7 + i, { id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, title: `Cable tray not bonded, bay ${i + 1}`, documentNumber: `TWR-DCL-EL-SNG-1${String(i).padStart(2, "0")}` }));
+const crowded = boardOf([...items, ...manyOpen]);
+
+/**
+ * On its page (RP-1092), the Kanban fills the window from under its type chips to the bottom
+ * edge, as the Submittals' does: its sideways scrollbar sits on that edge, it scrolls down
+ * inside itself, and the page doesn't scroll.
+ */
+export const KanbanFillsTheWindow: Story = {
+  parameters: { ...overlay, layout: "fullscreen" },
+  args: { data: { view: "kanban", board: crowded } },
+  render: (args, context) => (
+    <StoryProjectPage context={context} current="snag_list">
+      <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} />
+    </StoryProjectPage>
+  ),
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const region = context.canvas.getByRole("region", { name: labels[locale].board });
+    await expectFillsTheWindow(region, context.canvas.getByRole("navigation", { name: labels[locale].types }));
+    // A short column still reaches the board's foot; a tall one grows past it.
+    const open = within(region).getByRole("region", { name: stages.open.name[locale] });
+    const closed = within(region).getByRole("region", { name: stages.closed.name[locale] });
+    await expect(open.scrollHeight).toBe(open.clientHeight);
+    await expect(closed.getBoundingClientRect().height).toBeGreaterThanOrEqual(region.clientHeight - 8);
   },
 };
 

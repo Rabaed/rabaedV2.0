@@ -28,6 +28,13 @@
 /* Let Tailwind see the classes used by ui components. */
 @source "../";
 
+/*
+ * `fills-window:` styles an element holding one that fills the window (`data-fills-window`,
+ * a Kanban, RP-1092): the shell is then the window's height and passes the rest of it down
+ * its flex chain, so the board ends at the window's bottom edge. Other pages grow as before.
+ */
+@custom-variant fills-window (&:has([data-fills-window]));
+
 @layer base {
   html {
     color-scheme: light;

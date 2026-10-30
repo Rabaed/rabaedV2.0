@@ -69,6 +69,16 @@ async function uploadDocument(workItemId: string, file: File, request: StartDocu
   }
 }
 
+/** A Document's size as the app words it: "640 KB", "2.4 MB", in Latin digits. */
+export function useFileSize(): (bytes: number) => string {
+  const t = useTranslations("workItems.attachments");
+  const format = useFormatter();
+  return (bytes: number) =>
+    bytes < 1024 * 1024
+      ? t("kb", { size: format.number(Math.max(1, Math.round(bytes / 1024)), { numberingSystem: "latn" }) })
+      : t("mb", { size: format.number(bytes / (1024 * 1024), { maximumFractionDigits: 1, numberingSystem: "latn" }) });
+}
+
 /** The Attachments System Field's Documents have no field key: this key stands for them in `pending`. */
 const systemField = "";
 
@@ -83,7 +93,6 @@ const pendingKeyOf = (fieldKey?: string, itemKey?: string) =>
  */
 export function useDocuments(workItemId: string, limits: DocumentList["limits"], { reply = false, onChanged }: { reply?: boolean; onChanged?: () => void } = {}) {
   const t = useTranslations("workItems.attachments");
-  const format = useFormatter();
   const router = useRouter();
   /** The field keys with an upload or removal under way (systemField for the System Field). */
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
@@ -97,10 +106,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"],
   const [message, setMessage] = useState<string | null>(null);
   const base = `/api/v1/work-items/${workItemId}/documents`;
 
-  const size = (bytes: number) =>
-    bytes < 1024 * 1024
-      ? t("kb", { size: format.number(Math.max(1, Math.round(bytes / 1024)), { numberingSystem: "latn" }) })
-      : t("mb", { size: format.number(bytes / (1024 * 1024), { maximumFractionDigits: 1, numberingSystem: "latn" }) });
+  const size = useFileSize();
 
   async function refused(res: Response) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };

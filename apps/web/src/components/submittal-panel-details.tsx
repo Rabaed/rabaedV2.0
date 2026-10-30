@@ -36,6 +36,7 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, type ReactNode } from "react";
+import { useSubmittalPanelAttachments } from "@/components/submittal-panel-attachments";
 import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
 import type { SubmittalPanelLog } from "@/components/submittal-panel-log";
 import { Link } from "@/i18n/navigation";
@@ -92,6 +93,7 @@ export function SubmittalPanelDetails({
 }) {
   const t = useTranslations("submittalPanelDetails");
   const chat = useSubmittalPanelChatTab({ item, locale, refreshKey });
+  const attachments = useSubmittalPanelAttachments({ item, locale, refreshKey });
   const [read, setRead] = useState<DetailsRead | null>(null);
   const [prefs, setPrefs] = useState<Pick<SubmittalPanelPreferences, "collapsed" | "tab">>(() => readSubmittalPanelPreferences(submittalPanelStorage()));
   /** Shows the viewer's choice and keeps it in this browser. */
@@ -230,6 +232,8 @@ export function SubmittalPanelDetails({
           ),
         };
       }
+      case "attachments":
+        return attachments;
       case "links":
         return {
           key,

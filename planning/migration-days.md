@@ -160,7 +160,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271104 | RP-1081 | 32 | raised_from_check_item_photos (moved from 20271103: main's RP-664 took it) |
 | 20271103 | RP-664 | 42 | required_field_audit |
 | 20271106 | RP-1087 | 11 | linked_documental_record |
-| 20271107 | RP-1065 | 51 | Submittal Panel number segments (spec RP-1054, lane 5A; placeholder) |
 | 20271108 | spec RP-1054 | 51 | review fixes, lane 5A integration branch (placeholder) |
 | 20271109 | spec RP-1054 | 51 | merge-with-main reconciliation, lane 5A (placeholder) |
 | 20271112 | spec RP-1054 | 52 | merge-with-main reconciliation, lane 5B (placeholder) |
@@ -169,5 +168,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271117 | spec RP-1054 | 52 | review fixes, lane 5B integration branch (placeholder) (moved from 20271111) |
 | 20271115 | RP-1110 | 32 | snag_report_recheck (20271113 is RP-1089 #485, 20271114 is RP-1108 #487) |
 | 20271113 | RP-1089 | 13 | may_raise_type |
+| 20271120 | RP-1065 | 51 | Submittal Panel number segments (spec RP-1054, lane 5A; placeholder) (moved from 20271107) |
 | 20271119 | RP-655 | 41 | previous_raised_items |
 | 20271118 | RP-1108 | 31 | questions_any_role (moved from 20271114: main's RP-1110 took 20271115, RP-1054 holds 1116 and 1117) |
