@@ -7,11 +7,11 @@
 // answers are read by everyone who sees the item from that Transition on, internal ones
 // by the acting Participant only, in the history too (seam 2: screens-rls.test.ts).
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, type ScreenList, type ScreenRead, type WorkflowDefinition, type WorkflowRead, type WorkflowTransition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -90,6 +90,15 @@ const approveForm = async (by: Caller, id: string) => (await detail(by, id)).act
 type HistoryEvent = { type: string; answers: Record<string, unknown> | null; internalNote: string | null };
 const history = async (by: Caller, id: string): Promise<HistoryEvent[]> => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
 
+const names = new Map<Caller, string>();
+const named = (by: Caller) => names.get(by) ?? "a caller";
+/** [`text`] when what `by` reads at `paths` holds it: a history event has no id its reader shares (`seq` counts only what they see), so the text, unique to one answer, is the key. */
+const textAt = (text: string, ...paths: string[]) => async (by: Caller) => {
+  const bodies = [];
+  for (const path of paths) bodies.push(...(await readById<unknown>(path)(by)));
+  return JSON.stringify(bodies).includes(text) ? [{ id: text }] : [];
+};
+
 beforeAll(async () => {
   const form = {
     sections: [
@@ -114,6 +123,15 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => !p.isOwnCompany).id;
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
+  const known: [Caller, string][] = [
+    [c1.caller, "C1's Project Admin"],
+    [at.c1Pm, "C1 PM"],
+    [at.c1Engineer, "C1 engineer"],
+    [k1Engineer, "K1 engineer"],
+    [at.k1Manager, "K1 manager"],
+    [other.c1Engineer, "the other Project's C1 engineer"],
+  ];
+  for (const [by, name] of known) names.set(by, name);
 });
 
 describe("a Project Admin authors the Project's Screens", () => {
@@ -135,12 +153,20 @@ describe("a Project Admin authors the Project's Screens", () => {
       draft: { versionNo: 1, schema: codeReplyV1, internalFields: ["verification_note"] },
       canAuthor: true,
     });
-    for (const reader of [at.c1Engineer, at.k1Manager, other.c1Engineer]) await expectHidden(reader.get(`/v1/screens/${screenId}`));
+    await expectHiddenFrom({
+      read: readById(`/v1/screens/${screenId}`),
+      target: screenId,
+      seenBy: c1.caller,
+      hiddenFrom: [at.c1Pm, at.c1Engineer, at.k1Manager, other.c1Engineer],
+      name: named,
+      label: "the draft Screen",
+    });
   });
 
   it("is refused to anyone but the Project's Project Admins, like a made-up Project; and a key taken twice", async () => {
     const body = { key: "other_reply", name: label("Other"), schema: codeReplyV1, internalFields: [] };
-    for (const by of [at.c1Engineer, at.k1Manager, other.c1Engineer]) await expectHidden(by.post(`/v1/projects/${at.projectId}/screens`, body));
+    for (const by of [at.c1Engineer, at.k1Manager, other.c1Engineer]) await expectHidden(by.post(`/v1/projects/${at.projectId}/screens`, body)); // not hidden-from: a refused create, so no row to read; the Project Admin's create of the same key below proves none was made
+    expect((await c1.caller.post(`/v1/projects/${at.projectId}/screens`, body)).statusCode).toBe(201);
     const again = await c1.caller.post(`/v1/projects/${at.projectId}/screens`, { ...body, key: "code_reply" });
     expect({ status: again.statusCode, error: again.json().error }).toEqual({ status: 409, error: "key_taken" });
   });
@@ -160,7 +186,7 @@ describe("a Project Admin authors the Project's Screens", () => {
     expect(refused.statusCode, refused.body).toBe(422);
     expect(refused.json()).toMatchObject({ error: "screen_problems", problems: [{ key: "recommended", code: "unknown_internal_field" }] });
     const list: ScreenList = (await ok(c1.caller.get(`/v1/projects/${at.projectId}/screens`), 200)).json();
-    expect(list.screens.map((s) => s.key)).not.toContain("copied_reply");
+    expect(list.screens.map((s) => s.key)).not.toContain("copied_reply"); // not hidden-from: the refused create made no Screen, read by the Project Admin who may see it
 
     const copied = (await ok(c1.caller.post(`/v1/projects/${at.projectId}/screens`, {
       key: "copied_reply", name: label("Copied"), schema: codeReplyV1, internalFields: ["verification_note"], publish: true,
@@ -181,10 +207,14 @@ describe("a Project Admin authors the Project's Screens", () => {
       const list: ScreenList = (await ok(reader.get(`/v1/projects/${at.projectId}/screens`), 200)).json();
       expect(list.screens).toContainEqual({ id: screenId, key: "code_reply", name: { en: "Code reply", ar: "رد الرمز" }, owner: "project", latestVersionNo: 1 });
     }
-    await expectHidden(other.c1Engineer.get(`/v1/screens/${screenId}`));
-    const others: ScreenList = (await ok(other.c1Engineer.get(`/v1/projects/${other.projectId}/screens`), 200)).json();
-    expect(others.screens.map((s) => s.id)).not.toContain(screenId);
-    await expectHidden(other.c1Engineer.get(`/v1/projects/${at.projectId}/screens`));
+    const seenBy = [c1.caller, at.c1Engineer, at.k1Manager];
+    const hidden = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
+      expectHiddenFrom({ read, target: screenId, seenBy, hiddenFrom: other.c1Engineer, name: named, label });
+    await hidden(readById(`/v1/screens/${screenId}`), "the Screen");
+    await hidden(async (by) => (await readById<ScreenList>(`/v1/projects/${at.projectId}/screens`)(by)).flatMap((l) => l.screens), "Tower's Screens");
+    // Each reads its own Project's Screens: the other Project's never lists Tower's.
+    const ownProject = new Map<Caller, string>([...seenBy.map((by): [Caller, string] => [by, at.projectId]), [other.c1Engineer, other.projectId]]);
+    await hidden(async (by) => (await readById<ScreenList>(`/v1/projects/${ownProject.get(by)}/screens`)(by)).flatMap((l) => l.screens), "the reader's own Project's Screens");
   });
 });
 
@@ -258,14 +288,18 @@ describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
     });
 
     for (const contractor of [at.c1Pm, at.c1Engineer]) {
-      const events = await history(contractor, id);
-      const code = events.find((e) => e.type === "issue_code");
+      const code = (await history(contractor, id)).find((e) => e.type === "issue_code");
       expect(code?.answers).toEqual({ remarks: "Matches the approved sample." });
-      expect(events.map((e) => e.type)).not.toContain("internal_answers");
-      expect(events.map((e) => e.type)).not.toContain("internal_note");
-      const everything = JSON.stringify([events, await detail(contractor, id)]);
-      expect(everything).not.toContain("Batch 7");
-      expect(everything).not.toContain("plant visit");
+    }
+    const contractors = [at.c1Pm, at.c1Engineer];
+    // The internal events, by their type (one each on the item), and their text anywhere the reader is shown the item.
+    for (const type of ["internal_answers", "internal_note"]) {
+      const ofType = async (by: Caller) => (await readById<{ events: HistoryEvent[] }>(`/v1/work-items/${id}/history`)(by)).flatMap((h) => h.events).filter((e) => e.type === type).map(() => ({ id: type }));
+      await expectHiddenFrom({ read: ofType, target: type, seenBy: at.k1Manager, hiddenFrom: contractors, name: named, label: "the history" });
+    }
+    for (const text of ["Batch 7", "plant visit"]) {
+      const read = textAt(text, `/v1/work-items/${id}/history`, `/v1/work-items/${id}`);
+      await expectHiddenFrom({ read, target: text, seenBy: at.k1Manager, hiddenFrom: contractors, name: named, label: "the history and the item" });
     }
 
     const own = await history(at.k1Manager, id);
@@ -305,7 +339,8 @@ describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
       const approve = (await detail(at.k1Manager, id)).actions.transitions.find((t) => t.key === "approve_a");
       expect(approve?.prefill).toEqual(reply);
       // The Contractor is never handed it: the item came to it from another Participant.
-      expect(JSON.stringify(await history(at.c1Engineer, id))).not.toContain("Batch 11");
+      const read = textAt("Batch 11", `/v1/work-items/${id}/history`);
+      await expectHiddenFrom({ read, target: "Batch 11", seenBy: [k1Engineer, at.k1Manager], hiddenFrom: [at.c1Pm, at.c1Engineer], name: named, label: "the history" });
     } finally {
       await ok(c1.caller.request("PUT", `/v1/workflows/${routeId}/draft`, { definition }), 200);
       expect((await c1.caller.post(`/v1/workflows/${routeId}/publish`)).statusCode).toBe(200);
@@ -318,13 +353,16 @@ describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
       answers: { remarks: "Fits the approved sample.", verification_note: "Batch 9 checked on site.", checks: { sample: { answer: "yes" } } },
       internalNote: "Recommended A after the site visit.",
     });
+    // The answers and the note were kept: the Consultant reads them in its history.
+    const own = JSON.stringify(await history(at.k1Manager, id));
+    for (const text of ["Batch 9", "site visit"]) expect(own).toContain(text);
     const shared = [];
     for (const reader of [at.c1Pm, at.c1Engineer, at.k1Manager]) {
       const res = await ok(reader.get(`/v1/work-items/${id}/shared`), 200);
       const text = res.body;
-      expect(text).not.toContain("Batch 9");
-      expect(text).not.toContain("site visit");
-      expect(text).not.toContain("internal_answers");
+      expect(text).not.toContain("Batch 9"); // not hidden-from: the Download leaves it out for everyone, K1 included; K1's history holds it (above)
+      expect(text).not.toContain("site visit"); // not hidden-from: the same for the Internal Note
+      expect(text).not.toContain("internal_answers"); // not hidden-from: and for the internal answers' event
       shared.push(res.json());
     }
     // One shared item, whoever downloads it, with the reply's shared Remarks.
