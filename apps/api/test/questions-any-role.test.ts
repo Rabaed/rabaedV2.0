@@ -98,8 +98,13 @@ describe("which Question Types each role is offered in New (seam 1)", () => {
   });
 
   it("a Question to one's own role, and a Snag by the Owner side, are refused when the Draft is started", async () => {
+    // A Question's Form asks the question; a Snag's and a Site Observation's don't.
     const start = (by: Caller, type: string) =>
-      by.post(`/v1/projects/${at.projectId}/work-items`, { type, title: "Mine", answers: { question: "Why?", trade: at.electrical, location: at.buildingA } });
+      by.post(`/v1/projects/${at.projectId}/work-items`, {
+        type,
+        title: "Mine",
+        answers: { ...(type.startsWith("QS") ? { question: "Why?" } : {}), trade: at.electrical, location: at.buildingA },
+      });
     for (const [by, type] of [
       [at.c1Engineer, "QSC"],
       [at.k1Manager, "QSN"],
