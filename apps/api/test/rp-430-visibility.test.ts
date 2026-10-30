@@ -5,15 +5,17 @@
 // Transition a rule withholds is refused exactly like one that isn't there (seam 2:
 // transition-rules-rls.test.ts).
 //
-// The Type is test-only, on the test Workflow with rules plus one Transition publishing refuses:
-// a K1 Transition asking whether the item has been through C1's Contractor review.
-import { publishFormVersion } from "@rabaed/admin/services";
-import { createDb, type Db } from "@rabaed/db";
-import { addRulesWorkflow, expectHiddenFrom, rulesFormSchema, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemHistory } from "@rabaed/domain";
+// The Type is test-only, on the test Workflow with rules (addRulesType). RP-430-2's K1 rule on C1's
+// Contractor review is one publishing refuses, so at seam 1 it is refused at publish, and no Version
+// holds it (every published Version passes every publish check: workflow-definition.test.ts); the
+// engine's answer to such a rule, had one been stored, is seam 2's (transition-rules-rls.test.ts).
+import { createDb } from "@rabaed/db";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addRule, type WorkflowRead, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, readById, type Caller } from "./support/harness.ts";
+import { addRulesType } from "./support/rules.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -35,32 +37,7 @@ let k1Manager2: Person;
 let projectId = "";
 let electrical = "";
 let buildingA = "";
-
-/** Adds Rabaed Type `TYPE` on the rules Workflow with check_contractor_route, its Form published (as the migrator). */
-async function addType(db: Db): Promise<void> {
-  const name = { en: "Ruled submittal (RP-430)", ar: "تقديم بقواعد (RP-430)" };
-  const { id: formId } = await db.insertInto("form_definition").values({ owner_kind: "rabaed", name: JSON.stringify(name) }).returning("id").executeTakeFirstOrThrow();
-  const workflowId = await addRulesWorkflow((text) => sql.raw(text).execute(db), {
-    extra: [
-      {
-        key: "check_contractor_route",
-        from: "consultant_review",
-        to: "consultant_approval",
-        label: { en: "Check the Contractor's route", ar: "تحقق من مسار المقاول" },
-        kind: "send",
-        outcome: null,
-        permission: "review",
-        rules: { restrict: [{ type: "been_through", step: "internal_review" }] },
-      },
-    ],
-  });
-  await db
-    .insertInto("work_item_type")
-    .values({ owner_kind: "rabaed", module_key: "submittals", code: TYPE, name: JSON.stringify(name), workflow_definition_id: workflowId, outcome_kind: "review_code", form_definition_id: formId })
-    .execute();
-  const published = await publishFormVersion(db, formId, rulesFormSchema);
-  expect(published, JSON.stringify(published)).toMatchObject({ ok: true });
-}
+let admin: Caller; // C1's Project Admin, who authors the Project's own Workflows.
 
 async function newDraft(by: Person, model: string): Promise<string> {
   const res = await ok(by.caller.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { model, trade: electrical, location: buildingA } }), 201);
@@ -115,8 +92,9 @@ const eventsRead = (id: string, what: string, match: (e: WorkItemHistory["events
 const who = (p: Person) => p.who;
 
 beforeAll(async () => {
-  await addType(migrator);
+  await addRulesType(migrator, TYPE);
   const c1 = await api.projectCreator();
+  admin = c1.caller;
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
   buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null })).json().id;
@@ -202,7 +180,20 @@ describe("RP-430-1: not the same person (seam 1)", () => {
 });
 
 describe("RP-430-2: has been through C1's Contractor review (seam 1)", () => {
-  it("never holds for K1, so never offered, and refused like a Transition that isn't there: K1 reads nothing of C1's internal route", async () => {
+  it("is refused at publish, so no Version a K1 Transition runs on asks it; K1 reads nothing of C1's internal route", async () => {
+    // The Project's own copy of the rules Workflow, with the rule on K1's Send to Manager.
+    const rules = (await sql<{ id: string }>`select workflow_definition_id as id from work_item_type where code = ${TYPE}`.execute(migrator)).rows[0]!.id;
+    const copy = (await ok(admin.post(`/v1/workflows/${rules}/duplicate`, { projectId, name: bilingual("Rules, Project copy (RP-430-2)") }), 201)).json().id as string;
+    const draft = ((await ok(admin.get(`/v1/workflows/${copy}`), 200)).json() as WorkflowRead).draft!.definition;
+    const asked = addRule(draft, "send_to_manager", { group: "restrict", rule: { type: "been_through", step: "internal_review" } });
+    await ok(admin.request("PUT", `/v1/workflows/${copy}/draft`, { definition: asked }), 200);
+    const refused = await admin.post(`/v1/workflows/${copy}/publish`);
+    expect(refused.statusCode, refused.body).toBe(422);
+    // By its code: the test Workflow's own old Return to the Draft is a problem too (ADR 0020), so a 422 alone proves nothing.
+    expect(refused.json().problems).toContainEqual(expect.objectContaining({ code: "been_through_other_participant", transition: "send_to_manager" }));
+    expect(((await ok(admin.get(`/v1/workflows/${copy}`), 200)).json() as WorkflowRead).publishedVersions).toEqual([]); // not hidden-from: the refused publish made no Version, read by the Project Admin who authors it
+
+    // What such a rule would read is C1's internal route, which K1 never reads.
     const id = await atConsultant("Contractor route", k1Manager);
     await expectHiddenFrom({
       read: eventsRead(id, "send_for_review", (e) => e.transition?.en === "Send for Review"),
@@ -220,8 +211,6 @@ describe("RP-430-2: has been through C1's Contractor review (seam 1)", () => {
       name: who,
       label: "the Step C1's Submit left",
     });
-    expect(await offered(k1Manager, id)).not.toContain("check_contractor_route"); // not hidden-from: a Transition not offered, a button and not a row
-    await expectRefusedLikeNone(k1Manager, id, "check_contractor_route");
     expect((await detail(k1Manager.caller, id)).step.key).toBe("consultant_review");
   });
 
