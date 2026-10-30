@@ -10,7 +10,7 @@ import {
   workItemListHref,
   type Locale,
 } from "@rabaed/domain";
-import { AgeDots, cn, DocNo, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -30,8 +30,12 @@ import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { SnagHeroPhoto, SnagItemCards } from "@/components/snag-item-cards";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
+import { InspectionManager, InspectionShared, InspectionSummaryBar } from "@/components/inspection";
+import { InspectionProvider } from "@/components/inspection-context";
+import { InspectionCounts, InspectionIssued, InspectionMeta, InspectionTextCard, InspectionRevision, InspectionWaiting } from "@/components/inspection-page-parts";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
+import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, sharedChecklists } from "@/lib/inspection";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
 import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
@@ -96,13 +100,38 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   // A Snag List item's own layout (RP-628): its Type and number over the Subject, then where it
   // was raised from and the Contractor's response beside the "before" photos.
   const snag = item.module === "snag_list";
-  const listHref = `/projects/${item.projectId}/${moduleTabPaths[snag ? "snag_list" : "submittals"]}`;
+  // A WIR's own layout (RP-655, the owner's Inspections (WIR) Screen Board): its line under the
+  // Subject, the Consultant Engineer's checklist with its summary bar, the Manager's decision, and
+  // after the code its Snags and Comments, reply and checklist. Its actions are exactly the API's.
+  const wir = item.module === "inspections";
+  const listModule = snag ? "snag_list" : wir ? "inspections" : "submittals";
+  const listHref = `/projects/${item.projectId}/${moduleTabPaths[listModule]}`;
   const quote = snag && typeof item.answers.comment === "string" ? item.answers.comment : null;
 
   // A Revision's previous item's follow-ups (RP-653); null for any other item.
   const previous = item.previousRaisedItems;
 
-  return (
+  const offered = inspectionActions(item.actions.transitions);
+  const events = history?.events ?? [];
+  // The viewer answers the checklist and sends it on (the Engineer), or issues the code it takes (the Manager).
+  const answering = wir && item.replyChecklists.length > 0 && offered.send !== null;
+  const issuing = wir && offered.codes.length > 0;
+  // A WIR's page lists only the actions its bars don't hold: Send to Manager is in the Engineer's bar, Return and the codes in the Manager's.
+  const actions = !wir ? item.actions : { ...item.actions, transitions: issuing ? [] : answering || !offered.send ? offered.others : [...offered.others, offered.send] };
+  const issued = wir && item.outcome ? (events.findLast((e) => e.type === "issue_code") ?? null) : null;
+  const shared = wir && item.outcome ? sharedChecklists(events, item.checklistCopies) : [];
+  const remarks = wir ? codeRemarks(events) : null;
+  const cover = wir ? coverNote(events) : null;
+  // The checklists the WIR shows itself: the Form then leaves out the Checklist Template fields they copy, so each shows once (RP-1071).
+  const shownChecklists = wir ? [...item.replyChecklists, ...shared, ...(offered.codes[0]?.checklists ?? [])] : item.replyChecklists;
+  const revisedFrom = chain?.revisions.find((r) => r.revisionNo === item.revisionNo - 1) ?? null;
+  // Another Company holds it with the checklist, which its readers read once the code shares it (V19).
+  const waiting =
+    wir && !item.outcome && !answering && !issuing && item.checklistCopies.length > 0 && item.documentNumber !== null && item.heldBy?.memberName === null && item.heldBy.pool === null
+      ? item.heldBy.companyName
+      : null;
+
+  const page = (
     <WorkItemFormProvider
       workItemId={item.id}
       projectId={item.projectId}
@@ -125,13 +154,32 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       autosave={item.autosave}
     >
       {/* On a phone a Snag List item ends above its bar of actions (RP-630). */}
-      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24")}>
+      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24", answering && "max-md:pb-52")}>
         {/* On a phone a Snag List item opens with its first photo, as the kit does (RP-630). */}
         {snag && <SnagHeroPhoto workItemId={item.id} subject={item.title} photos={beforePhotos(form.schema, documents.documents)} />}
         <div className="space-y-2">
-          <Link href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
-            {snag ? moduleNames.snag_list[locale] : t("title")}
-          </Link>
+          {wir ? (
+            // Inspections › its Document Number, as the design's breadcrumb reads.
+            <nav aria-label={t("inspection.breadcrumb")} className="flex flex-wrap items-center gap-2 text-sm">
+              <Link href={listHref} className="text-brand-fg underline underline-offset-4">
+                {moduleNames.inspections[locale]}
+              </Link>
+              {item.documentNumber && (
+                <>
+                  <span aria-hidden="true" className="text-muted">
+                    ›
+                  </span>
+                  <span aria-current="page" className="font-semibold">
+                    <DocNo value={item.documentNumber} />
+                  </span>
+                </>
+              )}
+            </nav>
+          ) : (
+            <Link href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
+              {snag ? moduleNames.snag_list[locale] : t("title")}
+            </Link>
+          )}
           {snag && (
             <div className="flex flex-wrap items-center gap-2">
               <SnagTypeChip code={item.type.code} name={item.type.name[locale]} />
@@ -149,8 +197,30 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
             </div>
           </div>
+          {wir && <InspectionMeta item={item} locale={locale} />}
           <div className="flex flex-wrap items-center gap-3">
+            {/* A WIR's code, once issued, beside its Stage with who issued it (RP-655). */}
+            {wir && item.outcome && (
+              <>
+                <Outcome
+                  outcome={item.outcome}
+                  typeCode={item.type.code}
+                  outcomes={outcomesOfType(item.type.code, typeOutcomes?.outcomes ?? [])}
+                  locale={locale}
+                  cancelled={watchOutcomeNames.cancelled[locale]}
+                />
+                <InspectionIssued issued={issued} locale={locale} />
+              </>
+            )}
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
+            {/* A WIR names who holds it beside its Stage: a person of the viewer's own Company, another Company by name (V14). */}
+            {wir && item.heldBy && (
+              <span className="flex items-center gap-1 text-sm" data-testid="wir-holder">
+                {/* eslint-disable-next-line rabaed/no-avoid-terms -- the icon's name */}
+                <Icon name="user" size={16} className="text-muted" />
+                <bdi>{item.heldBy.memberName?.[locale] ?? item.heldBy.companyName[locale]}</bdi>
+              </span>
+            )}
             {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
             {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null && (
               <>
@@ -175,17 +245,43 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
 
         <WorkItemActions
           workItemId={item.id}
-          actions={item.actions}
+          actions={actions}
           locale={locale}
           // A Snag List item's actions on a phone: a bar at the bottom of the screen, in reach of a thumb (RP-630).
           phoneBar={snag}
         />
-        <WorkItemRevision
-          workItemId={item.id}
-          projectId={item.projectId}
-          canCreate={item.actions.createRevision}
-          canDiscard={item.actions.discardRevision}
-        />
+        {wir && (
+          <>
+            {item.outcome && <InspectionCounts item={item} locale={locale} />}
+            {item.outcome && item.actions.createRevision && (
+              <div className="flex flex-col gap-3 rounded-lg bg-danger-tint p-4">
+                <p className="flex items-start gap-2 font-semibold text-danger-fg">
+                  <Icon name="git-branch" size={20} className="mt-0.5 shrink-0" />
+                  {t("inspection.revisionBanner")}
+                </p>
+                <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={item.actions.createRevision} canDiscard={item.actions.discardRevision} />
+              </div>
+            )}
+            <InspectionRevision item={item} previous={revisedFrom} locale={locale} />
+            {waiting && <InspectionWaiting company={waiting} locale={locale} />}
+            {remarks && item.outcome && <InspectionTextCard icon="message" title={t("inspection.remarks")} text={remarks} locale={locale} />}
+            {cover && <InspectionTextCard icon="file-text" title={t("inspection.coverNote")} text={cover} locale={locale} />}
+            <InspectionShared workItemId={item.id} checklists={shared} locale={locale} />
+            {/* The Consultant's checklist, any of its Members may add to it (ADR 0024); the holder's bar sends it on. */}
+            {!issuing && <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />}
+            {answering && <InspectionSummaryBar workItemId={item.id} actions={item.actions} locale={locale} />}
+            {issuing && <InspectionManager workItemId={item.id} actions={item.actions} recommendedCode={recommendedCodeSent(events)} locale={locale} />}
+          </>
+        )}
+        {/* A coded WIR offers its Revision in its banner above. */}
+        {!(wir && item.outcome && item.actions.createRevision) && (
+          <WorkItemRevision
+            workItemId={item.id}
+            projectId={item.projectId}
+            canCreate={item.actions.createRevision}
+            canDiscard={item.actions.discardRevision}
+          />
+        )}
         <WorkItemReplacement workItemId={item.id} canCreate={item.actions.createReplacement} />
         {item.versionsChanged && (
           <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
@@ -222,7 +318,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <bdi>{item.title}</bdi>
           </dd>
           <dt className="text-muted">{t("fields.documentNumber")}</dt>
-          <dd className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <dd className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
             {/* A Revision's number carries its " Rev n", and reads left to right whole. */}
             <span>
               {item.documentNumber ? (
@@ -262,8 +358,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         {item.sentBackForComment && <SentBackNotice>{t("sentBackForComment")}</SentBackNotice>}
         {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19).
             The Form then leaves out the Checklist Template fields they copy, so the checklist shows once (RP-1071). */}
-        <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />
-        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} replyChecklists={item.replyChecklists} />
+        {!wir && <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />}
+        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} replyChecklists={shownChecklists} />
 
         {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
@@ -346,7 +442,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
           {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees;
               each opens the Snag List filtered to them (RP-628), where the viewer again sees only its own. */}
-          {item.raisedItems.map((f) => {
+          {!wir && item.raisedItems.map((f) => {
             const counts = t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) });
             return (
               <Fragment key={f.type.code}>
@@ -368,7 +464,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           })}
           {/* A Revision: what its previous item in the chain left (RP-653), one line per Type, counting only what the viewer sees.
               It never blocks the code; each opens the Snag List filtered to that item. */}
-          {previous?.items.map((f) => {
+          {!wir && previous?.items.map((f) => {
             const counts = t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) });
             const typeName = t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale];
             return (
@@ -404,5 +500,14 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         )}
       </div>
     </WorkItemFormProvider>
+  );
+
+  // A WIR's parts share who its follow-ups go to and the Engineer's answers as typed (RP-655).
+  return wir ? (
+    <InspectionProvider raiser={item.raisedBy.companyName} holder={item.heldBy?.companyName ?? null} checklists={item.replyChecklists} documentNumber={item.documentNumber}>
+      {page}
+    </InspectionProvider>
+  ) : (
+    page
   );
 }
