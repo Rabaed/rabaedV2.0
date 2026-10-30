@@ -37,6 +37,7 @@ import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
 import { lookOf, placeText, type Places } from "./snag-look.ts";
+import { chipChosen, typeChipsOf } from "./snag-type-chips.ts";
 import { SnagPhoneList, type SnagPhoneLabels, type SnagSwipe } from "./snag-phone.tsx";
 import { saveFile } from "./work-item-export.ts";
 import { ownerOf, placesOf } from "./work-item-board.tsx";
@@ -73,6 +74,8 @@ export type SnagListLabels = {
   types: string;
   /** The chip of every Type. */
   allTypes: string;
+  /** The one chip of the Question Types (QSN, QSC, QSO), e.g. "Questions". */
+  questions: string;
   stage: string;
   trade: string;
   company: string;
@@ -527,8 +530,9 @@ function NewMenu({ types, locale, labels, newHref, linkAs: Link }: { types: read
 
 /**
  * The type chips: All, then each of the Module's Types (a new Type shows as a chip with no
- * change here), each with how many items the viewer sees with the other filters on. Under a
- * search the API counts nothing beyond what it shows, so the chips carry no number then.
+ * change here), the three Question Types as one "Questions" chip (RP-1109), each with how many
+ * items the viewer sees with the other filters on. Under a search the API counts nothing beyond
+ * what it shows, so the chips carry no number then.
  */
 function TypeChips({
   list,
@@ -549,7 +553,6 @@ function TypeChips({
   phone?: boolean;
 }) {
   const counts = list.typeCounts;
-  const countOf = (code: string) => counts?.find((c) => c.code === code)?.count ?? 0;
   const all = counts?.reduce((sum, c) => sum + c.count, 0);
   const { cursor: _cursor, page: _page, ...rest } = query;
   const chip = (key: string, chosen: boolean, type: string[], content: ReactNode, count: number | undefined, next = { ...rest, type }) => (
@@ -572,17 +575,17 @@ function TypeChips({
     <nav aria-label={labels.types}>
       <ul className={cn("flex items-center gap-2", phone ? "flex-nowrap pb-1" : "flex-wrap")}>
         {chip("all", query.type.length === 0, [], labels.allTypes, all)}
-        {list.filters.types.map((t) => {
-          const look = lookOf(t.code);
+        {typeChipsOf(list.filters.types, counts).map((c) => {
+          const look = lookOf(c.kind === "questions" ? "QST" : c.type.code);
           return chip(
-            t.code,
-            query.type.length === 1 && query.type[0] === t.code,
-            [t.code],
+            c.key,
+            chipChosen(c, query.type),
+            c.codes,
             <>
               <Icon name={look.icon} size={15} className={look.mark} />
-              {t.name[locale]}
+              {c.kind === "questions" ? labels.questions : c.type.name[locale]}
             </>,
-            counts ? countOf(t.code) : undefined,
+            c.count,
           );
         })}
         {phone &&

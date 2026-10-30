@@ -34,6 +34,7 @@ const labels: Record<Locale, SnagListLabels> = {
     newOfType: (type) => `New ${type}`,
     types: "Types",
     allTypes: "All",
+    questions: "Questions",
     stage: "Stage",
     trade: "Trade",
     company: "Company",
@@ -102,6 +103,7 @@ const labels: Record<Locale, SnagListLabels> = {
     newOfType: (type) => `إضافة ${type}`,
     types: "الأنواع",
     allTypes: "الكل",
+    questions: "الأسئلة",
     stage: "المرحلة",
     trade: "التخصص",
     company: "الشركة",
@@ -334,6 +336,47 @@ export const TypeChips: Story = {
     await expect(chosen).toHaveTextContent(snag.name[storyLocale(context)]);
     await expect(links[0]!.getAttribute("href")).not.toContain("type=");
     await expect(within(chips).getByRole("link", { name: new RegExp(walkdown.name[storyLocale(context)]) })).toHaveAttribute("href", expect.stringContaining("type=WLK"));
+  },
+};
+
+// The Question Types (RP-1004): one "Questions" chip filters to all three, counting only what the viewer sees.
+const questionTypes = [
+  { code: "QSN", name: b("Question to Consultant", "سؤال إلى الاستشاري") },
+  { code: "QSC", name: b("Question to Contractor", "سؤال إلى المقاول") },
+  { code: "QSO", name: b("Question to Owner", "سؤال إلى المالك") },
+];
+const withQuestions = {
+  filters: { ...filters, types: [comment, ...questionTypes, snag, walkdown] },
+  // TMC sees two Questions to Consultant and one to Owner; none to Contractor.
+  typeCounts: [...list.typeCounts!, { code: "QSN", count: 2 }, { code: "QSO", count: 1 }],
+};
+const questionsQuery = { ...defaults, type: ["QSN", "QSC", "QSO"] };
+
+/** One "Questions" chip, not one per Question Type: its count adds up the three, and it filters to all three. */
+export const QuestionsChip: Story = {
+  args: { data: { view: "list", list: { ...list, ...withQuestions } } },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const chips = context.canvas.getByRole("navigation", { name: labels[locale].types });
+    const links = within(chips).getAllByRole("link");
+    // All, Comment, Questions, Snag, Walkdown item: the Question Types have no chips of their own.
+    await expect(links).toHaveLength(5);
+    for (const t of questionTypes) await expect(within(chips).queryByRole("link", { name: new RegExp(t.name[locale]) })).toBeNull();
+    const questions = within(chips).getByRole("link", { name: new RegExp(labels[locale].questions) });
+    await expect(questions).toHaveTextContent("3");
+    await expect(links[0]).toHaveTextContent("9");
+    const href = new URLSearchParams(questions.getAttribute("href")!.slice(1));
+    await expect(href.getAll("type").flatMap((v) => v.split(",")).sort()).toEqual(["QSC", "QSN", "QSO"]);
+  },
+};
+
+/** Chosen, on the Kanban too: the Questions chip is the current one. */
+export const QuestionsChipChosen: Story = {
+  args: { query: questionsQuery, data: { view: "kanban", board: { ...board, ...withQuestions } } },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const chips = context.canvas.getByRole("navigation", { name: labels[locale].types });
+    await expect(within(chips).getByRole("link", { current: true })).toHaveTextContent(labels[locale].questions);
   },
 };
 
