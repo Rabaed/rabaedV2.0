@@ -1011,6 +1011,7 @@
         "notYet": "Photos can be added once the Draft is saved.",
         "uploading": "Uploading…",
         "takePhoto": "Take a photo",
+        "upload": "Upload",
         "open": "Open {name} full size",
         "remove": "Remove {name}",
         "frozen": "Submitted: can't be changed",
@@ -1073,7 +1074,11 @@
         "itemNumber": "{n} of {of}",
         "raiseSnag": "Raise a Snag",
         "snagRaised": "A Snag is raised with the code",
-        "noSnagRaised": "No Snag is raised"
+        "noSnagRaised": "No Snag is raised",
+        "raiseSnagTicked": "Becomes a Snag for the Contractor when the code is issued.",
+        "raiseSnagUnticked": "Unticked: for example a minor failure fixed on the spot.",
+        "addComment": "Add comment",
+        "addPhoto": "Add photo"
       },
       "tableField": {
         "addRow": "Add row",
@@ -1163,6 +1168,93 @@
       "saving": "Saving…",
       "saved": "Saved.",
       "notSaved": "The checklist wasn't saved. Try again."
+    },
+    "inspection": {
+      "breadcrumb": "Breadcrumb",
+      "requestedFor": "Requested for",
+      "issuedBy": "Issued by {by} · {when}",
+      "privacy": "Only {company} sees your answers until you send them.",
+      "internal": "Internal",
+      "coverNote": "Cover Note",
+      "remarks": "Remarks",
+      "revisionBanner": "This WIR is to be revised: create a Revision for re-inspection.",
+      "waiting": "With {company}. You read the checklist's answers once the code is issued.",
+      "save": {
+        "saved": "Saved",
+        "savedAt": "Saved {time}",
+        "notSaved": "Not saved",
+        "offline": "Not saved: the signal dropped. Your answer is still on this screen.",
+        "retry": "Retry"
+      },
+      "tiles": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "na": "N/A",
+        "answered": "answered",
+        "items": "items"
+      },
+      "filters": {
+        "label": "Show items",
+        "all": "All",
+        "unanswered": "Unanswered",
+        "failed": "Failed"
+      },
+      "summary": {
+        "label": "Checklist summary",
+        "pass": "Pass",
+        "fail": "Fail",
+        "na": "N/A",
+        "answered": "<strong>{answered}</strong> of <strong>{total}</strong> answered",
+        "progress": "Items answered",
+        "left": "{count, plural, one {1 item is left to answer.} other {{n} items are left to answer.}}",
+        "notSaved": "{count, plural, one {1 change not saved: Retry it before you send.} other {{n} changes not saved: Retry them before you send.}}"
+      },
+      "send": {
+        "recommendedCode": "Recommended Code",
+        "internal": "Your Recommended Code and Internal Note stay inside {company}. {raiser} never sees them: only the code and what it shares.",
+        "snags": "{tickedCount, plural, one {1 failed item ticked “Raise a Snag”} other {{ticked} failed items ticked “Raise a Snag”}} · {untickedCount, plural, one {1 unticked} other {{unticked} unticked}}"
+      },
+      "recommendedCode": {
+        "title": "Engineer's Recommended Code",
+        "sent": "Sent {when}",
+        "internalOnly": "Inside {company} only: {raiser} never sees this."
+      },
+      "decision": {
+        "label": "Your decision",
+        "title": "Your decision",
+        "proposed": "Proposed: {code}",
+        "issue": "Issue code"
+      },
+      "issueCodeAs": "Issue code: {code}",
+      "code": {
+        "label": "Review Code",
+        "failedProposal": "{count, plural, one {1 item failed} other {{n} items failed}}: the proposal was {proposed}. You can still choose {picked}.",
+        "passedProposal": "No item failed: the proposal was {proposed}. You can still choose {picked}.",
+        "commentRows": "Each row becomes a Comment in the Snag List, assigned to {company}.",
+        "snagsTitle": "Snags that will be raised",
+        "noSnags": "No failed item is ticked “Raise a Snag”.",
+        "snagTo": "Item {n} · to {company}",
+        "unticked": "{count, plural, one {1 failed item raises no Snag: its tick was taken off.} other {{n} failed items raise no Snag: their ticks were taken off.}}",
+        "raisedBy": "Raised by {company}, assigned to {raiser}, whatever the code."
+      },
+      "return": {
+        "kept": "The Engineer's answers, comments and photos stay on the WIR, to change and send to you again.",
+        "internal": "Internal to {company}: {raiser} isn't told."
+      },
+      "counts": {
+        "label": "Raised from this WIR",
+        "hint": "Opens the Snag List filtered to this WIR. Counts include only items you can see."
+      },
+      "shared": {
+        "title": "Checklist",
+        "readable": "You can read the checklist now that the code is issued."
+      },
+      "revision": {
+        "of": "Revision of",
+        "number": "Rev {revision}",
+        "neverBlocks": "Open Snags never block this code: the Consultant Manager can issue it either way.",
+        "openSnagList": "Open in Snag List"
+      }
     },
     "attachments": {
       "title": "Attachments",
