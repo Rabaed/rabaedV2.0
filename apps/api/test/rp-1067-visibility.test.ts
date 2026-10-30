@@ -11,7 +11,7 @@
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { addTestWorkflow, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemHistory } from "@rabaed/domain";
+import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, readById, type Caller } from "./support/harness.ts";
@@ -176,7 +176,7 @@ describe("scenario RP-1067-1: C1's PM opens the approval log", () => {
 
 describe("scenario RP-1067-2: the log's start", () => {
   it("gives C1 the Creation Date and K1 none, so K1's log starts at C1's Submit", async () => {
-    const created = (by: Caller) => readById(`/v1/work-items/${id}`)(by).then((read) => read.flatMap((d) => ((d as { creationDate: string | null }).creationDate ? [{ id }] : [])));
+    const created = (by: Caller) => readById<WorkItemDetail>(`/v1/work-items/${id}`)(by).then((read) => read.flatMap((d) => (d.creationDate ? [{ id }] : [])));
     await expectHiddenFrom({ read: created, target: id, seenBy: [at.c1Pm, at.c1Engineer], hiddenFrom: [at.k1Manager, k1Engineer, signer], name: named, label: "the Creation Date" });
     const k1Log = await history(signer);
     expect([k1Log[0]!.type, k1Log[0]!.transition?.en, k1Log[0]!.by.memberName]).toEqual(["transition", "Submit", null]);
