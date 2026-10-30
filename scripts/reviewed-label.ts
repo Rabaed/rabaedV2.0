@@ -37,6 +37,35 @@ export interface ReviewedGit {
   tree(commit: string): string;
   /** The tree id of the clean merge of `other` into `base` (`git merge-tree --write-tree`); undefined when it conflicts or errors. */
   mergedTree(base: string, other: string): string | undefined;
+  /** The author's and the committer's email of `commit`. */
+  identity(commit: string): { author: string; committer: string };
+  /** The paths `commit` changes against its parent, both sides of a rename (`git diff-tree --no-renames`). */
+  changedPaths(commit: string): string[];
+}
+
+/** Where CI's update-screenshots workflow keeps the story screenshot baselines (its `SCREENSHOTS`). */
+export const BASELINE_FOLDER = "packages/ui/test/__screenshots__";
+/** The email that workflow commits as, author and committer alike (its `git config` email). */
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's own noreply address for its Actions bot.
+export const BASELINE_BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
+
+/**
+ * True for CI's "Update story screenshot baselines" commit (RP-1103): one parent, authored and committed by the
+ * workflow's bot, changing only PNGs under the baseline folder, at least one. It changes no code, so it does not
+ * void a verify line: `pnpm verify` compares no screenshots off Linux, and CI checks them. Anyone can set a commit's
+ * author, but such a commit still changes only baseline images, which CI's story run then checks; a mixed commit,
+ * or one a person made or re-committed (a cherry-pick, a rebase), never counts.
+ */
+export function isBaselineBotCommit(commit: string, git: ReviewedGit): boolean {
+  try {
+    if (git.parents(commit).length !== 1) return false;
+    const { author, committer } = git.identity(commit);
+    if (author !== BASELINE_BOT_EMAIL || committer !== BASELINE_BOT_EMAIL) return false;
+    const paths = git.changedPaths(commit);
+    return paths.length > 0 && paths.every((path) => path.startsWith(`${BASELINE_FOLDER}/`) && path.endsWith(".png"));
+  } catch {
+    return false;
+  }
 }
 
 /** True when the push `before` -> `after` only merged main in, with no change of its own. */
@@ -52,16 +81,18 @@ export function keepsLabel(before: string, after: string, git: ReviewedGit): boo
   }
 }
 
-/** How many clean merges of main the walk follows before it gives up; a branch merges main about once a day. */
-const MAX_MAIN_MERGES = 50;
+/** How many clean commits the walk follows before it gives up; a branch merges main about once a day. */
+const MAX_CLEAN_COMMITS = 50;
 
 /**
- * True when `head` is `base`, or follows it by clean merges of main only, each one a push `keepsLabel` would keep
- * the label on (RP-1017: `pnpm queue` takes a `pnpm verify` run on such an older head). `base` may be abbreviated.
+ * True when `head` is `base`, or follows it by clean commits only: merges of main, each one a push `keepsLabel` would
+ * keep the label on (RP-1017: `pnpm queue` and the verify gate take a `pnpm verify` run on such an older head), and
+ * the screenshot bot's baseline-only commits (`isBaselineBotCommit`, RP-1103). `base` may be abbreviated. The
+ * `reviewed` label itself still follows `keepsLabel` alone.
  */
 export function onlyMainMergedSince(base: string, head: string, git: ReviewedGit): boolean {
   let current = head;
-  for (let merges = 0; merges <= MAX_MAIN_MERGES; merges++) {
+  for (let steps = 0; steps <= MAX_CLEAN_COMMITS; steps++) {
     if (current.startsWith(base)) return true;
     let first: string | undefined;
     try {
@@ -69,7 +100,7 @@ export function onlyMainMergedSince(base: string, head: string, git: ReviewedGit
     } catch {
       return false;
     }
-    if (first === undefined || !keepsLabel(first, current, git)) return false;
+    if (first === undefined || !(keepsLabel(first, current, git) || isBaselineBotCommit(current, git))) return false;
     current = first;
   }
   return false;
@@ -110,6 +141,15 @@ export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = s
       const done = run(["merge-tree", "--write-tree", base, other]);
       return done.status === 0 ? (done.stdout ?? "").split("\n")[0]?.trim() : undefined;
     },
+    identity(commit) {
+      const [author = "", committer = ""] = must(["log", "-1", "--format=%ae%n%ce", commit]).split("\n");
+      return { author: author.trim(), committer: committer.trim() };
+    },
+    changedPaths: (commit) =>
+      must(["diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", commit])
+        .split("\n")
+        .map((path) => path.trim())
+        .filter(Boolean),
   };
 }
 

@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { keepsLabel, dropLabelOnPush, onlyMainMergedSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
+import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, isBaselineBotCommit, keepsLabel, dropLabelOnPush, onlyMainMergedSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
+
+const human = { author: "dev@example.com", committer: "dev@example.com" };
+const bot = { author: BASELINE_BOT_EMAIL, committer: BASELINE_BOT_EMAIL };
+const baseline = "packages/ui/test/__screenshots__/stories.test.tsx/button-primary-en-chromium-linux.png";
 
 // A clean merge of main into the reviewed head: before = R, main commit = M, new head = N.
 function git(overrides: Partial<ReviewedGit> = {}): ReviewedGit {
@@ -12,9 +16,50 @@ function git(overrides: Partial<ReviewedGit> = {}): ReviewedGit {
     onMain: (commit) => commit === "M",
     tree: () => "tree1",
     mergedTree: () => "tree1",
+    identity: () => human,
+    changedPaths: () => ["apps/web/src/page.tsx"],
     ...overrides,
   };
 }
+
+// RP-1103: CI's "Update story screenshot baselines" commit changes no code, so it must not void a verify line.
+describe("isBaselineBotCommit", () => {
+  const botCommit = (overrides: Partial<ReviewedGit> = {}) => git({ parents: () => ["V"], identity: () => bot, changedPaths: () => [baseline, `${BASELINE_FOLDER}/other-ar-chromium-linux.png`], ...overrides });
+
+  it("counts the screenshot bot's commit that changes only baseline images", () => {
+    expect(isBaselineBotCommit("B", botCommit())).toBe(true);
+  });
+
+  it("refuses the bot's commit when it changes anything else beside the baselines (a mixed commit)", () => {
+    expect(isBaselineBotCommit("B", botCommit({ changedPaths: () => [baseline, "scripts/verify.ts"] }))).toBe(false);
+    expect(isBaselineBotCommit("B", botCommit({ changedPaths: () => [baseline, `${BASELINE_FOLDER}/notes.txt`] }))).toBe(false);
+    expect(isBaselineBotCommit("B", botCommit({ changedPaths: () => ["packages/ui/test/stories.test.tsx"] }))).toBe(false);
+  });
+
+  it("refuses a commit of baselines only when a person made it, as author or as committer", () => {
+    expect(isBaselineBotCommit("B", botCommit({ identity: () => human }))).toBe(false);
+    expect(isBaselineBotCommit("B", botCommit({ identity: () => ({ author: BASELINE_BOT_EMAIL, committer: "dev@example.com" }) }))).toBe(false);
+    expect(isBaselineBotCommit("B", botCommit({ identity: () => ({ author: "dev@example.com", committer: BASELINE_BOT_EMAIL }) }))).toBe(false);
+  });
+
+  it("refuses a bot commit that changes nothing, a merge, and a commit git cannot read", () => {
+    expect(isBaselineBotCommit("B", botCommit({ changedPaths: () => [] }))).toBe(false);
+    expect(isBaselineBotCommit("B", botCommit({ parents: () => ["V", "M"] }))).toBe(false);
+    const broken = botCommit({
+      changedPaths: () => {
+        throw new Error("bad object");
+      },
+    });
+    expect(isBaselineBotCommit("B", broken)).toBe(false);
+  });
+
+  // The rule names what .github/workflows/update-screenshots.yml commits, so the two cannot drift apart.
+  it("matches the folder and the committer the update-screenshots workflow uses", () => {
+    const workflow = readFileSync(join(dirname(import.meta.filename), "..", ".github", "workflows", "update-screenshots.yml"), "utf8");
+    expect((parse(workflow) as { env: Record<string, string> }).env.SCREENSHOTS).toBe(BASELINE_FOLDER);
+    expect(workflow).toContain(`git config user.email "${BASELINE_BOT_EMAIL}"`);
+  });
+});
 
 describe("keepsLabel", () => {
   it("keeps the label for a clean merge of main into the reviewed head", () => {
@@ -90,6 +135,22 @@ describe("onlyMainMergedSince", () => {
     // M1 is an ancestor too, but on main's side: a run there never saw the branch's own commits.
     expect(onlyMainMergedSince("M1", "N2", chain())).toBe(false);
     expect(onlyMainMergedSince("N2", "V", chain())).toBe(false);
+  });
+
+  // RP-1103: V <- B (bot baselines) <- N3 (merges main M3); V <- H (a person's baselines).
+  const withBot: Record<string, string[]> = { ...graph, B: ["V"], N3: ["B", "M3"], H: ["V"], B2: ["E"] };
+  const botChain = (overrides: Partial<ReviewedGit> = {}) =>
+    chain({ parents: (commit) => withBot[commit] ?? [], identity: (commit) => (commit.startsWith("B") ? bot : human), changedPaths: (commit) => (commit === "H" || commit.startsWith("B") ? [baseline] : ["apps/web/src/page.tsx"]), ...overrides });
+
+  it("steps over the screenshot bot's baseline-only commit, alone or followed by a clean merge of main", () => {
+    expect(onlyMainMergedSince("V", "B", botChain())).toBe(true);
+    expect(onlyMainMergedSince("V", "N3", botChain())).toBe(true);
+  });
+
+  it("refuses a baseline commit a person made, a mixed bot commit, and a bot commit on top of an ordinary one", () => {
+    expect(onlyMainMergedSince("V", "H", botChain())).toBe(false);
+    expect(onlyMainMergedSince("V", "N3", botChain({ changedPaths: () => [baseline, "scripts/verify.ts"] }))).toBe(false);
+    expect(onlyMainMergedSince("V", "B2", botChain())).toBe(false);
   });
 
   it("refuses when git cannot answer", () => {
@@ -177,6 +238,16 @@ describe("realGit", () => {
     expect(real.tree("N")).toBe("treeid");
     expect(real.onMain("M")).toBe(false);
     expect(calls).toEqual([["rev-list", "--parents", "-n", "1", "N"], ["rev-parse", "N^{tree}"], ["merge-base", "--is-ancestor", "M", "origin/main"]]);
+  });
+
+  it("reads a commit's author and committer emails, and both sides of every path it changes", () => {
+    const { calls, git: real } = recorded((args) => ({ status: 0, stdout: args[0] === "log" ? "bot@x\ncommitter@x\n" : `${baseline}\nold/name.ts\n` }));
+    expect(real.identity("B")).toEqual({ author: "bot@x", committer: "committer@x" });
+    expect(real.changedPaths("B")).toEqual([baseline, "old/name.ts"]);
+    expect(calls).toEqual([
+      ["log", "-1", "--format=%ae%n%ce", "B"],
+      ["diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", "B"],
+    ]);
   });
 
   it("returns the merged tree for a clean merge-tree and undefined for a conflict", () => {

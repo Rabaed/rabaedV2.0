@@ -7,7 +7,8 @@ import { onlyMainMergedSince, realGit, type ReviewedGit } from "./reviewed-label
 import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEvent } from "./reviewed-required.ts";
 
 // The verify gate (RP-1094): a PR merges only when its body shows `pnpm verify` passed on its head,
-// or on a commit only clean merges of main followed (`onlyMainMergedSince`, RP-1017). One rule for
+// or on a commit only clean merges of main followed (`onlyMainMergedSince`, RP-1017), or the screenshot
+// bot's baseline-only commits (`isBaselineBotCommit`, RP-1103: they voided #458, #459, #476). One rule for
 // `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request and merge_group,
 // so a merge started from GitHub's button cannot skip it (14 PRs merged without a valid line, retro
 // 2026-10-29).
@@ -51,7 +52,7 @@ export const verifiedCommits = (body: string): string[] => stampedCommits(readLi
 
 export type VerifyGate = { ok: true; commit: string } | { ok: false; reason: string };
 
-/** Passes when a stamped line names `head` or a commit only clean merges of main led to it from. */
+/** Passes when a stamped line names `head` or a commit only clean merges of main (and baseline-only bot commits) led to it from. */
 export function verifyGate(body: string, head: string, git: ReviewedGit): VerifyGate {
   const lines = readLines(body);
   const verified = stampedCommits(lines);
@@ -61,7 +62,7 @@ export function verifyGate(body: string, head: string, git: ReviewedGit): Verify
   const unstamped = lines.filter(({ stamped }) => !stamped).map(({ commit: sha }) => sha);
   const parts = [
     ...(unstamped.length > 0 ? [`its verify line for ${unstamped.join(", ")} has no valid stamp (edited by hand, or printed before RP-1094), so it does not count`] : []),
-    ...(verified.length > 0 ? [`its stamped verify line names ${verified.join(", ")}, which is neither the head ${head} nor a commit only clean merges of main led to it from`] : []),
+    ...(verified.length > 0 ? [`its stamped verify line names ${verified.join(", ")}, which is neither the head ${head} nor a commit only clean merges of main and screenshot-bot baseline commits led to it from`] : []),
   ];
   return { ok: false, reason: parts.join("; ") };
 }
@@ -101,7 +102,7 @@ export async function requireVerified(event: RequiredEvent, seam: GateSeam): Pro
     return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this check.` };
   }
   const gate = verifyGate(pull.body, head, seam);
-  if (gate.ok) return { ok: true, summary: `PR #${pr}: \`pnpm verify\` passed on ${gate.commit}${head.startsWith(gate.commit) ? ", its head" : `, which only clean merges of main led to the head ${head} from`}: passes.` };
+  if (gate.ok) return { ok: true, summary: `PR #${pr}: \`pnpm verify\` passed on ${gate.commit}${head.startsWith(gate.commit) ? ", its head" : `, which only clean merges of main and screenshot-bot baseline commits led to the head ${head} from`}: passes.` };
   return { ok: false, summary: `PR #${pr}: ${gate.reason}. ${verifyFix(pr, head)}. Editing the body runs this check again.` };
 }
 
