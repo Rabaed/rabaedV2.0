@@ -41,9 +41,6 @@ RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, an
 RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
 RP-427-4 db  # The Project Admin binds C2's MARs to an exception Workflow named after C2's Company, then 
 
-# RP-437
-RP-437-1 db  # A MAR on the Rabaed Default MAR Workflow Version 3: C1's PM Submits it with a Cover Note a
-
 # RP-438
 RP-438-1 db  # C1 Submits a MAR and the K1 engineer sends it to the K1 manager; C1 opens "View workflow" 
 
@@ -64,9 +61,6 @@ RP-450-1 api  # Tower's Project Admin duplicates and publishes a Workflow, adds 
 
 # RP-555
 RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
-
-# RP-580
-RP-580-1 db  # K1 Sends a Submitted item Back to C1's Draft Step, which says "After a Send Back: Comment 
 
 # RP-589
 RP-589-5 db  # C1's PM imports a register (one row assigned to a C1 engineer, who later sends it for revi

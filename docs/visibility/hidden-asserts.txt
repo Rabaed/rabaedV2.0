@@ -270,10 +270,6 @@ packages/db/test/register-import-rls.test.ts empty 30
 packages/db/test/register-import-rls.test.ts text 3
 packages/db/test/reply-checklist-rls.test.ts empty 13
 packages/db/test/reply-checklist-rls.test.ts text 1
-packages/db/test/revision-follow-ups-rls.test.ts empty 5
-packages/db/test/revision-follow-ups-rls.test.ts text 1
-packages/db/test/revision-rls.test.ts empty 16
-packages/db/test/revision-rls.test.ts text 1
 packages/db/test/rls.test.ts empty 4
 packages/db/test/sar-adds-supplier-rls.test.ts empty 6
 packages/db/test/sar-adds-supplier-rls.test.ts text 2
