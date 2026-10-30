@@ -17,6 +17,8 @@
 // was kept is printed last, with why, so a `| tail` keeps the reasons.
 //
 //   pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
+//   pnpm lanes:prune --stale     a report for session start (RP-1096): running stacks against the cap, stopped
+//                                stacks, dead containers, volume-only projects and stray containers; removes nothing
 //
 // --lane N limits the candidates (stale, plus merged with --merged) to rabaed-laneN, with the
 // same confirmation and the same keep rules, so one lane is freed without touching the others (RP-505).
@@ -42,13 +44,45 @@ import {
   staleProjects,
   type KeptProject,
   type StaleProject,
+  type Volume,
 } from "./lanes.ts";
+import { maxStacks, staleReport } from "./machine-load.ts";
+import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, type JudgedLane } from "./prune-guards.ts";
 import { gitChanges, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 
-const options = parsePruneArgs(process.argv.slice(2));
+const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
+const argv = process.argv.slice(2);
+
+// RP-1096: --stale only reports, and removes nothing (lane 7 included, marked as Main 7's).
+if (argv.includes("--stale")) {
+  if (argv.length > 1) {
+    console.error(`--stale is a report on its own.\n${usage}`);
+    process.exit(1);
+  }
+  const listed = listContainers(DOCKER_TIMEOUT_MS);
+  let volumes: Volume[] | undefined;
+  try {
+    volumes = listed && listVolumes();
+  } catch {
+    volumes = undefined;
+  }
+  if (!listed || !volumes) {
+    console.error(`Docker is not answering (no answer in ${DOCKER_TIMEOUT_MS / 1000} s): it is stopped or jammed. Tell your Main; do not restart it yourself.`);
+    process.exit(1);
+  }
+  try {
+    for (const line of staleReport({ containers: listed, volumes, exists: existsSync, max: maxStacks(process.env) })) console.log(line);
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+const options = parsePruneArgs(argv);
 if (!options) {
-  console.error(`Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`);
+  console.error(usage);
   process.exit(1);
 }
 const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal(options);

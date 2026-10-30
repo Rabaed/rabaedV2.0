@@ -4,6 +4,7 @@ import { join } from "node:path";
 // One `pnpm verify` per worktree (RP-996): two runs in one worktree share the lane's
 // databases and fail each other. The lock is a file in the worktree, so verify in two
 // worktrees still runs side by side. The pid check is passed in, so it is unit-tested.
+// RP-1096 adds the machine's one verify slot (machineLockFile): a second worktree's verify waits for it.
 
 /** Who holds the lock: the verify process, when it started and how it was started. */
 export type LockHolder = { pid: number; started: Date; command: string };
@@ -102,6 +103,52 @@ export function acquireLock(file: string, self: LockHolder, isAlive: (pid: numbe
   if (stale && isAlive(stale.pid)) return { acquired: false, message: refusal(stale) };
   if (!removeStale(file, staleText, self.pid) || !create(file, self)) return refuseCurrent(file);
   return { acquired: true, tookOver: stale ? `took over a stale lock (${describeHolder(stale)}): that process is gone.` : "took over an unreadable lock." };
+}
+
+/**
+ * The machine's one verify slot (RP-1096): a lock file in the clone's common git folder, so every
+ * worktree of the clone (every lane on this machine) shares it. On 2026-10-29 many verify runs at once
+ * pushed the machine to 98% CPU and seam suites ran past 3 hours.
+ */
+export function machineLockFile(commonGitDir: string): string {
+  return join(commonGitDir, "rabaed-verify-machine.lock");
+}
+
+export type WaitDeps = {
+  isAlive: (pid: number) => boolean;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+  /** A line for the run's output: when it starts waiting, when the holder changes, and every reportEveryMs. */
+  report: (line: string) => void;
+  pollMs?: number;
+  reportEveryMs?: number;
+};
+
+/**
+ * Takes the lock for `self`, waiting while another live run holds it (a stale one is taken over at
+ * once, as acquireLock does). Never gives up: the run holding it ends some time, and Ctrl-C stops the wait.
+ */
+export async function waitForLock(
+  file: string,
+  self: LockHolder,
+  { isAlive, now, sleep, report, pollMs = 30_000, reportEveryMs = 600_000 }: WaitDeps,
+): Promise<{ waitedMs: number; tookOver?: string }> {
+  const start = now();
+  let said: string | undefined;
+  let nextReport = start + reportEveryMs;
+  for (;;) {
+    const result = acquireLock(file, self, isAlive);
+    if (result.acquired) return { waitedMs: now() - start, ...(result.tookOver === undefined ? {} : { tookOver: result.tookOver }) };
+    if (result.message !== said) {
+      report(`Waiting for the machine's verify slot: ${result.message} One verify runs at a time (RP-1096).`);
+      said = result.message;
+      nextReport = now() + reportEveryMs;
+    } else if (now() >= nextReport) {
+      report(`Still waiting for the machine's verify slot (${Math.floor((now() - start) / 60_000)} min).`);
+      nextReport = now() + reportEveryMs;
+    }
+    await sleep(pollMs);
+  }
 }
 
 /** Removes the lock if `pid` holds it; a lock another run took (over) is left alone. */

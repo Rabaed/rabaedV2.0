@@ -2,10 +2,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
+import { composeProjectOfEnv, envValue } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { branchMix } from "./shared-files.ts";
-import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
-import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
+import { postgresOfEnv, tcpReachable } from "./test-services.ts";
+import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
+import { acquireLock, lockFile, machineLockFile, releaseLock, waitForLock } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
 import { failureEnd, finalLine, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
@@ -21,6 +23,8 @@ import { isRunning } from "./worktrees-stale.ts";
 // shared files with code gets a warning first and again above the last line (RP-993).
 // A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
+// Before the first step it checks Docker, the db and rustfs and stops with what is down, then
+// waits for the machine's one verify slot: a run in another worktree waits for this one (RP-1096).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 
@@ -99,13 +103,46 @@ try {
 }
 if (claimsWarning) out.error(`${claimsWarning}\n`);
 
-// The lane's Postgres first (RP-575): a stopped container otherwise showed only at
-// test:seam1, after every step before it had run.
+// The lane's stack first (RP-575, RP-1096): Docker answers, the db and rustfs containers run
+// healthy, and both answer. A stopped or jammed one otherwise showed only at test:seam1, after
+// every step before it had run, or as seam suites timing out after hours.
 const envFile = join(root, ".env");
-const postgres = existsSync(envFile) ? postgresOfEnv(readFileSync(envFile, "utf8")) : undefined;
+const envText = existsSync(envFile) ? readFileSync(envFile, "utf8") : "";
+const postgres = postgresOfEnv(envText);
 if (!postgres) stopEarly("No Postgres in this worktree's .env: run `pnpm lane:env <n>` first.");
 const postgresAnswers = () => tcpReachable(postgres.host, postgres.port);
-if (!(await postgresAnswers())) stopEarly(postgresDown(postgres));
+const project = composeProjectOfEnv(envText) ?? "rabaed";
+const health: HealthDeps = {
+  project,
+  listServices: () => listServiceStates(project),
+  postgres,
+  dbAnswers: postgresAnswers,
+  filesEndpoint: envValue(envText, "FILE_STORE_ENDPOINT"),
+  filesProblem: (endpoint) => filesProblem(endpoint),
+};
+const checkHealth = async () => {
+  const problems = await stackHealthProblems(health);
+  if (problems.length > 0) stopEarly(healthStop(project, problems));
+};
+await checkHealth();
+
+// One verify on the machine at a time (RP-1096): a run in another worktree waits for this one.
+// The slot is a lock in the clone's common git folder; released on every exit, as the worktree's lock is.
+const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root, encoding: "utf8" });
+if (common.status !== 0) stopEarly("git could not find this clone's common git folder, which holds the machine's verify slot.");
+const slot = machineLockFile(common.stdout.trim());
+process.on("exit", () => releaseLock(slot, process.pid));
+const turn = await waitForLock(
+  slot,
+  { pid: process.pid, started: new Date(), command: `pnpm verify in ${root}` },
+  { isAlive: isRunning, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: (line) => out.info(line) },
+);
+if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
+if (turn.waitedMs > 0) {
+  out.info(`Got the machine's verify slot after ${Math.round(turn.waitedMs / 60_000)} min.`);
+  // The stack may have gone down while this run waited.
+  await checkHealth();
+}
 
 const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) stopEarly("git diff against origin/main failed; run `git fetch origin main` first.", diff.status ?? 1);
