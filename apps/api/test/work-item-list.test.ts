@@ -8,9 +8,9 @@
 import { randomUUID } from "node:crypto";
 import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { LEGACY_MAR, expectHiddenFrom } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -43,6 +43,10 @@ async function list(by: Caller, query: WorkItemQueryInput = {}, project = projec
 const ids = (l: WorkItemList) => l.items.map((i) => i.id);
 const row = (l: WorkItemList, id: string): WorkItemRow | undefined => l.items.find((i) => i.id === id);
 const total = (l: WorkItemList) => l.stages.reduce((sum, s) => sum + s.count, 0);
+/** The rows `by` lists with `query`, for expectHiddenFrom. */
+const rowsOf = (query: WorkItemQueryInput = {}) => async (by: Caller) => (await list(by, query)).items;
+const whoIs = (by: Caller) =>
+  by === c1Engineer ? "C1 engineer" : by === c1Pm ? "C1 PM" : by === c2Engineer ? "C2" : by === k1ManagerA ? "K1 manager A" : by === k1ManagerB ? "K1 manager B" : by === outsider ? "outsider" : "someone";
 
 /** A Draft MAR of C1's, complete, with its datasheet. */
 async function draft(title: string, answers: Record<string, unknown> = {}): Promise<string> {
@@ -174,11 +178,12 @@ describe("one row per Revision chain", () => {
   it("shows the raiser's Company its open Rev 1, and everyone else the original while Rev 1 is a Draft (V1)", async () => {
     const mine = await list(c1Engineer);
     expect(ids(mine)).toContain(revision);
-    expect(ids(mine)).not.toContain(original);
+    expect(ids(mine)).not.toContain(original); // not hidden-from: one row per chain; C1 lists the original under "Show all Revisions" below
     expect(row(mine, revision)).toMatchObject({ revisionNo: 1, stage: { key: "draft" }, outcome: null });
     const theirs = await list(k1ManagerB);
     expect(ids(theirs)).toContain(original);
-    expect(ids(theirs)).not.toContain(revision);
+    // Rev 1, a Draft, is C1's alone (V1): C1 lists it first.
+    await expectHiddenFrom({ read: rowsOf(), target: revision, seenBy: c1Engineer, hiddenFrom: [k1ManagerA, k1ManagerB, c2Engineer], name: whoIs, label: "Rev 1" });
     expect(row(theirs, original)).toMatchObject({ revisionNo: 0, outcome: "C", with: null });
   });
 
@@ -186,14 +191,14 @@ describe("one row per Revision chain", () => {
     expect(ids(await list(c1Engineer, { allRevisions: true }))).toEqual(expect.arrayContaining([original, revision]));
     const theirs = ids(await list(k1ManagerB, { allRevisions: true }));
     expect(theirs).toContain(original);
-    expect(theirs).not.toContain(revision);
+    await expectHiddenFrom({ read: rowsOf({ allRevisions: true }), target: revision, seenBy: c1Engineer, hiddenFrom: [k1ManagerB, c2Engineer], name: whoIs, label: "Rev 1, all Revisions" });
   });
 
   it("moves K1 to Rev 1 once it is Submitted", async () => {
     await submit(revision);
     const theirs = await list(k1ManagerB);
     expect(ids(theirs)).toContain(revision);
-    expect(ids(theirs)).not.toContain(original);
+    expect(ids(theirs)).not.toContain(original); // not hidden-from: one row per chain; K1 lists the original under "Show all Revisions" above
   });
 });
 
@@ -210,8 +215,8 @@ describe('"With" (V14, scenario 70)', () => {
     expect(theirs.with).toMatchObject({ kind: "own", step: { key: "consultant_review" }, holder: null });
     const mine = row(await list(c1Engineer), item)!;
     expect(mine.with).toEqual({ kind: "company", companyName: expect.any(Object) });
-    k1Name = theirs.with!.companyName.en;
-    expect(mine.with!.companyName.en).toBe(k1Name);
+    k1Name = theirs.with!.companyName.en; // not hidden-from: K1's name as K1 reads it, which C1 is shown too (V14); the row is found by id
+    expect(mine.with!.companyName.en).toBe(k1Name); // not hidden-from: C1 is shown the holding Company's name (V14), on the row found by id
   });
 
   it("names the holder to their own Company only, once one picks it up", async () => {
@@ -226,26 +231,36 @@ describe('"With" (V14, scenario 70)', () => {
 
     const c1List = await list(c1Engineer);
     expect(row(c1List, item)!.with).toEqual({ kind: "company", companyName: expect.objectContaining({ en: k1Name }) });
-    expect(JSON.stringify(c1List)).not.toContain(name.en);
-    expect(JSON.stringify(await list(c1Engineer, { with: [`company:${k1ParticipantId}`] }))).not.toContain(name.en);
+    // The holder's name, which K1's colleague reads above, never reaches C1.
+    expect(JSON.stringify(await list(k1ManagerB))).toContain(name.en);
+    expect(JSON.stringify(c1List)).not.toContain(name.en); // not hidden-from: secret text, read in K1's list the line above
+    expect(JSON.stringify(await list(c1Engineer, { with: [`company:${k1ParticipantId}`] }))).not.toContain(name.en); // not hidden-from: secret text, read in K1's list above
   });
 
   it("filters by who has it: me, notPickedUp, a Step of my own, another Company", async () => {
     expect(ids(await list(k1ManagerA, { with: ["me"] }))).toContain(item);
-    expect(ids(await list(k1ManagerB, { with: ["me"] }))).not.toContain(item);
-    expect(ids(await list(k1ManagerB, { with: ["not_picked_up"] }))).not.toContain(item);
+    expect(ids(await list(k1ManagerB, { with: ["me"] }))).not.toContain(item); // not hidden-from: the "me" filter on K1's own item, which B lists by its Step below
+    expect(ids(await list(k1ManagerB, { with: ["not_picked_up"] }))).not.toContain(item); // not hidden-from: the "not picked up" filter on K1's own item, which B lists by its Step below
     expect(ids(await list(k1ManagerB, { with: ["step:consultant_review"] }))).toContain(item);
     const c1List = await list(c1Engineer, { with: [`company:${k1ParticipantId}`] });
     expect(ids(c1List)).toContain(item);
-    // C1 doesn't see K1's Step as a Step of its own.
-    expect(ids(await list(c1Engineer, { with: ["step:consultant_review"] }))).not.toContain(item);
+    // C1 doesn't see K1's Step as a Step of its own: K1 finds the item by it, C1 doesn't.
+    await expectHiddenFrom({ read: rowsOf({ with: ["step:consultant_review"] }), target: item, seenBy: k1ManagerB, hiddenFrom: c1Engineer, name: whoIs, label: "by K1's Step" });
   });
 
   it("offers the With values of the viewer's own visible items only", async () => {
     const { filters } = await list(c1Engineer);
     expect(filters.with.companies).toEqual([{ participantId: k1ParticipantId, name: expect.objectContaining({ en: k1Name }) }]);
-    expect(filters.with.steps.map((s) => s.key)).not.toContain("consultant_review");
-    expect((await list(k1ManagerB)).filters.with.steps.map((s) => s.key)).toContain("consultant_review");
+    // K1's Step is a "with" choice for K1 only.
+    await expectHiddenFrom({
+      read: async (by: Caller) => (await list(by)).filters.with.steps,
+      target: "consultant_review",
+      idOf: (s) => s.key,
+      seenBy: k1ManagerB,
+      hiddenFrom: [c1Engineer, c2Engineer],
+      name: whoIs,
+      label: "K1's Step as a choice",
+    });
   });
 });
 
@@ -263,20 +278,20 @@ describe("filters and sorts, combined", () => {
 
   it("filters by Type, Stage, Trade and Location, a Location taking in the ones under it", async () => {
     expect(ids(await list(c1Engineer, { type: [LEGACY_MAR] }))).toEqual(expect.arrayContaining([mechanicalInB, electricalInA]));
-    expect(ids(await list(c1Engineer, { type: ["SAR"] }))).toEqual([]);
+    expect(ids(await list(c1Engineer, { type: ["SAR"] }))).toEqual([]); // not hidden-from: a Type filter; no SAR is raised on this Project
     expect(ids(await list(c1Engineer, { trade: [trade.mechanical] }))).toEqual([mechanicalInB]);
     const inTower = ids(await list(c1Engineer, { location: [loc.tower1] }));
     expect(inTower).toContain(electricalInA);
-    expect(inTower).not.toContain(mechanicalInB);
+    expect(inTower).not.toContain(mechanicalInB); // not hidden-from: a Location filter on C1's own item, which C1 lists by Trade above
     const draftsInA = ids(await list(c1Engineer, { stage: ["draft"], location: [loc.buildingA] }));
     expect(draftsInA).toContain(electricalInA);
-    expect(draftsInA).not.toContain(submittedOld);
-    expect(draftsInA).not.toContain(mechanicalInB);
+    expect(draftsInA).not.toContain(submittedOld); // not hidden-from: a Stage filter on C1's own item
+    expect(draftsInA).not.toContain(mechanicalInB); // not hidden-from: a Location filter on C1's own item, which C1 lists by Trade above
   });
 
   it("filters by Review Code", async () => {
     // The Code C original is no longer the latest of its chain: Rev 1 is.
-    expect(ids(await list(k1ManagerB, { outcome: ["C"] }))).toEqual([]);
+    expect(ids(await list(k1ManagerB, { outcome: ["C"] }))).toEqual([]); // not hidden-from: a Review Code filter on the latest Revisions; K1 lists the Code C ones with all Revisions next
     const coded = await list(k1ManagerB, { outcome: ["C"], allRevisions: true });
     expect(coded.items.length).toBeGreaterThan(0);
     expect(coded.items.every((i) => i.outcome === "C")).toBe(true);
@@ -286,8 +301,8 @@ describe("filters and sorts, combined", () => {
     const aged = await list(c1Engineer, { stepAgeMin: 3 });
     // A Draft with no number has no Step Age, so no Step Age filter matches it (nobody sees when it was started).
     expect(ids(aged)).toContain(submittedOld);
-    expect(ids(aged)).not.toContain(mechanicalInB);
-    expect(ids(aged)).not.toContain(electricalInA);
+    expect(ids(aged)).not.toContain(mechanicalInB); // not hidden-from: a Step Age filter on C1's own Draft
+    expect(ids(aged)).not.toContain(electricalInA); // not hidden-from: a Step Age filter on C1's own Draft
     expect(aged.items.every((i) => (i.stepAgeWeeks === null || i.stepAgeWeeks >= 3) && ["draft", "in_progress"].includes(i.stage.category))).toBe(true);
     // A new Draft, without its datasheet: the moved clock spoils an upload's signature.
     const fresh = (
@@ -296,8 +311,8 @@ describe("filters and sorts, combined", () => {
         201,
       )
     ).json().id;
-    expect(ids(await list(c1Engineer, { stepAgeMin: 2 }))).not.toContain(fresh);
-    expect(ids(await list(c1Engineer, { stepAgeMin: 2, trade: [trade.mechanical] }))).toEqual([]);
+    expect(ids(await list(c1Engineer, { stepAgeMin: 2 }))).not.toContain(fresh); // not hidden-from: a Step Age filter on C1's own new Draft
+    expect(ids(await list(c1Engineer, { stepAgeMin: 2, trade: [trade.mechanical] }))).toEqual([]); // not hidden-from: Step Age and Trade filters on C1's own items
   });
 
   it("sorts by Step Age, the oldest first, closed items (which don't age) last", async () => {
@@ -360,7 +375,16 @@ describe("a second Contractor (V3, scenario 17)", () => {
       const l = await list(c2Engineer, query);
       expect(l.items.every((i) => i.id === c2Item), JSON.stringify(query)).toBe(true);
       expect(total(l), JSON.stringify(query)).toBe(l.items.length);
-      expect(l.filters.with.companies).toEqual([]);
+      // K1, which holds C1's items, is a "with" choice for C1 and never for C2.
+      await expectHiddenFrom({
+        read: async (by: Caller) => (await list(by, query)).filters.with.companies,
+        target: k1ParticipantId,
+        idOf: (c) => c.participantId,
+        seenBy: c1Engineer,
+        hiddenFrom: c2Engineer,
+        name: whoIs,
+        label: `K1 as a "with" choice, ${JSON.stringify(query)}`,
+      });
     }
     expect(ids(await list(c2Engineer))).toEqual([c2Item]);
   });
@@ -368,8 +392,10 @@ describe("a second Contractor (V3, scenario 17)", () => {
 
 describe("refusals", () => {
   it("answers a Member off the Project as if it didn't exist", async () => {
-    await expectHidden(outsider.get(`/v1/projects/${projectId}/work-items`));
-    await expectHidden(outsider.get(`/v1/projects/${projectId}/work-items?stage=draft`));
+    for (const query of ["", "?stage=draft"]) {
+      const listOf = async (by: Caller) => (await readById(`/v1/projects/${projectId}/work-items${query}`)(by)).map(() => ({ id: projectId }));
+      await expectHiddenFrom({ read: listOf, target: projectId, seenBy: [c1Engineer, k1ManagerA, c2Engineer], hiddenFrom: outsider, name: whoIs, label: `the List${query}` });
+    }
   });
 
   it("refuses a filter or cursor that isn't one", async () => {
