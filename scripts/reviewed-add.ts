@@ -15,7 +15,8 @@ import { realGateGit, verifyGate } from "./verify-gate.ts";
 // Either may name an older commit when only clean commits led from it to the head: merges of main and the
 // screenshot bot's baseline commits (`onlyCleanCommitsSince`, RP-1017, RP-1103), the one rule the verify gate uses.
 //
-// The `reviewed-label` workflow still removes the label on any push (scripts/reviewed-label.ts), so this waits for
+// The `reviewed-label` workflow still removes the label on any push except a clean merge of main or a bot's
+// baseline-only commit (scripts/reviewed-label.ts, RP-584, RP-1121), so this waits for
 // that run on the head first, and takes the label off again when a push landed while it was adding it. A label
 // added with GITHUB_TOKEN starts no `labeled` run, so it then re-runs the head's failed `reviewed-required` run,
 // which reads the labels live. Docs-only PRs are unchanged: `docs-only` still passes without `reviewed`.
