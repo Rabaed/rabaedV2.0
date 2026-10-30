@@ -111,9 +111,6 @@ RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflow
 RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
 RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
 
-# RP-626
-RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
-
 # RP-1058
 RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
 
