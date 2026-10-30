@@ -116,7 +116,6 @@ apps/api/test/pool-of-one.test.ts text 1
 apps/api/test/projects.test.ts empty 5
 apps/api/test/projects.test.ts text 4
 apps/api/test/questions-any-role.test.ts empty 11
-apps/api/test/questions.test.ts empty 15
 apps/api/test/raisable-types.test.ts empty 3
 apps/api/test/raised-item-counts.test.ts empty 4
 apps/api/test/random-ids.test.ts text 2
@@ -137,12 +136,7 @@ apps/api/test/sign-in-first.test.ts empty 2
 apps/api/test/sign-in.test.ts empty 3
 apps/api/test/sign-in.test.ts text 1
 apps/api/test/signature.test.ts empty 2
-apps/api/test/site-observations.test.ts empty 7
-apps/api/test/site-observations.test.ts text 1
-apps/api/test/snag-bulk.test.ts empty 12
 apps/api/test/snag-item-detail.test.ts empty 5
-apps/api/test/snag-list-views.test.ts empty 12
-apps/api/test/snag-list-views.test.ts text 1
 apps/api/test/snag-phone.test.ts empty 3
 apps/api/test/snag-phone.test.ts text 4
 apps/api/test/snag-report.test.ts empty 21
@@ -262,7 +256,6 @@ packages/db/test/participant-rls.test.ts text 2
 packages/db/test/pool-error.test.ts empty 2
 packages/db/test/project-rls.test.ts empty 2
 packages/db/test/published-version-immutability.test.ts empty 4
-packages/db/test/question-any-role-rls.test.ts empty 1
 packages/db/test/question-rls.test.ts empty 7
 packages/db/test/record-ready-rls.test.ts empty 6
 packages/db/test/record-ready-rls.test.ts text 1
@@ -281,8 +274,6 @@ packages/db/test/sent-back-rows-rls.test.ts empty 9
 packages/db/test/sent-back-rows-rls.test.ts text 5
 packages/db/test/show-inspections-setting.test.ts empty 1
 packages/db/test/site-observation-rls.test.ts empty 9
-packages/db/test/snag-list-scenarios-rls.test.ts empty 17
-packages/db/test/snag-list-scenarios-rls.test.ts text 1
 packages/db/test/snag-report-rls.test.ts empty 15
 packages/db/test/snag-rls.test.ts empty 16
 packages/db/test/supabase-gate.test.ts empty 4
