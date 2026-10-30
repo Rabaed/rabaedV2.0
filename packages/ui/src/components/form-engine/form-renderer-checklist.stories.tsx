@@ -66,8 +66,12 @@ const copy = {
   no: { en: "No", ar: "لا" },
   comment: { en: "Comment", ar: "التعليق" },
   commentRequired: { en: "Comment (required)", ar: "التعليق (مطلوب)" },
+  addComment: { en: "Add comment", ar: "إضافة تعليق" },
+  addPhoto: { en: "Add photo", ar: "إضافة صورة" },
+  formworkPhotos: { en: "Photos for Formwork is clean and tight", ar: "صور \u2068الشدة نظيفة ومحكمة\u2069" },
   photosRequired: { en: "Photos (required)", ar: "الصور (مطلوب)" },
   takePhoto: { en: "Take a photo", ar: "التقط صورة" },
+  upload: { en: "Upload", ar: "رفع" },
   summary: { en: "Summary", ar: "الملخص" },
   notAnswered: { en: "Not answered", ar: "لم تتم الإجابة" },
   answerThis: { en: "Answer this item.", ar: "أجب عن هذا البند." },
@@ -146,9 +150,14 @@ export const Empty: Story = {
     const permit = itemOf(context, copy.permit);
     await expect(permit.getByRole("radio", { name: storyText(context, copy.yes) })).toBeVisible();
     await expect(permit.getByRole("radio", { name: storyText(context, copy.no) })).toBeVisible();
-    // An item that asks for evidence only on a negative answer shows none yet; an optional one shows it.
+    // An item that asks for evidence only on a negative answer shows none yet; an optional one opens it from its link (RP-655).
     await expect(rebar.queryByLabelText(storyText(context, copy.comment), { exact: false })).toBeNull();
-    await expect(itemOf(context, copy.formwork).getByLabelText(storyText(context, copy.comment))).toBeVisible();
+    const formwork = itemOf(context, copy.formwork);
+    await expect(formwork.queryByLabelText(storyText(context, copy.comment))).toBeNull();
+    await userEvent.click(formwork.getByRole("button", { name: storyText(context, copy.addComment) }));
+    await expect(formwork.getByLabelText(storyText(context, copy.comment))).toBeVisible();
+    await userEvent.click(formwork.getByRole("button", { name: storyText(context, copy.addPhoto) }));
+    await expect(formwork.getByRole("group", { name: storyText(context, copy.formworkPhotos) })).toBeVisible();
   },
 };
 
