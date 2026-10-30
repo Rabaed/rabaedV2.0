@@ -1,4 +1,4 @@
-import { itemsToCreate, outcomeLook, type BilingualText, type Outcome, type OutcomeLook, type WorkItemHistory } from "@rabaed/domain";
+import { intlLocaleOf, itemsToCreate, outcomeLook, type BilingualText, type Locale, type Outcome, type OutcomeLook, type WorkItemHistory } from "@rabaed/domain";
 
 /**
  * The Submittal Panel's approval log and Internal Communication (RP-1067, spec RP-1054 gaps A6–A9,
@@ -127,6 +127,12 @@ export type SubmittalInternalEntry = {
   texts: SubmittalTimelineText[];
   tone: SubmittalTimelineTone;
 };
+
+/** A person's Positions as one reads a list in the page's language ("Engineer and Project Manager"); null for none. */
+export function submittalPositionsText(positions: readonly BilingualText[], locale: Locale): string | null {
+  if (positions.length === 0) return null;
+  return new Intl.ListFormat(intlLocaleOf(locale), { type: "conjunction" }).format(positions.map((p) => p[locale]));
+}
 
 /**
  * Internal Communication (gap A9, V5), newest first: the internal events the history read gives the

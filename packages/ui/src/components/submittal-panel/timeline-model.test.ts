@@ -1,6 +1,22 @@
 import type { WorkItemHistory } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { submittalApprovalLog, submittalInternalLog } from "./timeline-model.ts";
+import { submittalApprovalLog, submittalInternalLog, submittalPositionsText } from "./timeline-model.ts";
+
+// "Name · Position · Company" (RP-1091): a person's several Positions read as one list in the page's language.
+describe("a person's Positions in words", () => {
+  const engineer = b("Engineer", "مهندس");
+  const pm = b("Project Manager", "مدير المشروع");
+
+  it("joins several as a list in English and in Arabic", () => {
+    expect(submittalPositionsText([engineer, pm], "en")).toBe("Engineer and Project Manager");
+    expect(submittalPositionsText([engineer, pm], "ar")).toBe("مهندس ومدير المشروع");
+  });
+
+  it("gives one as it is, and none for no Position", () => {
+    expect(submittalPositionsText([pm], "ar")).toBe("مدير المشروع");
+    expect(submittalPositionsText([], "en")).toBeNull();
+  });
+});
 
 type Event = WorkItemHistory["events"][number];
 

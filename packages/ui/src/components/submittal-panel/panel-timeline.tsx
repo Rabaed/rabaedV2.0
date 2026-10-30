@@ -5,7 +5,14 @@ import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Badge } from "../data/badge.tsx";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import type { SubmittalInternalEntry, SubmittalLogEntry, SubmittalTimelineEvent, SubmittalTimelineText, SubmittalTimelineTone } from "./timeline-model.ts";
+import {
+  submittalPositionsText,
+  type SubmittalInternalEntry,
+  type SubmittalLogEntry,
+  type SubmittalTimelineEvent,
+  type SubmittalTimelineText,
+  type SubmittalTimelineTone,
+} from "./timeline-model.ts";
 
 /**
  * The Submittal Panel's timeline (RP-1067, README §5): one list, newest first, for both the approval
@@ -135,8 +142,7 @@ function eventItem(
     move: labels.move(event),
     who: {
       person: person?.[locale] ?? null,
-      // Several Positions, as one reads a list in the page's language.
-      position: positions.length > 0 ? positions.map((p) => p[locale]).join(locale === "ar" ? "، " : ", ") : null,
+      position: submittalPositionsText(positions, locale),
       company: event.by.companyName?.[locale] ?? null,
     },
     texts: texts.map((t) => ({ label: labels.texts[t.kind], text: t.text })),
