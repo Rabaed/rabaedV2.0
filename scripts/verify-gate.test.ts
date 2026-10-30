@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ReviewedGit } from "./reviewed-label.ts";
+import { BASELINE_BOT_EMAIL, type ReviewedGit } from "./reviewed-label.ts";
 import { needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
 
@@ -7,7 +7,14 @@ const steps = ["lint", "typecheck", "test:unit"];
 const line = (sha: string) => finalLine({ sha, dirty: false, steps });
 
 // No merges unless a test gives a graph.
-const noMerges: ReviewedGit = { parents: () => [], onMain: () => false, tree: () => "tree1", mergedTree: () => "tree1" };
+const noMerges: ReviewedGit = {
+  parents: () => [],
+  onMain: () => false,
+  tree: () => "tree1",
+  mergedTree: () => "tree1",
+  identity: () => ({ author: "dev@example.com", committer: "dev@example.com" }),
+  changedPaths: () => ["apps/web/src/page.tsx"],
+};
 
 describe("stampLine", () => {
   it("ends the line with a stamp that depends on every character before it", () => {
@@ -93,6 +100,20 @@ describe("verifyGate", () => {
     const graph: Record<string, string[]> = { abc1234: ["n1", "m2"], n1: ["beef999"] };
     const git: ReviewedGit = { ...noMerges, parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") };
     expect(verifyGate(line("beef999"), "abc1234", git).ok).toBe(false);
+  });
+
+  // RP-1103: the screenshot bot's baseline-only commit (#458, #459, #476) no longer voids the line.
+  it("passes when the screenshot bot's baseline-only commit follows the verified one, and fails when a person made it", () => {
+    const graph: Record<string, string[]> = { abc1234: ["b1", "m2"], b1: ["beef999"] };
+    const baselines = (author: string): ReviewedGit => ({
+      ...noMerges,
+      parents: (commit) => graph[commit] ?? [],
+      onMain: (commit) => commit.startsWith("m"),
+      identity: (commit) => (commit === "b1" ? { author, committer: author } : { author: "dev@example.com", committer: "dev@example.com" }),
+      changedPaths: (commit) => (commit === "b1" ? ["packages/ui/test/__screenshots__/stories.test.tsx/button-en-chromium-linux.png"] : []),
+    });
+    expect(verifyGate(line("beef999"), "abc1234", baselines(BASELINE_BOT_EMAIL))).toEqual({ ok: true, commit: "beef999" });
+    expect(verifyGate(line("beef999"), "abc1234", baselines("dev@example.com")).ok).toBe(false);
   });
 });
 

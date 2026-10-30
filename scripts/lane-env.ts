@@ -38,6 +38,8 @@
 // Lane 7 holds Main 7's UAT harness data (RP-1101): --free never offers it, not even as the lane asked for,
 // and --force never takes it over from another worktree (lanes.ts protectedLaneReason); ask Main 7.
 // A plain `lane:env 7` stays Main 7's own.
+// RP-1096: it warns when the lane's stack would leave one running-stack slot or none, and refuses
+// when RABAED_MAX_STACKS (default 8, machine-load.ts) stacks already run; `pnpm lanes:prune --stale` lists them.
 // One lane:env runs at a time per clone (a lock in the common git folder, lanes-lock.ts), from reading the
 // lanes until .env is written, so two runs at once never choose the same lane.
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
@@ -67,6 +69,7 @@ import {
   type TakeoverWorktree,
 } from "./lanes.ts";
 import { acquireLaneLock, laneLockFile, systemLockDeps } from "./lanes-lock.ts";
+import { maxStacks, stackCap, type CapVerdict } from "./machine-load.ts";
 import { samePath } from "./paths.ts";
 import { foreignSessionLock, listeningPid, ownServerHint, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
 import { currentRoot, gitDirty, gitError, judgeWorktree, listWorktrees, NOT_FINISHED, refExists, systemLiveness, type Verdict, type Worktree } from "./worktrees.ts";
@@ -264,6 +267,23 @@ if (clashes.length > 0) {
   }
   console.log(`${why}\nUsing lane ${next}, the next free one.`);
   lane = next;
+}
+
+// RP-1096: a cap on running stacks (RABAED_MAX_STACKS, default 8; the owner sets it). Near it a
+// warning, at it a refusal. The lane's own stack is not another one. Skipped when Docker is not running.
+if (containers) {
+  let cap: CapVerdict;
+  try {
+    cap = stackCap(lane, containers, maxStacks(process.env));
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
+  if (cap.level === "refuse") {
+    console.error(cap.message);
+    process.exit(1);
+  }
+  if (cap.level === "warn") console.warn(`Warning: ${cap.message}`);
 }
 
 const { postgres: pg, api, admin, web, mailpit, files } = lanePorts(lane);

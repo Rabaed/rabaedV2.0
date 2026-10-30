@@ -55,17 +55,35 @@ export default async function NewWorkItemPage({
 
   const chosen = raisable.types.find((type) => type.code === requested) ?? raisable.types[0];
   const form = chosen ? await getNewWorkItemForm(projectId, chosen.code) : null;
+  // The WIR request's own layout (RP-655): an Inspection Type whose Form picks a Checklist Template.
+  const request = moduleKey === "inspections" && !!form && form.schema.sections.some((s) => s.fields.some((f) => f.type === "checklist_template"));
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className={request ? "max-w-6xl space-y-6" : "max-w-2xl space-y-6"}>
       <div className="space-y-1">
-        <Link
-          href={moduleKey === "submittals" ? `/projects/${project.id}/work-items` : `/projects/${project.id}/${moduleTabPaths[moduleKey]}`}
-          className="text-sm text-brand-fg underline underline-offset-4"
-        >
-          {moduleKey === "submittals" ? t("title") : tabs(moduleKey)}
-        </Link>
-        <h1 className="text-h4 font-semibold">{t("newItem")}</h1>
+        {request ? (
+          // Inspections › New WIR, as the design's breadcrumb reads.
+          <nav aria-label={t("inspection.breadcrumb")} className="flex flex-wrap items-center gap-2 text-sm">
+            <Link href={`/projects/${project.id}/${moduleTabPaths[moduleKey]}`} className="text-brand-fg underline underline-offset-4">
+              {tabs(moduleKey)}
+            </Link>
+            <span aria-hidden="true" className="text-muted">
+              ›
+            </span>
+            <span aria-current="page" className="font-semibold">
+              {t("inspection.request.newWir")}
+            </span>
+          </nav>
+        ) : (
+          <Link
+            href={moduleKey === "submittals" ? `/projects/${project.id}/work-items` : `/projects/${project.id}/${moduleTabPaths[moduleKey]}`}
+            className="text-sm text-brand-fg underline underline-offset-4"
+          >
+            {moduleKey === "submittals" ? t("title") : tabs(moduleKey)}
+          </Link>
+        )}
+        {/* The WIR request is headed by its Type's own name ("Work Inspection Request"). */}
+        <h1 className="text-h4 font-semibold">{request && chosen ? chosen.name[locale] : t("newItem")}</h1>
       </div>
       {!chosen || !form ? (
         <p className="text-muted">{t("noRaisableType")}</p>
@@ -87,6 +105,7 @@ export default async function NewWorkItemPage({
               checklistTemplates={checklistTemplates}
               startTradeId={defaultTradeId(form.schema, mine.trade)}
               locale={locale}
+              {...(request ? { request: { company: me.company.legalName } } : {})}
             />
           )}
         </>

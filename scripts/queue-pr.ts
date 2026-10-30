@@ -26,8 +26,9 @@ import { isAncestor } from "./worktrees.ts";
 // every file it changes is a doc: the rule of the main ruleset's reviewed-required check (RP-606).
 // --no-review only names the docs-only label when it is missing; it no longer skips the rule.
 // A PR queued under `reviewed` also needs `pnpm verify passed on <sha>:` in its body, where <sha> is
-// its head or a commit only clean merges of main followed (the reviewed-label rule, RP-1017): PR #288's
-// labelled, green old head was queued after verify had found a visibility leak on it. The line must
+// its head or a commit only clean merges of main and screenshot-bot baseline commits followed (the
+// reviewed-label rule, RP-1017, RP-1103): PR #288's labelled, green old head was queued after verify
+// had found a visibility leak on it. The line must
 // carry its stamp: the verify gate's rule (scripts/verify-gate.ts, RP-1094), the same as the check's.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 

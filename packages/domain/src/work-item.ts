@@ -797,13 +797,18 @@ export const workItemDetail = workItemSummary.extend({
    * Revision number and Document Number, and the items raised from it per Type, counted as
    * `raisedItems` counts them (only those the viewer sees, never a discarded one). Null for an item
    * that is no Revision, when the viewer sees no previous item, or when nothing was raised from it.
-   * The counts never block a code.
+   * The counts never block a code. `raised`: the same items one each (RP-655, the Revision's
+   * "Snags from Rev 0" list), by Type code, then Document Number: its number, Subject and
+   * whether it is closed.
    */
   previousRaisedItems: z
     .object({
       revisionNo: z.number().int().nonnegative(),
       documentNumber: z.string().nullable(),
       items: z.array(raisedItemCount),
+      raised: z.array(
+        z.object({ id: z.uuid(), typeCode: z.string(), documentNumber: z.string().nullable(), title: z.string(), closed: z.boolean() }),
+      ),
     })
     .nullable(),
   /**

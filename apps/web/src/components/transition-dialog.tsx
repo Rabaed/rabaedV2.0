@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatNumber,
   formFields,
   isAnnotatedCopy,
   isScreenFileField,
@@ -14,14 +15,16 @@ import {
   type ReplyChecklistRead,
   type WorkItemActions,
 } from "@rabaed/domain";
-import { ActionForm, Badge, Button, Field, Select, type FormFiles } from "@rabaed/ui";
+import { ActionForm, Badge, Button, CodeBadge, cn, DocNo, Field, Icon, IconButton, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { InspectionTiles, liveTally, tallyOf, useInspection, type Inspection } from "@/components/inspection-context";
 import { ReplyChecklistsRead } from "@/components/reply-checklists";
 import { useDocuments, useImageUrls } from "@/components/use-documents";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
+import { snagsToRaise } from "@/lib/inspection";
 
 /**
  * A Transition as the pop-up needs it: the item's page and the Kanban's moves both
@@ -35,6 +38,8 @@ import { useActionFormLabels } from "@/lib/form-labels";
 export type TransitionChoice = {
   key: string;
   label: BilingualText;
+  /** What kind of move it is (a Return, a send…), where the caller knows it. */
+  kind?: WorkItemActions["transitions"][number]["kind"];
   actionForm: FormSchema | null;
   assignTo?: { memberId: string; name: BilingualText }[];
   recommendCode?: { code: string; name: BilingualText }[];
@@ -217,7 +222,8 @@ function useReplyFiles(workItemId: string, actionForm: FormSchema | null) {
  * and the Draft is finished on its page.
  */
 export function TransitionDialog({
-  transition,
+  transition: pickedFirst,
+  choices,
   calls,
   locale,
   description,
@@ -226,6 +232,11 @@ export function TransitionDialog({
   onClose,
 }: {
   transition: TransitionChoice;
+  /**
+   * Transitions to pick from in the one pop-up, `transition` picked first (a WIR's codes, RP-655):
+   * each keeps its own Action Form answers (the Internal Note is the pop-up's), and the pop-up takes the one picked.
+   */
+  choices?: TransitionChoice[];
   calls: WorkItemCalls;
   locale: Locale;
   /** A line under the heading, e.g. the item's Subject on the Kanban. */
@@ -236,11 +247,19 @@ export function TransitionDialog({
   onClose: () => void;
 }) {
   const t = useTranslations("workItems.actions");
+  const tInspection = useTranslations("workItems.inspection");
   const actionFormLabels = useActionFormLabels();
   const itemForm = useWorkItemForm();
+  // On a WIR's page, its own pop-ups (RP-655); null on any other item's.
+  const inspection = useInspection();
   const dialog = useRef<HTMLDialogElement>(null);
-  // Pre-filled from the reply that brought the item here, inside the viewer's own Company (RP-437).
-  const [answers, setAnswers] = useState<Record<string, unknown>>(transition.prefill ?? {});
+  const [picked, setPicked] = useState(pickedFirst.key);
+  const transition = choices?.find((c) => c.key === picked) ?? pickedFirst;
+  // Each Transition's own answers, pre-filled from the reply that brought the item here, inside the viewer's own Company (RP-437).
+  const [answersByKey, setAnswersByKey] = useState<Record<string, Record<string, unknown>>>({});
+  const answers = answersByKey[transition.key] ?? transition.prefill ?? {};
+  const setAnswers = (update: (current: Record<string, unknown>) => Record<string, unknown>) =>
+    setAnswersByKey((all) => ({ ...all, [transition.key]: update(all[transition.key] ?? transition.prefill ?? {}) }));
   const [internalNote, setInternalNote] = useState("");
   const [assignTo, setAssignTo] = useState(TO_POOL);
   const [recommendedCode, setRecommendedCode] = useState(NO_RECOMMENDED_CODE);
@@ -291,17 +310,69 @@ export function TransitionDialog({
     }
   }
 
+  // A WIR's pop-ups (RP-655): Send to Manager with the Recommended Code, the codes to pick from, Return to Engineer.
+  const sending = inspection !== null && transition.recommendCode !== undefined && !transition.checklists;
+  const coding = inspection !== null && choices !== undefined;
+  const returning = inspection !== null && transition.kind === "return";
+  const title = coding ? tInspection("decision.issue") : transition.label[locale];
+
   return (
     <dialog
       ref={dialog}
       onClose={onClose}
-      aria-label={transition.label[locale]}
-      className="m-auto w-full max-w-md rounded-md border border-border bg-surface p-6 text-text backdrop:bg-text/40"
+      aria-label={title}
+      className={cn(
+        "m-auto w-full max-w-md rounded-md border border-border bg-surface p-6 text-text backdrop:bg-text/40",
+        // On a phone a WIR's pop-up is a sheet from the bottom of the screen, as the design draws it.
+        inspection && "max-h-[90dvh] overflow-y-auto max-md:mb-0 max-md:max-w-none max-md:rounded-b-none md:max-w-xl",
+      )}
     >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <h2 className="text-h6 font-semibold">{transition.label[locale]}</h2>
+        {inspection ? (
+          // A WIR's sheet: its title over the WIR's number, and a close button (RP-655).
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-h6 font-semibold">{title}</h2>
+              {inspection.documentNumber && (
+                <p className="text-sm text-muted">
+                  <DocNo value={inspection.documentNumber} />
+                </p>
+              )}
+            </div>
+            <IconButton label={t("cancel")} onClick={() => dialog.current?.close()}>
+              <Icon name="x" size={20} />
+            </IconButton>
+          </div>
+        ) : (
+          <h2 className="text-h6 font-semibold">{title}</h2>
+        )}
         {description && <p className="text-caption text-muted">{description}</p>}
-        {transition.checklists && (
+        {sending && inspection && (
+          <SendToManager
+            transition={transition}
+            inspection={inspection}
+            value={recommendedCode}
+            onValue={setRecommendedCode}
+            idPrefix={idPrefix}
+            locale={locale}
+          />
+        )}
+        {coding && choices && inspection && (
+          <CodeChoice choices={choices} picked={transition} onPick={(key) => setPicked(key)} idPrefix={idPrefix} locale={locale} />
+        )}
+        {returning && inspection?.holder && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p className="flex items-start gap-2 rounded-md bg-code-c-bg p-3 text-code-c-fg">
+              <Icon name="alert-triangle" size={16} className="mt-0.5 shrink-0" />
+              {tInspection("return.kept")}
+            </p>
+            <p className="flex items-start gap-2 rounded-md bg-info-tint p-3 text-info-fg">
+              <Icon name="lock" size={16} className="mt-0.5 shrink-0" />
+              {tInspection("return.internal", { company: inspection.holder[locale], raiser: inspection.raiser[locale] })}
+            </p>
+          </div>
+        )}
+        {transition.checklists && !inspection && (
           <>
             {/* The Engineer's Recommended Code: the taker's own Company's only (V5). */}
             {recommended && (
@@ -357,7 +428,9 @@ export function TransitionDialog({
             {reply.message}
           </p>
         )}
-        {transition.recommendCode && (
+        {sending && inspection && <SendToManagerLines inspection={inspection} locale={locale} />}
+        {coding && inspection && <CodeRaises transition={transition} raiser={inspection.raiser} holder={inspection.holder} locale={locale} />}
+        {transition.recommendCode && !sending && (
           <Field label={t("recommendCode")} help={t("recommendCodeHelp")} id={`${idPrefix}-recommend-code`}>
             <Select
               value={recommendedCode}
@@ -386,15 +459,197 @@ export function TransitionDialog({
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={() => dialog.current?.close()}>
+        <div className={cn("flex justify-end gap-3", inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6")}>
+          <Button type="button" variant={inspection ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>
-          <Button type="submit" disabled={pending}>
-            {transition.label[locale]}
+          <Button type="submit" disabled={pending} className={cn(inspection && "min-h-11 max-md:flex-[2]")}>
+            {coding ? tInspection("issueCodeAs", { code: transition.label[locale] }) : transition.label[locale]}
           </Button>
         </div>
       </form>
     </dialog>
+  );
+}
+
+/**
+ * Send to Manager on a WIR (RP-655): the summary tiles, then the Recommended Code as cards with
+ * their Code badges, from the codes the Transition offers, internal to the Consultant (V5).
+ */
+function SendToManager({
+  transition,
+  inspection,
+  value,
+  onValue,
+  idPrefix,
+  locale,
+}: {
+  transition: TransitionChoice;
+  inspection: Inspection;
+  value: string;
+  onValue: (code: string) => void;
+  idPrefix: string;
+  locale: Locale;
+}) {
+  const t = useTranslations("workItems.inspection");
+  const labelId = `${idPrefix}-recommended-code`;
+  return (
+    <>
+      <InspectionTiles tally={liveTally(inspection)} locale={locale} />
+      <div className="flex flex-col gap-2">
+        <p id={labelId} className="flex items-center gap-2 text-sm font-semibold">
+          {t("send.recommendedCode")}
+          <Badge tone="neutral">
+            <Icon name="lock" size={14} />
+            {t("internal")}
+          </Badge>
+        </p>
+        <div role="radiogroup" aria-labelledby={labelId} className="flex flex-col gap-2">
+          {(transition.recommendCode ?? []).map((option) => (
+            <ChoiceCard key={option.code} name={labelId} value={option.code} checked={value === option.code} onPick={onValue}>
+              <CodeOf code={option.code} name={option.name} locale={locale} />
+            </ChoiceCard>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Under the Internal Note of Send to Manager: whose the sentCode stays, and the Snags the ticks will raise. */
+function SendToManagerLines({ inspection, locale }: { inspection: Inspection; locale: Locale }) {
+  const t = useTranslations("workItems.inspection");
+  const snags = inspection.checklists.map((c) => snagsToRaise(c.items, inspection.answers[c.fieldKey] ?? {}));
+  const ticked = snags.reduce((n, s) => n + s.ticked.length, 0);
+  const unticked = snags.reduce((n, s) => n + s.unticked, 0);
+  return (
+    <>
+      {inspection.holder && (
+        <p className="flex items-start gap-2 rounded-md bg-info-tint p-3 text-sm text-info-fg">
+          <Icon name="lock" size={16} className="mt-0.5 shrink-0" />
+          {t("send.internal", { company: inspection.holder[locale], raiser: inspection.raiser[locale] })}
+        </p>
+      )}
+      {ticked + unticked > 0 && (
+        <p className="flex items-start gap-2 rounded-md bg-surface-subtle p-3 text-sm">
+          <Icon name="flag" size={16} className="mt-0.5 shrink-0" />
+          {t("send.snags", { ticked: formatNumber(ticked, locale), unticked: formatNumber(unticked, locale), tickedCount: ticked, untickedCount: unticked })}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** A choice of a WIR pop-up: a card holding a radio, outlined in the brand colour when picked. */
+function ChoiceCard({ name, value, checked, onPick, children }: { name: string; value: string; checked: boolean; onPick: (value: string) => void; children: ReactNode }) {
+  return (
+    <label
+      className={cn(
+        "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-md border px-3 py-2",
+        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus",
+        checked ? "border-brand bg-brand-tint" : "border-border bg-surface hover:bg-hover",
+      )}
+    >
+      <input type="radio" name={name} value={value} checked={checked} onChange={() => onPick(value)} className="size-5 shrink-0 accent-brand" />
+      <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">{children}</span>
+    </label>
+  );
+}
+
+/** A Review Code as the design draws it: its badge, A to D, with its name. */
+function CodeOf({ code, name, locale }: { code: string; name: { en: string; ar: string }; locale: Locale }) {
+  const letter = reviewCodes.find((c) => c === code.toLowerCase());
+  return letter ? <CodeBadge code={letter} locale={locale} size="sm" /> : <span>{name[locale]}</span>;
+}
+
+/**
+ * The code pop-up's choice on a WIR (RP-655, ADR 0025): the tiles over the checklist, each code
+ * the API offers as a card, the one the checklist proposes marked and picked first, and a line
+ * when the pick isn't the proposal.
+ */
+function CodeChoice({
+  choices,
+  picked,
+  onPick,
+  idPrefix,
+  locale,
+}: {
+  choices: TransitionChoice[];
+  picked: TransitionChoice;
+  onPick: (key: string) => void;
+  idPrefix: string;
+  locale: Locale;
+}) {
+  const t = useTranslations("workItems.inspection");
+  const tActions = useTranslations("workItems.actions");
+  const labelId = `${idPrefix}-code`;
+  const checklists = picked.checklists ?? [];
+  const tally = tallyOf(checklists);
+  const proposal = choices.find((c) => c.proposed);
+  return (
+    <>
+      <InspectionTiles tally={tally} locale={locale} />
+      <div className="flex flex-col gap-2">
+        <p id={labelId} className="text-sm font-semibold">
+          {t("code.label")}
+        </p>
+        <div role="radiogroup" aria-labelledby={labelId} className="flex flex-col gap-2">
+          {choices.map((choice) => (
+            <ChoiceCard key={choice.key} name={labelId} value={choice.key} checked={choice.key === picked.key} onPick={onPick}>
+              <span className="font-semibold">{choice.label[locale]}</span>
+              {choice.proposed && <Badge tone="neutral">{tActions("proposed")}</Badge>}
+            </ChoiceCard>
+          ))}
+        </div>
+      </div>
+      {proposal && proposal.key !== picked.key && (
+        <p className="flex items-start gap-2 rounded-md bg-code-c-bg p-3 text-sm font-medium text-code-c-fg">
+          <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
+          {tally.failed > 0
+            ? t("code.failedProposal", { n: formatNumber(tally.failed, locale), count: tally.failed, proposed: proposal.label[locale], picked: picked.label[locale] })
+            : t("code.passedProposal", { proposed: proposal.label[locale], picked: picked.label[locale] })}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Under the code's Action Form on a WIR (RP-655): where its comment rows go (Code B's Comments),
+ * and the Snags every code raises from the failed items still ticked, assigned to the raiser.
+ */
+function CodeRaises({ transition, raiser, holder, locale }: { transition: TransitionChoice; raiser: BilingualText; holder: BilingualText | null; locale: Locale }) {
+  const t = useTranslations("workItems.inspection");
+  const rows = transition.actionForm ? formFields(transition.actionForm).some((f) => f.key === "items_to_create") : false;
+  const raised = (transition.checklists ?? []).map((c) => ({ fieldKey: c.fieldKey, ...snagsToRaise(c.items, c.answers) }));
+  const snags = raised.flatMap((c) => c.ticked.map((snag) => ({ ...snag, id: `${c.fieldKey}:${snag.key}` })));
+  const unticked = raised.reduce((n, c) => n + c.unticked, 0);
+  return (
+    <>
+      {rows && <p className="text-sm text-muted">{t("code.commentRows", { company: raiser[locale] })}</p>}
+      <section aria-labelledby="inspection-snags-raised" className="flex flex-col gap-2">
+        <h3 id="inspection-snags-raised" className="flex items-center gap-2 text-sm font-semibold">
+          <Icon name="flag" size={16} />
+          {t("code.snagsTitle")}
+          <span className="tabular-nums text-muted">{formatNumber(snags.length, locale)}</span>
+        </h3>
+        {snags.length === 0 ? (
+          <p className="text-sm text-muted">{t("code.noSnags")}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {snags.map((snag) => (
+              <li key={snag.id} className="flex flex-col gap-0.5 rounded-md border border-border p-3">
+                <p className="font-semibold">
+                  <bdi>{snag.text[locale]}</bdi>
+                </p>
+                <p className="text-sm text-muted">{t("code.snagTo", { n: formatNumber(snag.number, locale), company: raiser[locale] })}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {unticked > 0 && <p className="text-sm text-muted">{t("code.unticked", { n: formatNumber(unticked, locale), count: unticked })}</p>}
+        {holder && snags.length > 0 && <p className="text-sm text-muted">{t("code.raisedBy", { company: holder[locale], raiser: raiser[locale] })}</p>}
+      </section>
+    </>
   );
 }

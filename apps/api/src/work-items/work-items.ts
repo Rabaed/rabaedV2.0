@@ -804,6 +804,12 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       select previous_revision_no, previous_document_number, type_code, type_name, open_count, closed_count
       from app.work_item_previous_raised_item_counts(${workItemId}::uuid)
     `.execute(trx);
+    // The same follow-ups one each (RP-655), read with their counts so the list and "n closed / m open" agree.
+    const { rows: previousRows } = previous[0]
+      ? await sql<{ work_item_id: string; type_code: string; document_number: string | null; title: string; closed: boolean }>`
+          select work_item_id, type_code, document_number, title, closed from app.work_item_previous_raised_items(${workItemId}::uuid)
+        `.execute(trx)
+      : { rows: [] };
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
     `.execute(trx);
@@ -858,6 +864,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
             revisionNo: previous[0].previous_revision_no,
             documentNumber: previous[0].previous_document_number,
             items: previous.map(raisedCount),
+            raised: previousRows.map((r) => ({ id: r.work_item_id, typeCode: r.type_code, documentNumber: r.document_number, title: r.title, closed: r.closed })),
           }
         : null,
       ...(pkg[0] ? { package: { id: pkg[0].package_id, number: packageNumber(pkg[0].seq), name: pkg[0].name, companyName: pkg[0].company_name } } : {}),

@@ -85,6 +85,10 @@ export function useFormRendererLabels(): FormRendererLabels {
       raiseSnag: t("checklistField.raiseSnag"),
       snagRaised: t("checklistField.snagRaised"),
       noSnagRaised: t("checklistField.noSnagRaised"),
+      raiseSnagTicked: t("checklistField.raiseSnagTicked"),
+      raiseSnagUnticked: t("checklistField.raiseSnagUnticked"),
+      addComment: t("checklistField.addComment"),
+      addPhoto: t("checklistField.addPhoto"),
       photosField: photosLabels(t),
     },
     table: {
@@ -124,6 +128,13 @@ export function checklistTemplateLabels(t: Translate): FormRendererLabels["check
     commentOptional: t("checklistTemplateField.commentOptional"),
     photoOptional: t("checklistTemplateField.photoOptional"),
     raisesSnag: (answer) => t("checklistTemplateField.raisesSnag", { answer }),
+    forTrade: (trade) => t("checklistTemplateField.forTrade", { trade }),
+    otherTradesHidden: (n, count) => t("checklistTemplateField.otherTradesHidden", { n, count }),
+    version: (n) => t("checklistTemplateField.version", { n }),
+    locked: t("checklistTemplateField.locked"),
+    hideItems: t("checklistTemplateField.hideItems"),
+    showItems: t("checklistTemplateField.showItems"),
+    negativeAsks: (answer, what, every) => t("checklistTemplateField.negativeAsks", { answer, what, every: every ? "yes" : "no" }),
   };
 }
 
@@ -136,6 +147,7 @@ function photosLabels(t: Translate): FormRendererLabels["photos"] {
     notYet: t("photosField.notYet"),
     uploading: t("photosField.uploading"),
     takePhoto: t("photosField.takePhoto"),
+    upload: t("photosField.upload"),
     open: (name) => t("photosField.open", { name }),
     remove: (name) => t("photosField.remove", { name }),
     frozen: t("photosField.frozen"),

@@ -199,6 +199,13 @@ export type FormRendererProps = {
    * Transition already titles. Default `shown`.
    */
   sectionTitles?: "shown" | "hidden";
+  /**
+   * An opt-in look for one page (RP-655, the WIR request): `sections: "cards"` puts each section
+   * in a card; `checklistTemplate: "cards"` offers the Checklist Template pick as radio cards, with
+   * its preview on a phone only (the page shows it beside the Form on a wide screen). Left out,
+   * the Form renders as every other.
+   */
+  look?: { sections?: "plain" | "cards"; checklistTemplate?: "select" | "cards" };
   className?: string;
 };
 
@@ -620,8 +627,10 @@ export function FormRenderer({
   onChange,
   idPrefix = "form",
   sectionTitles = "shown",
+  look = {},
   className,
 }: FormRendererProps) {
+  const templateCards = look.checklistTemplate === "cards";
   const fieldId = (key: string) => `${idPrefix}-${key}`;
   const byKey = new Map(answerFields(schema).map((f) => [f.key, f]));
   const visibility = formVisibility(schema, answers);
@@ -720,19 +729,21 @@ export function FormRenderer({
   /** A `checklist_template` field: the active templates of the chosen Trade, the one already picked, and its items below. */
   function checklistTemplateControl(field: Extract<AnswerField, { type: "checklist_template" }>): { element: ReactNode; group?: boolean } {
     return {
-      // The Field labels the select; with nothing to offer, it labels the line saying why.
-      group: templateOptions(answers[field.key], textOf(answers.trade), checklistTemplates, locale, labels.checklistTemplate).length === 0,
+      // The Field labels the select; the cards, or with nothing to offer the line saying why, are a group it names.
+      group: templateCards || templateOptions(answers[field.key], textOf(answers.trade), checklistTemplates, locale, labels.checklistTemplate).length === 0,
       element: (
         <ChecklistTemplateField
           name={field.key}
           value={answers[field.key]}
           tradeId={textOf(answers.trade)}
+          tradeName={choices.trades.find((t) => t.id === textOf(answers.trade))?.label}
           choices={checklistTemplates}
           required={field.required === true}
           mode="edit"
           locale={locale}
           labels={labels.checklistTemplate}
           onChange={(v) => onChange?.({ [field.key]: v })}
+          look={templateCards ? "cards" : "select"}
         />
       ),
     };
@@ -952,7 +963,11 @@ export function FormRenderer({
         const headingId = `${idPrefix}-section-${section.key}`;
         const editing = mode === "edit" && (editableSections === undefined || editableSections.includes(section.key));
         return (
-          <section key={section.key} aria-labelledby={headingId} className="flex flex-col gap-4">
+          <section
+            key={section.key}
+            aria-labelledby={headingId}
+            className={cn("flex flex-col gap-4", look.sections === "cards" && "rounded-lg border border-border bg-surface p-4 md:p-5")}
+          >
             <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
               {section.title[locale]}
             </h3>
@@ -1010,8 +1025,8 @@ export function FormRenderer({
                     {element}
                   </Field>
                 );
-                // The picked Checklist Template's items read below the pick and its help (RP-651).
-                return field.type === "checklist_template" ? (
+                // The picked Checklist Template's items read below the pick and its help (RP-651); the cards show their own preview.
+                return field.type === "checklist_template" && !templateCards ? (
                   <Fragment key={field.key}>
                     {shownField}
                     <PickedTemplateItems value={answers[field.key]} choices={checklistTemplates} locale={locale} labels={labels.checklistTemplate} />
