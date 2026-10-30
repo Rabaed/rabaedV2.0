@@ -196,6 +196,8 @@ describe("Show Inspections in the Submittals tab: on", () => {
     expect(await exported(c1Engineer)).toEqual(ids(await submittals(c1Engineer)));
     expect(await exported(c1Engineer)).toContain(wirId);
     await hiddenFromC2(async (by) => (await exported(by)).map((id) => ({ id })), [marId, marPendingId, wirId], "the export");
+    // Nor any other row: C2 covers none of the Project's items.
+    expect((await exported(c2Engineer)).length).toBe(0);
   });
 
   it("shows another Contractor none of C1's WIRs: not in the list, the Stage counts, the Kanban, the filters or the card (V3, scenario RP-652-1)", async () => {

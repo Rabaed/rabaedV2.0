@@ -11,7 +11,7 @@ import { rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
 import { createDb, readPublishedVersionDefinition, withMember } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { parseWorkflowDefinition, type Home, type TypeOutcomes, type WorkItemBoard, type WorkItemHistory } from "@rabaed/domain";
-import { sql } from "kysely";
+import { sql, type RawBuilder } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checklistTemplate } from "./support/checklist-template.ts";
 import { createTestApi, readById, type Caller } from "./support/harness.ts";
@@ -289,9 +289,15 @@ describe("RP-673-1: who reads the Consultant Engineer's Recommended Code of a WI
   /** [the note] when `by`'s history of the item holds it (an event's `seq` counts only what its reader sees, so the note's own text is the key). */
   const noteInHistory = async (by: Caller) =>
     (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by)).filter((h) => JSON.stringify(h).includes(RECOMMENDATION_NOTE)).map(() => ({ id: RECOMMENDATION_NOTE }));
-  /** The id of the item's newest event the migrator reads under `where`. */
-  const eventId = async (where: string) =>
-    (await sql<{ id: string }>`select id from work_item_event where work_item_id = ${id}::uuid and ${sql.raw(where)} order by seq desc limit 1`.execute(migrator)).rows[0]!.id;
+  /** The ids of the item's events matching `where`, newest first, as the migrator reads them. */
+  const eventIds = async (where: RawBuilder<unknown>) =>
+    (await sql<{ id: string }>`select id from work_item_event where work_item_id = ${id}::uuid and ${where} order by seq desc`.execute(migrator)).rows.map((r) => r.id);
+  /** Each event matching `where` (at least one) is read by every one of `seenBy`, and by none of `hiddenFrom`. */
+  async function expectEventsHidden(read: (as: string) => Promise<readonly { id: string }[]>, where: RawBuilder<unknown>, seenBy: string[], hiddenFrom: string[], label: string) {
+    const targets = await eventIds(where);
+    expect(targets.length, label).toBeGreaterThan(0);
+    for (const target of targets) await expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, label });
+  }
   const names = new Map<string | Caller, string>();
   const named = (who: string | Caller) => names.get(who) ?? "someone";
 
@@ -328,9 +334,9 @@ describe("RP-673-1: who reads the Consultant Engineer's Recommended Code of a WI
 
   it("as the app role, the event rows of the Recommended Code and the Internal Note are K1's alone", async () => {
     const [seenBy, hiddenFrom] = [[ahmed.id, mohammed.id], [hafiz.id, ali.id]];
-    await expectHiddenFrom({ read: eventsAs, target: await eventId("type = 'recommend_code'"), seenBy, hiddenFrom, name: named, label: "the Recommended Code's row" });
-    const noteRow = await eventId(`payload::text like '%${RECOMMENDATION_NOTE}%'`);
-    await expectHiddenFrom({ read: noteRowsAs, target: noteRow, seenBy, hiddenFrom, name: named, label: "the Internal Note's row" });
+    await expectEventsHidden(eventsAs, sql`type = 'recommend_code'`, seenBy, hiddenFrom, "the Recommended Code's row");
+    // Every row that holds the note, whichever event carries it.
+    await expectEventsHidden(noteRowsAs, sql`position(${RECOMMENDATION_NOTE} in payload::text) > 0`, seenBy, hiddenFrom, "the Internal Note's row");
   });
 
   it("another Contractor, C2, who doesn't cover the trade, reads nothing of the WIR: no item, history or events", async () => {
@@ -339,7 +345,7 @@ describe("RP-673-1: who reads the Consultant Engineer's Recommended Code of a WI
     const historyRead = async (by: Caller) => (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by)).map(() => ({ id }));
     await expectHiddenFrom({ read: historyRead, target: id, seenBy, hiddenFrom: yousef.caller, name: named, label: "its history" });
     // The Code, shared: C1 and K1 read its row as the app role, C2 doesn't.
-    await expectHiddenFrom({ read: eventsAs, target: await eventId("type = 'issue_code'"), seenBy: [hafiz.id, mohammed.id], hiddenFrom: yousef.id, name: named, label: "its events" });
+    await expectEventsHidden(eventsAs, sql`type = 'issue_code'`, [hafiz.id, mohammed.id], [yousef.id], "its events");
   });
 });
 

@@ -13,7 +13,7 @@
 import { expectHiddenFrom } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, WorkItemDetail } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, readById, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { bilingual, buildTower, detail, ok, only, all, projectMember, take, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -87,6 +87,15 @@ describe("RP-651-2: the copy of its Checklist Template on a WIR", () => {
     expect(await latestVersion(template)).not.toBe(v1);
     const [copy] = await copiesRead(tower.c1Engineer);
     expect([copy!.versionId, copy!.versionNo, copy!.items.map((i) => i.key)]).toEqual([v1, 1, ["formwork", "rebar_cover", "cubes"]]);
+  });
+
+  it("before the Submit, follows a new pick only from the Member who may save the WIR's answers", async () => {
+    const v2 = await latestVersion(template);
+    // C1's PM reads the Draft but doesn't hold it.
+    const refused = await save(tower.c1Pm, v2);
+    expect({ status: refused.statusCode, error: refused.json().error }).toEqual({ status: 409, error: "not_editable" });
+    await expectHidden(save(tower.k1Manager, v2)); // not hidden-from: a refused write; the first test proves the Draft hidden from K1 with expectHiddenFrom
+    expect((await copiesRead(tower.c1Engineer)).map((c) => c.versionId)).toEqual([v1]);
   });
 
   it("once Submitted, K1 reads it too, still Version 1's items; C2 and another Project still read none", async () => {

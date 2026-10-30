@@ -262,9 +262,10 @@ describe("an informed Consultant and C1's After photos (scenario RP-1002-1)", ()
     const inProgress = await addAfterPhoto(at.c1Engineer, id, "in-progress.jpg");
 
     await expectPhotosHidden(id, [atOpen, inProgress], [at.c1Pm, at.c1Engineer], [at.k1Manager, owner]);
-    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? [])).toEqual([]); // not hidden-from: no Transition took them yet, so no event carries them for anyone
+    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? [])).toEqual([]); // not hidden-from: no Transition took them yet, so no event carries them for anyone; K1 reads them on the Resolve below
 
     await take(at.c1Pm, id, "resolve_in_progress", { answers: { resolution_note: "Clipped and covered" } });
+    expect((await history(at.k1Manager, id)).flatMap((e) => e.files ?? []).sort()).toEqual([atOpen, inProgress].sort());
     expect((await afterPhotos(at.k1Manager, id)).map((d) => [d.id, d.frozen])).toEqual([
       [atOpen, true],
       [inProgress, true],
