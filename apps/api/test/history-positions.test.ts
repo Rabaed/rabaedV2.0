@@ -4,7 +4,7 @@
 // and the final Code's signer by name with none. Seam 2: packages/db/test/history-positions-rls.test.ts.
 import type { WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, memberOnProject, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -86,9 +86,7 @@ describe("scenario RP-1091-2: K1 reads the same history", () => {
 
 describe("scenario RP-1091-3: a Member of a third Company on the Project", () => {
   it("reads nothing of C1's item's history: the plain 404", async () => {
-    const res = await c2Engineer.get(`/v1/work-items/${id}/history`);
-    expect(res.statusCode).toBe(404);
-    expect(res.body).not.toContain(PROJECT_MANAGER.en);
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
   });
 
   it("reads its own item's history, its own people with each of their Positions (the positive control)", async () => {

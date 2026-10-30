@@ -149,6 +149,47 @@ describe("scenario RP-1091-2: K1 reads the same history", () => {
   });
 });
 
+// app.history_actor_positions is a definer the app role may call itself: called directly, it gives
+// no more than the history does (CODING_STANDARDS › Visibility, "Side channels"). The `created`
+// event's id is a uuid_v7 carrying the Draft's start, read by nobody through the app role.
+describe("app.history_actor_positions called directly (RP-1091-1 to RP-1091-3)", () => {
+  /** The event ids `as` gets for item `item`. */
+  const idsOf = async (as: string, item: string) =>
+    (await tower.call<{ event_id: string }>(as, sql`select event_id from app.history_actor_positions(${item}::uuid)`)).map((r) => r.event_id).sort();
+  /** Item `item`'s event ids by Participant, as the migrator reads them. */
+  const eventsOf = async (item: string, participantId: string, created: boolean) =>
+    (
+      await migrator.query("select id from work_item_event where work_item_id = $1 and actor_participant_id = $2 and (type = 'created') = $3", [
+        item,
+        participantId,
+        created,
+      ])
+    ).rows
+      .map((r) => r.id as string)
+      .sort();
+
+  it("gives C1's engineer C1's events but never the `created` one (the positive control)", async () => {
+    const [createdId] = await eventsOf(id, tower.c1.participantId, true);
+    expect(createdId).toBeDefined();
+    const c1Events = await eventsOf(id, tower.c1.participantId, false);
+    expect(c1Events).toHaveLength(3);
+    const ids = await idsOf(tower.c1.members.engineer, id);
+    expect(ids).toEqual(c1Events);
+    expect(ids).not.toContain(createdId);
+  });
+
+  it("gives K1's manager no C1 event, the `created` one included", async () => {
+    const c1Events = [...(await eventsOf(id, tower.c1.participantId, true)), ...(await eventsOf(id, tower.c1.participantId, false))];
+    const ids = await idsOf(tower.k1.members.manager, id);
+    expect(ids).toEqual(await eventsOf(id, tower.k1.participantId, false));
+    expect(ids.filter((e) => c1Events.includes(e))).toEqual([]);
+  });
+
+  it("gives C2's engineer nothing of C1's item", async () => {
+    expect(await idsOf(tower.c2.members.engineer, id)).toEqual([]);
+  });
+});
+
 describe("scenario RP-1091-3: a Member of a third Company on the Project", () => {
   it("reads nothing of C1's item's history, nor of a made-up id", async () => {
     const { c2 } = tower;
