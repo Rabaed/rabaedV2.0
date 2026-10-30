@@ -64,6 +64,21 @@ const ownerOrMember = (projectId: string, memberRead: (as: string) => Promise<st
       : await memberRead(as),
   );
 
+/**
+ * The control beside an OWNER `seenBy`: each of `readers` reads their own Company's Participant on
+ * `projectId` through `read`, the very read that must not give them the hidden row, so the read works.
+ */
+async function readsOwnParticipant(projectId: string, read: (as: string) => Promise<string[]>, readers: readonly string[]): Promise<void> {
+  for (const as of readers) {
+    const { rows } = await migrator.query(
+      "select p.id from participant p join member m on m.company_id = p.company_id where m.id = $1 and p.project_id = $2 and p.status = 'active'",
+      [as, projectId],
+    );
+    expect(rows, `${as} has a Participant on the Project`).toHaveLength(1); // not hidden-from: the control's own setup
+    expect(await read(as), `${as} reads its own Participant`).toContain(rows[0].id);
+  }
+}
+
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
@@ -114,6 +129,7 @@ describe("project_member", () => {
     ] as const) {
       await expectHiddenFrom({ read, target, seenBy, hiddenFrom: null, name });
     }
+    expect(await app.transaction().execute(projectMembersSeen)).toEqual([]); // not hidden-from: no Project Member at all, whoever's; the read is proven by id just above
   });
 });
 
@@ -122,6 +138,7 @@ describe("project_admin", () => {
     const admins = (trx: Db) => sql<{ member_id: string }>`select member_id from project_admin`.execute(trx).then((r) => r.rows.map((x) => x.member_id));
     expect(await withMember(app, host.member, admins)).toEqual([host.ap]);
     await expectHiddenFrom({ read: async (as: string) => asRows(await withMember(app, as, admins)), target: host.ap, seenBy: host.member, hiddenFrom: consultant.member });
+    expect(await withMember(app, consultant.member, admins)).toEqual([]); // not hidden-from: no Project Admin at all, whoever's; the read is proven by id just above
   });
 });
 
@@ -212,6 +229,7 @@ describe("the Participant functions", () => {
     ] as const) {
       await expectHiddenFrom({ read: async (as: string) => asRows(await names(as)), target, seenBy, hiddenFrom: consultant.ap });
     }
+    expect(await names(consultant.ap)).toEqual([]); // not hidden-from: no Company at all, whoever's; the read is proven by id just above
   });
 
   it("name the Host Company to every Member of a Participant, and to nobody else", async () => {
@@ -305,11 +323,17 @@ describe("a Participant Invitation", () => {
 
   it("hides the invited Company from every other Participant (scenario 30)", async () => {
     const hiddenFrom = [consultant.member, consultant.ap, host.member];
+    // The Project Members read their own Participant through both reads (the consultant's Authorized
+    // Person, on no Project Member list, reads none at all, so it is no control).
+    await readsOwnParticipant(project, participantsSeen, [consultant.member, host.member]);
+    await readsOwnParticipant(project, listed, [consultant.member, host.member]);
     await expectHiddenFrom({ read: ownerOrMember(project, participantsSeen), target: invitedParticipant, seenBy: OWNER, hiddenFrom, label: "participant" });
     await expectHiddenFrom({ read: ownerOrMember(project, listed), target: invitedParticipant, seenBy: OWNER, hiddenFrom, label: "app.project_participants" });
   });
 
   it("shows the Project Admins the pending invitation by CR number only, never the Company", async () => {
+    await readsOwnParticipant(project, participantsSeen, [host.ap]);
+    await readsOwnParticipant(project, listed, [host.ap]);
     await expectHiddenFrom({ read: ownerOrMember(project, participantsSeen), target: invitedParticipant, seenBy: OWNER, hiddenFrom: host.ap, label: "participant" });
     await expectHiddenFrom({ read: ownerOrMember(project, listed), target: invitedParticipant, seenBy: OWNER, hiddenFrom: host.ap, label: "app.project_participants" });
     const rows = await pending(host.ap);
@@ -341,6 +365,8 @@ describe("a Participant Invitation", () => {
         hiddenFrom: [host.member, consultant.member],
       });
     }
+    expect(await pending(host.member)).toEqual([]); // not hidden-from: no pending invitation at all, whoever's; proven by id just above
+    expect(await pending(consultant.member)).toEqual([]); // not hidden-from: no pending invitation at all, whoever's; proven by id just above
   });
 
   it("shows the invited Authorized Person only the invitation (scenario 30)", async () => {
@@ -360,6 +386,9 @@ describe("a Participant Invitation", () => {
     for (const { id: target } of onProject) {
       await expectHiddenFrom({ read: ownerOrMember(project, participantsSeen), target, seenBy: OWNER, hiddenFrom: invitee.ap });
     }
+    // The same read works for a Participant's Member, and gives the invited Authorized Person no row at all.
+    await readsOwnParticipant(project, participantsSeen, [consultant.member]);
+    expect(await participantsSeen(invitee.ap)).toEqual([]); // not hidden-from: no row at all, whoever's; proven by id just above
     // Nor its participation: answered for a Participant's own Authorized Person, not the invited one's.
     type Ask = readonly [string, string];
     await expectHiddenFrom({
@@ -614,6 +643,8 @@ describe("an onboarding lead, converted when Rabaed onboards its Company", () =>
       withMember(app, as, (trx) =>
         sql<{ id: string }>`select id from participant where project_id = ${project}`.execute(trx).then((r) => r.rows.map((x) => x.id)),
       );
+    // The read works: the Project Admin, this Project's only Project Member, reads its own Participant through it.
+    await readsOwnParticipant(project, seen, [host.ap]);
     await expectHiddenFrom({
       read: ownerOrMember(project, seen),
       target: before[0]!.invitation_id as string,

@@ -152,6 +152,7 @@ describe("app.work_item_named_answers", () => {
       hiddenFrom: b.ap,
       name: (as) => (as === a.ap ? "A" : "B"),
     });
+    expect(await named(b.ap, a.itemId)).toEqual([]); // not hidden-from: no answer at all for B; the read is proven by A just above
   });
 });
 
@@ -264,6 +265,7 @@ describe("app.form_participant_choices", () => {
         name: (as) => (as === a.ap ? "A" : "B"),
         label: itemId === null ? "a new item" : "A's item",
       });
+      expect(await choices(b.ap, a.projectId, itemId)).toEqual([]); // not hidden-from: no choice at all for B; the read is proven by A just above
     }
     expect((await choices(b.ap, b.projectId, a.itemId)).map((r) => r.participant_id)).toEqual([b.participantId]);
   });

@@ -459,5 +459,6 @@ describe("app.numbering_pattern_versions (visibility.md RP-412-3)", () => {
       seenBy: [t.c1.ap, t.c1.member],
       hiddenFrom: other.c1.ap,
     });
+    expect(await versions(other.c1.ap, t.projectId)).toEqual([]); // not hidden-from: no version at all; the read is proven by id just above
   });
 });

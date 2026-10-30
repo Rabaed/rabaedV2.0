@@ -76,6 +76,8 @@ describe("the app role", () => {
     const who = (member: string | null) => (member === null ? "no Member set" : "an active Member");
     await expectHiddenFrom({ read: readAs("option_list"), target: listId, seenBy: memberId, hiddenFrom: null, name: who, label: "option_list" });
     await expectHiddenFrom({ read: readAs("option"), target: optionId, seenBy: memberId, hiddenFrom: null, name: who, label: "option" });
+    expect((await sql`select id from option_list`.execute(app)).rows).toEqual([]); // not hidden-from: no list at all, whoever's; the read is proven by id just above
+    expect((await sql`select id from option`.execute(app)).rows).toEqual([]); // not hidden-from: no option at all, whoever's; the read is proven by id just above
   });
 
   it("can't insert, update or delete a list or an option", async () => {

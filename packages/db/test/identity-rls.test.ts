@@ -72,12 +72,14 @@ describe("company", () => {
     // Each Company is read by its own Member first, by id; with no Member set, by nobody.
     await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyA, seenBy: ids.a1, hiddenFrom: null, name: who, label: "Company A" });
     await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyB, seenBy: ids.b1, hiddenFrom: null, name: who, label: "Company B" });
+    expect(await app.transaction().execute(companiesSeen)).toEqual([]); // not hidden-from: no Company at all, whoever's; the read is proven by id just above
   });
 
   it("shows nothing to a deactivated Member", async () => {
     // Not even their own Company, which its active Member reads; nor anyone else's.
     await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyA, seenBy: ids.a1, hiddenFrom: ids.aGone, name: who, label: "Company A" });
     await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyB, seenBy: ids.b1, hiddenFrom: ids.aGone, name: who, label: "Company B" });
+    expect(await withMember(app, ids.aGone, companiesSeen)).toEqual([]); // not hidden-from: no Company at all, whoever's; the read is proven by id just above
   });
 
   it("cannot be changed by the app role", async () => {
@@ -97,6 +99,7 @@ describe("member", () => {
     // Each Company's Member is read by its own Company first, by id; with no Member set, by nobody.
     await expectHiddenFrom({ read: readAs(membersSeen), target: ids.a1, seenBy: ids.a1, hiddenFrom: null, name: who, label: "A's Member" });
     await expectHiddenFrom({ read: readAs(membersSeen), target: ids.b1, seenBy: ids.b1, hiddenFrom: null, name: who, label: "B's Member" });
+    expect(await app.transaction().execute(membersSeen)).toEqual([]); // not hidden-from: no Member at all, whoever's; the read is proven by id just above
   });
 });
 

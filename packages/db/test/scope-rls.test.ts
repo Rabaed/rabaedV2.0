@@ -287,6 +287,7 @@ describe("Scopes and Sub-scopes", () => {
       for (const s of everyScope) {
         await expectHiddenFrom({ read: fromTable, target: s.id, seenBy: s.project_id === projectA ? host.member : other.ap, hiddenFrom: consultant.ap });
       }
+      expect(await scopesSeen(consultant.ap)).toEqual([]); // not hidden-from: no Scope at all, whoever's; the read is proven by id just above
       const electrical = (await migrator.query("select id from scope where trade_value_id = $1", [trade.electrical])).rows;
       expect(await covered(consultant.ap)).toEqual(sorted(...electrical.map((r: { id: string }) => r.id)));
       expect(await covered(consultant.ap)).toContain(indoor);
@@ -308,6 +309,7 @@ describe("Scopes and Sub-scopes", () => {
           hiddenFrom: [host.member, other.ap, other.member],
         });
       }
+      for (const as of [host.member, other.ap, other.member]) expect(await covered(as), as).toEqual([]); // not hidden-from: no Scope at all, whoever's; the read is proven by id just above
       expect(await covered(consultant.ap, randomUUID())).toEqual([]); // not hidden-from: a made-up Participant id, no row exists
     });
   });

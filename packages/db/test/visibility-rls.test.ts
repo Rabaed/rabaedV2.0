@@ -288,6 +288,8 @@ describe("the Visibility read functions", () => {
       as === host.ap ? "host AP" : as === host.member ? "host Member" : as === consultant.ap ? "consultant AP" : as === consultant.member ? "consultant Member" : as;
     await expectHiddenFrom({ read: grantsOf(consultantParticipant), target: consultantParticipant, seenBy: [consultant.member, host.ap], hiddenFrom: host.member, name });
     await expectHiddenFrom({ read: grantsOf(hostParticipant), target: hostParticipant, seenBy: [host.member, host.ap], hiddenFrom: consultant.member, name });
+    expect(await grants(host.member, consultantParticipant)).toEqual([]); // not hidden-from: no row at all, whoever's; proven by id just above
+    expect(await grants(consultant.member, hostParticipant)).toEqual([]); // not hidden-from: no row at all, whoever's; proven by id just above
   });
 
   it("give an Authorized Person not on the Project their Participant's covered values, and no other", async () => {

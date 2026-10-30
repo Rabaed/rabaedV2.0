@@ -1,7 +1,8 @@
 // Seam 2 for scenario RP-381-1 (visibility.md V15, side channels): a Member who isn't a Project
 // Admin reads only their own Company's Participant, and its order on the Project is theirs only
 // through a Project Admin. Orders are given out max+1, so even a Participant's own order would count
-// the other Participants. Seam 1 is apps/api/test/participants.test.ts.
+// the other Participants. Seam 1 is apps/api/test/participants.test.ts. The seam 2 Tower has four
+// Participants, not the scenario's three: the side channel is the same for any count.
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
