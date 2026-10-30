@@ -147,7 +147,8 @@ function sectionsOf(row: Row, locale: Locale): SubmittalPanelSectionItem[] {
   const supplier = submittalPanelSupplier(row.form, row.answers, suppliers, locale);
   const scopes = row.scopes.map((s) => s[locale]);
   const place = row.place.map((p) => p[locale]);
-  const all: Record<SubmittalPanelSectionKey, SubmittalPanelSectionItem> = {
+  // Attachments has stories of its own (`panel-attachments.stories.tsx`).
+  const all: Record<Exclude<SubmittalPanelSectionKey, "attachments">, SubmittalPanelSectionItem> = {
     subject: {
       key: "subject",
       icon: "file-text",
@@ -205,7 +206,7 @@ function sectionsOf(row: Row, locale: Locale): SubmittalPanelSectionItem[] {
       children: <SubmittalPanelLinks links={row.links} none={copy.noLinks[locale]} />,
     },
   };
-  return submittalPanelSectionKeys(row.form).map((key) => all[key]);
+  return submittalPanelSectionKeys(row.form).flatMap((key) => (key === "attachments" ? [] : [all[key]]));
 }
 
 function DetailsDemo({ context, start, startCollapsed = {} }: { context: StoryContext; start: string; startCollapsed?: Record<string, boolean> }) {
