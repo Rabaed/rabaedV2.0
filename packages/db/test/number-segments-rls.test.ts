@@ -3,106 +3,43 @@
 // RP-1065-1). `app.work_item_number_segments` names what each part of an item's number is,
 // from the Numbering Pattern Version it was numbered under, for whoever sees the item; it
 // carries only what the number already prints: no counter, no other Company's volume.
-import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { createDb, type Db } from "../src/index.ts";
+import { bilingual, buildSeamTwoTower, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
-const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
-const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
 
 let migrator: pg.Client;
 let app: Db;
-let engineer = "";
 
-type Company = { id: string; cr: string; ap: string; member: string };
 type Segments = { separator: string; segments: { kind: string; value: string; level?: number }[] } | null;
 
-async function one(text: string, values: unknown[]): Promise<string> {
-  return (await migrator.query(text, values)).rows[0].id as string;
-}
-
-async function member(companyId: string, who: string, creator = false): Promise<string> {
-  return one(
-    "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', $4) returning id",
-    [companyId, email(who), JSON.stringify({ en: who, ar: who }), creator],
-  );
-}
-
-async function company(name: string): Promise<Company> {
-  const cr = digits(10);
-  const id = await one(
-    "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
-    [JSON.stringify({ en: name, ar: name }), cr, `3${digits(13)}3`, engineer],
-  );
-  const ap = await member(id, "ap", true);
-  await migrator.query("update company set authorized_person_id = $1 where id = $2", [ap, id]);
-  return { id, cr, ap, member: await member(id, "engineer") };
-}
-
-const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
-  withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
-
-async function outcome(as: string, query: ReturnType<typeof sql<{ outcome: string }>>) {
-  return (await call(as, query))[0]!.outcome;
-}
-
-/** What `as` reads of the item's number segments. */
-async function segmentsOf(as: string, item: string): Promise<Segments> {
-  const [row] = await call<{ segments: Segments }>(as, sql`select app.work_item_number_segments(${item}::uuid) as segments`);
-  return row!.segments;
-}
-
 /**
- * A Project of C1's (its Authorized Person created it and is its Project Admin; its
- * Participant is 01) with C2 (02) and K1, a Consultant; everyone covers everything.
- * Trade EL, Location Z1 > B1.
+ * The seam 2 Tower (RP-980): C1, the Contractor whose Authorized Person created the Project (its
+ * Participant is 01), with K1, a Consultant, and C2, another Contractor, here covering every
+ * Location; Trade EL. Built here only, as the Tower has neither: Building B1 inside Building A, so a
+ * number has a second Location level, and a Scope of the Trade for the MARs.
  */
 async function tower(code: string) {
-  const c1 = await company("C1");
-  const c2 = await company("C2");
-  const k1 = await company("K1");
-  const [created] = await call<{ project_id: string }>(
+  const t = await buildSeamTwoTower(app, migrator, { projectCode: code, c2OtherLocation: false, checklistTemplate: false });
+  const { projectId, tradeId, c1, call } = t;
+  const [b1] = await call<{ value_id: string }>(
     c1.ap,
-    sql`select project_id from app.create_project('{"en": "Tower", "ar": "برج"}'::jsonb, ${code}, 'contractor')`,
+    sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'location', ${t.buildingA}::uuid, 'B1', ${JSON.stringify(bilingual("B1"))}::jsonb)`,
   );
-  const projectId = created!.project_id;
-  const p1 = await one("select id from participant where project_id = $1", [projectId]);
-  const p2 = await joinProject(app, projectId, { adminId: c1.ap, crNumber: c2.cr, role: "contractor" }, c2.ap);
-  const pk = await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap);
-  const value = async (kind: string, valueCode: string, parent: string | null) => {
-    const [row] = await call<{ value_id: string }>(
-      c1.ap,
-      sql`select value_id from app.add_dimension_value(${projectId}::uuid, ${kind}, ${parent}::uuid, ${valueCode}, '{"en": "V", "ar": "ق"}'::jsonb)`,
-    );
-    return row!.value_id;
-  };
-  const trade = await value("trade", "EL", null);
-  const zone = await value("location", "Z1", null);
-  const building = await value("location", "B1", zone);
+  const building = b1!.value_id;
   const [scope] = await call<{ scope_id: string }>(
     c1.ap,
-    sql`select scope_id from app.add_scope(${projectId}::uuid, ${trade}::uuid, null, '{"en": "S", "ar": "ن"}'::jsonb)`,
+    sql`select scope_id from app.add_scope(${projectId}::uuid, ${tradeId}::uuid, null, '{"en": "S", "ar": "ن"}'::jsonb)`,
   );
-  for (const [co, p, positions] of [
-    [c1, p1, ["engineer", "project_manager"]],
-    [c2, p2, ["engineer", "project_manager"]],
-    [k1, pk, ["engineer", "manager"]],
-  ] as const) {
-    expect(await outcome(co.ap, sql`select app.add_project_member(${p}::uuid, ${co.member}::uuid, now()) as outcome`)).toBe("added");
-    for (const kind of ["trade", "location"]) {
-      expect(await outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
-      expect(
-        await outcome(co.ap, sql`select app.set_member_visibility(${p}::uuid, ${co.member}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`),
-      ).toBe("set");
-    }
-    expect(
-      await outcome(co.ap, sql`select app.set_project_member_positions(${p}::uuid, ${co.member}::uuid, ${[...positions]}::text[]) as outcome`),
-    ).toBe("set");
+
+  /** What `as` reads of the item's number segments. */
+  async function segmentsOf(as: string, item: string): Promise<Segments> {
+    const [row] = await call<{ segments: Segments }>(as, sql`select app.work_item_number_segments(${item}::uuid) as segments`);
+    return row!.segments;
   }
 
   /** `as` raises a MAR in B1, a Draft; returns its id. */
@@ -111,28 +48,24 @@ async function tower(code: string) {
       as,
       sql`select outcome, work_item_id from app.create_work_item(
         ${projectId}::uuid, 'MAR', 'Cable trays', app.latest_form_version('MAR'), '{"description": "Galvanised"}'::jsonb,
-        ${trade}::uuid, ${building}::uuid, now(), ${[scope!.scope_id]}::uuid[])`,
+        ${tradeId}::uuid, ${building}::uuid, now(), ${[scope!.scope_id]}::uuid[])`,
     );
     expect(draft!.outcome).toBe("created");
     return draft!.work_item_id;
   }
 
-  /** `as` takes `transition` on the item, which they hold. */
-  async function takes(as: string, item: string, transition: string) {
-    expect(
-      await outcome(
-        as,
-        sql`select app.take_transition(${item}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
-      ),
-    ).toBe("applied");
-  }
-
   /** `as` raises a MAR in B1 and sends it for review; returns its id and Document Number. */
   async function numbered(as: string): Promise<{ id: string; number: string }> {
     const id = await drafted(as);
-    await takes(as, id, "send_for_review");
+    expect(await t.take(as, id, "send_for_review")).toBe("applied");
     const number = (await migrator.query("select document_number from work_item where id = $1", [id])).rows[0].document_number as string;
     return { id, number };
+  }
+
+  /** C1's Project Manager picks the item up in C1's internal review and Submits it to K1. */
+  async function submitted(item: string) {
+    expect(await t.pickUp(c1.members.project_manager, item)).toBe("picked_up");
+    expect(await t.take(c1.members.project_manager, item, "submit")).toBe("applied");
   }
 
   /** Adds a Numbering Pattern row as the migrator, set by C1's Authorized Person. */
@@ -144,13 +77,12 @@ async function tower(code: string) {
     );
   }
 
-  return { projectId, c1, c2, k1, p1, p2, trade, zone, building, drafted, takes, numbered, pattern };
+  return { ...t, segmentsOf, drafted, numbered, submitted, pattern };
 }
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
-  engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
   app = createDb(urls.app, { max: 2 });
 });
 
@@ -190,9 +122,9 @@ describe("app.document_number_parts, the shared cases", () => {
 describe("app.work_item_number_segments", () => {
   it("names each part of a number issued under the Rabaed Default, the sequence last", async () => {
     const t = await tower("NSD");
-    const { id, number } = await t.numbered(t.c1.member);
+    const { id, number } = await t.numbered(t.c1.members.engineer);
     expect(number).toBe("NSD-MAR-01-0001");
-    expect(await segmentsOf(t.c1.member, id)).toEqual({
+    expect(await t.segmentsOf(t.c1.members.engineer, id)).toEqual({
       separator: "-",
       segments: [
         { kind: "project", value: "NSD" },
@@ -205,14 +137,14 @@ describe("app.work_item_number_segments", () => {
 
   it("keeps the segments of the pattern an item was numbered under after the pattern changes", async () => {
     const t = await tower("NSC");
-    const before = await t.numbered(t.c1.member);
+    const before = await t.numbered(t.c1.members.engineer);
     expect(before.number).toBe("NSC-MAR-01-0001");
     await t.pattern([{ kind: "project" }, { kind: "trade" }, { kind: "location", level: 2 }, { kind: "text", text: "QA" }], [0, 1, 2], 5, "/");
-    const after = await t.numbered(t.c1.member);
+    const after = await t.numbered(t.c1.members.engineer);
     expect(after.number).toBe("NSC/EL/B1/QA/00001");
 
-    expect((await segmentsOf(t.c1.member, before.id))?.segments.map((s) => s.kind)).toEqual(["project", "type", "participant", "sequence"]);
-    expect(await segmentsOf(t.c1.member, after.id)).toEqual({
+    expect((await t.segmentsOf(t.c1.members.engineer, before.id))?.segments.map((s) => s.kind)).toEqual(["project", "type", "participant", "sequence"]);
+    expect(await t.segmentsOf(t.c1.members.engineer, after.id)).toEqual({
       separator: "/",
       segments: [
         { kind: "project", value: "NSC" },
@@ -226,49 +158,62 @@ describe("app.work_item_number_segments", () => {
 
   it("names the Participant Code a number was built with", async () => {
     const t = await tower("NSP");
-    expect(await outcome(t.c1.ap, sql`select app.set_participant_code(${t.p1}::uuid, 'TMC') as outcome`)).toBe("set");
-    const { id, number } = await t.numbered(t.c1.member);
+    expect(await t.outcome(t.c1.ap, sql`select app.set_participant_code(${t.c1.participantId}::uuid, 'TMC') as outcome`)).toBe("set");
+    const { id, number } = await t.numbered(t.c1.members.engineer);
     expect(number).toBe("NSP-MAR-TMC-0001");
-    expect((await segmentsOf(t.c1.member, id))?.segments[2]).toEqual({ kind: "participant", value: "TMC" });
+    expect((await t.segmentsOf(t.c1.members.engineer, id))?.segments[2]).toEqual({ kind: "participant", value: "TMC" });
   });
 
   it("gives nothing for a Draft, which has no number", async () => {
     const t = await tower("NSN");
-    const draft = await t.drafted(t.c1.member);
-    expect(await segmentsOf(t.c1.member, draft)).toBeNull();
+    const draft = await t.drafted(t.c1.members.engineer);
+    expect(await t.segmentsOf(t.c1.members.engineer, draft)).toBeNull();
   });
 
   it("gives nothing for a number the item's pattern doesn't rebuild, such as one brought in from elsewhere", async () => {
     const t = await tower("NSI");
-    const { id } = await t.numbered(t.c1.member);
+    const { id } = await t.numbered(t.c1.members.engineer);
     await migrator.query("update work_item set document_number = 'OLD-REG-17' where id = $1", [id]);
-    expect(await segmentsOf(t.c1.member, id)).toBeNull();
+    expect(await t.segmentsOf(t.c1.members.engineer, id)).toBeNull();
   });
 
   it("gives nothing once a code the number printed has changed: the rebuild must match exactly", async () => {
     const t = await tower("NSR");
-    const { id } = await t.numbered(t.c1.member);
+    const { id } = await t.numbered(t.c1.members.engineer);
     await migrator.query("update project set code = 'NSX' where id = $1", [t.projectId]);
-    expect(await segmentsOf(t.c1.member, id)).toBeNull();
+    expect(await t.segmentsOf(t.c1.members.engineer, id)).toBeNull();
   });
 });
 
 describe("visibility.md, Document Numbers", () => {
   it("RP-1065-1: whoever sees the item reads the same segments, only what its number prints; anyone else reads none", async () => {
     const t = await tower("NSV");
-    const { id, number } = await t.numbered(t.c1.member);
-    // Still in C1's internal review: K1 and C2 don't see it, so they read nothing of it.
-    for (const who of [t.k1.member, t.k1.ap, t.c2.member, t.c2.ap]) expect(await segmentsOf(who, id), who).toBeNull();
-    await t.takes(t.c1.member, id, "submit");
+    const { id, number } = await t.numbered(t.c1.members.engineer);
+    // C2 reads the segments of an item it does see, its own once numbered (the positive control):
+    // the refusals below are about C1's item, not a C2 Member who reaches nothing at all. C2's
+    // internal review needs a Project Manager, which the Tower's C2 lacks: its Engineer is one here.
+    expect(
+      await t.outcome(
+        t.c2.ap,
+        sql`select app.set_project_member_positions(${t.c2.participantId}::uuid, ${t.c2.members.engineer}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`,
+      ),
+    ).toBe("set");
+    const theirs = await t.numbered(t.c2.members.engineer);
+    const theirSegments = await t.segmentsOf(t.c2.members.engineer, theirs.id);
+    expect(theirSegments?.segments.map((s) => s.value).join(theirSegments.separator)).toBe(theirs.number);
 
-    const own = await segmentsOf(t.c1.member, id);
+    // Still in C1's internal review: K1 and C2 don't see it, so they read nothing of it.
+    for (const who of [t.k1.members.engineer, t.k1.ap, t.c2.members.engineer, t.c2.ap]) expect(await t.segmentsOf(who, id), who).toBeNull();
+    await t.submitted(id);
+
+    const own = await t.segmentsOf(t.c1.members.engineer, id);
     expect(own).not.toBeNull();
-    expect(await segmentsOf(t.k1.member, id)).toEqual(own);
+    expect(await t.segmentsOf(t.k1.members.engineer, id)).toEqual(own);
     // Each value is a part of the number, in order: nothing it doesn't print, no counter key or value.
     expect(own!.segments.map((s) => s.value).join(own!.separator)).toBe(number);
     expect(own!.segments.every((s) => Object.keys(s).every((key) => ["kind", "value", "level"].includes(key)))).toBe(true);
     expect(Object.keys(own!).sort()).toEqual(["segments", "separator"]);
     // C2, a Contractor that never had the item, still reads nothing.
-    expect(await segmentsOf(t.c2.member, id)).toBeNull();
+    expect(await t.segmentsOf(t.c2.members.engineer, id)).toBeNull();
   });
 });
