@@ -1,11 +1,11 @@
 // Seam 1 for the Owner's review (ADR 0022, RP-593; workflow-engine.md §5.3a; visibility.md V5,
-// V14 and scenarios RP-593-1, RP-593-2 and RP-598-1). On a 1→1→1 Workflow the Consultant PM's Code is a
+// V14 and scenarios RP-593-1, RP-593-2, RP-598-1 and RP-1138-1). On a 1→1→1 Workflow the Consultant PM's Code is a
 // Recommended Code to the Owner: the Contractor sees the item "With Owner review" and no Code in any
 // channel (the List, the Kanban, search, the item, its history, the Activity Feed, notifications,
 // the Dashboard) until the Owner confirms it, which issues it and runs its result. A Code the
 // Owner Sends Back never reaches the Contractor.
 import { createDb } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { addOwnerReviewType } from "./support/owner-review.ts";
@@ -42,6 +42,7 @@ let k1: Company;
 let ow: Company;
 let at: Tower;
 let owPm: Caller; // Holds the Owner's review.
+let owParticipant = "";
 
 /** The objects in `json` about item `id` (its row, card, entry or notification), at any depth. */
 function about(json: unknown, id: string): unknown[] {
@@ -100,7 +101,7 @@ beforeAll(async () => {
   const owCompany = await api.onboardCompany({ legalName: { en: "Waha Owner Holding", ar: "الواحة القابضة المالكة" } });
   ow = { company: owCompany, caller: await api.acceptInvitation(owCompany.invitationToken) };
   at = await buildTower(api, { c1, k1 }, "OWR");
-  const owParticipant = await api.addParticipant(c1.caller, at.projectId, ow.company, "owner");
+  owParticipant = await api.addParticipant(c1.caller, at.projectId, ow.company, "owner");
   await ok(c1.caller.request("PUT", `/v1/participants/${owParticipant}/visibility`, { trade: all, location: all }));
   owPm = await projectMember(api, ow, owParticipant, ["project_manager"]);
 });
@@ -211,5 +212,28 @@ describe("scenario RP-598-1: while the Owner reviews, C1 reads it \"With Owner r
     await ok(owPm.post(`/v1/work-items/${id}/pick-up`));
     await take(owPm, id, "confirm_a");
     expect((await detail(at.c1Pm, id)).heldBy).toBeNull();
+  });
+});
+
+describe("scenario RP-1138-1: the Owner Sends the item Back to K1 from its review", () => {
+  it("C1 reads K1 as the holder and nothing of OW, its Companies to choose from included; K1 and OW read OW", async () => {
+    const title = "Earthing layout";
+    const id = await atConsultant(title);
+    await take(at.k1Manager, id, "recommend_a");
+    const owName = (await detail(owPm, id)).heldBy!.companyName;
+    const names = new Map<Caller, string>([[at.c1Pm, "C1 PM"], [at.c1Engineer, "C1 engineer"], [at.k1Manager, "K1 manager"], [owPm, "OW PM"]]);
+    // The Companies a participant question on the item offers (app.form_participant_choices): those on it.
+    const choices = async (by: Caller) => (await ok(by.get(`/v1/work-items/${id}/form-choices`), 200)).json().participants as { id: string }[];
+    const viewers = { read: choices, target: owParticipant, seenBy: [at.k1Manager, owPm], hiddenFrom: [at.c1Pm, at.c1Engineer], name: (by: Caller) => names.get(by)! };
+    await expectHiddenFrom({ ...viewers, label: "the item's Companies, at the Owner's review" });
+
+    await ok(owPm.post(`/v1/work-items/${id}/pick-up`));
+    await take(owPm, id, "owner_send_back");
+    await drainOutbox(worker);
+    // Back with K1: C1 reads K1's name as the holder, as K1 does.
+    const k1Name = (await detail(at.k1Manager, id)).heldBy!.companyName;
+    expect(k1Name).not.toEqual(owName); // not hidden-from: K1 and OW are two Companies, so the holder read below is K1's
+    for (const by of [at.c1Pm, at.c1Engineer]) expect((await detail(by, id)).heldBy!.companyName, names.get(by)).toEqual(k1Name);
+    await expectHiddenFrom({ ...viewers, label: "the item's Companies, after the Send Back" });
   });
 });

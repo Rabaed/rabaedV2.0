@@ -11,10 +11,14 @@
 --   holder_participant_id, holder_member_id and holder_company_name, which the List, its search,
 --   the Kanban and the "With" filter read). The holder and the recommending Consultant read it as
 --   before.
--- * app.work_item_companies: leaves out the review Step's assignments for such a reader: they name
---   its holder (a pooled, picked-up or vacant row, and a row reassigned within the holder's Company).
---   The item's raiser and the actors of the events the reader sees stay, so a Company that acted
---   on the item where the reader sees it is still named.
+-- * app.work_item_companies: an assignment at an Owner's review Step (a `confirm_code` Step) names
+--   its holder only to that holder's own Participant and to a Participant whose transition brought
+--   the item to that Step (the recommending Consultant), the same two the label leaves out. This
+--   holds while the item waits there (a pooled, picked-up or vacant row, or one reassigned within
+--   the holder's Company) and after it has left: a Send Back is internal to the Owner and the
+--   Consultant, so the review's finished row was the Contractor's only way to OW's name. The
+--   item's raiser and the actors of the events the reader sees stay, so a Company that acted on
+--   the item where the reader sees it (the Owner's issued Code, its signer) is still named.
 
 create or replace function app.work_item_holder_unchecked(p_work_item_id uuid, p_participant_ids uuid[])
   returns table(participant_id uuid, assignee_member_id uuid)
@@ -40,9 +44,6 @@ create or replace function app.work_item_companies(p_work_item_id uuid) returns 
   set search_path = pg_catalog, public
   as $$
     #variable_conflict use_column
-    declare
-      -- The reader reads the item "With Owner review": the review Step's assignments name its holder.
-      v_owner_review boolean := app.with_owner_review_unchecked(p_work_item_id, array(select app.current_participant_ids())) is not null;
     begin
       return query
         select p.id, co.legal_name
@@ -53,8 +54,15 @@ create or replace function app.work_item_companies(p_work_item_id uuid) returns 
             select w.raised_by_participant_id from work_item w where w.id = p_work_item_id
             union
             select a.participant_id from step_assignment a
+            join workflow_step s on s.id = a.step_id
             where a.work_item_id = p_work_item_id
-              and not (v_owner_review and a.step_id = (select w.current_step_id from work_item w where w.id = p_work_item_id))
+              -- The Owner's review names its holder to the holder and to whoever brought the item to it only.
+              and (s.outcome_mode is distinct from 'confirm_code'
+                or a.participant_id in (select app.current_participant_ids())
+                or exists (
+                  select 1 from work_item_event e
+                  where e.work_item_id = p_work_item_id and e.type = 'transition' and e.to_step_id = a.step_id
+                    and e.actor_participant_id in (select app.current_participant_ids())))
             union
             select e.actor_participant_id from work_item_event e
             where e.work_item_id = p_work_item_id
