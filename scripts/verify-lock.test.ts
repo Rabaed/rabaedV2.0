@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { acquireLock, lockFile, machineLockFile, releaseLock, waitForLock } from "./verify-lock.ts";
+import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock } from "./verify-lock.ts";
 
 // A fresh worktree folder per test; the lock goes where verify.ts puts it.
 const worktree = () => mkdtempSync(join(tmpdir(), "verify-lock-"));
@@ -86,9 +86,25 @@ describe("releaseLock", () => {
   });
 });
 
-describe("machineLockFile", () => {
-  it("is one file in the clone's common git folder, the same for every worktree of it", () => {
-    expect(machineLockFile("G:/Rabaed Contech/.git")).toBe(join("G:/Rabaed Contech/.git", "rabaed-verify-machine.lock"));
+describe("mainSlot", () => {
+  const git = "G:/Rabaed Contech/.git";
+
+  it("is one file per Main in the clone's common git folder, shared by its lanes", () => {
+    expect(mainSlot(git, "31")).toEqual({ file: join(git, "rabaed-verify-main3.lock"), name: "Main 3's verify slot" });
+    expect(mainSlot(git, "34").file).toBe(mainSlot(git, "31").file);
+    // Main 3 itself (lane 30) and the legacy lane 3 share Main 3's slot too.
+    expect(mainSlot(git, "30").file).toBe(mainSlot(git, "31").file);
+    expect(mainSlot(git, "3").file).toBe(mainSlot(git, "31").file);
+  });
+
+  it("lets two Mains verify side by side", () => {
+    expect(mainSlot(git, "41").file).not.toBe(mainSlot(git, "31").file);
+    expect(mainSlot(git, "7")).toEqual({ file: join(git, "rabaed-verify-main7.lock"), name: "Main 7's verify slot" });
+  });
+
+  it("gives the main folder (lane 0, or no lane) a slot of its own", () => {
+    expect(mainSlot(git, "0")).toEqual({ file: join(git, "rabaed-verify-main-folder.lock"), name: "the main folder's verify slot" });
+    expect(mainSlot(git, "").file).toBe(mainSlot(git, "0").file);
   });
 });
 
@@ -109,7 +125,7 @@ describe("waitForLock", () => {
   it("takes a free lock at once and says nothing", async () => {
     const lines: string[] = [];
     const file = lockFile(worktree());
-    expect(await waitForLock(file, first, { isAlive: alive, ...clock(), report: (l) => lines.push(l) })).toEqual({ waitedMs: 0 });
+    expect(await waitForLock(file, first, { isAlive: alive, ...clock(), report: (l) => lines.push(l), slot: "Main 3's verify slot" })).toEqual({ waitedMs: 0 });
     expect(lines).toEqual([]);
   });
 
@@ -118,13 +134,13 @@ describe("waitForLock", () => {
     const file = lockFile(worktree());
     acquireLock(file, first, alive);
     const time = clock((sleeps) => sleeps === 40 && releaseLock(file, first.pid));
-    const result = await waitForLock(file, second, { isAlive: alive, ...time, report: (l) => lines.push(l), pollMs: 30_000, reportEveryMs: 600_000 });
+    const result = await waitForLock(file, second, { isAlive: alive, ...time, report: (l) => lines.push(l), slot: "Main 3's verify slot", pollMs: 30_000, reportEveryMs: 600_000 });
     expect(result).toEqual({ waitedMs: 40 * 30_000 });
     expect(lines[0]).toBe(
-      `Waiting for the machine's verify slot: verify already running (pid 4100, started 09:05, \`pnpm verify\`). One verify runs at a time (RP-1096); if that pid is not a verify run, delete ${file}.`,
+      `Waiting for Main 3's verify slot: verify already running (pid 4100, started 09:05, \`pnpm verify\`). One verify per Main runs at a time (RP-1096); if that pid is not a verify run, delete ${file}.`,
     );
     // Then a line every 10 minutes, not every poll.
-    expect(lines.slice(1)).toEqual(["Still waiting for the machine's verify slot (10 min)."]);
+    expect(lines.slice(1)).toEqual(["Still waiting for Main 3's verify slot (10 min)."]);
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ pid: second.pid });
   });
 
@@ -139,14 +155,14 @@ describe("waitForLock", () => {
       }
       if (sleeps === 2) releaseLock(file, third.pid);
     });
-    await waitForLock(file, second, { isAlive: alive, ...time, report: (l) => lines.push(l) });
+    await waitForLock(file, second, { isAlive: alive, ...time, report: (l) => lines.push(l), slot: "Main 3's verify slot" });
     expect(lines[1]).toContain("pid 4300, started 09:41");
   });
 
   it("takes over a lock whose verify is gone without waiting", async () => {
     const file = lockFile(worktree());
     acquireLock(file, first, alive);
-    const result = await waitForLock(file, second, { isAlive: (pid) => pid !== first.pid, ...clock(), report: () => {} });
+    const result = await waitForLock(file, second, { isAlive: (pid) => pid !== first.pid, ...clock(), report: () => {}, slot: "Main 3's verify slot" });
     expect(result).toEqual({ waitedMs: 0, tookOver: expect.stringContaining("stale lock (pid 4100") });
   });
 });

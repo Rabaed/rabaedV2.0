@@ -7,7 +7,7 @@ import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
-import { acquireLock, lockFile, machineLockFile, releaseLock, waitForLock } from "./verify-lock.ts";
+import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
 import { failureEnd, finalLine, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
@@ -24,7 +24,7 @@ import { isRunning } from "./worktrees-stale.ts";
 // A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
-// waits for the machine's one verify slot: a run in another worktree waits for this one (RP-1096).
+// waits for its Main's one verify slot: a run in another of the Main's lanes waits for this one (RP-1096).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 
@@ -146,25 +146,25 @@ const checkStack = async () => {
 };
 await checkStack();
 
-// One verify on the machine at a time (RP-1096): a run in another worktree waits for this one.
-// The slot is a lock in the clone's common git folder; released on every exit, as the worktree's lock is.
+// One verify per Main at a time (RP-1096; the owner chose per Main): a run in another of the Main's
+// lanes waits for this one. The slot is a lock in the clone's common git folder; released on every exit.
 const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root, encoding: "utf8" });
-if (common.status !== 0) stopEarly("git could not find this clone's common git folder, which holds the machine's verify slot.");
-const slot = machineLockFile(common.stdout.trim());
-process.on("exit", () => releaseLock(slot, process.pid));
+if (common.status !== 0) stopEarly("git could not find this clone's common git folder, which holds the Mains' verify slots.");
+const slot = mainSlot(common.stdout.trim(), postgres.lane);
+process.on("exit", () => releaseLock(slot.file, process.pid));
 // With --log the waiting lines go to the terminal too, so a run that waits is not silent there; the last line is still verify's.
 const reportWait = (line: string) => {
   out.info(line);
   if (options.log !== undefined) terminal.stderr(line);
 };
 const turn = await waitForLock(
-  slot,
+  slot.file,
   { pid: process.pid, started: new Date(), command: `pnpm verify in ${root}` },
-  { isAlive: isRunning, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait },
+  { isAlive: isRunning, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, slot: slot.name },
 );
 if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
 if (turn.waitedMs > 0) {
-  out.info(`Got the machine's verify slot after ${Math.round(turn.waitedMs / 60_000)} min.`);
+  out.info(`Got ${slot.name} after ${Math.round(turn.waitedMs / 60_000)} min.`);
   // The stack may have gone down while this run waited.
   await checkStack();
 }
