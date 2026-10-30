@@ -68,7 +68,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 For every channel ticked above:
 
 - [ ] Its row in `docs/visibility.md` says how this change keeps it closed (a new channel adds a row, and the checklist above gets it too).
-- [ ] A scenario covers it: new rows `RP-nnn-n` in the scenario matrix, or the existing rows updated. Scenarios:
+- [ ] A scenario covers it: new rows `RP-nnn-n` in the ticket's own `docs/visibility/scenarios/RP-nnn.md`, or the existing rows updated. Scenarios:
 - [ ] Each scenario has its automated test (seam 1 api, seam 2 database, or both). Tests:
 
 ## Checks

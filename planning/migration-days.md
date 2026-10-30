@@ -168,3 +168,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271112 | spec RP-1054 | 52 | merge-with-main reconciliation, lane 5B (placeholder) |
 | 20271105 | RP-1086 | 22 | record_clean_up |
 | 20271114 | RP-1108 | 31 | questions_any_role (20271113 is RP-1110's, RP-603 claim 15031) |
+| 20271113 | RP-1089 | 13 | may_raise_type |
