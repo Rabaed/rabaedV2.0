@@ -887,8 +887,9 @@ function SnagBoard({
       aria-label={labels.board}
       tabIndex={0}
       // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
+      // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("flex min-h-0 min-w-0 flex-1 gap-3 overflow-auto pb-2", focusRing)}
+      className={cn("flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2", focusRing, "focus-visible:-outline-offset-2")}
     >
       {board.stages
         .filter((s) => s.category !== "draft")

@@ -256,17 +256,19 @@ const list: WorkItemListData = {
   ],
   filters,
 };
-const board: WorkItemBoardData = {
-  stages: list.stages,
+/** A Kanban of these items: a column per Stage, TMC's cards in one lane. */
+const boardOf = (of: WorkItemRow[]): WorkItemBoardData => ({
+  stages: counts(of),
   filters,
   typeCounts: list.typeCounts,
-  columns: list.stages.map((s) => {
-    const cards = items.filter((i) => i.stage.key === s.key);
+  columns: counts(of).map((s) => {
+    const cards = of.filter((i) => i.stage.key === s.key);
     return { stageKey: s.key, shown: cards.length, steps: [], lanes: cards.length ? [{ kind: "company" as const, participantId: tmcId, companyName: tmc, count: cards.length, cards }] : [] };
   }),
   moves: {},
   layout: { contractorName: false, location: true, creationDate: true },
-};
+});
+const board = boardOf(items);
 
 const defaults: WorkItemQuery = { ...workItemQuery.parse({}), module: "snag_list", sort: "stage", page: 1, pageSize: 25 };
 
@@ -369,15 +371,7 @@ export const Kanban: Story = {
 
 // Twelve open snags: a column taller than the window.
 const manyOpen = Array.from({ length: 12 }, (_, i) => row(7 + i, { id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, title: `Cable tray not bonded, bay ${i + 1}`, documentNumber: `TWR-DCL-EL-SNG-1${String(i).padStart(2, "0")}` }));
-const crowdedItems = [...items, ...manyOpen];
-const crowded: WorkItemBoardData = {
-  ...board,
-  stages: counts(crowdedItems),
-  columns: counts(crowdedItems).map((s) => {
-    const cards = crowdedItems.filter((i) => i.stage.key === s.key);
-    return { stageKey: s.key, shown: cards.length, steps: [], lanes: cards.length ? [{ kind: "company" as const, participantId: tmcId, companyName: tmc, count: cards.length, cards }] : [] };
-  }),
-};
+const crowded = boardOf([...items, ...manyOpen]);
 
 /**
  * On its page (RP-1092), the Kanban fills the window from under its type chips to the bottom

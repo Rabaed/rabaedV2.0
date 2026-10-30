@@ -502,7 +502,7 @@ export const NoMoveHandler: Story = {
 };
 
 /** The toolbar the List shares, the Card view layout menu and the Kanban / List switch, as the Submittals tab shows it. */
-function Toolbar({ args, locale }: { args: Story["args"]; locale: "en" | "ar" }) {
+function Toolbar({ args, locale, boardClassName }: { args: Story["args"]; locale: "en" | "ar"; boardClassName?: string }) {
   const [layout, setLayout] = useState<BoardCardLayout>(defaultBoardCardLayout);
   const data = args?.board ?? board;
   return (
@@ -541,6 +541,7 @@ function Toolbar({ args, locale }: { args: Story["args"]; locale: "en" | "ar" })
           layout={layout}
           listHrefFor={listHrefFor}
           itemHref={(id) => `#${id}`}
+          className={boardClassName}
         />
       }
     />
@@ -606,7 +607,8 @@ export const FillsTheWindow: Story = {
   args: { board: crowded },
   render: (args, context) => (
     <StoryProjectPage context={context} current="submittals">
-      <Toolbar args={args} locale={storyLocale(context)} />
+      {/* The canvas reaches the page's edges, as the Submittals tab passes it (work-item-list-or-kanban.tsx). */}
+      <Toolbar args={args} locale={storyLocale(context)} boardClassName="-mx-4 px-4 sm:-mx-7 sm:px-7" />
     </StoryProjectPage>
   ),
   play: async (context) => {

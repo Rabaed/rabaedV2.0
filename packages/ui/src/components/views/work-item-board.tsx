@@ -176,8 +176,9 @@ export function WorkItemBoard({
       tabIndex={0}
       data-board=""
       // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
+      // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("relative min-h-0 flex-1 overflow-auto bg-canvas pt-[18px] pb-[40px]", focusRing, className)}
+      className={cn("relative min-h-64 flex-1 overflow-auto bg-canvas pt-[18px] pb-[40px]", focusRing, "focus-visible:-outline-offset-2", className)}
     >
       {dragging && (
         <p role="status" className="sr-only">
