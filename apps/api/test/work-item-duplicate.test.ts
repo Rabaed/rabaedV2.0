@@ -10,13 +10,13 @@
 // menu offers it only where allowed.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFileStore, fileStoreSettingsFromEnv, type FileStore } from "../src/documents/file-store.ts";
 import { duplicateWorkItem } from "../src/work-items/work-items.ts";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 
@@ -43,6 +43,13 @@ const answers = {
 const duplicate = (by: Caller, id: string, idempotencyKey: string = randomUUID()) => by.post(`/v1/work-items/${id}/duplicate`, { idempotencyKey });
 const history = async (by: Caller, id: string): Promise<WorkItemHistory> => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json();
 
+/** Who each caller is, in a failure. */
+const names = new Map<Caller, string>();
+const nameOf = (by: Caller) => names.get(by) ?? "a caller";
+/** Work Item `id` is read by id by `seenBy` and by none of `hiddenFrom`. */
+const itemHidden = (id: string, seenBy: Caller[], hiddenFrom: Caller[]) =>
+  expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy, hiddenFrom, name: nameOf, label: "the item by id" });
+
 beforeAll(async () => {
   const c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
@@ -52,6 +59,14 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
   c2Engineer = await projectMember(api, c2, c2Participant, ["engineer"]);
   stranger = (await api.authorizedPerson()).caller;
+  for (const [by, name] of [
+    [at.c1Engineer, "the C1 engineer"],
+    [at.c1Pm, "the C1 PM"],
+    [at.k1Manager, "the K1 manager"],
+    [c2Engineer, "the C2 engineer"],
+    [stranger, "a stranger"],
+  ] as const)
+    names.set(by, name);
 
   const res = await ok(
     at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: LEGACY_MAR, title: "Fixtures", answers: { ...answers, trade: at.electrical, location: at.buildingA } }),
@@ -107,14 +122,28 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
     expect(documents.documents.map((d) => [d.fileName, d.fieldKey])).toEqual([["datasheet.pdf", "datasheet"]]);
     const [copied] = documents.documents;
     const source: DocumentList = (await ok(at.c1Engineer.get(`/v1/work-items/${closed}/documents`), 200)).json();
-    expect(source.documents.map((d) => d.id)).not.toContain(copied!.id);
+    expect(source.documents.map((d) => d.id)).not.toContain(copied!.id); // not hidden-from: the copy is a new Document, not the source's
     expect(source.documents.map((d) => d.fileName)).toContain("k1-sample-report.pdf");
     // Its own file: readable to C1, not to K1, another Contractor or a stranger, while it is C1's Draft.
     expect((await ok(at.c1Engineer.get(`/v1/work-items/${copy}/documents/${copied!.id}/download`), 200)).json()).toHaveProperty("url");
-    for (const who of [at.k1Manager, c2Engineer, stranger]) {
-      await expectHidden(who.get(`/v1/work-items/${copy}/documents`));
-      await expectHidden(who.get(`/v1/work-items/${copy}/documents/${copied!.id}/download`));
-    }
+    const seenBy = [at.c1Engineer, at.c1Pm];
+    const hiddenFrom = [at.k1Manager, c2Engineer, stranger];
+    await expectHiddenFrom({
+      read: async (by: Caller) => (await readById<DocumentList>(`/v1/work-items/${copy}/documents`)(by)).flatMap((l) => l.documents),
+      target: copied!.id,
+      seenBy,
+      hiddenFrom,
+      name: nameOf,
+      label: "the copy's Documents",
+    });
+    await expectHiddenFrom({
+      read: async (by: Caller) => (await readById<{ url: string }>(`/v1/work-items/${copy}/documents/${copied!.id}/download`)(by)).map(() => ({ id: copied!.id })),
+      target: copied!.id,
+      seenBy,
+      hiddenFrom,
+      name: nameOf,
+      label: "the copied file's download",
+    });
   });
 
   it("keeps the original's files when the copy is deleted", async () => {
@@ -138,7 +167,7 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
     for (const who of [at.c1Engineer, at.c1Pm]) {
       expect((await detail(who, copy)).duplicatedFrom).toEqual({ workItemId: closed, documentNumber: source, subject: "Fixtures" });
     }
-    expect((await history(at.c1Engineer, copy)).events.map((e) => e.type)).not.toContain("duplicated");
+    expect((await history(at.c1Engineer, copy)).events.map((e) => e.type)).not.toContain("duplicated"); // not hidden-from: a Duplicate writes no event, for its own Company either
   });
 
   it("answers the same request made twice at once with one Draft", async () => {
@@ -171,7 +200,7 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
         (await ok(who.get(`/v1/projects/${at.projectId}/activity`), 200)).json(),
         (await ok(who.get(`/v1/projects/${at.projectId}/work-items`), 200)).json(),
       ];
-      expect(JSON.stringify(reads)).not.toContain("2020-01-02");
+      expect(JSON.stringify(reads)).not.toContain("2020-01-02"); // not hidden-from: no read gives the Draft's start time, its own Company's either (scenario 61)
     }
     expect((await detail(at.c1Pm, started)).duplicatedFrom).toMatchObject({ workItemId: closed });
   });
@@ -200,14 +229,15 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
   });
 
   it("is C1's Draft: K1, another Contractor and a stranger can't see it", async () => {
-    for (const who of [at.k1Manager, c2Engineer, stranger]) await expectHidden(who.get(`/v1/work-items/${copy}`));
+    await itemHidden(copy, [at.c1Engineer, at.c1Pm], [at.k1Manager, c2Engineer, stranger]);
   });
 
   it("is refused to K1, who sees the item but didn't raise it, and to anyone who can't see it", async () => {
     const refused = await duplicate(at.k1Manager, closed);
     expect(refused.statusCode).toBe(409);
     expect(refused.json()).toEqual({ error: "duplicate_not_allowed" });
-    for (const who of [c2Engineer, stranger]) await expectHidden(duplicate(who, closed));
+    await itemHidden(closed, [at.c1Engineer, at.k1Manager], [c2Engineer, stranger]);
+    for (const who of [c2Engineer, stranger]) await expectHidden(duplicate(who, closed)); // not hidden-from: a refused write; the read above proves the item with expectHiddenFrom
   });
 });
 
@@ -249,7 +279,7 @@ describe("a Duplicate's file copies", () => {
     };
     const requestKey = randomUUID();
     await expect(duplicateWorkItem(appDb, failing, await c1EngineerId(), closed, requestKey, new Date())).rejects.toThrow("the store failed");
-    expect(copied).toHaveLength(1);
+    expect(copied).toHaveLength(1); // not hidden-from: the files the failing store wrote, in the test's own list
     expect(await files.stat(copied[0]!)).toBeNull();
     expect(await madeFor(requestKey)).toBe(0);
   });
