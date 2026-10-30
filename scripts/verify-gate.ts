@@ -3,11 +3,11 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { onlyMainMergedSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
+import { onlyCleanCommitsSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEvent } from "./reviewed-required.ts";
 
 // The verify gate (RP-1094): a PR merges only when its body shows `pnpm verify` passed on its head,
-// or on a commit only clean merges of main followed (`onlyMainMergedSince`, RP-1017), or the screenshot
+// or on a commit only clean merges of main followed (`onlyCleanCommitsSince`, RP-1017), or the screenshot
 // bot's baseline-only commits (`isBaselineBotCommit`, RP-1103: they voided #458, #459, #476). One rule for
 // `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request and merge_group,
 // so a merge started from GitHub's button cannot skip it (14 PRs merged without a valid line, retro
@@ -56,7 +56,7 @@ export type VerifyGate = { ok: true; commit: string } | { ok: false; reason: str
 export function verifyGate(body: string, head: string, git: ReviewedGit): VerifyGate {
   const lines = readLines(body);
   const verified = stampedCommits(lines);
-  const commit = verified.find((candidate) => onlyMainMergedSince(candidate, head, git));
+  const commit = verified.find((candidate) => onlyCleanCommitsSince(candidate, head, git));
   if (commit !== undefined) return { ok: true, commit };
   if (lines.length === 0) return { ok: false, reason: `its body has no \`pnpm verify passed on <sha>:\` line, so nothing shows \`pnpm verify\` passed on its head ${head}` };
   const unstamped = lines.filter(({ stamped }) => !stamped).map(({ commit: sha }) => sha);

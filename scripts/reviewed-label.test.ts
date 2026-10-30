@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, isBaselineBotCommit, keepsLabel, dropLabelOnPush, onlyMainMergedSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
+import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, isBaselineBotCommit, keepsLabel, dropLabelOnPush, onlyCleanCommitsSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
 
 const human = { author: "dev@example.com", committer: "dev@example.com" };
 const bot = { author: BASELINE_BOT_EMAIL, committer: BASELINE_BOT_EMAIL };
@@ -106,35 +106,35 @@ describe("keepsLabel", () => {
 });
 
 // RP-1017: `pnpm queue` takes a verify run on an older head when only clean merges of main followed it.
-describe("onlyMainMergedSince", () => {
+describe("onlyCleanCommitsSince", () => {
   // V (verified) <- N1 (merges main M1) <- N2 (merges main M2); E is an ordinary commit on top of N1.
   const graph: Record<string, string[]> = { N2: ["N1", "M2"], N1: ["V", "M1"], E: ["N1"], V: ["P"] };
   const chain = (overrides: Partial<ReviewedGit> = {}) => git({ parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("M"), ...overrides });
 
   it("accepts the verified commit itself", () => {
-    expect(onlyMainMergedSince("V", "V", chain())).toBe(true);
+    expect(onlyCleanCommitsSince("V", "V", chain())).toBe(true);
   });
 
   it("accepts a head reached from it by clean merges of main only, each one as keepsLabel decides", () => {
-    expect(onlyMainMergedSince("V", "N1", chain())).toBe(true);
-    expect(onlyMainMergedSince("V", "N2", chain())).toBe(true);
+    expect(onlyCleanCommitsSince("V", "N1", chain())).toBe(true);
+    expect(onlyCleanCommitsSince("V", "N2", chain())).toBe(true);
   });
 
   it("accepts an abbreviated verified sha (pnpm verify prints git's short form)", () => {
-    expect(onlyMainMergedSince("abc1234", "abc1234def5678", chain())).toBe(true);
+    expect(onlyCleanCommitsSince("abc1234", "abc1234def5678", chain())).toBe(true);
   });
 
   it("refuses when any later commit is not a clean merge of main", () => {
-    expect(onlyMainMergedSince("V", "E", chain())).toBe(false);
-    expect(onlyMainMergedSince("V", "N2", chain({ tree: (commit) => (commit === "N1" ? "edited" : "tree1") }))).toBe(false);
-    expect(onlyMainMergedSince("V", "N2", chain({ onMain: (commit) => commit === "M2" }))).toBe(false);
+    expect(onlyCleanCommitsSince("V", "E", chain())).toBe(false);
+    expect(onlyCleanCommitsSince("V", "N2", chain({ tree: (commit) => (commit === "N1" ? "edited" : "tree1") }))).toBe(false);
+    expect(onlyCleanCommitsSince("V", "N2", chain({ onMain: (commit) => commit === "M2" }))).toBe(false);
   });
 
   it("refuses a commit the head does not descend from, and a newer head than the one verified", () => {
-    expect(onlyMainMergedSince("X", "N2", chain())).toBe(false);
+    expect(onlyCleanCommitsSince("X", "N2", chain())).toBe(false);
     // M1 is an ancestor too, but on main's side: a run there never saw the branch's own commits.
-    expect(onlyMainMergedSince("M1", "N2", chain())).toBe(false);
-    expect(onlyMainMergedSince("N2", "V", chain())).toBe(false);
+    expect(onlyCleanCommitsSince("M1", "N2", chain())).toBe(false);
+    expect(onlyCleanCommitsSince("N2", "V", chain())).toBe(false);
   });
 
   // RP-1103: V <- B (bot baselines) <- N3 (merges main M3); V <- H (a person's baselines).
@@ -143,14 +143,14 @@ describe("onlyMainMergedSince", () => {
     chain({ parents: (commit) => withBot[commit] ?? [], identity: (commit) => (commit.startsWith("B") ? bot : human), changedPaths: (commit) => (commit === "H" || commit.startsWith("B") ? [baseline] : ["apps/web/src/page.tsx"]), ...overrides });
 
   it("steps over the screenshot bot's baseline-only commit, alone or followed by a clean merge of main", () => {
-    expect(onlyMainMergedSince("V", "B", botChain())).toBe(true);
-    expect(onlyMainMergedSince("V", "N3", botChain())).toBe(true);
+    expect(onlyCleanCommitsSince("V", "B", botChain())).toBe(true);
+    expect(onlyCleanCommitsSince("V", "N3", botChain())).toBe(true);
   });
 
   it("refuses a baseline commit a person made, a mixed bot commit, and a bot commit on top of an ordinary one", () => {
-    expect(onlyMainMergedSince("V", "H", botChain())).toBe(false);
-    expect(onlyMainMergedSince("V", "N3", botChain({ changedPaths: () => [baseline, "scripts/verify.ts"] }))).toBe(false);
-    expect(onlyMainMergedSince("V", "B2", botChain())).toBe(false);
+    expect(onlyCleanCommitsSince("V", "H", botChain())).toBe(false);
+    expect(onlyCleanCommitsSince("V", "N3", botChain({ changedPaths: () => [baseline, "scripts/verify.ts"] }))).toBe(false);
+    expect(onlyCleanCommitsSince("V", "B2", botChain())).toBe(false);
   });
 
   it("refuses when git cannot answer", () => {
@@ -159,7 +159,7 @@ describe("onlyMainMergedSince", () => {
         throw new Error("bad object");
       },
     });
-    expect(onlyMainMergedSince("V", "N1", broken)).toBe(false);
+    expect(onlyCleanCommitsSince("V", "N1", broken)).toBe(false);
   });
 });
 

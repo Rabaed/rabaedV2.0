@@ -149,19 +149,24 @@ for (const { name, script } of steps) {
     postgresAnswers,
   );
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  // A pull or Auto-fix's merge of main mid-run (RP-1103): stop now, with no line to paste.
+  const moved = headMoved(startedOn, readHead());
   if (outcome.passed) {
     out.info(`ok   ${outcome.label} (${seconds}s)`);
     passed.push(outcome.label);
-    // A pull or Auto-fix's merge of main mid-run (RP-1103): stop now, with no line to paste.
-    const moved = headMoved(startedOn, readHead(), name, runCommand(from));
     if (moved !== undefined) {
-      out.end([moved], true);
+      out.end([`${runCommand(from)} stopped after ${name}: ${moved}`], true);
       process.exit(1);
     }
     continue;
   }
   out.error(`FAIL ${name} (${seconds}s, exit ${exit}${outcome.reran ? ", after one re-run" : ""}). The last ${tailLines} lines it printed:`);
   out.error(tail(outcome.output, tailLines));
+  // The failure may come from the move rather than the diff: say so instead of the usual stop line.
+  if (moved !== undefined) {
+    out.end([`${runCommand(from)} stopped at ${name}: ${moved}`], true);
+    process.exit(outcome.status);
+  }
   // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
   // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).
   const answers = isSeamStep(name) ? await postgresAnswers() : true;

@@ -19,8 +19,10 @@ import { resolve } from "node:path";
 //      (a conflict resolution, an "evil merge", or extra changes fail this).
 // Anything else, including any error while checking, removes the label: a missing
 // label costs one `gh pr edit`, a stale one lets unreviewed code into main.
-// `pnpm queue` follows the same rule back from the head to the commit `pnpm verify`
-// passed on (`onlyMainMergedSince`, RP-1017), so there is one definition of it.
+// `pnpm queue` and the verify gate follow this rule back from the head to the commit
+// `pnpm verify` passed on (`onlyCleanCommitsSince`, RP-1017), so there is one definition
+// of it; that walk also steps over the screenshot bot's baseline-only commits
+// (`isBaselineBotCommit`, RP-1103), which the label rule does not.
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH. Runs the default
 // branch's copy of this file in a checkout that has main's history and the PR head;
@@ -90,7 +92,7 @@ const MAX_CLEAN_COMMITS = 50;
  * the screenshot bot's baseline-only commits (`isBaselineBotCommit`, RP-1103). `base` may be abbreviated. The
  * `reviewed` label itself still follows `keepsLabel` alone.
  */
-export function onlyMainMergedSince(base: string, head: string, git: ReviewedGit): boolean {
+export function onlyCleanCommitsSince(base: string, head: string, git: ReviewedGit): boolean {
   let current = head;
   for (let steps = 0; steps <= MAX_CLEAN_COMMITS; steps++) {
     if (current.startsWith(base)) return true;
