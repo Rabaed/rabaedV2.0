@@ -6,7 +6,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -49,6 +49,36 @@ const addProjectMember = (as: string, participant: string, member: string) =>
       .then((r) => r.rows[0]!.outcome),
   );
 
+/** Ids as rows, for expectHiddenFrom. */
+const asRows = (ids: readonly string[]) => ids.map((id) => ({ id }));
+
+/**
+ * The table owner, who reads every row. An Invited Participant is read by no Member until it is accepted, so
+ * the owner is the `seenBy` that proves its row was made; each Member reads through `memberRead`.
+ */
+const OWNER = "the table owner";
+const ownerOrMember = (projectId: string, memberRead: (as: string) => Promise<string[]>) => async (as: string) =>
+  asRows(
+    as === OWNER
+      ? (await migrator.query("select id from participant where project_id = $1", [projectId])).rows.map((r) => r.id as string)
+      : await memberRead(as),
+  );
+
+/**
+ * The control beside an OWNER `seenBy`: each of `readers` reads their own Company's Participant on
+ * `projectId` through `read`, the very read that must not give them the hidden row, so the read works.
+ */
+async function readsOwnParticipant(projectId: string, read: (as: string) => Promise<string[]>, readers: readonly string[]): Promise<void> {
+  for (const as of readers) {
+    const { rows } = await migrator.query(
+      "select p.id from participant p join member m on m.company_id = p.company_id where m.id = $1 and p.project_id = $2 and p.status = 'active'",
+      [as, projectId],
+    );
+    expect(rows, `${as} has a Participant on the Project`).toHaveLength(1); // not hidden-from: the control's own setup
+    expect(await read(as), `${as} reads its own Participant`).toContain(rows[0].id);
+  }
+}
+
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
@@ -89,7 +119,17 @@ describe("project_member", () => {
   });
 
   it("shows nothing with no Member set", async () => {
-    expect(await app.transaction().execute(projectMembersSeen)).toEqual([]);
+    const read = async (as: string | null) =>
+      asRows(await (as === null ? app.transaction().execute(projectMembersSeen) : withMember(app, as, projectMembersSeen)));
+    const name = (as: string | null) => (as === null ? "no Member" : as === host.member ? "the host's Member" : "the consultant's Member");
+    for (const [target, seenBy] of [
+      [host.ap, host.member],
+      [host.member, host.member],
+      [consultant.member, consultant.member],
+    ] as const) {
+      await expectHiddenFrom({ read, target, seenBy, hiddenFrom: null, name });
+    }
+    expect(await app.transaction().execute(projectMembersSeen)).toEqual([]); // not hidden-from: no Project Member at all, whoever's; the read is proven by id just above
   });
 });
 
@@ -97,7 +137,8 @@ describe("project_admin", () => {
   it("shows only your own Company's Project Admins", async () => {
     const admins = (trx: Db) => sql<{ member_id: string }>`select member_id from project_admin`.execute(trx).then((r) => r.rows.map((x) => x.member_id));
     expect(await withMember(app, host.member, admins)).toEqual([host.ap]);
-    expect(await withMember(app, consultant.member, admins)).toEqual([]);
+    await expectHiddenFrom({ read: async (as: string) => asRows(await withMember(app, as, admins)), target: host.ap, seenBy: host.member, hiddenFrom: consultant.member });
+    expect(await withMember(app, consultant.member, admins)).toEqual([]); // not hidden-from: no Project Admin at all, whoever's; the read is proven by id just above
   });
 });
 
@@ -158,7 +199,9 @@ describe("the Participant functions", () => {
     expect(await companyProjects(consultant.ap)).toEqual([consultantParticipant, annexParticipant].sort());
     // Only their own Company's, even for the Host Company's Project Admin.
     expect(await companyProjects(host.member)).toEqual([hostParticipant]);
-    expect(await companyProjects(host.ap)).not.toContain(consultantParticipant);
+    for (const target of [consultantParticipant, annexParticipant]) {
+      await expectHiddenFrom({ read: async (as: string) => asRows(await companyProjects(as)), target, seenBy: consultant.ap, hiddenFrom: host.ap });
+    }
   });
 
   it("let only a Project Admin add Participants", async () => {
@@ -179,7 +222,14 @@ describe("the Participant functions", () => {
     expect(await names(host.ap)).toEqual([host.id, consultant.id]);
     expect(await names(host.member)).toEqual([host.id]);
     expect(await names(consultant.member)).toEqual([consultant.id]);
-    expect(await names(consultant.ap)).toEqual([]);
+    // Its Authorized Person, not on the Project, lists neither: each Company is listed by someone who may.
+    for (const [target, seenBy] of [
+      [host.id, [host.ap, host.member]],
+      [consultant.id, [host.ap, consultant.member]],
+    ] as const) {
+      await expectHiddenFrom({ read: async (as: string) => asRows(await names(as)), target, seenBy, hiddenFrom: consultant.ap });
+    }
+    expect(await names(consultant.ap)).toEqual([]); // not hidden-from: no Company at all, whoever's; the read is proven by id just above
   });
 
   it("name the Host Company to every Member of a Participant, and to nobody else", async () => {
@@ -272,15 +322,20 @@ describe("a Participant Invitation", () => {
   });
 
   it("hides the invited Company from every other Participant (scenario 30)", async () => {
-    for (const as of [consultant.member, consultant.ap, host.member]) {
-      expect(await participantsSeen(as)).not.toContain(invitedParticipant);
-      expect(await listed(as)).not.toContain(invitedParticipant);
-    }
+    const hiddenFrom = [consultant.member, consultant.ap, host.member];
+    // The Project Members read their own Participant through both reads (the consultant's Authorized
+    // Person, on no Project Member list, reads none at all, so it is no control).
+    await readsOwnParticipant(project, participantsSeen, [consultant.member, host.member]);
+    await readsOwnParticipant(project, listed, [consultant.member, host.member]);
+    await expectHiddenFrom({ read: ownerOrMember(project, participantsSeen), target: invitedParticipant, seenBy: OWNER, hiddenFrom, label: "participant" });
+    await expectHiddenFrom({ read: ownerOrMember(project, listed), target: invitedParticipant, seenBy: OWNER, hiddenFrom, label: "app.project_participants" });
   });
 
   it("shows the Project Admins the pending invitation by CR number only, never the Company", async () => {
-    expect(await participantsSeen(host.ap)).not.toContain(invitedParticipant);
-    expect(await listed(host.ap)).not.toContain(invitedParticipant);
+    await readsOwnParticipant(project, participantsSeen, [host.ap]);
+    await readsOwnParticipant(project, listed, [host.ap]);
+    await expectHiddenFrom({ read: ownerOrMember(project, participantsSeen), target: invitedParticipant, seenBy: OWNER, hiddenFrom: host.ap, label: "participant" });
+    await expectHiddenFrom({ read: ownerOrMember(project, listed), target: invitedParticipant, seenBy: OWNER, hiddenFrom: host.ap, label: "app.project_participants" });
     const rows = await pending(host.ap);
     expect(rows).toContainEqual({
       invitation_id: invitedParticipant,
@@ -289,10 +344,29 @@ describe("a Participant Invitation", () => {
       role_name: expect.any(Object),
       invited_at: expect.any(Date),
     });
-    expect(JSON.stringify(rows)).not.toContain(invitee.id);
-    // Not for the Project's other Members.
-    expect(await pending(host.member)).toEqual([]);
-    expect(await pending(consultant.member)).toEqual([]);
+    // The Company's id is nowhere in them, though the participant row itself (the table owner's read) names it.
+    const ownersRow = (await migrator.query("select * from participant where id = $1", [invitedParticipant])).rows;
+    await expectHiddenFrom({
+      read: async (text: string) => (text.includes(invitee.id) ? [{ id: invitee.id }] : []),
+      target: invitee.id,
+      seenBy: JSON.stringify(ownersRow),
+      hiddenFrom: JSON.stringify(rows),
+      name: (text) => (text === JSON.stringify(rows) ? "the Project Admin's pending invitations" : "the table owner's participant row"),
+    });
+    // Not for the Project's other Members: none of the pending invitations.
+    const pendingIds = rows.map((r) => r.invitation_id as string);
+    expect(pendingIds).toContain(invitedParticipant);
+    for (const target of pendingIds) {
+      await expectHiddenFrom({
+        read: pending,
+        target,
+        idOf: (r) => r.invitation_id as string,
+        seenBy: host.ap,
+        hiddenFrom: [host.member, consultant.member],
+      });
+    }
+    expect(await pending(host.member)).toEqual([]); // not hidden-from: no pending invitation at all, whoever's; proven by id just above
+    expect(await pending(consultant.member)).toEqual([]); // not hidden-from: no pending invitation at all, whoever's; proven by id just above
   });
 
   it("shows the invited Authorized Person only the invitation (scenario 30)", async () => {
@@ -306,11 +380,27 @@ describe("a Participant Invitation", () => {
         invited_at: expect.any(Date),
       },
     ]);
-    expect(await participantsSeen(invitee.ap)).toEqual([]);
-    const participation = await withMember(app, invitee.ap, (trx) =>
-      sql`select * from app.participation(${invitedParticipant}::uuid)`.execute(trx),
-    );
-    expect(participation.rows).toEqual([]);
+    // No Participant on the Project, its own included: every row the table owner reads is hidden from it.
+    const onProject = await ownerOrMember(project, participantsSeen)(OWNER);
+    expect(onProject.map((r) => r.id)).toContain(invitedParticipant);
+    for (const { id: target } of onProject) {
+      await expectHiddenFrom({ read: ownerOrMember(project, participantsSeen), target, seenBy: OWNER, hiddenFrom: invitee.ap });
+    }
+    // The same read works for a Participant's Member, and gives the invited Authorized Person no row at all.
+    await readsOwnParticipant(project, participantsSeen, [consultant.member]);
+    expect(await participantsSeen(invitee.ap)).toEqual([]); // not hidden-from: no row at all, whoever's; proven by id just above
+    // Nor its participation: answered for a Participant's own Authorized Person, not the invited one's.
+    type Ask = readonly [string, string];
+    await expectHiddenFrom({
+      read: ([as, participant]: Ask) =>
+        withMember(app, as, (trx) => sql<{ participant_id: string }>`select participant_id from app.participation(${participant}::uuid)`.execute(trx)).then((r) =>
+          r.rows.map((x) => ({ id: x.participant_id === participant ? "the asked Participant" : x.participant_id })),
+        ),
+      target: "the asked Participant",
+      seenBy: [[consultant.ap, consultantParticipant]],
+      hiddenFrom: [[invitee.ap, invitedParticipant]],
+      name: ([as]) => (as === invitee.ap ? "the invited Authorized Person" : "the consultant's Authorized Person"),
+    });
     expect(await addProjectMember(invitee.ap, invitedParticipant, invitee.member)).toBe("not_found");
   });
 
@@ -331,8 +421,8 @@ describe("a Participant Invitation", () => {
     const id = (await invitations(other.ap))[0]!.participant_id as string;
 
     expect(await respond(other.ap, id, false)).toBe("declined");
-    expect(await invitations(other.ap)).toEqual([]);
-    expect(await listed(host.ap)).not.toContain(id);
+    expect(await invitations(other.ap)).toEqual([]); // not hidden-from: their own list once declined (state)
+    expect(await listed(host.ap)).not.toContain(id); // not hidden-from: declined is no Participant, read by the Project Admin who lists every one (state)
     // Still pending for the Project Admins, exactly like a CR number that isn't on Rabaed (scenario 31).
     expect(await pending(host.ap)).toContainEqual({
       invitation_id: id,
@@ -380,7 +470,7 @@ describe("a Participant Invitation", () => {
     const k1 = await company(engineer, "K1");
     expect(await invite(host.ap, k1.cr)).toBe("invited");
     const ids = (await pending(host.ap)).filter((r) => [leadCr, k1.cr].includes(r.cr_number as string)).map((r) => r.invitation_id as string);
-    expect(ids).toHaveLength(2);
+    expect(ids).toHaveLength(2); // not hidden-from: both invitations were made (setup)
 
     // A Project Member who is not a Project Admin, another Participant and the invited Company.
     for (const as of [host.member, consultant.ap, consultant.member, k1.ap]) {
@@ -390,9 +480,9 @@ describe("a Participant Invitation", () => {
     for (const id of ids) expect(await withdraw(host.ap, id)).toBe("not_found");
 
     const left = (await pending(host.ap)).map((r) => r.invitation_id);
-    for (const id of ids) expect(left).not.toContain(id);
-    expect(await invitations(k1.ap)).toEqual([]);
-    for (const as of [host.ap, k1.ap]) expect(await participantsSeen(as)).not.toContain(ids[1]);
+    for (const id of ids) expect(left).not.toContain(id); // not hidden-from: the Project Admin's own pending list, once withdrawn (state)
+    expect(await invitations(k1.ap)).toEqual([]); // not hidden-from: the invitee's own list, once withdrawn (state)
+    for (const as of [host.ap, k1.ap]) expect(await participantsSeen(as)).not.toContain(ids[1]); // not hidden-from: a withdrawn invitation makes no Participant, for the Project Admin who reads every one (state)
   });
 });
 
@@ -442,7 +532,7 @@ describe("an onboarding lead, converted when Rabaed onboards its Company", () =>
     await joinProject(app, project, { adminId: host.ap, crNumber: consultant.cr, role: "consultant" }, consultant.ap);
     expect(await invite(cr, "owner_representative")).toBe("invited");
     before = await pending();
-    expect(before).toHaveLength(1);
+    expect(before).toHaveLength(1); // not hidden-from: the lead was made (setup)
     newcomer = await company(engineer, "Newcomer", cr);
   });
 
@@ -471,7 +561,7 @@ describe("an onboarding lead, converted when Rabaed onboards its Company", () =>
     expect(closed.participant_id).toBe(lead.id);
     expect(closed.converted_at).not.toBeNull();
     // Converted once: again, nothing more.
-    expect(await convert(newcomer.id)).toEqual([]);
+    expect(await convert(newcomer.id)).toEqual([]); // not hidden-from: converted once, nothing left to convert (state)
   });
 
   it("shows the Project Admin the same row as before, once (scenario 31)", async () => {
@@ -537,7 +627,7 @@ describe("an onboarding lead, converted when Rabaed onboards its Company", () =>
     expect(await invite(closedCr, "consultant", closedProject)).toBe("invited");
     await migrator.query("update project set status = 'closed' where id = $1", [closedProject]);
     const closer = await company(engineer, "Closer", closedCr);
-    expect(await convert(closer.id)).toEqual([]);
+    expect(await convert(closer.id)).toEqual([]); // not hidden-from: a closed Project's lead is not converted (state)
     const lead = await migrator.query("select converted_at from onboarding_lead where cr_number = $1", [closedCr]);
     expect(lead.rows).toEqual([{ converted_at: null }]);
   });
@@ -549,11 +639,17 @@ describe("an onboarding lead, converted when Rabaed onboards its Company", () =>
         .then((r) => r.rows),
     );
     expect(invitations.map((i) => i.participant_id)).toEqual([before[0]!.invitation_id]);
-    for (const as of [consultant.ap, consultant.member, host.member]) {
-      const seen = await withMember(app, as, (trx) =>
+    const seen = (as: string) =>
+      withMember(app, as, (trx) =>
         sql<{ id: string }>`select id from participant where project_id = ${project}`.execute(trx).then((r) => r.rows.map((x) => x.id)),
       );
-      expect(seen, as).not.toContain(before[0]!.invitation_id);
-    }
+    // The read works: the Project Admin, this Project's only Project Member, reads its own Participant through it.
+    await readsOwnParticipant(project, seen, [host.ap]);
+    await expectHiddenFrom({
+      read: ownerOrMember(project, seen),
+      target: before[0]!.invitation_id as string,
+      seenBy: OWNER,
+      hiddenFrom: [consultant.ap, consultant.member, host.member],
+    });
   });
 });

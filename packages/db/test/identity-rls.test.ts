@@ -5,7 +5,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -56,6 +56,12 @@ const companiesSeen = (trx: Db) =>
 const membersSeen = (trx: Db) =>
   sql<{ id: string }>`select id from member`.execute(trx).then((r) => r.rows.map((x) => x.id).sort());
 
+/** What `member` reads with `seen`, as rows for expectHiddenFrom; `null` reads with no Member set. */
+const readAs = (seen: (trx: Db) => Promise<string[]>) => async (member: string | null) =>
+  (member === null ? await app.transaction().execute(seen) : await withMember(app, member, seen)).map((id) => ({ id }));
+const who = (member: string | null) =>
+  member === null ? "no Member set" : member === ids.aGone ? "A's deactivated Member" : member === ids.b1 ? "B1" : member === ids.a1 ? "A1" : member;
+
 describe("company", () => {
   it("shows a Member only their own Company", async () => {
     expect(await withMember(app, ids.a1, companiesSeen)).toEqual([ids.companyA]);
@@ -63,11 +69,17 @@ describe("company", () => {
   });
 
   it("shows nothing with no Member set", async () => {
-    expect(await app.transaction().execute(companiesSeen)).toEqual([]);
+    // Each Company is read by its own Member first, by id; with no Member set, by nobody.
+    await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyA, seenBy: ids.a1, hiddenFrom: null, name: who, label: "Company A" });
+    await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyB, seenBy: ids.b1, hiddenFrom: null, name: who, label: "Company B" });
+    expect(await app.transaction().execute(companiesSeen)).toEqual([]); // not hidden-from: no Company at all, whoever's; the read is proven by id just above
   });
 
   it("shows nothing to a deactivated Member", async () => {
-    expect(await withMember(app, ids.aGone, companiesSeen)).toEqual([]);
+    // Not even their own Company, which its active Member reads; nor anyone else's.
+    await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyA, seenBy: ids.a1, hiddenFrom: ids.aGone, name: who, label: "Company A" });
+    await expectHiddenFrom({ read: readAs(companiesSeen), target: ids.companyB, seenBy: ids.b1, hiddenFrom: ids.aGone, name: who, label: "Company B" });
+    expect(await withMember(app, ids.aGone, companiesSeen)).toEqual([]); // not hidden-from: no Company at all, whoever's; the read is proven by id just above
   });
 
   it("cannot be changed by the app role", async () => {
@@ -84,7 +96,10 @@ describe("member", () => {
   });
 
   it("shows nothing with no Member set", async () => {
-    expect(await app.transaction().execute(membersSeen)).toEqual([]);
+    // Each Company's Member is read by its own Company first, by id; with no Member set, by nobody.
+    await expectHiddenFrom({ read: readAs(membersSeen), target: ids.a1, seenBy: ids.a1, hiddenFrom: null, name: who, label: "A's Member" });
+    await expectHiddenFrom({ read: readAs(membersSeen), target: ids.b1, seenBy: ids.b1, hiddenFrom: null, name: who, label: "B's Member" });
+    expect(await app.transaction().execute(membersSeen)).toEqual([]); // not hidden-from: no Member at all, whoever's; the read is proven by id just above
   });
 });
 
@@ -105,7 +120,7 @@ describe("the session functions", () => {
     const hash = token();
     await sql`select app.create_session(${hash}, ${ids.a1}::uuid, null, now() - interval '1 minute')`.execute(app);
     const { rows } = await sql`select * from app.session_principal(${hash}, '2000-01-01'::timestamptz)`.execute(app);
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([]); // not hidden-from: an expired session yields no principal, a session check
   });
 
   it("refuse a session for a deactivated Member", async () => {

@@ -4,9 +4,10 @@
 // their Participant covers (as V16). Anyone else trying to change them gets a
 // 404 that names nothing. Scopes never grant or restrict access.
 import { randomUUID } from "node:crypto";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
 import type { Scope } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -44,6 +45,23 @@ const listScopes = async (by: Caller, project = projectId): Promise<Scope[]> => 
 };
 
 const ids = (scopes: Scope[]) => scopes.map((s) => s.id).sort();
+
+/** The Scopes `by` reads at `path` for expectHiddenFrom: the list on a 200, `[]` for the plain 404. */
+const scopesAt = (path: string) => async (by: Caller) => (await readById<{ scopes: Scope[] }>(path)(by)).flatMap((b) => b.scopes);
+
+/** Who a Caller is, in a failure. */
+const whoIs = (by: Caller) =>
+  by === host.caller
+    ? "host Project Admin"
+    : by === hostMember.caller
+      ? "host member"
+      : by === consultant.caller
+        ? "consultant's Authorized Person"
+        : by === engineer.caller
+          ? "consultant engineer"
+          : by === other.caller
+            ? "another Project's Project Admin"
+            : "someone";
 
 beforeAll(async () => {
   host = await api.projectCreator();
@@ -124,25 +142,34 @@ describe("Scopes and Sub-scopes", () => {
       ["consultant engineer", engineer.caller],
       ["another Project's Project Admin", other.caller],
     ] as const) {
-      await expectHidden(addScope(caller, trade.electrical, "Sneaky"), `${who} adds`);
-      await expectHidden(addScope(caller, trade.electrical, "Sneaky", lighting), `${who} adds a Sub-scope`);
+      await expectHidden(addScope(caller, trade.electrical, "Sneaky"), `${who} adds`); // not hidden-from: a refused write; nothing to read back by id
+      await expectHidden(addScope(caller, trade.electrical, "Sneaky", lighting), `${who} adds a Sub-scope`); // not hidden-from: a refused write; nothing to read back by id
       for (const scopeId of [lighting, indoor, randomUUID()]) {
-        await expectHidden(updateScope(caller, scopeId, { name: bilingual("Sneaky") }), `${who} renames ${scopeId}`);
-        await expectHidden(updateScope(caller, scopeId, { active: false }), `${who} deactivates ${scopeId}`);
+        await expectHidden(updateScope(caller, scopeId, { name: bilingual("Sneaky") }), `${who} renames ${scopeId}`); // not hidden-from: a refused write on Scopes listed above (or a made-up id); the list below proves them unchanged
+        await expectHidden(updateScope(caller, scopeId, { active: false }), `${who} deactivates ${scopeId}`); // not hidden-from: a refused write on Scopes listed above (or a made-up id); the list below proves them unchanged
       }
     }
     expect((await listScopes(host.caller)).find((s) => s.id === lighting)).toMatchObject({ name: bilingual("Lighting"), active: true });
+    expect((await listScopes(host.caller)).find((s) => s.id === indoor)).toMatchObject({ name: bilingual("Indoor"), active: true });
   });
 
   it("of another Project are never listed or reachable", async () => {
     const otherTrade = await created(other.caller.post(`/v1/projects/${projectB}/trades`, { code: "EL", name: bilingual("Electrical") }));
     const otherScope = await created(addScope(other.caller, otherTrade, "Lighting", null, projectB));
-    for (const caller of [host.caller, hostMember.caller, engineer.caller]) {
-      expect(ids(await listScopes(caller))).not.toContain(otherScope);
-      await expectHidden(caller.get(`/v1/projects/${projectB}/scopes`));
-    }
-    await expectHidden(updateScope(host.caller, otherScope, { active: false }));
+    const onProject = [host.caller, hostMember.caller, engineer.caller];
+    // Each one's own Project's list: Project B's Admin reads its Scope there, and nobody on this Project reads it in theirs.
+    await expectHiddenFrom({
+      read: (by: Caller) => listScopes(by, by === other.caller ? projectB : projectId),
+      target: otherScope,
+      seenBy: other.caller,
+      hiddenFrom: onProject,
+      name: whoIs,
+      label: "own Project's list",
+    });
+    await expectHiddenFrom({ read: scopesAt(`/v1/projects/${projectB}/scopes`), target: otherScope, seenBy: other.caller, hiddenFrom: onProject, name: whoIs, label: "Project B's list" });
+    await expectHidden(updateScope(host.caller, otherScope, { active: false })); // not hidden-from: a refused write; the list below proves the Scope unchanged
     expect(ids(await listScopes(other.caller, projectB))).toEqual([otherScope]);
+    expect((await listScopes(other.caller, projectB)).find((s) => s.id === otherScope)?.active).toBe(true);
   });
 
   describe("for an Authorized Person who isn't a Project Member", () => {
@@ -155,21 +182,50 @@ describe("Scopes and Sub-scopes", () => {
     });
 
     it("are only those of the Trades their Participant covers", async () => {
-      await expectHidden(consultant.caller.get(`/v1/projects/${projectId}/scopes`));
+      await expectHiddenFrom({
+        read: scopesAt(`/v1/projects/${projectId}/scopes`),
+        target: lighting,
+        seenBy: [host.caller, hostMember.caller, engineer.caller],
+        hiddenFrom: consultant.caller,
+        name: whoIs,
+        label: "the Project's list",
+      });
       const res = await consultant.caller.get(`/v1/participants/${consultantParticipantId}/scopes`);
       expect(res.statusCode, res.body).toBe(200);
       const scopes: Scope[] = res.json().scopes;
       const electrical = (await listScopes(host.caller)).filter((s) => s.tradeId === trade.electrical);
       expect(scopes).toEqual(electrical);
       expect(ids(scopes)).toEqual(expect.arrayContaining([lighting, indoor]));
-      expect(ids(scopes)).not.toContain(hvac);
+      // HVAC, under Mechanical, is in every Project Member's list and not in what the Authorized Person reads through the Participant.
+      await expectHiddenFrom({
+        read: (by: Caller) => (by === consultant.caller ? scopesAt(`/v1/participants/${consultantParticipantId}/scopes`)(by) : listScopes(by)),
+        target: hvac,
+        seenBy: [host.caller, hostMember.caller, engineer.caller],
+        hiddenFrom: consultant.caller,
+        name: whoIs,
+        label: "a Trade the Participant doesn't cover",
+      });
     });
 
     it("are read through the Participant only by its own Company and the Project Admins", async () => {
       expect((await host.caller.get(`/v1/participants/${consultantParticipantId}/scopes`)).statusCode).toBe(200);
-      await expectHidden(hostMember.caller.get(`/v1/participants/${consultantParticipantId}/scopes`));
-      await expectHidden(other.caller.get(`/v1/participants/${consultantParticipantId}/scopes`));
-      await expectHidden(consultant.caller.get(`/v1/participants/${randomUUID()}/scopes`));
+      await expectHiddenFrom({
+        read: scopesAt(`/v1/participants/${consultantParticipantId}/scopes`),
+        target: lighting,
+        seenBy: [host.caller, consultant.caller],
+        hiddenFrom: [hostMember.caller, other.caller],
+        name: whoIs,
+        label: "through the Participant",
+      });
+      // A made-up Participant gets its Authorized Person the same plain 404, while they read their own.
+      await expectHiddenFrom({
+        read: (path: string) => readById(path)(consultant.caller),
+        target: "scopes",
+        idOf: () => "scopes",
+        seenBy: `/v1/participants/${consultantParticipantId}/scopes`,
+        hiddenFrom: `/v1/participants/${randomUUID()}/scopes`,
+        label: "made-up Participant",
+      });
     });
   });
 });
