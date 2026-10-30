@@ -181,6 +181,16 @@ async function drawn(scope: HTMLElement) {
   await waitFor(() => expect(scope.querySelector('[data-state="ready"]')).not.toBeNull(), { timeout: 15000 });
 }
 
+/**
+ * pdf.js draws a page's text in its canvas's direction: in an Arabic panel the pages and their
+ * thumbnails must still be left to right, or a Latin PDF's words come out scrambled.
+ */
+async function pagesLeftToRight(scope: HTMLElement) {
+  const canvases = [...scope.querySelectorAll("canvas")];
+  await expect(canvases.length).toBeGreaterThan(0);
+  for (const canvas of canvases) await expect(getComputedStyle(canvas).direction).toBe("ltr");
+}
+
 /** Opens the datasheet's preview from its card. */
 async function openDatasheet(context: PlayContext) {
   await userEvent.click(button(cardOf(context, "datasheet"), context, copy.preview));
@@ -240,6 +250,7 @@ export const Preview: Story = {
     await expect(thumbs.getBoundingClientRect().width).toBe(72);
     await expect(within(thumbs).getAllByRole("button")).toHaveLength(3);
     await expect(within(preview).getAllByRole("img")).toHaveLength(3);
+    await pagesLeftToRight(preview);
 
     const page1 = within(preview).getAllByRole("img")[0]!;
     const before = page1.getBoundingClientRect().width;
@@ -326,6 +337,7 @@ export const OpenLarge: Story = {
     await userEvent.click(button(previewOf(context)!, context, copy.openLarge));
     const large = within(panel).getByRole("dialog", { name: "LED-1200_Datasheet.pdf" });
     await drawn(large);
+    await pagesLeftToRight(large);
     // The whole panel inside its border.
     const fill = large.getBoundingClientRect();
     const box = panel.getBoundingClientRect();

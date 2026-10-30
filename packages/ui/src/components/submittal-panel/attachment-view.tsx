@@ -294,8 +294,11 @@ function PdfCanvas({
   }, [pdf, page, width, draw]);
   const height = Math.round(width / (pdf.aspects[page - 1] ?? 1));
   return (
+    // Left to right in an Arabic panel too: pdf.js draws a page's text in its canvas's direction,
+    // and a right-to-left one scrambles the words. The thumbnails stay where the panel's direction puts them.
     <canvas
       ref={ref}
+      dir="ltr"
       data-page={label ? page : undefined}
       role={label ? "img" : undefined}
       aria-label={label}
