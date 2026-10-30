@@ -122,6 +122,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const shared = wir && item.outcome ? sharedChecklists(events, item.checklistCopies) : [];
   const remarks = wir ? codeRemarks(events) : null;
   const cover = wir ? coverNote(events) : null;
+  // The checklists the WIR shows itself: the Form then leaves out the Checklist Template fields they copy, so each shows once (RP-1071).
+  const shownChecklists = wir ? [...item.replyChecklists, ...shared, ...(offered.codes[0]?.checklists ?? [])] : item.replyChecklists;
   const revisedFrom = chain?.revisions.find((r) => r.revisionNo === item.revisionNo - 1) ?? null;
   // Another Company holds it with the checklist, which its readers read once the code shares it (V19).
   const waiting =
@@ -244,10 +246,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <>
             {item.outcome && <InspectionCounts item={item} locale={locale} />}
             {item.outcome && item.actions.createRevision && (
-              <p className="flex items-start gap-2 rounded-lg bg-danger-tint p-4 font-semibold text-danger-fg">
-                <Icon name="git-branch" size={20} className="mt-0.5 shrink-0" />
-                {t("inspection.revisionBanner")}
-              </p>
+              <div className="flex flex-col gap-3 rounded-lg bg-danger-tint p-4">
+                <p className="flex items-start gap-2 font-semibold text-danger-fg">
+                  <Icon name="git-branch" size={20} className="mt-0.5 shrink-0" />
+                  {t("inspection.revisionBanner")}
+                </p>
+                <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={item.actions.createRevision} canDiscard={item.actions.discardRevision} />
+              </div>
             )}
             <InspectionRevision item={item} previous={revisedFrom} locale={locale} />
             {waiting && <InspectionWaiting company={waiting} locale={locale} />}
@@ -260,12 +265,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             {issuing && <InspectionManager workItemId={item.id} actions={item.actions} recommendedCode={recommendedCodeSent(events)} locale={locale} />}
           </>
         )}
-        <WorkItemRevision
-          workItemId={item.id}
-          projectId={item.projectId}
-          canCreate={item.actions.createRevision}
-          canDiscard={item.actions.discardRevision}
-        />
+        {/* A coded WIR offers its Revision in its banner above. */}
+        {!(wir && item.outcome && item.actions.createRevision) && (
+          <WorkItemRevision
+            workItemId={item.id}
+            projectId={item.projectId}
+            canCreate={item.actions.createRevision}
+            canDiscard={item.actions.discardRevision}
+          />
+        )}
         <WorkItemReplacement workItemId={item.id} canCreate={item.actions.createReplacement} />
         {item.versionsChanged && (
           <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
@@ -343,7 +351,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19).
             The Form then leaves out the Checklist Template fields they copy, so the checklist shows once (RP-1071). */}
         {!wir && <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />}
-        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} replyChecklists={item.replyChecklists} />
+        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} replyChecklists={shownChecklists} />
 
         {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />

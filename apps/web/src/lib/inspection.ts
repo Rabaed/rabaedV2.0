@@ -104,7 +104,7 @@ export function recommendedCodeSent(
 }
 
 /** A checklist as the code shared it (RP-86): the copy it answered and the answers the code took. */
-export type SharedChecklist = { fieldKey: string; name: BilingualText; items: ChecklistTemplateItem[]; answers: ChecklistAnswers };
+export type SharedChecklist = { fieldKey: string; copyOf: string; name: BilingualText; items: ChecklistTemplateItem[]; answers: ChecklistAnswers };
 
 /** The checklists the last code took, each matched to the copy it answered; empty before the code. */
 export function sharedChecklists(events: readonly HistoryEvent[], copies: readonly ChecklistCopy[]): SharedChecklist[] {
@@ -117,7 +117,7 @@ export function sharedChecklists(events: readonly HistoryEvent[], copies: readon
       const copy = copies.find((c) => c.fieldKey === field.copyOf);
       const answers = code.answers?.[field.key];
       if (!copy || typeof answers !== "object" || answers === null) return [];
-      return [{ fieldKey: field.key, name: copy.name, items: copy.items, answers: answers as ChecklistAnswers }];
+      return [{ fieldKey: field.key, copyOf: field.copyOf, name: copy.name, items: copy.items, answers: answers as ChecklistAnswers }];
     });
 }
 

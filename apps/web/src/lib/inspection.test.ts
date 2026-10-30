@@ -184,7 +184,7 @@ describe("what the WIR page reads from its history", () => {
   });
 
   it("the checklist the code shared, matched to the copy it answered; none before the code", () => {
-    expect(sharedChecklists(history, [copy])).toEqual([{ fieldKey: "inspection_checklist", name: text("Cable trays"), items, answers: answered }]);
+    expect(sharedChecklists(history, [copy])).toEqual([{ fieldKey: "inspection_checklist", copyOf: "checklist_template", name: text("Cable trays"), items, answers: answered }]);
     expect(sharedChecklists(history.slice(0, 2), [copy])).toEqual([]);
   });
 });

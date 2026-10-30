@@ -442,7 +442,7 @@ export function TransitionDialog({
             {error}
           </p>
         )}
-        <div className={cn("flex justify-end gap-3", inspection && "max-md:sticky max-md:bottom-0 max-md:bg-surface max-md:pt-2")}>
+        <div className={cn("flex justify-end gap-3", inspection && "max-md:sticky max-md:-bottom-6 max-md:-mb-6 max-md:bg-surface max-md:pt-2 max-md:pb-6")}>
           <Button type="button" variant={inspection ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>
