@@ -12,14 +12,14 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useFileSize } from "@/components/use-documents";
 
-/** The Documents read for one item: its files, or that they couldn't be read (hidden, gone or failed: the same to the viewer). */
+/** The Documents read for one item: its cards, or that they couldn't be read (hidden, gone or failed: the same to the viewer). */
 type DocumentsRead = { id: string; ok: true; files: SubmittalPanelAttachmentFile[] } | { id: string; ok: false };
 
 /**
  * The Submittal Panel's Attachments section (RP-1068, spec RP-1054 decision C3): the item's
  * Documents from `GET /v1/work-items/:id/documents`, which lists only what the viewer may see, and
- * each file read only through its short-lived signed URL (`/documents/:docId/download`), which the
- * api issues after its access check: a file the viewer may not see is a 404, so its preview says it
+ * each Document read only through its short-lived signed URL (`/documents/:docId/download`), which the
+ * api issues after its access check: a Document the viewer may not see is a 404, so its preview says it
  * couldn't be opened and shows nothing of it. A failed read here leaves the rest of the Details tab
  * as it is.
  */
@@ -32,7 +32,7 @@ export function useSubmittalPanelAttachments({ item, locale, refreshKey }: { ite
   useEffect(() => {
     const controller = new AbortController();
     const id = item.id;
-    // A read again that fails keeps the files already shown; a new item's says they couldn't be read.
+    // A read again that fails keeps the Documents already shown; a new item's says they couldn't be read.
     const failed = () => setRead((shown) => (shown?.id === id && shown.ok ? shown : { id, ok: false }));
     fetch(documentsUrl, { signal: controller.signal })
       .then(async (res) => {
@@ -102,7 +102,7 @@ export function useSubmittalPanelAttachments({ item, locale, refreshKey }: { ite
         {t("unavailableList")}
       </p>
     ) : (
-      // One item's files and what was read of them; another item starts afresh.
+      // One item's Documents and what was read of them; another item starts afresh.
       <SubmittalPanelAttachments key={item.id} locale={locale} labels={labels} files={ready.files} fileUrl={fileUrl} />
     ),
   };

@@ -21,7 +21,7 @@ export type SubmittalPanelAttachmentViewerProps = {
   load: AttachmentLoad | undefined;
   place: AttachmentPlace;
   onPlace: (place: AttachmentPlace) => void;
-  /** Another file chosen in the switcher strip. */
+  /** Another Document chosen in the switcher strip. */
   onFile: (file: SubmittalPanelAttachmentFile) => void;
   onRetry: () => void;
   onDownload: () => void;
@@ -37,8 +37,8 @@ const focusable = 'button:not([disabled]), [tabindex="0"]';
 const stayFocused = "aria-disabled:cursor-default aria-disabled:bg-transparent aria-disabled:text-on-inverse/40";
 
 /**
- * Open large (RP-1068, README §7): the file over the whole panel, not the screen, with "‹ Back",
- * the page and zoom controls (25% steps) and a strip to switch files. It is mounted inside the
+ * Open large (RP-1068, README §7): the Document over the whole panel, not the screen, with "‹ Back",
+ * the page and zoom controls (25% steps) and a strip to switch Documents. It is mounted inside the
  * panel, so it follows the panel's width and layout bands, and is a dialog layer the panel waits
  * for: Esc closes it first (the section's listener), and ↑ / ↓ don't move to another submittal.
  * The keyboard stays inside it until it closes.

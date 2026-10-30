@@ -23,15 +23,15 @@ export type SubmittalPanelAttachmentFile = {
 export type SubmittalPanelAttachmentsLabels = AttachmentViewLabels & {
   /** "PDF", "Image", "File". */
   kind: Record<SubmittalPanelAttachmentKind, string>;
-  /** "12 pages", once pdf.js has read the file: formatted (`n`) and as a number for the plural (`count`). */
+  /** "12 pages", once pdf.js has read the Document: formatted (`n`) and as a number for the plural (`count`). */
   pageCount: (n: string, count: number) => string;
   /** "1 / 12": the page shown, left to right in Arabic too. */
   pageOf: (page: string, pages: string) => string;
-  /** "attachments", after Open large's "1 / 3" (the file shown among the section's `count`). */
+  /** "attachments", after Open large's "1 / 3" (the Document shown among the section's `count`). */
   ofAttachments: (count: number) => string;
-  /** The file switcher's name in Open large. */
+  /** The Document switcher's name in Open large. */
   files: string;
-  /** What a section with no files says. */
+  /** What a section with no Documents says. */
   none: string;
   preview: string;
   closePreview: string;
@@ -51,13 +51,13 @@ export type SubmittalPanelAttachmentsProps = {
   labels: SubmittalPanelAttachmentsLabels;
   files: readonly SubmittalPanelAttachmentFile[];
   /**
-   * A URL to read the file from: the api's short-lived signed download URL, issued after its
-   * access check. It rejects when the api refuses (a file the viewer may not see is a 404).
+   * A URL to read the Document from: the api's short-lived signed download URL, issued after its
+   * access check. It rejects when the api refuses (a Document the viewer may not see is a 404).
    */
   fileUrl: (id: string) => Promise<string>;
 };
 
-/** A view's zoom and page, reset when its file changes. */
+/** A view's zoom and page, reset when its Document changes. */
 export type AttachmentPlace = { zoom: number; page: number; jump: AttachmentPageJump | null };
 const start: AttachmentPlace = { zoom: 100, page: 1, jump: null };
 
@@ -65,11 +65,11 @@ const start: AttachmentPlace = { zoom: 100, page: 1, jump: null };
 const otherLayer = '[role="dialog"][data-state="open"]:not([data-attachment-viewer]), [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"], [data-number-card]:not([hidden])';
 
 /**
- * The Attachments section's body (RP-1068, README §7, owner decision C3): a card per file with its
+ * The Attachments section's body (RP-1068, README §7, owner decision C3): a card per Document with its
  * type, name (left to right), "PDF · 12 pages · 2.4 MB", and Preview, Open large and Download.
  * Preview opens inline, directly under its card and across the section; Preview again or ✕
  * closes it. Open large fills the panel itself, not the screen. Esc closes the innermost layer
- * first: Open large, then the preview, then the panel. Files are read only through `fileUrl`;
+ * first: Open large, then the preview, then the panel. Documents are read only through `fileUrl`;
  * nothing opens a new tab or window, and nothing is downloaded to be viewed.
  */
 export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: SubmittalPanelAttachmentsProps) {
@@ -84,11 +84,11 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   const opener = useRef<HTMLElement | null>(null);
   const n = (value: number) => formatNumber(value, locale);
   const kindOf = (file: SubmittalPanelAttachmentFile) => attachmentKind(file.contentType);
-  // A file no longer listed (the item read again) has no preview.
+  // A Document no longer listed (the item read again) has no preview.
   const previewFile = files.find((f) => f.id === preview) ?? null;
   const largeFile = files.find((f) => f.id === large) ?? null;
   const previewIdOf = (fileId: string) => `${id}-${fileId}`;
-  /** A card's first button: Preview, or Download for a file with no preview. */
+  /** A card's first button: Preview, or Download for a Document with no preview. */
   const focusCard = (fileId: string) => cards.current.get(fileId)?.querySelector("button")?.focus();
 
   const openPreview = (file: SubmittalPanelAttachmentFile) => {
@@ -120,7 +120,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
     const read = await load(file.id, kindOf(file));
     if (read) saveAttachment(read, file.name);
   };
-  // The print frame, taken away with the section: it never outlives the file's URL.
+  // The print frame, taken away with the section: it never outlives the Document's URL.
   const printing = useRef<(() => void) | null>(null);
   useEffect(() => () => printing.current?.(), []);
   const print = async (file: SubmittalPanelAttachmentFile) => {
@@ -197,7 +197,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
                 <AttachmentTile kind={kind} className="h-10 w-[34px]" />
                 <div className="min-w-0 flex-1">
                   <p className={cn(attachmentNameClass, "text-[13px] font-semibold")}>{file.name}</p>
-                  {/* A Download or Print that couldn't read the file says so here; an open preview says it itself. */}
+                  {/* A Download or Print that couldn't read the Document says so here; an open preview says it itself. */}
                   {fileLoad?.status === "failed" && !open ? (
                     <p role="alert" className="truncate text-[11.5px] text-danger-fg">
                       {labels.unavailable}

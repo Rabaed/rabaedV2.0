@@ -317,7 +317,7 @@ describe("RP-1068-1: the Submittal Panel's preview of a Document", () => {
     await ok(tryTake(pm, itemId, "submit"));
   });
 
-  it("reads the file through its signed URL for a Company that sees the item, shown in the page, not saved", async () => {
+  it("reads the Document through its signed URL for a Company that sees the item, shown in the page, not saved", async () => {
     const res = await fetch(await downloadUrl(k1Engineer, itemId, documentId));
     expect({
       status: res.status,

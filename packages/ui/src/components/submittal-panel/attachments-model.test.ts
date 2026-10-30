@@ -8,7 +8,7 @@ import {
   submittalPanelAttachmentDocuments,
 } from "./attachments-model.ts";
 
-describe("what a file previews as (README §7)", () => {
+describe("what a Document previews as (README §7)", () => {
   it("renders a PDF's pages, shows a photo, and offers nothing else a preview", () => {
     expect(attachmentKind("application/pdf")).toBe("pdf");
     expect(attachmentKind("image/jpeg")).toBe("image");
@@ -55,12 +55,12 @@ describe("the page shown", () => {
     expect(attachmentPageAt(5000, tops)).toBe(3);
   });
 
-  it("is page 1 of a file with no pages laid out yet", () => {
+  it("is page 1 of a Document with no pages laid out yet", () => {
     expect(attachmentPageAt(100, [])).toBe(1);
   });
 });
 
-describe("the files the Attachments section lists", () => {
+describe("the Documents the Attachments section lists", () => {
   const document = (id: string, change: Partial<DocumentSummary> = {}): DocumentSummary => ({
     id,
     fileName: `${id}.pdf`,
@@ -77,12 +77,12 @@ describe("the files the Attachments section lists", () => {
     ...change,
   });
 
-  it("are every Document the viewer reads, in order, the Form's fields' files too", () => {
+  it("are every Document the viewer reads, in order, the Form's fields' Documents too", () => {
     const documents = [document("system"), document("datasheet", { fieldKey: "datasheet" }), document("evidence", { fieldKey: "checklist", itemKey: "c1" })];
     expect(submittalPanelAttachmentDocuments(documents).map((d) => d.id)).toEqual(["system", "datasheet", "evidence"]);
   });
 
-  it("leave out a photo's annotated copy, which is shown beside its original, never as a file of its own", () => {
+  it("leave out a photo's annotated copy, which is shown beside its original, never as a Document of its own", () => {
     const documents = [document("photo", { contentType: "image/jpeg" }), document("copy", { contentType: "image/jpeg", annotatedFromId: "photo" })];
     expect(submittalPanelAttachmentDocuments(documents).map((d) => d.id)).toEqual(["photo"]);
   });

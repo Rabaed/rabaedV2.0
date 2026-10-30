@@ -69,7 +69,7 @@ async function uploadDocument(workItemId: string, file: File, request: StartDocu
   }
 }
 
-/** A file's size as the app words it: "640 KB", "2.4 MB", in Latin digits. */
+/** A Document's size as the app words it: "640 KB", "2.4 MB", in Latin digits. */
 export function useFileSize(): (bytes: number) => string {
   const t = useTranslations("workItems.attachments");
   const format = useFormatter();

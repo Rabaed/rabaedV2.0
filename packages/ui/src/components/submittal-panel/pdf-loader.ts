@@ -46,14 +46,14 @@ function aspectOf(page: PDFPageProxy): number {
 }
 
 /**
- * Opens a PDF from its bytes. The whole file is read before it is opened, rather than pdf.js
+ * Opens a PDF from its bytes. The whole Document is read before it is opened, rather than pdf.js
  * asking the file store for parts of it later, after the signed URL has expired (5 minutes) and
  * with range requests the file store's CORS doesn't answer. Only the first page is read here;
  * every other page is read when it is drawn, and let go of once drawn.
  */
 export async function openPdf(bytes: ArrayBuffer): Promise<LoadedPdf> {
   const lib = await loadPdfJs();
-  // pdf.js moves the bytes it is given to its worker: give it a copy, the caller keeps the file.
+  // pdf.js moves the bytes it is given to its worker: give it a copy, the caller keeps the Document.
   const loading = lib.getDocument({ data: new Uint8Array(bytes.slice(0)) });
   let doc: PDFDocumentProxy;
   const aspects = new Map<number, number>();

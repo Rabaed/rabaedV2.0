@@ -2,7 +2,7 @@ import { isAnnotatedCopy, type DocumentSummary } from "@rabaed/domain";
 
 /**
  * The Submittal Panel's Attachments (RP-1068, spec RP-1054, README §7, owner decision C3): what a
- * file previews as, zoom, the page shown, and which layer Esc closes. Plain data, tested on its own.
+ * Document previews as, zoom, the page shown, and which layer Esc closes. Plain data, tested on its own.
  */
 
 /** A PDF renders its pages (pdf.js), an image shows the photo; anything else is Download only. */
@@ -42,9 +42,9 @@ export function attachmentPageAt(scrollTop: number, pageTops: readonly number[])
 }
 
 /**
- * The files the section lists: every Document the viewer reads (the api leaves out what they may
- * not see), the Form's fields' files too, in order; a photo's annotated copy is shown beside its
- * original by the photo tool, never as a file of its own.
+ * The Documents the section lists: every Document the viewer reads (the api leaves out what they may
+ * not see), the Form's fields' Documents too, in order; a photo's annotated copy is shown beside its
+ * original by the photo tool, never as a Document of its own.
  */
 export function submittalPanelAttachmentDocuments(documents: readonly DocumentSummary[]): DocumentSummary[] {
   return documents.filter((d) => !isAnnotatedCopy(d));

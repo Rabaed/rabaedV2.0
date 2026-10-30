@@ -11,11 +11,11 @@ import type { AttachmentLoad } from "./attachment-files.ts";
 import { isCancelled, type LoadedPdf } from "./pdf-loader.ts";
 
 
-/** A file type's icon (the icon set registers no PDF glyph: a PDF is a text file in a red tile). */
+/** A Document's type icon (the icon set registers no PDF glyph: a PDF is a text file in a red tile). */
 export const attachmentIcon: Record<SubmittalPanelAttachmentKind, IconName> = { pdf: "file-text", image: "photo", other: "file" };
 const tileTone: Record<SubmittalPanelAttachmentKind, string> = { pdf: "bg-danger-tint text-danger-fg", image: "bg-info-tint text-info-fg", other: "bg-neutral-tint text-neutral-fg" };
 
-/** A file's type tile. */
+/** A Document's type tile. */
 export function AttachmentTile({ kind, className }: { kind: SubmittalPanelAttachmentKind; className?: string }) {
   return (
     <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-[6px]", tileTone[kind], className)}>
@@ -39,7 +39,7 @@ export type AttachmentViewLabels = {
   /** "This file couldn't be opened." */
   unavailable: string;
   tryAgain: string;
-  /** What a file a browser can't draw says instead (a drawing, an Office file). */
+  /** What a Document a browser can't draw says instead (a drawing, an Office document). */
   noPreview: string;
 };
 
@@ -69,9 +69,9 @@ const padding = 18;
 const thumbnailWidth = 52;
 
 /**
- * A file's pages or photo (RP-1068, README §7), inside the inline preview or Open large: a PDF's
+ * A Document's pages or photo (RP-1068, README §7), inside the inline preview or Open large: a PDF's
  * pages drawn by pdf.js, stacked in a scroll area, with page thumbnails beside them; an image's
- * photo. While its file is read it says so; a file that can't be read (one the viewer may not see
+ * photo. While it is read it says so; a Document that can't be read (one the viewer may not see
  * gets the api's 404) says it couldn't be opened, with Try again, and shows nothing else.
  */
 export function AttachmentView({ locale, labels, name, kind, load, onRetry, zoom, onPage, jump, thumbnails = false }: AttachmentViewProps) {

@@ -12,9 +12,9 @@ import { SubmittalPanelSections } from "./panel-sections.tsx";
 import { SubmittalPanel, SubmittalPanelIdentity, useSubmittalPanelIds } from "./submittal-panel.tsx";
 
 /*
- * The Submittal Panel's Attachments (RP-1068, README §7, owner decision C3): file cards, the inline
+ * The Submittal Panel's Attachments (RP-1068, README §7, owner decision C3): Document cards, the inline
  * preview under its card (pdf.js pages and thumbnails, or the photo), Open large over the whole
- * panel, and Esc closing the innermost layer first. Files come only from `fileUrl`, as the app's
+ * panel, and Esc closing the innermost layer first. Documents come only from `fileUrl`, as the app's
  * come from the api's signed URL; here it hands out same-origin URLs of a PDF built in the story.
  */
 
@@ -95,7 +95,7 @@ function useFileUrl(refused: readonly string[]) {
   return useMemo(() => {
     const urls: Record<string, () => string> = { datasheet: () => samplePdfUrl(3), compliance: () => samplePdfUrl(2, [2]), photo: () => sitePhoto };
     return async (id: string) => {
-      // A file the viewer may not see: the api answers 404, so no URL is handed out.
+      // A Document the viewer may not see: the api answers 404, so no URL is handed out.
       if (refused.includes(id) || !urls[id]) throw new Error("not_found");
       return urls[id]();
     };
@@ -223,10 +223,10 @@ async function openDatasheet(context: PlayContext) {
 }
 
 /**
- * A card per file: its type, its name left to right in Arabic too, its type and size, and
+ * A card per Document: its type, its name left to right in Arabic too, its type and size, and
  * Preview, Open large and Download; a drawing a browser can't draw offers Download only.
  */
-export const Files: Story = {
+export const Documents: Story = {
   play: async (context) => {
     const card = cardOf(context, "datasheet");
     await expect(card).toHaveTextContent(`LED-1200_Datasheet.pdfPDF · ${mb("2.4", storyLocale(context))}`);
@@ -311,8 +311,8 @@ export const Preview: Story = {
 };
 
 /**
- * Print prints the file from a hidden frame, never a new tab or window; the frame goes once the
- * print dialog closes, and with the section, so it never outlives the file's URL.
+ * Print prints the Document from a hidden frame, never a new tab or window; the frame goes once the
+ * print dialog closes, and with the section, so it never outlives the Document's URL.
  */
 export const Print: Story = {
   render: (_args, context) => <AttachmentsDemo context={context} goneOnClose />,
@@ -401,8 +401,8 @@ export const Photo: Story = {
 };
 
 /**
- * Open large fills the panel itself (not the screen), with Back first, the file's place among the
- * section's, page and zoom controls (25% steps) and the file switcher. ↑ / ↓ don't move to another
+ * Open large fills the panel itself (not the screen), with Back first, the Document's place among the
+ * section's, page and zoom controls (25% steps) and the Document switcher. ↑ / ↓ don't move to another
  * submittal while it is open. Esc closes it first, then the preview, then the panel.
  */
 export const OpenLarge: Story = {
@@ -437,7 +437,7 @@ export const OpenLarge: Story = {
     await userEvent.keyboard("{ArrowDown}");
     await expect(output(context).moved).toBe("0");
 
-    // The switcher: another file, back at its first page and 100%.
+    // The switcher: another Document, back at its first page and 100%.
     const switcher = within(large).getByRole("group", { name: storyText(context, copy.files) });
     await userEvent.click(within(switcher).getByRole("button", { name: "Compliance_Statement.pdf" }));
     const other = within(panel).getByRole("dialog", { name: "Compliance_Statement.pdf" });
@@ -473,7 +473,7 @@ export const OpenLarge: Story = {
 };
 
 /**
- * A file the viewer may not see: the api refuses its URL (404), so the preview says the file
+ * A Document the viewer may not see: the api refuses its URL (404), so the preview says the Document
  * couldn't be opened, with Try again, and draws nothing of it.
  */
 export const Unavailable: Story = {

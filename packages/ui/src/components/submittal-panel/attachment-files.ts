@@ -4,14 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import { openPdf, type LoadedPdf } from "./pdf-loader.ts";
 
-/** A file read into this page: its bytes as a same-origin URL, and a PDF opened with pdf.js (null if it can't be). */
+/** A Document read into this page: its bytes as a same-origin URL, and a PDF opened with pdf.js (null if it can't be). */
 export type LoadedAttachment = { url: string; pdf: LoadedPdf | null };
 
 export type AttachmentLoad = { status: "loading" } | { status: "ready"; file: LoadedAttachment } | { status: "failed" };
 
 /**
- * Reads the Attachments' files, each once, only through the URL `fileUrl` hands out (the api's
- * short-lived signed download URL, issued after its access check): a file the viewer may not see
+ * Reads the Attachments' Documents, each once, only through the URL `fileUrl` hands out (the api's
+ * short-lived signed download URL, issued after its access check): a Document the viewer may not see
  * gets the api's 404, so it fails and nothing is shown. The bytes are read whole and kept, so the
  * preview, Open large, Download and Print all use the one read, and nothing is asked of the file
  * store once the URL has expired. A failed read is tried again by asking once more.
@@ -74,7 +74,7 @@ export function useAttachmentFiles(fileUrl: (id: string) => Promise<string>) {
   return { loads, load };
 }
 
-/** Saves a file read into this page under its name: the browser's download, no page opened. */
+/** Saves a Document read into this page under its name: the browser's download, no page opened. */
 export function saveAttachment(file: LoadedAttachment, name: string) {
   const link = document.createElement("a");
   link.href = file.url;
@@ -86,9 +86,9 @@ export function saveAttachment(file: LoadedAttachment, name: string) {
 }
 
 /**
- * Prints a file read into this page from a hidden frame: the browser's print dialog, no new tab or
+ * Prints a Document read into this page from a hidden frame: the browser's print dialog, no new tab or
  * window. The frame goes once the dialog closes; the returned function takes it away sooner (the
- * section closing), so it never outlives the file's URL.
+ * section closing), so it never outlives the Document's URL.
  */
 export function printAttachment(file: LoadedAttachment): () => void {
   document.querySelector("iframe[data-attachment-print]")?.remove();
