@@ -7,7 +7,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -75,7 +75,10 @@ describe("member_list_columns", () => {
   });
 
   it("is read by nobody else: not a colleague of the same Company, nor another Company's Member", async () => {
-    expect(await rowsAs(people.colleague, sql`select 1 from member_list_columns`)).toEqual([]);
+    // A's row is read by A, then by neither the colleague nor B, by its Member's id (RP-1095).
+    const read = (as: string) => rowsAs(as, sql`select member_id from member_list_columns`) as Promise<{ member_id: string }[]>;
+    await expectHiddenFrom({ read, target: people.a, seenBy: people.a, hiddenFrom: [people.colleague, people.b], idOf: (r) => r.member_id, label: "A's columns" });
+    expect(await rowsAs(people.colleague, sql`select member_id from member_list_columns`)).toEqual([]);
     expect(await rowsAs(people.b, sql`select member_id from member_list_columns`)).toEqual([{ member_id: people.b }]);
   });
 

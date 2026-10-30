@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { buildSeamTwoTower, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { buildSeamTwoTower, expectHiddenFrom, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -422,7 +422,14 @@ describe("RP-1110: a report is checked again each time its asker reads it", () =
          where work_item_id = $1 and dimension_id = (select dimension_id from dimension_value where id = $2)`,
         [moving, tower.buildingB],
       );
-      expect(await tower.call(c1Engineer(), sql<{ id: string }>`select id from work_item where id = ${moving}::uuid`)).toEqual([]);
+      // K1 still reads the moved Snag, by id; C1's engineer, covering Building A only, no longer does (RP-1095).
+      await expectHiddenFrom({
+        read: (as: string) => tower.call<{ id: string }>(as, sql`select id from work_item where id = ${moving}::uuid`),
+        target: moving,
+        seenBy: k1(),
+        hiddenFrom: c1Engineer(),
+        label: "the moved Snag",
+      });
       expect(await state(c1Engineer(), id)).toEqual(gone);
       expect((await state(c1Engineer(), control))[0]!.status).toBe("ready");
     } finally {

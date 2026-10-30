@@ -17,7 +17,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db, type RecordFacts } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, bilingual, buildSeamTwoTower, c2Draft, digits, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, bilingual, buildSeamTwoTower, c2Draft, digits, expectHiddenFrom, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const TYPE = `WR${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
@@ -261,8 +261,20 @@ describe("RP-982-1: C2 gets no record of the Inspection; C1 does", () => {
   });
 
   it("C1 and the Owner get its file; C2 gets none, and gets its own item's", async () => {
-    for (const reader of [tower.c1.members.engineer, tower.ow.members.representative]) expect(await recordFile(reader, id), reader).toHaveLength(1);
-    expect(await recordFile(tower.c2.members.engineer, id)).toEqual([]);
-    expect(await recordFile(tower.c2.members.engineer, c2Item)).toHaveLength(1);
+    // By storage key, each read first by a Member who sees the item (RP-1095).
+    const keyOf = (item: string) => `projects/${tower.projectId}/work-items/${item}/documental-record/record.pdf`;
+    const idOf = (r: { storage_key: string }) => r.storage_key;
+    for (const reader of [tower.c1.members.engineer, tower.ow.members.representative]) {
+      expect(await recordFile(reader, id), reader).toEqual([{ storage_key: keyOf(id) }]);
+    }
+    await expectHiddenFrom({
+      read: (as: string) => recordFile(as, id),
+      target: keyOf(id),
+      seenBy: [tower.c1.members.engineer, tower.ow.members.representative],
+      hiddenFrom: tower.c2.members.engineer,
+      idOf,
+      label: "C1's record",
+    });
+    expect(await recordFile(tower.c2.members.engineer, c2Item)).toEqual([{ storage_key: keyOf(c2Item) }]);
   });
 });

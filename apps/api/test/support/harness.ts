@@ -41,6 +41,20 @@ export async function expectHidden(response: LightMyRequestResponse | Promise<Li
   });
 }
 
+/**
+ * A read for expectHiddenFrom (@rabaed/db/test-support, RP-1095): `by` GETs `path`, and gets
+ * `[body]` when they may see it, `[]` for the plain 404 (expectHidden's) when they may not.
+ * Anything else fails, so a broken read never passes as "hidden".
+ */
+export const readById =
+  <T = { id: string }>(path: string) =>
+  async (by: Caller): Promise<T[]> => {
+    const res = await by.get(path);
+    if (res.statusCode === 200) return [res.json() as T];
+    await expectHidden(res, path);
+    return [];
+  };
+
 export const testConfig: ApiConfig = {
   sessionTtlMs: 12 * HOUR,
   invitationTtlMs: 72 * HOUR,

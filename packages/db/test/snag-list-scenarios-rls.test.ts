@@ -494,7 +494,7 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
         .filter((id) => ours.includes(id));
     expect(await atStage(c2, "open")).toEqual([c2Snag]);
     expect((await atStage(c1Pm, "open")).sort()).toEqual([first, second].sort());
-    expect(await atStage(c2, "in_progress")).toEqual([]);
+    // (No item of these is In Progress, so a read at that Stage would be empty for everyone and prove nothing: RP-1095.)
     expect(await listed(outsider)).toEqual([]);
     expect(await outsiderReadsOwnProject()).toBe(true);
   });

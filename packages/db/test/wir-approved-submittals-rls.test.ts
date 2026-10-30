@@ -21,7 +21,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -204,8 +204,14 @@ describe("RP-82-1: an inspector reads an Approved submittal they can't see as it
       approved_submittals: [{ document_number: marNumber, subject: "Approved cable trays" }],
     });
     expect(JSON.stringify(read)).not.toContain(mar);
-    // Nor can they open the MAR itself.
-    expect(await call(inspector, sql<object>`select id from work_item where id = ${mar}::uuid`)).toEqual([]);
+    // Nor can they open the MAR itself, which K1's Authorized Person reads by id (RP-1095).
+    await expectHiddenFrom({
+      read: (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${mar}::uuid`),
+      target: mar,
+      seenBy: k1.ap,
+      hiddenFrom: inspector,
+      label: "the MAR",
+    });
   });
 
   it("gives a reader who sees the MAR its id", async () => {
