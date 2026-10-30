@@ -198,7 +198,8 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
                 {tInspection("revision.neverBlocks")}
               </p>
             )}
-            {counts.documentNumber && (
+            {/* The Snag List filters by Rev 0's number only: a Revision's (" Rev 1") is no filter value, so it would open unfiltered. */}
+            {counts.documentNumber && counts.revisionNo === 0 && (
               <Link
                 href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [counts.documentNumber] })}
                 className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md bg-surface-subtle px-3 text-sm font-semibold hover:bg-hover md:min-h-9"

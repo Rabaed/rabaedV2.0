@@ -804,8 +804,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       select previous_revision_no, previous_document_number, type_code, type_name, open_count, closed_count
       from app.work_item_previous_raised_item_counts(${workItemId}::uuid)
     `.execute(trx);
-    // The same follow-ups one each (RP-655): the Snag List can't list them, as its filter matches the
-    // Document Number every Revision of the chain shares.
+    // The same follow-ups one each (RP-655), read with their counts so the list and "n closed / m open" agree.
     const { rows: previousRows } = previous[0]
       ? await sql<{ work_item_id: string; type_code: string; document_number: string | null; title: string; closed: boolean }>`
           select work_item_id, type_code, document_number, title, closed from app.work_item_previous_raised_items(${workItemId}::uuid)

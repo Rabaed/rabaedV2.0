@@ -5,9 +5,10 @@
 -- * app.work_item_previous_raised_items: for a Revision `p_work_item_id`, the items raised from the item
 --   before it in its chain (`revision_of_id`) that the caller sees, never a discarded one: each one's Type,
 --   Document Number, Subject and whether it is closed, as the counts count them. No row when the caller
---   sees no Rev n-1 or the item is no Revision. The Snag List's `raisedFrom` filter can't list them: it
---   matches a Document Number, which every Revision of a chain shares, so it also finds Rev 1's own
---   follow-ups. Open follow-ups never block a code: no rule reads these rows.
+--   sees no Rev n-1 or the item is no Revision. They are the rows the counts count, read with them in
+--   the item read, so the Revision's list and its "n closed / m open" always agree. The Snag List's
+--   `raisedFrom` filter can't stand in: it takes no Revision's Document Number (" Rev 1" is no filter
+--   value), so a Rev 2 could not list Rev 1's. Open follow-ups never block a code: no rule reads these rows.
 
 create function app.work_item_previous_raised_items(p_work_item_id uuid)
   returns table (work_item_id uuid, type_code text, document_number text, title text, closed boolean)
