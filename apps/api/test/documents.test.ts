@@ -302,6 +302,40 @@ describe("a hidden item's Documents", () => {
   });
 });
 
+// Scenario RP-1068-1: the Submittal Panel reads a Document to preview it only through this URL.
+describe("RP-1068-1: the Submittal Panel's preview of a Document", () => {
+  let itemId = "";
+  let documentId = "";
+  const body = "%PDF-1.7 luminaire datasheet";
+
+  beforeAll(async () => {
+    itemId = await draft();
+    documentId = await uploaded(engineer, itemId, body, "Luminaire datasheet.pdf");
+    await attachDatasheet(engineer, itemId);
+    await ok(tryTake(engineer, itemId, "send_for_review"));
+    await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
+    await ok(tryTake(pm, itemId, "submit"));
+  });
+
+  it("reads the file through its signed URL for a Company that sees the item, shown in the page, not saved", async () => {
+    const res = await fetch(await downloadUrl(k1Engineer, itemId, documentId));
+    expect({
+      status: res.status,
+      type: res.headers.get("content-type"),
+      disposition: res.headers.get("content-disposition")?.split(";")[0],
+      body: await res.text(),
+    }).toEqual({ status: 200, type: "application/pdf", disposition: "inline", body });
+  });
+
+  it("gives a Company that can't see the item, and a Member off the Project, the plain 404 for the URL, as for a made-up id", async () => {
+    for (const who of [c2Engineer, outsider]) {
+      await expectHidden(who.get(documentsUrl(itemId)));
+      await expectHidden(who.get(`${documentUrl(itemId, documentId)}/download`));
+      await expectHidden(who.get(`${documentUrl(itemId, randomUUID())}/download`));
+    }
+  });
+});
+
 describe("a download URL", () => {
   it("stops working once it expires", async () => {
     const itemId = await draft();
