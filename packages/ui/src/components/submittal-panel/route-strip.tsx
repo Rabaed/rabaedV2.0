@@ -4,7 +4,7 @@ import { formatNumber, type BaseRole, type Locale } from "@rabaed/domain";
 import { useId, type CSSProperties } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import type { RouteStop, RouteStopState } from "./route-model.ts";
+import { routeStopLine, submittalRouteStopLine, type RouteStop, type RouteStopLine, type RouteStopState, type SubmittalRoute } from "./route-model.ts";
 
 /** The route strip's words, in the viewer's language, from the app's messages. */
 export type SubmittalRouteLabels = {
@@ -66,7 +66,7 @@ export type SubmittalRouteStripProps = {
 export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = false, className }: SubmittalRouteStripProps) {
   const listId = useId();
   const items = stops.map((stop, i) => {
-    const line = large ? stopLine(stop, labels, locale) : stop.companyName ? labels.withCompany(stop.companyName[locale]) : null;
+    const line = large ? lineText(routeStopLine(stop), labels, locale) : stop.companyName ? labels.withCompany(stop.companyName[locale]) : null;
     return (
       <li key={i} aria-current={stop.state === "current" ? "step" : undefined} data-state={stop.state} className="flex min-w-0 items-center gap-1">
         {/* Points along the flow: the icon turns round in Arabic by itself. */}
@@ -81,7 +81,8 @@ export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = fal
           )}
         >
           <RoleIcon role={stop.role} size={large ? 32 : 24} />
-          <span className="min-w-0">
+          {/* The role and line: the rail's one-line strip keeps them on the stop holding the item only (submittal-panel.css). */}
+          <span data-stop-label="" className="min-w-0">
             <b className="block leading-tight font-semibold">{labels.role(stop.role)}</b>
             {line && <small className="block text-[11px] leading-tight font-medium text-muted">{line}</small>}
           </span>
@@ -115,9 +116,67 @@ export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = fal
   );
 }
 
-/** The large strip's line under a stop: who holds it, or what it is. */
-function stopLine(stop: RouteStop, labels: SubmittalRouteLabels, locale: Locale): string {
-  if (stop.companyName) return labels.withCompany(stop.companyName[locale]);
-  if (stop.stepKeys.length === 0) return labels.outcome;
-  return labels.steps(stop.stepKeys.length, formatNumber(stop.stepKeys.length, locale));
+/**
+ * The vertical Step list of the rail's Workflow block (RP-1093, README §4.9): one row a stop of the
+ * route strip, in its order, each with its state (done ✓, current, upcoming), its Project Role and
+ * one line: the viewer's own Step where its Participant holds the item, the Company the API names
+ * where another Company does (never one of its Steps, V14), the outcome, or how many Steps it has.
+ */
+export function SubmittalRouteSteps({ locale, labels, route, className }: { locale: Locale; labels: SubmittalRouteLabels; route: SubmittalRoute; className?: string }) {
+  return (
+    <ol data-route-steps="" aria-label={labels.route} className={cn("flex flex-col", className)}>
+      {route.stops.map((stop, i) => {
+        const last = i === route.stops.length - 1;
+        return (
+          <li
+            key={i}
+            data-state={stop.state}
+            aria-current={stop.state === "current" ? "step" : undefined}
+            className={cn("relative grid grid-cols-[20px_minmax(0,1fr)] gap-2.5", !last && "pb-3")}
+          >
+            {/* The line down to the next stop: green once this one is done. */}
+            {!last && (
+              <span aria-hidden="true" className={cn("absolute start-[9px] top-5 bottom-0 w-0.5", stop.state === "done" ? "bg-success" : "bg-border-subtle")} />
+            )}
+            <span
+              aria-hidden="true"
+              className={cn(
+                "relative flex size-5 items-center justify-center rounded-full",
+                stop.state === "done" && "bg-success text-on-inverse",
+                stop.state === "current" && "bg-surface shadow-[inset_0_0_0_2px_var(--brand)]",
+                stop.state === "upcoming" && "bg-surface shadow-[inset_0_0_0_2px_var(--border-strong)]",
+              )}
+            >
+              {stop.state === "done" && <Icon name="check" size={12} />}
+              {stop.state === "current" && <span className="size-2 rounded-full bg-brand" />}
+            </span>
+            <span className="min-w-0">
+              <b className="flex items-center gap-1.5 text-[13px] leading-5 font-semibold">
+                <RoleIcon role={stop.role} size={18} />
+                {labels.role(stop.role)}
+              </b>
+              <small dir="auto" className="block text-[12px] text-muted">
+                {lineText(submittalRouteStopLine(route, i), labels, locale)}
+              </small>
+              <span className="sr-only">({labels.state(stop.state)})</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** A stop's line in words: under the large strip's stops and the Step list's rows alike. */
+function lineText(line: RouteStopLine, labels: SubmittalRouteLabels, locale: Locale): string {
+  switch (line.kind) {
+    case "step":
+      return line.name[locale];
+    case "company":
+      return labels.withCompany(line.name[locale]);
+    case "outcome":
+      return labels.outcome;
+    case "steps":
+      return labels.steps(line.count, formatNumber(line.count, locale));
+  }
 }

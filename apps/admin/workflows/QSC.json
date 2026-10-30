@@ -4,7 +4,7 @@
       "key": "draft",
       "name": { "en": "Draft", "ar": "مسودة" },
       "stage": "draft",
-      "actor": { "role": "consultant", "permission": "create" },
+      "actor": { "raiser": true, "permission": "create" },
       "outcomeMode": "none"
     },
     {
@@ -37,8 +37,9 @@
       "from": "draft",
       "to": "open",
       "outcome": null,
-      "permission": "create",
-      "actionForm": null
+      "permission": "submit",
+      "actionForm": null,
+      "inform": ["consultant"]
     },
     {
       "key": "answer",

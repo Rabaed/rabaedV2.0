@@ -157,10 +157,10 @@ export function SubmittalPanelHost({
   const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
   const place = item?.location ? (placesOf(filters.locations).get(item.location.id)?.map((p) => p.name[locale]) ?? [item.location.name[locale]]) : [];
-  // The approval log, in the side rail from 880px and in-flow below, and Internal Communication (RP-1067).
-  const log = useSubmittalPanelLog({ item, locale, refreshKey, outcomes: filters.outcomes });
   // The route strip and the Workflow map (RP-1064).
-  const { route } = useSubmittalPanelRoute(item, locale, refreshKey);
+  const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale, refreshKey);
+  // The approval log, in the side rail from 880px and in-flow below, under the Workflow block (RP-1093), and Internal Communication (RP-1067).
+  const log = useSubmittalPanelLog({ item, locale, refreshKey, outcomes: filters.outcomes, workflow, openMap });
 
   return (
     <SubmittalPanel

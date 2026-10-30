@@ -1,7 +1,7 @@
 "use client";
 
 import type { Locale, ProjectSummary, WorkItemDetail, WorkItemWorkflowMap } from "@rabaed/domain";
-import { SubmittalRouteStrip, SubmittalWorkflowMap, submittalRoute, type SubmittalWorkflowMapLabels } from "@rabaed/ui";
+import { SubmittalRouteSteps, SubmittalRouteStrip, SubmittalWorkflowMap, submittalRoute, type SubmittalWorkflowMapLabels } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
@@ -31,10 +31,11 @@ function useRead<T>(url: string | null, refreshKey?: unknown): Read<T> | null {
  * viewer may know it (V14), and the Project read, for whether the viewer may edit Workflows (a
  * Project Admin; V20). No new API.
  *
- * `route` goes in the panel's route slot (the strip and the map); `openMap` opens the map from
- * anywhere else in the panel (the Details tab's button, the rail's link: RP-1067).
+ * `route` goes in the panel's route slot (the strip and the map); `workflow` is the rail's Workflow
+ * block and the in-flow section's (the strip again, then the vertical Step list: RP-1093, README
+ * §4.9); `openMap` opens the map from anywhere else in the panel (the rail's link: RP-1067).
  */
-export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Locale, refreshKey?: unknown): { route: ReactNode; openMap: () => void } {
+export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Locale, refreshKey?: unknown): { route: ReactNode; workflow: ReactNode; openMap: () => void } {
   const t = useTranslations("submittalRoute");
   const tMap = useTranslations("workflowMap");
   const tRoles = useTranslations("projects.roles");
@@ -70,11 +71,18 @@ export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Loca
 
   // The same function every render: a map asked for before its read arrives opens once it does.
   const openMap = useCallback(() => setOpen(true), []);
-  if (!item || !map) return { route: null, openMap };
+  if (!item || !map) return { route: null, workflow: null, openMap };
   const project = projectRead?.value ?? null;
-  const { stops } = submittalRoute({ definition: map.definition, stages: map.stages, position: map.position });
+  const route = submittalRoute({ definition: map.definition, stages: map.stages, position: map.position });
+  const { stops } = route;
   return {
     openMap,
+    workflow: (
+      <div className="flex min-w-0 flex-col gap-4">
+        <SubmittalRouteStrip locale={locale} labels={labels} stops={stops} onOpen={openMap} />
+        <SubmittalRouteSteps locale={locale} labels={labels} route={route} />
+      </div>
+    ),
     route: (
       <div className="sdp-route-slot px-5 pb-4">
         <SubmittalRouteStrip locale={locale} labels={labels} stops={stops} onOpen={openMap} />

@@ -5,7 +5,14 @@ import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Badge } from "../data/badge.tsx";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import type { SubmittalInternalEntry, SubmittalLogEntry, SubmittalTimelineEvent, SubmittalTimelineText, SubmittalTimelineTone } from "./timeline-model.ts";
+import {
+  submittalPositionsText,
+  type SubmittalInternalEntry,
+  type SubmittalLogEntry,
+  type SubmittalTimelineEvent,
+  type SubmittalTimelineText,
+  type SubmittalTimelineTone,
+} from "./timeline-model.ts";
 
 /**
  * The Submittal Panel's timeline (RP-1067, README §5): one list, newest first, for both the approval
@@ -19,8 +26,11 @@ export type SubmittalTimelineItem = {
   tone: SubmittalTimelineTone;
   icon: IconName;
   move: string;
-  /** Who acted: a person (the viewer's own, or the Code's signer) and their Company, or a Company alone. */
-  who?: { person: string | null; company: string | null };
+  /**
+   * Who acted: a person (the viewer's own, or the Code's signer), their Position (the viewer's own
+   * people only, as the read gives it, RP-1091) and their Company; or a Company alone.
+   */
+  who?: { person: string | null; position?: string | null; company: string | null };
   /** Each text written with it, labelled ("Cover Note", "Remarks"). */
   texts?: readonly { label: string; text: string }[];
   chip?: ReactNode;
@@ -57,7 +67,16 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
             <p className={cn("text-[13px] font-semibold", item.collapsed && "text-text-secondary")}>{item.move}</p>
             {item.who && (item.who.person || item.who.company) && (
               <p className="mt-1 text-[12.5px] [overflow-wrap:anywhere]">
+                {/* Name · Position · Company, each part only when given; a Position only with its person. */}
                 {item.who.person && <span className="font-semibold">{item.who.person}</span>}
+                {item.who.person && item.who.position && (
+                  <>
+                    <span className="text-muted"> · </span>
+                    <span data-who="position" className="text-muted">
+                      {item.who.position}
+                    </span>
+                  </>
+                )}
                 {item.who.person && item.who.company && <span className="text-muted"> · </span>}
                 {item.who.company && <span className="text-muted">{item.who.company}</span>}
               </p>
@@ -113,6 +132,7 @@ const iconOf = (event: SubmittalTimelineEvent, tone: SubmittalTimelineTone): Ico
 function eventItem(
   event: SubmittalTimelineEvent,
   person: BilingualText | null,
+  positions: readonly BilingualText[],
   texts: readonly SubmittalTimelineText[],
   labels: SubmittalTimelineLabels,
   locale: Locale,
@@ -120,7 +140,11 @@ function eventItem(
   return {
     key: String(event.seq),
     move: labels.move(event),
-    who: { person: person?.[locale] ?? null, company: event.by.companyName?.[locale] ?? null },
+    who: {
+      person: person?.[locale] ?? null,
+      position: submittalPositionsText(positions, locale),
+      company: event.by.companyName?.[locale] ?? null,
+    },
     texts: texts.map((t) => ({ label: labels.texts[t.kind], text: t.text })),
     at: event.at,
   };
@@ -159,7 +183,7 @@ export function SubmittalApprovalLog({
       </Badge>
     );
     return {
-      ...eventItem(event, entry.person, entry.texts, labels, locale),
+      ...eventItem(event, entry.person, entry.positions, entry.texts, labels, locale),
       tone: entry.tone,
       icon: iconOf(event, entry.tone),
       chip: chip && href ? (
@@ -190,8 +214,8 @@ export function SubmittalInternalCommunication({
   banner: string;
   entries: readonly SubmittalInternalEntry[];
 }) {
-  const items = entries.map(({ event, person, texts, tone }): SubmittalTimelineItem => ({
-    ...eventItem(event, person, texts, labels, locale),
+  const items = entries.map(({ event, person, positions, texts, tone }): SubmittalTimelineItem => ({
+    ...eventItem(event, person, positions, texts, labels, locale),
     tone,
     icon: event.type === "internal_note" ? "message" : event.recommendedCode !== null ? "gavel" : toneIcon[tone],
     chip: event.recommendedCode ? (

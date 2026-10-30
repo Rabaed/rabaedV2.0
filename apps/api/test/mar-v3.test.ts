@@ -127,8 +127,9 @@ describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
         ["CMT", 2],
         ["SNG", 1],
         ["OBS", 1],
-        ["QSN", 1],
-        ["QSC", 1],
+        ["QSN", 2],
+        ["QSC", 2],
+        ["QSO", 1],
       ]);
     } finally {
       await migrator.destroy();

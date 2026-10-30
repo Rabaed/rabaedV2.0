@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { protectedLaneReason } from "./lanes.ts";
 import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
 import { longPath, rdLongPath } from "./worktrees.ts";
 
@@ -36,7 +37,9 @@ describe("removalRefusal", () => {
   it("never a folder a Claude session works in, nor lane 7's, even with --force", () => {
     const held = 'a running Claude session is in it: session "lane 52" (pid 52)';
     expect(removalRefusal(target({ held }), { force: true, platform: "win32" })).toContain(held);
-    expect(removalRefusal(target({ project: "rabaed-lane7" }), { force: true, platform: "win32" })).toContain("live UAT stack");
+    expect(removalRefusal(target({ project: "rabaed-lane7" }), { force: true, platform: "win32" })).toBe(
+      `Not removed: ${target({}).path} is kept: ${protectedLaneReason("rabaed-lane7")}.`,
+    );
   });
 
   it("lists uncommitted and untracked files, and unpushed commits; --force removes it anyway", () => {

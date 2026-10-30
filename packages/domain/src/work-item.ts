@@ -853,9 +853,13 @@ export const workItemHistory = z.object({
       /**
        * Another Company by its name only; a person only within the viewer's own,
        * except whoever issued a Code, named to everyone who sees it (V14).
+       * `positions`: a Member of the viewer's own Participant's Positions (RP-1091), as
+       * they held them when they took a Transition or a Code, else as they hold them now;
+       * none for anyone else, the Code's signer of another Company included.
        */
-      by: z.object({ companyName: bilingualText.nullable(), memberName: bilingualText.nullable() }),
+      by: z.object({ companyName: bilingualText.nullable(), memberName: bilingualText.nullable(), positions: z.array(bilingualText) }),
       transition: bilingualText.nullable(),
+      /** The Steps it moved between: only on the viewer's own Participant's events (V14), and a Rabaed Engineer's. */
       fromStep: bilingualText.nullable(),
       toStep: bilingualText.nullable(),
       reason: z.string().nullable(),
