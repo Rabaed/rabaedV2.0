@@ -1,7 +1,7 @@
 /* eslint-disable rabaed/no-avoid-terms -- GitHub's required checks, author associations and git's names, by their own names, as in reviewed-required.ts */
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { onlyCleanCommitsSince, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
+import { isBaselineBotCommit, onlyCleanCommitsSince, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { REQUIRED_CHECK } from "./reviewed-required.ts";
 import { realGateGit, verifyGate } from "./verify-gate.ts";
 
@@ -123,12 +123,16 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!first.sameRepo) return skip("a fork's PR: not labelled here (the reviewed-label job skips forks too).");
   if (first.draft) return skip("a draft: checked again when marked ready.");
   const head = first.headSha;
+  seam.fetchPull(pr);
+  // The screenshot bot pushes with GITHUB_TOKEN, which starts no reviewed-label run: nothing to wait for on its commit.
+  const botHead = isBaselineBotCommit(head, seam);
   // That run may be about to remove a label left from an earlier head, so the labels are read only once it has
   // finished: a label seen before then may be gone a moment later, and adding before it finishes would race it.
   const settled = await waitFor(
     async () => {
       const runs = await seam.labelRuns(head);
-      return runs === undefined || (runs.length > 0 && runs.every((run) => run.status === "completed"));
+      if (runs === undefined) return true;
+      return runs.length > 0 ? runs.every((run) => run.status === "completed") : botHead;
     },
     seam.sleep,
     pollMs,
@@ -138,7 +142,6 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
   if (pull.labels.includes(REVIEWED_LABEL)) return skip(`already has \`${REVIEWED_LABEL}\`.`);
-  seam.fetchPull(pr);
   const review = reviewAt(await seam.comments(pr), head, seam);
   const verify = verifyGate(pull.body, head, seam);
   if (!review.ok || !verify.ok) {

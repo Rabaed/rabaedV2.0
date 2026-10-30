@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addEvent, addReviewed, isTrustedAuthor, reviewAt, reviewMarker, type AddSeam, type ReviewComment } from "./reviewed-add.ts";
-import { REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
+import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
 
 const HEAD = "a".repeat(40);
@@ -151,7 +151,8 @@ describe("addReviewed", () => {
     for (const start of [{ draft: true }, { sameRepo: false }, { open: false }, { labels: [REVIEWED_LABEL] }]) {
       const { seam, calls } = fakeSeam(start);
       expect(await addReviewed({ pr: 5 }, seam)).toMatchObject({ ok: true, added: false });
-      expect(calls).toEqual([]);
+      // The label is read only after the reviewed-label wait, which needs the head's commits.
+      expect(calls).toEqual(start.labels ? ["fetch"] : []);
     }
   });
 
@@ -167,7 +168,25 @@ describe("addReviewed", () => {
     const result = await addReviewed({ pr: 5 }, { ...seam, labelRuns: async () => [{ status: "in_progress" }] }, { pollMs: 10, timeoutMs: 30 });
     expect(result).toMatchObject({ ok: false, added: false });
     expect(result.summary).toContain("reviewed-label");
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["fetch"]);
+  });
+
+  it("does not wait for a reviewed-label run on the screenshot bot's baseline commit: a GITHUB_TOKEN push starts none", async () => {
+    const bot: ReviewedGit = {
+      ...git,
+      parents: (commit) => (commit === HEAD ? [OLD] : []),
+      identity: () => ({ author: BASELINE_BOT_EMAIL, committer: BASELINE_BOT_EMAIL }),
+      changedPaths: () => [`${BASELINE_FOLDER}/button.png`],
+    };
+    const { seam, calls } = fakeSeam({ comments: [review(HEAD)], graph: bot });
+    const result = await addReviewed({ pr: 5 }, { ...seam, labelRuns: async () => [] }, { pollMs: 10, timeoutMs: 30 });
+    expect(result).toMatchObject({ ok: true, added: true });
+    expect(calls).toContain("add");
+  });
+
+  it("still waits when a code commit has no reviewed-label run yet", async () => {
+    const { seam } = fakeSeam({});
+    expect(await addReviewed({ pr: 5 }, { ...seam, labelRuns: async () => [] }, { pollMs: 10, timeoutMs: 30 })).toMatchObject({ ok: false, added: false });
   });
 
   it("does not re-run a reviewed-required run that passed, and waits for one still running", async () => {
@@ -206,6 +225,6 @@ describe("addReviewed", () => {
     let reads = 0;
     const moving: AddSeam = { ...seam, pull: async () => ({ ...(await seam.pull(5)), headSha: reads++ === 0 ? HEAD : OLD }) };
     expect(await addReviewed({ pr: 5 }, moving)).toMatchObject({ ok: true, added: false });
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["fetch"]);
   });
 });
