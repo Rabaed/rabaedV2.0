@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // What the migration checks share: where the migrations live, git, and a
 // commit's migrations.
@@ -11,6 +13,12 @@ export interface Migration {
   name: string;
   sql: string;
 }
+
+/** The migrations in `repo`'s working tree (not a commit's), each by file name with its SQL. */
+export const workingTreeMigrations = (repo: string): Migration[] =>
+  readdirSync(join(repo, migrationsDir))
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => ({ name, sql: readFileSync(join(repo, migrationsDir, name), "utf8") }));
 
 /** Runs git in `repo` and returns its output. */
 export const git = (repo: string, ...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });

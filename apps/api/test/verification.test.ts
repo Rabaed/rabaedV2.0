@@ -331,7 +331,19 @@ describe("a record replaced by a corrected copy (Re-produce, RP-155)", { timeout
     shown = await verified(byLink(visitor(), replaced.token));
     if (shown.status !== "replaced") throw new Error(`expected a replaced record, got ${shown.status}`);
     replacedAt = shown.replacedAt;
-    expect(new Date(shown.sealedAt).getTime()).toBeLessThanOrEqual(new Date(replacedAt).getTime() + 1000);
+    // When the corrected copy replaced the old one, and when it was sealed, as the Re-produce recorded them (read as the
+    // migrator: no seam shows the row). The seal time is the worker's clock and the replacement the database's, which
+    // differ by more than a second under load (RP-1105), so each is compared with its own record, never with the other.
+    const { rows } = await sql<{ replaced_at: string; sealed_at: string; old_sealed_at: string }>`
+      select app.iso_utc(x.created_at) as replaced_at, app.iso_utc(x.new_sealed_at) as sealed_at, app.iso_utc(x.replaced_sealed_at) as old_sealed_at
+      from documental_record_reproduction x join documental_record r on r.id = x.documental_record_id
+      where r.work_item_id = ${replaced.id}::uuid and x.previous_status = 'published'
+    `.execute(migrator);
+    const [row] = rows;
+    expect(rows).toHaveLength(1);
+    expect({ replacedAt: row!.replaced_at, sealedAt: row!.sealed_at }).toEqual({ replacedAt, sealedAt: shown.sealedAt });
+    // The corrected copy was sealed after the copy it replaced: two readings of the worker's one clock.
+    expect(new Date(shown.sealedAt).getTime()).toBeGreaterThan(new Date(row!.old_sealed_at).getTime());
   });
 
   it("still recognises the old copy's fingerprint, as replaced on that date, and gives the corrected copy's as current", () => {
