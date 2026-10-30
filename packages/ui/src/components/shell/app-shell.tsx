@@ -91,11 +91,12 @@ export function AppShell({ sidebar, topBar, menuLabel, closeLabel, children }: A
   );
 
   return (
-    <div className="flex min-h-dvh bg-canvas text-text">
+    // A page holding a board that fills the window (RP-1092) is the window's height: the page doesn't scroll, the board does.
+    <div className="flex min-h-dvh bg-canvas text-text fills-window:h-dvh">
       <Sidebar {...sidebar} className={cn("hidden lg:flex", sidebar.className)} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col fills-window:min-h-0">
         <TopBar menu={menu} {...topBar} />
-        <main className="flex min-w-0 flex-1 flex-col">{children}</main>
+        <main className="flex min-w-0 flex-1 flex-col fills-window:min-h-0">{children}</main>
       </div>
     </div>
   );

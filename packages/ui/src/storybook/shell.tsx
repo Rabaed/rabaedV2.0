@@ -1,10 +1,12 @@
 import type { ModuleKey } from "@rabaed/domain";
+import type { ReactNode } from "react";
 import { Button, IconButton } from "../components/button/button.tsx";
+import { AppShell } from "../components/shell/app-shell.tsx";
 import { Icon } from "../components/icon/icon.tsx";
 import { PageHeader } from "../components/shell/page-header.tsx";
 import { ProjectTabs, projectTabKeys, type ProjectTabKey } from "../components/shell/project-tabs.tsx";
 import { RabaedLogoTile, SidebarBrand, type SidebarProps } from "../components/shell/sidebar.tsx";
-import { ProjectMark, TopBarTitle } from "../components/shell/page-frame.tsx";
+import { PageContent, ProjectMark, TabsBar, TopBarTitle } from "../components/shell/page-frame.tsx";
 import { DocNo } from "../components/doc-no/doc-no.tsx";
 import { MemberMenu, type MemberMenuProps } from "../components/shell/member-menu.tsx";
 import { storyLocale, storyText } from "./locale.ts";
@@ -136,6 +138,16 @@ export function storyTopBar(context: Context) {
     ),
     member: storyMemberMenu(context),
   };
+}
+
+/** A Project's Module tab as the app lays it out: the shell, the Project tabs, then `children` in the page's content area. */
+export function StoryProjectPage({ context, current, children }: { context: Context; current: ProjectTabKey; children: ReactNode }) {
+  return (
+    <AppShell sidebar={storySidebar(context)} topBar={storyTopBar(context)} menuLabel={storyText(context, shellCopy.menu)} closeLabel={storyText(context, shellCopy.close)}>
+      <TabsBar>{storyProjectTabs(context, current, ["submittals", "inspections", "snag_list"])}</TabsBar>
+      <PageContent>{children}</PageContent>
+    </AppShell>
+  );
 }
 
 export function storyPageHeader(context: Context) {
