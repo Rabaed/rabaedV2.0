@@ -3,8 +3,11 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
+import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
 import { storyLocale } from "../../storybook/locale.ts";
+import { overlay } from "../../storybook/overlay.ts";
 import { packagesBoardLabels } from "../../storybook/packages.ts";
+import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { viewSwitchLabels } from "../../storybook/views.ts";
 import { WorkItemViewSwitch } from "../views/work-item-board.tsx";
 import { PackagesBoard } from "./packages-board.tsx";
@@ -51,7 +54,8 @@ const meta = {
     packageHref: (id: string) => `#${id}`,
   },
   render: (args, context) => <PackagesBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
-  decorators: [(Story) => <div className="bg-canvas p-6">{Story()}</div>],
+  // A full-screen story lays out the whole page itself (FillsTheWindow).
+  decorators: [(Story, context) => (context.parameters.layout === "fullscreen" ? Story() : <div className="bg-canvas p-6">{Story()}</div>)],
 } satisfies Meta<typeof PackagesBoard>;
 
 export default meta;
@@ -159,6 +163,25 @@ export const WithToolbar: Story = {
     await expect(within(views).getByRole("link", { name: viewSwitchLabels[locale].packages })).toHaveAttribute("aria-current", "page");
     await expect(within(views).getByRole("link", { name: viewSwitchLabels[locale].packages })).toHaveAttribute("href", "?view=packages");
     await expect(context.canvas.getByRole("button", { name: labelsOf(context).create.trigger })).toBeVisible();
+  },
+};
+
+// Twelve Packages in progress: a column taller than the window.
+const manyInProgress = Array.from({ length: 12 }, (_, i) => ({ ...lighting, id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, number: `PKG-1${String(i).padStart(2, "0")}`, name: b(`Lighting – Level ${i + 1}`, `الإنارة – الطابق ${i + 1}`) }));
+
+/**
+ * On its page (RP-1135, as RP-1092's boards), the Packages board fills the window from under
+ * its toolbar to the bottom edge, so its sideways scrollbar sits on that edge, not under the
+ * tallest column. The board scrolls down inside itself, and the page doesn't scroll.
+ */
+export const FillsTheWindow: Story = {
+  ...WithToolbar,
+  parameters: { ...overlay, layout: "fullscreen" },
+  args: { ...WithToolbar.args, packages: [bathrooms, lighting, facade, lifts, ...manyInProgress] },
+  render: (args, context) => <StoryProjectPage context={context} current="submittals">{WithToolbar.render!(args, context)}</StoryProjectPage>,
+  play: async (context) => {
+    const labels = labelsOf(context);
+    await expectFillsTheWindow(context.canvas.getByRole("region", { name: labels.board }), context.canvas.getByRole("region", { name: labels.toolbar }));
   },
 };
 
