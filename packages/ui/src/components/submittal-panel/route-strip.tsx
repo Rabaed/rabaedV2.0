@@ -81,7 +81,8 @@ export function SubmittalRouteStrip({ locale, labels, stops, onOpen, large = fal
           )}
         >
           <RoleIcon role={stop.role} size={large ? 32 : 24} />
-          <span className="min-w-0">
+          {/* The role and line: the rail's one-line strip keeps them on the stop holding the item only (submittal-panel.css). */}
+          <span data-stop-label="" className="min-w-0">
             <b className="block leading-tight font-semibold">{labels.role(stop.role)}</b>
             {line && <small className="block text-[11px] leading-tight font-medium text-muted">{line}</small>}
           </span>

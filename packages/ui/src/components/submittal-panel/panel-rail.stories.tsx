@@ -187,6 +187,26 @@ const ownLines = (context: PlayContext) => {
   return [ar ? "مدير مشروع المقاول" : "Contractor PM", ar ? "2 خطوات" : "2 Steps", ar ? "1 الخطوة" : "1 Step", storyText(context, copy.outcome)];
 };
 
+/**
+ * The rail's route strip is one line (README §4.9): every stop and chevron on the first line, nothing
+ * cut off sideways. The stop holding the item keeps its role and line; the others are their role's tile.
+ */
+async function expectStripOnOneLine(context: PlayContext) {
+  const strip = railOf(context).querySelector<HTMLElement>(".sdp-route")!;
+  const stops = [...strip.querySelectorAll<HTMLElement>("li")];
+  // On one line, the stops (centred on it) share their middle, whatever their height.
+  const middles = stops.map((li) => {
+    const box = li.getBoundingClientRect();
+    return Math.round(box.top + box.height / 2);
+  });
+  await expect(middles.every((middle) => Math.abs(middle - middles[0]!) <= 1)).toBe(true);
+  await expect(strip.querySelector("ol")!.scrollWidth).toBeLessThanOrEqual(strip.querySelector("ol")!.clientWidth);
+  await expect(stops.at(-1)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(strip.getBoundingClientRect().bottom);
+  // Every stop's role is still in the strip's description for assistive technology.
+  const button = within(railOf(context)).getByRole("button", { name: storyText(context, copy.open) });
+  for (const role of [copy.roles.contractor, copy.roles.consultant, copy.roles.owner]) await expect(button).toHaveAccessibleDescription(new RegExp(storyText(context, role)));
+}
+
 /** Nothing scrolls sideways, in the panel or the rail. */
 async function expectNoSidewaysScroll(context: PlayContext) {
   const body = panelOf(context).querySelector(".sdp-body")!;
@@ -208,6 +228,7 @@ export const Wide: Story = {
     await expect(shown(inflowOf(context))).toBe(false);
     await expectWorkflow(context, rail.querySelector<HTMLElement>('[data-rail="workflow"]')!, 0, ownLines(context));
     await expect(panelOf(context).querySelector(".sdp-route-slot .sdp-route")).toBeVisible();
+    await expectStripOnOneLine(context);
     await userEvent.click(within(rail).getByRole("button", { name: storyText(context, copy.map) }));
     await expect(openedOf(context)).toBe("1");
     await userEvent.click(within(rail).getByRole("button", { name: storyText(context, copy.open) }));
@@ -256,6 +277,8 @@ export const InsideAnotherCompany: Story = {
       storyText(context, copy.outcome),
     ]);
     await expect(block.textContent).not.toMatch(/Consultant Engineer|Consultant Manager|مهندس الاستشاري|مدير الاستشاري/);
+    // The longest line, "With Design Consultants LLC", still keeps the strip on one line.
+    await expectStripOnOneLine(context);
   },
 };
 
@@ -271,5 +294,6 @@ export const Closed: Story = {
     await expectWorkflow(context, block, 4, [ar ? "3 خطوات" : "3 Steps", ar ? "2 خطوات" : "2 Steps", ar ? "1 الخطوة" : "1 Step", storyText(context, copy.outcome)]);
     await expect(block.querySelectorAll("[data-route-steps] .bg-brand")).toHaveLength(0);
     await expect([...block.querySelectorAll<HTMLElement>(".sdp-route li[data-state]")].map((s) => s.dataset.state)).toEqual(["done", "done", "done", "done"]);
+    await expectStripOnOneLine(context);
   },
 };
