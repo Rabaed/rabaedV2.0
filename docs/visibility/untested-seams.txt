@@ -1,0 +1,166 @@
+# Visibility scenarios with no test at one seam, as of RP-1095 (2026-10-30).
+# One "RP-nnn-n api" (no test in apps/api/test/) or "RP-nnn-n db" (no test in packages/db/test/) a line.
+# This list only shrinks: scripts/check-scenario-seams.ts fails on a gap that isn't here, and on
+# a line whose test now exists. Never add a line for a new scenario: write its test at both seams.
+# Grouped by the ticket that added the scenario; the comment after a line is the start of its Scenario cell.
+
+# RP-82
+RP-82-1 api  # C1's WIR in Building A names under Approved submittals (a link question that accepts only 
+RP-82-2 api  # Tower's Project Admin (C1) turns on "Approved submittals required" (Project Settings → Req
+
+# RP-85
+RP-85-1 db  # C1's engineer has no Signature and opens Send for Review on their Draft, whose Form isn't 
+RP-85-2 db  # C1's engineer adds a Signature, takes Send for Review, then replaces it; the PM Returns th
+
+# RP-381
+RP-381-1 db  # The Tower has three Participants, none with a Participant Code; K1's manager and a C1 engi
+
+# RP-392
+RP-392-1 db  # C1 engineer saves a Draft on day 1; it is numbered on day 3, and later sent back (to its D
+RP-392-2 db  # C1 creates a Revision on day 5 and sends it for review on day 7
+
+# RP-407
+RP-407-1 db  # C1 has items Submitted to K1 and in its own internal review; C2 (a second Contractor on th
+RP-407-2 db  # C1 engineer's Draft has been a Draft for six weeks
+RP-407-3 db  # The Project closes while a C1 item waits, five weeks old, at C1's internal review
+RP-407-4 db  # A C1 item sits five weeks at C1's internal review, then is Submitted to K1
+RP-407-5 db  # K1 manager A is on two Projects, with C1 items Submitted on each
+RP-407-6 db  # As in RP-407-5
+RP-407-7 db  # On one Project C1 has a Draft, an item in its internal review and items Submitted to K1. K
+RP-407-8 db  # As in RP-407-7
+
+# RP-408
+RP-408-1 db  # As in RP-407-7, and in RP-407-3 (a Project that has closed)
+
+# RP-410
+RP-410-1 db  # A C1 item is Submitted and picked up by K1's manager; C1's PM picks up another in internal
+
+# RP-412
+RP-412-1 db  # Tower's Project Admin (C1, the Host Company) saves the Project pattern twice, gives the MA
+RP-412-2 db  # C1 has issued two MAR numbers; a C1 engineer, a C2 engineer and a K1 manager open Project 
+RP-412-3 api  # A C2 member who is also a Project Admin saves Tower's pattern; a Rabaed Engineer saves ano
+
+# RP-427
+RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
+RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
+RP-427-4 db  # The Project Admin binds C2's MARs to an exception Workflow named after C2's Company, then 
+
+# RP-430
+RP-430-1 api  # K1's manager sends a MAR to the Manager step, then picks it up; its Approve says "not the 
+RP-430-2 api  # A K1 Transition's rule asks whether the item has been through C1's Contractor review (whic
+RP-430-3 api  # K1's Reject says "all Comments closed"; a Comment raised from the MAR is a C1 Draft, later
+
+# RP-431
+RP-431-2 api  # C1's engineer sends a Draft for review with "Assign to"; C1's PM Submits with "Assign to"
+
+# RP-435
+RP-435-1 api  # K1 closes C1's MAR with Code D; C1's engineer creates a replacement (a new Draft linked "r
+
+# RP-436
+RP-436-1 db  # The C1 engineer sends a MAR for review, the C1 PM Returns it and later Submits it, and a K
+
+# RP-437
+RP-437-1 db  # A MAR on the Rabaed Default MAR Workflow Version 3: C1's PM Submits it with a Cover Note a
+
+# RP-438
+RP-438-1 db  # C1 Submits a MAR and the K1 engineer sends it to the K1 manager; C1 opens "View workflow" 
+
+# RP-439
+RP-439-1 db  # Tower's Project Admin copies the MAR Workflow into Tower; another Project's Project Admin 
+
+# RP-441
+RP-441-1 db  # Tower's Project Admin duplicates, publishes and binds a MAR Workflow as the Project copy, 
+
+# RP-442
+RP-442-1 db  # TMC's Authorized Person saves Tower's own Workflow to TMC's Library, edits the Library cop
+
+# RP-443
+RP-443-1 db  # A Rabaed Engineer duplicates MAR's Workflow into another Rabaed Default's draft, saves and
+
+# RP-450
+RP-450-1 api  # Tower's Project Admin duplicates and publishes a Workflow, adds a Stage and an outcome, an
+
+# RP-514
+RP-514-1 db  # C1 (TMC) runs a Workflow whose Draft Step is "Drafts visible to: the author only". Hafiz, 
+
+# RP-519
+RP-519-1 db  # C1 (TMC) runs a Workflow whose Internal Review Stage has two Steps, Contractor Engineer an
+
+# RP-520
+RP-520-1 db  # Nasser opens a Riyadh Gate Tower URL (a Project or item he may not see) and a made-up URL
+
+# RP-521
+RP-521-1 db  # As in 12: K1's Mechanical manager opens the Link from a Mechanical MAR to C1's Electrical 
+
+# RP-555
+RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
+
+# RP-566
+RP-566-1 api  # A Rabaed Engineer adds an outcome to a Rabaed Default Type's set (MAR's shape; the test's 
+RP-566-1 db  # A Rabaed Engineer adds an outcome to a Rabaed Default Type's set (MAR's shape; the test's 
+
+# RP-580
+RP-580-1 db  # K1 Sends a Submitted item Back to C1's Draft Step, which says "After a Send Back: Comment 
+
+# RP-589
+RP-589-5 db  # C1's PM imports a register (one row assigned to a C1 engineer, who later sends it for revi
+
+# RP-593
+RP-593-3 api  # The same on an Electrical item, which OR covers
+
+# RP-594
+RP-594-1 api  # C1 raises a Supplier Approval Request for Najd Cables (Electrical); K1 closes it at Code A
+
+# RP-596
+RP-596-1 db  # A new Project's DAR runs the Rabaed Default 1→1 → Owner review: C1's engineer raises and s
+RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflows of a submittal Type, an
+
+# RP-598
+RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
+RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
+
+# RP-626
+RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
+
+# RP-651
+RP-651-2 api  # C1's engineer raises a Civil WIR picking "Concrete pour": its Version 1 items are copied o
+
+# RP-670
+RP-670-1 api  # A record job fails and then runs out of attempts, and a Rabaed Engineer reads the failing 
+
+# RP-1058
+RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
+
+# RP-1062
+RP-1062-1 api  # C1 Submits a WIR (a MAR at seam 1) to K1 and its Members post in its Chat; C2 Submits one 
+RP-1062-2 api  # K1's manager covers Building B only (seam 2), or Mechanical only (seam 1); C1's Submitted 
+RP-1062-3 api  # C1's engineer posts on an item still in C1's internal review
+RP-1062-4 api  # C1's engineer, K1's engineer (K1's manager at seam 1) and the Owner's Representative post 
+RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager (seam 1), reads an item's 
+
+# RP-1064
+RP-1064-1 api  # C1 Submits a MAR and K1's engineer sends it to K1's manager; C1 opens it in the Submittal 
+RP-1064-1 db  # C1 Submits a MAR and K1's engineer sends it to K1's manager; C1 opens it in the Submittal 
+
+# RP-1067
+RP-1067-1 api  # C1 Submits a MAR with a Cover Note; K1's engineer recommends Code B internally and K1 Send
+RP-1067-1 db  # C1 Submits a MAR with a Cover Note; K1's engineer recommends Code B internally and K1 Send
+RP-1067-2 api  # As in RP-1067-1
+RP-1067-2 db  # As in RP-1067-1
+RP-1067-3 api  # As in RP-1067-1; K1's engineer wrote an Internal Note; C1's PM Returned it once with a rea
+RP-1067-3 db  # As in RP-1067-1; K1's engineer wrote an Internal Note; C1's PM Returned it once with a rea
+
+# RP-1069
+RP-1069-1 api  # The Submittal Panel's Chat tab shows C1's Submitted item's thread to K1's engineer: messag
+RP-1069-1 db  # The Submittal Panel's Chat tab shows C1's Submitted item's thread to K1's engineer: messag
+
+# RP-1072
+RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
+
+# RP-1079
+RP-1079-1 api  # K1's PM adds a site photo to the Screen of its Recommendation to the Owner (a reply photos
+RP-1079-2 api  # The Owner Sends it Back; K1 adds another photo and Recommends C again; the Owner confirms 
+
+# RP-1093
+RP-1093-1 api  # As RP-1064-1; C1 opens the item in the Submittal Panel at Wide or Full, then below 880px
+RP-1093-1 db  # As RP-1064-1; C1 opens the item in the Submittal Panel at Wide or Full, then below 880px

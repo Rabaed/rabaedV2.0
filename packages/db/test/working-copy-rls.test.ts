@@ -20,6 +20,7 @@ import {
   buildSeamTwoTower,
   c2Draft,
   digits,
+  expectHiddenFrom,
   sha256Bytea,
   testDatabaseUrls,
   wirAtConsultant,
@@ -322,7 +323,8 @@ describe("scenarios RP-23-3 and RP-1083-3: what a Working Copy prints", () => {
     expect((content.companies as object[]).map((c) => Object.keys(c).sort())).toEqual(
       (content.companies as object[]).map(() => ["baseRole", "name", "participantId", "roleName"]),
     );
-    expect((content.companies as { name: { en: string } }[]).map((c) => c.name.en)).toEqual(["OW", "K1", "C1"]);
+    // By id: the Owner, K1 and C1, never C2 (RP-1095).
+    expect((content.companies as { participantId: string }[]).map((c) => c.participantId)).toEqual([ow.participantId, k1.participantId, c1.participantId]);
     expect((content.moves as object[]).map((m) => Object.keys(m).sort())).toEqual(
       (content.moves as object[]).map(() => ["at", "companyName", "kind", "label", "participantId", "roleName"]),
     );
@@ -446,6 +448,10 @@ describe("scenarios RP-23-3 and RP-1083-3: what a Working Copy prints", () => {
         ),
       ).toBe("confirmed");
       expect(await takeWith(k1.members.engineer, item, "recommend_b", { answers: { remarks: "For the Owner" } })).toBe("applied");
+      // K1's Engineer reads the photo; C1's PM doesn't, so its empty copy below is not an empty item (RP-1095).
+      const photo = started!.document_id;
+      const byId = (as: string) => copyTower.call<{ id: string }>(as, sql`select id from document where id = ${photo}::uuid`);
+      await expectHiddenFrom({ read: byId, target: photo, seenBy: k1.members.engineer, hiddenFrom: c1.members.project_manager, label: "the Recommendation's photo" });
       // While the Owner reviews, C1's PM asks for its Working Copy.
       const copy = await printed(c1.members.project_manager, item);
       expect((copy.documents as { fileName: string }[]).map((d) => d.fileName)).toEqual([]);

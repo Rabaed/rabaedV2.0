@@ -348,12 +348,12 @@ describe("scenario RP-23-2: the Owner sends a Code B back and confirms the Code 
   });
 
   it("give no answers and no Remarks for the Owner's review's moves, internal to K1 and the Owner", () => {
-    const review = facts.transitions.filter((t) => t.companyName.en !== "C1");
-    expect(review.map((t) => [t.companyName.en, t.kind])).toEqual([
-      ["K1", "submit"],
-      ["OW", "send_back"],
-      ["K1", "submit"],
-      ["OW", "close"],
+    const review = facts.transitions.filter((t) => t.participantId !== tower.c1.participantId);
+    expect(review.map((t) => [t.participantId, t.kind])).toEqual([
+      [tower.k1.participantId, "submit"],
+      [tower.ow.participantId, "send_back"],
+      [tower.k1.participantId, "submit"],
+      [tower.ow.participantId, "close"],
     ]);
     expectNothingShared(review);
   });
@@ -381,14 +381,14 @@ describe("scenario RP-650-1: K1's PM recommends Code B to the Owner with Remarks
   it("never give the Recommendation's Remarks: not as its answers, not as a Code's Remarks, nowhere", () => {
     expect(facts.outcome).toBe("B");
     expect(JSON.stringify(facts)).not.toContain(RECOMMENDATION_REMARKS);
-    const recommendation = facts.transitions.find((t) => t.companyName.en === "K1")!;
+    const recommendation = facts.transitions.find((t) => t.participantId === tower.k1.participantId)!;
     expect([recommendation.kind, recommendation.answers, recommendation.remarks]).toEqual(["submit", null, null]);
     // The Owner's Confirm asks nothing, so page 1 has no reply to print.
     expect(facts.transitions.map((t) => t.remarks)).toEqual(facts.transitions.map(() => null));
   });
 
   it("still give the Comments the Code raised, by K1", () => {
-    expect(facts.comments.map((c) => [c.comment, c.companyName.en])).toEqual([["Fix the gland plate", "K1"]]);
+    expect(facts.comments.map((c) => [c.comment, c.participantId, c.companyName.en])).toEqual([["Fix the gland plate", tower.k1.participantId, "K1"]]);
   });
 });
 
