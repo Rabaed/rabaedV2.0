@@ -8,13 +8,13 @@
 // A Contractor whose Visibility lists Trades without General never sees a General observation.
 import { rabaedFormFile, rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
 import { createDb, rabaedDefaultWorkflowId, readLatestPublishedDefinition } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DimensionValues, StartedDocumentUpload, WorkItemList } from "@rabaed/domain";
 import { formSchema, parseWorkflowDefinition, sameJson } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { all, buildTower, detail, ok, only, projectMember, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -32,6 +32,18 @@ let c2Engineer: Caller; // Another Contractor whose Trade Visibility lists Elect
 const photo = jpegWithExif();
 const observations = async (by: Caller): Promise<WorkItemList> => (await ok(by.get(`/v1/projects/${at.projectId}/modules/snag_list/work-items`), 200)).json();
 const trades = async (by: Caller, projectId: string) => ((await ok(by.get(`/v1/projects/${projectId}/dimensions`), 200)).json() as DimensionValues).trade;
+const who = (by: Caller) => (by === c2Engineer ? "C2 engineer" : by === at.c1Pm ? "C1 PM" : by === at.k1Manager ? "K1 manager" : "someone");
+
+/** Item `id` is read by each of `seenBy`, then by none of `hiddenFrom`: in the Snag List, by id and its history. */
+async function hiddenEverywhere(id: string, seenBy: Caller | Caller[], hiddenFrom: Caller | Caller[], label: string) {
+  const historyOf = async (by: Caller) => (await readById<unknown>(`/v1/work-items/${id}/history`)(by)).map(() => ({ id }));
+  const reads: [string, (by: Caller) => Promise<readonly { id: string }[]>][] = [
+    ["Snag List", async (by) => (await observations(by)).items],
+    ["by id", readById(`/v1/work-items/${id}`)],
+    ["history", historyOf],
+  ];
+  for (const [read, rows] of reads) await expectHiddenFrom({ read: rows, target: id, seenBy, hiddenFrom, name: who, label: `${label}, ${read}` });
+}
 
 /** `by`'s Draft Site Observation on General, Building A. */
 async function draftObservation(by: Caller, title: string): Promise<string> {
@@ -39,13 +51,14 @@ async function draftObservation(by: Caller, title: string): Promise<string> {
   return (await ok(by.post(`/v1/projects/${at.projectId}/work-items`, { type: "OBS", title, answers }), 201)).json().id as string;
 }
 
-/** Uploads an After photo to item `id` as `by`. */
-async function addAfterPhoto(by: Caller, id: string): Promise<void> {
+/** Uploads an After photo to item `id` as `by`; its Document's id. */
+async function addAfterPhoto(by: Caller, id: string): Promise<string> {
   const started = await by.post(`/v1/work-items/${id}/documents`, { fieldKey: "after_photos", reply: true, fileName: "after.jpg", contentType: "image/jpeg", sizeBytes: photo.byteLength });
   expect(started.statusCode, started.body).toBe(201);
   const { id: documentId, upload } = started.json() as StartedDocumentUpload;
   expect((await fetch(upload.url, { method: upload.method, headers: upload.headers, body: photo })).status).toBe(200);
   expect((await by.post(`/v1/work-items/${id}/documents/${documentId}/confirm`)).statusCode).toBe(204);
+  return documentId;
 }
 
 beforeAll(async () => {
@@ -84,26 +97,26 @@ describe("a Consultant's Site Observation on General (seam 1)", () => {
 
     expect((await detail(at.c1Pm, id)).documentNumber).toMatch(/-OBS-/);
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
-    await addAfterPhoto(at.c1Pm, id);
+    const after = await addAfterPhoto(at.c1Pm, id);
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Cleared and swept" } });
 
     const atVerify = await detail(at.k1Manager, id);
     expect(atVerify.step.key).toBe("verify");
     expect(atVerify.actions.transitions.map((t) => t.key)).toEqual(expect.arrayContaining(["close", "return_to_open"]));
     const { documents } = (await ok(at.k1Manager.get(`/v1/work-items/${id}/documents`), 200)).json();
-    expect(documents.filter((d: { fieldKey: string }) => d.fieldKey === "after_photos")).toHaveLength(1);
+    expect(documents.filter((d: { fieldKey: string }) => d.fieldKey === "after_photos").map((d: { id: string }) => d.id)).toEqual([after]);
     await take(at.k1Manager, id, "close");
     expect((await detail(at.c1Pm, id)).outcome).toBe("closed");
   });
 
   it("is a Contractor's own too: C1 raises one on itself, holds every Step, and the Consultant is informed", async () => {
     const id = await draftObservation(at.c1Pm, "Waste left at the riser");
-    await expectHidden(at.k1Manager.get(`/v1/work-items/${id}`), "a Draft");
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: at.c1Pm, hiddenFrom: at.k1Manager, name: who, label: "a Draft" });
     await take(at.c1Pm, id, "raise");
     if ((await detail(at.c1Pm, id)).actions.pickUp) await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     const read = await detail(at.k1Manager, id);
     expect(read.stage.key).toBe("open");
-    expect(read.actions.transitions).toEqual([]);
+    expect(read.actions.transitions).toEqual([]); // not hidden-from: K1 reads the item, and holds no Transition
     expect((await tryTake(at.k1Manager, id, "resolve", { answers: { resolution_note: "Not K1's" } })).statusCode).toBe(409);
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Removed" } });
     // The raiser verifies: it holds Verify, as the Snag's Version 3 has it (picks it up when pooled).
@@ -116,11 +129,8 @@ describe("a Consultant's Site Observation on General (seam 1)", () => {
 describe("a Contractor not covering General never sees a General observation (scenarios RP-627-1, RP-627-2)", () => {
   it("RP-627-1: C2, whose Trade Visibility lists Trades without General, sees it in no list, by id or history, at any Step", async () => {
     const id = await draftObservation(at.k1Manager, "Skip full of rubbish");
-    const hidden = async (step: string) => {
-      expect((await observations(c2Engineer)).items.map((i) => i.id), step).not.toContain(id);
-      await expectHidden(c2Engineer.get(`/v1/work-items/${id}`), step);
-      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`), step);
-    };
+    // K1, the raiser, reads it at every Step.
+    const hidden = (step: string) => hiddenEverywhere(id, at.k1Manager, c2Engineer, step);
     await hidden("draft");
     await take(at.k1Manager, id, "raise");
     await hidden("open");
@@ -129,14 +139,16 @@ describe("a Contractor not covering General never sees a General observation (sc
     await hidden("verify");
     await take(at.k1Manager, id, "close");
     await hidden("closed");
-    expect((await observations(c2Engineer)).stages.reduce((n, s) => n + s.count, 0)).toBe(0);
+    // Its Stage counts: K1 counts it, C2 counts nothing (C2 sees no Snag List item on this Project).
+    const counted = async (by: Caller) => (await observations(by)).stages.reduce((n, s) => n + s.count, 0);
+    expect(await counted(at.k1Manager)).toBeGreaterThan(0);
+    expect(await counted(c2Engineer)).toBe(0);
   });
 
   it("RP-627-2: C2 never sees one C1 raised on itself either, and cannot raise one on General", async () => {
     const id = await draftObservation(at.c1Pm, "C1's own mess");
     await take(at.c1Pm, id, "raise");
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
-    expect((await observations(c2Engineer)).items.map((i) => i.id)).not.toContain(id);
+    await hiddenEverywhere(id, [at.c1Pm, at.k1Manager], c2Engineer, "open");
     const refused = await c2Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
       type: "OBS",
       title: "Not mine to raise",

@@ -10,7 +10,7 @@
 // C1 covers Building A, C2 Building B (V3); K1, the Consultant, raises Snags on both, and
 // closes C1's Code B review whose two rows become Comments with C1.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { type WorkItemBoard, type WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
@@ -61,6 +61,8 @@ const board = async (by: Caller, query = ""): Promise<WorkItemBoard> => (await o
 const ids = (list: WorkItemList) => list.items.map((i) => i.id).sort();
 const sorted = (...values: string[]) => [...values].sort();
 const total = (list: Pick<WorkItemList, "stages">) => list.stages.reduce((n, s) => n + s.count, 0);
+const who = (by: Caller) => (by === c2Engineer ? "C2 engineer" : by === at.c1Pm ? "C1 PM" : by === at.k1Manager ? "K1 manager" : "someone");
+const rowsOf = (query = "") => async (by: Caller) => (await snags(by, query)).items;
 
 /** K1's manager raises a Snag on `location`, of `trade`, with `photos` photos. */
 async function snag(title: string, { trade, location, photos = 0 }: { trade: string; location: string; photos?: number }): Promise<string> {
@@ -125,7 +127,7 @@ beforeAll(async () => {
 
 describe("the Snag List's rows (seam 1)", () => {
   it("are the Snags and Comments C1 sees, each Comment with the item it was raised from and its Code, each Snag by hand", async () => {
-    expect(comments).toHaveLength(2);
+    expect(comments).toHaveLength(2); // not hidden-from: the review's two rows made two Comments
     const list = await snags(at.c1Pm);
     expect(ids(list)).toEqual(sorted(...comments, photographed, started));
     for (const id of comments) {
@@ -188,10 +190,10 @@ describe("the Snag List's rows (seam 1)", () => {
     // The Consultant raises Snags, and so does the Contractor on its own work (RP-622).
     expect(await raisable(at.k1Manager, "snag_list")).toContain("SNG");
     expect(await raisable(at.c1Engineer, "snag_list")).toContain("SNG");
-    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain(REVIEWED);
+    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain(REVIEWED); // not hidden-from: Types offered, not a row
     // A Comment comes only from a Code B, never from "+ New" (RP-668).
-    expect(await raisable(at.k1Manager, "snag_list")).not.toContain("CMT");
-    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain("CMT");
+    expect(await raisable(at.k1Manager, "snag_list")).not.toContain("CMT"); // not hidden-from: Types offered, not a row
+    expect(await raisable(at.c1Engineer, "snag_list")).not.toContain("CMT"); // not hidden-from: Types offered, not a row
     const direct = await at.k1Manager.post(`/v1/projects/${at.projectId}/work-items`, {
       type: "CMT",
       title: "Raised directly",
@@ -199,7 +201,7 @@ describe("the Snag List's rows (seam 1)", () => {
     });
     expect(direct.statusCode).toBe(422);
     expect(direct.body).toContain("type_not_found");
-    expect(await raisable(at.c1Engineer)).not.toContain("SNG");
+    expect(await raisable(at.c1Engineer)).not.toContain("SNG"); // not hidden-from: Types offered, not a row
     // The Submittals stay the default.
     expect(await raisable(at.c1Engineer)).toEqual(await raisable(at.c1Engineer, "submittals"));
     expect((await at.c1Engineer.get(`/v1/projects/${at.projectId}/raisable-types?module=nothing`)).statusCode).toBe(400);
@@ -207,8 +209,8 @@ describe("the Snag List's rows (seam 1)", () => {
 
   it("are left out of other Modules' reads", async () => {
     const submittals: WorkItemList = (await ok(at.c1Pm.get(`/v1/projects/${at.projectId}/modules/submittals/work-items`), 200)).json();
-    expect(submittals.typeCounts).toBeUndefined();
-    expect(submittals.filters.companies).toBeUndefined();
+    expect(submittals.typeCounts).toBeUndefined(); // not hidden-from: a field other Modules' reads leave out
+    expect(submittals.filters.companies).toBeUndefined(); // not hidden-from: a field other Modules' reads leave out
     expect(submittals.items.every((i) => i.raisedFrom === undefined && i.photo === undefined)).toBe(true);
   });
 });
@@ -229,7 +231,8 @@ describe("the Snag List's filters and search, over the items the viewer sees (se
     expect(ids(mechanical)).toEqual([started]);
     expect(mechanical.typeCounts).toEqual([{ code: "SNG", count: 1 }]);
     expect(ids(await snags(at.c1Pm, `?location=${at.buildingA}`))).toEqual(sorted(...comments, photographed, started));
-    expect(ids(await snags(at.c1Pm, `?location=${buildingB}`))).toEqual([]);
+    // C2's Snag on Building B: K1 finds it by that Location, C1 never does.
+    await expectHiddenFrom({ read: rowsOf(`?location=${buildingB}`), target: c2Snag, seenBy: at.k1Manager, hiddenFrom: at.c1Pm, name: who });
     expect(ids(await snags(at.c1Pm, "?stage=in_progress"))).toEqual([started]);
   });
 
@@ -259,7 +262,7 @@ describe("the Snag List's filters and search, over the items the viewer sees (se
     const bySubject = await snags(at.c1Pm, "?q=insulation");
     expect(ids(bySubject)).toEqual([started]);
     // A search counts no more than it shows: no type chip counts.
-    expect(bySubject.typeCounts).toBeUndefined();
+    expect(bySubject.typeCounts).toBeUndefined(); // not hidden-from: a search gives no type chip counts
   });
 });
 
@@ -270,21 +273,35 @@ describe("C2's Snag List names and counts none of C1's items (scenario RP-94-1)"
     expect(total(list)).toBe(1);
     expect(list.typeCounts).toEqual([{ code: "SNG", count: 1 }]);
     expect(list.filters.companies).toEqual([{ participantId: c2Participant, name: expect.any(Object), own: true }]);
-    expect(list.filters.raisedFrom).toEqual([]);
+    const companies = async (by: Caller) => (await snags(by)).filters.companies!.map((c) => ({ id: c.participantId }));
+    await expectHiddenFrom({ read: companies, target: at.c1ParticipantId, seenBy: [at.c1Pm, at.k1Manager], hiddenFrom: c2Engineer, name: who, label: "Company choices" });
+    const sources = async (by: Caller) => (await snags(by)).filters.raisedFrom!.map((r) => ({ id: r.documentNumber }));
+    await expectHiddenFrom({ read: sources, target: sourceNumber, seenBy: [at.c1Pm, at.k1Manager], hiddenFrom: c2Engineer, name: who, label: "Raised from choices" });
     const kanban = await board(c2Engineer);
     expect(kanban.typeCounts).toEqual([{ code: "SNG", count: 1 }]);
     expect(kanban.stages.reduce((n, s) => n + s.count, 0)).toBe(1);
-    for (const read of [JSON.stringify(list), JSON.stringify(kanban)]) {
-      for (const hidden of [source, sourceNumber, ...comments, photographed, started, at.c1ParticipantId]) expect(read).not.toContain(hidden);
+    // No field of C2's List or Kanban names C1's items, their source or C1; C1's PM reads each of them there.
+    // Each viewer's List and Kanban, read once.
+    const readText = new Map<Caller, string>();
+    for (const by of [at.c1Pm, c2Engineer]) readText.set(by, JSON.stringify(await snags(by)) + JSON.stringify(await board(by)));
+    const mentions = (text: string) => async (by: Caller) => (readText.get(by)!.includes(text) ? [{ id: text }] : []);
+    for (const hidden of [source, sourceNumber, ...comments, photographed, started, at.c1ParticipantId]) {
+      await expectHiddenFrom({ read: mentions(hidden), target: hidden, seenBy: at.c1Pm, hiddenFrom: c2Engineer, name: who, label: "List and Kanban" });
     }
   });
 
   it("RP-94-1: filtering by C1's source or C1 finds nothing, and counts nothing", async () => {
-    for (const query of [`?raisedFrom=${sourceNumber}`, `?company=${at.c1ParticipantId}`, "?type=CMT"]) {
-      const list = await snags(c2Engineer, query);
-      expect(list.items, query).toEqual([]);
-      expect(total(list), query).toBe(0);
-      expect(list.typeCounts!.filter((t) => t.code === "CMT"), query).toEqual([]);
+    for (const [query, target] of [
+      [`?raisedFrom=${sourceNumber}`, comments[0]!],
+      [`?company=${at.c1ParticipantId}`, photographed],
+      ["?type=CMT", comments[0]!],
+    ] as const) {
+      // K1 finds C1's item with each filter; C2 never does, nor counts a Comment.
+      await expectHiddenFrom({ read: rowsOf(query), target, seenBy: at.k1Manager, hiddenFrom: c2Engineer, name: who, label: query });
+      const commentCount = async (by: Caller) => (await snags(by, query)).typeCounts!.filter((t) => t.code === "CMT" && t.count > 0).map((t) => ({ id: t.code }));
+      await expectHiddenFrom({ read: commentCount, target: "CMT", seenBy: at.k1Manager, hiddenFrom: c2Engineer, name: who, label: `${query}, type chips` });
+      expect(total(await snags(at.k1Manager, query)), query).toBeGreaterThan(0);
+      expect(total(await snags(c2Engineer, query)), query).toBe(0);
     }
   });
 });
