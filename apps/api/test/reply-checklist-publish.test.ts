@@ -80,7 +80,7 @@ describe("publishing a Workflow (seam 1)", () => {
     expect(problem!.message.en).toContain("doesn't close the item");
     expect(problem!.message.ar).toContain("لا يُغلق العنصر");
     // Nothing was published.
-    expect((await readWorkflow(id)).publishedVersions).toEqual([]);
+    expect((await readWorkflow(id)).publishedVersions).toEqual([]); // not hidden-from: its own author reads the Workflow, which has no published Version
 
     // Taken back, the same copy publishes: the WIR's codes, which close it, keep the checklist.
     const definition = (await readWorkflow(id)).draft!.definition;
@@ -161,6 +161,6 @@ describe("every published Workflow Version (seam 1)", () => {
         and jsonb_path_exists(coalesce(t.action_form, 'null'), '$.sections[*].fields[*] ? (@.type == "copied_checklist")')
       order by 1, 2, 3
     `.execute(migrator);
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([]); // not hidden-from: the migrator reads every Version, and none breaks the rule
   });
 });
