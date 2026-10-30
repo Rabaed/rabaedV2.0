@@ -90,10 +90,10 @@ const filesIn = (locale: Locale): SubmittalPanelAttachmentFile[] => [
   { id: "drawing", name: "Ceiling_layout_L3.dwg", contentType: "image/vnd.dwg", size: mb("3.8", locale) },
 ];
 
-/** The URLs the story's "api" hands out: a 3-page and a 2-page PDF, and the photo. */
+/** The URLs the story's "api" hands out: a 3-page PDF, a 2-page one whose second page is landscape, and the photo. */
 function useFileUrl(refused: readonly string[]) {
   return useMemo(() => {
-    const urls: Record<string, () => string> = { datasheet: () => samplePdfUrl(3), compliance: () => samplePdfUrl(2), photo: () => sitePhoto };
+    const urls: Record<string, () => string> = { datasheet: () => samplePdfUrl(3), compliance: () => samplePdfUrl(2, [2]), photo: () => sitePhoto };
     return async (id: string) => {
       // A file the viewer may not see: the api answers 404, so no URL is handed out.
       if (refused.includes(id) || !urls[id]) throw new Error("not_found");
@@ -370,6 +370,15 @@ export const OpenLarge: Story = {
     await expect(within(other).getByText("1 / 2")).toBeVisible();
     await expect(within(other).getByText("100%")).toBeVisible();
     await expect(within(switcher).getByRole("button", { name: "Compliance_Statement.pdf" })).toHaveAttribute("aria-current", "true");
+    // Each page keeps its own shape: the landscape page 2 is wider than tall once it is drawn.
+    await userEvent.click(button(other, context, copy.nextPage));
+    await expect(within(other).getByText("2 / 2")).toBeVisible();
+    await drawn(other);
+    const sheet2 = within(other).getByRole("img", { name: storyLocale(context) === "ar" ? "صفحة 2" : "Page 2" });
+    await waitFor(() => {
+      const box = sheet2.getBoundingClientRect();
+      return expect(Math.round((box.width / box.height) * 100)).toBe(Math.round((842 / 595) * 100));
+    });
 
     await userEvent.keyboard("{Escape}");
     await expect(within(panel).queryByRole("dialog")).toBeNull();

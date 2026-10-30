@@ -4,7 +4,7 @@
  * for the canvas when it loads). The worker is this package's own copy of pdf.js's, served by
  * whichever bundler builds the app (Next) or the stories (Vite), so it comes from the app's origin.
  */
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 
 type PdfJs = typeof import("pdfjs-dist");
 
@@ -26,56 +26,72 @@ export type PdfRender = { done: Promise<void>; cancel: () => void };
 
 export type LoadedPdf = {
   pages: number;
-  /** Each page's width over its height, in page order. */
-  aspects: readonly number[];
   /**
-   * Draws page `page` (1-based) `width` CSS pixels wide, sharp on this screen. `done` rejects
-   * once cancelled, which `isCancelled` tells apart from a failure.
+   * Page `page`'s width over its height: its own once it has been read to be drawn, until then
+   * the first page's (most sets keep one sheet size, so a page's box rarely changes when drawn).
+   */
+  aspect: (page: number) => number;
+  /**
+   * Draws page `page` (1-based) `width` CSS pixels wide, sharp on this screen; its `aspect` is
+   * its own by then. `done` rejects once cancelled, which `isCancelled` tells apart from a failure.
    */
   render: (page: number, canvas: HTMLCanvasElement, width: number) => PdfRender;
   destroy: () => void;
 };
 
+/** A page's width over its height, at its own size. */
+function aspectOf(page: PDFPageProxy): number {
+  const viewport = page.getViewport({ scale: 1 });
+  return viewport.width / viewport.height;
+}
+
 /**
  * Opens a PDF from its bytes. The whole file is read before it is opened, rather than pdf.js
  * asking the file store for parts of it later, after the signed URL has expired (5 minutes) and
- * with range requests the file store's CORS doesn't answer.
+ * with range requests the file store's CORS doesn't answer. Only the first page is read here;
+ * every other page is read when it is drawn, and let go of once drawn.
  */
 export async function openPdf(bytes: ArrayBuffer): Promise<LoadedPdf> {
   const lib = await loadPdfJs();
   // pdf.js moves the bytes it is given to its worker: give it a copy, the caller keeps the file.
   const loading = lib.getDocument({ data: new Uint8Array(bytes.slice(0)) });
   let doc: PDFDocumentProxy;
-  const aspects: number[] = [];
+  const aspects = new Map<number, number>();
   try {
     doc = await loading.promise;
-    for (let n = 1; n <= doc.numPages; n++) {
-      const viewport = (await doc.getPage(n)).getViewport({ scale: 1 });
-      aspects.push(viewport.width / viewport.height);
-    }
+    const first = await doc.getPage(1);
+    aspects.set(1, aspectOf(first));
+    first.cleanup();
   } catch (error) {
     void loading.destroy();
     throw error;
   }
+  const firstAspect = aspects.get(1)!;
   return {
     pages: doc.numPages,
-    aspects,
+    aspect: (page) => aspects.get(page) ?? firstAspect,
     render(page, canvas, width) {
       let cancelled = false;
       let drawing: { cancel: () => void } | undefined;
       const done = (async () => {
         const pdfPage = await doc.getPage(page);
-        if (cancelled) throw new lib.RenderingCancelledException("cancelled");
-        const base = pdfPage.getViewport({ scale: 1 });
-        const sharp = (width / base.width) * (window.devicePixelRatio || 1);
-        // No larger than a browser draws (Safari leaves a canvas over ~16.7M pixels blank): a big sheet zoomed in is a little softer instead.
-        const scale = Math.min(sharp, Math.sqrt(maxCanvasPixels / (base.width * base.height)));
-        const viewport = pdfPage.getViewport({ scale });
-        canvas.width = Math.round(viewport.width);
-        canvas.height = Math.round(viewport.height);
-        const render = pdfPage.render({ canvas, viewport });
-        drawing = render;
-        await render.promise;
+        try {
+          aspects.set(page, aspectOf(pdfPage));
+          if (cancelled) throw new lib.RenderingCancelledException("cancelled");
+          const base = pdfPage.getViewport({ scale: 1 });
+          const sharp = (width / base.width) * (window.devicePixelRatio || 1);
+          // No larger than a browser draws (Safari leaves a canvas over ~16.7M pixels blank): a big sheet zoomed in is a little softer instead.
+          const scale = Math.min(sharp, Math.sqrt(maxCanvasPixels / (base.width * base.height)));
+          const viewport = pdfPage.getViewport({ scale });
+          canvas.width = Math.round(viewport.width);
+          canvas.height = Math.round(viewport.height);
+          const render = pdfPage.render({ canvas, viewport });
+          drawing = render;
+          await render.promise;
+        } finally {
+          // The page's parsed resources go once it is drawn (or stopped): the canvas keeps the picture.
+          pdfPage.cleanup();
+        }
       })();
       return {
         done,

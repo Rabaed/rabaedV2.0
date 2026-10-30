@@ -274,6 +274,8 @@ function PdfCanvas({
   const ref = useRef<HTMLCanvasElement>(null);
   // The width it was last drawn at: coming back near the view at the same size draws nothing again.
   const drawnAt = useRef(0);
+  // The first page's shape until this page is read to be drawn, then its own.
+  const [aspect, setAspect] = useState(() => pdf.aspect(page));
   const drawn = useEffectEvent(onDrawn);
   useEffect(() => {
     const canvas = ref.current;
@@ -290,6 +292,7 @@ function PdfCanvas({
     render.done.then(
       () => {
         drawnAt.current = width;
+        setAspect(pdf.aspect(page));
         drawn();
       },
       (error: unknown) => {
@@ -299,7 +302,7 @@ function PdfCanvas({
     );
     return () => render.cancel();
   }, [pdf, page, width, draw]);
-  const height = Math.round(width / (pdf.aspects[page - 1] ?? 1));
+  const height = Math.round(width / aspect);
   return (
     // Left to right in an Arabic panel too: pdf.js draws a page's text in its canvas's direction,
     // and a right-to-left one scrambles the words. The thumbnails stay where the panel's direction puts them.

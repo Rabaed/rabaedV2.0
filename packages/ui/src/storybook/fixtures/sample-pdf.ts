@@ -2,9 +2,10 @@
  * A small PDF for the Attachments stories (RP-1068), built here so no binary fixture is committed:
  * A4 pages drawn from vector shapes only, no text (a font's glyphs would differ between machines
  * and change the screenshots). Page n carries n squares in its top corner, so a test can tell the
- * pages apart.
+ * pages apart. The pages listed in `landscape` are A4 turned on its side, as a drawing set's sheets
+ * differ from its cover.
  */
-export function samplePdf(pages: number): Uint8Array {
+export function samplePdf(pages: number, landscape: readonly number[] = []): Uint8Array {
   const objects: string[] = [];
   // 1: the catalogue, 2: the page tree, then a page and its content stream per page.
   const pageIds = Array.from({ length: pages }, (_, i) => 3 + i * 2);
@@ -12,7 +13,7 @@ export function samplePdf(pages: number): Uint8Array {
   objects.push(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages} >>`);
   for (let page = 1; page <= pages; page++) {
     const content = sheet(page);
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${pageIds[page - 1]! + 1} 0 R /Resources << >> >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${landscape.includes(page) ? "842 595" : "595 842"}] /Contents ${pageIds[page - 1]! + 1} 0 R /Resources << >> >>`);
     objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
   }
 
@@ -55,6 +56,6 @@ function sheet(page: number): string {
 }
 
 /** A same-origin URL the story's `fileUrl` hands out, as the api hands out a signed URL. */
-export function samplePdfUrl(pages: number): string {
-  return URL.createObjectURL(new Blob([samplePdf(pages) as BlobPart], { type: "application/pdf" }));
+export function samplePdfUrl(pages: number, landscape: readonly number[] = []): string {
+  return URL.createObjectURL(new Blob([samplePdf(pages, landscape) as BlobPart], { type: "application/pdf" }));
 }
