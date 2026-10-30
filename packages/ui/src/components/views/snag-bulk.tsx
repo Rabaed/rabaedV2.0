@@ -97,9 +97,12 @@ export type SnagReportActions = {
     /** The link to the made PDF, e.g. "Download the Snag report (3 items)": `n` is `count` written for the locale. */
     download: (n: string, count: number) => string;
     failed: string;
+    /** The report holds items the viewer can no longer see (RP-1110): it is not theirs to download any more. */
+    gone: string;
   };
   request: (ids: string[] | null) => Promise<SnagReportState | null>;
-  check: (id: string) => Promise<SnagReportState | null>;
+  /** "gone" when the report holds items the viewer can no longer see (RP-1110). */
+  check: (id: string) => Promise<SnagReportState | "gone" | null>;
 };
 
 type Stage = WorkItemListData["stages"][number];

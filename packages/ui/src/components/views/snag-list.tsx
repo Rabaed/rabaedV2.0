@@ -224,8 +224,8 @@ export function SnagList({
       setExporting(false);
     }
   };
-  // The PDF report (RP-677): asked for, then asked after until the worker has made it.
-  const [report, setReport] = useState<{ status: "asking" | "preparing" | "ready" | "failed"; id?: string; url?: string; count?: number } | null>(null);
+  // The PDF report (RP-677): asked for, then asked after until the worker has made it, or until it holds items the viewer no longer sees (RP-1110).
+  const [report, setReport] = useState<{ status: "asking" | "preparing" | "ready" | "failed" | "gone"; id?: string; url?: string; count?: number } | null>(null);
   const exportPdf = async (ids: string[] | null) => {
     if (!bulk) return;
     setReport({ status: "asking" });
@@ -251,7 +251,13 @@ export function SnagList({
       void bulk.report
         .check(polledId)
         .then((got) => {
-          if (stopped || !got || got.status === "preparing") return;
+          if (stopped || !got) return;
+          // It holds items the viewer no longer sees (RP-1110), for example after a change while it was made.
+          if (got === "gone") {
+            setReport((was) => (was?.id === polledId ? { status: "gone" } : was));
+            return;
+          }
+          if (got.status === "preparing") return;
           setReport((was) => (was?.id === polledId ? { status: got.status, id: polledId, url: got.url ?? undefined, count: was.count } : was));
         })
         .catch(() => undefined);
@@ -432,6 +438,8 @@ export function SnagList({
             bulk.report.labels.preparing
           ) : report.status === "failed" ? (
             bulk.report.labels.failed
+          ) : report.status === "gone" ? (
+            bulk.report.labels.gone
           ) : report.url ? (
             <a href={report.url} className={cn("font-semibold text-brand-fg underline", focusRing)}>
               {bulk.report.labels.download(n(report.count ?? 0), report.count ?? 0)}
