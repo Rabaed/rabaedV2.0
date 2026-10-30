@@ -18,7 +18,6 @@ import {
   submittalPanelPosition,
   submittalPanelStorage,
   submittalPanelWith,
-  placesOf,
   readSubmittalPanelPreferences,
   stageColour,
   useSubmittalPanelIds,
@@ -37,6 +36,7 @@ import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { useCreateRevision } from "@/components/work-item-revision";
+import { submittalPanelPlace } from "@/lib/submittal-panel-place";
 import { openIdFrom, sizeFrom, submittalPanelHref } from "@/lib/submittal-panel-url";
 
 type Filters = Pick<WorkItemListData["filters"], "outcomes" | "locations">;
@@ -156,7 +156,7 @@ export function SubmittalPanelHost({
   const item = read?.item ?? null;
   const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
-  const place = item?.location ? (placesOf(filters.locations).get(item.location.id)?.map((p) => p.name[locale]) ?? [item.location.name[locale]]) : [];
+  const { shown: place, numbered: numberPlace } = submittalPanelPlace(item?.location ?? null, filters.locations, locale);
   // The route strip and the Workflow map (RP-1064).
   const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale, refreshKey);
   // The approval log, in the side rail from 880px and in-flow below, under the Workflow block (RP-1093), and Internal Communication (RP-1067).
@@ -202,7 +202,7 @@ export function SubmittalPanelHost({
             subject={item.title}
             numberId={ids.numberId}
             subjectId={ids.subjectId}
-            numberInfo={<SubmittalPanelNumber item={item} locale={locale} place={place} />}
+            numberInfo={<SubmittalPanelNumber item={item} locale={locale} place={numberPlace} />}
             chips={
               <>
                 <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
