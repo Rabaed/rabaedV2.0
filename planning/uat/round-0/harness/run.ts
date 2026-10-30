@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
 import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
+import { runWhileUp } from "../../../../scripts/stack-health.ts";
 import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02] [--fixtures]
@@ -10,7 +11,7 @@ import { stackDown } from "./stack.ts";
 // Loads cases/<part>.ts, runs the cases in sequence, and merges each result into
 // results/results.json as it finishes. A thrown error is "error" (a script problem), never "fail".
 // The api and db are checked before and after each case (RP-1099): when either is down the run
-// stops and that case's result is not written. An outage that starts and ends inside one case
+// stops and that case's result is not written (runWhileUp in scripts/stack-health.ts). An outage that starts and ends inside one case
 // is not seen.
 
 const resultsFile = resolve(round, "results", "results.json");
@@ -106,31 +107,31 @@ async function main() {
   const todo = registry.filter((c) => !ids || ids.includes(c.id));
   if (ids) for (const id of ids) if (!registry.some((c) => c.id === id)) console.warn(`No case ${id} in the loaded files.`);
   const counts: Record<string, number> = {};
-  let ran = 0;
-  let stopped = false;
+  let outcome: Awaited<ReturnType<typeof runWhileUp>>;
   try {
-    for (const c of todo) {
-      if (!known.has(c.id) && !c.id.startsWith("SMOKE")) console.warn(`Warning: ${c.id} is not in test-cases.json.`);
-      const downBefore = await stackDown(c.id);
-      const result = downBefore ? undefined : await runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
-      const down = downBefore ?? (await stackDown(c.id));
-      if (down || !result) {
-        console.error(down);
-        process.exitCode = 1;
-        stopped = true;
-        break;
-      }
-      saveResult(c.id, result);
-      ran++;
-      counts[result.status] = (counts[result.status] ?? 0) + 1;
-      const failed = result.checks.filter((k) => !k.ok).length;
-      const why = result.status === "pass" ? "" : ` ${result.notes.split("\n").pop() ?? ""}`;
-      console.log(`${c.id.padEnd(10)} ${result.status.toUpperCase().padEnd(8)} ${result.checks.length - failed}/${result.checks.length} checks, ${result.screenshots.length} shots${why}`);
-    }
+    // A case the stack went down under is not saved, so its earlier result in results/ stays.
+    outcome = await runWhileUp(todo, {
+      down: (c) => stackDown(c.id),
+      run: (c) => {
+        if (!known.has(c.id) && !c.id.startsWith("SMOKE")) console.warn(`Warning: ${c.id} is not in test-cases.json.`);
+        return runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
+      },
+      save: (c, result) => {
+        saveResult(c.id, result);
+        counts[result.status] = (counts[result.status] ?? 0) + 1;
+        const failed = result.checks.filter((k) => !k.ok).length;
+        const why = result.status === "pass" ? "" : ` ${result.notes.split("\n").pop() ?? ""}`;
+        console.log(`${c.id.padEnd(10)} ${result.status.toUpperCase().padEnd(8)} ${result.checks.length - failed}/${result.checks.length} checks, ${result.screenshots.length} shots${why}`);
+      },
+    });
   } finally {
     await closeBrowser();
   }
-  console.log(`${stopped ? `Stopped: ${ran} of ${todo.length}` : `Done: ${todo.length}`} cases written (${Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none"}). Results: ${resultsFile}`);
+  if (outcome.stopped) {
+    console.error(outcome.stopped);
+    process.exitCode = 1;
+  }
+  console.log(`${outcome.stopped ? `Stopped: ${outcome.saved} of ${todo.length}` : `Done: ${todo.length}`} cases written (${Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none"}). Results: ${resultsFile}`);
 }
 
 main().catch((error: unknown) => {

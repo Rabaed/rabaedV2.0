@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer, type AddressInfo, type Server, type Socket } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { alertCommand, parseHealthArgs, stackProblems, stoppedMessage, targetOfEnv, targetOfLane } from "./stack-health.ts";
+import { alertCommand, parseHealthArgs, runWhileUp, stackProblems, stoppedMessage, targetOfEnv, targetOfLane } from "./stack-health.ts";
 
 // RP-1099: lane 7 sat at Exited (255) for over 2 hours after a Docker Desktop update, and the
 // UAT harness wrote Fail results against the dead stack.
@@ -181,6 +181,54 @@ describe("stoppedMessage", () => {
     expect(stoppedMessage(["db at 127.0.0.1:6132 is not answering (connect ECONNREFUSED)"], "VIS-03")).toContain(
       "UAT stopped at VIS-03: the stack is down, so nothing was written for VIS-03. What was written before it is kept.",
     );
+  });
+});
+
+describe("runWhileUp", () => {
+  // The harness's case and fixture loops: a result taken while the stack was down is never saved.
+  /** A run over `items` whose stack check answers `downAt(check number)`; records what ran and was saved. */
+  async function track(items: string[], downAt: (check: number) => string | undefined) {
+    const log: string[] = [];
+    let checks = 0;
+    const outcome = await runWhileUp(items, {
+      down: async (item) => {
+        log.push(`check ${item}`);
+        return downAt(++checks);
+      },
+      run: async (item) => (log.push(`run ${item}`), `result ${item}`),
+      save: (item, result) => void log.push(`save ${item}: ${result}`),
+    });
+    return { outcome, log };
+  }
+
+  it("saves every result while the stack stays up, checking before and after each", async () => {
+    const { outcome, log } = await track(["A", "B"], () => undefined);
+    expect(outcome).toEqual({ saved: 2, stopped: undefined });
+    expect(log).toEqual(["check A", "run A", "check A", "save A: result A", "check B", "run B", "check B", "save B: result B"]);
+  });
+
+  it("runs and saves nothing when the stack is down before the first item", async () => {
+    const { outcome, log } = await track(["A", "B"], () => "db down");
+    expect(outcome).toEqual({ saved: 0, stopped: "db down" });
+    expect(log).toEqual(["check A"]);
+  });
+
+  it("does not save an item when the stack went down while it ran, and stops there", async () => {
+    // Checks: 1 before A, 2 after A, 3 before B, 4 after B (down).
+    const { outcome, log } = await track(["A", "B", "C"], (n) => (n === 4 ? "api down" : undefined));
+    expect(outcome).toEqual({ saved: 1, stopped: "api down" });
+    expect(log).toEqual(["check A", "run A", "check A", "save A: result A", "check B", "run B", "check B"]);
+  });
+
+  it("tells the check whether it is before or after the item, so a fixture cut off midway can say it may be partial", async () => {
+    const asked: string[] = [];
+    const outcome = await runWhileUp(["FX-C2"], {
+      down: async (item, when) => (asked.push(`${when} ${item}`), when === "after" ? `${item} may be partial` : undefined),
+      run: async () => "applied",
+      save: () => {},
+    });
+    expect(asked).toEqual(["before FX-C2", "after FX-C2"]);
+    expect(outcome).toEqual({ saved: 0, stopped: "FX-C2 may be partial" });
   });
 });
 

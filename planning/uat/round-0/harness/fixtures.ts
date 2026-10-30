@@ -2,6 +2,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { round } from "./browser.ts";
 import { Api, projectIdOf } from "./helpers.ts";
+import { runWhileUp } from "../../../../scripts/stack-health.ts";
 import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts --fixtures [--only FX-C2,FX-OR]
@@ -129,23 +130,29 @@ const fixtures: Record<string, () => Promise<FixtureRecord>> = { "FX-C2": fxC2, 
 export async function applyFixtures(only?: string[]): Promise<void> {
   mkdirSync(resolve(round, "results"), { recursive: true });
   const record: Record<string, FixtureRecord> = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, FixtureRecord>) : {};
-  for (const [name, apply] of Object.entries(fixtures)) {
-    if (only && !only.includes(name)) continue;
-    let fixture: FixtureRecord;
-    try {
-      fixture = await apply();
-    } catch (error) {
-      fixture = { status: "failed", detail: error instanceof Error ? error.message : String(error), at: new Date().toISOString() };
-    }
-    // RP-1099: a fixture taken while the api or db went down is not written.
-    const down = await stackDown(name);
-    if (down) {
-      console.error(down);
-      process.exitCode = 1;
-      return;
-    }
-    record[name] = fixture;
-    console.log(`${name.padEnd(7)} ${record[name]!.status.toUpperCase().padEnd(8)} ${record[name]!.detail}`);
-    writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+  const chosen = Object.entries(fixtures).filter(([name]) => !only || only.includes(name));
+  // RP-1099: a fixture taken while the api or db went down is not written. It may have made part
+  // of its data first; a re-run applies only what is missing.
+  const { stopped } = await runWhileUp(chosen, {
+    down: async ([name], when) => {
+      const down = await stackDown(name);
+      return down && when === "after" ? `${down}\n${name} may be partial: re-run it with --fixtures --only ${name} once the stack is back.` : down;
+    },
+    run: async ([, apply]): Promise<FixtureRecord> => {
+      try {
+        return await apply();
+      } catch (error) {
+        return { status: "failed", detail: error instanceof Error ? error.message : String(error), at: new Date().toISOString() };
+      }
+    },
+    save: ([name], fixture) => {
+      record[name] = fixture;
+      console.log(`${name.padEnd(7)} ${fixture.status.toUpperCase().padEnd(8)} ${fixture.detail}`);
+      writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+    },
+  });
+  if (stopped) {
+    console.error(stopped);
+    process.exitCode = 1;
   }
 }
