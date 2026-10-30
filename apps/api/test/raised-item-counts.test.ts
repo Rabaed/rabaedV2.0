@@ -6,10 +6,10 @@
 // SNG) linked to a source Snag by hand. The Comments line of a Code B is covered by
 // code-b-comments.test.ts.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, ok, only, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -78,7 +78,7 @@ beforeAll(async () => {
 describe("a source counts the Snags raised from it, open and closed (seam 1)", () => {
   it("shows no Snags line while none is raised from it, then follows the Snags as they close", async () => {
     const source = await raised("Riser room", at.electrical, at.buildingA);
-    expect(await snagLines(at.c1Pm, source)).toEqual([]);
+    expect(await snagLines(at.c1Pm, source)).toEqual([]); // not hidden-from: nothing is raised from it yet
 
     const first = await raised("Riser room: label the trays", at.electrical, at.buildingA);
     const second = await raised("Riser room: seal the openings", at.electrical, at.buildingA);
@@ -99,7 +99,7 @@ describe("a source counts the Snags raised from it, open and closed (seam 1)", (
     await raiseFrom(draft, source);
     expect(await snagLines(at.k1Manager, source)).toEqual([{ open: 1, closed: 0 }]); // K1's own Draft.
     await ok(at.k1Manager.post(`/v1/work-items/${draft}/discard-draft`));
-    expect(await snagLines(at.k1Manager, source)).toEqual([]);
+    expect(await snagLines(at.k1Manager, source)).toEqual([]); // not hidden-from: K1's own Draft, discarded, counts nowhere
   });
 });
 
@@ -110,7 +110,7 @@ describe("the counts follow what the viewer sees (seam 2, scenarios RP-624-1 and
     const forC2 = await raised("Stair B: C2's side", at.electrical, buildingB);
     await raiseFrom(forC1, source);
     await raiseFrom(forC2, source);
-    await expectHidden(await c2Engineer.get(`/v1/work-items/${forC1}`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${forC1}`), target: forC1, seenBy: [at.c1Pm, at.k1Manager], hiddenFrom: c2Engineer, label: "C1's Snag" });
     // C2 sees the source and counts the one Snag it sees.
     expect(await snagLines(c2Engineer, source)).toEqual([{ open: 1, closed: 0 }]);
   });
@@ -122,7 +122,7 @@ describe("the counts follow what the viewer sees (seam 2, scenarios RP-624-1 and
     await raiseFrom(electrical, source);
     await raiseFrom(mechanical, source);
     expect(await snagLines(at.c1Pm, source)).toEqual([{ open: 2, closed: 0 }]);
-    await expectHidden(await c1ElectricalOnly.get(`/v1/work-items/${mechanical}`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${mechanical}`), target: mechanical, seenBy: at.c1Pm, hiddenFrom: c1ElectricalOnly, label: "the Mechanical Snag" });
     expect(await snagLines(c1ElectricalOnly, source)).toEqual([{ open: 1, closed: 0 }]);
   });
 });

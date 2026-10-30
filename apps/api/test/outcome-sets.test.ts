@@ -7,7 +7,7 @@
 // set, and the Dashboard and the List show it with its English and Arabic name.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import {
   defaultOutcomeSets,
   definitionFromRows,
@@ -23,7 +23,7 @@ import {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type TestApi } from "./support/harness.ts";
 import { buildTower, ok, type Company, type Tower } from "./support/tower.ts";
 import { LEGACY_MAR, returnInInternalReview } from "@rabaed/db/test-support";
 
@@ -68,7 +68,9 @@ describe("a Project's outcome sets", () => {
 
   it("are hidden from anyone not on the Project, and for a Type the Project doesn't use, as a made-up Project is", async () => {
     const t = await buildTower(api, { c1, k1 }, "OSH");
-    await expectHidden(outsider.caller.get(outcomesPath(t)));
+    // The Project's Members read the set, so the outsider's 404 is no empty read (RP-1095).
+    const setOn = (by: Caller) => readById<TypeOutcomes>(outcomesPath(t))(by).then((rows) => rows.map(() => ({ id: t.projectId })));
+    await expectHiddenFrom({ read: setOn, target: t.projectId, seenBy: [c1.caller, t.k1Manager], hiddenFrom: outsider.caller, name: (by) => (by === outsider.caller ? "the outsider" : by === c1.caller ? "C1's Admin" : "K1's manager"), label: "MAR's outcome set" });
     await expectHidden(c1.caller.get(outcomesPath(t, "NOPE")));
     await expectHidden(c1.caller.get(`/v1/projects/00000000-0000-4000-8000-000000000000/work-item-types/MAR/outcomes`));
   });

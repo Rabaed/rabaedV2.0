@@ -55,19 +55,6 @@ RP-450-1 api  # Tower's Project Admin duplicates and publishes a Workflow, adds 
 # RP-555
 RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
 
-# RP-589
-RP-589-5 db  # C1's PM imports a register (one row assigned to a C1 engineer, who later sends it for revi
-
-# RP-594
-RP-594-1 api  # C1 raises a Supplier Approval Request for Najd Cables (Electrical); K1 closes it at Code A
-
-# RP-596
-RP-596-1 db  # A new Project's DAR runs the Rabaed Default 1→1 → Owner review: C1's engineer raises and s
-RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflows of a submittal Type, an
-
-# RP-598
-RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
-
 # RP-1062
 RP-1062-1 api  # C1 Submits a WIR (a MAR at seam 1) to K1 and its Members post in its Chat; C2 Submits one 
 RP-1062-2 api  # K1's manager covers Building B only (seam 2), or Mechanical only (seam 1); C1's Submitted 
