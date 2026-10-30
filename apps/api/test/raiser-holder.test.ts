@@ -9,10 +9,10 @@
 // raiser Version is published.
 import { sql } from "kysely";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition, WorkflowRead, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, ok, only, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -41,6 +41,15 @@ async function move(by: Caller, id: string, transition: string, options: Paramet
 }
 
 const offered = async (by: Caller, id: string) => (await detail(by, id)).actions.transitions.map((t) => t.key);
+
+/** How a reader is named in a hidden-from failure. */
+const nameOf = (by: Caller) =>
+  new Map<Caller, string>([
+    [at.c1Pm, "C1 PM"],
+    [at.c1Engineer, "C1 Engineer"],
+    [at.k1Manager, "K1 manager"],
+    [c2Engineer, "C2 Engineer"],
+  ]).get(by) ?? "another Member";
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
@@ -91,12 +100,17 @@ describe("a Contractor's Snag on itself (seam 1)", () => {
   it("RP-622-1: its Draft reaches no other Company, and its whole journey never C2, in no list or by id (K1 is informed from the Raise: RP-625)", async () => {
     const id = await draftSnag(at.c1Pm, "C1's own fault");
     const hidden = async (step: string) => {
-      for (const other of step === "draft" ? [at.k1Manager, c2Engineer] : [c2Engineer]) {
-        await expectHidden(other.get(`/v1/work-items/${id}`), step);
-        await expectHidden(other.get(`/v1/work-items/${id}/history`), step);
-        await expectHidden(other.get(`/v1/work-items/${id}/workflow`), step);
-        expect((await snags(other)).items.map((i) => i.id), step).not.toContain(id);
-      }
+      // From the Raise K1 is informed (RP-625), so it reads the Snag too; C2 never does.
+      const seenBy = step === "draft" ? [at.c1Pm, at.c1Engineer] : [at.c1Pm, at.c1Engineer, at.k1Manager];
+      const hiddenFrom = step === "draft" ? [at.k1Manager, c2Engineer] : [c2Engineer];
+      const byId = (path: string) => async (by: Caller) => (await readById<object>(path)(by)).map(() => ({ id }));
+      const reads: [string, (by: Caller) => Promise<readonly { id: string }[]>][] = [
+        ["the Snag", byId(`/v1/work-items/${id}`)],
+        ["its history", byId(`/v1/work-items/${id}/history`)],
+        ["its Workflow map", byId(`/v1/work-items/${id}/workflow`)],
+        ["the Snag List", async (by) => (await snags(by)).items],
+      ];
+      for (const [what, read] of reads) await expectHiddenFrom({ read, target: id, seenBy, hiddenFrom, name: nameOf, label: `${step}, ${what}` });
     };
     await hidden("draft");
     await move(at.c1Pm, id, "raise");
@@ -132,7 +146,7 @@ describe("a Consultant's Snag on the Contractor, on the same Version (seam 1)", 
 
     const map = (await ok(at.c1Pm.get(`/v1/work-items/${id}/workflow`), 200)).json();
     expect(map.position).toMatchObject({ kind: "company", role: "consultant" });
-    expect(await offered(at.c1Pm, id)).toEqual([]);
+    expect(await offered(at.c1Pm, id)).toEqual([]); // not hidden-from: C1 reads the Snag at K1's Verify, with no Transition offered
 
     expect(await offered(at.k1Manager, id)).toEqual(expect.arrayContaining(["close", "return_to_open"]));
     await take(at.k1Manager, id, "close");
@@ -158,8 +172,10 @@ describe("RP-622-2: the raiser's role on the map is read only by those who see t
     expect(await actors(at.c1Pm, own)).toEqual(as("contractor"));
     expect(await actors(at.c1Pm, onC1)).toEqual(as("consultant"));
     expect(await actors(at.k1Manager, onC1)).toEqual(as("consultant"));
-    await expectHidden(at.k1Manager.get(`/v1/work-items/${own}/workflow`), "K1, C1's Draft");
-    for (const id of [own, onC1, crypto.randomUUID()]) await expectHidden(c2Engineer.get(`/v1/work-items/${id}/workflow`), `C2, ${id}`);
+    const mapOf = (id: string) => async (by: Caller) => (await readById<object>(`/v1/work-items/${id}/workflow`)(by)).map(() => ({ id }));
+    await expectHiddenFrom({ read: mapOf(own), target: own, seenBy: at.c1Pm, hiddenFrom: [at.k1Manager, c2Engineer], name: nameOf, label: "C1's Draft's map" });
+    await expectHiddenFrom({ read: mapOf(onC1), target: onC1, seenBy: [at.c1Pm, at.k1Manager], hiddenFrom: c2Engineer, name: nameOf, label: "K1's Snag on C1's map" });
+    await expectHidden(c2Engineer.get(`/v1/work-items/${crypto.randomUUID()}/workflow`), "C2, a made-up id"); // not hidden-from: a made-up id, answered as the hidden ones above
   });
 });
 
@@ -242,6 +258,6 @@ describe("a Snag started on a Version whose Steps name roles (seam 1)", () => {
     expect(back.step.key).toBe("draft");
     expect(back.workflow.versionNo).toBe(3);
     expect(back.actions.transitions.map((t) => t.key)).toContain("raise");
-    expect(await offered(at.c1Pm, id)).toEqual([]);
+    expect(await offered(at.c1Pm, id)).toEqual([]); // not hidden-from: C1 reads the Snag sent back to K1's Draft, with no Transition offered
   });
 });

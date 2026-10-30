@@ -4,14 +4,14 @@
 // returns it with a reason. Nobody outside the Contractor sees any of it.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { takeTransitionRequest, type WorkItemDetail, type WorkItemHistory } from "@rabaed/domain";
+import { takeTransitionRequest, type WorkItemDetail, type WorkItemHistory, type WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
 import { takeTransition } from "../src/work-items/work-items.ts";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
-import { LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -72,6 +72,27 @@ const buttons = (d: WorkItemDetail) => [
   ...d.actions.transitions.map((t) => t.key),
 ];
 
+/** How a reader is named in a hidden-from failure. */
+const nameOf = (caller: Caller) =>
+  new Map<Caller, string>([
+    [engineer, "C1 Engineer"],
+    [pm1, "C1 PM 1"],
+    [pm2, "C1 PM 2"],
+    [k1Engineer, "K1 Engineer"],
+    [orEngineer, "OR Engineer"],
+    [c2Engineer, "C2 Engineer"],
+  ]).get(caller) ?? "another Member";
+
+/** The Project's list as `by` reads it. */
+const listed = async (by: Caller): Promise<WorkItemList["items"]> => {
+  const res = await by.get(`/v1/projects/${projectId}/work-items`);
+  expect(res.statusCode, res.body).toBe(200);
+  return (res.json() as WorkItemList).items;
+};
+
+/** Item `id`'s history as a read by id: `[{ id }]` when `by` may read it, `[]` for the plain 404. */
+const historyOf = (id: string) => async (by: Caller) => (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by)).map(() => ({ id }));
+
 beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
@@ -103,7 +124,7 @@ describe("Send for Review", () => {
       label: { en: "Send for Review" },
       actionForm: null,
     });
-    expect(buttons(await detail(pm1, id))).toEqual([]);
+    expect(buttons(await detail(pm1, id))).toEqual([]); // not hidden-from: the PM reads the Draft, with no button on it
   });
 
   it("moves the Draft to Internal Review, held by the PM pool, and assigns the Document Number", async () => {
@@ -116,20 +137,23 @@ describe("Send for Review", () => {
       stepAgeWeeks: 1,
     });
     expect(d.documentNumber).toBe("TWR-MARV-01-0001");
-    expect(buttons(d)).toEqual([]);
+    expect(buttons(d)).toEqual([]); // not hidden-from: the Engineer reads the item they sent, with no button on it
     expect(buttons(await detail(pm1, id))).toEqual(["pick_up"]);
   });
 
   it("keeps the item invisible to the Consultant, the Owner Representative and the second Contractor (V1)", async () => {
-    for (const caller of [k1Engineer, orEngineer, c2Engineer]) {
+    const outsiders = [k1Engineer, orEngineer, c2Engineer];
+    const hidden = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
+      expectHiddenFrom({ read, target: id, seenBy: [engineer, pm1], hiddenFrom: outsiders, name: nameOf, label });
+    await hidden(listed, "the Project's list");
+    await hidden(readById(`/v1/work-items/${id}`), "the item");
+    await hidden(historyOf(id), "its history");
+    for (const caller of outsiders) {
       const list = (await caller.get(`/v1/projects/${projectId}/work-items`)).json();
-      expect(list.items).toEqual([]);
       expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
-      await expectHidden(caller.get(`/v1/work-items/${id}`));
-      await expectHidden(caller.get(`/v1/work-items/${id}/history`));
       const res = await tryTake(caller, id, "return", { reason: "x" });
-      await expectHidden(res);
-      await expectHidden(caller.post(`/v1/work-items/${id}/pick-up`));
+      await expectHidden(res); // not hidden-from: a refused write; the reads above prove the row with expectHiddenFrom
+      await expectHidden(caller.post(`/v1/work-items/${id}/pick-up`)); // not hidden-from: a refused write; the reads above prove the row with expectHiddenFrom
     }
   });
 
@@ -163,7 +187,7 @@ describe("Pick up, Return and re-send", () => {
       label: { en: "Return" },
       actionForm: { sections: [{ fields: [{ key: "reason", type: "textarea", required: true }] }] },
     });
-    expect(buttons(await detail(pm2, id))).toEqual([]);
+    expect(buttons(await detail(pm2, id))).toEqual([]); // not hidden-from: the PM who lost reads the item, with no button on it
   });
 
   it("refuses the Engineer and the other PM, who don't hold the Step, and changes nothing (scenario 11)", async () => {
@@ -202,7 +226,7 @@ describe("Pick up, Return and re-send", () => {
     expect(d).toMatchObject({ stage: { key: "draft" }, documentNumber: number });
     expect(d.heldBy?.memberName).not.toBeNull();
     expect(buttons(d)).toEqual(["send_for_review"]);
-    expect(buttons(await detail(pm1, id))).toEqual([]);
+    expect(buttons(await detail(pm1, id))).toEqual([]); // not hidden-from: the PM reads the returned Draft, with no button on it
 
     await ok(tryTake(engineer, id, "send_for_review"));
     expect((await detail(engineer, id)).documentNumber).toBe(number);
@@ -229,11 +253,14 @@ describe("Pick up, Return and re-send", () => {
   });
 
   it("keeps the Return reason from everyone outside the Contractor (V5)", async () => {
-    for (const caller of [k1Engineer, orEngineer, c2Engineer]) {
-      const res = await caller.get(`/v1/work-items/${id}/history`);
-      await expectHidden(res);
-      expect(res.body).not.toContain("Wrong tray size");
-    }
+    // The Return's event, as a row: `[{ id }]` when the reader's history holds its reason, `[]` when not, or for the plain 404.
+    const returnEvent = `${id}/return`;
+    const reasonRead = async (by: Caller) =>
+      (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by))
+        .flatMap((h) => h.events)
+        .filter((e) => e.reason === "Wrong tray size")
+        .map(() => ({ id: returnEvent }));
+    await expectHiddenFrom({ read: reasonRead, target: returnEvent, seenBy: [engineer, pm1, pm2], hiddenFrom: [k1Engineer, orEngineer, c2Engineer], name: nameOf, label: "the Return reason" });
   });
 });
 
@@ -252,7 +279,7 @@ describe("the Document Number", () => {
   it("is the second Contractor's own series", async () => {
     const id = await createDraft(c2Engineer);
     // c2 has Engineers only: nobody could hold Internal Review, so it can't be sent, and no button says it can.
-    expect(buttons(await detail(c2Engineer, id))).toEqual([]);
+    expect(buttons(await detail(c2Engineer, id))).toEqual([]); // not hidden-from: C2 reads its own Draft, with no button on it
     const res = await tryTake(c2Engineer, id, "send_for_review");
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: "no_step_pool" });
@@ -271,7 +298,7 @@ describe("a Transition", () => {
     expect([a.statusCode, b.statusCode]).toEqual([204, 204]);
     await ok(tryTake(engineer, id, "send_for_review", { idempotencyKey }));
     const events = await history(engineer, id);
-    expect(events.filter((e) => e.type === "transition")).toHaveLength(1);
+    expect(events.filter((e) => e.type === "transition")).toHaveLength(1); // not hidden-from: the replays wrote no second event, read by the Engineer, who sees it
     expect((await detail(engineer, id)).stage.key).toBe("internal_review");
 
     // The same key for another item is a mistake, not a replay.
@@ -294,11 +321,11 @@ describe("a Transition", () => {
 
   it("is refused to a holder without the permission, and nothing changes (scenario 11)", async () => {
     const id = await createDraft(noPosition, "Cable glands", { datasheet: false });
-    expect(buttons(await detail(noPosition, id))).toEqual([]);
+    expect(buttons(await detail(noPosition, id))).toEqual([]); // not hidden-from: the raiser reads their own Draft, with no button on it
     const res = await tryTake(noPosition, id, "send_for_review");
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: "forbidden" });
-    expect(await history(noPosition, id)).toEqual([]);
+    expect(await history(noPosition, id)).toEqual([]); // not hidden-from: the refused move wrote no event, read by the raiser, who sees the history
     expect((await detail(noPosition, id)).stage.key).toBe("draft");
   });
 
@@ -306,7 +333,7 @@ describe("a Transition", () => {
     const id = await createDraft(engineer, "Trunking");
     expect((await engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review" })).statusCode).toBe(400);
     expect((await tryTake(api.anonymous(), id, "send_for_review")).statusCode).toBe(401);
-    await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/pick-up`));
+    await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/pick-up`)); // not hidden-from: a made-up id; there is no row to read first
   });
 });
 
@@ -365,7 +392,7 @@ describe("a Transition sent again while the first one commits", () => {
     }
 
     expect(await Promise.all([first, second])).toEqual([{ ok: true }, { ok: true }]);
-    expect((await history(engineer, id)).filter((e) => e.type === "transition")).toHaveLength(1);
+    expect((await history(engineer, id)).filter((e) => e.type === "transition")).toHaveLength(1); // not hidden-from: the second request replayed the first, writing no second event
     expect((await detail(engineer, id)).stage.key).toBe("internal_review");
   });
 });
