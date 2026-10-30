@@ -29,19 +29,22 @@ export type PublishScreenResult =
  * published Version never changes: Workflow Versions published afterwards pin the new
  * one, and those published before keep theirs. Content equal to the latest published
  * Version publishes nothing, so the seed step can run again. Two publishes of one
- * Screen at once take turns.
+ * Screen at once take turns. A reply checklist is refused while a published Workflow
+ * that falls back to this Screen shows it on a Transition that doesn't close the item
+ * (RP-1088), and nothing is written.
  */
 export async function publishRabaedScreen(migratorDb: Db, document: RabaedScreenDocument): Promise<PublishScreenResult> {
   try {
     return await migratorDb.transaction().execute((trx) => publishIn(trx, document));
   } catch (error) {
     // A refusal found once the Screen's row is written rolls the transaction back.
-    if (error instanceof Refused) return { ok: false, reason: "screen_problems", problems: error.problems };
+    if (error instanceof ScreenRefused) return { ok: false, reason: "screen_problems", problems: error.problems };
     throw error;
   }
 }
 
-class Refused extends Error {
+/** A Screen problem found once the Screen's row is written: thrown, so the transaction rolls back. */
+class ScreenRefused extends Error {
   constructor(readonly problems: ScreenProblem[]) {
     super("screen_problems");
   }
@@ -77,8 +80,8 @@ async function publishIn(trx: Db, document: RabaedScreenDocument): Promise<Publi
   }
   // A reply checklist only while every Workflow that would pin this Version shows it on a close (RP-1088).
   const shownOffClose = await readScreenShownOffClose(trx, screenId);
-  const placed = screenProblems(document.schema, document.internalFields, { optionListIds, shownOffClose });
-  if (placed.length > 0) throw new Refused(placed);
+  const offClose = screenProblems(document.schema, document.internalFields, { optionListIds, shownOffClose });
+  if (offClose.length > 0) throw new ScreenRefused(offClose);
   const versionNo = Math.max(0, ...versions.rows.map((v) => v.version_no)) + 1;
   await sql`
     insert into screen_version (screen_id, version_no, status, schema, internal_fields, published_at)

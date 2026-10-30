@@ -7,6 +7,7 @@
 //
 // The seam suites' global setup runs the migrations, then the demo seed, which publishes the
 // Rabaed Defaults.
+import { publishRabaedScreen } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition, WorkflowRead } from "@rabaed/domain";
@@ -118,8 +119,38 @@ describe("publishing a Screen (seam 1)", () => {
   });
 });
 
+describe("publishing a Rabaed Default Screen (Rabaed Admin, seam 1)", () => {
+  const KEY = "rp1088_site_note";
+  const document = (name: string, schema: object) => ({ key: KEY, name: bilingual(name), schema, internalFields: [] });
+
+  beforeAll(async () => {
+    // A test-only Rabaed Default Screen with no checklist yet, which the Project's WIR falls back to on Send to Manager.
+    expect(await publishRabaedScreen(migrator, document("Site note", screenOf(remarks)))).toMatchObject({ ok: true, published: true, versionNo: 1 });
+    const id = await wirCopy("WIR with a Rabaed Default Screen on Send to Manager", (d) => show(d, "send_to_manager", KEY));
+    expect((await c1.caller.post(`/v1/workflows/${id}/publish`)).statusCode).toBe(200);
+  });
+
+  it("refuses adding a checklist while a Project's published Workflow shows it off a close, and writes nothing, its name included", async () => {
+    expect(await publishRabaedScreen(migrator, document("Site note with checks", screenOf(remarks, checklist)))).toEqual({
+      ok: false,
+      reason: "screen_problems",
+      problems: [{ key: "inspection_checklist", code: "reply_checklist_not_on_close" }],
+    });
+    const { rows } = await sql<{ name: { en: string }; versions: number }>`
+      select s.name, (select count(*)::int from screen_version v where v.screen_id = s.id) as versions
+      from screen s where s.owner_kind = 'rabaed' and s.key = ${KEY}
+    `.execute(migrator);
+    expect(rows).toEqual([{ name: bilingual("Site note"), versions: 1 }]);
+  });
+
+  it("publishes the same content again as nothing new, whatever shows it", async () => {
+    expect(await publishRabaedScreen(migrator, document("Site note", screenOf(remarks)))).toMatchObject({ ok: true, published: false, versionNo: 1 });
+  });
+});
+
 describe("every published Workflow Version (seam 1)", () => {
   // The Rabaed Defaults the seed published, and every Project's: none shows a reply checklist off a close (RP-1088).
+  // A published Version's action_form holds its pinned Screen's schema, a copy (workflow-engine.md §5.7), so it is read there.
   it("shows a reply checklist only on a Transition that closes the item", async () => {
     const { rows } = await sql<{ workflow: string; version_no: number; transition: string }>`
       select d.name ->> 'en' as workflow, v.version_no, t.key as transition

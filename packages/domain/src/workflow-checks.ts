@@ -861,8 +861,8 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
     ar: `يعرض ${names.transition.ar} الشاشة "${names.detail}"، وليس لها إصدار منشور يمكن لسير العمل هذا استخدامه.`,
   }),
   reply_checklist_not_on_close: (names) => ({
-    en: `${names.transition.en} shows the checklist ${names.detail} in its Screen but doesn't close the item: only a close takes a checklist, raising its Snags and printing it in the record.`,
-    ar: `${names.transition.ar} يعرض قائمة التحقق ${names.detail} في شاشته لكنه لا يُغلق العنصر: لا يأخذ قائمة التحقق إلا انتقال إغلاق، فيُنشئ عيوبها ويطبعها في السجل.`,
+    en: `${names.transition.en} shows checklist "${names.detail}" in its Screen but doesn't close the item: only a close takes a checklist, raising its Snags and printing it in the Documental Record.`,
+    ar: `يعرض ${names.transition.ar} قائمة التحقق "${names.detail}" في شاشته لكنه لا يُغلق العنصر: لا يأخذ قائمة التحقق إلا انتقال إغلاق، فيُنشئ عيوبها ويطبعها في السجل التوثيقي.`,
   }),
   screen_with_action_form: (names) => ({
     en: `${names.transition.en} shows Screen "${names.detail}" and has an Action Form of its own: it takes one or the other.`,
