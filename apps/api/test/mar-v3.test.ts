@@ -15,11 +15,11 @@ import { readFileSync } from "node:fs";
 import { publishRabaedDefaults, rabaedDefaultTypes } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { sql } from "kysely";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, FormVersion, WorkItemHistory } from "@rabaed/domain";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, projectMember, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -268,7 +268,12 @@ describe("the MAR Workflow Version 3 (seam 1 acceptance)", () => {
 // Contractor reads the Manager's shared reply once the Code is issued.
 describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
   let id = "";
-  const answersSeen = (events: WorkItemHistory["events"]) => JSON.stringify(events.map((e) => [e.type, e.answers, e.recommendedCode, e.internalNote]));
+  /** `text` as a row when it is anywhere in item `item`'s history as `by` reads it, any field, for expectHiddenFrom. */
+  const textIn = (item: string, text: string) => async (by: Caller) => (JSON.stringify(await history(by, item)).includes(text) ? [{ id: text }] : []);
+  /** Item `item`'s history as `by` reads it, as the item's id, or none for the plain 404. */
+  const historyOf = (item: string) => (by: Caller) => readById(`/v1/work-items/${item}/history`)(by).then((rows) => rows.map(() => ({ id: item })));
+  const whoIs = (by: Caller) =>
+    by === hafiz ? "Hafiz (C1)" : by === ali ? "Ali (C1 PM)" : by === ahmed ? "Ahmed (K1)" : by === mohammed ? "Mohammed (K1)" : by === faisal ? "Faisal (O1)" : by === yousef ? "Yousef (C2)" : "someone";
 
   beforeAll(async () => {
     id = await submitted("Visibility", "Covers Level 2 only");
@@ -279,9 +284,11 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
       const submit = (await history(who, id)).find((e) => e.answers?.cover_note !== undefined);
       expect(submit).toMatchObject({ audience: "shared", answers: { cover_note: "Covers Level 2 only" }, by: { memberName: null } });
       expect(submit!.by.companyName).not.toBeNull();
-      expect(JSON.stringify(await history(who, id))).not.toContain("quantities checked against BOQ");
     }
-    await expectHidden(yousef.get(`/v1/work-items/${id}/history`));
+    // C1, whose PM wrote it, reads the Internal Note; the Consultant and oversight don't (RP-1095).
+    const pmNote = "PM: quantities checked against BOQ";
+    await expectHiddenFrom({ read: textIn(id, pmNote), target: pmNote, seenBy: [ali, hafiz], hiddenFrom: [ahmed, mohammed, faisal], name: whoIs });
+    await expectHiddenFrom({ read: historyOf(id), target: id, seenBy: [ahmed, faisal], hiddenFrom: yousef, name: whoIs, label: "the history" });
   });
 
   it("the Contractor and oversight never read the Consultant Engineer's reply or Recommended Code, before or after the Code", async () => {
@@ -299,9 +306,11 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
     await take(mohammed, id, "revise_c", { answers: { ...verified, remarks: "Resubmit with 4000 K" } });
     for (const who of [hafiz, ali, faisal]) {
       const events = await history(who, id);
-      expect(answersSeen(events)).not.toContain("Wrong colour temperature");
       expect(events.some((e) => e.type === "internal_answers" || e.type === "recommend_code")).toBe(false);
-      expect(JSON.stringify(events)).not.toContain("compared with the approved sample");
+    }
+    // K1 reads its Engineer's reply and Internal Note after the Code; the Contractor and oversight never do (RP-1095).
+    for (const text of ["Wrong colour temperature", "Engineer: compared with the approved sample"]) {
+      await expectHiddenFrom({ read: textIn(id, text), target: text, seenBy: [ahmed, mohammed], hiddenFrom: [hafiz, ali, faisal], name: whoIs });
     }
   });
 
