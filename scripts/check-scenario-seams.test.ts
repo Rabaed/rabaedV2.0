@@ -20,19 +20,38 @@ describe("seamProblems", () => {
   it("doesn't count an ID named only in a comment, a string or a template title's ${…}", () => {
     const text = [`// ${id(9, 1)}`, `const scenario = "${id(9, 1)}";`, "it(`${scenario}: hidden`, () => {});"].join("\n");
     expect(seamProblems([row(id(9, 1))], [api(text), db(named(id(9, 1)))], [])).toEqual([
-      `docs/visibility/scenarios/x.md:7: scenario ${id(9, 1)} has no api test (an it(...) or describe(...) naming it in apps/api/test/): add one, or, only for a gap already on main, a line "${id(9, 1)} api" in docs/visibility/untested-seams/RP-9.txt`,
+      `docs/visibility/scenarios/x.md:7: scenario ${id(9, 1)} has no api test (an it(...), test(...) or describe(...) around a running test, naming it, in apps/api/test/): add one, or, only for a gap already on main, a line "${id(9, 1)} api" in docs/visibility/untested-seams/RP-9.txt`,
     ]);
   });
 
-  it("counts a title of it.each, test, describe.skip and a template title", () => {
-    const text = [`it.each([1])("${id(9, 1)} %s", () => {});`, `test("${id(9, 2)}", () => {});`, `describe.skip("${id(9, 3)}", () => {});`, `it(\`${id(9, 4)} \${x}\`, () => {});`].join("\n");
+  it("counts a title of it.each, test, a describe around a test, and a template title", () => {
+    const text = [
+      `it.each([1])("${id(9, 1)} %s", () => {});`,
+      `test("${id(9, 2)}", () => {});`,
+      `describe("${id(9, 3)}", () => { it("hidden", () => {}); });`,
+      `it(\`${id(9, 4)} \${x}\`, () => {});`,
+    ].join("\n");
     const rows = [1, 2, 3, 4].map((n) => row(id(9, n)));
     expect(seamProblems(rows, [api(text), db(text)], [])).toEqual([]);
   });
 
+  it("doesn't count a test that never runs: skip, todo, skipIf, no body, or a describe with no running test", () => {
+    const text = [
+      `it.skip("${id(9, 1)}", () => {});`,
+      `it.todo("${id(9, 2)}");`,
+      `it.skipIf(true)("${id(9, 3)}", () => {});`,
+      `it("${id(9, 4)}");`,
+      `describe("${id(9, 5)}", () => {});`,
+      `describe.skip("${id(9, 6)}", () => { it("hidden", () => {}); });`,
+      `describe("${id(9, 7)}", () => { it.skip("hidden", () => {}); });`,
+    ].join("\n");
+    const rows = [1, 2, 3, 4, 5, 6, 7].map((n) => row(id(9, n)));
+    expect(seamProblems(rows, [api(text), db(text)], [])).toHaveLength(14);
+  });
+
   it("names the seam a scenario has no test in", () => {
     expect(seamProblems([row(id(9, 1)), row(id(9, 2))], [api(named(`${id(9, 1)} ${id(9, 2)}`)), db(named(id(9, 2)))], [])).toEqual([
-      `docs/visibility/scenarios/x.md:7: scenario ${id(9, 1)} has no db test (an it(...) or describe(...) naming it in packages/db/test/): add one, or, only for a gap already on main, a line "${id(9, 1)} db" in docs/visibility/untested-seams/RP-9.txt`,
+      `docs/visibility/scenarios/x.md:7: scenario ${id(9, 1)} has no db test (an it(...), test(...) or describe(...) around a running test, naming it, in packages/db/test/): add one, or, only for a gap already on main, a line "${id(9, 1)} db" in docs/visibility/untested-seams/RP-9.txt`,
     ]);
   });
 

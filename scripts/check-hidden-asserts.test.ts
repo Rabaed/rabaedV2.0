@@ -29,7 +29,7 @@ describe("findAsserts", () => {
   });
 
   it("keys an assert by its test's titles and its line's text, and gives its line", () => {
-    expect(findAsserts(db, testFile("expect(  x ).toEqual([]);  "))).toEqual([{ kind: "empty", key: "empty C2 > hidden :: expect( x ).toEqual([]);", line: 3 }]);
+    expect(findAsserts(db, testFile("expect(  x ).toEqual([]);  "))).toEqual([{ kind: "empty", titles: "C2 > hidden", key: "empty C2 > hidden :: expect( x ).toEqual([]);", line: 3 }]);
   });
 
   it("keys an assert outside any test as (top level), and keeps a template title's ${…}", () => {

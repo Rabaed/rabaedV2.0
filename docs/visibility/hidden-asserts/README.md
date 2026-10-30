@@ -9,6 +9,6 @@ One assert a line, keyed `<kind> <titles> :: <line>`:
 - `<titles>`: the `describe` / `it` titles around the assert, joined with ` > ` (`(top level)` outside any);
 - `<line>`: the text of the assert's line, spaces collapsed.
 
-No line numbers, so an edit elsewhere in the file doesn't break the check. Two identical asserts in one test are two identical lines. Not all are visibility asserts; an audit found about 280 that are.
+No line numbers, so an edit elsewhere in the file doesn't break the check. Two identical asserts in one test are two identical lines, matched by count. An assert split over lines is keyed by the line that matches (`).toEqual([]);`, say), so it is weaker; renaming a test or editing an assert's line changes its key, and the old entry then fails as stale and the new one as unlisted. Not all are visibility asserts; an audit found about 280 that are.
 
 The lists only shrink: `scripts/check-hidden-asserts.ts` fails on an assert that isn't listed, even in a file that also has a fix, and on an entry with no assert left. When you fix an assert, delete its line; when a file's last line goes, delete the file. A new hidden-from assert uses `expectHiddenFrom`; a line that is no visibility assert is marked `// not hidden-from: <why>`.

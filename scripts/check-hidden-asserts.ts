@@ -42,8 +42,8 @@ const skipLine = /\/\/\s*not hidden-from:/;
 const topLevel = "(top level)";
 const titleSeparator = " > ";
 
-/** One assert: its kind, its key in the baseline, and its line (1-based). */
-export type Assert = { kind: Kind; key: string; line: number };
+/** One assert: its kind, the titles of the blocks around it, its key in the baseline, and its line (1-based). */
+export type Assert = { kind: Kind; titles: string; key: string; line: number };
 
 /** The asserts `text` holds, in line order, leaving out marked lines. */
 export function findAsserts(file: string, text: string): Assert[] {
@@ -56,7 +56,7 @@ export function findAsserts(file: string, text: string): Assert[] {
       const matches = kinds.flatMap((kind) => [...raw.matchAll(patterns[kind])].map((match) => ({ kind, at: match.index })));
       for (const { kind, at } of matches.sort((a, b) => a.at - b.at)) {
         const titles = titlePathAt(blocks, offset + at).join(titleSeparator) || topLevel;
-        found.push({ kind, key: `${kind} ${titles} :: ${lineText}`, line: i + 1 });
+        found.push({ kind, titles, key: `${kind} ${titles} :: ${lineText}`, line: i + 1 });
       }
     }
     offset += raw.length + 1;
@@ -114,28 +114,27 @@ export function hiddenAssertProblems(files: Citation[], baselines: BaselineFile[
   }
 
   for (const [file, has] of asserts) {
-    const left = new Map<string, number>();
-    for (const entry of listed.get(file) ?? []) left.set(entry.key, (left.get(entry.key) ?? 0) + 1);
-    for (const assert of has) {
-      const n = left.get(assert.key) ?? 0;
-      if (n > 0) left.set(assert.key, n - 1);
-      else {
-        const titles = assert.key.slice(assert.kind.length + 1, assert.key.indexOf(" :: "));
-        problems.push(`${file}:${assert.line}: ${describeKind[assert.kind]}, in "${titles}", not in ${baselineFileFor(file)}: ${fixKind[assert.kind]} (RP-1095)`);
-      }
+    for (const assert of unmatched(has, listed.get(file) ?? [])) {
+      problems.push(`${file}:${assert.line}: ${describeKind[assert.kind]}, in "${assert.titles}", not in ${baselineFileFor(file)}: ${fixKind[assert.kind]} (RP-1095)`);
     }
   }
-
   for (const [file, entries] of listed) {
-    const left = new Map<string, number>();
-    for (const assert of asserts.get(file) ?? []) left.set(assert.key, (left.get(assert.key) ?? 0) + 1);
-    for (const entry of entries) {
-      const n = left.get(entry.key) ?? 0;
-      if (n > 0) left.set(entry.key, n - 1);
-      else problems.push(`${baselineFileFor(file)}:${entry.line}: ${file} has no such assert now: delete this line (and the list, if it is its last)`);
+    for (const entry of unmatched(entries, asserts.get(file) ?? [])) {
+      problems.push(`${baselineFileFor(file)}:${entry.line}: ${file} has no such assert now: delete this line (and the list, if it is its last)`);
     }
   }
   return problems;
+}
+
+/** The items of `these` left over once each item of `those` has used up one item of the same key. */
+function unmatched<T extends { key: string }>(these: T[], those: { key: string }[]): T[] {
+  const left = new Map<string, number>();
+  for (const { key } of those) left.set(key, (left.get(key) ?? 0) + 1);
+  return these.filter(({ key }) => {
+    const n = left.get(key) ?? 0;
+    left.set(key, n - 1);
+    return n <= 0;
+  });
 }
 
 /** The baseline files of the repository at `repo`, every file under the folder but its README. */

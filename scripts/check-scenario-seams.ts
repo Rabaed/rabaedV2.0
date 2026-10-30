@@ -1,15 +1,16 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoCitations, type Citation } from "./check-scenario-ids.ts";
-import { testBlocks } from "./test-titles.ts";
+import { runningTestTitles, testBlocks } from "./test-titles.ts";
 import { readScenarioRows, scenariosDir, matrixFile, type ScenarioRow } from "./visibility-scenarios.ts";
 
 // Every RP-nnn-n visibility scenario is tested at both seams: the api (seam 1, apps/api/test/)
 // and the database with its RLS (seam 2, packages/db/test/). RP-1078, RP-1082 and RP-1083 were
 // tested at the api only, and that is how the RP-1079 leak got through (RP-1095).
 //
-// A test "covers" a scenario when an it(...), test(...) or describe(...) title in a seam test file
-// names the scenario's ID (RP-1134); a comment or another string doesn't. The gaps already on main
+// A test "covers" a scenario when the title of an it(...) or test(...) in a seam test file, or of a
+// describe(...) around it, names the scenario's ID (RP-1134); a comment or another string doesn't,
+// and neither does a test that never runs (skip, todo, skipIf, runIf, no body). The gaps already on main
 // when this check came are listed in docs/visibility/untested-seams/, one file per ticket
 // (RP-nnn.txt, like docs/visibility/scenarios/), one "RP-nnn-n api|db" a line, so parallel PRs edit
 // different files. The list only shrinks: a new gap fails, and so does a listed gap that has its
@@ -51,7 +52,7 @@ function namedIn(citations: Citation[], seam: Seam): Set<string> {
   const named = new Set<string>();
   for (const { file, text } of citations) {
     if (!isSeamTest(file, seam)) continue;
-    for (const { title } of testBlocks(file, text)) for (const match of title.matchAll(/(?<![\w-])RP-\d+-\d+(?![\w-])/g)) named.add(match[0]);
+    for (const title of runningTestTitles(testBlocks(file, text))) for (const match of title.matchAll(/(?<![\w-])RP-\d+-\d+(?![\w-])/g)) named.add(match[0]);
   }
   return named;
 }
@@ -90,7 +91,7 @@ export function seamProblems(rows: ScenarioRow[], citations: Citation[], gapFile
     for (const seam of seams) {
       if (named[seam].has(row.id) || listed.has(`${row.id} ${seam}`)) continue;
       problems.push(
-        `${row.file}:${row.line}: scenario ${row.id} has no ${seam} test (an it(...) or describe(...) naming it in ${seamFolder[seam]}): add one, or, only for a gap already on main, a line "${row.id} ${seam}" in ${gapFileFor(keyOf(row.id))}`,
+        `${row.file}:${row.line}: scenario ${row.id} has no ${seam} test (an it(...), test(...) or describe(...) around a running test, naming it, in ${seamFolder[seam]}): add one, or, only for a gap already on main, a line "${row.id} ${seam}" in ${gapFileFor(keyOf(row.id))}`,
       );
     }
   }
@@ -101,10 +102,13 @@ export function seamProblems(rows: ScenarioRow[], citations: Citation[], gapFile
 export function readGapFiles(repo: string): GapFile[] {
   const dir = join(repo, gapsDir);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((name) => name !== "README.md")
-    .sort()
-    .map((name) => ({ file: `${gapsDir}/${name}`, text: readFileSync(join(dir, name), "utf8") }));
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.name !== "README.md")
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((entry) =>
+      // A folder here is reported as no gap list, not read.
+      entry.isFile() ? { file: `${gapsDir}/${entry.name}`, text: readFileSync(join(dir, entry.name), "utf8") } : { file: `${gapsDir}/${entry.name}/`, text: "" },
+    );
 }
 
 /** The problems of the repository at `repo`. */
