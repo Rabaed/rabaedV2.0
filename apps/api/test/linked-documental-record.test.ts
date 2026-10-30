@@ -7,12 +7,12 @@
 // Company's Member get the same plain 404 as a made-up id.
 import { createHash, randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { bilingual, buildTower, detail, draft, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -64,6 +64,24 @@ async function closeWithRecord(id: string, code: string): Promise<void> {
 const addLink = async (from: string, to: string): Promise<string> => (await ok(at.c1Engineer.post(`/v1/work-items/${from}/links`, { workItemId: to }), 201)).json().id;
 const viaLink = (by: Caller, item: string, link: string) => by.get(`/v1/work-items/${item}/links/${link}/documental-record`);
 
+/** A record PDF read for expectHiddenFrom: `[{ id: Y }]` when the PDF comes, `[]` for the plain 404, anything else fails. */
+const pdfRead = async (res: ReturnType<Caller["get"]>, path: string): Promise<{ id: string }[]> => {
+  const got = await res;
+  if (got.statusCode === 200) {
+    expect(new Uint8Array(got.rawPayload), path).toEqual(PDF);
+    return [{ id: y }];
+  }
+  await expectHidden(got, path);
+  return [];
+};
+
+/** One read of a record through a Link: by whom, on which item, through which Link. */
+type Call = { by: Caller; item: string; link: string; name: string };
+const call = (by: Caller, item: string, link: string, name: string): Call => ({ by, item, link, name });
+const through = (c: Call) => pdfRead(viaLink(c.by, c.item, c.link), `${c.name}: ${c.item}/links/${c.link}`);
+/** Y's record comes through every call in `seenBy` and none in `hiddenFrom`. */
+const yThrough = (seenBy: Call | Call[], hiddenFrom: Call | Call[]) => expectHiddenFrom({ read: through, target: y, name: (c) => c.name, seenBy, hiddenFrom });
+
 beforeAll(async () => {
   const c1 = await api.projectCreator();
   k1 = await onboard("Linked Record Consultants");
@@ -84,10 +102,13 @@ describe("scenario RP-1087-1: a linked item's record, through the Link", () => {
   it("is X's Link to Y with no id for the viewer, and Y's own URL and record are 404 to them", async () => {
     const links: WorkItemLinks = (await ok(viewer.get(`/v1/work-items/${x}/links`), 200)).json();
     expect(links.links.find((l) => l.id === xToY)).toMatchObject({ workItemId: null });
-    await expectHidden(viewer.get(`/v1/work-items/${y}`));
-    await expectHidden(viewer.get(`/v1/work-items/${y}/documental-record`));
-    // Positive control: C1's Engineer, who sees Y, gets its record from Y itself.
-    await ok(at.c1Engineer.get(`/v1/work-items/${y}/documental-record`), 200);
+    // C1's Engineer, who sees Y, opens it and gets its record from Y itself.
+    const name = (by: Caller) => (by === viewer ? "the Mechanical viewer" : "C1's Engineer");
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${y}`), target: y, seenBy: at.c1Engineer, hiddenFrom: viewer, name });
+    // Y's own record read answers its signed URL, which holds Y's id.
+    const ownRecord = readById<{ url: string }>(`/v1/work-items/${y}/documental-record`);
+    const recordOfY = async (by: Caller) => (await ownRecord(by)).map((r) => ({ id: r.url.includes(`/work-items/${y}/`) ? y : r.url }));
+    await expectHiddenFrom({ read: recordOfY, target: y, seenBy: at.c1Engineer, hiddenFrom: viewer, name });
   });
 
   it("gives the viewer Y's PDF itself, named by its Document Number, and nothing that names Y", async () => {
@@ -97,7 +118,7 @@ describe("scenario RP-1087-1: a linked item's record, through the Link", () => {
     expect(res.headers["content-disposition"]).toContain(`filename="${yNumber}.pdf"`);
     expect(res.headers["cache-control"]).toBe("private, no-store");
     expect(new Uint8Array(res.rawPayload)).toEqual(PDF);
-    expect(JSON.stringify(res.headers)).not.toContain(y);
+    expect(JSON.stringify(res.headers)).not.toContain(y); // not hidden-from: no header names Y's id, in the response the viewer does get
   });
 
   it("answers HEAD the same way with no body, so the Link's page knows the record is there", async () => {
@@ -112,21 +133,26 @@ describe("scenario RP-1087-1: a linked item's record, through the Link", () => {
 
 describe("scenario RP-1087-2: no record through the Link otherwise", () => {
   it("is 404 for a Link to an item that isn't closed, a made-up Link and another item's Link", async () => {
-    await expectHidden(viaLink(viewer, x, xToZ));
-    await expectHidden(viaLink(viewer, x, randomUUID()));
-    await expectHidden(viaLink(viewer, z, xToY));
-    await expectHidden(viaLink(viewer, x, "not-a-uuid"));
+    // Any record at all is a failure (Z has none), so a 200 counts whatever PDF it sends.
+    await yThrough(call(viewer, x, xToY, "X's Link to Y"), [
+      call(viewer, x, xToZ, "X's Link to Z"),
+      call(viewer, x, randomUUID(), "a made-up Link"),
+      call(viewer, z, xToY, "X's Link on Z"),
+      call(viewer, x, "not-a-uuid", "a Link id that isn't a uuid"),
+    ]);
   });
 
   it("is 404 for a Member who doesn't see X: another Company's Manager", async () => {
-    await expectHidden(k1.caller.get(`/v1/work-items/${x}/links/${xToY}/documental-record`));
-    await expectHidden(viaLink(at.k1Manager, x, xToY));
+    await yThrough(call(viewer, x, xToY, "the viewer"), [call(k1.caller, x, xToY, "K1's Authorized Person"), call(at.k1Manager, x, xToY, "K1's Manager")]);
   });
 
   it("is 404 once the Link is removed", async () => {
-    await ok(viaLink(viewer, v, vToY), 200);
+    await yThrough(call(viewer, v, vToY, "V's Link before the removal"), call(viewer, x, xToZ, "X's Link to Z"));
     await ok(at.c1Engineer.delete(`/v1/work-items/${v}/links/${vToY}`));
-    await expectHidden(viaLink(viewer, v, vToY));
-    await expectHidden(viaLink(at.c1Engineer, v, vToY));
+    // X's own Link to Y still brings Y's record; the removed one brings it to nobody.
+    await yThrough(call(viewer, x, xToY, "X's Link to Y"), [
+      call(viewer, v, vToY, "the viewer, through the removed Link"),
+      call(at.c1Engineer, v, vToY, "C1's Engineer, through the removed Link"),
+    ]);
   });
 });

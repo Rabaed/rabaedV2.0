@@ -8,7 +8,7 @@
 // record through a short-lived signed link; anyone else gets the plain 404.
 import { createHash } from "node:crypto";
 import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -32,7 +32,7 @@ import {
 import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -118,6 +118,13 @@ async function participant(company: Company, role: "contractor" | "owner_represe
 }
 
 const downloadLink = (by: Caller, id: string) => by.get(`/v1/work-items/${id}/documental-record`);
+
+/** Item `id`'s record for expectHiddenFrom: `[{ id }]` when `by` gets its link (which names the item), `[]` for the plain 404. */
+const recordOf = (id: string) => async (by: Caller) =>
+  (await readById<SignedUrl>(`/v1/work-items/${id}/documental-record`)(by)).map((link) => ({ id: link.url.includes(`/work-items/${id}/`) ? id : link.url }));
+/** Item `id`'s record is read by everyone in `seenBy` and nobody in `hiddenFrom`. */
+const recordHiddenFrom = (id: string, seenBy: Caller[], hiddenFrom: Caller[], name: (by: Caller) => string) =>
+  expectHiddenFrom({ read: recordOf(id), target: id, seenBy, hiddenFrom, name });
 
 /** The record as `by` downloads it: the signed link, then the file. */
 async function download(by: Caller, id: string): Promise<{ link: SignedUrl; bytes: Uint8Array }> {
@@ -336,9 +343,14 @@ describe("scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, an
   });
 
   it("is the plain 404 for C2, as for an item that doesn't exist", async () => {
-    await expectHidden(downloadLink(c2Engineer, id), "C2");
-    await expectHidden(downloadLink(c1Pm, "0198f5c0-0000-7000-8000-000000000000"), "made-up id");
-    await expectHidden(downloadLink(c1Pm, "not-an-id"), "malformed id");
+    await recordHiddenFrom(id, [c1Pm, k1Pm, orEngineer], [c2Engineer], (by) => (by === c2Engineer ? "C2" : by === k1Pm ? "K1" : by === orEngineer ? "OR" : "C1 PM"));
+    // The same answer for an id that doesn't exist, or isn't an id, to someone who opens the real one.
+    for (const [other, what] of [
+      ["0198f5c0-0000-7000-8000-000000000000", "made-up id"],
+      ["not-an-id", "malformed id"],
+    ] as const) {
+      await expectHiddenFrom({ read: (path: string) => readById(path)(c1Pm), target: "a record", idOf: () => "a record", seenBy: `/v1/work-items/${id}/documental-record`, hiddenFrom: `/v1/work-items/${other}/documental-record`, label: what });
+    }
   });
 
   it("prints the item, its outcome and everyone on its path, C1's and K1's alike, with each Transition's time and hash", async () => {
@@ -452,8 +464,7 @@ describe("the record job", () => {
     expect(text).toContain("Cancelled");
     expect((await verifySeal(copies[0]!.bytes)).valid).toBe(true);
     // Never Submitted: K1 never saw it, and C2 never did.
-    await expectHidden(downloadLink(k1Pm, id), "K1");
-    await expectHidden(downloadLink(c2Engineer, id), "C2");
+    await recordHiddenFrom(id, [c1Engineer, c1Pm], [k1Pm, c2Engineer], (by) => (by === k1Pm ? "K1" : by === c2Engineer ? "C2" : "C1"));
   });
 
   it("names each signer with the Position they held when they acted, not a later one", async () => {

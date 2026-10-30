@@ -10,7 +10,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls, withoutStamp } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls, withoutStamp } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -156,6 +156,24 @@ describe("scenario RP-617-1: app.member_company_has_stamp, as the app role", () 
   });
 });
 
+/** `stored_file` rows among `fileIds` that a Member reads. */
+const filesRead = (fileIds: string[]) => (reader: string) =>
+  rowsAs<{ id: string }>(reader, sql`select id from stored_file where id = any(${fileIds}::uuid[])`);
+
+/**
+ * Company B's own Stamp, saved once by its Authorized Person: a file B's Member may read, so a
+ * read of A's files as B is proven to work. Saved only from here on: the member_company_has_stamp
+ * test above reads B as having none.
+ */
+let bStampId: string | undefined;
+async function bStamp(): Promise<string> {
+  if (bStampId === undefined) {
+    expect(await save(people.other, companies.b, "stamp")).toBe("set");
+    bStampId = (await filesOf(companies.b)).stamp!;
+  }
+  return bStampId;
+}
+
 describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
   it("are read by every Member of the Company, with the files they point at", async () => {
     const files = await filesOf(companies.a);
@@ -170,11 +188,23 @@ describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
   });
 
   it("are read by no other Company's Member: neither the row nor its files, current or replaced", async () => {
-    expect(await rowsAs(people.other, sql`select id from company where id = ${companies.a}::uuid`)).toEqual([]);
+    await expectHiddenFrom({
+      read: (reader: string) => rowsAs<{ id: string }>(reader, sql`select id from company where id = ${companies.a}::uuid`),
+      target: companies.a,
+      seenBy: [people.ap, people.colleague],
+      hiddenFrom: people.other,
+    });
     const { rows } = await migrator.query("select id from stored_file where storage_key like $1", [`companies/${companies.a}/%`]);
-    expect(rows.length).toBeGreaterThan(2);
-    const ids = rows.map((r) => r.id as string);
-    expect(await rowsAs(people.other, sql`select id from stored_file where id = any(${ids}::uuid[])`)).toEqual([]);
+    const aFiles = rows.map((r) => r.id as string);
+    const current = await filesOf(companies.a);
+    expect(aFiles).toEqual(expect.arrayContaining([current.logo, current.stamp]));
+    // One read names every file of A's (current and replaced) and B's own Stamp: B reads exactly its own.
+    const b = await bStamp();
+    const readIds = filesRead([...aFiles, b]);
+    for (const target of [current.logo!, current.stamp!]) {
+      await expectHiddenFrom({ read: readIds, target, seenBy: [people.ap, people.colleague], hiddenFrom: people.other });
+    }
+    expect((await readIds(people.other)).map((r) => r.id)).toEqual([b]);
   });
 
   it("a replaced file stays the Company's own: its Members no longer read it, nobody else ever did", async () => {
@@ -185,9 +215,13 @@ describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
     ]);
     const replaced = rows.map((r) => r.id as string);
     expect(replaced.length).toBeGreaterThan(0);
-    for (const reader of [people.colleague, people.other]) {
-      expect(await rowsAs(reader, sql`select id from stored_file where id = any(${replaced}::uuid[])`), reader).toEqual([]);
-    }
+    // Nobody may read a replaced file, so one read also names files each reader may: A's Members get
+    // exactly A's current ones, B exactly its own Stamp, and neither gets a replaced one.
+    const b = await bStamp();
+    const readIds = filesRead([...replaced, current.logo!, current.stamp!, b]);
+    const ids = async (reader: string) => (await readIds(reader)).map((r) => r.id).sort();
+    for (const reader of [people.ap, people.colleague]) expect(await ids(reader), reader).toEqual([current.logo, current.stamp].sort());
+    expect(await ids(people.other)).toEqual([b]);
   });
 
   it("can't be written directly by the app role, even by the Authorized Person", async () => {
