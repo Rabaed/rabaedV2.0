@@ -181,6 +181,7 @@ function useSnagBulk(projectId: string, query: WorkItemQuery, locale: Locale, re
         preparing: t("pdfPreparing"),
         download: (n, count) => t("pdfDownload", { n, count }),
         failed: t("pdfFailed"),
+        gone: t("pdfGone"),
       },
       request: async (ids) => {
         const params = workItemSearchParams({ ...query, module: undefined, cursor: undefined, lang: locale });
@@ -193,6 +194,8 @@ function useSnagBulk(projectId: string, query: WorkItemQuery, locale: Locale, re
       },
       check: async (id) => {
         const res = await fetch(`/api/v1/projects/${projectId}/snag-list/reports/${id}`);
+        // It holds items the viewer can no longer see (RP-1110).
+        if (res.status === 410) return "gone";
         return res.ok ? ((await res.json()) as SnagReportState) : null;
       },
     },

@@ -1,5 +1,6 @@
 import { migrationsDir } from "./migrations.ts";
 import { startServices } from "./test-services.ts";
+import { stampLine } from "./verify-gate.ts";
 
 // Which checks `pnpm verify` (RP-459) runs for a diff. Pure, so it is unit-tested.
 
@@ -64,12 +65,14 @@ export const isSeamStep = (step: string): boolean => step.startsWith("test:seam"
 /**
  * The line `pnpm verify` ends with when every step passed: the verified commit, "dirty" if the tree has uncommitted
  * changes (RP-563). After `--from` (RP-1019) it starts `pnpm verify --from <step>` and names the steps it did not run,
- * so it never reads as a full pass: `pnpm queue` looks for `pnpm verify passed on <sha>:` only.
+ * so it never reads as a full pass. Only a full, clean run on a known commit ends with the stamp the verify gate
+ * checks (scripts/verify-gate.ts, RP-1094), so an edited line no longer counts.
  */
 export function finalLine({ sha, dirty, steps, from }: { sha: string; dirty: boolean; steps: string[]; from?: From }): string {
   const command = runCommand(from);
   const notRun = from ? ` Not run: ${from.notRun.join(", ")}, so this is not a complete run.` : "";
-  return `${command} passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.${notRun}`;
+  const line = `${command} passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.${notRun}`;
+  return from || dirty || sha === "" ? line : stampLine(line);
 }
 
 // A seam step that fails only on timeouts or a worker that never started (RP-607): what

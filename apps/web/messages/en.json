@@ -165,6 +165,7 @@
       "pdfPreparing": "Preparing the PDF…",
       "pdfDownload": "{count, plural, one {Download the Snag List PDF (1 item)} other {Download the Snag List PDF ({n} items)}}",
       "pdfFailed": "The PDF could not be made. Try again.",
+      "pdfGone": "No longer available: it holds items you can no longer see. Ask for a new one.",
       "close": "Close",
       "cancel": "Cancel",
       "working": "Working…",
