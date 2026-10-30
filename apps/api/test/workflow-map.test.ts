@@ -5,10 +5,10 @@
 // name, never which of its internal Steps holds the item, so its internal moves change
 // nothing another Company reads.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemWorkflowMap } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, readById, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { addInternalConsultantStepsType, INTERNAL_STEPS_TYPE } from "./support/internal-steps-type.ts";
 import { approvedSupplier, projectMember, tryTake } from "./support/tower.ts";
 
@@ -41,8 +41,8 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
   expect(r.statusCode, r.body).toBe(status);
 }
 
-async function participant(c1: Company, role: "consultant" | "owner", legalName: string) {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+async function participant(c1: Company, role: "consultant" | "owner", name: string) {
+  const onboarded = await api.onboardCompany({ legalName: bilingual(name) }); // not hidden-from: names the Company at onboarding, no compare
   const company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   const participantId = await api.addParticipant(c1.caller, projectId, onboarded, role);
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
@@ -76,7 +76,7 @@ beforeAll(async () => {
   k1Manager = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   const ow = await participant(c1, "owner", "Map Test Owner");
   owner = await projectMember(api, ow.company, ow.participantId, ["representative"]);
-  const other = await api.onboardCompany({ legalName: bilingual("Unrelated Contracting") });
+  const other = await api.onboardCompany({ legalName: bilingual("Unrelated Contracting") }); // not hidden-from: names the Company at onboarding, no compare
   stranger = await api.acceptInvitation(other.invitationToken);
 });
 
@@ -122,7 +122,7 @@ describe("the map of an item moving through C1 and K1", () => {
   });
 
   it("names no Position the definition doesn't narrow a Step to", () => {
-    expect(atK1Manager.pm.positions).toEqual([]);
+    expect(atK1Manager.pm.positions).toEqual([]); // not hidden-from: the definition narrows no Step to a Position, so the map names none
   });
 
   it("names each viewer's own Participant role", () => {
@@ -155,7 +155,11 @@ describe("the map of an item moving through C1 and K1", () => {
   });
 
   it("answers anyone who doesn't see the item, and a made-up id, with the plain 404", async () => {
-    for (const path of [`/v1/work-items/${id}/workflow`, `/v1/work-items/${crypto.randomUUID()}/workflow`, "/v1/work-items/nope/workflow"]) {
+    // The item's map, by id: [{ id }] for whoever reads it (RP-1126).
+    const read = async (by: Caller) => (await readById<WorkItemWorkflowMap>(`/v1/work-items/${id}/workflow`)(by)).map(() => ({ id }));
+    const named = new Map<Caller, string>([[pm, "C1's PM"], [k1Manager, "K1's manager"], [owner, "the Owner Representative"], [stranger, "a Company on no shared Project"]]);
+    await expectHiddenFrom({ read, target: id, seenBy: [pm, k1Manager, owner], hiddenFrom: stranger, name: (by) => named.get(by) ?? "a caller", label: "the item's Workflow map" });
+    for (const path of [`/v1/work-items/${crypto.randomUUID()}/workflow`, "/v1/work-items/nope/workflow"]) {
       const res = await stranger.get(path);
       expect(res.statusCode, res.body).toBe(404);
     }

@@ -4,11 +4,11 @@
 // Version of the Library copy) and its Project Admins copy it into a Project. The Library is
 // private to the Company until a copy is made into a Project.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { LibraryWorkflows, SavedToLibrary, WorkflowMapRead } from "@rabaed/domain";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import type { LibraryWorkflows, SavedToLibrary, WorkflowBuilderRead, WorkflowMapRead, WorkflowRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { buildTower, ok, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -30,13 +30,23 @@ let towerRoute = "";
 let librarySaved = "";
 
 const library = async (by: Company["caller"]): Promise<LibraryWorkflows> => (await ok(by.get("/v1/library/workflows"), 200)).json();
-const names = (list: LibraryWorkflows) => list.workflows.map((w) => w.name.en);
+const ids = (list: LibraryWorkflows) => list.workflows.map((w) => w.id);
+
+// The reads a hidden-from assert makes (RP-1126): the Library's list, and a Workflow read by
+// id, as its read, its map and its builder.
+const inLibrary = async (by: Caller) => (await library(by)).workflows;
+const workflowRead = (id: string) => readById<WorkflowRead>(`/v1/workflows/${id}`);
+const mapRead = (id: string) => async (by: Caller) => (await readById<WorkflowMapRead>(`/v1/workflows/${id}/map`)(by)).map((m) => m.workflow);
+const builderRead = (id: string) => async (by: Caller) => (await readById<WorkflowBuilderRead>(`/v1/workflows/${id}/builder`)(by)).map((b) => b.workflow);
+const callers = new Map<Caller, string>();
+const who = (by: Caller) => callers.get(by) ?? "a caller";
 
 beforeAll(async () => {
   tmc = await api.projectCreator();
   k1 = await api.authorizedPerson();
   outsider = await api.authorizedPerson();
   at = await buildTower(api, { c1: tmc, k1 }, "WL1");
+  callers.set(tmc.caller, "TMC's Authorized Person").set(k1.caller, "K1's Authorized Person").set(outsider.caller, "the outsider's Authorized Person").set(at.c1Pm, "TMC's PM");
 });
 
 describe("saving a Workflow to the Library", () => {
@@ -64,14 +74,14 @@ describe("saving a Workflow to the Library", () => {
     ]);
     // Any Member of the Company lists it.
     const member = await api.member(tmc.caller);
-    expect(names(await library(member.caller))).toEqual([SAVED.en]);
+    expect(ids(await library(member.caller))).toEqual([librarySaved]);
   });
 
   it("is for the Authorized Person alone: a plain Member, and a made-up Workflow, get the plain 404", async () => {
     const member = await api.member(tmc.caller);
-    await expectHidden(member.caller.post(`/v1/workflows/${towerRoute}/save-to-library`, { name: label("Nope") }));
-    await expectHidden(tmc.caller.post(`/v1/workflows/00000000-0000-4000-8000-000000000000/save-to-library`, { name: label("Nope") }));
-    expect(names(await library(tmc.caller))).toEqual([SAVED.en]);
+    await expectHidden(member.caller.post(`/v1/workflows/${towerRoute}/save-to-library`, { name: label("Nope") })); // not hidden-from: a refused write (only the Authorized Person saves to the Library); the list below shows nothing was saved
+    await expectHidden(tmc.caller.post(`/v1/workflows/00000000-0000-4000-8000-000000000000/save-to-library`, { name: label("Nope") })); // not hidden-from: a made-up id, the answer a refusal must look like
+    expect(ids(await library(tmc.caller))).toEqual([librarySaved]);
   });
 
   it("is a copy that keeps no link: changing either leaves the other as it was", async () => {
@@ -89,7 +99,7 @@ describe("saving a Workflow to the Library", () => {
     expect((await library(tmc.caller)).workflows[0]!.publishedVersions).toEqual([1, 2]);
     const tower = (await ok(tmc.caller.get(`/v1/workflows/${towerRoute}`), 200)).json();
     expect(tower.publishedVersions).toEqual([1]);
-    expect(JSON.stringify(tower.published.definition)).not.toContain("Renamed in the Library");
+    expect(JSON.stringify(tower.published.definition)).not.toContain("Renamed in the Library"); // not hidden-from: Tower's copy kept its own Step name
   });
 });
 
@@ -101,26 +111,34 @@ describe("using a Library Workflow on a Project", () => {
     expect(builder.workflow).toMatchObject({ owner: "project", projectId: at.projectId, publishedVersions: [] });
     expect(builder.workflow.draft.versionNo).toBe(1);
     // Never published, so Tower's other Members don't read it yet (V20).
-    await expectHidden(at.c1Pm.get(`/v1/workflows/${id}`));
+    await expectHiddenFrom({ read: workflowRead(id), target: id, seenBy: tmc.caller, hiddenFrom: at.c1Pm, name: who, label: "an unpublished copy in Tower" });
   });
 
   it("is refused to a Member who is not that Project's Admin, whatever the Library says", async () => {
-    await expectHidden(at.c1Pm.post(`/v1/workflows/${librarySaved}/duplicate`, { projectId: at.projectId, name: label("Nope") }));
-    await expectHidden(k1.caller.post(`/v1/workflows/${librarySaved}/duplicate`, { projectId: at.projectId, name: label("Nope") }));
+    // TMC's PM, a Member of TMC, reads the Library copy; K1 doesn't (V18).
+    await expectHiddenFrom({ read: workflowRead(librarySaved), target: librarySaved, seenBy: [tmc.caller, at.c1Pm], hiddenFrom: k1.caller, name: who, label: "TMC's Library copy" });
+    const before = (await ok(tmc.caller.get(`/v1/projects/${at.projectId}/workflow-settings`), 200)).body;
+    await expectHidden(at.c1Pm.post(`/v1/workflows/${librarySaved}/duplicate`, { projectId: at.projectId, name: label("Nope") })); // not hidden-from: a refused write (not the Project's Admin); the read above proves who reads the row
+    await expectHidden(k1.caller.post(`/v1/workflows/${librarySaved}/duplicate`, { projectId: at.projectId, name: label("Nope") })); // not hidden-from: a refused write; the read above proves the row with expectHiddenFrom
+    expect((await ok(tmc.caller.get(`/v1/projects/${at.projectId}/workflow-settings`), 200)).body).toBe(before);
   });
 });
 
 describe("the Library is private to its Company (scenario RP-442-1, V18)", () => {
   it("lists only the Company's own: another Company, Tower's Consultant included, sees nothing of it", async () => {
-    expect(names(await library(k1.caller))).toEqual([]);
-    expect(names(await library(outsider.caller))).toEqual([]);
-    for (const other of [k1, outsider]) {
-      await expectHidden(other.caller.get(`/v1/workflows/${librarySaved}`));
-      await expectHidden(other.caller.get(`/v1/workflows/${librarySaved}/map`));
-      await expectHidden(other.caller.get(`/v1/workflows/${librarySaved}/builder`));
-      await expectHidden(other.caller.post(`/v1/workflows/${librarySaved}/save-to-library`, { name: label("Taken") }));
+    const member = await api.member(tmc.caller);
+    callers.set(member.caller, "a plain Member of TMC");
+    const others = [k1.caller, outsider.caller];
+    const hidden = (read: (by: Caller) => Promise<readonly { id: string }[]>, seenBy: Caller[], what: string) =>
+      expectHiddenFrom({ read, target: librarySaved, seenBy, hiddenFrom: others, name: who, label: what });
+    await hidden(inLibrary, [tmc.caller, member.caller], "the Library list");
+    await hidden(workflowRead(librarySaved), [tmc.caller, member.caller], "the Workflow");
+    await hidden(mapRead(librarySaved), [tmc.caller, member.caller], "its map");
+    await hidden(builderRead(librarySaved), [tmc.caller], "its builder");
+    for (const other of others) {
+      await expectHidden(other.post(`/v1/workflows/${librarySaved}/save-to-library`, { name: label("Taken") })); // not hidden-from: a refused write; the reads above prove the row with expectHiddenFrom
     }
-    expect(names(await library(k1.caller))).toEqual([]);
+    expect(ids(await library(k1.caller))).toEqual([]); // not hidden-from: the refused save put no copy in K1's Library
   });
 
   it("shows another Company the copy only once it is in a Project it is on, and it can save that to its own Library", async () => {
@@ -136,18 +154,19 @@ describe("the Library is private to its Company (scenario RP-442-1, V18)", () =>
     expect(map.workflow.draft).toBeNull();
     const saved: SavedToLibrary = (await ok(k1.caller.post(`/v1/workflows/${towerRoute}/save-to-library`, { name: label("Beta Build route") }), 201)).json();
     expect(saved.published).toBe(true);
-    expect(names(await library(k1.caller))).toEqual(["Beta Build route"]);
+    expect(ids(await library(k1.caller))).toEqual([saved.id]);
     // And TMC's Library is still TMC's alone.
-    expect(names(await library(tmc.caller))).toEqual([SAVED.en]);
-    await expectHidden(tmc.caller.get(`/v1/workflows/${saved.id}`));
+    expect(ids(await library(tmc.caller))).toEqual([librarySaved]);
+    await expectHiddenFrom({ read: inLibrary, target: saved.id, seenBy: k1.caller, hiddenFrom: tmc.caller, name: who, label: "K1's Library list" });
+    await expectHiddenFrom({ read: workflowRead(saved.id), target: saved.id, seenBy: k1.caller, hiddenFrom: tmc.caller, name: who, label: "K1's Library copy" });
   });
 
   it("keeps a copy nobody has published to its Authorized Person", async () => {
-    const draftOnly = await ok(tmc.caller.post(`/v1/workflows/${librarySaved}/duplicate`, { projectId: null, name: label("TMC unfinished") }), 201);
+    const draftOnly = (await ok(tmc.caller.post(`/v1/workflows/${librarySaved}/duplicate`, { projectId: null, name: label("TMC unfinished") }), 201)).json().id as string;
     const member = await api.member(tmc.caller);
-    expect(names(await library(tmc.caller))).toContain("TMC unfinished");
-    expect(names(await library(member.caller))).not.toContain("TMC unfinished");
-    await expectHidden(member.caller.get(`/v1/workflows/${draftOnly.json().id}/map`));
+    callers.set(member.caller, "a plain Member of TMC");
+    await expectHiddenFrom({ read: inLibrary, target: draftOnly, seenBy: tmc.caller, hiddenFrom: member.caller, name: who, label: "the Library list" });
+    await expectHiddenFrom({ read: mapRead(draftOnly), target: draftOnly, seenBy: tmc.caller, hiddenFrom: member.caller, name: who, label: "its map" });
   });
 });
 
@@ -158,7 +177,8 @@ describe("looking at a Library Workflow", () => {
     expect(map.workflow).toMatchObject({ owner: "company", canAuthor: false, draft: null, publishedVersions: [1, 2] });
     expect(map.stages.length).toBeGreaterThan(0);
     expect(map.positions.length).toBeGreaterThan(0);
-    await expectHidden(member.caller.get(`/v1/workflows/${librarySaved}/builder`));
+    callers.set(member.caller, "a plain Member of TMC");
+    await expectHiddenFrom({ read: builderRead(librarySaved), target: librarySaved, seenBy: tmc.caller, hiddenFrom: member.caller, name: who, label: "the builder" });
     expect((await member.caller.request("PUT", `/v1/workflows/${librarySaved}/draft`, { definition: map.workflow.published?.definition })).statusCode).toBe(404);
   });
 
