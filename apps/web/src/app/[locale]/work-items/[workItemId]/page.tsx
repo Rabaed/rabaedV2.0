@@ -35,7 +35,8 @@ import { InspectionProvider } from "@/components/inspection-context";
 import { InspectionCounts, InspectionIssued, InspectionMeta, InspectionTextCard, InspectionRevision, InspectionWaiting } from "@/components/inspection-page-parts";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
-import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, sharedChecklists } from "@/lib/inspection";
+import { WirDraftBar, WirDraftSide, WirNextSteps, WirRequestColumns } from "@/components/wir-request";
+import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, requestActions, sharedChecklists } from "@/lib/inspection";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
 import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
@@ -117,7 +118,16 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const answering = wir && item.replyChecklists.length > 0 && offered.send !== null;
   const issuing = wir && offered.codes.length > 0;
   // A WIR's page lists only the actions its bars don't hold: Send to Manager is in the Engineer's bar, Return and the codes in the Manager's.
-  const actions = !wir ? item.actions : { ...item.actions, transitions: issuing ? [] : answering || !offered.send ? offered.others : [...offered.others, offered.send] };
+  const editing = editable && !!mine && !!scopes;
+  // The WIR request (RP-655): a WIR its raiser's Company fills in before it has a number. Two columns
+  // on a wide screen, and a sticky bar holding Save draft and the move that sends it on.
+  const requesting = wir && editing && item.documentNumber === null;
+  const request = requestActions(item.actions.transitions);
+  const actions = !wir
+    ? item.actions
+    : requesting
+      ? { ...item.actions, transitions: request.others }
+      : { ...item.actions, transitions: issuing ? [] : answering || !offered.send ? offered.others : [...offered.others, offered.send] };
   const issued = wir && item.outcome ? (events.findLast((e) => e.type === "issue_code") ?? null) : null;
   const shared = wir && item.outcome ? sharedChecklists(events, item.checklistCopies) : [];
   const remarks = wir ? codeRemarks(events) : null;
@@ -146,7 +156,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       checklistTemplates={checklistTemplates}
       answers={item.answers}
       named={item.namedAnswers}
-      editable={editable && !!mine && !!scopes}
+      editable={editing}
       editableSections={form.editableSections}
       fixedByNumber={item.fixedByNumber}
       canCancel={item.actions.transitions.some((tr) => tr.kind === "cancel")}
@@ -154,7 +164,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       autosave={item.autosave}
     >
       {/* On a phone a Snag List item ends above its bar of actions (RP-630). */}
-      <div className={cn("max-w-3xl space-y-6", snag && "max-md:pb-24", answering && "max-md:pb-52")}>
+      <div className={cn(requesting ? "max-w-6xl" : "max-w-3xl space-y-6", snag && "max-md:pb-24", answering && "max-md:pb-52")}>
+        <WirRequestColumns on={requesting} side={<WirDraftSide reviewer={request.goesTo} locale={locale} />}>
         {/* On a phone a Snag List item opens with its first photo, as the kit does (RP-630). */}
         {snag && <SnagHeroPhoto workItemId={item.id} subject={item.title} photos={beforePhotos(form.schema, documents.documents)} />}
         <div className="space-y-2">
@@ -359,7 +370,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19).
             The Form then leaves out the Checklist Template fields they copy, so the checklist shows once (RP-1071). */}
         {!wir && <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />}
-        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} replyChecklists={shownChecklists} />
+        <WorkItemAnswers
+          locale={locale}
+          workItemId={item.id}
+          documents={documents}
+          replyChecklists={shownChecklists}
+          {...(requesting ? { look: { sections: "cards", checklistTemplate: "cards" } as const, saveRow: false } : {})}
+        />
 
         {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
@@ -372,6 +389,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         >
           <WorkItemLinkedFrom items={linkedFrom.items} />
         </WorkItemLinks>
+        {/* On a phone the request's next steps come at the end; a wide screen has them beside the Form. */}
+        {requesting && <WirNextSteps reviewer={request.goesTo} locale={locale} className="lg:hidden" />}
 
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
           <dt className="text-muted">{t("fields.type")}</dt>
@@ -498,6 +517,11 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             locale={locale}
           />
         )}
+        {/* Last in the column, so it stays at the bottom of the screen all the way down (sticky), in reach over every part. */}
+        {requesting && (
+          <WirDraftBar workItemId={item.id} actions={item.actions} send={request.send} goesTo={request.goesTo} company={item.raisedBy.companyName} locale={locale} />
+        )}
+        </WirRequestColumns>
       </div>
     </WorkItemFormProvider>
   );

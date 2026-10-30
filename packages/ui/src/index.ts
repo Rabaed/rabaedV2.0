@@ -41,7 +41,7 @@ export { Field, type ChoiceOption, type FieldProps } from "./components/form/fie
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
 export { ActionForm, internalNoteMaxLength, type ActionFormLabels, type ActionFormProps } from "./components/form-engine/action-form.tsx";
 export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
-export { ChecklistTemplateItems, type ChecklistTemplateFieldLabels } from "./components/form-engine/checklist-template-field.tsx";
+export { ChecklistTemplateItems, ChecklistTemplatePreview, type ChecklistTemplateFieldLabels } from "./components/form-engine/checklist-template-field.tsx";
 export { FormPdfOptions, type FormPdfOptionsLabels, type FormPdfOptionsProps } from "./components/form-engine/form-pdf-options.tsx";
 export { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./components/form-engine/checklist-field.tsx";
 export { LinkSearch, type LinkSearchLabels, type LinkSearchProps } from "./components/form-engine/link-search.tsx";

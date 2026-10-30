@@ -1112,7 +1112,14 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "raisesSnag": "عند {answer} يُنشأ عيب"
+        "raisesSnag": "عند {answer} يُنشأ عيب",
+        "forTrade": "قوالب \u2068{trade}\u2069",
+        "otherTradesHidden": "{count, plural, one {قالب واحد لتخصصات أخرى مخفي} two {قالبان لتخصصات أخرى مخفيان} few {{n} قوالب لتخصصات أخرى مخفية} many {{n} قالبًا لتخصصات أخرى مخفيًا} other {{n} قالب لتخصصات أخرى مخفي}}",
+        "version": "الإصدار {n}",
+        "locked": "يمكنك تغيير قالب قائمة التحقق حتى يُقدَّم طلب المعاينة، ثم يُقفل.",
+        "hideItems": "إخفاء البنود",
+        "showItems": "عرض البنود",
+        "negativeAsks": "{every, select, yes {{what, select, both {عند {answer}، يجب أن يضيف الاستشاري تعليقًا وصورة} comment {عند {answer}، يجب أن يضيف الاستشاري تعليقًا} other {عند {answer}، يجب أن يضيف الاستشاري صورة}}} other {{what, select, both {عند {answer}، تحتاج بعض البنود إلى تعليق أو صورة من الاستشاري} comment {عند {answer}، تحتاج بعض البنود إلى تعليق من الاستشاري} other {عند {answer}، تحتاج بعض البنود إلى صورة من الاستشاري}}}}"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
@@ -1171,6 +1178,20 @@
     },
     "inspection": {
       "breadcrumb": "مسار التنقل",
+      "request": {
+        "newWir": "طلب معاينة جديد",
+        "raisedBy": "رفعته \u2068{company}\u2069",
+        "goesTo": "يذهب إلى \u2068{name}\u2069",
+        "numberOnSubmit": "يُعطى الرقم عند التقديم",
+        "actions": "حفظ طلب المعاينة أو إرساله",
+        "previewTitle": "معاينة قالب قائمة التحقق",
+        "previewEmpty": "اختر قالب قائمة تحقق لترى بنوده هنا.",
+        "nextTitle": "ما الذي يحدث بعد ذلك",
+        "nextReview": "تراجعه شركتك، ثم تعيده أو تقدّمه إلى الاستشاري مع خطاب تغطية.",
+        "nextReviewBy": "يراجعه \u2068{name}\u2069، ثم يعيده أو يقدّمه إلى الاستشاري مع خطاب تغطية.",
+        "nextInspect": "يعاين الاستشاري الأعمال في الموقع.",
+        "nextCode": "يصدر مدير الاستشاري رمز المراجعة."
+      },
       "requestedFor": "مطلوب في",
       "issuedBy": "أصدره {by} · {when}",
       "privacy": "لا يرى إجاباتك إلا {company} حتى ترسلها.",
@@ -1253,7 +1274,9 @@
         "of": "مراجعة لـ",
         "number": "المراجعة {revision}",
         "neverBlocks": "العيوب المفتوحة لا تمنع إصدار هذا الرمز أبدًا: يمكن لمدير الاستشاري إصداره في كل الأحوال.",
-        "openSnagList": "فتح في قائمة العيوب"
+        "openSnagList": "فتح في قائمة العيوب",
+        "rowOpen": "مفتوح",
+        "rowClosed": "مغلق"
       }
     },
     "attachments": {

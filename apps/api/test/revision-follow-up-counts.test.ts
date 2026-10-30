@@ -156,3 +156,45 @@ describe("a Revision shows the follow-ups its previous item left (seam 1)", () =
     await expectHidden(yousef.caller.get(`/v1/work-items/${chain.revision}`));
   });
 });
+
+// RP-655-1 (the Screen Board's "Snags from Rev 0", one row each): Rev 1 lists Rev 0's Snags by number,
+// Subject and Open / Closed, only those the viewer sees (seam 2: packages/db/test/revision-follow-ups-rls.test.ts).
+describe("a Revision lists each follow-up its previous item left (seam 1)", () => {
+  const rows = async (by: Caller, id: string) =>
+    ((await detail(by, id)).previousRaisedItems?.raised ?? []).map((r) => ({ id: r.id, type: r.typeCode, closed: r.closed, title: r.title, documentNumber: r.documentNumber }));
+
+  it("Rev 1 lists Rev 0's two Snags, one closed and one open, with their numbers and Subjects; the Consultant reads the same", async () => {
+    const chain = await codeCWithTwoSnags("Wall chases");
+    const snags = await snagList(hafiz.caller, `?raisedFrom=${encodeURIComponent((await detail(hafiz.caller, chain.wir)).documentNumber!)}`);
+    // Submitted, so the Consultant sees Rev 1 too (a Draft is the raiser's alone).
+    await take(hafiz.caller, chain.revision, "send_for_review");
+    await take(ali.caller, chain.revision, "submit", { answers: { cover_note: "Ready again" } });
+    for (const reader of [hafiz.caller, mohammed.caller]) {
+      const listed = await rows(reader, chain.revision);
+      expect(listed.map((r) => r.id).sort()).toEqual([chain.closed, chain.open].sort());
+      expect(listed.find((r) => r.id === chain.closed)).toMatchObject({ type: "SNG", closed: true });
+      expect(listed.find((r) => r.id === chain.open)).toMatchObject({ type: "SNG", closed: false });
+      for (const r of listed) expect(r).toMatchObject({ title: snags.find((s) => s.id === r.id)!.title, documentNumber: snags.find((s) => s.id === r.id)!.documentNumber });
+    }
+  });
+
+  it("lists only Rev 0's, never the Revision's own: the same Snags as the Snag List filtered to Rev 0's number", async () => {
+    const chain = await codeCWithTwoSnags("Wall chases, second");
+    // Rev 1 is inspected and fails too: its own two Snags are raised from it.
+    await atManager(chain.revision, TWO_FAILS, "C");
+    await take(mohammed.caller, chain.revision, "revise_c", { answers: { ...VERIFIED, remarks: "Still open" } });
+    const listed = (await rows(hafiz.caller, chain.revision)).map((r) => r.id).sort();
+    expect(listed).toEqual([chain.closed, chain.open].sort());
+    // The Snag List by Rev 0's number finds exactly these. Rev 1's own two (its number, " Rev 1", is no filter value) are not listed.
+    const rev0 = (await detail(hafiz.caller, chain.wir)).documentNumber!;
+    expect((await snagsFrom(hafiz.caller, rev0)).map((s) => s.id).sort()).toEqual(listed);
+    const own = (await snagList(hafiz.caller)).filter((s) => s.raisedFrom?.workItemId === chain.revision).map((s) => s.id);
+    expect(own).toHaveLength(2);
+    expect(own.some((id) => listed.includes(id))).toBe(false);
+  });
+
+  it("Rev 0 itself lists none", async () => {
+    const chain = await codeCWithTwoSnags("Wall chases, third");
+    expect((await detail(hafiz.caller, chain.wir)).previousRaisedItems).toBeNull();
+  });
+});
