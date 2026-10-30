@@ -111,7 +111,7 @@ describe("what the WIR page reads from its history", () => {
     type,
     at: "2026-10-22T11:10:00.000Z",
     audience: "shared",
-    by: { companyName: text("Design Consultants LLC"), memberName: text("Mohammed Al Shamsi") },
+    by: { companyName: text("Design Consultants LLC"), memberName: text("Mohammed Al Shamsi"), positions: [] },
     transition: null,
     fromStep: null,
     toStep: null,
@@ -149,7 +149,7 @@ describe("what the WIR page reads from its history", () => {
   };
   const answered = { supports: { answer: "pass" }, earthing: { answer: "fail", comment: "Jumpers missing" } };
   const history: Event[] = [
-    event("transition", { transition: text("Submit"), by: { companyName: text("TMC Constructions"), memberName: null }, answers: { cover_note: "Ready from 09:00" } }),
+    event("transition", { transition: text("Submit"), by: { companyName: text("TMC Constructions"), memberName: null, positions: [] }, answers: { cover_note: "Ready from 09:00" } }),
     event("recommend_code", { audience: "internal", recommendedCode: "C" }),
     event("issue_code", {
       at: "2026-10-22T11:10:00.000Z",
@@ -162,17 +162,17 @@ describe("what the WIR page reads from its history", () => {
   ];
 
   it("the Cover Note: the last Submit's, with who wrote it", () => {
-    expect(coverNote(history)).toEqual({ text: "Ready from 09:00", by: { companyName: text("TMC Constructions"), memberName: null }, at: "2026-10-22T11:10:00.000Z" });
+    expect(coverNote(history)).toEqual({ text: "Ready from 09:00", by: { companyName: text("TMC Constructions"), memberName: null, positions: [] }, at: "2026-10-22T11:10:00.000Z" });
     expect(coverNote(history.slice(1))).toBeNull();
   });
 
   it("the code's reply: its Remarks, who issued it and when", () => {
-    expect(codeRemarks(history)).toEqual({ text: "Move the tray", by: { companyName: text("Design Consultants LLC"), memberName: text("Mohammed Al Shamsi") }, at: "2026-10-22T11:10:00.000Z" });
+    expect(codeRemarks(history)).toEqual({ text: "Move the tray", by: { companyName: text("Design Consultants LLC"), memberName: text("Mohammed Al Shamsi"), positions: [] }, at: "2026-10-22T11:10:00.000Z" });
     expect(codeRemarks(history.slice(0, 2))).toBeNull();
   });
 
   it("the Engineer's Recommended Code, internal to the Consultant: the last one, who sent it and when, and the Internal Note sent with it", () => {
-    const sent = { companyName: text("Design Consultants LLC"), memberName: text("Ahmed bin Said") };
+    const sent = { companyName: text("Design Consultants LLC"), memberName: text("Ahmed bin Said"), positions: [] };
     const events = [
       event("transition", { transition: text("Send to Manager"), at: "2026-10-22T08:05:00.000Z", by: sent }),
       event("internal_note", { audience: "internal", transition: text("Send to Manager"), at: "2026-10-22T08:05:00.000Z", by: sent, internalNote: "Hold it" }),
