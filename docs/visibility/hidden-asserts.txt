@@ -136,6 +136,7 @@ apps/api/test/replacements.test.ts empty 12
 apps/api/test/reply-screen-files.test.ts empty 21
 apps/api/test/return-in-internal-review.test.ts empty 2
 apps/api/test/revision-follow-up-counts.test.ts empty 1
+apps/api/test/revision-follow-up-counts.test.ts text 1
 apps/api/test/revisions.test.ts empty 29
 apps/api/test/revisions.test.ts text 3
 apps/api/test/sar-dar-forms.test.ts empty 1
@@ -302,7 +303,7 @@ packages/db/test/register-import-rls.test.ts text 3
 packages/db/test/reply-checklist-rls.test.ts empty 13
 packages/db/test/reply-checklist-rls.test.ts text 1
 packages/db/test/reply-files-rls.test.ts empty 16
-packages/db/test/revision-follow-ups-rls.test.ts empty 3
+packages/db/test/revision-follow-ups-rls.test.ts empty 5
 packages/db/test/revision-follow-ups-rls.test.ts text 1
 packages/db/test/revision-rls.test.ts empty 16
 packages/db/test/revision-rls.test.ts text 1
