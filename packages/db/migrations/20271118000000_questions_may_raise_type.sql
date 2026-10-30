@@ -1,8 +1,9 @@
 -- RP-1108 (decision RP-1004): who may raise a Question. `app.may_raise_type`, rebuilt from
 -- RP-1089's 20271113000000_may_raise_type.sql (its newest body): a Draft held by the raiser reads
--- the per-Type `create` too (`app.project_member_may_create`, 20271114000000_questions_any_role.sql),
+-- the per-Type `create` too (`app.project_member_has_type_permission`, 20271114000000_questions_any_role.sql),
 -- and no Question asks the raiser's own role (`app.asks_own_role`). "New" (`app.raisable_type_ids`),
--- `app.create_work_item`, the Register Import and Revisions all read it, so each answers the same.
+-- `app.create_work_item` and the Register Import read it, so each answers the same. (Revisions and
+-- replacements still read the Module-wide permission; no Question offers either.)
 
 -- Who may raise a Type -------------------------------------------------------------------
 
@@ -14,7 +15,7 @@ create or replace function app.may_raise_type(p_project_member_id uuid, p_type_i
     begin
       return coalesce((
         select case
-          when s.actor_rule ? 'raiser' then app.project_member_may_create(pm.id, t.id, s.actor_rule ->> 'permission')
+          when s.actor_rule ? 'raiser' then app.project_member_has_type_permission(pm.id, t.id, s.actor_rule ->> 'permission')
           else s.actor_rule ->> 'base_role' = r.base_role
         end
           -- A Question never asks the raiser's own role (RP-1108).

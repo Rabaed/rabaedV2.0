@@ -192,9 +192,27 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
     await take(at.c1Pm, id, "answer", { answers: { answer: "Sunday" } });
     await pickUp(o1Pm, id);
     expect(await offered(o1Pm, id)).toEqual(expect.arrayContaining(["close", "ask_again"]));
+    await take(o1Pm, id, "ask_again", { reason: "Which Sunday?" });
+    expect((await detail(at.c1Pm, id)).step.key).toBe("open");
+    await take(at.c1Pm, id, "answer", { answers: { answer: "The 14th" } });
+    await pickUp(o1Pm, id);
     await take(o1Pm, id, "close");
     expect((await detail(at.k1Manager, id)).outcome).toBe("closed");
-    expect((await othersTransitions(at.k1Manager, id)).map((e) => e.transition)).toEqual(["Ask", "Answer", "Close"]);
+    expect((await othersTransitions(at.k1Manager, id)).map((e) => e.transition)).toEqual(["Ask", "Answer", "Ask again", "Answer", "Close"]);
+    await hiddenFrom(c2Engineer, id, "closed, C2");
+  });
+
+  it("the Owner Representative's QSC to C1 is asked, answered, asked again and closed; the Consultant is informed", async () => {
+    const id = await asked(r1Engineer, "QSC", "Which cable route");
+    expect(await offered(at.k1Manager, id)).toEqual([]);
+    await pickUp(at.c1Pm, id);
+    await take(at.c1Pm, id, "answer", { answers: { answer: "Through the riser" } });
+    await pickUp(r1Engineer, id);
+    await take(r1Engineer, id, "ask_again", { reason: "Which riser?" });
+    await take(at.c1Pm, id, "answer", { answers: { answer: "The east riser" } });
+    await pickUp(r1Engineer, id);
+    await take(r1Engineer, id, "close");
+    expect((await othersTransitions(at.k1Manager, id)).map((e) => e.transition)).toEqual(["Ask", "Answer", "Ask again", "Answer", "Close"]);
     await hiddenFrom(c2Engineer, id, "closed, C2");
   });
 
@@ -208,6 +226,13 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
     // Positive controls: the asked Company reads each.
     expect((await detail(r1Engineer, toOwner)).step.key).toBe("open");
     expect((await detail(at.k1Manager, toConsultant)).step.key).toBe("open");
+    // The Consultant's QSO is answered by R1 and closed by K1, still read by no Contractor.
+    await pickUp(r1Engineer, toOwner);
+    await take(r1Engineer, toOwner, "answer", { answers: { answer: "Accepted" } });
+    await pickUp(at.k1Manager, toOwner);
+    await take(at.k1Manager, toOwner, "close");
+    expect((await detail(r1Engineer, toOwner)).outcome).toBe("closed");
+    await hiddenFrom(at.c1Pm, toOwner, "closed, C1");
   });
 
   it("RP-1108-4: the Owner Representative's Draft is its own until the Ask", async () => {
@@ -218,5 +243,9 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
     await pickUp(at.k1Manager, id);
     expect(await offered(at.k1Manager, id)).toContain("answer");
     for (const contractor of [at.c1Pm, c2Engineer]) await hiddenFrom(contractor, id, "open");
+    await take(at.k1Manager, id, "answer", { answers: { answer: "Sample B" } });
+    await pickUp(r1Engineer, id);
+    await take(r1Engineer, id, "close");
+    expect((await detail(at.k1Manager, id)).outcome).toBe("closed");
   });
 });

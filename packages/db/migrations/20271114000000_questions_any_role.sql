@@ -13,7 +13,7 @@
 --   and the Owner Representative's Positions get `create` in the Snag List for the Question
 --   Types only, never for Snags or Site Observations. `app.project_member_has_permission` reads
 --   the Module-wide rows only, so every check it makes answers as before; raising a Type reads
---   both (`app.project_member_may_create`).
+--   both (`app.project_member_has_type_permission`).
 -- * Their `submit` (to Ask, and to Answer a QSO), `close` (to Close or Ask again) and `attach`
 --   (the Question's Attachments) are Module-wide: no Snag List Step names the Owner's roles, and
 --   they raise nothing else there, so they hold no other Snag List Step.
@@ -56,7 +56,7 @@ create or replace function app.project_member_has_permission(p_project_member_id
   $$;
 
 -- `p_permission` for Type `p_type_id`: on its whole Module, or on that Type alone (RP-1108).
-create function app.project_member_may_create(p_project_member_id uuid, p_type_id uuid, p_permission text) returns boolean
+create function app.project_member_has_type_permission(p_project_member_id uuid, p_type_id uuid, p_permission text) returns boolean
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
@@ -73,7 +73,7 @@ create function app.project_member_may_create(p_project_member_id uuid, p_type_i
       );
     end
   $$;
-revoke all on function app.project_member_may_create(uuid, uuid, text) from public;
+revoke all on function app.project_member_has_type_permission(uuid, uuid, text) from public;
 
 -- The role a Question asks -------------------------------------------------------------------
 
