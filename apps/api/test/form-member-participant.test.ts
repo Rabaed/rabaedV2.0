@@ -9,12 +9,12 @@
 // Owner OW hosts the Project, so the Host Company isn't the filler's own.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { BaseRole, FormChoices, WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { detail, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -112,7 +112,7 @@ let owMember: Person;
 
 /** A Company with its own name, its Authorized Person signed in. */
 async function company(name: string) {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(name) });
+  const onboarded = await api.onboardCompany({ legalName: bilingual(name) }); // not hidden-from: onboards the Company by its name
   return { onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
 }
 
@@ -140,6 +140,13 @@ async function participant(name: string, role: BaseRole): Promise<Party> {
 
 const choices = async (by: Caller, url: string): Promise<FormChoices> => (await ok(by.get(url), 200)).json();
 const ids = (list: { id: string }[]) => list.map((c) => c.id).sort();
+
+/** For expectHiddenFrom: `[{ id: text }]` when `text` (an id, or a name) is anywhere in `url`'s 200 answer to `by`, `[]` when it isn't. */
+const foundIn = (url: string, text: string) => async (by: Caller) => ((await ok(by.get(url), 200)).body.includes(text) ? [{ id: text }] : []);
+/** For expectHiddenFrom: `[{ id }]` when `by` gets `url`'s choices, `[]` for the plain 404. */
+const choicesRead = (url: string, id: string) => async (by: Caller) => (await readById<FormChoices>(url)(by)).map(() => ({ id }));
+/** The id and the English name of a Member or a Participant: what nobody who can't see it may read. */
+const idAndName = (p: { name: { en: string } } & ({ id: string } | { participantId: string })) => ["id" in p ? p.id : p.participantId, p.name.en]; // not hidden-from: the targets of expectHiddenFrom, each read first by its own Company, the id beside the name
 
 const createDraft = (by: Caller, answers: Record<string, unknown>) =>
   by.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Cable trays", answers: { ...builtIns(), ...answers } });
@@ -186,14 +193,21 @@ describe("what a C1 Engineer is offered (V15)", () => {
   });
 
   it("never names C2, K1 or OR, nor any of their Members, anywhere in the answer", async () => {
-    const body = (await ok(engineer.caller.get(`/v1/projects/${projectId}/form-choices`), 200)).body;
-    for (const hidden of [c2, k1, or]) {
-      expect(body).not.toContain(hidden.participantId);
-      expect(body).not.toContain(hidden.name.en);
-    }
-    for (const hidden of [c2Engineer, k1Engineer, k1Manager, orMember, owMember]) {
-      expect(body).not.toContain(hidden.id);
-      expect(body).not.toContain(hidden.name.en);
+    const url = `/v1/projects/${projectId}/form-choices`;
+    // Each is in the answer to a Member of its own Company first, so the answer is proven to name it there.
+    for (const [hidden, seer, who] of [
+      [c2, c2Engineer, "C2"],
+      [k1, k1Engineer, "K1"],
+      [or, orMember, "OR"],
+      [c2Engineer, c2Engineer, "C2's engineer"],
+      [k1Engineer, k1Manager, "K1's engineer"],
+      [k1Manager, k1Engineer, "K1's manager"],
+      [orMember, orMember, "OR's Member"],
+      [owMember, { caller: ow.admin }, "OW's Member"],
+    ] as const) {
+      for (const text of idAndName(hidden)) {
+        await expectHiddenFrom({ read: foundIn(url, text), target: text, seenBy: seer.caller, hiddenFrom: engineer.caller, name: () => "C1 Engineer", label: who });
+      }
     }
   });
 
@@ -205,8 +219,16 @@ describe("what a C1 Engineer is offered (V15)", () => {
 
   it("is a 404 for anyone not on the Project, as for a made-up one", async () => {
     const outsider = (await api.member((await company("Elsewhere")).caller)).caller;
-    await expectHidden(outsider.get(`/v1/projects/${projectId}/form-choices`));
-    await expectHidden(engineer.caller.get(`/v1/projects/${randomUUID()}/form-choices`));
+    const url = `/v1/projects/${projectId}/form-choices`;
+    await expectHiddenFrom({ read: choicesRead(url, projectId), target: projectId, seenBy: engineer.caller, hiddenFrom: outsider, name: (by) => (by === outsider ? "outsider" : "C1 Engineer") });
+    await expectHiddenFrom({
+      read: (path: string) => readById(path)(engineer.caller),
+      target: "choices",
+      idOf: () => "choices",
+      seenBy: url,
+      hiddenFrom: `/v1/projects/${randomUUID()}/form-choices`,
+      label: "made-up Project",
+    });
   });
 });
 
@@ -299,8 +321,10 @@ describe("a Submitted item's member and participant answers", () => {
       supplier: { companyName: ow.name, memberName: null },
     });
     expect(item.answers).toEqual({ ...builtIns(), manufacturer: "ACME Cables", supplier: ow.participantId });
-    expect(res.body).not.toContain(pm.id);
-    expect(res.body).not.toContain(pm.name.en);
+    // C1's Engineer reads the PM's id and name in the same answer; K1 reads neither, anywhere in it.
+    for (const text of idAndName(pm)) {
+      await expectHiddenFrom({ read: foundIn(`/v1/work-items/${id}`, text), target: text, seenBy: engineer.caller, hiddenFrom: k1Manager.caller, name: (by) => (by === k1Manager.caller ? "K1" : "C1 Engineer") });
+    }
   });
 
   it("on the item, K1 is offered the Companies on it, and still nobody else's people", async () => {
@@ -310,7 +334,16 @@ describe("a Submitted item's member and participant answers", () => {
   });
 
   it("anyone who can't see the item gets a 404 for its choices", async () => {
-    await expectHidden(c2Engineer.caller.get(`/v1/work-items/${id}/form-choices`));
-    await expectHidden(engineer.caller.get(`/v1/work-items/${randomUUID()}/form-choices`));
+    const url = `/v1/work-items/${id}/form-choices`;
+    const who = (by: Caller) => (by === c2Engineer.caller ? "C2" : by === k1Manager.caller ? "K1" : "C1 Engineer");
+    await expectHiddenFrom({ read: choicesRead(url, id), target: id, seenBy: [engineer.caller, k1Manager.caller], hiddenFrom: c2Engineer.caller, name: who });
+    await expectHiddenFrom({
+      read: (path: string) => readById(path)(engineer.caller),
+      target: "choices",
+      idOf: () => "choices",
+      seenBy: url,
+      hiddenFrom: `/v1/work-items/${randomUUID()}/form-choices`,
+      label: "made-up item",
+    });
   });
 });

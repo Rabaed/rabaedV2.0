@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -277,20 +277,40 @@ describe("Scopes and Sub-scopes", () => {
         projectA,
       ]);
       expect(onProject.rowCount).toBe(0);
-      expect(await scopesSeen(consultant.ap)).toEqual([]);
+      // No Scope straight from the table, Project A's or B's: each read there by a Member of its Project.
+      const fromTable = async (as: string) => (await scopesSeen(as)).map((s) => ({ id: s.id }));
+      const everyScope = (await migrator.query("select id, project_id from scope where project_id = any($1::uuid[])", [[projectA, projectB]])).rows as {
+        id: string;
+        project_id: string;
+      }[];
+      expect(everyScope.map((s) => s.id)).toEqual(expect.arrayContaining([lighting, indoor, hvac]));
+      for (const s of everyScope) {
+        await expectHiddenFrom({ read: fromTable, target: s.id, seenBy: s.project_id === projectA ? host.member : other.ap, hiddenFrom: consultant.ap });
+      }
+      expect(await scopesSeen(consultant.ap)).toEqual([]); // not hidden-from: no Scope at all, whoever's; the read is proven by id just above
       const electrical = (await migrator.query("select id from scope where trade_value_id = $1", [trade.electrical])).rows;
       expect(await covered(consultant.ap)).toEqual(sorted(...electrical.map((r: { id: string }) => r.id)));
       expect(await covered(consultant.ap)).toContain(indoor);
-      expect(await covered(consultant.ap)).not.toContain(hvac);
+      // HVAC, of a Trade it doesn't cover, by no route: neither the table nor its Participant's Scopes.
+      const anyRoute = async (as: string) => [...(await fromTable(as)), ...(await covered(as)).map((id) => ({ id }))];
+      await expectHiddenFrom({ read: anyRoute, target: hvac, seenBy: host.member, hiddenFrom: consultant.ap });
     });
 
     it("are nobody else's to read through it", async () => {
       // Its own Company's, and the Project's Project Admins: the V16 line.
       expect(await covered(host.ap)).toContain(lighting);
-      for (const as of [host.member, other.ap, other.member]) {
-        expect(await covered(as), as).toEqual([]);
+      const electrical = (await migrator.query("select id from scope where trade_value_id = $1", [trade.electrical])).rows.map((r: { id: string }) => r.id);
+      expect(electrical).toContain(lighting);
+      for (const target of electrical) {
+        await expectHiddenFrom({
+          read: async (as: string) => (await covered(as)).map((id) => ({ id })),
+          target,
+          seenBy: [host.ap, consultant.ap],
+          hiddenFrom: [host.member, other.ap, other.member],
+        });
       }
-      expect(await covered(consultant.ap, randomUUID())).toEqual([]);
+      for (const as of [host.member, other.ap, other.member]) expect(await covered(as), as).toEqual([]); // not hidden-from: no Scope at all, whoever's; the read is proven by id just above
+      expect(await covered(consultant.ap, randomUUID())).toEqual([]); // not hidden-from: a made-up Participant id, no row exists
     });
   });
 
