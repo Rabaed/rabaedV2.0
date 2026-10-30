@@ -17,7 +17,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, bilingual, buildSeamTwoTower, digits, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, bilingual, buildSeamTwoTower, digits, expectHiddenFrom, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const TYPE = `WC${Array.from({ length: 3 }, () => String.fromCharCode(65 + randomInt(26))).join("")}`;
@@ -105,6 +105,19 @@ const photosAs = async (as: string, id: string) =>
   (await call<{ id: string }>(as, sql`select id from document where work_item_id = ${id}::uuid and field_key = ${FIELD} order by id`)).map((r) => r.id);
 const byId = async (as: string, documentId: string) =>
   (await call<{ id: string }>(as, sql`select id from document where id = ${documentId}::uuid`)).map((r) => r.id);
+const rowsOf = (ids: string[]) => ids.map((id) => ({ id }));
+/** Photo `photo` of item `id` is read by each of `seenBy` first, in the list and by id, then by none of `hiddenFrom` (RP-1095). */
+async function photoHidden(id: string, photo: string, seenBy: string | string[], hiddenFrom: string | string[], label: string) {
+  await expectHiddenFrom({ read: async (as: string) => rowsOf(await photosAs(as, id)), target: photo, seenBy, hiddenFrom, label: `${label}, the list` });
+  await expectHiddenFrom({ read: async (as: string) => rowsOf(await byId(as, photo)), target: photo, seenBy, hiddenFrom, label: `${label}, by id` });
+}
+/** Item `id`'s checklist answers are read by each of `seenBy` first, then by none of `hiddenFrom` (RP-1095). */
+const answersHidden = (id: string, seenBy: string | string[], hiddenFrom: string | string[], label: string) =>
+  expectHiddenFrom({ read: (as: string) => answersAs(as, id), target: FIELD, idOf: (r) => r.field_key, seenBy, hiddenFrom, label: `${label}, the answers` });
+/** The Documents item `id`'s shared events took, by id, as `as` reads them. */
+const sharedDocuments = async (as: string, id: string) =>
+  call<{ id: string }>(as, sql`select d as id from app.work_item_shared_documents(${id}::uuid) d`);
+
 /** The checklist the code's event shares, as `as` reads its events. */
 const codeAnswersAs = async (as: string, id: string) =>
   (
@@ -169,22 +182,22 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
       expect(await photosAs(reader, id), reader).toEqual([photo]);
       expect(await byId(reader, photo), reader).toEqual([photo]);
     }
-    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative]) {
+    const outsiders = [c1.members.engineer, c1.members.project_manager, ow.members.representative];
+    for (const outsider of outsiders) {
       // Each sees the Inspection itself (raised, oversight), never the checklist in progress.
-      expect((await call<{ id: string }>(outsider, sql`select id from work_item where id = ${id}::uuid`)).length, outsider).toBe(1);
-      expect(await answersAs(outsider, id), outsider).toEqual([]);
-      expect(await photosAs(outsider, id), outsider).toEqual([]);
-      expect(await byId(outsider, photo), outsider).toEqual([]);
+      expect((await call<{ id: string }>(outsider, sql`select id from work_item where id = ${id}::uuid`)).map((r) => r.id), outsider).toEqual([id]);
       expect(await codeAnswersAs(outsider, id), outsider).toEqual([]);
-      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`), outsider).toEqual([]);
     }
+    await answersHidden(id, k1.members.engineer, outsiders, "before the code");
+    await photoHidden(id, photo, [k1.members.engineer, k1.members.manager], outsiders, "before the code");
+    // (No shared event has taken a Document yet, so app.work_item_shared_documents is empty for everyone
+    // here; the code's test below reads it shared.)
   });
 
   it("another Project's Member reads and writes none of them (layer 1)", async () => {
     const { id, photo } = await atManager("Slab pour, Level 6");
-    expect(await answersAs(other.ap, id)).toEqual([]);
-    expect(await photosAs(other.ap, id)).toEqual([]);
-    expect(await byId(other.ap, photo)).toEqual([]);
+    await answersHidden(id, k1.members.engineer, other.ap, "another Project");
+    await photoHidden(id, photo, k1.members.engineer, other.ap, "another Project");
     expect(await save(other.ap, id)).toBe("not_found");
     expect((await startPhoto(other.ap, id, "cover")).outcome).toBe("not_found");
   });
@@ -218,7 +231,7 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
 
   it("the code freezes and shares them: C1 and the Owner read them in its event, and the photo by id; C2 never", async () => {
     const { id, photo } = await atManager("Slab pour, Level 5");
-    expect(await answersAs(c2.members.engineer, id)).toEqual([]);
+    await answersHidden(id, k1.members.engineer, c2.members.engineer, "before the code");
     expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
 
     for (const reader of [c1.members.engineer, c1.members.project_manager, ow.members.representative, k1.members.engineer, k1.members.manager]) {
@@ -234,8 +247,14 @@ describe("RP-86-1: the Consultant Engineer's checklist stays with K1 until the c
     );
     expect(frozen).toEqual({ frozen: true, taken: true });
     expect(await codeAnswersAs(c2.members.engineer, id)).toEqual([]);
-    expect(await photosAs(c2.members.engineer, id)).toEqual([]);
-    expect(await byId(c2.members.engineer, photo)).toEqual([]);
+    await photoHidden(id, photo, c1.members.engineer, c2.members.engineer, "after the code");
+    await expectHiddenFrom({
+      read: (as: string) => sharedDocuments(as, id),
+      target: photo,
+      seenBy: [c1.members.engineer, ow.members.representative],
+      hiddenFrom: c2.members.engineer,
+      label: "the code's shared Documents",
+    });
   });
 });
 
@@ -281,8 +300,12 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
     snag = raised.rows[0].from_id as string;
   });
 
-  const seesSnag = async (as: string) => (await call<{ id: string }>(as, sql`select id from work_item where id = ${snag}::uuid`)).length === 1;
-  const snagPhotos = async (as: string) => (await call<{ id: string }>(as, sql`select id from document where work_item_id = ${snag}::uuid`)).length;
+  const snagRow = (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${snag}::uuid`);
+  const seesSnag = async (as: string) => (await snagRow(as)).map((r) => r.id).includes(snag);
+  /** The Snag's photos `as` reads, by id. */
+  const snagPhotos = async (as: string) => (await call<{ id: string }>(as, sql`select id from document where work_item_id = ${snag}::uuid order by id`)).map((r) => r.id);
+  /** The Snag's photos, as the owner reads them: the ids every reader must get. */
+  const storedPhotos = async () => (await migrator.query("select id from document where work_item_id = $1 order by id", [snag])).rows.map((r) => r.id as string);
   const snagCount = (as: string) =>
     call<{ type_code: string; open_count: number }>(as, sql`select type_code, open_count::integer from app.work_item_raised_item_counts(${id}::uuid)`);
   const checkItem = async (as: string) =>
@@ -293,9 +316,11 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
 
   it("C1, K1 and the Owner read the Snag, its photo, its check item, its source and its count", async () => {
     const number = (await migrator.query("select document_number from work_item where id = $1", [id])).rows[0].document_number as string;
+    const photos = await storedPhotos();
+    expect(photos.length).toBe(1); // not hidden-from: the owner's own count of the copies
     for (const reader of [c1.members.engineer, c1.members.project_manager, k1.members.engineer, k1.members.manager, ow.members.representative]) {
       expect(await seesSnag(reader), reader).toBe(true);
-      expect(await snagPhotos(reader), reader).toBe(1);
+      expect(await snagPhotos(reader), reader).toEqual(photos);
       expect(await checkItem(reader), reader).toEqual({ key: "formwork", text: bilingual("Formwork tight") });
       // Not only C1, holding it: the Link came with the Snag, before its first arrival (RP-1031).
       expect(await source(reader), reader).toEqual([{ document_number: number, work_item_id: id }]);
@@ -304,13 +329,15 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
   });
 
   it("C2 and another Project's Member read none of it", async () => {
-    for (const outsider of [c2.members.engineer, other.ap]) {
-      expect(await seesSnag(outsider), outsider).toBe(false);
-      expect(await snagPhotos(outsider), outsider).toBe(0);
-      expect(await checkItem(outsider), outsider).toBeNull();
-      expect(await source(outsider), outsider).toEqual([]);
-      expect(await snagCount(outsider), outsider).toEqual([]);
-    }
+    // Each read first by C1's engineer, who sees it, then by neither outsider (RP-1095).
+    const seenBy = c1.members.engineer;
+    const hiddenFrom = [c2.members.engineer, other.ap];
+    await expectHiddenFrom({ read: snagRow, target: snag, seenBy, hiddenFrom, label: "the Snag" });
+    const [photo] = await storedPhotos();
+    await expectHiddenFrom({ read: async (as: string) => rowsOf(await snagPhotos(as)), target: photo!, seenBy, hiddenFrom, label: "its photo" });
+    await expectHiddenFrom({ read: async (as: string) => ((await checkItem(as)) === null ? [] : [{ id: "formwork" }]), target: "formwork", seenBy, hiddenFrom, label: "its check item" });
+    await expectHiddenFrom({ read: source, target: id, idOf: (r) => r.work_item_id, seenBy, hiddenFrom, label: "its source" });
+    await expectHiddenFrom({ read: snagCount, target: "SNG", idOf: (r) => r.type_code, seenBy, hiddenFrom, label: "its count" });
     // (app.raised_document_copies gives nothing to anyone once the code has committed, the next test shows,
     // so an outsider's empty read of it would prove nothing: RP-1095.)
   });
@@ -334,7 +361,7 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
 
   it("the files to copy are only the code's own transaction's: once it committed, none, for K1 that raised them too", async () => {
     // The photo was copied (a Document of the Snag) ...
-    expect(await snagPhotos(k1.members.manager)).toBe(1);
+    expect(await snagPhotos(k1.members.manager)).toEqual(await storedPhotos());
     // ... but a later transaction (a replayed code) is given nothing to copy again.
     for (const reader of [k1.members.manager, c1.members.engineer]) {
       expect(await call(reader, sql<object>`select * from app.raised_document_copies(${id}::uuid)`), reader).toEqual([]);
@@ -410,7 +437,8 @@ describe("RP-1081-1: a Snag's check item photos are the Inspection's, read where
         sql`select d.id from document d where d.id in (select document_id from app.raised_from_check_item_photos(${snag}::uuid)) order by d.id`,
       )
     ).map((r) => r.id);
-  const named = async (as: string) => (await call<{ document_id: string }>(as, sql`select document_id from app.raised_from_check_item_photos(${snag}::uuid)`)).length;
+  /** The photo ids app.raised_from_check_item_photos names to `as`. */
+  const named = async (as: string) => (await call<{ document_id: string }>(as, sql`select document_id from app.raised_from_check_item_photos(${snag}::uuid)`)).map((r) => ({ id: r.document_id }));
 
   beforeAll(async () => {
     id = await atConsultantReview("Slab pour, Level 11");
@@ -434,19 +462,21 @@ describe("RP-1081-1: a Snag's check item photos are the Inspection's, read where
   });
 
   it("C2 and another Project's Member are named none", async () => {
-    for (const outsider of [c2.members.engineer, other.ap]) {
-      expect(await named(outsider), outsider).toBe(0);
+    // Each photo is named to C1's engineer first (RP-1095).
+    for (const target of item) {
+      await expectHiddenFrom({ read: named, target, seenBy: c1.members.engineer, hiddenFrom: [c2.members.engineer, other.ap], label: "check item photos" });
     }
   });
 
   it("names none to the Owner once it sees the Snag but not the Inspection, and none to anyone once the Link is removed", async () => {
     const owner = ow.members.representative;
     await migrator.query("delete from work_item_access where work_item_id = $1 and participant_id = $2", [id, ow.participantId]);
-    expect(await named(owner)).toBe(0);
+    for (const target of item) await expectHiddenFrom({ read: named, target, seenBy: [c1.members.engineer, k1.members.manager], hiddenFrom: owner, label: "no Inspection" });
     expect(await photos(c1.members.engineer)).toEqual(item);
     await migrator.query("update work_item_link set removed_at = now() where from_id = $1 and kind = 'raised_from'", [snag]);
+    // Both were named them just above; now neither is.
     for (const reader of [c1.members.engineer, k1.members.manager]) {
-      expect(await named(reader), reader).toBe(0);
+      expect(await named(reader), reader).toEqual([]);
     }
   });
 });
@@ -476,13 +506,9 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
     expect(await take(k1.members.engineer, id, "send_to_manager")).toBe("applied");
     expect(await pickUp(k1.members.manager, id)).toBe("picked_up");
 
-    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative, c2.members.engineer, other.ap]) {
-      expect(await photosAs(outsider, id), outsider).toEqual([]);
-      for (const document of [photo, copy]) expect(await byId(outsider, document), outsider).toEqual([]);
-    }
-    for (const outsider of [c1.members.engineer, c1.members.project_manager, ow.members.representative]) {
-      expect(await call(outsider, sql<{ document_id: string }>`select * from app.work_item_shared_documents(${id}::uuid)`), outsider).toEqual([]);
-    }
+    const outsiders = [c1.members.engineer, c1.members.project_manager, ow.members.representative, c2.members.engineer, other.ap];
+    for (const document of [photo, copy]) await photoHidden(id, document, k1.members.engineer, outsiders, "before the code");
+    // (No shared event has taken them yet, so app.work_item_shared_documents is empty for everyone here.)
 
     expect(await take(k1.members.manager, id, "revise_c", { remarks: "Formwork to be sealed" })).toBe("applied");
     for (const reader of [c1.members.engineer, c1.members.project_manager, ow.members.representative, k1.members.engineer, k1.members.manager]) {
@@ -494,10 +520,7 @@ describe("RP-981-1: an annotated copy of a checklist photo stays with K1 until t
       [id],
     );
     expect(taken.rows).toEqual([photo, copy].sort().map((d) => ({ id: d, frozen: true, taken: true })));
-    for (const outsider of [c2.members.engineer, other.ap]) {
-      expect(await photosAs(outsider, id), outsider).toEqual([]);
-      expect(await byId(outsider, copy), outsider).toEqual([]);
-    }
+    await photoHidden(id, copy, c1.members.engineer, [c2.members.engineer, other.ap], "after the code");
     // Shared: K1 holds the WIR no more, so it is never annotated again.
     expect((await startCopy(k1.members.manager, id, photo)).outcome).toBe("not_editable");
   });
