@@ -1,5 +1,6 @@
 #!/bin/sh
-# Refuses a commit that stages a conflict marker (RP-989), a font file or embedded font data (RP-962).
+# Refuses a commit that stages a conflict marker (RP-989), a token or key (RP-1100), a font file or
+# embedded font data (RP-962).
 # pnpm install turns the hooks on for the clone and every worktree (scripts/hooks-install.ts).
 
 # Conflict markers only: the whitespace rules --check also applies are switched off.
@@ -7,4 +8,5 @@ git -c core.whitespace=-trailing-space,-space-before-tab,-blank-at-eof diff --ca
   echo "A conflict marker is staged (above): resolve it, git add the file, then commit again." >&2
   exit 1
 }
+node scripts/check-secrets.ts --staged || exit 1
 exec node scripts/check-no-fonts.ts --staged

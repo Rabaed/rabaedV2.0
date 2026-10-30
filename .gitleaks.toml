@@ -30,3 +30,15 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 regexes = ['''uat_frm09_denied''']
 paths = ['''^planning/uat/round-0/cases/FRM\.ts$''']
+
+# RP-1100's secret-scan test once spelled out the curl shape it guards against
+# (`curl -u someone@example.com:` before a fake token built at run time, commit
+# 2e80acaf9); it was never a secret, and the test now builds the curl from parts.
+# Only the default curl-auth-user rule, only that made-up address, only that file.
+[[allowlists]]
+description = "RP-1100: a made-up curl user in the secret-scan test"
+targetRules = ["curl-auth-user"]
+condition = "AND"
+regexTarget = "line"
+regexes = ['''someone@example\.com''']
+paths = ['''^scripts/check-secrets\.test\.ts$''']
