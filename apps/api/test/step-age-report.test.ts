@@ -323,17 +323,22 @@ describe("who gets no report", () => {
     // While it is active, the week's reports have it.
     sent = [];
     await sendWeek();
-    const active = { reports: sent };
+    // Each week is its own copy: `sent` is pushed into, so holding the array itself would make
+    // the later weeks read the earlier ones' reports (and "closed between" always empty).
+    const active = { reports: [...sent] };
     await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
     try {
       sent = [];
       await sendWeek();
-      const closedWeek = { reports: sent };
+      const closedWeek = { reports: [...sent] };
       await sql`update project set status = 'active', closed_at = null where id = ${at.projectId}`.execute(migrator);
       await queueWeek();
       await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
+      sent = [];
       await drain();
-      const closedBetween = { reports: sent.filter((r) => !closedWeek.reports.includes(r)) };
+      const closedBetween = { reports: [...sent] };
+      // The re-queue did queue this Project's reports again: the drain had something to leave out.
+      expect(active.reports.filter((r) => r.projectId === at.projectId).length).toBeGreaterThan(0);
       await expectHiddenFrom({
         read: async (week: { reports: StepAgeReport[] }) => week.reports.filter((r) => r.projectId === at.projectId).map((r) => ({ id: r.projectId })),
         target: at.projectId,

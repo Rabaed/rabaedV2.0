@@ -150,8 +150,26 @@ async function read({ as, via }: View, projects = [tower.projectId, second.proje
 }
 const named = (v: View) => `${names.get(v.as) ?? v.as} (${v.via})`;
 const views = (via: Via, ...members: string[]) => members.map((as) => ({ as, via }));
+/** A row's id for `byEvent`: its event's. Only the feed reads events, so another read is a mistake in the call,
+ *  not an empty answer: an `undefined` id would pass "not read" for every row (RP-1129 review). */
+const eventId = (r: Row) => {
+  if (r.event === undefined) throw new Error("byEvent needs feed views on both sides: this row came from another read");
+  return r.event;
+};
 const hidden = (label: string, target: string, seenBy: View | View[], hiddenFrom: View | View[], byEvent = false) =>
-  expectHiddenFrom<View, Row>({ read: (v) => read(v), target, seenBy, hiddenFrom, name: named, label, ...(byEvent ? { idOf: (r) => r.event! } : {}) });
+  expectHiddenFrom<View, Row>({ read: (v) => read(v), target, seenBy, hiddenFrom, name: named, label, ...(byEvent ? { idOf: eventId } : {}) });
+/** Reads each view once, for a check that runs over many targets. */
+function readOnce(): (v: View) => Promise<Row[]> {
+  const cache = new Map<string, Promise<Row[]>>();
+  return (v) => {
+    const key = `${v.as}/${v.via}`;
+    const hit = cache.get(key) ?? read(v);
+    cache.set(key, hit);
+    return hit;
+  };
+}
+const hiddenCached = (read: (v: View) => Promise<Row[]>, label: string, target: string, seenBy: View | View[], hiddenFrom: View | View[]) =>
+  expectHiddenFrom<View, Row>({ read, target, seenBy, hiddenFrom, name: named, label, idOf: eventId });
 const ids = async (v: View, projects?: string[]) => (await read(v, projects)).map((r) => r.id).sort();
 
 beforeAll(async () => {
@@ -334,7 +352,11 @@ describe("scenarios RP-407-5 and RP-407-6: K1 manager A is on two Projects, mana
       [[atTower, atSecond], c1.id],
     );
     expect(internal.rows.map((r) => r.id)).toContain(await eventOf(atSecond, "send_for_review"));
-    for (const { id } of internal.rows) await hidden("C1's internal event", id, { as: c1.members.engineer, via: "feed" }, views("feed", a, k1B), true);
+    // The three feeds are read once for every one of C1's internal events, not once an event.
+    const feeds = readOnce();
+    for (const { id } of internal.rows) {
+      await hiddenCached(feeds, "C1's internal event", id, { as: c1.members.engineer, via: "feed" }, views("feed", a, k1B));
+    }
     // C1 reads its own people's names; K1 reads C1 by its name only (V14).
     const c1Name = (await migrator.query("select legal_name from company where id = $1", [c1.id])).rows[0].legal_name;
     expect((await read({ as: pm, via: "feed" })).find((e) => e.event === submitOf.tower)?.member_name).not.toBeNull();

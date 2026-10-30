@@ -189,12 +189,14 @@ describe("Need My Action", () => {
   });
 
   it("combines with the other filters", async () => {
-    expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]); // not hidden-from: a Stage filter; the PM holds no Draft
+    // A Draft of the engineer's is theirs (V1): with the toggle on, no Stage filter hands it to the PM.
+    await expectHiddenFrom({ read: async (by: Caller) => (await list(by, { stage: ["draft"] })).items, target: myDraft, seenBy: c1Engineer, hiddenFrom: c1Pm, label: "a Draft under the Stage filter" });
+    expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]); // not hidden-from: proven by the expectHiddenFrom above; the PM holds no Draft of their own
     // C1's only PM holds every Step of C1's internal review at once (§3.3 rule 4).
     const mine = ids(await list(c1Pm, { with: ["me"] }));
     expect(mine).toContain(inReview);
     expect(mine).toEqual(ids(await list(c1Pm)));
-    expect(ids(await list(c1Pm, { with: ["not_picked_up"] }))).toEqual([]); // not hidden-from: a With filter; the only PM holds every Step at once
+    expect(ids(await list(c1Pm, { with: ["not_picked_up"] }))).toEqual([]); // not hidden-from: a With filter; the only PM holds every Step at once, and the Draft above is covered
   });
 });
 

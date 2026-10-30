@@ -140,6 +140,11 @@ const hiddenFrom = (target: string, seenBy: Reader | Reader[], hidden: Reader | 
   expectHiddenFrom({ read: (r: Reader) => r.rows(), target, seenBy, hiddenFrom: hidden, name: (r) => r.name, label });
 /** `by`'s whole feed: its events, by id. */
 const eventsIn = (by: Caller, name: string): Reader => ({ name: `${name}'s feed`, rows: async () => (await feed(by)).entries });
+/** The same, read once: a check over many events reads each feed one time, not once an event. */
+const eventsRead = (by: Caller, name: string): Reader => {
+  let once: Promise<ActivityFeedEntry[]> | undefined;
+  return { name: `${name}'s feed`, rows: () => (once ??= feed(by).then((f) => f.entries)) };
+};
 /** The items `by`'s feed names, by id. */
 const itemsIn = (by: Caller, name: string): Reader => ({ name: `${name}'s feed`, rows: async () => (await feed(by)).entries.map((e) => ({ id: e.workItem.id })) });
 /** `text`, as the one row of a body that holds it. */
@@ -262,25 +267,27 @@ describe("answer changes through the feed: C1 changes its Returned item twice", 
   });
 
   it("gives no answers_changed to C1 itself, K1, OR or OW", async () => {
+    // Each feed is read once for all of the events below: a read a change would be six pages a change.
     const feeds = [
-      eventsIn(tower.c1Engineer, "C1 engineer"),
-      eventsIn(tower.c1Pm, "C1 PM"),
-      eventsIn(orEngineer, "OR"),
-      eventsIn(owner, "OW"),
-      eventsIn(k1Engineer, "K1 engineer"),
-      eventsIn(k1Pm, "K1 PM"),
+      eventsRead(tower.c1Engineer, "C1 engineer"),
+      eventsRead(tower.c1Pm, "C1 PM"),
+      eventsRead(orEngineer, "OR"),
+      eventsRead(owner, "OW"),
+      eventsRead(k1Engineer, "K1 engineer"),
+      eventsRead(k1Pm, "K1 PM"),
     ];
     // The Project's answers_changed events, this item's two among them: no feed holds any.
+    let eventRows: Promise<{ id: string }[]> | undefined;
     const events: Reader = {
       name: "the Project's events",
       rows: () =>
-        migrator
+        (eventRows ??= migrator
           .selectFrom("work_item_event")
           .innerJoin("work_item", "work_item.id", "work_item_event.work_item_id")
           .select("work_item_event.id")
           .where("work_item.project_id", "=", tower.projectId)
           .where("work_item_event.type", "=", "answers_changed")
-          .execute(),
+          .execute()),
     };
     const changes = await events.rows();
     expect(changes.length).toBeGreaterThanOrEqual(2);

@@ -97,10 +97,14 @@ describe("scenario RP-1062-1: C1 Submits a MAR to K1 and its Members post in its
     await posted(tower.c1Pm, c1Item, "Please review.");
     const name = whoIs;
     await expectHiddenFrom({ read: thread(c1Item), target: message, seenBy: [tower.c1Pm, tower.k1Manager], hiddenFrom: c2Engineer, name, label: "C1's thread" });
-    const before = (await readChat(tower.c1Pm, c1Item)).count;
+    const before = (await readChat(tower.c1Pm, c1Item)).messages.map((m) => m.id);
     await expectHiddenFrom({ read: poster(c1Item), target: c1Item, seenBy: tower.c1Engineer, hiddenFrom: c2Engineer, name, label: "posting on C1's item" });
-    // C2's refused post wrote nothing; the C1 engineer's accepted one is the only new message.
-    expect((await readChat(tower.c1Pm, c1Item)).count).toBe(before + 1);
+    // C2's refused posts wrote nothing: every message the thread gained is the C1 engineer's.
+    const after = (await readChat(tower.c1Pm, c1Item)).messages;
+    const added = after.filter((m) => !before.includes(m.id));
+    expect(added.length, "the C1 engineer's accepted post").toBeGreaterThan(0);
+    for (const m of added) expect(m.author, "every new message is C1's").toMatchObject({ kind: "own", companyName: bilingual(C1_NAME) });
+    expect(after.length).toBe(before.length + added.length);
 
     // The same plain 404 as a made-up or malformed id, from C2's engineer, who reads and posts on its own item.
     const asC2 = (read: (id: string) => (by: Caller) => Promise<unknown[]>) => async (id: string) => (await read(id)(c2Engineer)).map(() => ({ id: "answered" }));

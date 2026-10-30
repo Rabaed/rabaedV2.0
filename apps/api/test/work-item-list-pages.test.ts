@@ -98,16 +98,21 @@ describe("the Member's own columns (Save as my default)", () => {
     { key: "revision", shown: false },
   ];
 
-  let saved: unknown;
   /** The column layout `by` reads on the List, for expectHiddenFrom: `[{ id: <the layout> }]`, or `[]` for the design's. */
   const layoutOf = async (by: Caller) => {
     const layout = (await list(by, { page: 1 })).columnLayout;
     return layout === undefined ? [] : [{ id: JSON.stringify(layout) }];
   };
+  /** The engineer's own saved layout, as layoutOf reads it: the target the others must not read. */
+  const savedByEngineer = async () => {
+    const [own] = await layoutOf(at.c1Engineer);
+    expect(own, "the engineer saved a layout").toBeDefined();
+    return own!.id;
+  };
 
   it("start as the design's, and are kept for the Member who saved them, the locked columns first", async () => {
     expect((await list(at.c1Engineer, { page: 1 })).columnLayout).toBeUndefined(); // not hidden-from: the Member's own, before they save one
-    saved = (await ok(at.c1Engineer.request("PUT", path(), mine), 200)).json();
+    const saved = (await ok(at.c1Engineer.request("PUT", path(), mine), 200)).json();
     expect((saved as unknown[]).slice(0, 3)).toEqual([
       { key: "documentNumber", shown: true },
       { key: "subject", shown: true },
@@ -119,7 +124,7 @@ describe("the Member's own columns (Save as my default)", () => {
   it("are nobody else's: a colleague and another Company still see the design's", async () => {
     // The engineer reads their saved layout first; neither the colleague nor K1 reads it.
     const name = (by: Caller) => (by === at.c1Engineer ? "C1 engineer" : by === at.c1Pm ? "C1 PM" : "K1");
-    await expectHiddenFrom({ read: layoutOf, target: JSON.stringify(saved), seenBy: at.c1Engineer, hiddenFrom: [at.c1Pm, at.k1Manager], name });
+    await expectHiddenFrom({ read: layoutOf, target: await savedByEngineer(), seenBy: at.c1Engineer, hiddenFrom: [at.c1Pm, at.k1Manager], name });
     expect((await list(at.c1Pm, { page: 1 })).columnLayout).toBeUndefined(); // not hidden-from: proven by the expectHiddenFrom above; the colleague has the design's
     expect((await list(at.k1Manager, { page: 1 })).columnLayout).toBeUndefined(); // not hidden-from: proven by the expectHiddenFrom above; K1 has the design's
   });
