@@ -5,6 +5,7 @@ import {
   claimOf,
   keptByClaims,
   projectInUseNow,
+  protectedLaneReason,
   staleProjects,
   type Container,
   type EnvClaim,
@@ -15,7 +16,7 @@ import {
   type WorktreeLane,
 } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { guardCandidates, listedChanges, protectedLaneReason } from "./prune-guards.ts";
+import { guardCandidates, listedChanges } from "./prune-guards.ts";
 import { CURRENT_WORKTREE, isFinished, lockedByApp, stillStarting, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
@@ -183,9 +184,9 @@ export function changedSinceListed(now: PruneWorktree | undefined, holders: Hold
 function skipReason(w: PruneWorktree, holders: Holders, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
   if (samePath(w.path, mainRoot, platform)) return "the main checkout";
   if (samePath(w.path, currentPath, platform)) return CURRENT_WORKTREE;
-  // RP-1101: the worktree whose .env names lane 7 serves the live UAT stack.
-  const uat = protectedLaneReason(w.project);
-  if (uat !== undefined) return uat;
+  // RP-1101: the worktree whose .env names lane 7 holds Main 7's harness data.
+  const harness = protectedLaneReason(w.project);
+  if (harness !== undefined) return harness;
   if (w.branch === "main") return "on main";
   if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return openSessionReason({ kind: "open", session: w.locked });
   const held = holdReason(w.path, holders);

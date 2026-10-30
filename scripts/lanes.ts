@@ -55,6 +55,18 @@ export function lanePorts(n: number): LanePorts {
 
 export const laneProject = (n: number) => `rabaed-lane${n}`;
 
+/**
+ * The lanes nothing frees, takes over or removes (RP-1101): lane 7 holds Main 7's Round 0 harness
+ * data (live UAT moved to Vercel, ADR 0026). lane:env --free never offers it, --force never takes
+ * it over, and no prune removes it or its worktree.
+ */
+const PROTECTED: Record<string, string> = {
+  "rabaed-lane7": "lane 7 holds Main 7's UAT harness data; nothing frees, takes over or prunes it (ask Main 7)",
+};
+
+/** Why nothing frees, takes over or removes this compose project, or undefined. */
+export const protectedLaneReason = (project: string | undefined): string | undefined => (project === undefined ? undefined : PROTECTED[project]);
+
 /** The compose projects that can hold lane n's ports: its own, and its twin's (legacy m and m0, RP-605). */
 export function laneProjects(n: number): string[] {
   const twin = twinLane(n);
@@ -174,14 +186,26 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
  * The order lane:env --free tries lanes in from start. From mL: the same Main's lanes m1–m4
  * from L (wrapping round), then the other Mains' lanes A–D; never a Main's own m0 or lane 0.
  * From a legacy lane (or 0): lanes 1–9 from it, wrapping round, then every Main's lanes A–D (RP-605).
+ * Never a protected lane (lane 7, RP-1101).
  */
 export function freeLaneOrder(start: number): number[] {
   const lanesAD = VALID_LANES.filter((n) => n >= 10 && n % 10 !== 0);
   const rotate = (lanes: number[], from: number) => [...lanes.slice(from), ...lanes.slice(0, from)];
-  if (start < 10) return [...rotate(LEGACY_LANES, Math.max(start, 1) - 1), ...lanesAD];
+  const unprotected = (lanes: number[]) => lanes.filter((n) => protectedLaneReason(laneProject(n)) === undefined);
+  if (start < 10) return unprotected([...rotate(LEGACY_LANES, Math.max(start, 1) - 1), ...lanesAD]);
   const main = Math.floor(start / 10);
   const own = lanesAD.filter((n) => Math.floor(n / 10) === main);
-  return [...rotate(own, Math.max(start % 10, 1) - 1), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)];
+  return unprotected([...rotate(own, Math.max(start % 10, 1) - 1), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)]);
+}
+
+/**
+ * The clashes lane:env --free sees for the lane asked for: a protected lane always clashes (RP-1101),
+ * even with no container or .env claim on it (only Main 7's volumes left), so --free moves on.
+ * A plain `lane:env 7` is Main 7's own and is not refused here.
+ */
+export function freeLaneClashes(n: number, clashes: string[]): string[] {
+  const refusal = protectedLaneReason(laneProject(n));
+  return refusal === undefined ? clashes : [...clashes, `${refusal}.`];
 }
 
 /** The first lane in freeLaneOrder(start) with no clash. */
@@ -262,9 +286,9 @@ type MergedInput = {
 export type KeptProject = { project: string; path: string; reason: string };
 
 /** The first of the paths a session holds, with why (claude-sessions.ts holdReason), or undefined. */
-const firstHeld = (paths: string[], holders: Holders, options?: { sinceListed?: boolean }): { path: string; reason: string } | undefined => {
+const firstHeld = (paths: string[], holders: Holders): { path: string; reason: string } | undefined => {
   for (const path of paths) {
-    const reason = holdReason(path, holders, options);
+    const reason = holdReason(path, holders);
     if (reason !== undefined) return { path, reason };
   }
   return undefined;
@@ -313,17 +337,6 @@ export function chooseMerged({ containers, volumes, worktrees, cwd, currentProje
     });
   }
   return { merged, kept };
-}
-
-/**
- * Why a project chosen for removal stays after all: a session holds one of its containers'
- * worktrees now, read again just before removing it (a session may have moved in or opened one
- * since the prompt, as in worktrees:prune's changedSinceListed); "<path>: <why>", or undefined.
- */
-export function heldSinceListed(project: StaleProject, containers: Container[], holders: Holders): string | undefined {
-  const dirs = [...new Set(containers.filter((c) => c.project === project.project).map((c) => c.workingDir))];
-  const held = firstHeld(dirs, holders, { sinceListed: true });
-  return held === undefined ? undefined : `${held.path}: ${held.reason}`;
 }
 
 /**
@@ -507,12 +520,15 @@ type TakeoverInput = {
  * A worktree that only names the lane in its .env, with no container of it (RP-1007), is judged
  * like a holder: once it is merged, clean and held by no session its claim is released (nothing
  * is removed, and its .env is left as it is).
+ * A protected lane (lane 7, RP-1101) is never taken over: refused names why.
  */
 export function chooseTakeover(
   n: number,
   { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, holders, platform }: TakeoverInput,
 ): { takeOver: Container[]; from: string[]; refused: string[]; released: string[] } {
   const projects = laneProjects(n);
+  const refusal = projects.map(protectedLaneReason).find((reason) => reason !== undefined);
+  if (refusal !== undefined) return { takeOver: [], from: [], refused: [`lane:env --force refused: ${refusal}.`], released: [] };
   const mine = containers.filter((c) => projects.includes(c.project) && !samePath(c.workingDir, cwd, platform));
   const from: string[] = [];
   const refused: string[] = [];

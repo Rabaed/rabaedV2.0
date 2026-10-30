@@ -24,12 +24,16 @@ export async function requestSnagReport(
 }
 
 export interface SnagReportStateRow {
-  readonly status: "preparing" | "ready" | "failed";
+  /** `gone`: its asker no longer sees an item or a photo it holds (RP-1110). */
+  readonly status: "preparing" | "ready" | "failed" | "gone";
   readonly storageKey: string | null;
   readonly fileName: string | null;
 }
 
-/** Where a report of Project `projectId` is, for the Member who asked for it; null for anyone else, another Project's id and a made-up id. */
+/**
+ * Where a report of Project `projectId` is, for the Member who asked for it, checked again against what they see now
+ * (`gone` when they no longer see an item or a photo it holds, RP-1110); null for anyone else, another Project's id and a made-up id.
+ */
 export async function snagReportState(trx: Transaction<Database>, projectId: string, reportId: string): Promise<SnagReportStateRow | null> {
   const { rows } = await sql<{ status: SnagReportStateRow["status"]; storage_key: string | null; file_name: string | null }>`
     select * from app.snag_report_state(${projectId}::uuid, ${reportId}::uuid)

@@ -165,6 +165,7 @@
       "pdfPreparing": "Preparing the PDF…",
       "pdfDownload": "{count, plural, one {Download the Snag List PDF (1 item)} other {Download the Snag List PDF ({n} items)}}",
       "pdfFailed": "The PDF could not be made. Try again.",
+      "pdfGone": "No longer available: it holds items you can no longer see. Ask for a new one.",
       "close": "Close",
       "cancel": "Cancel",
       "working": "Working…",
@@ -907,7 +908,7 @@
       "raisedBy": "Raised by",
       "package": "Package",
       "issuedCode": "Issued Code",
-      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "OBS": "Site Observations", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor" },
+      "raisedItemTypes": { "CMT": "Comments", "SNG": "Snags", "OBS": "Site Observations", "QSN": "Questions to Consultant", "QSC": "Questions to Contractor", "QSO": "Questions to Owner" },
       "raisedItemCounts": "{open} open / {closed} closed",
       "previousRaisedItems": "{type} from Rev {revision}",
       "previousRaisedItemCounts": "{closed} closed / {open} open"

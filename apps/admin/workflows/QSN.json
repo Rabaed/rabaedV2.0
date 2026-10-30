@@ -4,7 +4,7 @@
       "key": "draft",
       "name": { "en": "Draft", "ar": "مسودة" },
       "stage": "draft",
-      "actor": { "role": "contractor", "permission": "create" },
+      "actor": { "raiser": true, "permission": "create" },
       "outcomeMode": "none"
     },
     {
@@ -37,7 +37,7 @@
       "from": "draft",
       "to": "open",
       "outcome": null,
-      "permission": "create",
+      "permission": "submit",
       "actionForm": null
     },
     {

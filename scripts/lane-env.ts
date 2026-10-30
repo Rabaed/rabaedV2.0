@@ -35,6 +35,9 @@
 // A lane another worktree's .env names is held, even with its containers stopped or gone (RP-1007), and the refusal
 // names that worktree; --free skips it. --force takes it over only from a worktree that is merged into origin/main,
 // clean and held by no Claude session, and names it (its .env is left as it is).
+// Lane 7 holds Main 7's UAT harness data (RP-1101): --free never offers it, not even as the lane asked for,
+// and --force never takes it over from another worktree (lanes.ts protectedLaneReason); ask Main 7.
+// A plain `lane:env 7` stays Main 7's own.
 // One lane:env runs at a time per clone (a lock in the common git folder, lanes-lock.ts), from reading the
 // lanes until .env is written, so two runs at once never choose the same lane.
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
@@ -47,6 +50,7 @@ import {
   composeProjectOfEnv,
   envClaims,
   firstFreeLane,
+  freeLaneClashes,
   holderAdvice,
   holdsLaneProject,
   laneClashes,
@@ -243,7 +247,8 @@ function takeOverLane(lane: number): boolean {
 }
 
 let lane = n;
-let clashes = clashesOf(n);
+// RP-1101: --free never hands out lane 7, even when asked for it by number.
+let clashes = free ? freeLaneClashes(n, clashesOf(n)) : clashesOf(n);
 // Not with --db: an implementer subagent shares its session's lane and must not take one.
 if (clashes.length > 0 && force && db === undefined && takeOverLane(n)) clashes = [];
 if (clashes.length > 0) {

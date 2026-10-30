@@ -10,7 +10,7 @@ const event = (over: Partial<Event>): Event => ({
   type: "transition",
   at: "2026-10-19T08:00:00.000Z",
   audience: "shared",
-  by: { companyName: b("TMC"), memberName: null },
+  by: { companyName: b("TMC"), memberName: null, positions: [] },
   transition: b("Move"),
   fromStep: null,
   toStep: null,

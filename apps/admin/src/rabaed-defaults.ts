@@ -119,8 +119,10 @@ export const rabaedDefaultTypes = [
   { type: "CMT", form: "CMT.json", workflow: "CMT.json", variants: null, history: null },
   { type: "SNG", form: "SNG.json", workflow: "SNG.json", variants: null, history: null },
   { type: "OBS", form: "OBS.json", workflow: "OBS.json", variants: null, history: null },
-  { type: "QSN", form: "QST.json", workflow: "QSN.json", variants: null, history: null },
-  { type: "QSC", form: "QST.json", workflow: "QSC.json", variants: null, history: null },
+  // RP-1108: Version 2 of each holds the Draft by the raiser; their Version 1 items finish on it.
+  { type: "QSN", form: "QST.json", workflow: "QSN.json", variants: null, history: ["QSN-1.json"] },
+  { type: "QSC", form: "QST.json", workflow: "QSC.json", variants: null, history: ["QSC-1.json"] },
+  { type: "QSO", form: "QST.json", workflow: "QSO.json", variants: null, history: null },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>

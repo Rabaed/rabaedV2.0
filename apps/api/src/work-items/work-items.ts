@@ -1857,6 +1857,8 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       answers: Record<string, unknown> | null;
       /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
       action_form: unknown;
+      /** The actor's Positions, for a Member of the viewer's own Participant only; null for anyone else (RP-1091, V14). */
+      member_positions: BilingualText[] | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     // The import that created it (RP-645, story 35), for its importing Company's Members only, with no time.
     const { rows: imports } = await sql<{ import_id: string; file_name: string; member_name: BilingualText | null; by_rabaed: boolean }>`
@@ -1886,7 +1888,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         type: r.type,
         at: r.created_at.toISOString(),
         audience: r.audience,
-        by: { companyName: r.company_name, memberName: r.member_name },
+        by: { companyName: r.company_name, memberName: r.member_name, positions: r.member_positions ?? [] },
         transition: r.transition_label,
         fromStep: r.from_step_name,
         toStep: r.to_step_name,

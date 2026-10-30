@@ -66,7 +66,7 @@ const ask = (memberId: string, c: unknown) =>
  * tests make (no Owner review, no Send Back): its Stage as app.step_as_seen gives it, who it is with as
  * app.work_item_holder gives it (the Member's own person, else the Company by name), Step Age at `now`.
  */
-async function rowOf(as: string, id: string, now = new Date()) {
+async function rowOf(as: string, id: string, now = new Date(), location = tower.buildingA) {
   const [step] = await tower.call<{ stage_key: string; entered_at: Date }>(as, sql`select stage_key, entered_at from app.step_as_seen(${id}::uuid)`);
   const [holder] = await tower.call<{ participant_id: string; assignee_member_id: string | null }>(as, sql`select * from app.work_item_holder(${id}::uuid)`);
   const own = await tower.call<{ id: string }>(as, sql`select app.current_participant_ids() as id`);
@@ -80,7 +80,7 @@ async function rowOf(as: string, id: string, now = new Date()) {
      join work_item_dimension_value dt on dt.work_item_id = w.id join dimension_value tv on tv.id = dt.dimension_value_id and tv.id = $5
      left join work_item_dimension_value dl on dl.work_item_id = w.id and dl.dimension_value_id = $6 left join dimension_value lv on lv.id = dl.dimension_value_id
      where w.id = $1`,
-    [id, step!.stage_key, holder?.participant_id ?? null, holder?.assignee_member_id ?? null, tower.tradeId, tower.buildingA],
+    [id, step!.stage_key, holder?.participant_id ?? null, holder?.assignee_member_id ?? null, tower.tradeId, location],
   );
   const r = rows[0];
   const open = r.category === "draft" || r.category === "in_progress";
@@ -343,5 +343,135 @@ describe("RP-1078: a report's rows are only what the Snag List shows its asker",
     expect(await ask(asker, report({ ...noId, id: "not-a-uuid" }))).toBeNull();
     expect(await ask(asker, report({ ...noId, id: randomUUID() }))).toBeNull();
     expect(await ask(asker, { ...content, projectName: projectNames.get(outsidersProjectId) })).toBeNull();
+  });
+});
+
+// RP-1110 (decision RP-1077): a report is checked again every time its state is read, so a download link is made
+// only while its asker still sees every item it holds and each photo it printed. Otherwise their own report reads
+// `gone`, with no file key, and anyone else still reads nothing.
+describe("RP-1110: a report is checked again each time its asker reads it", () => {
+  const k1 = () => tower.k1.members.engineer;
+  const c1Engineer = () => tower.c1.members.engineer;
+  const report = (...items: object[]) => ({ ...content, items });
+  const gone = [{ status: "gone", storage_key: null }];
+
+  /** A Snag of K1's on `location`: raised in Building A, K1's Draft elsewhere; its id. */
+  async function raised(title: string, location: string): Promise<string> {
+    const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+      k1(),
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', ${title}, app.latest_form_version('SNG'), ${JSON.stringify({ description: title })}::jsonb,
+        ${tower.tradeId}::uuid, ${location}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    // In Building B, both C1 and C2 cover it, so a Raise would ask K1 to pick one: K1's own Draft is enough to be seen.
+    if (location === tower.buildingA) expect(await tower.take(k1(), created!.work_item_id, "raise")).toBe("applied");
+    return created!.work_item_id;
+  }
+
+  /** `as` asks for a report of `c` and the worker makes it: its id, ready. */
+  async function ready(as: string, c: unknown): Promise<string> {
+    const id = (await ask(as, c))!;
+    expect(id).toBeTruthy();
+    const { rows } = await migrator.query<{ outbox_id: string }>("select outbox_id from snag_report where id = $1", [id]);
+    const key = `projects/${projectId}/snag-reports/${id}/snag-report.pdf`;
+    expect((await sql<{ saved: boolean }>`select app.save_snag_report(${rows[0]!.outbox_id}::uuid, ${key}, ${sha(key)}, 10) as saved`.execute(app)).rows[0]!.saved).toBe(true);
+    expect(await state(as, id)).toEqual([{ status: "ready", storage_key: key }]);
+    return id;
+  }
+
+  /** `admin` sets Member `member`'s Location grant on Participant `participant`: every Location, or Building A only. */
+  async function locations(admin: string, participant: string, member: string, onlyA: boolean): Promise<void> {
+    expect(
+      await tower.outcome(
+        admin,
+        sql`select app.set_member_visibility(${participant}::uuid, ${member}::uuid, 'location', ${!onlyA}, ${onlyA ? [tower.buildingA] : []}::uuid[], now()) as outcome`,
+      ),
+    ).toBe("set");
+  }
+
+  it("RP-1110-1: K1's engineer asks a report over Buildings A and B, is narrowed to A, and their report is gone", async () => {
+    const a = await raised("Lintel cracked", tower.buildingA);
+    const b = await raised("Gutter loose", tower.buildingB);
+    const id = await ready(k1(), report({ ...(await rowOf(k1(), a)), photo: null }, { ...(await rowOf(k1(), b, new Date(), tower.buildingB)), photo: null }));
+    // A report of Building A only, made beside it: the positive control.
+    const onlyA = await ready(k1(), report({ ...(await rowOf(k1(), a)), photo: null }));
+    await locations(tower.k1.ap, tower.k1.participantId, k1(), true);
+    try {
+      expect(await state(k1(), id)).toEqual(gone);
+      expect((await state(k1(), onlyA))[0]!.status).toBe("ready");
+      // Still nothing to anyone else, nor under a made-up id.
+      expect(await state(c1Engineer(), id)).toEqual([]);
+      expect(await state(k1(), randomUUID())).toEqual([]);
+    } finally {
+      await locations(tower.k1.ap, tower.k1.participantId, k1(), false);
+    }
+    // Widened again, it is theirs to download again: the check is made each time.
+    expect((await state(k1(), id))[0]!.status).toBe("ready");
+  });
+
+  it("RP-1110-2: a Snag in the report moves to a Location its asker does not cover, and the report is gone", async () => {
+    await locations(tower.c1.ap, tower.c1.participantId, c1Engineer(), true);
+    try {
+      const moving = await raised("Kerb stone chipped", tower.buildingA);
+      const staying = await raised("Kerb paint faded", tower.buildingA);
+      const id = await ready(c1Engineer(), report({ ...(await rowOf(c1Engineer(), moving)), photo: null }));
+      const control = await ready(c1Engineer(), report({ ...(await rowOf(c1Engineer(), staying)), photo: null }));
+      await migrator.query(
+        `update work_item_dimension_value set dimension_value_id = $2
+         where work_item_id = $1 and dimension_id = (select dimension_id from dimension_value where id = $2)`,
+        [moving, tower.buildingB],
+      );
+      expect(await tower.call(c1Engineer(), sql<{ id: string }>`select id from work_item where id = ${moving}::uuid`)).toEqual([]);
+      expect(await state(c1Engineer(), id)).toEqual(gone);
+      expect((await state(c1Engineer(), control))[0]!.status).toBe("ready");
+    } finally {
+      await locations(tower.c1.ap, tower.c1.participantId, c1Engineer(), false);
+    }
+  });
+
+  it("RP-1110-3: a photo the report printed is removed, and the report is gone", async () => {
+    const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+      asker,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'SNG', 'Hinge squeaks', app.latest_form_version('SNG'), ${JSON.stringify({ description: "Hinge squeaks" })}::jsonb,
+        ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
+    );
+    const item = created!.work_item_id;
+    const [started] = await tower.call<{ outcome: string; document_id: string }>(
+      asker,
+      sql`select outcome, document_id from app.start_document_upload(${item}::uuid, 'before.jpg', 10, 'image/jpeg', now(), 'photos')`,
+    );
+    expect(
+      await tower.outcome(asker, sql`select app.confirm_document_upload(${item}::uuid, ${started!.document_id}::uuid, 10, 'image/jpeg', ${randomBytes(32)}::bytea, now()) as outcome`),
+    ).toBe("confirmed");
+    const key = await storageKey(started!.document_id);
+    const withIt = await ready(asker, withPhoto(key, await rowOf(asker, item)));
+    // The same item printed with no photo: the positive control.
+    const without = await ready(asker, report({ ...(await rowOf(asker, item)), photo: null }));
+    expect(await tower.outcome(asker, sql`select app.remove_document(${item}::uuid, ${started!.document_id}::uuid, now()) as outcome`)).toBe("removed");
+    expect(await state(asker, withIt)).toEqual(gone);
+    expect((await state(asker, without))[0]!.status).toBe("ready");
+  });
+
+  it("RP-1110-4: a report whose items and photos are all still seen is ready as before, and nothing to another Member or a made-up id", async () => {
+    const item = await raised("Grille missing", tower.buildingA);
+    const id = await ready(k1(), report({ ...(await rowOf(k1(), item)), photo: null }));
+    expect((await state(k1(), id))[0]!.status).toBe("ready");
+    expect(await state(c1Engineer(), id)).toEqual([]);
+    expect(await state(tower.k1.ap, id)).toEqual([]);
+    expect(await state(k1(), randomUUID())).toEqual([]);
+  });
+
+  it("RP-1110-1: a report still being made is gone too, once its asker no longer sees an item in it", async () => {
+    const b = await raised("Bollard leaning", tower.buildingB);
+    const id = (await ask(k1(), report({ ...(await rowOf(k1(), b, new Date(), tower.buildingB)), photo: null })))!;
+    expect(await state(k1(), id)).toEqual([{ status: "preparing", storage_key: null }]);
+    await locations(tower.k1.ap, tower.k1.participantId, k1(), true);
+    try {
+      expect(await state(k1(), id)).toEqual(gone);
+    } finally {
+      await locations(tower.k1.ap, tower.k1.participantId, k1(), false);
+    }
   });
 });

@@ -2,7 +2,7 @@
 // or "Function not implemented" after git already deleted its .git. With core.longpaths, then
 // `rd /s /q \\?\<path>` for what is left, then `git worktree prune` (worktree-removal.ts).
 // It refuses the main checkout, the current worktree, a folder a Claude session works in, and
-// lane 7's (the live UAT stack), always; a folder git does not list outside .claude/worktrees/;
+// lane 7's (Main 7's harness data), always; a folder git does not list outside .claude/worktrees/;
 // and, without --force, one with uncommitted or untracked files (listed) or unpushed commits.
 // Its branch and its compose project stay: it says how to remove them.
 //
