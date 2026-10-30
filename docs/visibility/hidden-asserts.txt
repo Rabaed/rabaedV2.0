@@ -106,8 +106,7 @@ apps/api/test/owner-review.test.ts empty 3
 apps/api/test/owner-review.test.ts text 2
 apps/api/test/package-notifications.test.ts empty 9
 apps/api/test/package-notifications.test.ts text 9
-apps/api/test/packages.test.ts empty 51
-apps/api/test/packages.test.ts text 13
+apps/api/test/packages.test.ts empty 18
 apps/api/test/participant-codes.test.ts empty 3
 apps/api/test/participant-invitation-email.test.ts empty 2
 apps/api/test/participant-invitation-email.test.ts text 2
@@ -129,8 +128,7 @@ apps/api/test/random-ids.test.ts text 2
 apps/api/test/reads-at-scale.test.ts empty 1
 apps/api/test/record-checks.test.ts empty 15
 apps/api/test/record-checks.test.ts text 12
-apps/api/test/register-import.test.ts empty 57
-apps/api/test/register-import.test.ts text 2
+apps/api/test/register-import.test.ts empty 14
 apps/api/test/replacements.test.ts empty 12
 apps/api/test/reply-screen-files.test.ts empty 21
 apps/api/test/return-in-internal-review.test.ts empty 2
@@ -279,8 +277,7 @@ packages/db/test/numbering-pattern-rls.test.ts empty 4
 packages/db/test/option-list-rls.test.ts empty 2
 packages/db/test/outbox-crash.test.ts empty 2
 packages/db/test/owner-review-rls.test.ts empty 6
-packages/db/test/package-rls.test.ts empty 15
-packages/db/test/package-rls.test.ts text 9
+packages/db/test/package-rls.test.ts empty 4
 packages/db/test/participant-code-rls.test.ts empty 1
 packages/db/test/participant-rls.test.ts empty 21
 packages/db/test/participant-rls.test.ts text 2
@@ -291,8 +288,6 @@ packages/db/test/question-any-role-rls.test.ts empty 1
 packages/db/test/question-rls.test.ts empty 7
 packages/db/test/record-ready-rls.test.ts empty 6
 packages/db/test/record-ready-rls.test.ts text 1
-packages/db/test/register-import-rls.test.ts empty 30
-packages/db/test/register-import-rls.test.ts text 3
 packages/db/test/reply-checklist-rls.test.ts empty 13
 packages/db/test/reply-checklist-rls.test.ts text 1
 packages/db/test/reply-files-rls.test.ts empty 16
