@@ -116,10 +116,32 @@ const gripOf = (context: PlayContext) => panelOf(context).querySelector<HTMLElem
 const keptOf = (context: PlayContext) => context.canvasElement.querySelector<HTMLElement>("[data-kept]")!.dataset.kept;
 const shown = (el: Element | null) => el !== null && getComputedStyle(el).display !== "none";
 
-/** The checks every size passes: With is shown, nothing scrolls sideways, every button is 32px at least. */
+/**
+ * The key facts leave no empty cell (RP-1090): every row of the grid is filled from edge to edge,
+ * so no fact's place looks like missing data. Returns, per row, the facts in it and whether they
+ * reach both edges of the grid.
+ */
+function factRows(panel: HTMLElement) {
+  const grid = panel.querySelector<HTMLElement>(".sdp-facts")!.getBoundingClientRect();
+  const rows = new Map<number, DOMRect[]>();
+  const keys = new Map<number, string[]>();
+  for (const cell of panel.querySelectorAll<HTMLElement>(".sdp-facts > [data-fact]")) {
+    const box = cell.getBoundingClientRect();
+    const top = Math.round(box.top);
+    rows.set(top, [...(rows.get(top) ?? []), box]);
+    keys.set(top, [...(keys.get(top) ?? []), cell.dataset.fact!]);
+  }
+  return [...rows].map(([top, boxes]) => ({
+    facts: keys.get(top)!.join(" "),
+    filled: Math.abs(Math.min(...boxes.map((b) => b.left)) - grid.left) <= 1 && Math.abs(Math.max(...boxes.map((b) => b.right)) - grid.right) <= 1,
+  }));
+}
+
+/** The checks every size passes: With is shown, no empty fact cell, nothing scrolls sideways, every button is 32px at least. */
 async function expectSound(context: PlayContext) {
   const panel = panelOf(context);
   await expect(panel.querySelector('[data-fact="with"]')).toBeVisible();
+  for (const row of factRows(panel)) await expect(row).toEqual({ facts: row.facts, filled: true });
   const body = panel.querySelector(".sdp-body")!;
   await expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
@@ -168,12 +190,17 @@ export const Normal: Story = {
 
 /**
  * Compact (440px): one column; previous / next, the breadcrumb's label and the hint are hidden;
- * the number is 21px. With is still shown. The choice is kept.
+ * the number is 21px. With is still shown. The key facts sit in 2 columns, With and Step Age side
+ * by side and the Location across both below, so no cell is empty (RP-1090). The choice is kept.
  */
 export const Compact: Story = {
   play: async (context) => {
     await choose(context, "compact", 440);
     const panel = panelOf(context);
+    await expect(factRows(panel)).toEqual([
+      { facts: "with stepAge", filled: true },
+      { facts: "location", filled: true },
+    ]);
     await expect(shown(panel.querySelector(".sdp-nav"))).toBe(false);
     await expect(shown(panel.querySelector(".sdp-hint"))).toBe(false);
     await expect(shown(panel.querySelector(".sdp-crumb-label"))).toBe(false);
