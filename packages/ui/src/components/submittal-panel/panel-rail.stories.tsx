@@ -202,6 +202,12 @@ async function expectStripOnOneLine(context: PlayContext) {
   await expect(middles.every((middle) => Math.abs(middle - middles[0]!) <= 1)).toBe(true);
   await expect(strip.querySelector("ol")!.scrollWidth).toBeLessThanOrEqual(strip.querySelector("ol")!.clientWidth);
   await expect(stops.at(-1)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(strip.getBoundingClientRect().bottom);
+  // The stop holding the item takes the room the strip has: its role or line is cut short only when the row is full.
+  const list = strip.querySelector("ol")!;
+  const boxes = stops.map((li) => li.getBoundingClientRect());
+  const room = list.clientWidth - (Math.max(...boxes.map((box) => box.right)) - Math.min(...boxes.map((box) => box.left)));
+  const cut = [...strip.querySelectorAll<HTMLElement>("li[aria-current] [data-stop-label] > *")].some((text) => text.scrollWidth > text.clientWidth);
+  if (cut) await expect(room).toBeLessThanOrEqual(1);
   // Every stop's role is still in the strip's description for assistive technology.
   const button = within(railOf(context)).getByRole("button", { name: storyText(context, copy.open) });
   for (const role of [copy.roles.contractor, copy.roles.consultant, copy.roles.owner]) await expect(button).toHaveAccessibleDescription(new RegExp(storyText(context, role)));
