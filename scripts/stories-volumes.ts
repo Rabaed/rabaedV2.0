@@ -123,7 +123,15 @@ export function parseRemoval(asked: string[], stdout: string, stderr: string): V
   return { removed, refused };
 }
 
-const docker = (args: string[]) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 });
+/** A stuck Docker must not hang a clean-up: a listing waits this long at most, a removal of one set twice that. */
+const LIST_TIMEOUT_MS = 15_000;
+const docker = (args: string[], timeout = LIST_TIMEOUT_MS) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout });
+
+/** "Docker did not answer" for the kept list: where the stories volumes stay and what removes them later. */
+export const DOCKER_SILENT = "Docker did not answer: stories volumes not removed (run `pnpm worktrees:prune` later).";
+
+/** The stories volumes among the names of every volume Docker lists. */
+export const storiesVolumesIn = (names: string[]): string[] => names.filter((v) => storiesHashOf(v) !== undefined);
 
 /** The stories volumes Docker lists, or undefined when Docker does not answer. */
 export function listStoriesVolumes(): string[] | undefined {
@@ -168,7 +176,7 @@ export function removeStoriesVolumesNow(
 ): { removed: string[]; kept: string[]; errors: string[] } {
   const volumes = docker.list();
   const mountedBy = volumes && docker.mountedBy();
-  if (!volumes || !mountedBy) return { removed: [], kept: ["Docker did not answer: stories volumes not removed (run `pnpm worktrees:prune` later)."], errors: [] };
+  if (!volumes || !mountedBy) return { removed: [], kept: [DOCKER_SILENT], errors: [] };
   const { remove, inUse } = chooseStoriesVolumes({ ...scope, volumes, existing, mountedBy, platform });
   const kept = inUse.map((v) => `Kept stories volume ${v.volume}: used by ${v.containers.join(", ")}.`);
   if (remove.length === 0) return { removed: [], kept, errors: [] };
@@ -187,7 +195,7 @@ export function removeStoriesVolumes(volumes: string[]): VolumeRemoval {
   for (const set of storiesSets(volumes)) {
     let removal: VolumeRemoval;
     try {
-      removal = parseRemoval(set.volumes, docker(["volume", "rm", ...set.volumes]), "");
+      removal = parseRemoval(set.volumes, docker(["volume", "rm", ...set.volumes], 2 * LIST_TIMEOUT_MS), "");
     } catch (error) {
       const e = error as { stdout?: string; stderr?: string; message?: string };
       removal = parseRemoval(set.volumes, e.stdout ?? "", e.stderr || e.message || "");

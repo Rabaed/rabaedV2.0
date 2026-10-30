@@ -38,7 +38,7 @@ import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { holdReason, systemHolders, type Holders } from "./claude-sessions.ts";
 import { describeServer, findServersOf, firstLine, stopServers, type Server } from "./servers.ts";
-import { describeCount, listStoriesVolumes, removeStoriesVolumesNow, storiesVolumesOf } from "./stories-volumes.ts";
+import { DOCKER_SILENT, describeCount, listStoriesVolumes, removeStoriesVolumesNow, storiesVolumesOf } from "./stories-volumes.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
@@ -165,6 +165,7 @@ async function main(): Promise<void> {
     console.warn(`Could not read the running processes (${firstLine(error)}), so dev servers are not stopped first.`);
   }
   const storiesVolumes = listStoriesVolumes();
+  if (storiesVolumes === undefined) console.log(DOCKER_SILENT);
   console.log(`Agent worktrees merged into ${target}:`);
   for (const w of remove) {
     console.log(`  ${name(w)}`);

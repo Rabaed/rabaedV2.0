@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
+import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesIn, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
 import { volumeName, worktreeHash } from "./test-stories-linux.ts";
 import { parseWorktrees } from "./worktrees.ts";
 
@@ -135,6 +135,12 @@ describe("removeStoriesVolumesNow", () => {
     const { docker, asked } = fakeDocker({ list: () => undefined });
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").kept).toEqual(["Docker did not answer: stories volumes not removed (run `pnpm worktrees:prune` later)."]);
     expect(asked).toEqual([]);
+  });
+});
+
+describe("storiesVolumesIn", () => {
+  it("keeps only the stories volumes of everything Docker lists", () => {
+    expect(storiesVolumesIn(volumes)).toEqual([...setOf(mainRoot), ...setOf(live), ...setOf(gone)]);
   });
 });
 

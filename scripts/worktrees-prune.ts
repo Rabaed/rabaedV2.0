@@ -46,7 +46,8 @@ import { systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { keptLast, shallowRefusal } from "./prune-guards.ts";
-import { chooseStoriesVolumes, describeCount, inUseLine, listStoriesVolumes, listVolumeMounts, removeStoriesVolumesNow, storiesSets } from "./stories-volumes.ts";
+import { chooseStoriesVolumes, describeCount, inUseLine, listVolumeMounts, removeStoriesVolumesNow, storiesSets, storiesVolumesIn } from "./stories-volumes.ts";
+import { STORIES_VOLUME_PREFIX } from "./test-stories-linux.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
@@ -134,7 +135,7 @@ const printKept = () => {
 // RP-1120: the stories volumes of the worktrees it removes and of those git no longer lists; the
 // worktrees it removes do not count as existing here, and are checked again just before.
 const toRemove = chosen.remove.map((w) => w.path);
-const storiesVolumes = docker && listStoriesVolumes();
+const storiesVolumes = docker && storiesVolumesIn(docker.volumes.map((v) => v.name));
 const storiesMounts = storiesVolumes && listVolumeMounts();
 const stories =
   storiesVolumes && storiesMounts
@@ -148,8 +149,8 @@ const stories =
     : { remove: [], inUse: [] };
 kept.push(...stories.inUse.map(inUseLine));
 printStale(listed, staleDays);
-if (!docker) console.log("Docker is not running: compose projects and stories volumes are not checked (run `pnpm lanes:prune` later).");
-else if (!storiesMounts) console.log("Docker did not list the stories volumes: they are not checked (run `pnpm worktrees:prune` later).");
+if (!docker) console.log("Docker is not running: compose projects and stories volumes are not checked (run `pnpm worktrees:prune` later).");
+else if (!storiesMounts) console.log("Docker did not list the containers: stories volumes are not checked (run `pnpm worktrees:prune` later).");
 if (chosen.remove.length + chosen.branches.length + chosen.projects.length + stories.remove.length === 0) {
   console.log("Nothing to prune.");
   printKept();
@@ -171,14 +172,14 @@ if (chosen.branches.length > 0) {
 }
 if (stories.remove.length > 0) {
   console.log(`Stories volumes (test:stories:linux's node_modules) of worktrees that are gone or removed above, to remove: ${describeCount(stories.remove)}:`);
-  for (const set of storiesSets(stories.remove)) console.log(`  rabaed-stories-${set.hash}-* (${set.volumes.length})`);
+  for (const set of storiesSets(stories.remove)) console.log(`  ${STORIES_VOLUME_PREFIX}${set.hash}-* (${set.volumes.length})`);
 }
 if (dryRun) {
   console.log("Dry run: nothing removed.");
   process.exit(0);
 }
 
-await confirmOrExit("Remove them? Their databases are lost.", { yes, verb: "remove", done: "removed" });
+await confirmOrExit(stories.remove.length > 0 ? "Remove them, the stories volumes included? Their databases are lost." : "Remove them? Their databases are lost.", { yes, verb: "remove", done: "removed" });
 
 let failed = 0;
 const attempt = (what: string, action: () => void) => {
