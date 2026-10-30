@@ -78,10 +78,22 @@ export async function askForSnagReport(
   });
 }
 
-/** Where the viewer's own report of Project `projectId` is, with its download link once it is made; null for anyone else's, another Project's and a made-up id. */
-export async function snagReportOf(db: Db, files: FileStore, memberId: string, projectId: string, reportId: string, now: Date): Promise<SnagReportState | null> {
+/**
+ * Where the viewer's own report of Project `projectId` is, with its download link once it is made; null for anyone else's,
+ * another Project's and a made-up id. The database checks it again each time (RP-1110): "gone" once the viewer no longer
+ * sees an item or a photo it holds, and then no link is made.
+ */
+export async function snagReportOf(
+  db: Db,
+  files: FileStore,
+  memberId: string,
+  projectId: string,
+  reportId: string,
+  now: Date,
+): Promise<SnagReportState | "gone" | null> {
   const state = await withMember(db, memberId, (trx) => snagReportState(trx, projectId, reportId));
   if (!state) return null;
+  if (state.status === "gone") return "gone";
   let link: SignedUrl | null = null;
   if (state.status === "ready" && state.storageKey) {
     link = await files.signDownload(state.storageKey, { fileName: state.fileName ?? "snag-report.pdf", contentType: "application/pdf" }, now);

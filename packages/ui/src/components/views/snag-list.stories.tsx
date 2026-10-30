@@ -471,8 +471,16 @@ const ali = { memberId: "00000000-0000-4000-8000-0000000000d1", name: b("Ali Son
 const khalid = { memberId: "00000000-0000-4000-8000-0000000000d2", name: b("Khalid Bakr", "خالد بكر") };
 
 const reportLabels: Record<Locale, SnagBulk["report"]["labels"]> = {
-  en: { exportPdf: "Export PDF", preparing: "Preparing the PDF…", download: (n) => `Download the Snag List PDF (${n} items)`, failed: "The PDF could not be made. Try again." },
-  ar: { exportPdf: "تصدير PDF", preparing: "جارٍ إعداد ملف PDF…", download: (n) => `تنزيل قائمة الملاحظات PDF (${n} عنصر)`, failed: "تعذّر إعداد ملف PDF. حاول مرة أخرى." },
+  en: { exportPdf: "Export PDF", preparing: "Preparing the PDF…", download: (n) => `Download the Snag List PDF (${n} items)`, failed: "The PDF could not be made. Try again.",
+    gone: "No longer available: it holds items you can no longer see. Ask for a new one.",
+  },
+  ar: {
+    exportPdf: "تصدير PDF",
+    preparing: "جارٍ إعداد ملف PDF…",
+    download: (n) => `تنزيل قائمة الملاحظات PDF (${n} عنصر)`,
+    failed: "تعذّر إعداد ملف PDF. حاول مرة أخرى.",
+    gone: "لم يعد متاحًا: فيه عناصر لم تعد تراها. اطلب تقريرًا جديدًا.",
+  },
 };
 
 const reportId = "00000000-0000-4000-8000-0000000000e1";
@@ -509,6 +517,27 @@ export const ExportPdf: Story = {
     await userEvent.click(context.canvas.getAllByRole("button", { name: pdf.exportPdf }).at(-1)!);
     await expect(await context.canvas.findByText(pdf.preparing)).toBeVisible();
     await expect(await context.canvas.findByRole("link", { name: pdf.download("1", 1) }, { timeout: 5000 })).toBeVisible();
+  },
+};
+
+/** The report holds items the viewer can no longer see, for example after a change while it was made (RP-1110): no link, only the line saying so. */
+export const ExportPdfGone: Story = {
+  render: (args, context) => {
+    const bulk = bulkFor(storyLocale(context));
+    return (
+      <SnagList
+        {...args}
+        locale={storyLocale(context)}
+        labels={labels[storyLocale(context)]}
+        bulk={{ ...bulk, report: { ...bulk.report, check: async () => "gone" as const } }}
+      />
+    );
+  },
+  play: async (context) => {
+    const pdf = reportLabels[storyLocale(context)];
+    await userEvent.click(context.canvas.getAllByRole("button", { name: pdf.exportPdf })[0]!);
+    await expect(await context.canvas.findByText(pdf.gone, undefined, { timeout: 5000 })).toBeVisible();
+    await expect(context.canvas.queryByRole("link", { name: pdf.download("3", 3) })).toBeNull();
   },
 };
 

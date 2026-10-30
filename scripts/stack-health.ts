@@ -4,9 +4,10 @@ import { fileURLToPath } from "node:url";
 import { isValidLane, lanePorts } from "./lanes.ts";
 
 // Is a lane's stack up? The api answers GET /health with 200 (it pings the database too), and
-// Postgres answers on its port. RP-1099: on 2026-10-29 a Docker Desktop update left lane 7, the
-// live UAT stack, at Exited (255) for over 2 hours unnoticed, and the UAT harness wrote Fail
-// results against it. Two users:
+// Postgres answers on its port. RP-1099: on 2026-10-29 a Docker Desktop update left lane 7 at
+// Exited (255) for over 2 hours unnoticed, and the UAT harness wrote Fail results against it.
+// Lane 7 is Main 7's UAT harness stack with the Round 0 data; live UAT is on Vercel (ADR 0026).
+// Two users:
 // - the UAT harness (planning/uat/round-0/harness/run.ts) writes no result while this finds a problem;
 // - `node scripts/stack-health.ts --lane 7 --alert`, run every 5 minutes by Windows Task Scheduler,
 //   shows the owner a message box while lane 7's api or db is down.

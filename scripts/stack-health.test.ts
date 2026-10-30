@@ -141,7 +141,7 @@ describe("stackProblems", () => {
 });
 
 describe("targets", () => {
-  it("reads a lane's ports: lane 7 is the UAT stack", () => {
+  it("reads a lane's ports: lane 7 is the UAT harness stack", () => {
     expect(targetOfLane(7)).toEqual({ apiUrl: "http://127.0.0.1:4700", dbHost: "127.0.0.1", dbPort: 6132 });
   });
 

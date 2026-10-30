@@ -167,4 +167,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271111 | spec RP-1054 | 52 | review fixes, lane 5B integration branch (placeholder) |
 | 20271112 | spec RP-1054 | 52 | merge-with-main reconciliation, lane 5B (placeholder) |
 | 20271105 | RP-1086 | 22 | record_clean_up |
+| 20271115 | RP-1110 | 32 | snag_report_recheck (20271113 is RP-1089 #485, 20271114 is RP-1108 #487) |
 | 20271113 | RP-1089 | 13 | may_raise_type |
