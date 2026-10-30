@@ -5,8 +5,8 @@ import { parse } from "yaml";
 type Compose = { services: Record<string, { restart?: string }> };
 const composeFile = (name: string) => parse(readFileSync(new URL(`../${name}`, import.meta.url), "utf8")) as Compose;
 
-// RP-1099: a Docker Desktop update stopped every stack, and lane 7 (live UAT) stayed down for
-// over 2 hours. Lane 7 alone restarts on its own: it copies docker-compose.uat.yml to the
+// RP-1099: a Docker Desktop update stopped every stack, and lane 7 (Main 7's UAT harness
+// stack) stayed down for over 2 hours. Lane 7 alone restarts on its own: it copies docker-compose.uat.yml to the
 // git-ignored docker-compose.override.yml, which compose reads beside docker-compose.yml. The
 // other lanes keep no restart policy, so Docker's start never brings back every old lane at once.
 describe("restart policy", () => {
