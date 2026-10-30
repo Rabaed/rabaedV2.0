@@ -5,12 +5,12 @@
 // Company sees at each step. Each run adds its own MARs to the one demo Project.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, DocumentList, FormToFill, FormVersion, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CODE_C_TITLE, DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
-import { createTestApi, expectHidden, DEFAULT_PASSWORD, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, DEFAULT_PASSWORD, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { detail, take } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -62,13 +62,13 @@ beforeAll(async () => {
   faisal = await signIn("faisal");
   omar = await signIn("omar");
   const projects = (await hafiz.get("/v1/projects")).json().projects as { id: string; code: string; name: { en: string } }[];
-  projectId = projects.find((p) => p.code === "TWR" && p.name.en === "Riyadh Gate Tower – Phase 2")!.id;
+  projectId = projects.find((p) => p.code === "TWR" && p.name.en === "Riyadh Gate Tower – Phase 2")!.id; // not hidden-from: finds the seeded Project Hafiz is on
   const dimensions = (await hafiz.get(`/v1/projects/${projectId}/dimensions`)).json();
   electrical = dimensions.trade.find((v: { code: string }) => v.code === "EL").id;
   tower1Floor2 = dimensions.location.find((v: { code: string }) => v.code === "T1F02").id;
   supplier = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`))
     .json()
-    .suppliers.find((s: { tradeId: string; name: { en: string } }) => s.tradeId === electrical && s.name.en === "Najd Electrical Supplies").id;
+    .suppliers.find((s: { tradeId: string; name: { en: string } }) => s.tradeId === electrical && s.name.en === "Najd Electrical Supplies").id; // not hidden-from: finds a seeded supplier
 });
 
 // The submittals demo (RP-597, spec RP-598): the three Types, three fictional suppliers (two
@@ -89,10 +89,10 @@ describe("the submittals the demo seeds", () => {
 
   it("lists three fictional suppliers: two preloaded (Civil, Electrical) and the one the SAR's Code A added", async () => {
     const list = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`)).json().suppliers as { name: { en: string; ar: string }; tradeId: string; status: string }[];
-    const names = list.map((s) => s.name.en).sort();
+    const names = list.map((s) => s.name.en).sort(); // not hidden-from: the seed's content, its suppliers' names
     expect(names).toEqual(["Al-Rimal Building Materials", "Najd Electrical Supplies", "Tabuk Cable Industries"]);
     expect(list.every((s) => s.status === "approved" && s.name.ar)).toBe(true);
-    const tradeOf = (n: string) => list.find((s) => s.name.en === n)!.tradeId;
+    const tradeOf = (n: string) => list.find((s) => s.name.en === n)!.tradeId; // not hidden-from: the seed's content, a supplier's Trade
     expect(tradeOf("Najd Electrical Supplies")).toBe(electrical);
     expect(tradeOf("Tabuk Cable Industries")).toBe(electrical);
     expect(tradeOf("Al-Rimal Building Materials")).not.toBe(electrical);
@@ -100,11 +100,11 @@ describe("the submittals the demo seeds", () => {
 
   it("lists two Checklist Templates, Civil and Electrical, so a WIR of either Trade can leave Draft (RP-651)", async () => {
     const list = (await hafiz.get(`/v1/projects/${projectId}/checklist-templates`)).json() as ChecklistTemplates;
-    expect(list.templates.map((t) => [t.name.en, t.status, t.items.length]).sort()).toEqual([
+    expect(list.templates.map((t) => [t.name.en, t.status, t.items.length]).sort()).toEqual([ // not hidden-from: the seed's content, its Checklist Templates
       ["Cable trays and containment", "active", 3],
       ["Concrete pour", "active", 4],
     ]);
-    expect(list.templates.find((t) => t.name.en === "Cable trays and containment")!.tradeId).toBe(electrical);
+    expect(list.templates.find((t) => t.name.en === "Cable trays and containment")!.tradeId).toBe(electrical); // not hidden-from: the seed's content, a Template's Trade
   });
 
   it("the SAR is at Code A, and the cable tray MAR chose the supplier it added", async () => {
@@ -112,7 +112,7 @@ describe("the submittals the demo seeds", () => {
     expect(sar).toMatchObject({ outcome: "A", stage: { key: "approved" } });
     const tray = await titled(hafiz, CODE_C_TITLE);
     const list = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`)).json().suppliers as { id: string; name: { en: string } }[];
-    expect(tray.answers.supplier).toBe(list.find((s) => s.name.en === "Tabuk Cable Industries")!.id);
+    expect(tray.answers.supplier).toBe(list.find((s) => s.name.en === "Tabuk Cable Industries")!.id); // not hidden-from: the seed's content, the supplier the MAR chose
   });
 
   it("the DAR ran 1→1 → Owner review and closed at A on Al Waha's Confirm", async () => {
@@ -151,7 +151,7 @@ describe("the demo seed", () => {
       where e.email = ${DEMO_ENGINEER_EMAIL}
       order by a.at, a.id
     `.execute(migrator);
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(4); // not hidden-from: the seed's content, its four Companies, read as the migrator
     for (const row of rows) expect(row, row.name).toMatchObject({ logo: "image/png", stamp: "image/png" });
   });
 
@@ -159,8 +159,8 @@ describe("the demo seed", () => {
     for (const who of Object.keys(demo) as Who[]) {
       const caller = await signIn(who);
       if (who === "nasser" || who === "layla" || who === "hind") continue; // Authorized Persons, not Project Members (V15).
-      const names = (await caller.get("/v1/projects")).json().projects.map((p: { name: { en: string } }) => p.name.en);
-      expect(names, who).toContain("Riyadh Gate Tower – Phase 2");
+      const ids = (await caller.get("/v1/projects")).json().projects.map((p: { id: string }) => p.id);
+      expect(ids, who).toContain(projectId);
     }
   });
 });
@@ -246,6 +246,34 @@ const linkedFrom = async (who: Caller, id: string): Promise<LinkedFrom> => {
   return r.json();
 };
 
+// Reads for expectHiddenFrom (RP-1095): each gives the row as `{ id }`, so a reader who may see
+// it reads it first and one who may not never does.
+/** Who a demo person is, in a failure. */
+const whoIs = (c: Caller) => Object.entries({ hafiz, ali, yousef, ahmed, mohammed, faisal, omar }).find(([, v]) => v === c)?.[0] ?? "a demo person";
+/** `path` read by id, as row `id`: `[{ id }]` on the 200, `[]` on the plain 404, a failure otherwise. */
+const opens = (path: string, id: string) => async (who: Caller) => (await readById<unknown>(path)(who)).map(() => ({ id }));
+/** What `who` reads at `path` (a 200), as `[{ id: target }]` when it holds `target`, an id or a note's words, else `[]`. */
+const mentions = (path: string, target: string) => async (who: Caller) => {
+  const r = await who.get(path);
+  expect(r.statusCode, r.body).toBe(200);
+  return r.body.includes(target) ? [{ id: target }] : [];
+};
+/** Every item `who` has listed on the demo Project, page by page, as each run adds its own. */
+const listed = async (who: Caller) => {
+  const rows: { id: string }[] = [];
+  let cursor: string | null = null;
+  do {
+    const r = await who.get(`/v1/projects/${projectId}/work-items${cursor === null ? "" : `?cursor=${encodeURIComponent(cursor)}`}`);
+    expect(r.statusCode, r.body).toBe(200);
+    const page = r.json() as { items: { id: string }[]; nextCursor: string | null };
+    rows.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor !== null);
+  return rows;
+};
+/** The Projects `who` has listed. */
+const projectsListed = async (who: Caller) => (await who.get("/v1/projects")).json().projects as { id: string }[];
+
 describe("the seeded Links", () => {
   let approved = "";
   let linking = "";
@@ -289,18 +317,21 @@ describe("the seeded Links", () => {
   it("show Omar, who covers Tower 2 only, the approved MAR as its number and Subject only, and 404 on it", async () => {
     const item = (await omar.get(`/v1/work-items/${linking}`)).json();
     expect(item.answers).toMatchObject({ related_submittals: [{ documentNumber: approvedNumber, subject: APPROVED_TITLE }] });
-    expect(JSON.stringify(item)).not.toContain(approved);
+    // Hafiz's copy of the linking MAR names the approved MAR's id; Omar's never does.
+    await expectHiddenFrom({ read: mentions(`/v1/work-items/${linking}`, approved), target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the linking MAR" });
     const { links: seen } = await links(omar, linking);
-    expect(seen).toHaveLength(2);
+    expect(seen).toHaveLength(2); // not hidden-from: Omar reads both Links, as number and Subject only (checked next)
     for (const link of seen) expect(link).toMatchObject({ documentNumber: approvedNumber, subject: APPROVED_TITLE, workItemId: null });
-    expect(JSON.stringify(seen)).not.toContain(approved);
-    await expectHidden(omar.get(`/v1/work-items/${approved}`));
-    await expectHidden(omar.get(`/v1/work-items/${approved}/linked-from`));
-    expect(await titled(omar, APPROVED_TITLE)).toBeUndefined();
+    await expectHiddenFrom({ read: mentions(`/v1/work-items/${linking}/links`, approved), target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "its Links" });
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${approved}`), target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the approved MAR" });
+    await expectHiddenFrom({ read: opens(`/v1/work-items/${approved}/linked-from`, approved), target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "its Linked from" });
+    await expectHiddenFrom({ read: listed, target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the List" });
   });
 
   it("are nothing to the other Contractor", async () => {
-    for (const id of [approved, linking]) await expectHidden(yousef.get(`/v1/work-items/${id}/links`));
+    for (const id of [approved, linking]) {
+      await expectHiddenFrom({ read: opens(`/v1/work-items/${id}/links`, id), target: id, seenBy: hafiz, hiddenFrom: yousef, name: whoIs, label: "Links" });
+    }
   });
 });
 
@@ -308,10 +339,13 @@ describe("the README walkthrough", () => {
   let mar = "";
   /** Not in the detail, the list, or (for Beta Build, with no items of its own) any count. */
   const hidden = async (who: Caller, { countsZero = false } = {}) => {
-    await expectHidden(who.get(`/v1/work-items/${mar}`));
-    const list = (await who.get(`/v1/projects/${projectId}/work-items`)).json();
-    expect(list.items.map((i: { id: string }) => i.id)).not.toContain(mar);
-    if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
+    // Hafiz raised it, so he reads it first: the item exists and both reads work.
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${mar}`), target: mar, seenBy: hafiz, hiddenFrom: who, name: whoIs, label: "the item" });
+    await expectHiddenFrom({ read: listed, target: mar, seenBy: hafiz, hiddenFrom: who, name: whoIs, label: "the List" });
+    if (countsZero) {
+      const list = (await who.get(`/v1/projects/${projectId}/work-items`)).json();
+      expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
+    }
   };
   const pickUp = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/pick-up`)).statusCode).toBe(204);
   // The Form of a complete MAR; a function, as the Trade and Location ids come from beforeAll.
@@ -413,8 +447,10 @@ describe("the README walkthrough", () => {
         answers: { cover_note: "Panels for Level 2, as drawing E-201" },
         by: { companyName: { en: "TMC Constructions" }, memberName: null },
       });
-      expect(JSON.stringify(history)).not.toContain("Add emergency duration");
-      expect(JSON.stringify(history)).not.toContain("Quantities checked against the BOQ");
+    }
+    // Ali's Return reason and Internal Note stay inside TMC: Ali reads them, the Consultant and Al Waha never do.
+    for (const note of ["Add emergency duration", "Quantities checked against the BOQ"]) {
+      await expectHiddenFrom({ read: mentions(`/v1/work-items/${mar}/history`, note), target: note, seenBy: ali, hiddenFrom: [ahmed, faisal], name: whoIs, label: "the history" });
     }
   });
 
@@ -425,7 +461,7 @@ describe("the README walkthrough", () => {
     expect(seen).toMatchObject({ canChange: false, documents: [{ fieldKey: "datasheet", fileName: "CoreLine-datasheet-rev-B.pdf", frozen: true }] });
     const link = (await ahmed.get(`/v1/work-items/${mar}/documents/${seen.documents[0]!.id}/download`)).json().url as string;
     expect(await (await fetch(link)).text()).toBe("%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet, 3-hour emergency (demo)");
-    await expectHidden(yousef.get(`/v1/work-items/${mar}/documents`));
+    await expectHiddenFrom({ read: opens(`/v1/work-items/${mar}/documents`, mar), target: mar, seenBy: ahmed, hiddenFrom: yousef, name: whoIs, label: "its Documents" });
   });
 
   it("8. Ahmed replies to his Manager, inside the Consultant; Mohammed's Code A starts from that verification; TMC and Al Waha see the Code and its signer only", async () => {
@@ -449,8 +485,9 @@ describe("the README walkthrough", () => {
         answers: { sample_checked: true, matches_specification: true },
       });
       expect(events.some((e) => e.type === "internal_answers" || e.type === "recommend_code")).toBe(false);
-      expect(JSON.stringify(events)).not.toContain("Sample matches");
     }
+    // Ahmed's Internal Note stays inside the Consultant.
+    await expectHiddenFrom({ read: mentions(`/v1/work-items/${mar}/history`, "Sample matches"), target: "Sample matches", seenBy: ahmed, hiddenFrom: [hafiz, faisal], name: whoIs, label: "the history" });
     await hidden(yousef, { countsZero: true });
   });
 
@@ -481,7 +518,8 @@ describe("the README walkthrough", () => {
     const linking = (await titled(omar, LINKING_TITLE))!;
     const seen = await links(omar, linking);
     expect(seen.links.every((l) => l.workItemId === null && l.subject === APPROVED_TITLE)).toBe(true);
-    await expectHidden(omar.get(`/v1/work-items/${(await titled(hafiz, APPROVED_TITLE))!}`));
+    const approved = (await titled(hafiz, APPROVED_TITLE))!;
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${approved}`), target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the approved MAR" });
   });
 
   it("12. Hafiz links a new MAR to it under Related submittals; once Submitted, Omar sees it under Linked from as a number and Subject only", async () => {
@@ -497,15 +535,15 @@ describe("the README walkthrough", () => {
     await attachDatasheet(hafiz, "wiring-datasheet.pdf", "%PDF-1.4 Lighting control wiring datasheet (demo)");
     await take(hafiz, mar, "send_for_review");
     // In TMC's internal review it isn't listed yet, whoever asks.
-    expect((await linkedFrom(hafiz, linking)).items).toEqual([]);
-    expect((await linkedFrom(omar, linking)).items).toEqual([]);
+    expect((await linkedFrom(hafiz, linking)).items).toEqual([]); // not hidden-from: listed for nobody before the Submit, a state check (both read it after it, below)
+    expect((await linkedFrom(omar, linking)).items).toEqual([]); // not hidden-from: listed for nobody before the Submit, a state check (both read it after it, below)
     await pickUp(ali);
     await take(ali, mar, "submit");
     const documentNumber = (await detail(hafiz, mar)).documentNumber;
     const subject = "Lighting control wiring – Tower 1";
     expect((await linkedFrom(hafiz, linking)).items).toEqual([{ documentNumber, subject, workItemId: mar }]);
     expect((await linkedFrom(omar, linking)).items).toEqual([{ documentNumber, subject, workItemId: null }]);
-    await expectHidden(omar.get(`/v1/work-items/${mar}`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${mar}`), target: mar, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the new MAR" });
   });
 
   it("13. The Consultant's replies: Ahmed's verification and the Return to Engineer stay inside the Consultant; Code C shares its Remarks and final verification", async () => {
@@ -553,8 +591,10 @@ describe("the README walkthrough", () => {
         answers: verification,
       });
       expect(history.events.some((e) => e.type === "internal_answers" || e.type === "recommend_code" || e.type === "internal_note")).toBe(false);
-      expect(JSON.stringify(history)).not.toContain("Check the photometric report");
-      expect(JSON.stringify(history)).not.toContain("Ahmed agrees");
+    }
+    // Mohammed's reason for the Return to Engineer and his Internal Note stay inside the Consultant.
+    for (const note of ["Check the photometric report", "Ahmed agrees"]) {
+      await expectHiddenFrom({ read: mentions(`/v1/work-items/${mar}/history`, note), target: note, seenBy: mohammed, hiddenFrom: [hafiz, faisal], name: whoIs, label: "the history" });
     }
     await hidden(yousef, { countsZero: true });
   });
@@ -572,9 +612,9 @@ describe("the README walkthrough", () => {
     ]);
     for (const who of [mohammed, faisal]) {
       expect(await chain(who, original)).toEqual([{ id: original, documentNumber: base, revisionNo: 0 }]);
-      expect((await links(who, original)).links).toEqual([]);
-      await expectHidden(who.get(`/v1/work-items/${rev1}`));
+      expect((await links(who, original)).links).toEqual([]); // not hidden-from: the original has no Link yet for anyone; the one to Rev 1 comes at its Submit
     }
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${rev1}`), target: rev1, seenBy: hafiz, hiddenFrom: [mohammed, faisal], name: whoIs, label: "Rev 1, a Draft" });
   });
 
   it("15. The seeded Code C MAR shows both Companies the Code's final verification and Remarks, in English and Arabic, and only the Consultant its Engineer's reply", async () => {
@@ -591,7 +631,7 @@ describe("the README walkthrough", () => {
       const replies = history.events.filter((e) => e.type === "internal_answers" || e.type === "recommend_code");
       expect(replies.length, "the Engineer's reply and Recommended Code").toBe(who === ahmed || who === mohammed ? 2 : 0);
     }
-    await expectHidden(yousef.get(`/v1/work-items/${id}`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: hafiz, hiddenFrom: yousef, name: whoIs, label: "the Code C MAR" });
   });
 
   it("15. Its Rev 1, Submitted by TMC, reaches the Consultant, whose Revision drop-down lists the original and Rev 1", async () => {
@@ -605,7 +645,7 @@ describe("the README walkthrough", () => {
     const revision: WorkItemDetail = (await mohammed.get(`/v1/work-items/${rev1!.id}`)).json();
     expect(revision).toMatchObject({ stage: { key: "pending_approval" }, outcome: null, answers: { model: expect.stringMatching(/HDG/) } });
     expect(revision.answers).not.toHaveProperty("verification_note");
-    await expectHidden(yousef.get(`/v1/work-items/${rev1!.id}/revisions`));
+    await expectHiddenFrom({ read: opens(`/v1/work-items/${rev1!.id}/revisions`, rev1!.id), target: rev1!.id, seenBy: hafiz, hiddenFrom: yousef, name: whoIs, label: "its Revisions" });
   });
 });
 
@@ -616,6 +656,7 @@ describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other 
   let jcv = "";
   let jcvItem = "";
   let twrItem = "";
+  const named = (c: Caller) => (c === nasser ? "nasser" : whoIs(c));
 
   beforeAll(async () => {
     nasser = await signIn("nasser");
@@ -623,7 +664,7 @@ describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other 
     expect(projects.map((p) => p.code)).toEqual(["JCV"]);
     jcv = projects[0]!.id;
     const items = (await nasser.get(`/v1/projects/${jcv}/work-items`)).json().items as { id: string }[];
-    expect(items).toHaveLength(1);
+    expect(items).toHaveLength(1); // not hidden-from: the seed's content, the one item it gives Nasser's own Project
     jcvItem = items[0]!.id;
     // The seed gives Riyadh Gate Tower one Draft of its own, so a fresh demo has an item to check.
     const twrItems = (await hafiz.get(`/v1/projects/${projectId}/work-items`)).json().items as { id: string; title: string }[];
@@ -632,16 +673,20 @@ describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other 
   });
 
   it("Hafiz (Riyadh Gate Tower) gets 404 on it and on its Work Item, and never sees it listed", async () => {
-    expect((await hafiz.get("/v1/projects")).json().projects.map((p: { code: string }) => p.code)).not.toContain("JCV");
-    await expectHidden(hafiz.get(`/v1/projects/${jcv}`));
-    await expectHidden(hafiz.get(`/v1/projects/${jcv}/work-items`));
-    await expectHidden(hafiz.get(`/v1/work-items/${jcvItem}`));
+    const hide = (read: (who: Caller) => Promise<readonly { id: string }[]>, target: string, label: string) =>
+      expectHiddenFrom({ read, target, seenBy: nasser, hiddenFrom: hafiz, name: named, label });
+    await hide(projectsListed, jcv, "the Projects page");
+    await hide(readById(`/v1/projects/${jcv}`), jcv, "the Project");
+    await hide(opens(`/v1/projects/${jcv}/work-items`, jcv), jcv, "its Work Items");
+    await hide(readById(`/v1/work-items/${jcvItem}`), jcvItem, "its Work Item");
   });
 
   it("Nasser (Jeddah Corniche Villas) gets 404 on Riyadh Gate Tower and its Work Items", async () => {
-    await expectHidden(nasser.get(`/v1/projects/${projectId}`));
-    await expectHidden(nasser.get(`/v1/projects/${projectId}/work-items`));
-    await expectHidden(nasser.get(`/v1/work-items/${twrItem}`));
+    const hide = (read: (who: Caller) => Promise<readonly { id: string }[]>, target: string, label: string) =>
+      expectHiddenFrom({ read, target, seenBy: hafiz, hiddenFrom: nasser, name: named, label });
+    await hide(readById(`/v1/projects/${projectId}`), projectId, "the Project");
+    await hide(opens(`/v1/projects/${projectId}/work-items`, projectId), projectId, "its Work Items");
+    await hide(readById(`/v1/work-items/${twrItem}`), twrItem, "its Work Item");
   });
 
   // Scenario RP-520-1, seam 1: what the web's one not-found page stands on. The api

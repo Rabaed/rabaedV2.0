@@ -5,9 +5,10 @@
 // 404 that names nothing; and items first leaving Draft are numbered under the
 // pattern in effect then.
 import { randomUUID } from "node:crypto";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
 import type { NumberingSettings, SaveNumberingPatternRequest, SaveNumberingRequest } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type TestApi } from "./support/harness.ts";
 import { all, approvedSupplier, bilingual, buildTower, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
 
 let api: TestApi;
@@ -50,6 +51,9 @@ async function tower(code: string) {
 }
 
 const settingsOf = (by: Caller, at: Tower) => by.get(`/v1/projects/${at.projectId}/numbering`);
+/** Project `projectId`'s settings for expectHiddenFrom: `[{ id: projectId }]` when `by` reads them (their example names the Project `code`), `[]` for the plain 404. */
+const settingsRead = (projectId: string, code: string) => async (by: Caller) =>
+  (await readById<NumberingSettings>(`/v1/projects/${projectId}/numbering`)(by)).map((s) => ({ id: s.example.projectCode === code ? projectId : s.example.projectCode }));
 const save = (by: Caller, at: Tower, body: Partial<SaveNumberingRequest> & Pick<SaveNumberingRequest, "pattern">) =>
   by.request("PUT", `/v1/projects/${at.projectId}/numbering`, { workItemTypeId: null, sharedCounterAccepted: false, ...body });
 const pattern = (p: { segments: object[]; countedBy: number[]; separator?: string; seqDigits?: number }) =>
@@ -130,11 +134,18 @@ describe("the Numbering page's settings", () => {
     const t = await tower("NHD");
     await ok(save(c1.caller, t, { pattern: pattern({ segments: [project, participantCode], countedBy: [0, 1] }) }));
     const theirs = await api.createProject(outsider.caller, { code: "OTH" });
-    await expectHidden(settingsOf(outsider.caller, t), "outsider");
-    await expectHidden(settingsOf(k1.caller, t), "K1's Authorized Person, not a Project Member");
-    await expectHidden(outsider.caller.get(`/v1/projects/${randomUUID()}/numbering`), "made-up id");
-    await expectHidden(outsider.caller.get(`/v1/projects/not-a-uuid/numbering`), "malformed id");
-    await expectHidden(c1.caller.get(`/v1/projects/${theirs.id}/numbering`), "another Project");
+    const whoReads = (by: Caller) => (by === c1.caller ? "C1 Project Admin" : by === t.c1Engineer ? "C1 engineer" : by === outsider.caller ? "outsider" : by === k1.caller ? "K1's Authorized Person, not a Project Member" : "someone");
+    await expectHiddenFrom({ read: settingsRead(t.projectId, "NHD"), target: t.projectId, seenBy: [c1.caller, t.c1Engineer], hiddenFrom: [outsider.caller, k1.caller], name: whoReads });
+    // A made-up or malformed id gets the outsider the same plain 404, while they read their own Project's settings.
+    await expectHiddenFrom({
+      read: (path: string) => readById(path)(outsider.caller),
+      target: "settings",
+      idOf: () => "settings",
+      seenBy: `/v1/projects/${theirs.id}/numbering`,
+      hiddenFrom: [`/v1/projects/${randomUUID()}/numbering`, `/v1/projects/not-a-uuid/numbering`],
+      label: "outsider, made-up or malformed id",
+    });
+    await expectHiddenFrom({ read: settingsRead(theirs.id, "OTH"), target: theirs.id, seenBy: outsider.caller, hiddenFrom: c1.caller, name: whoReads, label: "another Project" });
 
     const change = { pattern: pattern({ segments: [type, participantCode], countedBy: [0, 1] }) };
     for (const [label, who] of [
@@ -144,9 +155,9 @@ describe("the Numbering page's settings", () => {
       ["K1 manager", t.k1Manager],
       ["outsider", outsider.caller],
     ] as const) {
-      await expectHidden(save(who, t, change), label);
+      await expectHidden(save(who, t, change), label); // not hidden-from: a refused write, on numbering C1 saved above; the read below proves it unchanged
     }
-    await expectHidden(c1.caller.request("PUT", `/v1/projects/${randomUUID()}/numbering`, { workItemTypeId: null, ...change }));
+    await expectHidden(c1.caller.request("PUT", `/v1/projects/${randomUUID()}/numbering`, { workItemTypeId: null, ...change })); // not hidden-from: a write to a made-up id, no row to prove
     expect(((await settingsOf(c1.caller, t)).json() as NumberingSettings).project!.pattern.segments).toEqual([project, participantCode]);
   });
 
@@ -282,8 +293,8 @@ describe("visibility.md, Document Numbers", () => {
         [1, custom],
       ]);
       // Another Company never gets the saver's name or id (V14), nor the saver's Company (V15).
-      if (!own) expect(res.body).not.toContain(c1.company.authorizedPerson.id);
-      if (!own) expect(res.body).not.toContain("Test Constructions");
+      if (!own) expect(res.body).not.toContain(c1.company.authorizedPerson.id); // not hidden-from: a sweep of the body; savedBy, compared whole above for own readers too, is the assert
+      if (!own) expect(res.body).not.toContain("Test Constructions"); // not hidden-from: a sweep of the body; savedBy, compared whole above for own readers too, is the assert
       // The Custom pattern is gone: MAR uses the Project pattern again.
       expect(s.types.find((x) => x.id === mar)!.override).toBeNull();
     }
@@ -303,14 +314,35 @@ describe("visibility.md, Document Numbers", () => {
       const res = await ok(settingsOf(who, t), 200);
       const s = res.json() as NumberingSettings;
       expect(Object.keys(s).sort(), label).toEqual(["canEdit", "example", "project", "types", "versions"]);
-      expect(counterLeaks(s, [...issued, ...counterKeys]), label).toEqual([]);
+      expect(counterLeaks(s, [...issued, ...counterKeys]), label).toEqual([]); // not hidden-from: a list of the paths that leak a counter
       // The example holds only the Project's attributes, and no counter value.
       expect(s.example, label).toEqual({ projectCode: "NEX", tradeCode: "GEN", participant: { code: null, ordinal: null }, locationPath: ["BA"] });
-      expect(s.versions, label).toEqual([]);
-      await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counters`), label);
-      await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counter?workItemType=MAR`), label);
+      expect(s.versions, label).toEqual([]); // not hidden-from: no pattern was saved on this Project, so it has no versions
+      // The plain 404 comes before the Project Admin's 422 participant_required; the counter is proven the admin's below.
+      await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counter?workItemType=MAR`), label); // not hidden-from: the 404's order before the 422, proven by id below
     }
     expect(counters).toEqual([expect.objectContaining({ counterKey: "NEX-MAR-01", lastValue: 2 })]);
+    // The counters, and the counter a value falls under, are read by the Project Admin and by none of them.
+    const nonAdmins = [t.c1Engineer, t.c2Engineer, t.k1Manager];
+    const whoReads = (by: Caller) => (by === c1.caller ? "C1 Project Admin" : by === t.c1Engineer ? "C1 engineer" : by === t.c2Engineer ? "C2 engineer" : "K1 manager");
+    await expectHiddenFrom({
+      read: async (by: Caller) => (await readById<{ counters: { counterKey: string }[] }>(`/v1/projects/${t.projectId}/numbering/counters`)(by)).flatMap((b) => b.counters),
+      target: "NEX-MAR-01",
+      idOf: (c) => c.counterKey,
+      seenBy: c1.caller,
+      hiddenFrom: nonAdmins,
+      name: whoReads,
+      label: "counters",
+    });
+    await expectHiddenFrom({
+      read: readById<{ counterKey: string }>(`/v1/projects/${t.projectId}/numbering/counter?workItemType=MAR&participantId=${t.c1ParticipantId}`),
+      target: "NEX-MAR-01",
+      idOf: (c) => c.counterKey,
+      seenBy: c1.caller,
+      hiddenFrom: nonAdmins,
+      name: whoReads,
+      label: "the counter a value falls under",
+    });
   });
 
   it("RP-1009: the counter-leak check reads the parsed body, so a Type id ending 0002 is no leak but a counter field or value is", () => {
@@ -321,13 +353,13 @@ describe("visibility.md, Document Numbers", () => {
       example: { projectCode: "NEX", tradeCode: "GEN", participant: { code: null, ordinal: null }, locationPath: ["BA"] },
       versions: [],
     };
-    expect(counterLeaks(body, ["NEX-MAR-01-0002"])).toEqual([]);
+    expect(counterLeaks(body, ["NEX-MAR-01-0002"])).toEqual([]); // not hidden-from: the leak check's own unit test, on a made-up body
     expect(counterLeaks({ ...body, lastValue: 2 }, [])).toEqual(["lastValue"]);
     expect(counterLeaks({ ...body, example: { ...body.example, counterKey: "NEX-MAR-01" } }, [])).toEqual(["example.counterKey"]);
     expect(counterLeaks({ ...body, example: { ...body.example, projectCode: "NEX-MAR-01-0002" } }, ["NEX-MAR-01-0002"])).toEqual(["example.projectCode"]);
     expect(counterLeaks({ ...body, example: { ...body.example, locationPath: ["NEX-MAR-01"] } }, ["NEX-MAR-01"])).toEqual(["example.locationPath.0"]);
     // A counter embedded in a longer string is still a leak.
-    expect(counterLeaks({ ...body, types: [{ ...body.types[0], name: { en: "MAR (next NEX-MAR-01-0003)", ar: "MAR" } }] }, ["NEX-MAR-01-0003"])).toEqual(["types.0.name.en"]);
+    expect(counterLeaks({ ...body, types: [{ ...body.types[0], name: { en: "MAR (next NEX-MAR-01-0003)", ar: "MAR" } }] }, ["NEX-MAR-01-0003"])).toEqual(["types.0.name.en"]); // not hidden-from: the leak check's own unit test, on a made-up body
   });
 
   it("a Project's own pattern can't be set to 'use the Project pattern'", async () => {

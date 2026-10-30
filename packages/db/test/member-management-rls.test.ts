@@ -6,7 +6,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -110,10 +110,12 @@ describe("inviting", () => {
     // Unfiltered: RLS alone decides what each Company sees.
     const everyone = (trx: Db) => sql<{ id: string }>`select id from member`.execute(trx).then((r) => r.rows.map((x) => x.id));
     expect(await withMember(app, ids.a1, everyone)).toContain(id);
-    const seenByB = await withMember(app, ids.b1, everyone);
-    expect(seenByB).not.toContain(id);
-    expect(seenByB).not.toContain(ids.apA);
-    expect(await app.transaction().execute(everyone)).toEqual([]);
+    // A Member's ids, or none set (null): A's Members read A's, B's and no one never do.
+    const seen = async (viewer: string | null) =>
+      (await (viewer === null ? app.transaction().execute(everyone) : withMember(app, viewer, everyone))).map((x) => ({ id: x }));
+    const name = (viewer: string | null) => (viewer === ids.a1 ? "A1" : viewer === ids.b1 ? "B1" : "no Member set");
+    for (const target of [id, ids.apA]) await expectHiddenFrom({ read: seen, target, seenBy: ids.a1, hiddenFrom: [ids.b1, null], name });
+    expect(await app.transaction().execute(everyone)).toEqual([]); // not hidden-from: with no Member set, no row at all; A's rows are proven to exist just above
   });
 
   it("is refused to a Member who is not the Authorized Person, and with no Member set", async () => {
@@ -216,7 +218,7 @@ describe("deactivating", () => {
     await sql`select app.create_session(${hash}, ${target}::uuid, null, now() + interval '1 hour')`.execute(app);
     expect(await withMember(app, ids.apA, (trx) => deactivate(trx, target))).toBe("deactivated");
     const { rows } = await sql`select * from app.session_principal(${hash}, now())`.execute(app);
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([]); // not hidden-from: the deactivated Member's session no longer resolves to a principal
     const revoked = await migrator.query("select revoked_at from session where token_hash = $1", [hash]);
     expect(revoked.rows[0].revoked_at).not.toBeNull();
   });

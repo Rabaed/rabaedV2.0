@@ -2,9 +2,9 @@
 // (RP-224; ADR 0009; visibility.md V15, scenarios 30 and 31).
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 // Reads the audit trail the way Rabaed Admin would.
@@ -19,17 +19,27 @@ type Company = { company: OnboardedCompany; caller: Caller };
 let host: Company; // Its Authorized Person creates the Project and is its Project Admin.
 let c1: Company; // A Participant that joined, with a Project Member.
 let c1Member: Caller;
+let c1ParticipantId: string;
 let projectId: string;
 
 beforeAll(async () => {
   host = await api.projectCreator();
   c1 = await api.authorizedPerson();
   projectId = (await api.createProject(host.caller, { role: "owner" })).id;
-  const c1Participant = await api.addParticipant(host.caller, projectId, c1.company, "contractor");
+  c1ParticipantId = await api.addParticipant(host.caller, projectId, c1.company, "contractor");
   const { member, caller } = await api.member(c1.caller);
-  await api.addProjectMember(c1.caller, c1Participant, member.id);
+  await api.addProjectMember(c1.caller, c1ParticipantId, member.id);
   c1Member = caller;
 });
+
+/** A read for expectHiddenFrom (RP-1095): `by` GETs `path`; `who` names them in a failure. */
+type Look = { by: Caller; path: string; who: string };
+const look = (by: Caller, path: string, who: string): Look => ({ by, path, who });
+const whoLooks = (l: Look) => `${l.who} at ${l.path}`;
+const uuids = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+/** Every id a Look's 200 answer names, wherever in its body; none for the plain 404, and anything else fails (readById). */
+const idsNamed = async ({ by, path }: Look) =>
+  (await readById<unknown>(path)(by)).flatMap((body) => JSON.stringify(body).match(uuids) ?? []).map((id) => ({ id: id.toLowerCase() }));
 
 /** A new Company with a signed-in Authorized Person, invited to the Project by the Project Admin. */
 async function invited(role = "consultant"): Promise<Company & { invitationId: string }> {
@@ -58,34 +68,60 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
         {
           id: k1.invitationId,
           project: { name: { en: "Riyadh Gate Tower", ar: "برج بوابة الرياض" } },
-          hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+          hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } }, // not hidden-from: the shape K1 may see, the Host Company's name in it
           projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
           invitedAt: expect.any(String),
         },
       ],
     });
-    expect(res.body).not.toContain(projectId);
-    // Nothing of the Project itself, nor a Participation to manage.
-    expect((await k1.caller.get("/v1/participants")).json().participants).toEqual([]);
-    for (const url of [
-      `/v1/projects/${projectId}`,
-      `/v1/projects/${projectId}/participants`,
-      `/v1/participants/${k1.invitationId}/members`,
-      `/v1/participants/${k1.invitationId}/visibility`,
-    ]) {
-      await expectHidden(k1.caller.get(url), url);
+    // Nothing of the Project itself: the Host Company reads the Project's id, K1 never, not even in its invitation.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: projectId,
+      seenBy: [look(host.caller, "/v1/participants", "the Host Company"), look(host.caller, `/v1/projects/${projectId}`, "the Project Admin")],
+      hiddenFrom: [
+        look(k1.caller, "/v1/participant-invitations", "K1"),
+        look(k1.caller, "/v1/participants", "K1"),
+        look(k1.caller, `/v1/projects/${projectId}`, "K1"),
+      ],
+      name: whoLooks,
+    });
+    // Nor its Participants: C1's Participant is read on the Project by its Admin and C1, never by K1.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: c1ParticipantId,
+      seenBy: [look(host.caller, `/v1/projects/${projectId}/participants`, "the Project Admin"), look(c1Member, `/v1/projects/${projectId}/participants`, "C1's Project Member")],
+      hiddenFrom: look(k1.caller, `/v1/projects/${projectId}/participants`, "K1"),
+      name: whoLooks,
+    });
+    // Nor a Participation to manage.
+    expect((await k1.caller.get("/v1/participants")).json().participants).toEqual([]); // not hidden-from: K1's own Company Projects, none until it accepts; the Project is hidden above
+    for (const url of [`/v1/participants/${k1.invitationId}/members`, `/v1/participants/${k1.invitationId}/visibility`]) {
+      await expectHidden(k1.caller.get(url), url); // not hidden-from: a pending invitation is no Participation yet, so nobody reads these until it's accepted
     }
     const add = await k1.caller.post(`/v1/participants/${k1.invitationId}/members`, { memberId: k1.company.authorizedPerson.id });
-    await expectHidden(add);
+    await expectHidden(add); // not hidden-from: an action on a Participation that doesn't exist yet
   });
 
   it("appears nowhere for another Participant", async () => {
-    expect(await participantIds(c1Member)).not.toContain(k1.invitationId);
-    // C1's Authorized Person's Company Projects.
-    const list = await c1.caller.get("/v1/participants");
-    expect(list.body).not.toContain(k1.invitationId);
-    expect(list.body).not.toContain(k1.company.companyId);
-    await expectHidden(c1Member.get(`/v1/participants/${k1.invitationId}/members`));
+    // The pending row is the Project Admin's and K1's to read; never on C1's Project Member's list of Participants,
+    // nor in C1's Authorized Person's Company Projects.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: k1.invitationId,
+      seenBy: [look(host.caller, `/v1/projects/${projectId}/invitations`, "the Project Admin"), look(k1.caller, "/v1/participant-invitations", "K1")],
+      hiddenFrom: [look(c1Member, `/v1/projects/${projectId}/participants`, "C1's Project Member"), look(c1.caller, "/v1/participants", "C1's Authorized Person")],
+      name: whoLooks,
+    });
+    // Nor which Company was invited: K1 reads its own record, C1 never meets its id.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: k1.company.companyId,
+      seenBy: look(k1.caller, `/v1/companies/${k1.company.companyId}`, "K1"),
+      hiddenFrom: look(c1.caller, "/v1/participants", "C1's Authorized Person"),
+      name: whoLooks,
+    });
+    await expectHidden(c1Member.get(`/v1/participants/${k1.invitationId}/members`)); // not hidden-from: no Participation yet, so its Members are nobody's to read until it's accepted
     // Pending invitations are the Project Admins' alone.
     const res = await c1Member.get(`/v1/projects/${projectId}/invitations`);
     expect(res.statusCode).toBe(403);
@@ -93,7 +129,7 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
   });
 
   it("is listed for the Project Admin as a pending invitation by CR number, never by name", async () => {
-    expect(await participantIds(host.caller)).not.toContain(k1.invitationId);
+    expect(await participantIds(host.caller)).not.toContain(k1.invitationId); // not hidden-from: a state, pending is no Participant yet; the Admin reads it as pending below
     const res = await host.caller.get(`/v1/projects/${projectId}/invitations`);
     expect(res.statusCode).toBe(200);
     expect(res.json().invitations).toContainEqual({
@@ -102,7 +138,14 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
       projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
       invitedAt: expect.any(String),
     });
-    expect(res.body).not.toContain(k1.company.companyId);
+    // By CR number only: K1 reads its own Company's id, the Project Admin never meets it.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: k1.company.companyId,
+      seenBy: look(k1.caller, `/v1/companies/${k1.company.companyId}`, "K1"),
+      hiddenFrom: look(host.caller, `/v1/projects/${projectId}/invitations`, "the Project Admin"),
+      name: whoLooks,
+    });
   });
 
   it("lists a CR number that isn't on Rabaed for the Project Admin just like one that is", async () => {
@@ -119,9 +162,14 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
 
   it("answers someone not on the Project as not found", async () => {
     const outsider = await api.projectCreator();
-    for (const id of [projectId, randomUUID()]) {
-      await expectHidden(outsider.caller.get(`/v1/projects/${id}/invitations`));
-    }
+    // The Project Admin reads K1's pending row; the outsider gets the plain 404, for this Project as for a made-up one.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: k1.invitationId,
+      seenBy: look(host.caller, `/v1/projects/${projectId}/invitations`, "the Project Admin"),
+      hiddenFrom: [projectId, randomUUID()].map((id) => look(outsider.caller, `/v1/projects/${id}/invitations`, "the outsider")),
+      name: whoLooks,
+    });
   });
 });
 
@@ -131,7 +179,7 @@ describe("answering an invitation", () => {
     const res = await k2.caller.post(`/v1/participant-invitations/${k2.invitationId}/accept`);
     expect(res.statusCode).toBe(204);
 
-    expect((await k2.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
+    expect((await k2.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]); // not hidden-from: K2's own list, emptied by its accept
     expect((await k2.caller.get("/v1/participants")).json().participants).toEqual([
       expect.objectContaining({
         id: k2.invitationId,
@@ -141,13 +189,19 @@ describe("answering an invitation", () => {
     ]);
     expect(await participantIds(host.caller)).toContain(k2.invitationId);
     const pending = (await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations;
-    expect(pending.map((i: { id: string }) => i.id)).not.toContain(k2.invitationId);
+    expect(pending.map((i: { id: string }) => i.id)).not.toContain(k2.invitationId); // not hidden-from: a state, accepted so no longer pending
     // Its Authorized Person now adds Project Members (V15), who then see the Project.
     const { member, caller } = await api.member(k2.caller);
     await api.addProjectMember(k2.caller, k2.invitationId, member.id);
     expect((await caller.get(`/v1/projects/${projectId}`)).statusCode).toBe(200);
-    // Other Participants still don't see it (V15).
-    expect(await participantIds(c1Member)).not.toContain(k2.invitationId);
+    // Other Participants still don't see it (V15): the Project Admin reads it on the Project, C1's Project Member never.
+    await expectHiddenFrom({
+      read: async (by: Caller) => (await participantIds(by)).map((id: string) => ({ id })),
+      target: k2.invitationId,
+      seenBy: host.caller,
+      hiddenFrom: c1Member,
+      name: (by) => (by === host.caller ? "the Project Admin" : "C1's Project Member"),
+    });
     // Inviting it again: every Project Admin sees it on the Project already.
     const again = await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: k2.company.crNumber, role: "owner" });
     expect(again.statusCode).toBe(409);
@@ -159,8 +213,8 @@ describe("answering an invitation", () => {
     const before = await participantIds(host.caller);
     expect((await k3.caller.post(`/v1/participant-invitations/${k3.invitationId}/decline`)).statusCode).toBe(204);
 
-    expect((await k3.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
-    expect((await k3.caller.get("/v1/participants")).json().participants).toEqual([]);
+    expect((await k3.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]); // not hidden-from: K3's own list, emptied by its decline
+    expect((await k3.caller.get("/v1/participants")).json().participants).toEqual([]); // not hidden-from: K3's own Company Projects, none since it declined
     expect(await participantIds(host.caller)).toEqual(before);
     const pending = (await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations;
     // Still "awaiting an answer" for the Project Admin, like a CR number that isn't on
@@ -172,35 +226,43 @@ describe("answering an invitation", () => {
       invitedAt: expect.any(String),
     });
     // Answered already: nothing left to accept.
-    await expectHidden(k3.caller.post(`/v1/participant-invitations/${k3.invitationId}/accept`));
+    await expectHidden(k3.caller.post(`/v1/participant-invitations/${k3.invitationId}/accept`)); // not hidden-from: a state, answered already so nothing is left to accept
   });
 
   it("is for the invited Company's Authorized Person only", async () => {
     const k4 = await invited();
     const { caller: k4Member } = await api.member(k4.caller);
+    // Listed for K4's Authorized Person alone: another Company's, the Project Admin's included, never has it to answer.
+    await expectHiddenFrom({
+      read: idsNamed,
+      target: k4.invitationId,
+      seenBy: look(k4.caller, "/v1/participant-invitations", "K4"),
+      hiddenFrom: [look(c1.caller, "/v1/participant-invitations", "C1"), look(host.caller, "/v1/participant-invitations", "the Host Company")],
+      name: whoLooks,
+    });
     for (const answer of ["accept", "decline"]) {
       const url = `/v1/participant-invitations/${k4.invitationId}/${answer}`;
       // Another Company's Authorized Person, the Project Admin included: as if it didn't exist.
       for (const caller of [c1.caller, host.caller]) {
         const res = await caller.post(url);
-        await expectHidden(res);
+        await expectHidden(res); // not hidden-from: a refused answer, an action not a read; the read is the expectHiddenFrom above, and it stays pending below
       }
       expect((await k4Member.post(url)).statusCode).toBe(403);
       expect((await api.anonymous().post(url)).statusCode).toBe(401);
     }
     expect((await k4Member.get("/v1/participant-invitations")).statusCode).toBe(403);
     for (const id of [randomUUID(), "not-a-uuid"]) {
-      await expectHidden(k4.caller.post(`/v1/participant-invitations/${id}/accept`));
+      await expectHidden(k4.caller.post(`/v1/participant-invitations/${id}/accept`)); // not hidden-from: an id that names no invitation
     }
     // Still pending.
-    expect((await k4.caller.get("/v1/participant-invitations")).json().invitations).toHaveLength(1);
+    expect((await k4.caller.get("/v1/participant-invitations")).json().invitations.map((i: { id: string }) => i.id)).toEqual([k4.invitationId]);
   });
 
   it("is only for a Project Admin to send", async () => {
     const other = await api.authorizedPerson();
     const res = await c1Member.post(`/v1/projects/${projectId}/participants`, { crNumber: other.company.crNumber, role: "owner" });
     expect(res.statusCode).toBe(403);
-    expect((await other.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
+    expect((await other.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]); // not hidden-from: the refused invite made no invitation, for anyone
   });
 });
 
@@ -215,14 +277,14 @@ describe("an onboarding lead", () => {
       id: expect.any(String),
       crNumber: cr,
       project: { id: projectId, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
-      hostCompany: { id: host.company.companyId, legalName: expect.any(Object) },
+      hostCompany: { id: host.company.companyId, legalName: expect.any(Object) }, // not hidden-from: the lead's shape for Rabaed Admin
       baseRole: "consultant",
       requestedAt: expect.any(String),
       convertedAt: null,
       participantId: null,
     });
     // A Company on Rabaed is invited, never a lead.
-    expect(JSON.stringify(leads)).not.toContain(c1.company.crNumber);
+    expect(JSON.stringify(leads)).not.toContain(c1.company.crNumber); // not hidden-from: a business rule on Rabaed Admin's list, a Company on Rabaed is never a lead
 
     const logged = await adminDb
       .selectFrom("admin_action")
@@ -239,7 +301,7 @@ describe("an onboarding lead", () => {
   it("is not served by the customer api to anyone (Rabaed Admin is its own service, ADR 0010)", async () => {
     for (const caller of [host.caller, api.anonymous()]) {
       const res = await caller.get("/admin/v1/onboarding-leads?reason=curious");
-      await expectHidden(res);
+      await expectHidden(res); // not hidden-from: no such route on the customer api, for anyone; Rabaed Admin is its own service
     }
   });
 });
@@ -268,7 +330,7 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
     expect((await invite(projectId, "owner_representative")).statusCode).toBe(202);
     expect((await invite(secondProjectId, "consultant")).statusCode).toBe(202);
     before = [...(await pendingFor(projectId)), ...(await pendingFor(secondProjectId))];
-    expect(before).toHaveLength(2);
+    expect(before).toHaveLength(2); // not hidden-from: a business rule, one pending row per CR number on each Project
 
     const company = await api.onboardCompany({ crNumber: cr, reason });
     newcomer = { company, caller: await api.acceptInvitation(company.invitationToken) };
@@ -309,11 +371,11 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
   it("makes the Company a Participant when its Authorized Person accepts", async () => {
     const [invitation] = await pendingFor(secondProjectId);
     expect((await newcomer.caller.post(`/v1/participant-invitations/${invitation!.id}/accept`)).statusCode).toBe(204);
-    expect(await participantIds(host.caller)).not.toContain(invitation!.id);
+    expect(await participantIds(host.caller)).not.toContain(invitation!.id); // not hidden-from: a state, it joined the second Project, not this one
     expect(
       (await host.caller.get(`/v1/projects/${secondProjectId}/participants`)).json().participants.map((p: { id: string }) => p.id),
     ).toContain(invitation!.id);
-    expect(await pendingFor(secondProjectId)).toEqual([]);
+    expect(await pendingFor(secondProjectId)).toEqual([]); // not hidden-from: a state, accepted so no longer pending
   });
 
   it("is logged with the onboarding, and kept for audit only through Rabaed Admin (V9)", async () => {
@@ -377,14 +439,14 @@ describe("withdrawing a pending invitation (scenario 38)", () => {
     expect(answers[2]).toEqual(answers[0]);
 
     // K1's invitation also leaves its Authorized Person's list, and nothing is left to accept.
-    expect((await k1.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
-    await expectHidden(k1.caller.post(`/v1/participant-invitations/${k1.invitationId}/accept`));
-    expect(await participantIds(host.caller)).not.toContain(k1.invitationId);
+    expect((await k1.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]); // not hidden-from: K1's own list, emptied by the withdraw
+    await expectHidden(k1.caller.post(`/v1/participant-invitations/${k1.invitationId}/accept`)); // not hidden-from: a state, withdrawn so nothing is left to accept
+    expect(await participantIds(host.caller)).not.toContain(k1.invitationId); // not hidden-from: a state, withdrawn so it never joined
 
     // Withdrawn already: all three are gone alike.
     const again: Awaited<ReturnType<Caller["post"]>>[] = [];
     for (const id of [leadId, k1.invitationId, k1Declined.invitationId]) again.push(await withdraw(host.caller, id));
-    for (const res of again) await expectHidden(res);
+    for (const res of again) await expectHidden(res); // not hidden-from: a state, withdrawn already so gone for everyone
     expect(again.map(answer)).toEqual(again.map(() => answer(again[0]!)));
   });
 
@@ -428,19 +490,19 @@ describe("withdrawing a pending invitation (scenario 38)", () => {
       // A Project Member who isn't a Project Admin, another Participant's Authorized
       // Person, the invited Company itself and someone off the Project.
       for (const caller of [c1Member, c1.caller, k5.caller, outsider.caller]) {
-        await expectHidden(withdraw(caller, id), `${id} as another caller`);
+        await expectHidden(withdraw(caller, id), `${id} as another caller`); // not hidden-from: a refused withdraw, an action not a read; the row stays, checked by id below
       }
       // The Project Admin, but through another of their Projects.
-      await expectHidden(withdraw(host.caller, id, otherProjectId));
+      await expectHidden(withdraw(host.caller, id, otherProjectId)); // not hidden-from: a refused withdraw through the wrong Project; the row stays, checked by id below
       expect((await withdraw(api.anonymous(), id)).statusCode).toBe(401);
     }
-    for (const id of [randomUUID(), "not-a-uuid"]) await expectHidden(withdraw(host.caller, id));
+    for (const id of [randomUUID(), "not-a-uuid"]) await expectHidden(withdraw(host.caller, id)); // not hidden-from: an id that names no invitation
     // A Participant that joined isn't a pending invitation.
     const [joined] = await participantIds(host.caller);
-    await expectHidden(withdraw(host.caller, joined));
+    await expectHidden(withdraw(host.caller, joined)); // not hidden-from: a state, a Participant is no pending invitation
 
     expect((await pending()).map((i) => i.id)).toEqual(expect.arrayContaining([leadId, k5.invitationId]));
-    expect((await k5.caller.get("/v1/participant-invitations")).json().invitations).toHaveLength(1);
+    expect((await k5.caller.get("/v1/participant-invitations")).json().invitations.map((i: { id: string }) => i.id)).toEqual([k5.invitationId]);
   });
 
   it("drops a withdrawn lead: onboarding its Company later invites it nowhere", async () => {
@@ -448,8 +510,8 @@ describe("withdrawing a pending invitation (scenario 38)", () => {
     expect((await withdraw(host.caller, await lead(cr))).statusCode).toBe(204);
     const company = await api.onboardCompany({ crNumber: cr });
     const caller = await api.acceptInvitation(company.invitationToken);
-    expect((await caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
-    expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.crNumber)).not.toContain(cr);
+    expect((await caller.get("/v1/participant-invitations")).json().invitations).toEqual([]); // not hidden-from: a business rule, a withdrawn lead invites nowhere
+    expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.crNumber)).not.toContain(cr); // not hidden-from: a state on Rabaed Admin's list, a withdrawn lead is dropped
   });
 
   it("keeps the lead's id when its CR number is invited again after Rabaed onboarded it: nothing shows it is now on Rabaed", async () => {
@@ -473,7 +535,7 @@ describe("closing an onboarding lead in Rabaed Admin", () => {
     expect(await api.closeOnboardingLead(leadId, reason)).toEqual({ ok: true });
 
     expect(await pending()).toEqual(before);
-    expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.id)).not.toContain(leadId);
+    expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.id)).not.toContain(leadId); // not hidden-from: a state on Rabaed Admin's list, a closed lead leaves it
     const logged = await adminDb
       .selectFrom("admin_action")
       .select(["action", "target_kind", "target_id"])

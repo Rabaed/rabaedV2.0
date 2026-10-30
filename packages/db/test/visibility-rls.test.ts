@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -176,7 +176,7 @@ describe("a Participant's Visibility", () => {
   });
 
   it("covers nothing of a dimension until it is granted", async () => {
-    expect(await myVisibility(consultant.member, "trade")).toEqual([]);
+    expect(await myVisibility(consultant.member, "trade")).toEqual([]); // not hidden-from: the Member's own coverage, none of the Trade dimension granted yet
   });
 
   // RP-233: anyone but a Project Admin gets the answer a made-up id gets, so
@@ -282,8 +282,14 @@ describe("the Visibility read functions", () => {
   it("show a Participant's Visibility to its own Company and the Project Admins only", async () => {
     expect(await grants(consultant.member, consultantParticipant)).toEqual(["location", "trade"]);
     expect(await grants(host.ap, consultantParticipant)).toEqual(["location", "trade"]);
-    expect(await grants(host.member, consultantParticipant)).toEqual([]);
-    expect(await grants(consultant.member, hostParticipant)).toEqual([]);
+    // A row of app.participant_grants is the asked Participant's (one per dimension, granted or not): known by its id.
+    const grantsOf = (participant: string) => async (as: string) => (await grants(as, participant)).map(() => ({ id: participant }));
+    const name = (as: string) =>
+      as === host.ap ? "host AP" : as === host.member ? "host Member" : as === consultant.ap ? "consultant AP" : as === consultant.member ? "consultant Member" : as;
+    await expectHiddenFrom({ read: grantsOf(consultantParticipant), target: consultantParticipant, seenBy: [consultant.member, host.ap], hiddenFrom: host.member, name });
+    await expectHiddenFrom({ read: grantsOf(hostParticipant), target: hostParticipant, seenBy: [host.member, host.ap], hiddenFrom: consultant.member, name });
+    expect(await grants(host.member, consultantParticipant)).toEqual([]); // not hidden-from: no row at all, whoever's; proven by id just above
+    expect(await grants(consultant.member, hostParticipant)).toEqual([]); // not hidden-from: no row at all, whoever's; proven by id just above
   });
 
   it("give an Authorized Person not on the Project their Participant's covered values, and no other", async () => {
@@ -294,7 +300,12 @@ describe("the Visibility read functions", () => {
     );
     expect(onProject.rowCount).toBe(0);
     const tableRows = await withMember(app, ap, (trx) => sql`select id from dimension_value`.execute(trx));
-    expect(tableRows.rows).toEqual([]);
+    // The Project's Trades and Locations are its Members'; an Authorized Person not on it reads none from the table.
+    const values = (as: string) => withMember(app, as, (trx) => sql<{ id: string }>`select id from dimension_value`.execute(trx).then((r) => r.rows));
+    for (const target of [trade.electrical, loc.tower1]) {
+      await expectHiddenFrom({ read: values, target, seenBy: [host.member, consultant.member], hiddenFrom: ap, label: "dimension_value" });
+    }
+    expect(tableRows.rows).toEqual([]); // not hidden-from: no row at all for them; the Project's values are proven hidden just above
     const covered = await withMember(app, ap, (trx) =>
       sql<{ id: string }>`select id from app.participant_covered_values(${consultantParticipant}::uuid) where kind = 'trade'`
         .execute(trx)

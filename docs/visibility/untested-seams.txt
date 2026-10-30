@@ -4,13 +4,6 @@
 # a line whose test now exists. Never add a line for a new scenario: write its test at both seams.
 # Grouped by the ticket that added the scenario; the comment after a line is the start of its Scenario cell.
 
-# RP-85
-RP-85-1 db  # C1's engineer has no Signature and opens Send for Review on their Draft, whose Form isn't 
-RP-85-2 db  # C1's engineer adds a Signature, takes Send for Review, then replaces it; the PM Returns th
-
-# RP-381
-RP-381-1 db  # The Tower has three Participants, none with a Participant Code; K1's manager and a C1 engi
-
 # RP-427
 RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
 RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
@@ -83,11 +76,4 @@ RP-596-1 db  # A new Project's DAR runs the Rabaed Default 1→1 → Owner revie
 RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflows of a submittal Type, an
 
 # RP-598
-RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
 RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
-
-# RP-1058
-RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
-
-# RP-1072
-RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
