@@ -1,5 +1,6 @@
-# Lane 7 (live UAT) only, RP-1099. Its containers come back on their own when Docker starts again
-# (after an update, a crash or a reboot), unless someone stopped them on purpose.
+# Lane 7 only, RP-1099: Main 7's UAT harness stack with the Round 0 data (live UAT is on Vercel,
+# ADR 0026). Its containers come back on their own when Docker starts again (after an update,
+# a crash or a reboot), unless someone stopped them on purpose.
 # In lane 7's worktree, copy this file to docker-compose.override.yml (git-ignored): compose reads
 # that file beside docker-compose.yml on every call, `pnpm demo` included, and `pnpm lane:env`
 # never rewrites it. The other lanes keep no restart policy, so Docker's start never brings back
