@@ -1,0 +1,16 @@
+/* Rabaed Admin shell (separate app from the project app) */
+.ad{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh;background:var(--ui-canvas);color:var(--ui-text);font-family:var(--font-ui)}
+.ad-sb{background:#111522;color:#c9ced8;display:flex;flex-direction:column;gap:4px;padding:16px 12px;position:sticky;top:0;height:100vh;box-sizing:border-box}
+.ad-br{display:flex;align-items:center;gap:10px;padding:4px 8px 16px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:10px}.ad-br img{width:34px;height:34px;border-radius:9px}
+.ad-br b{display:block;color:#fff;font-size:15px}.ad-br small{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#ffb39f}
+.ad-sb h6{margin:10px 10px 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280}
+.ad-sb button{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border:0;border-radius:9px;background:transparent;color:#c9ced8;font:inherit;font-size:13.5px;cursor:pointer;text-align:start}.ad-sb button .ti{font-size:18px;color:#8b93a3}
+.ad-sb button:hover{background:rgba(255,255,255,.06)}.ad-sb button.on{background:rgba(248,85,47,.16);color:#fff}.ad-sb button.on .ti{color:#ff8a6c}
+.ad-sb .sp{flex:1}
+.ad-me{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:rgba(255,255,255,.05)}.ad-me b{display:block;color:#fff;font-size:13px}.ad-me small{font-size:11.5px;color:#8b93a3}
+.ad-mn{display:flex;flex-direction:column;min-width:0}
+.ad-hd{display:flex;align-items:center;gap:12px;height:60px;padding:0 24px;background:var(--ui-surface);border-bottom:1px solid var(--ui-border);position:sticky;top:0;z-index:5}
+.ad-hd .crumb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ui-muted)}.ad-hd .crumb b{color:var(--ui-text)}.ad-hd .crumb .ti{font-size:13px;color:var(--ui-faint)}
+.ad-hd .sp{flex:1}.ad-env{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:#111522;color:#ffb39f;font-size:11.5px;font-weight:700}
+.ad-ct{padding:20px 24px 90px;display:flex;flex-direction:column;gap:14px}
+[dir=rtl] .ad-hd .crumb .ti{transform:scaleX(-1)}

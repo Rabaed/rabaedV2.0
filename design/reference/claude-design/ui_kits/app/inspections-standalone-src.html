@@ -1,0 +1,75 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Inspections (WIR)" subtitle="Responsive web: request · Engineer on site (phone browser) · Manager Result pop-ups · after the Result · Revision · Snag · photo tool · EN / AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rabaed — Inspections (WIR)</title>
+<meta name="ext-resource-dependency" content="../../assets/brand/rabaed-mark.svg" data-resource-id="markSvg">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="snag/snag.css">
+<link rel="stylesheet" href="bulk/bulk.css">
+<link rel="stylesheet" href="wir/photo.css">
+<link rel="stylesheet" href="wir/wir.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+.ir-rev{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:4px;padding:6px;border-radius:14px;background:#1f2430;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.25);font:600 12px var(--font-ui);max-width:calc(100vw - 24px);overflow-x:auto}
+.ir-rev>span{padding:0 6px;color:#9aa0ad;white-space:nowrap}.ir-rev button{border:0;background:transparent;color:#d5d8de;height:28px;padding:0 8px;border-radius:8px;font:inherit;cursor:pointer;white-space:nowrap}.ir-rev button:hover{background:rgba(255,255,255,.1)}.ir-rev button.on{background:#fff;color:#1f2430}.ir-rev i.sep{width:1px;height:18px;background:rgba(255,255,255,.2);flex:none}
+.frame .ir-rev{display:none}
+html.m .ir-rev{bottom:auto;top:62px}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f95738"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect x="430" y="220" width="340" height="400" rx="36" fill="#fff"/><rect x="520" y="190" width="160" height="70" rx="20" fill="#1f2430"/><path d="M510 420l60 60 120-130" stroke="#f95738" stroke-width="40" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></template>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="wir/data.js"></script>
+<script src="wir/photo.js"></script>
+<script src="wir/wir-a.js"></script>
+<script src="wir/wir-b.js"></script>
+<script src="wir/wir-c.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1',Q=new URLSearchParams(location.search||(location.hash.includes('=')?location.hash.slice(1):'')),FRAME=Q.has('frame');
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+if(Q.get('lang'))S.lang=Q.get('lang');
+S.project='dmt';S.tab=12;if(FRAME)document.documentElement.classList.add('frame');
+const save=()=>{if(FRAME)return;let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{lang:S.lang,col:S.col,theme:S.theme,mode:S.mode})))};
+const X=WX,V=X.V,D=WD;
+const mq=()=>document.documentElement.classList.toggle('m',innerWidth<=640||Q.has('m'));mq();addEventListener('resize',mq);
+const SCR=[['list','Inspections list','قائمة الفحوصات'],['start','Start inspection','بدء الفحص'],['request','Request','الطلب'],['photo','Photo · add','الصورة · إضافة'],['annotate','Annotate','التعليم'],['viewer','Annotated / Original','مُعلَّمة / أصلية'],['site','On site · Pass','الموقع · مطابق'],['site-fail','On site · Fail','الموقع · غير مطابق'],['retry','Save failed','فشل الحفظ'],['send','Send to Manager','إرسال للمدير'],['mgr','Manager','المدير'],['r-pass','Passed','ناجح'],['r-pwc','Passed w/ Comments','ناجح مع ملاحظات'],['r-fail','Failed','راسب'],['return','Return','إرجاع'],['after','After Result','بعد النتيجة'],['rev','Revision','المراجعة'],['snag','Snag','الملاحظة']];
+let cur='site';
+function scrollTo2(id,off){setTimeout(()=>{const el=document.getElementById(id);if(!el)return;const y=el.getBoundingClientRect().top+window.scrollY-(off||70);window.scrollTo(0,y);const c=document.querySelector('.ct');},30)}
+function jump(k,keep){cur=k;RPH.close();V.modal=null;V.err=null;V.filter='all';V.retrying=0;
+ const pg={list:'list',start:'start',request:'request',photo:'request',annotate:'site',viewer:'site',site:'site','site-fail':'site',retry:'site',send:'site',mgr:'mgr','r-pass':'mgr','r-pwc':'mgr','r-fail':'mgr',return:'mgr',after:'after',rev:'rev',snag:'snag'}[k]||'site';
+ V.scr=pg;if(!keep&&['site','site-fail','retry','annotate','viewer'].includes(k)&&!V._mid){V.ans=X.cl(D.MID);V._mid=1}
+ if(k==='send'){V.ans=X.cl(D.FIN);V._mid=0;V.modal='send';V.send.rec='f';V.send.note=X.T(D.WIR.note)}
+ if(k==='retry')V.err='i8';
+ if(k==='r-pass'){V.modal='result';V.res.r='p'}if(k==='r-pwc'){V.modal='result';V.res.r='c'}if(k==='r-fail'){V.modal='result';V.res.r='f'}if(k==='return'){V.modal='return';V.ret={reason:'',err:0}}
+ if(k==='after')V.view='ctr';
+ if(!FRAME)history.replaceState(null,'','#'+k);
+ render();window.scrollTo(0,0);
+ if(k==='site-fail')scrollTo2('it-i14');if(k==='retry')scrollTo2('it-i8');if(k==='photo')setTimeout(()=>{const f=document.querySelector('[data-ph-drop="rq"]');f&&window.scrollTo(0,f.getBoundingClientRect().top+scrollY-140)},30);
+ if(k==='annotate')setTimeout(()=>RPH.open('it-i14',0,{edit:1}),20);if(k==='viewer')setTimeout(()=>RPH.open('it-i14',0),20);
+}
+X.go=(k,keep)=>jump(k,keep);
+function revBar(){const L=X.L;return `<div class="ir-rev" id="irrev"><span>${L('Screens','الشاشات')}</span>${SCR.map(s=>`<button class="${cur===s[0]?'on':''}" data-jump="${s[0]}">${L(s[1],s[2])}</button>`).join('')}<i class="sep"></i><button class="${S.lang==='en'?'on':''}" data-rlang="en">EN</button><button class="${S.lang==='ar'?'on':''}" data-rlang="ar">ع</button></div>`}
+function mhd(){const L=X.L;const no=V.scr==='list'?L('Inspections','الفحوصات'):V.scr==='request'?L('New WIR','طلب فحص جديد'):V.scr==='snag'?'SNG-0141':D.WIR.no+(V.scr==='rev'?' Rev 1':'');return `<header class="wm-hd"><button class="bk" aria-label="${L('Back','رجوع')}"><i class="ti ti-arrow-left"></i></button><div class="t"><b>${L('Dubai Marina Tower','برج دبي مارينا')}</b><small><bdi dir="ltr" class="num">${no}</bdi></small></div><button aria-label="${L('Menu','القائمة')}"><i class="ti ti-menu-2"></i></button></header>`}
+function render(){const L=X.L;const p=RP.PROJECTS.find(x=>x.id==='dmt');
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'?' light':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:p.l,n:L(p.n,p.na),c:L(p.co,p.coa)}})}${RS.tabs()}${mhd()}<main class="ct wir-ct" id="wroot">${X.view()}</main></div></div>${revBar()}`;
+ RPH.paint();save()}
+const R=()=>{const y=window.scrollY;const r=document.getElementById('wroot');r.innerHTML=X.view();document.getElementById('irrev').outerHTML=revBar();window.scrollTo(0,y)};
+document.addEventListener('click',e=>{const j=e.target.closest('[data-jump],[data-rlang]');if(j){e.preventDefault();if(j.dataset.jump)return jump(j.dataset.jump);S.lang=j.dataset.rlang;V._mid=0;const k=cur;return jump(k)}
+ const b=e.target.closest('button,[data-act]');if(!b||b.closest('#wroot')||b.closest('#ph-root')||!document.contains(b))return;const d=b.dataset;
+ if(d.lang){S.lang=d.lang;S.menu=null;return jump(cur)}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.act==='collapse'){S.col=!S.col;return render()}
+ if(d.tab!==undefined){if(+d.tab===4){location.href='snag-list.html';return}if(+d.tab===2){location.href='packages.html';return}if(+d.tab===1){location.href='submittals-list.html';return}}
+});
+X.bind(document.getElementById('app'),R);
+jump(Q.get('scr')||(location.hash.includes('=')?'':location.hash.slice(1))||'list');
+</script>
+</body>
+</html>
