@@ -9,13 +9,13 @@
 // The MAR Form Version 1 has no checklist, so this file adds a test-only Rabaed
 // Default Type (the MAR's Workflow) whose Form has one.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -213,7 +213,7 @@ describe("an item's photos", () => {
     expect(await refusedWith(start(engineer, id, { itemKey: "permit_on_site" }))).toEqual({ status: 422, body: { error: "field_not_found" } });
     expect(await refusedWith(start(engineer, id, { itemKey: "welding" }))).toEqual({ status: 422, body: { error: "field_not_found" } });
     expect(await refusedWith(start(engineer, id, { itemKey: null }))).toEqual({ status: 422, body: { error: "field_not_found" } });
-    expect((await list(engineer, id)).documents).toEqual([]);
+    expect((await list(engineer, id)).documents).toEqual([]); // not hidden-from: nothing was uploaded
   });
 
   it("take images only", async () => {
@@ -287,9 +287,11 @@ describe("once Submitted", () => {
   });
 
   it("anyone who can't see the item gets a 404 for its photos and their download URLs", async () => {
-    await expectHidden(c2Engineer.get(documentsUrl(id)));
-    await expectHidden(c2Engineer.get(`${documentUrl(id, photo)}/download`));
-    await expectHidden(start(c2Engineer, id));
+    const named = (by: Caller) => (by === consultant ? "K1 engineer" : by === c2Engineer ? "C2 engineer" : "someone");
+    const documents = async (by: Caller) => (await readById<DocumentList>(documentsUrl(id))(by)).flatMap((l) => l.documents);
+    const download = async (by: Caller) => (await readById<{ url: string }>(`${documentUrl(id, photo)}/download`)(by)).map(() => ({ id: photo }));
+    for (const read of [documents, download]) await expectHiddenFrom({ read, target: photo, seenBy: consultant, hiddenFrom: c2Engineer, name: named });
+    await expectHidden(start(c2Engineer, id)); // not hidden-from: a refused write; the reads above prove the photo with expectHiddenFrom
   });
 
   it("no more photos can be added, or removed: the evidence is frozen", async () => {

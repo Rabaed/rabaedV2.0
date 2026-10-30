@@ -8,9 +8,23 @@
 # The render job re-renders every baseline and the commit job commits them.
 # The render job renders every story twice: a story whose two renders differ
 # keeps its old baseline, and the unstable job fails naming it (RP-569).
-# Then review the changed PNGs in the PR like any other change. The bot's own
-# commit starts no new run: a push made with the workflow token triggers no
-# pull_request event, and ui-changed skips github-actions[bot] as well.
+# Then review the changed PNGs in the PR like any other change.
+#
+# The bot's push starts the PR's checks (RP-1121). With the workflow token it
+# would start none (GitHub's rule), and the head would get no reviewed-label,
+# reviewed-required or verify-gate run, so `pnpm queue` and the merge queue
+# would wait forever. So the commit job pushes with a GitHub App installation
+# token: an ordinary push, which starts every pull_request workflow on the new
+# head. The reviewed label and the verify line carry over that one baseline
+# commit (scripts/reviewed-label.ts: `baselineBotPush`, which needs the push's
+# sender to be a bot, and `onlyCleanCommitsSince`). ui-changed skips any bot's push,
+# so the bot's own commit never renders again.
+# The App: repository variable SCREENSHOTS_APP_CLIENT_ID and secret
+# SCREENSHOTS_APP_PRIVATE_KEY; the App has Contents read and write on this
+# repository only (setup steps on RP-1121).
+# Without them, or if the token cannot be made, it pushes with the workflow
+# token and starts CI by hand as before; the head then gets no reviewed-label,
+# reviewed-required or verify-gate run.
 #
 # New baselines need no step (RP-296). When CI's pull_request run fails for a
 # PR from a branch of this repository and the stories job's only failures were
@@ -57,7 +71,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action != 'labeled' &&
-      github.actor != 'github-actions[bot]' &&
+      !endsWith(github.actor, '[bot]') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
@@ -204,12 +218,23 @@ jobs:
       # "all" replaces every baseline (the label); "new" only adds missing ones (CI).
       MODE: ${{ github.event_name == 'workflow_run' && 'new' || 'all' }}
     steps:
+      # RP-1121: a token whose push starts the PR's checks (see the header). Contents only;
+      # it lives for this job. A failure here falls back to the workflow token.
+      - id: app
+        if: vars.SCREENSHOTS_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.SCREENSHOTS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SCREENSHOTS_APP_PRIVATE_KEY }}
+          permission-contents: write
       # The commit the PNGs were rendered from: if the branch has moved since,
       # the push below is rejected rather than overwriting the newer commit.
       # keeps credentials: the push below needs them, and nothing here runs PR code.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || needs.render.outputs.sha }}
+          token: ${{ steps.app.outputs.token || github.token }}
           # Kept at full depth: the flip-flop check runs "git log origin/main..HEAD", which
           # needs the history down to the merge base, and its depth is not known up front
           # (a shallow fetch would list the whole branch as new commits).
@@ -294,6 +319,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MESSAGE: ${{ env.MODE == 'new' && 'Add screenshot baselines for new stories' || 'Update story screenshot baselines' }}
+          APP_TOKEN: ${{ steps.app.outputs.token != '' }}
         run: |
           case "$BRANCH" in
             gh-readonly-queue/*) echo "::error::$BRANCH is a merge queue branch; never commit to it."; exit 1 ;;
@@ -306,8 +332,13 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "$MESSAGE"
             git push origin "HEAD:refs/heads/$BRANCH"
-            # Pushes made with the workflow token do not start CI; start it explicitly.
-            gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
+            if [ "$APP_TOKEN" = true ]; then
+              echo "Pushed with the App's token: GitHub starts the PR's checks on the new head."
+            else
+              # Pushes made with the workflow token start no workflow; start CI explicitly.
+              gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
+              echo "::warning::Pushed with the workflow token, so the new head gets no reviewed-label, reviewed-required or verify-gate run. Set up the screenshot bot App (RP-1121); until then tell your Main, who closes and reopens the PR."
+            fi
           fi
 
   # RP-569: fails when a story rendered differently twice. The render job put its
