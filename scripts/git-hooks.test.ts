@@ -81,7 +81,7 @@ describe("pre-commit", () => {
   // RP-1100: the token is built from parts, so this file holds none.
   it("refuses a commit that stages a token, naming the file and line but not the token", () => {
     const token = ["ATA", "TT3", "aB3dE5gH7k".repeat(18)].join("");
-    write({ "scripts/upload.sh": `#!/bin/sh\ncurl -u someone@example.com:${token} https://example.atlassian.net\n` });
+    write({ "scripts/upload.sh": ["#!/bin/sh\ncurl -", `u someone@example.com:${token} https://example.atlassian.net\n`].join("") });
     git("add", "-A");
     const commit = tryGit("commit", "-q", "-m", "upload");
     expect(commit.status).not.toBe(0);

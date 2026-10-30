@@ -63,7 +63,7 @@ describe("findSecrets", () => {
   }
 
   it("finds the token inside the curl Jira's upload hands back (the RP-1100 incident)", () => {
-    const curl = join2("curl -u someone@example.com:", tokens.atlassian, " -X POST -H 'X-Atlassian-Token: no-check' -F file=@shot.png https://example.atlassian.net/rest/api/3/issue/RP-1/attachments");
+    const curl = join2("curl -", "u someone@example.com:", tokens.atlassian, " -X POST -H 'X-Atlassian-Token: no-check' -F file=@shot.png https://example.atlassian.net/rest/api/3/issue/RP-1/attachments");
     expect(findSecrets(curl)).toEqual(["atlassian-api-token"]);
   });
 
@@ -213,7 +213,7 @@ describe("scanTree", () => {
 
 describe("formatFinding", () => {
   it("names the file, line and kind, never the token", () => {
-    const [finding] = scanText("scripts/upload.sh", `curl -u me:${tokens.atlassian}`);
+    const [finding] = scanText("scripts/upload.sh", join2("curl -", "u me:", tokens.atlassian));
     const text = formatFinding(finding!);
     expect(text).toBe("  scripts/upload.sh:1: Atlassian API token (atlassian-api-token)");
     expect(text).not.toContain(tokens.atlassian.slice(0, 12));
