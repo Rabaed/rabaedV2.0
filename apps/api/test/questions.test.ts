@@ -243,10 +243,15 @@ describe("each Company reads the other's work as the shared Transitions only (sc
 });
 
 describe("the Rabaed Default Question Workflows and Form", () => {
-  it.each(["QSN", "QSC"])("%s's Workflow and the shared Form are the documents `pnpm defaults:publish` publishes, as their latest Versions", async (code) => {
+  // RP-1108: QSN's and QSC's Version 2 hold the Draft by the raiser; QSO is new at Version 1.
+  it.each([
+    ["QSN", 2],
+    ["QSC", 2],
+    ["QSO", 1],
+  ])("%s's Workflow and the shared Form are the documents `pnpm defaults:publish` publishes, as their latest Versions (Version %i)", async (code, versionNo) => {
     const definitionId = (await rabaedDefaultWorkflowId(migrator, code))!;
     const latest = (await readLatestPublishedDefinition(migrator, definitionId))!;
-    expect(latest.versionNo).toBe(1);
+    expect(latest.versionNo).toBe(versionNo);
     const file = parseWorkflowDefinition(rabaedWorkflowFile(`${code}.json`));
     expect(file.ok && sameDefinition(latest.definition, file.definition)).toBe(true);
 

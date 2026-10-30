@@ -28,6 +28,10 @@ const sara = bi("Sara Al Harbi", "سارة الحربي");
 const faisal = bi("Faisal Al Qahtani", "فيصل القحطاني");
 const khalid = bi("Khalid Al Shehri", "خالد الشهري");
 const omar = bi("Omar Haddad", "عمر حداد");
+/** Their Positions, as the read gives them to their own Company only (RP-1091). */
+const engineer = bi("Engineer", "مهندس");
+const projectManager = bi("Project Manager", "مدير المشروع");
+const manager = bi("Manager", "مدير");
 
 type Event = WorkItemHistory["events"][number];
 type Over = Partial<Event> & Pick<Event, "type" | "audience" | "at">;
@@ -36,7 +40,7 @@ type Over = Partial<Event> & Pick<Event, "type" | "audience" | "at">;
 const history = (events: Over[]): Event[] =>
   events.map((over, i) => ({
     seq: i + 1,
-    by: { companyName: null, memberName: null },
+    by: { companyName: null, memberName: null, positions: [] },
     transition: null,
     fromStep: null,
     toStep: null,
@@ -60,25 +64,25 @@ const remarks = "Use the revised fixing detail on sheet E-204.";
 
 /** As the read gives it to the Contractor (TMC): its own internal moves, and the shared ones; the Consultant by name only, but for the Code's signer. */
 const contractorHistory = history([
-  { type: "transition", audience: "internal", at: "2026-10-05T07:10:00Z", transition: bi("Send for review", "إرسال للمراجعة"), by: { companyName: contractor, memberName: sara } },
-  { type: "internal_note", audience: "internal", at: "2026-10-06T08:00:00Z", transition: submitText, internalNote: "Checked against the spec, section 26 51 00.", by: { companyName: contractor, memberName: faisal } },
-  { type: "transition", audience: "shared", at: "2026-10-06T08:00:00Z", transition: submitText, answers: coverNote, by: { companyName: contractor, memberName: faisal } },
-  { type: "transition", audience: "shared", at: "2026-10-12T11:30:00Z", transition: sendBack, reason: "The datasheet is for another model.", by: { companyName: consultant, memberName: null } },
-  { type: "transition", audience: "internal", at: "2026-10-13T06:45:00Z", transition: bi("Return", "إرجاع"), reason: "Attach the 4000K datasheet.", by: { companyName: contractor, memberName: faisal } },
-  { type: "transition", audience: "shared", at: "2026-10-14T09:20:00Z", transition: submitText, by: { companyName: contractor, memberName: faisal } },
-  { type: "issue_code", audience: "shared", at: "2026-10-20T13:05:00Z", transition: codeB, outcome: "B", remarks, by: { companyName: consultant, memberName: omar } },
+  { type: "transition", audience: "internal", at: "2026-10-05T07:10:00Z", transition: bi("Send for review", "إرسال للمراجعة"), by: { companyName: contractor, memberName: sara, positions: [engineer] } },
+  { type: "internal_note", audience: "internal", at: "2026-10-06T08:00:00Z", transition: submitText, internalNote: "Checked against the spec, section 26 51 00.", by: { companyName: contractor, memberName: faisal, positions: [projectManager] } },
+  { type: "transition", audience: "shared", at: "2026-10-06T08:00:00Z", transition: submitText, answers: coverNote, by: { companyName: contractor, memberName: faisal, positions: [projectManager] } },
+  { type: "transition", audience: "shared", at: "2026-10-12T11:30:00Z", transition: sendBack, reason: "The datasheet is for another model.", by: { companyName: consultant, memberName: null, positions: [] } },
+  { type: "transition", audience: "internal", at: "2026-10-13T06:45:00Z", transition: bi("Return", "إرجاع"), reason: "Attach the 4000K datasheet.", by: { companyName: contractor, memberName: faisal, positions: [projectManager] } },
+  { type: "transition", audience: "shared", at: "2026-10-14T09:20:00Z", transition: submitText, by: { companyName: contractor, memberName: faisal, positions: [projectManager] } },
+  { type: "issue_code", audience: "shared", at: "2026-10-20T13:05:00Z", transition: codeB, outcome: "B", remarks, by: { companyName: consultant, memberName: omar, positions: [] } },
 ]);
 
 /** As the read gives it to the Consultant (Design Consultants): the Contractor by name only, its own people and internal moves. */
 const consultantHistory = history([
-  { type: "transition", audience: "shared", at: "2026-10-06T08:00:00Z", transition: submitText, answers: coverNote, by: { companyName: contractor, memberName: null } },
-  { type: "picked_up", audience: "internal", at: "2026-10-07T07:00:00Z", by: { companyName: consultant, memberName: khalid } },
-  { type: "recommend_code", audience: "internal", at: "2026-10-09T10:15:00Z", recommendedCode: "C", by: { companyName: consultant, memberName: khalid } },
-  { type: "transition", audience: "shared", at: "2026-10-12T11:30:00Z", transition: sendBack, reason: "The datasheet is for another model.", by: { companyName: consultant, memberName: omar } },
-  { type: "transition", audience: "shared", at: "2026-10-14T09:20:00Z", transition: submitText, by: { companyName: contractor, memberName: null } },
-  { type: "internal_note", audience: "internal", at: "2026-10-16T08:40:00Z", transition: bi("Send to Manager", "إرسال إلى المدير"), internalNote: "Fixings differ from E-204.", by: { companyName: consultant, memberName: khalid } },
-  { type: "recommend_code", audience: "internal", at: "2026-10-16T08:40:00Z", recommendedCode: "B", by: { companyName: consultant, memberName: khalid } },
-  { type: "issue_code", audience: "shared", at: "2026-10-20T13:05:00Z", transition: codeB, outcome: "B", remarks, by: { companyName: consultant, memberName: omar } },
+  { type: "transition", audience: "shared", at: "2026-10-06T08:00:00Z", transition: submitText, answers: coverNote, by: { companyName: contractor, memberName: null, positions: [] } },
+  { type: "picked_up", audience: "internal", at: "2026-10-07T07:00:00Z", by: { companyName: consultant, memberName: khalid, positions: [engineer] } },
+  { type: "recommend_code", audience: "internal", at: "2026-10-09T10:15:00Z", recommendedCode: "C", by: { companyName: consultant, memberName: khalid, positions: [engineer] } },
+  { type: "transition", audience: "shared", at: "2026-10-12T11:30:00Z", transition: sendBack, reason: "The datasheet is for another model.", by: { companyName: consultant, memberName: omar, positions: [manager] } },
+  { type: "transition", audience: "shared", at: "2026-10-14T09:20:00Z", transition: submitText, by: { companyName: contractor, memberName: null, positions: [] } },
+  { type: "internal_note", audience: "internal", at: "2026-10-16T08:40:00Z", transition: bi("Send to Manager", "إرسال إلى المدير"), internalNote: "Fixings differ from E-204.", by: { companyName: consultant, memberName: khalid, positions: [engineer] } },
+  { type: "recommend_code", audience: "internal", at: "2026-10-16T08:40:00Z", recommendedCode: "B", by: { companyName: consultant, memberName: khalid, positions: [engineer] } },
+  { type: "issue_code", audience: "shared", at: "2026-10-20T13:05:00Z", transition: codeB, outcome: "B", remarks, by: { companyName: consultant, memberName: omar, positions: [manager] } },
 ]);
 
 const reviewCodes = [
@@ -274,6 +278,9 @@ const inflowOf = (context: PlayContext) => panelOf(context).querySelector<HTMLEl
 const railOf = (context: PlayContext) => panelOf(context).querySelector<HTMLElement>(".sdp-rail")!;
 const textOf = (el: Element) => el.textContent ?? "";
 const name = (context: PlayContext, text: BilingualText) => storyText(context, text);
+/** Each entry's "Name · Position · Company" line's Position, newest first; null where it has none. */
+const positionsOf = (el: Element) =>
+  [...el.querySelectorAll(".sdp-timeline-entry")].map((entry) => entry.querySelector('[data-who="position"]')?.textContent ?? null);
 
 /** No bubbles, no composer, no due dates anywhere in the panel. */
 async function expectNoChat(context: PlayContext) {
@@ -306,6 +313,11 @@ export const AsTheContractor: Story = {
       name(context, copy.coverNote),
     ]);
     await expect(log).not.toContain("another model");
+    // Scenario RP-1091-1: the Contractor's own people with their Position; the Code's signer with none (V14).
+    await expect(positionsOf(section)).toEqual([null, null, name(context, projectManager), null, null, name(context, projectManager), null]);
+    await expect(textOf(section.querySelectorAll(".sdp-timeline-entry")[2]!)).toContain(
+      [name(context, faisal), name(context, projectManager), name(context, contractor)].join(" · "),
+    );
     const chip = section.querySelector<HTMLElement>('[data-chip="comments"]')!;
     await expect(chip).toHaveTextContent(comments("3", storyLocale(context)));
     await expect(chip.closest("a")?.getAttribute("href")).toBe("#snag-list");
@@ -345,6 +357,9 @@ export const AsTheConsultant: Story = {
     await expect(log).toContain(name(context, contractor));
     await expect(log).toContain(name(context, omar));
     await expect(log).not.toContain(name(context, copy.recommended));
+    // Scenario RP-1091-2: the Consultant's own people with their Position; the Contractor's turns with none.
+    await expect(positionsOf(section)).toEqual([name(context, manager), null, null, name(context, manager), null]);
+    await expect(log).not.toContain(name(context, projectManager));
     const entries = section.querySelectorAll(".sdp-timeline-entry");
     await expect(textOf(entries[entries.length - 1]!)).toContain(name(context, submitText));
     await expectNoChat(context);
@@ -371,6 +386,7 @@ export const ConsultantInternal: Story = {
     await expect(textOf(tab)).not.toContain(name(context, submitText));
     await expect(textOf(tab)).not.toContain(name(context, contractor));
     await expect(tab.querySelectorAll(".sdp-timeline-entry")).toHaveLength(4);
+    await expect(positionsOf(tab)).toEqual(Array(4).fill(name(context, engineer)));
     await expectNoChat(context);
   },
 };

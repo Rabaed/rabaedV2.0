@@ -9,6 +9,7 @@ import {
   databasesOfEnv,
   dropOrKeep,
   firstFreeLane,
+  freeLaneClashes,
   freeLaneOrder,
   holderAdvice,
   isPortTaken,
@@ -18,7 +19,6 @@ import {
   laneEnv,
   laneHolders,
   lanePorts,
-  heldSinceListed,
   onlyLane,
   orphanDatabases,
   parseConnections,
@@ -33,6 +33,7 @@ import {
   holdsLaneProject,
   postgresConnections,
   projectInUseNow,
+  protectedLaneReason,
   pruneCommand,
   releaseContainers,
   staleProjects,
@@ -192,10 +193,10 @@ describe("firstFreeLane", () => {
     expect(firstFreeLane(1, () => ["taken"])).toBeUndefined();
   });
 
-  it("starts at lane 1 when asked from lane 0, and still reaches lane 9", () => {
+  it("starts at lane 1 when asked from lane 0, and still reaches lane 9 (never trying lane 7)", () => {
     const tried: number[] = [];
     expect(firstFreeLane(0, (n) => (tried.push(n), n === 9 ? [] : ["taken"]))).toBe(9);
-    expect(tried).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(tried).toEqual([1, 2, 3, 4, 5, 6, 8, 9]);
   });
 
   it("picks 32 from 31 when 31 is taken", () => {
@@ -209,13 +210,46 @@ describe("firstFreeLane", () => {
   });
 
   it("goes on to the lanes A–D once the legacy lanes 1–9 are all taken, never an m0 (RP-605)", () => {
-    expect(freeLaneOrder(4)).toEqual([4, 5, 6, 7, 8, 9, 1, 2, 3, 11, 12, 13, 14, 21, 22, 23, 24, 31, 32, 33, 34, 41, 42, 43, 44, 51, 52, 53, 54]);
+    expect(freeLaneOrder(4)).toEqual([4, 5, 6, 8, 9, 1, 2, 3, 11, 12, 13, 14, 21, 22, 23, 24, 31, 32, 33, 34, 41, 42, 43, 44, 51, 52, 53, 54]);
     expect(firstFreeLane(1, (n) => (n < 10 ? ["taken"] : []))).toBe(11);
   });
 
   it("starts a bare --free at lane 11, so it never hands out a legacy lane (RP-605)", () => {
     const parsed = parseLaneEnvArgs(["--free"]);
     expect("lane" in parsed && freeLaneOrder(parsed.lane).every((n) => n >= 11 && n % 10 !== 0)).toBe(true);
+  });
+});
+
+describe("lane 7, Main 7's harness data (RP-1101)", () => {
+  const here = "G:\\rabaed-wt\\RP-1101";
+
+  it("is the one protected lane, with a reason naming Main 7", () => {
+    expect(protectedLaneReason("rabaed-lane7")).toContain("Main 7");
+    expect(protectedLaneReason("rabaed-lane71")).toBeUndefined();
+    expect(protectedLaneReason("rabaed-lane42")).toBeUndefined();
+    expect(protectedLaneReason(undefined)).toBeUndefined();
+  });
+
+  it("is never offered by lane:env --free, whatever lane it starts from", () => {
+    for (const start of VALID_LANES) expect(freeLaneOrder(start)).not.toContain(7);
+    expect(firstFreeLane(6, (n) => (n === 7 ? [] : ["taken"]))).toBeUndefined();
+  });
+
+  it("clashes for lane:env 7 --free even with nothing on it (only Main 7's volumes left), so --free moves on", () => {
+    expect(freeLaneClashes(7, [])).toEqual([`${protectedLaneReason("rabaed-lane7")}.`]);
+    expect(freeLaneClashes(7, ["Port 5532 is taken."])).toEqual(["Port 5532 is taken.", `${protectedLaneReason("rabaed-lane7")}.`]);
+    expect(freeLaneClashes(42, [])).toEqual([]);
+    expect(freeLaneClashes(42, ["Port 4420 is taken."])).toEqual(["Port 4420 is taken."]);
+  });
+
+  it("is never taken over by lane:env --force, even from a worktree that is gone", () => {
+    const containers = [container({ name: "rabaed-lane7-db-1", state: "exited", project: "rabaed-lane7", workingDir: "G:\\rabaed-wt\\gone" })];
+    const p = chooseTakeover(7, { containers, worktrees: [], cwd: here, holders: none, platform: "win32" });
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual([`lane:env --force refused: ${protectedLaneReason("rabaed-lane7")}.`]);
+    // Nor from a merged, clean worktree whose .env names it.
+    const merged: TakeoverWorktree = { path: "G:\\rabaed-wt\\RP-7", branch: "RP-7-x", merged: true, dirty: false, exists: true, project: "rabaed-lane7" };
+    expect(chooseTakeover(7, { containers: [], worktrees: [merged], cwd: here, holders: none, platform: "win32" }).released).toEqual([]);
   });
 });
 
@@ -642,26 +676,6 @@ describe("postgresConnections (RP-1073)", () => {
     };
     expect(postgresConnections("x", refused)).toEqual({ unanswered: "psql: error: connection refused" });
     expect(postgresConnections("x", () => [])).toEqual({ unanswered: 'psql answered ""' });
-  });
-});
-
-describe("heldSinceListed (lanes:prune --merged, just before each removal)", () => {
-  const project = { project: "rabaed-lane3", reason: "branch merged into origin/main (x)", containers: ["rabaed-lane3-db-1"], volumes: [] };
-  const containers = [
-    container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\RP-362" }),
-    container({ name: "rabaed-lane4-db-1", project: "rabaed-lane4", workingDir: "G:\\rabaed-wt\\RP-363" }),
-  ];
-
-  it("names the session that now holds one of the project's worktrees, without saying to archive it", () => {
-    const holders: Holders = { ...none, desktopSession: (path) => (path === "G:\\rabaed-wt\\RP-362" ? { kind: "open", session: 'session "RP-9"' } : undefined) };
-    expect(heldSinceListed(project, containers, holders)).toBe('G:\\rabaed-wt\\RP-362: its Claude desktop session is open (session "RP-9")');
-    const running: Holders = { ...none, runningSession: (path) => (path === "G:\\rabaed-wt\\RP-362" ? "a running Claude session is in it: x" : undefined) };
-    expect(heldSinceListed(project, containers, running)).toBe("G:\\rabaed-wt\\RP-362: a running Claude session is in it: x");
-  });
-
-  it("lets the project go when nothing holds its worktrees, whatever holds another project's", () => {
-    const holders: Holders = { ...none, runningSession: (path) => (path === "G:\\rabaed-wt\\RP-363" ? "a running Claude session is in it: x" : undefined) };
-    expect(heldSinceListed(project, containers, holders)).toBeUndefined();
   });
 });
 

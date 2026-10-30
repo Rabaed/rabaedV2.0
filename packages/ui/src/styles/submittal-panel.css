@@ -139,6 +139,39 @@
   display: none;
 }
 
+/*
+ * The rail's route strip is one line at 300px and 360px (README §4.9): the stop holding the item keeps
+ * its role and line, cut short if it must; every other stop is its role's tile, its name still read
+ * out (the Step list below names each stop).
+ */
+.sdp-rail .sdp-route ol {
+  flex-wrap: nowrap;
+}
+.sdp-rail .sdp-route li {
+  flex: none;
+}
+.sdp-rail .sdp-route li[aria-current] {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.sdp-rail .sdp-route [data-stop-label] > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sdp-rail .sdp-route li:not([aria-current]) .sdp-stop {
+  padding-inline-end: 3px;
+}
+.sdp-rail .sdp-route li:not([aria-current]) [data-stop-label] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Compact (< 560): one column; no previous / next, no breadcrumb label, no hint; number at 21px. */
 @container sdp (max-width: 559px) {
   .sdp-nav,
@@ -151,6 +184,10 @@
   }
   .sdp-fields {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* The key facts are 2 × 2 here but number three: the last spans both columns, so no cell is empty (RP-1090). */
+  .sdp-facts > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 
