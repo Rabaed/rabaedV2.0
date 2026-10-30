@@ -186,6 +186,15 @@ export const AsTheConsultant: Story = {
     for (const name of Object.values(hiddenPerson)) await expect(log).not.toHaveTextContent(name);
     await expect(owner).toHaveTextContent(roles.owner.name[locale]);
 
+    // Each Company's badge is the route strip's role tile (RP-1093): one colour per Project Role, in the panel's one role map.
+    const tiles = [contractor, own, mine, owner].map((b) => b!.querySelector<HTMLElement>("[data-role-badge] .sdp-role"));
+    for (const tile of tiles) await expect(tile).toBeVisible();
+    const tint = (tile: HTMLElement | null) => getComputedStyle(tile!).backgroundColor;
+    await expect(contractor!.querySelector("[data-role-badge]")).toHaveAttribute("data-role-badge", "contractor");
+    await expect(owner!.querySelector("[data-role-badge]")).toHaveAttribute("data-role-badge", "owner");
+    await expect(tint(tiles[1]!)).toBe(tint(tiles[2]!));
+    await expect(new Set([tint(tiles[0]!), tint(tiles[1]!), tint(tiles[3]!)]).size).toBe(3);
+
     // Positive control: our own Company's authors by name.
     await expect(own).toHaveTextContent(khalid[locale]);
     await expect(mine).toHaveTextContent(sara[locale]);
