@@ -123,6 +123,30 @@ describe("filesWithEmbeddedFonts", () => {
     expect(filesWithEmbeddedFonts(repo).sort()).toEqual(["a.css", "b.js", "c.html"]);
   });
 
+  // An owner export renamed and moved out of design/reference/, where .gitignore no longer hides it (RP-663).
+  const thmanyahFace = (mime: string) => `<style>@font-face { font-family: "Thmanyah Sans"; src: url('data:${mime};base64,${fakeBase64}') format("woff2"); }</style>`;
+
+  it("finds a Thmanyah @font-face inlined in a committed page moved out of design/reference/", () => {
+    commit({ "docs/notes/submittals-page.htm": thmanyahFace(font("woff2")) });
+    expect(filesWithEmbeddedFonts(repo)).toEqual(["docs/notes/submittals-page.htm"]);
+  });
+
+  it("finds a Thmanyah @font-face staged in a page moved out of design/reference/", () => {
+    writeFileSync(join(repo, "board.html"), thmanyahFace(font("woff2")));
+    git("add", "board.html");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["board.html"]);
+  });
+
+  it("finds an @font-face whose inlined font hides behind a generic mime type: format() names it a font", () => {
+    commit({ "octet.html": thmanyahFace("application/octet-stream"), "untyped.css": thmanyahFace("") });
+    expect(filesWithEmbeddedFonts(repo).sort()).toEqual(["octet.html", "untyped.css"]);
+  });
+
+  it("ignores an @font-face that loads its font from a URL", () => {
+    commit({ "fonts.css": `@font-face { font-family: "Thmanyah Sans"; src: url("/fonts/thmanyahsans-Regular.woff2") format("woff2"); }` });
+    expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+
   it("finds a manifest font however its mime type is cased, JSON-escaped inside a script string, or the old IE type", () => {
     const fontEntry = (mime: string) => JSON.stringify({ a1: { mime, data: fakeBase64 } });
     commit({
