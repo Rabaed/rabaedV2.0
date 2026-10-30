@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { holdReason, systemHolders, tryReadTimedProcessList, type Holders, type TimedProcessList } from "./claude-sessions.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
@@ -28,6 +28,8 @@ export type WorktreeFacts = Worktree & {
   ahead: number;
   /** Uncommitted changes, including untracked files that are not ignored. */
   dirty: boolean;
+  /** Those changes as `git status --porcelain` lines ("?? notes.md" is untracked), so a skip can list them (RP-1101). */
+  changes?: string[];
   /**
    * Its branch (or detached HEAD) has never had a commit of its own (see hasOwnCommit),
    * so its subagent may still be running: a new agent worktree has nothing ahead and
@@ -192,8 +194,23 @@ export function listWorktrees(cwd?: string): Worktree[] {
  * A root .pnpm-store/ never counts: pnpm makes one when a sandboxed agent can't write to the
  * drive root's store, and a branch from before RP-549 does not ignore it yet.
  */
-export const gitDirty = (dir: string): boolean =>
-  git(["--no-optional-locks", "status", "--porcelain", "--", ":(top)", ":(top,exclude).pnpm-store"], dir).trim() !== "";
+export const gitDirty = (dir: string): boolean => gitChanges(dir).length > 0;
+
+/** gitDirty's changes, one `git status --porcelain` line each. */
+export const gitChanges = (dir: string): string[] =>
+  git(["-c", "core.quotePath=false", "--no-optional-locks", "status", "--porcelain", "--", ":(top)", ":(top,exclude).pnpm-store"], dir)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+
+/** Whether the clone at cwd is shallow (`git rev-parse --is-shallow-repository`); a git that cannot tell counts as shallow (RP-1101). */
+export function isShallowRepo(cwd: string): boolean {
+  try {
+    return git(["rev-parse", "--is-shallow-repository"], cwd).trim() !== "false";
+  } catch {
+    return true;
+  }
+}
 
 /** The current worktree's top folder. */
 export const currentRoot = (): string => git(["rev-parse", "--show-toplevel"]).trim();
@@ -231,13 +248,14 @@ export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: str
 function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Liveness): WorktreeFacts {
   // A folder deleted by hand is still listed; it has nothing uncommitted, and no subagent runs in it.
   const exists = existsSync(w.path);
-  const dirty = exists && gitDirty(w.path);
+  const changes = exists ? gitChanges(w.path) : [];
+  const dirty = changes.length > 0;
   const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
   // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
   const mayBeStarting = ahead === 0 && noCommitsYet;
-  return { ...w, ahead, dirty, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
+  return { ...w, ahead, dirty, changes, noCommitsYet, lockLive: mayBeStarting && live.lockLive(w.locked), heldByProcess: mayBeStarting && live.heldByProcess(w.path) };
 }
 
 /** judgeWorktree's answer. neverCommitted: finished although its branch has had no commit of its own. */
@@ -337,29 +355,55 @@ export function removeWorktree(w: Worktree, mainRoot: string, target: string): R
   return removeLinkedWorktree(w, mainRoot, target);
 }
 
+/** A Windows path as `\\?\G:\…`, which rd follows past MAX_PATH (260 characters). */
+export const longPath = (path: string): string => (path.startsWith("\\\\?\\") ? path : `\\\\?\\${path.replace(/\//g, "\\")}`);
+
+/**
+ * Deletes a Windows folder with `rd /s /q "\\?\<path>"` (RP-1101), which reaches past MAX_PATH where
+ * git and rmSync stop. Verbatim arguments: Node would otherwise escape the quotes as \" and rd would get
+ * an invalid path. Throws with rd's message when it fails.
+ */
+export function rdLongPath(path: string, spawn: typeof spawnSync = spawnSync): void {
+  const result = spawn("cmd", ["/d", "/s", "/c", `"rd /s /q "${longPath(path)}""`], { encoding: "utf8", windowsVerbatimArguments: true });
+  if (result.status !== 0) throw Object.assign(new Error(`rd failed (exit ${result.status})`), { stderr: `${result.stderr ?? ""}${result.error?.message ?? ""}`.trim() || `rd exited ${result.status}` });
+}
+
 /** What removeWorktree left: branches it kept, and why its folder is still there. Empty when it removed everything. */
 export type Removal = { branchesKept?: { branch: string; reason: string }[]; folderLeft?: string };
 
 /**
  * removeWorktree for any worktree but the main checkout (worktrees:prune decides which).
- * The folder removal retries while Windows briefly locks node_modules; a folder still
- * there afterwards is returned as folderLeft, with why. Once the worktree is removed,
+ * git removes with core.longpaths (RP-1101: "Filename too long"); a remove that fails after
+ * deleting the worktree's .git ("Function not implemented") goes on to the folder. The folder
+ * removal retries while Windows briefly locks node_modules, then tries `rd /s /q \\?\<path>`
+ * on Windows; a folder still there afterwards is returned as folderLeft, with why. Once the worktree is removed,
  * a branch git will not delete is kept and named, not thrown.
  */
 export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: string): Removal {
   if (samePath(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: the main checkout`);
   if (w.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   try {
-    git(["worktree", "remove", "--force", w.path], mainRoot);
+    git(["-c", "core.longpaths=true", "worktree", "remove", "--force", w.path], mainRoot);
   } catch (error) {
-    // "Directory not empty" leaves the worktree deregistered and its folder behind; any other failure leaves it listed.
-    if (listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
+    // "Directory not empty" leaves the worktree deregistered and its folder behind; a failure after git
+    // deleted its .git leaves a folder git can no longer read (`git worktree prune` drops the record);
+    // any other failure leaves it listed and readable.
+    const gitGone = existsSync(w.path) && !existsSync(join(w.path, ".git"));
+    if (!gitGone && listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
   }
   let folderLeft: string | undefined;
   try {
     if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   } catch (error) {
     folderLeft = (error as { code?: string }).code ?? String(error);
+    if (process.platform === "win32") {
+      try {
+        rdLongPath(w.path);
+      } catch (rdError) {
+        folderLeft = `${folderLeft}; ${gitError(rdError)}`;
+      }
+      if (!existsSync(w.path)) folderLeft = undefined;
+    }
   }
   const branchesKept: { branch: string; reason: string }[] = [];
   const deleteIfInTarget = (branch: string) => {
