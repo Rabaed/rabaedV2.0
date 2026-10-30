@@ -144,7 +144,7 @@ describe("scenario RP-1069-1: K1's engineer reads C1's Submitted item's thread",
 });
 
 describe("scenario RP-1069-1: before the Submission Date", () => {
-  it("C1's post is refused not_submitted, and K1 reads nothing of the thread once it is Submitted but C1's early post", async () => {
+  it("refuses C1's post before the Submission Date and writes nothing: once Submitted, K1 reads only the post after it", async () => {
     const { c1, k1 } = tower;
     expect((await post(c1.members.engineer, internal, "Too early")).outcome).toBe("not_submitted");
     expect(await chat(c1.members.engineer, internal)).toEqual([]); // not hidden-from: C1 sees the item; the refused post wrote nothing

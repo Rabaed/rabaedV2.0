@@ -56,8 +56,8 @@ beforeAll(async () => {
   await addInternalConsultantStepsType(migrator);
   await addOwnerReviewType(migrator, OWNER_TYPE, ownerSchema);
   const c1 = await api.projectCreator();
-  const onboard = async (legalName: string): Promise<Company> => {
-    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+  const onboard = async (name: string): Promise<Company> => {
+    const onboarded = await api.onboardCompany({ legalName: bilingual(name) }); // not hidden-from: onboards the Company by its name
     return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   };
   const k1 = await onboard(CONSULTANT);

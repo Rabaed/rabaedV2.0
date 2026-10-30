@@ -36,8 +36,8 @@ const readChat = async (by: Caller, item: string): Promise<WorkItemChat> => (awa
 /** `by` posts on item `item` and it is accepted; returns the new message's id. */
 const post = async (by: Caller, item: string, body: unknown): Promise<string> => (await ok(by.post(chatUrl(item), body), 201)).json().id;
 
-const onboard = async (legalName: string): Promise<Company> => {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+const onboard = async (name: string): Promise<Company> => {
+  const onboarded = await api.onboardCompany({ legalName: bilingual(name) }); // not hidden-from: onboards the Company by its name
   return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
 };
 

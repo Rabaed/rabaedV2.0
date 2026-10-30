@@ -32,12 +32,10 @@ const names = new Map<string, string>();
 const named = (as: string) => names.get(as) ?? as;
 const latestVersionNo = async () => (await readLatestPublishedDefinition(owner, defaultId))!.versionNo;
 
-/** `as` runs `query` selecting one `outcome`. */
-const outcomeOf = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => tower.outcome(as, query);
 const bind = (as: string, participantId: string | null) =>
-  outcomeOf(as, sql`select app.bind_workflow(${tower.projectId}::uuid, ${typeId}::uuid, ${participantId}::uuid, ${defaultId}::uuid, now()) as outcome`);
+  tower.outcome(as, sql`select app.bind_workflow(${tower.projectId}::uuid, ${typeId}::uuid, ${participantId}::uuid, ${defaultId}::uuid, now()) as outcome`);
 const unbind = (as: string, participantId: string | null) =>
-  outcomeOf(as, sql`select app.unbind_workflow(${tower.projectId}::uuid, ${typeId}::uuid, ${participantId}::uuid, now()) as outcome`);
+  tower.outcome(as, sql`select app.unbind_workflow(${tower.projectId}::uuid, ${typeId}::uuid, ${participantId}::uuid, now()) as outcome`);
 /** The outcomes `as` is told the Tower lacks to fall back to the Rabaed Default Project-wide, one row each. */
 const toldLacking = async (as: string) =>
   (
@@ -86,7 +84,7 @@ beforeAll(async () => {
   expect(copy!.outcome).toBe("duplicated");
   copyId = copy!.workflow_definition_id;
   expect((await tower.call<{ outcome: string }>(c1.ap, sql`select outcome from app.publish_workflow(${copyId}::uuid, now())`))[0]!.outcome).toBe("published");
-  expect(await outcomeOf(c1.ap, sql`select app.bind_workflow(${tower.projectId}::uuid, ${typeId}::uuid, null, ${copyId}::uuid, now()) as outcome`)).toBe("bound");
+  expect(await tower.outcome(c1.ap, sql`select app.bind_workflow(${tower.projectId}::uuid, ${typeId}::uuid, null, ${copyId}::uuid, now()) as outcome`)).toBe("bound");
   expect(await bind(c1.ap, c2.participantId)).toBe("bound");
 
   // Rabaed adds an outcome to the Type's set: every Project but the Tower already holds it.
@@ -153,7 +151,7 @@ describe("scenario RP-566-1: a Rabaed Default Version that uses an outcome the T
   it("goes back once the Project Admin adds the outcome, and the Tower's new items start on a Version with no outcome outside its set", async () => {
     const { c1 } = tower;
     expect(
-      await outcomeOf(c1.ap, sql`select app.add_outcome(${tower.projectId}::uuid, ${TYPE}, ${code}, ${JSON.stringify(bilingual("On site"))}::jsonb, true, 'positive', '[]'::jsonb) as outcome`),
+      await tower.outcome(c1.ap, sql`select app.add_outcome(${tower.projectId}::uuid, ${TYPE}, ${code}, ${JSON.stringify(bilingual("On site"))}::jsonb, true, 'positive', '[]'::jsonb) as outcome`),
     ).toBe("added");
     expect(await unbind(c1.ap, null)).toBe("unbound");
     const { rows } = await migrator.query(

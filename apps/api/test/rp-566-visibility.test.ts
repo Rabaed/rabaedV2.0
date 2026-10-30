@@ -142,12 +142,14 @@ describe("scenario RP-566-1: a Rabaed Default Version that uses an outcome the T
     await ok(c1.caller.post(`/v1/projects/${at.projectId}/work-item-types/${TYPE}/outcomes`, { code, name: bilingual("On site"), closing: true, polarity: "positive", actions: [] }), 201);
     await ok(c1.caller.request("DELETE", `${bindings()}?workItemTypeId=${typeId}`));
     expect((await settings(c1.caller)).types.find((t) => t.code === TYPE)!.workflow).toMatchObject({ id: defaultId, source: "rabaed_default", versionNo: await latestVersionNo() });
-    const outside = await sql<{ outcome: string }>`
+    const { rows } = await sql<{ version_no: number; outside: string[] }>`
       with v as (select app.new_item_workflow_version(${at.projectId}::uuid, ${typeId}::uuid, null) as id)
-      select t.outcome from workflow_transition t join v on t.workflow_version_id = v.id
-      where t.outcome is not null
-        and not exists (select 1 from outcome o where o.project_id = ${at.projectId}::uuid and o.work_item_type_id = ${typeId}::uuid and o.code = t.outcome and o.closing)
+      select (select version_no from workflow_version where id = v.id) as version_no,
+        array(select t.outcome from workflow_transition t where t.workflow_version_id = v.id and t.outcome is not null
+          and not exists (select 1 from outcome o where o.project_id = ${at.projectId}::uuid and o.work_item_type_id = ${typeId}::uuid and o.code = t.outcome and o.closing)) as outside
+      from v
     `.execute(migrator);
-    expect(outside.rows).toEqual([]); // not hidden-from: the Version's outcomes outside the Tower's set, as the migrator reads them
+    // The Version new items start on is the Default's latest, and it has no outcome outside the Tower's set.
+    expect(rows).toEqual([{ version_no: await latestVersionNo(), outside: [] }]);
   });
 });

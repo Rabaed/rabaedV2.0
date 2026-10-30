@@ -101,8 +101,8 @@ async function addLogType(): Promise<void> {
   expect(await publishFormVersion(migrator, formId, schema)).toMatchObject({ ok: true });
 }
 
-const onboard = async (legalName: string): Promise<Company> => {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+const onboard = async (name: string): Promise<Company> => {
+  const onboarded = await api.onboardCompany({ legalName: bilingual(name) }); // not hidden-from: onboards the Company by its name
   return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
 };
 
@@ -145,7 +145,9 @@ beforeAll(async () => {
 describe("scenario RP-1067-1: C1's PM opens the approval log", () => {
   it("names C1's own people, and K1 by its Company name only but for the final Code's signer", async () => {
     const events = await history(at.c1Pm);
-    expect(events.filter((e) => e.by.companyName?.en === C1_NAME).every((e) => e.by.memberName !== null)).toBe(true); // not hidden-from: C1's own events, each named
+    const own = events.filter((e) => e.by.companyName?.en === C1_NAME);
+    expect(own.length).toBeGreaterThan(0);
+    expect(own.filter((e) => e.by.memberName === null)).toEqual([]); // not hidden-from: none of C1's own events is unnamed
     // Each K1 turn one shared block: its Send Back, then its Code, with no person, no Step and no Position, the signer named.
     const k1 = events.filter((e) => e.by.companyName?.en === K1_NAME); // not hidden-from: picks K1's events to compare whole
     expect(k1.map((e) => [e.type, e.audience, e.by.memberName, e.by.positions, e.fromStep, e.toStep, e.reason, e.remarks, e.internalNote, e.recommendedCode, e.outcome])).toEqual([
@@ -154,10 +156,10 @@ describe("scenario RP-1067-1: C1's PM opens the approval log", () => {
     ]);
   });
 
-  it("reads as text the Cover Note, the Send Back's reason and the Remarks only of what C1 doesn't write itself", async () => {
+  it("reads as text boxes the Cover Note and the Remarks only; the Send Back's reason rides on K1's block (above)", async () => {
     const shared = (await history(at.c1Pm)).filter((e) => e.audience === "shared");
-    const texts = shared.flatMap((e) => [e.reason, e.remarks, e.internalNote, e.answers?.cover_note as string | undefined].filter((t) => typeof t === "string"));
-    expect(texts).toEqual(["Trays for Level 2", "Wrong tray finish", "Approved with comments"]);
+    const texts = shared.flatMap((e) => [e.answers?.cover_note as string | undefined, e.remarks, e.internalNote].filter((t) => typeof t === "string"));
+    expect(texts).toEqual(["Trays for Level 2", "Approved with comments"]);
   });
 
   it("gives K1's internal moves, its Recommended Codes and its Internal Note to K1 only", async () => {

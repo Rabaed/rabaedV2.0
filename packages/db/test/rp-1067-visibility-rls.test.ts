@@ -156,7 +156,9 @@ afterAll(async () => {
 describe("scenario RP-1067-1: C1's PM reads the approval log", () => {
   it("names C1's own people, and K1 by its Company name only but for the final Code's signer, with no Step", async () => {
     const rows = await historyOf(tower.c1.members.project_manager);
-    expect(rows.filter((r) => r.company_name?.en === "C1").every((r) => r.member_name !== null)).toBe(true); // not hidden-from: C1's own events, each named
+    const own = rows.filter((r) => r.company_name?.en === "C1");
+    expect(own.length).toBeGreaterThan(0);
+    expect(own.filter((r) => r.member_name === null)).toEqual([]); // not hidden-from: none of C1's own events is unnamed
     const k1 = rows.filter((r) => r.company_name?.en === "K1"); // not hidden-from: picks K1's events to compare whole
     expect(k1.map((r) => [r.type, r.audience, r.member_name, r.from_step_name, r.to_step_name, r.reason, r.remarks, r.internal_note, r.recommended_code, r.outcome])).toEqual([
       ["transition", "shared", null, null, null, "Wrong tray finish", null, null, null, null],
@@ -164,10 +166,10 @@ describe("scenario RP-1067-1: C1's PM reads the approval log", () => {
     ]);
   });
 
-  it("reads as text the Cover Note, the Send Back's reason and the Remarks only of what C1 doesn't write itself", async () => {
+  it("reads as text boxes the Cover Note and the Remarks only; the Send Back's reason rides on K1's block (above)", async () => {
     const shared = (await historyOf(tower.c1.members.project_manager)).filter((r) => r.audience === "shared");
-    const texts = shared.flatMap((r) => [r.reason, r.remarks, r.internal_note, r.answers?.cover_note].filter((t) => typeof t === "string"));
-    expect(texts).toEqual(["Trays for Level 2", "Wrong tray finish", "Approved with comments"]);
+    const texts = shared.flatMap((r) => [r.answers?.cover_note, r.remarks, r.internal_note].filter((t) => typeof t === "string"));
+    expect(texts).toEqual(["Trays for Level 2", "Approved with comments"]);
   });
 
   it("gives K1's internal events to K1 only", async () => {
