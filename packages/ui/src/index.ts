@@ -364,6 +364,13 @@ export {
   type SubmittalTimelineLabels,
 } from "./components/submittal-panel/panel-timeline.tsx";
 export { SubmittalPanelMapLink, SubmittalPanelRail, SubmittalPanelWorkflowAndLog, type SubmittalPanelRailLabels } from "./components/submittal-panel/panel-rail.tsx";
+export {
+  SubmittalPanelAttachments,
+  type SubmittalPanelAttachmentFile,
+  type SubmittalPanelAttachmentsLabels,
+  type SubmittalPanelAttachmentsProps,
+} from "./components/submittal-panel/panel-attachments.tsx";
+export { attachmentKind, submittalPanelAttachmentDocuments, type SubmittalPanelAttachmentKind } from "./components/submittal-panel/attachments-model.ts";
 export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
 export {
   WorkflowBuilder,

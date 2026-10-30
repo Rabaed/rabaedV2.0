@@ -16,7 +16,8 @@ const radix = Object.keys(JSON.parse(readFileSync(new URL("package.json", import
 // real Chromium. See test/stories.test.tsx.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  optimizeDeps: { include: radix },
+  // pdf.js too (the Attachments preview, RP-1068): it is imported only when a PDF is first opened.
+  optimizeDeps: { include: [...radix, "pdfjs-dist"] },
   test: {
     name: "stories",
     include: ["test/**/*.test.tsx"],

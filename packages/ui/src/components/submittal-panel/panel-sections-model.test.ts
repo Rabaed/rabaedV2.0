@@ -68,15 +68,15 @@ const noLocation = {
 
 describe("the Submittal Panel's fixed sections (owner decision C5)", () => {
   it("shows every fixed section a material request's Form has data for, in the design's order", () => {
-    expect(submittalPanelSectionKeys(mar)).toEqual(["subject", "scope", "location", "supplier", "links"]);
+    expect(submittalPanelSectionKeys(mar)).toEqual(["subject", "scope", "location", "supplier", "attachments", "links"]);
   });
 
   it("hides Supplier & items for a Type whose Form has no Approved Supplier (a DAR)", () => {
-    expect(submittalPanelSectionKeys(dar)).toEqual(["subject", "scope", "location", "links"]);
+    expect(submittalPanelSectionKeys(dar)).toEqual(["subject", "scope", "location", "attachments", "links"]);
   });
 
   it("hides Location for a Form that asks none", () => {
-    expect(submittalPanelSectionKeys(noLocation)).toEqual(["subject", "scope", "links"]);
+    expect(submittalPanelSectionKeys(noLocation)).toEqual(["subject", "scope", "attachments", "links"]);
   });
 });
 
