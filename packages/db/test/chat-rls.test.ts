@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { bilingual, buildSeamTwoTower, digits, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { bilingual, buildSeamTwoTower, digits, expectHiddenFrom, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -47,6 +47,15 @@ async function posted(as: string, id: string, body: string): Promise<string> {
   expect((await post(as, id, body)).outcome).toBe("posted");
   return body;
 }
+/** `as` posts `body` on item `id`, which must be accepted; returns the new message's id. */
+async function postedId(as: string, id: string, body: string): Promise<string> {
+  const result = await post(as, id, body);
+  expect(result.outcome).toBe("posted");
+  return result.message_id!;
+}
+/** Message `message` on item `id` is read by each of `seenBy` first, then by none of `hiddenFrom` (RP-1095). */
+const messageHidden = (id: string, message: string, seenBy: string | string[], hiddenFrom: string | string[], label: string) =>
+  expectHiddenFrom({ read: (as: string) => chat(as, id), target: message, seenBy, hiddenFrom, label });
 /** One character that is two UTF-16 code units (a grinning face). */
 const EMOJI = "\u{1F600}";
 /** A body no other test posts. */
@@ -210,25 +219,25 @@ describe("scenario RP-1062-1: a competing Contractor (V3)", () => {
   it("neither reads nor posts on C1's item, and reads and posts on its own", async () => {
     const other = tower.c2.members.engineer;
     // C1's item in Building B, which C2 covers: only V3 keeps it from C2.
-    const c1Body = await posted(tower.c1.members.engineer, item.c1AtB, unique("Column datasheet attached."));
-    expect(await bodies(tower.k1.members.engineer, item.c1AtB)).toContain(c1Body);
+    const c1Message = await postedId(tower.c1.members.engineer, item.c1AtB, unique("Column datasheet attached."));
+    await messageHidden(item.c1AtB, c1Message, tower.k1.members.engineer, other, "C1's item");
     expect(await chat(other, item.c1AtB)).toEqual([]);
     const before = await stored(item.c1AtB);
     expect(await post(other, item.c1AtB, "Hello?")).toEqual({ outcome: "not_found", message_id: null });
     expect(await post(other, randomUUID(), "Hello?")).toEqual({ outcome: "not_found", message_id: null });
     expect(await stored(item.c1AtB)).toBe(before);
-    // Positive control: the same Member, on the item C2 raised.
-    const c2Body = await posted(other, item.c2AtB, unique("Beam datasheet attached."));
-    expect(await bodies(other, item.c2AtB)).toContain(c2Body);
-    // And C1, of the same Project Role, never reads C2's.
-    expect(await chat(tower.c1.members.engineer, item.c2AtB)).toEqual([]);
+    // Positive control: the same Member, on the item C2 raised; and C1, of the same Project Role, never reads C2's.
+    const c2Message = await postedId(other, item.c2AtB, unique("Beam datasheet attached."));
+    await messageHidden(item.c2AtB, c2Message, other, tower.c1.members.engineer, "C2's item");
   });
 });
 
 describe("scenario RP-1062-2: a Member outside the item's Location (layer 4)", () => {
   it("neither reads nor posts, and reads and posts on an item in the Location they cover", async () => {
     const manager = tower.k1.members.manager;
-    await posted(tower.c1.members.engineer, item.c1AtA, unique("Slab datasheet attached."));
+    const message = await postedId(tower.c1.members.engineer, item.c1AtA, unique("Slab datasheet attached."));
+    // K1's Engineer covers Building A and reads it; the Manager, who covers Building B only, doesn't.
+    await messageHidden(item.c1AtA, message, tower.k1.members.engineer, manager, "outside Building B");
     expect(await chat(manager, item.c1AtA)).toEqual([]);
     expect(await post(manager, item.c1AtA, "Seen.")).toEqual({ outcome: "not_found", message_id: null });
     // Positive control: K1's Manager on C1's item in Building B, which they cover.
@@ -282,13 +291,15 @@ describe("scenario RP-1062-5: a Member who loses access", () => {
   it("stops reading the Chat at once, and goes on reading where they still have access", async () => {
     const { ow } = tower;
     const representative = ow.members.representative;
-    const atA = await posted(tower.c1.members.engineer, item.c1AtA, unique("Slab poured."));
+    const atA = await postedId(tower.c1.members.engineer, item.c1AtA, unique("Slab poured."));
     const atB = await posted(tower.c1.members.engineer, item.c1AtB, unique("Column poured."));
     // Positive control: before, the Owner's Representative reads both C1 items.
-    expect(await bodies(representative, item.c1AtA)).toContain(atA);
+    expect((await chat(representative, item.c1AtA)).map((m) => m.id)).toContain(atA);
     expect(await bodies(representative, item.c1AtB)).toContain(atB);
     expect(await coverLocation(ow.ap, ow.participantId, representative, tower.buildingB)).toBe("set");
     try {
+      // Afterwards K1's Engineer still reads it, and the Representative doesn't.
+      await messageHidden(item.c1AtA, atA, tower.k1.members.engineer, representative, "narrowed off Building A");
       expect(await chat(representative, item.c1AtA)).toEqual([]);
       expect(await post(representative, item.c1AtA, "Still here?")).toEqual({ outcome: "not_found", message_id: null });
       expect(await bodies(representative, item.c1AtB)).toContain(atB);

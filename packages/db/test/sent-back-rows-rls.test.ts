@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, expectedContentSha256, joinProject, sha256Bytea, sha256Hex, testDatabaseUrls, type HashedDocument } from "../test-support/index.ts";
+import { addTestWorkflow, expectedContentSha256, expectHiddenFrom, joinProject, sha256Bytea, sha256Hex, testDatabaseUrls, type HashedDocument } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -259,7 +259,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
   });
 
   it("had, at the Send Back, its two Documents and two Links to X", () => {
-    expect(atSendBack.documents).toHaveLength(2);
+    expect(atSendBack.documents).toEqual([...first].sort());
     expect(atSendBack.linkRows).toHaveLength(2);
     expect(atSendBack.links).toEqual([`related:${x}`, `relies_on:${x}`]);
   });
@@ -274,17 +274,21 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
   it("shows K1 and the Owner its Documents and Links as they were at the Send Back, from the tables and the functions", async () => {
     for (const other of [k1.member, ow.member]) {
       expect(await reads(other, id)).toEqual(atSendBack);
-      for (const document of added) {
-        expect(await call(other, sql<{ id: string }>`select id from document where id = ${document}`)).toEqual([]);
-      }
+    }
+    // C1, holding it, reads each added Document by id; K1 and the Owner don't (RP-1095).
+    const byId = (document: string) => (as: string) => call<{ id: string }>(as, sql`select id from document where id = ${document}`);
+    for (const document of added) {
+      await expectHiddenFrom({ read: byId(document), target: document, seenBy: c1.member, hiddenFrom: [k1.member, ow.member], label: "an added Document" });
     }
   });
 
   it("keeps it in X's Linked from and out of Y's for them", async () => {
     for (const other of [k1.member, ow.member]) {
       expect(await linkedFrom(other, x)).toEqual([id]);
-      expect(await linkedFrom(other, y)).toEqual([]);
     }
+    // C1 reads it in Y's Linked from already; K1 and the Owner don't (RP-1095).
+    const yLinkers = async (as: string) => (await linkedFrom(as, y)).map((linker) => ({ id: linker }));
+    await expectHiddenFrom({ read: yLinkers, target: id, seenBy: c1.member, hiddenFrom: [k1.member, ow.member], label: "Y's Linked from" });
   });
 
   it("shows C1, holding it, what it has now", async () => {
@@ -398,6 +402,18 @@ describe("an item the caller can't see, through app.item_row_seen (RP-309 review
     const hidden = await draft("H"); // C1's own: K1 can't see it (V1).
     const shared = await draft("S");
     await submit(shared); // The stranger is not on the Project.
+    // Someone who sees each item gets true for one of these, so the false below is the caller's (RP-1095).
+    const seenFor = async (as: string, id: string) => {
+      const answers = [];
+      for (const arrival of [-1, 0, 1, 2]) {
+        for (const removed of [false, true]) {
+          answers.push((await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`))[0]!.seen);
+        }
+      }
+      return answers;
+    };
+    expect(await seenFor(c1.member, hidden)).toContain(true);
+    expect(await seenFor(k1.member, shared)).toContain(true);
     for (const [as, id] of [
       [k1.member, hidden],
       [stranger.member, shared],
@@ -458,9 +474,15 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
     }
     expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "picked_up"]);
     expect(await pickUp(k1Manager, id)).toBe("picked_up");
-    for (const as of [c1.member, ow.member]) {
-      for (const row of await assignments(as, id)) expect(row.assignee_member_id, as).not.toBe(k1Manager);
-    }
+    // K1 reads its Manager holding it; C1 and the Owner never read who (RP-1095).
+    await expectHiddenFrom({
+      read: (as: string) => assignments(as, id),
+      target: k1Manager,
+      idOf: (row) => row.assignee_member_id ?? "",
+      seenBy: k1.member,
+      hiddenFrom: [c1.member, ow.member],
+      label: "K1's holder",
+    });
   });
 });
 
@@ -540,6 +562,13 @@ describe("Documents and Links added during the Draft, through the app role (scen
   });
 
   it("give no times of an item the caller can't see", async () => {
+    // C1 reads each time first, so the stranger's empty read is the caller's (RP-1095).
+    const times = (read: (as: string) => Promise<Date[]>) => async (as: string) => (await read(as)).map((at) => ({ id: at.toISOString() }));
+    for (const read of [uploadedAt, linkedAt]) {
+      const [at] = await read(c1.member);
+      expect(at).toBeInstanceOf(Date);
+      await expectHiddenFrom({ read: times(read), target: at!.toISOString(), seenBy: c1.member, hiddenFrom: stranger.member, label: "times" });
+    }
     expect(await uploadedAt(stranger.member)).toEqual([]);
     expect(await linkedAt(stranger.member)).toEqual([]);
   });
