@@ -6,14 +6,17 @@ import { addOwnerReviewWorkflow } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { expect } from "vitest";
 
-/** Adds Rabaed Type `code` on a new Owner's review Workflow, with its Form published with `schema` (as the migrator). */
-export async function addOwnerReviewType(migrator: Db, code: string, schema: unknown): Promise<void> {
+/**
+ * Adds Rabaed Type `code` on a new Owner's review Workflow, with its Form published with `schema` (as the migrator).
+ * `screens` maps a Transition's key to the Screen it shows (addTestScreen's id).
+ */
+export async function addOwnerReviewType(migrator: Db, code: string, schema: unknown, { screens }: { screens?: Record<string, string> } = {}): Promise<void> {
   const { id: formId } = await migrator
     .insertInto("form_definition")
     .values({ owner_kind: "rabaed", name: JSON.stringify({ en: "Owner's review (test)", ar: "مراجعة المالك (اختبار)" }) })
     .returning("id")
     .executeTakeFirstOrThrow();
-  const workflowId = await addOwnerReviewWorkflow((text) => sql.raw(text).execute(migrator));
+  const workflowId = await addOwnerReviewWorkflow((text) => sql.raw(text).execute(migrator), { screens });
   await migrator
     .insertInto("work_item_type")
     .values({

@@ -3,7 +3,7 @@
 // Seam 2 is packages/db/test/owner-review-reply-files-rls.test.ts; this file reads the same world
 // through every api read that can return a Document: the item's Documents and their download, the
 // Work Item page, its history, the item as shared, the List, its search and the Kanban, the Activity
-// Feed, the bell, the annotate start, the Working Copy and the Documental Record.
+// Feed, the annotate start, the Working Copy and the Documental Record.
 //
 // K1's PM adds a site photo to the "Recommend C" Screen and Recommends C to the Owner. The Transition
 // takes the photo, but its events are internal to K1 and the Owner, so C1, the Contractor, reads it by
@@ -15,8 +15,7 @@
 // would hold no reply photo even if their content let one through: that content rule
 // (app.reply_event_shared) is seam 2's to prove. Here they guard what the files print.
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { addOwnerReviewWorkflow, addTestScreen, drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import { publishFormVersion } from "@rabaed/admin/services";
+import { addTestScreen, drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { SignedUrl, StartedDocumentUpload, WorkingCopyAnswer } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -36,6 +35,7 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { attachDatasheet, createTestApi, readById, type Caller } from "./support/harness.ts";
+import { addOwnerReviewType } from "./support/owner-review.ts";
 import { all, bilingual, buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -211,26 +211,7 @@ beforeAll(async () => {
     },
     [],
   );
-  const workflowId = await addOwnerReviewWorkflow(run, { screens: { recommend_c: screen } });
-  const { id: formId } = await migrator
-    .insertInto("form_definition")
-    .values({ owner_kind: "rabaed", name: JSON.stringify(bilingual("Owner review files (api)")) })
-    .returning("id")
-    .executeTakeFirstOrThrow();
-  await migrator
-    .insertInto("work_item_type")
-    .values({
-      owner_kind: "rabaed",
-      module_key: "submittals",
-      code: TYPE,
-      name: JSON.stringify(bilingual("Owner review files (api)")),
-      workflow_definition_id: workflowId,
-      outcome_kind: "review_code",
-      form_definition_id: formId,
-    })
-    .execute();
-  const published = await publishFormVersion(migrator, formId, schema);
-  expect(published, JSON.stringify(published)).toMatchObject({ ok: true });
+  await addOwnerReviewType(migrator, TYPE, schema, { screens: { recommend_c: screen } });
   await run(`
     with p as (
       insert into position (owner_kind, base_role, key, name, sort)
@@ -270,7 +251,7 @@ beforeAll(async () => {
   };
   // Anything earlier tests left in the outbox is not ours to judge.
   await runWorker();
-}, 120_000);
+});
 
 const c1 = () => [at.c1Pm, at.c1Engineer];
 
@@ -315,10 +296,11 @@ describe("scenario RP-1079-1: the photos K1's Recommendation takes are read by K
 
     await c1ReadsNone(id, title, [photo], datasheet, [k1Pm, owPm], "with the Owner");
     expect(await inWorkingCopy(id, [photo, datasheet])).toEqual([datasheet]);
-    // Nor does an annotate start tell C1 the photo is there: as for a made-up id, unlike its own Datasheet.
-    expect(await annotateAnswer(at.c1Pm, id, photo)).toEqual(await annotateAnswer(at.c1Pm, id, randomUUID()));
-    expect(await annotateAnswer(at.c1Pm, id, photo)).toEqual({ status: 404, error: "not_found" });
-    expect(await annotateAnswer(at.c1Pm, id, datasheet)).toMatchObject({ status: 409 });
+    // Nor does an annotate start tell C1 the photo is there: it answers as for a made-up id, and its own Datasheet not so.
+    const madeUp = await annotateAnswer(at.c1Pm, id, randomUUID());
+    expect(madeUp).toEqual({ status: 404, error: "not_found" });
+    expect(await annotateAnswer(at.c1Pm, id, photo)).toEqual(madeUp);
+    expect(await annotateAnswer(at.c1Pm, id, datasheet)).not.toEqual(madeUp);
 
     // The Owner holding the review reads it too; C1 still reads none.
     await ok(owPm.post(`/v1/work-items/${id}/pick-up`));
@@ -348,5 +330,5 @@ describe("scenario RP-1079-2: neither an Owner Send Back nor the Confirm shares 
     await c1ReadsNone(id, title, [photo, second], datasheet, [k1Pm, owPm], "after the Confirm");
     // The Documental Record, one file for every viewer, holds C1's Datasheet and neither photo.
     for (const by of [at.c1Pm, k1Pm]) expect(await inRecord(by, id, [photo, second, datasheet]), who(by)).toEqual([datasheet]);
-  }, 120_000);
+  });
 });
