@@ -411,6 +411,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      pdfjs-dist:
+        specifier: 6.4.299
+        version: 6.4.299
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
@@ -3848,6 +3851,10 @@ packages:
 
   pdfjs-dist@6.3.289:
     resolution: {integrity: sha512-ZHjSVpDa3D6izMq8/04lvkhkATUmL9px6ChPaXc1k6nU2Mrhlg1/7F0bdUqCwUjw3NsPTfPZsMDUU6ZIcRaeQw==}
+    engines: {node: '>=22.13.0 || >=24'}
+
+  pdfjs-dist@6.4.299:
+    resolution: {integrity: sha512-AVl138zALtfaAPvADulE0PZThbYzCBS79nL4pOSL/6Sm/4AH5A21BD9VHt97OlCuzJuCpmeZtAtkinisF4Vb1g==}
     engines: {node: '>=22.13.0 || >=24'}
 
   pg-cloudflare@1.4.0:
@@ -7830,6 +7837,10 @@ snapshots:
       tslib: 1.14.1
 
   pdfjs-dist@6.3.289:
+    optionalDependencies:
+      '@napi-rs/canvas': 1.0.11
+
+  pdfjs-dist@6.4.299:
     optionalDependencies:
       '@napi-rs/canvas': 1.0.11
 
