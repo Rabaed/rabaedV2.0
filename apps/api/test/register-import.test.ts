@@ -775,9 +775,9 @@ describe("RP-589-3: a Rabaed Engineer's import for C1 (RP-645)", () => {
     for (const by of [defaultMember.caller, tower.c1Pm]) {
       for (const body of await bodies(by)) {
         // A body each reads with a 200 (bodies): no row to prove first, a name it never carries.
-        expect(body).not.toContain(engineerName); // not hidden-from: text never in a body read with a 200
-        expect(body).not.toContain(engineer.email); // not hidden-from: text never in a body read with a 200
-        expect(body).not.toContain(engineer.id); // not hidden-from: text never in a body read with a 200
+        expect(body).not.toContain(engineerName);
+        expect(body).not.toContain(engineer.email);
+        expect(body).not.toContain(engineer.id);
         expect(body).not.toMatch(/"(createdAt|confirmedAt|created_at|confirmed_at|importedAt)"/);
       }
     }

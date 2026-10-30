@@ -20,8 +20,11 @@ const email = (who: string) => `${who.toLowerCase()}-${randomUUID().slice(0, 8)}
 const TYPE = "DAR";
 /** The eight, by their keys within the Type (RP-596). */
 const DEFAULT_KEYS = ["1-1", "1-1-owner", "1-2", "1-2-owner", "2-1", "2-1-owner", "2-2", "2-2-owner"];
-/** OW's name, its own, so any read that names OW shows. */
+/** OW's legal name, new on every run. */
 const OW_NAME = `Waha Owner Holding ${randomUUID().slice(0, 8)}`;
+/** How a failure names Member `as`. */
+const whoIs = (as: string) =>
+  ({ [people.c1Engineer]: "C1 engineer", [people.c1Pm]: "C1 PM", [people.k1Pm]: "K1 PM", [people.owPm]: "OW PM", [c1.ap]: "C1 (Tower's Admin)", [xc.ap]: "XC (another Project's Admin)" })[as] ?? as;
 
 let migrator: pg.Client;
 let app: Db;
@@ -213,7 +216,7 @@ describe("scenario RP-596-1: a new Project's DAR runs the Rabaed Default 1→1 �
       "select b.id from workflow_binding b join work_item_type t on t.id = b.work_item_type_id and t.code = $2 where b.project_id = $1",
       [projectId, TYPE],
     );
-    expect(bound.length).toBe(0); // not hidden-from: the migrator reads every binding; none was made for Tower's DAR
+    expect(bound).toEqual([]); // not hidden-from: the migrator reads every binding; none was made for Tower's DAR
   });
 
   it("OW's PM holds the Owner's Step; the Code is read by K1 and OW only until OW confirms it; it then closes at B for everyone, with its Comments", async () => {
@@ -233,9 +236,14 @@ describe("scenario RP-596-1: a new Project's DAR runs the Rabaed Default 1→1 �
     // The Recommended Code and every Code: K1 and OW read B, C1 reads none.
     const recommended = async (as: string) =>
       (await asRead(as, id)).history.filter((e) => e.type === "recommend_code").map((e) => ({ id: `${e.type}:${e.recommended_code}` }));
-    await expectHiddenFrom({ label: "Recommended Code", read: recommended, target: "recommend_code:B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm, people.c1Engineer] });
-    await expectHiddenFrom({ label: "Code", read: (as: string) => codesRead(as, id), target: "B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm, people.c1Engineer] });
+    await expectHiddenFrom({ name: whoIs, label: "Recommended Code", read: recommended, target: "recommend_code:B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm, people.c1Engineer] });
+    await expectHiddenFrom({ name: whoIs, label: "Code", read: (as: string) => codesRead(as, id), target: "B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm, people.c1Engineer] });
     expect((await asRead(people.c1Pm, id)).item).toEqual({ outcome: null, closed: false });
+    // C1 reads "Owner review" in place of the holder; K1, which recommended, and OW, which holds it, read the holder.
+    // (C1 still reads OW as the holder through the List row and app.work_item_holder: RP-1138.)
+    const ownerReview = (as: string) => rows(as, sql`select app.with_owner_review(${id}::uuid) as label`);
+    for (const by of [people.c1Pm, people.c1Engineer]) expect(await ownerReview(by), whoIs(by)).toEqual([{ label: { en: "Owner review", ar: "مراجعة المالك" } }]);
+    for (const by of [people.k1Pm, people.owPm]) expect(await ownerReview(by), whoIs(by)).toEqual([{ label: null }]);
 
     // OW's PM, the Owner's only approver, holds the Owner's Step, offered only the Confirm and its Send Back.
     const { rows: holding } = await migrator.query(
@@ -258,17 +266,20 @@ describe("scenario RP-596-1: a new Project's DAR runs the Rabaed Default 1→1 �
     const c1After = await asRead(people.c1Pm, id);
     expect(c1After.history.at(-1)).toMatchObject({ type: "issue_code", outcome: "B" });
     // C1 still reads no Recommendation: the issued Code only.
-    await expectHiddenFrom({ label: "Recommended Code, after", read: recommended, target: "recommend_code:B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm] });
-    // Its Comments, one per row of K1's Recommendation, raised by K1 and read by C1.
+    await expectHiddenFrom({ name: whoIs, label: "Recommended Code, after", read: recommended, target: "recommend_code:B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm] });
+    // Its Comments, one per row of K1's Recommendation, raised by K1, held by C1's Step Pool and read by C1.
     expect(c1After.comments).toEqual({ open: 2, closed: 0 });
     const { rows: raised } = await migrator.query(
-      `select p.company_id, c.title from work_item_link l join work_item c on c.id = l.from_id join participant p on p.id = c.raised_by_participant_id
+      `select p.company_id, a.participant_id as holder, c.title from work_item_link l
+       join work_item c on c.id = l.from_id
+       join participant p on p.id = c.raised_by_participant_id
+       join step_assignment a on a.work_item_id = c.id and a.status in ('pooled', 'picked_up')
        where l.to_id = $1 and l.kind = 'raised_from' order by c.title`,
       [id],
     );
     expect(raised).toEqual([
-      { company_id: k1.id, title: "Label the circuits" },
-      { company_id: k1.id, title: "Seal the cable entries" },
+      { company_id: k1.id, holder: participant.c1, title: "Label the circuits" },
+      { company_id: k1.id, holder: participant.c1, title: "Seal the cable entries" },
     ]);
   });
 });
@@ -293,14 +304,14 @@ describe("scenario RP-596-2: every Member of any Project reads the eight Rabaed 
       "select p.id from participant p where p.project_id = $1 and p.company_id = $2",
       [projectId, xc.id],
     );
-    expect(xcOnTower.length).toBe(0); // not hidden-from: the migrator's read that XC is no Participant of Tower
+    expect(xcOnTower).toEqual([]); // not hidden-from: the migrator's read that XC is no Participant of Tower
     expect((await call<{ id: string }>(xc.ap, sql`select id from project where id = ${otherProjectId}::uuid`)).map((p) => p.id)).toEqual([otherProjectId]);
   });
 
   it("what Tower binds or duplicates of them reaches Tower only", async () => {
     const byKey = new Map((await darDefaults(c1.ap)).map((d) => [d.default_key, d.id]));
     const darType = (await migrator.query("select id from work_item_type where project_id is null and code = $1", [TYPE])).rows[0].id as string;
-    // Bound for C1's own raises only, so the DAR scenarios above run the Type's own Workflow.
+    // Bound for C1's own raises only.
     expect(await outcome(c1.ap, sql`select app.bind_workflow(${projectId}::uuid, ${darType}::uuid, ${participant.c1}::uuid, ${byKey.get("1-1")!}::uuid, now()) as outcome`)).toBe("bound");
     const [copied] = await call<{ outcome: string; workflow_definition_id: string }>(
       c1.ap,
@@ -310,6 +321,7 @@ describe("scenario RP-596-2: every Member of any Project reads the eight Rabaed 
     const binding = (await migrator.query("select id from workflow_binding where project_id = $1 and work_item_type_id = $2", [projectId, darType])).rows[0].id as string;
 
     await expectHiddenFrom({
+      name: whoIs,
       label: "Tower's binding",
       read: (as: string) => call<{ id: string }>(as, sql`select id from workflow_binding`),
       target: binding,
@@ -317,6 +329,7 @@ describe("scenario RP-596-2: every Member of any Project reads the eight Rabaed 
       hiddenFrom: xc.ap,
     });
     await expectHiddenFrom({
+      name: whoIs,
       label: "Tower's copy",
       read: (as: string) => call<{ id: string }>(as, sql`select id from workflow_definition`),
       target: copied!.workflow_definition_id,
@@ -327,7 +340,7 @@ describe("scenario RP-596-2: every Member of any Project reads the eight Rabaed 
     expect(await darRuns(xc.ap)).toBe(byKey.get("1-1-owner"));
     expect(await darDefaults(xc.ap)).toEqual(await darDefaults(c1.ap));
     expect((await darDefaults(c1.ap)).map((d) => d.id)).toEqual([...byKey.values()]);
-    // Unbound again: Tower's DAR, raised by C1, runs the Type's own Workflow for what follows.
+    // Unbound again: Tower's DAR, raised by C1, runs the Type's own Workflow.
     expect(await outcome(c1.ap, sql`select app.unbind_workflow(${projectId}::uuid, ${darType}::uuid, ${participant.c1}::uuid, now()) as outcome`)).toBe("unbound");
   });
 });

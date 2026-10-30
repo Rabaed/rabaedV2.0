@@ -12,7 +12,7 @@ apps/api/test/activity-feed.test.ts text 6
 apps/api/test/after-send-back.test.ts empty 1
 apps/api/test/answers-history.test.ts empty 3
 apps/api/test/answers-history.test.ts text 5
-apps/api/test/approved-suppliers.test.ts empty 5
+apps/api/test/approved-suppliers.test.ts empty 6
 apps/api/test/built-in-fields.test.ts empty 3
 apps/api/test/bulk-transitions.test.ts empty 9
 apps/api/test/bulk-transitions.test.ts text 5
@@ -123,7 +123,7 @@ apps/api/test/random-ids.test.ts text 2
 apps/api/test/reads-at-scale.test.ts empty 1
 apps/api/test/record-checks.test.ts empty 15
 apps/api/test/record-checks.test.ts text 12
-apps/api/test/register-import.test.ts empty 14
+apps/api/test/register-import.test.ts empty 17
 apps/api/test/replacements.test.ts empty 12
 apps/api/test/return-in-internal-review.test.ts empty 2
 apps/api/test/revision-follow-up-counts.test.ts empty 1
@@ -265,7 +265,7 @@ packages/db/test/numbering-pattern-rls.test.ts empty 4
 packages/db/test/option-list-rls.test.ts empty 2
 packages/db/test/outbox-crash.test.ts empty 2
 packages/db/test/owner-review-rls.test.ts empty 6
-packages/db/test/package-rls.test.ts empty 4
+packages/db/test/package-rls.test.ts empty 5
 packages/db/test/participant-code-rls.test.ts empty 1
 packages/db/test/participant-rls.test.ts empty 21
 packages/db/test/participant-rls.test.ts text 2

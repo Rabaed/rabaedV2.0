@@ -70,7 +70,7 @@ describe("a Project's outcome sets", () => {
     const t = await buildTower(api, { c1, k1 }, "OSH");
     // The Project's Members read the set, so the outsider's 404 is no empty read (RP-1095).
     const setOn = (by: Caller) => readById<TypeOutcomes>(outcomesPath(t))(by).then((rows) => rows.map(() => ({ id: t.projectId })));
-    await expectHiddenFrom({ read: setOn, target: t.projectId, seenBy: [c1.caller, t.k1Manager], hiddenFrom: outsider.caller, label: "MAR's outcome set" });
+    await expectHiddenFrom({ read: setOn, target: t.projectId, seenBy: [c1.caller, t.k1Manager], hiddenFrom: outsider.caller, name: (by) => (by === outsider.caller ? "the outsider" : by === c1.caller ? "C1's Admin" : "K1's manager"), label: "MAR's outcome set" });
     await expectHidden(c1.caller.get(outcomesPath(t, "NOPE")));
     await expectHidden(c1.caller.get(`/v1/projects/00000000-0000-4000-8000-000000000000/work-item-types/MAR/outcomes`));
   });

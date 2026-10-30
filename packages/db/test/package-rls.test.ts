@@ -49,11 +49,11 @@ async function member(companyId: string, who: string, creator = false): Promise<
   );
 }
 
-async function company(engineer: string, called: string): Promise<Company> {
+async function company(engineer: string, name: string): Promise<Company> {
   const cr = digits(10);
   const id = await one(
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
-    [JSON.stringify({ en: called, ar: called }), cr, `3${digits(13)}3`, engineer],
+    [JSON.stringify({ en: name, ar: name }), cr, `3${digits(13)}3`, engineer],
   );
   const ap = await member(id, "ap", true);
   await migrator.query("update company set authorized_person_id = $1 where id = $2", [ap, id]);
@@ -952,9 +952,10 @@ describe("scenario RP-588-2 (RP-643: notification): a Package Submit's one notif
 
   it("is gone from the bell once its Member sees none of its items", async () => {
     const before = (await notificationOf(k1Electrical)).map((n) => n.id);
-    expect(before.length).toBe(1);
+    expect(before).toEqual([expect.any(String)]);
     expect(await setTrade([])).toBe("set");
-    expect(await notificationOf(k1Electrical)).toEqual([]); // not hidden-from: the same Member reads it just before and just after
+    // The same Member read it just before, by id, so this is no empty read.
+    expect((await notificationOf(k1Electrical)).map((n) => n.id)).not.toContain(before[0]);
     expect(await setTrade([electrical])).toBe("set");
     expect((await notificationOf(k1Electrical)).map((n) => n.id)).toEqual(before);
   });

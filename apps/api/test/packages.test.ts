@@ -98,22 +98,14 @@ async function rows(by: Caller): Promise<Map<string, WorkItemRow>> {
 // Project they aren't on, so a broken read never passes as "hidden".
 
 /** The Tower's Packages board as `by` reads it. */
-async function board(by: Caller): Promise<PackageSummary[]> {
-  const res = await by.get(`/v1/projects/${at.projectId}/packages`);
-  if (res.statusCode === 200) return res.json().packages;
-  await expectHidden(res, "the Packages board"); // not hidden-from: the read's own 404 check, as readById's
-  return [];
-}
+const board = async (by: Caller): Promise<PackageSummary[]> =>
+  (await readById<{ packages: PackageSummary[] }>(`/v1/projects/${at.projectId}/packages`)(by)).flatMap((b) => b.packages);
 
 /** The Packages the rows of the Tower's Submittals List name for `by`, as `{ id }` rows. */
-async function packagesOnRows(by: Caller): Promise<{ id: string }[]> {
-  const res = await by.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`);
-  if (res.statusCode !== 200) {
-    await expectHidden(res, "the Submittals List"); // not hidden-from: the read's own 404 check, as readById's
-    return [];
-  }
-  return (res.json().items as WorkItemRow[]).flatMap((r) => (r.package ? [{ id: r.package.id }] : []));
-}
+const packagesOnRows = async (by: Caller): Promise<{ id: string }[]> =>
+  (await readById<{ items: WorkItemRow[] }>(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`)(by))
+    .flatMap((b) => b.items)
+    .flatMap((r) => (r.package ? [{ id: r.package.id }] : []));
 
 /** `[{ id }]` when `by`'s answer to GET `path` names `id` anywhere, else `[]`. */
 const mentions = (path: string, id: string) => async (by: Caller) => ((await ok(by.get(path), 200)).body.includes(id) ? [{ id }] : []);
@@ -688,7 +680,6 @@ describe("an item still to Submit that the Member doesn't see", () => {
       status: 409,
       body: { error: "package_not_ready", notReady: [], othersNotReady: true },
     });
-    expect(res.body).not.toContain(electrical); // not hidden-from: the whole answer is compared above
     // Once C1's PM has Submitted the Electrical one, only theirs is left.
     await take(at.c1Pm, electrical, "submit");
     expect((await getPackage(narrowedPm, pkg.id)).actions.submit).toBe(true);
@@ -1104,6 +1095,8 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
   let electricalItems: string[] = [];
   let mechanicalItem = "";
   let loose = ""; // A submittal in no Package.
+  let inOther = ""; // The other Package's submittal.
+  let c2Own = ""; // C2's own Draft.
 
   /** The ids of the Submittals List `by` reads with `query`. */
   const listedIds = async (by: Caller, query: string) => {
@@ -1151,14 +1144,16 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
     const c2Participant = await api.addParticipant(c1.caller, tower.projectId, c2Company.company, "contractor");
     await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
     c2 = await projectMember(api, c2Company, c2Participant, ["engineer"]);
-    await ok(
-      c2.post(`/v1/projects/${tower.projectId}/work-items`, {
-        type: CODE_B_TYPE,
-        title: "C2's own",
-        answers: { model: "C2's own", trade: tower.electrical, location: tower.buildingA },
-      }),
-      201,
-    );
+    c2Own = (
+      await ok(
+        c2.post(`/v1/projects/${tower.projectId}/work-items`, {
+          type: CODE_B_TYPE,
+          title: "C2's own",
+          answers: { model: "C2's own", trade: tower.electrical, location: tower.buildingA },
+        }),
+        201,
+      )
+    ).json().id as string;
 
     pkg = await createPackage(tower.c1Pm, "Switchgear – Tower 2", tower.projectId);
     electricalItems = [await readyForPmB("Switchgear EL 1", tower.electrical), await readyForPmB("Switchgear EL 2", tower.electrical)];
@@ -1168,7 +1163,7 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
     expect(taken.map((i) => i.id).sort()).toEqual([...electricalItems, mechanicalItem].sort());
 
     other = await createPackage(tower.c1Pm, "Other set", tower.projectId);
-    const inOther = await readyForPmB("Other set EL", tower.electrical);
+    inOther = await readyForPmB("Other set EL", tower.electrical);
     await ok(addItem(tower.c1Pm, other.id, inOther));
     await ok(submitPackage(tower.c1Pm, other.id), 200);
     loose = await readyForPmB("Loose EL", tower.electrical);
@@ -1181,14 +1176,13 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
     for (const by of [tower.c1Pm, tower.k1Manager]) expect(await listedIds(by, q)).toEqual([...electricalItems, mechanicalItem].sort());
     expect(await listedIds(k1Electrical, q)).toEqual(electricalItems);
     // Unfiltered, the other Package's item and the loose one are listed too.
-    expect(await listedIds(tower.k1Manager, "")).toEqual(expect.arrayContaining([loose]));
-    expect((await listedIds(tower.k1Manager, "")).length).toBe(5);
+    expect(await listedIds(tower.k1Manager, "")).toEqual([...electricalItems, mechanicalItem, inOther, loose].sort());
   });
 
   it("RP-647-1: a Package the viewer doesn't see filters to nothing, the same answer as a made-up id", async () => {
     const path = (id: string) => `/v1/projects/${tower.projectId}/work-items?page=1&pageSize=50&packageId=${id}`;
     // C2 has its own Draft in the List, and sees none of the Package's items.
-    expect((await listedIds(c2, "")).length).toBe(1);
+    expect(await listedIds(c2, "")).toEqual([c2Own]);
     // C1's Open Package holds a Draft: K1 sees neither.
     const open = await createPackage(tower.c1Pm, "Still open", tower.projectId);
     const stillOpen = await readyForPmB("Still open EL", tower.electrical);

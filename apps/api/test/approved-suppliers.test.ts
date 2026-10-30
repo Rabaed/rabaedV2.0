@@ -245,11 +245,14 @@ describe("a SAR closed at Code A adds its supplier (RP-594-1, RP-598-2)", () => 
   });
 
   it("RP-594-1: Code C adds nothing, and a second SAR for the same supplier, in other letter case and with outer spaces, adds no second entry", async () => {
+    // C1's whole list, by id, before and after: it holds Najd Cables from the test above, so it is no empty read.
+    const listIds = async () => (await suppliersOf(at.projectId)(at.c1Engineer)).map((s) => s.id);
+    const before = await listIds();
+    expect(before).toContain((await named("Najd Cables"))[0]!.id);
     await closedSar({ en: "Rejected Wires", ar: "أسلاك مرفوضة" }, "revise_c");
-    expect(await named("Rejected Wires")).toEqual([]); // not hidden-from: C1's own list, Code C added no row
-    const before = (await named("Najd Cables")).map((s) => s.id);
+    expect(await listIds()).toEqual(before);
     await closedSar({ en: "  najd CABLES ", ar: "كابلات نجد" }, "approve_a");
-    expect((await named("Najd Cables")).map((s) => s.id)).toEqual(before);
+    expect(await listIds()).toEqual(before);
   });
 
   it("RP-598-2: C2's MAR names Shared Cables by its id, read back as stored, and nothing in it leads to the SAR", async () => {
@@ -275,7 +278,7 @@ describe("a SAR closed at Code A adds its supplier (RP-594-1, RP-598-2)", () => 
       status: "approved",
     });
     // Nothing C2 reads of its MAR names the SAR, which C2 can't read (V1, V10).
-    expect(JSON.stringify(read).includes(sar), "C2's MAR names the SAR").toBe(false);
+    expect(JSON.stringify(read), "C2's MAR names the SAR").not.toContain(sar);
     await expectHiddenFrom({
       read: (by: Caller) => readById(`/v1/work-items/${sar}`)(by),
       target: sar,

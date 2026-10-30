@@ -268,15 +268,12 @@ describe("the MAR Workflow Version 3 (seam 1 acceptance)", () => {
 // Contractor reads the Manager's shared reply once the Code is issued.
 describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
   let id = "";
-  /** Item `item`'s Internal Notes `by` reads, each as its own text, for expectHiddenFrom. */
-  const notesOf = (item: string) => async (by: Caller) => (await history(by, item)).flatMap((e) => (e.internalNote === null ? [] : [{ id: e.internalNote }]));
-  /** The verification notes of the Screen answers `by` reads on item `item`, for expectHiddenFrom. */
-  const replyNotesOf = (item: string) => async (by: Caller) =>
-    (await history(by, item)).flatMap((e) => (typeof e.answers?.verification_note === "string" ? [{ id: e.answers.verification_note }] : []));
+  /** `text` as a row when it is anywhere in item `item`'s history as `by` reads it, any field, for expectHiddenFrom. */
+  const textIn = (item: string, text: string) => async (by: Caller) => (JSON.stringify(await history(by, item)).includes(text) ? [{ id: text }] : []);
   /** Item `item`'s history as `by` reads it, as the item's id, or none for the plain 404. */
   const historyOf = (item: string) => (by: Caller) => readById(`/v1/work-items/${item}/history`)(by).then((rows) => rows.map(() => ({ id: item })));
   const whoIs = (by: Caller) =>
-    by === hafiz ? "Hafiz (C1)" : by === ali ? "Ali (C1 PM)" : by === ahmed ? "Ahmed (K1)" : by === mohammed ? "Mohammed (K1)" : by === faisal ? "Faisal (O1)" : "Yousef (C2)";
+    by === hafiz ? "Hafiz (C1)" : by === ali ? "Ali (C1 PM)" : by === ahmed ? "Ahmed (K1)" : by === mohammed ? "Mohammed (K1)" : by === faisal ? "Faisal (O1)" : by === yousef ? "Yousef (C2)" : "someone";
 
   beforeAll(async () => {
     id = await submitted("Visibility", "Covers Level 2 only");
@@ -289,7 +286,8 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
       expect(submit!.by.companyName).not.toBeNull();
     }
     // C1, whose PM wrote it, reads the Internal Note; the Consultant and oversight don't (RP-1095).
-    await expectHiddenFrom({ read: notesOf(id), target: "PM: quantities checked against BOQ", seenBy: [ali, hafiz], hiddenFrom: [ahmed, mohammed, faisal], name: whoIs });
+    const pmNote = "PM: quantities checked against BOQ";
+    await expectHiddenFrom({ read: textIn(id, pmNote), target: pmNote, seenBy: [ali, hafiz], hiddenFrom: [ahmed, mohammed, faisal], name: whoIs });
     await expectHiddenFrom({ read: historyOf(id), target: id, seenBy: [ahmed, faisal], hiddenFrom: yousef, name: whoIs, label: "the history" });
   });
 
@@ -311,14 +309,9 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
       expect(events.some((e) => e.type === "internal_answers" || e.type === "recommend_code")).toBe(false);
     }
     // K1 reads its Engineer's reply and Internal Note after the Code; the Contractor and oversight never do (RP-1095).
-    await expectHiddenFrom({ read: replyNotesOf(id), target: "Wrong colour temperature", seenBy: [ahmed, mohammed], hiddenFrom: [hafiz, ali, faisal], name: whoIs });
-    await expectHiddenFrom({
-      read: notesOf(id),
-      target: "Engineer: compared with the approved sample",
-      seenBy: [ahmed, mohammed],
-      hiddenFrom: [hafiz, ali, faisal],
-      name: whoIs,
-    });
+    for (const text of ["Wrong colour temperature", "Engineer: compared with the approved sample"]) {
+      await expectHiddenFrom({ read: textIn(id, text), target: text, seenBy: [ahmed, mohammed], hiddenFrom: [hafiz, ali, faisal], name: whoIs });
+    }
   });
 
   it("the Contractor and oversight read the Manager's shared reply after the Code: the Code, Remarks and final verification", async () => {
