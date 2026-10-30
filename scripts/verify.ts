@@ -7,7 +7,8 @@ import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
-import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock } from "./verify-lock.ts";
+import { processAncestors, processStart } from "./process-start.ts";
+import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock, type Processes } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
 import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
@@ -51,9 +52,12 @@ function stopEarly(message: string, code = 1): never {
 
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
+// Both locks record this process's OS start time and check a holder's, so a pid Windows reused is not taken for a live run (RP-1136).
+const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [process.ppid, ...processAncestors(process.ppid)] };
+const pidStarted = processStart(process.pid);
 const lock = lockFile(root);
-const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, isRunning);
-if (!taken.acquired) stopEarly(`${taken.message} Let it finish; if that pid is not a verify run, delete ${lock}.`);
+const taken = acquireLock(lock, { pid: process.pid, started: new Date(), pidStarted, command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, processes);
+if (!taken.acquired) stopEarly(`${taken.message} Let it finish.`);
 process.on("exit", () => releaseLock(lock, process.pid));
 // A last line for an interrupted run too, so a background run's notification still says how it ended.
 const interrupted = (signal: string, code: number) => () => {
@@ -167,8 +171,8 @@ const reportWait = (line: string) => {
 };
 const turn = await waitForLock(
   slot.file,
-  { pid: process.pid, started: new Date(), command: `pnpm verify in ${root}` },
-  { isAlive: isRunning, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, slot: slot.name },
+  { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}` },
+  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, slot: slot.name },
 );
 if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
 if (turn.waitedMs > 0) {
