@@ -126,6 +126,8 @@ describe("using a Library Workflow on a Project", () => {
 
 describe("the Library is private to its Company (scenario RP-442-1, V18)", () => {
   it("lists only the Company's own: another Company, Tower's Consultant included, sees nothing of it", async () => {
+    expect(ids(await library(k1.caller))).toEqual([]); // not hidden-from: K1 has saved nothing to its own Library yet, so it lists nothing; the reads below prove TMC's row by id
+    expect(ids(await library(outsider.caller))).toEqual([]); // not hidden-from: the outsider has saved nothing to its own Library yet, so it lists nothing; the reads below prove TMC's row by id
     const member = await api.member(tmc.caller);
     callers.set(member.caller, "a plain Member of TMC");
     const others = [k1.caller, outsider.caller];
