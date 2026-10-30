@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
+import { createHash, randomInt } from "node:crypto";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 
@@ -108,6 +109,41 @@ export interface PdfAValidatorSession extends PdfAValidator {
 }
 
 /**
+ * How long a session's container lives (RP-1122): longer than the longest test file, so a test
+ * that is killed or times out (its afterAll never calls close) still leaves no container behind:
+ * the sleep ends and `--rm` removes it.
+ */
+export const VERAPDF_SESSION_SECONDS = 3600;
+
+/**
+ * The `docker run` arguments of a session's container (RP-1122). Its name and label let
+ * `pnpm lanes:prune` (scripts/verapdf-containers.ts, which reads this name back) find it and
+ * remove it once the process `pid` that started it is gone. `hash` names the worktree, as
+ * scripts/test-stories-linux.ts's worktreeHash does; `n` is random, so two sessions never share a
+ * name (worker threads share one pid, and a killed run's pid may be reused).
+ */
+export function veraPdfSessionArgs({ image, dir, hash, pid, n }: { image: string; dir: string; hash: string; pid: number; n: number }): string[] {
+  return [
+    "run",
+    "-d",
+    "--rm",
+    "--name",
+    `rabaed-verapdf-${hash}-${pid}-${n}`,
+    "--label",
+    `rabaed.verapdf=${hash}`,
+    "-v",
+    `${dir}:/data:ro`,
+    "--entrypoint",
+    "sleep",
+    image,
+    String(VERAPDF_SESSION_SECONDS),
+  ];
+}
+
+/** This worktree's hash: the sha1 of its root, spelled as Node resolves it (worktreeHash in scripts/test-stories-linux.ts; scripts/verapdf-containers.test.ts checks they agree). */
+export const veraPdfWorktreeHash = (): string => createHash("sha1").update(resolve(import.meta.dirname, "../../../..")).digest("hex").slice(0, 8);
+
+/**
  * veraPDF in one Docker container kept for many PDFs (a test file's, started at its first PDF),
  * instead of a container for each: the PDFs go in through a folder mounted into it.
  */
@@ -116,7 +152,8 @@ export function veraPdfDockerSession(image: string): PdfAValidatorSession {
   let count = 0;
   const start = async () => {
     const dir = await sharedFolder();
-    const { stdout } = await run("docker", ["run", "-d", "--rm", "-v", `${dir}:/data:ro`, "--entrypoint", "sleep", image, "infinity"], { timeout: TIMEOUT_MS });
+    const args = veraPdfSessionArgs({ image, dir, hash: veraPdfWorktreeHash(), pid: process.pid, n: randomInt(1_000_000_000) });
+    const { stdout } = await run("docker", args, { timeout: TIMEOUT_MS });
     return { id: stdout.trim(), dir };
   };
   return {
