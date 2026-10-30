@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stampLine } from "./verify-gate.ts";
-import { failureEnd, finalLine, isSeamStep, loadFailure, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
+import { failureEnd, finalLine, headMoved, isSeamStep, loadFailure, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
 
@@ -89,6 +89,32 @@ describe("finalLine", () => {
     expect(finalLine({ sha: "abc1234", dirty: false, steps: ["test:seam1", "test:seam2"], from: { step: "test:seam1", notRun: ["lint", "typecheck", "test:unit"] } })).toBe(
       "pnpm verify --from test:seam1 passed on abc1234: test:seam1, test:seam2. Not run: lint, typecheck, test:unit, so this is not a complete run.",
     );
+  });
+});
+
+// RP-1103: Auto-fix merged main, or a pull landed, while verify ran; its line then named a commit it never fully tested.
+describe("headMoved", () => {
+  const started = "5c894cfc9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const now = "730ec3c1fbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  it("says nothing while HEAD is the commit the run started on", () => {
+    expect(headMoved(started, started)).toBeUndefined();
+  });
+
+  it("stops the run when HEAD moved, naming both commits, why no line is stamped, and what to do", () => {
+    const end = headMoved(started, now, "lint");
+    expect(end).toBe(
+      "pnpm verify stopped after lint: HEAD moved from 5c894cfc9 to 730ec3c1f during the run (a pull, a merge of main, Auto-fix's push), so its steps did not all run on one commit and no verify line is printed. Wait for the branch to settle, then run pnpm verify again.",
+    );
+  });
+
+  it("names a resumed run by its own command", () => {
+    expect(headMoved(started, now, "test:seam1", "pnpm verify --from test:seam1")).toMatch(/^pnpm verify --from test:seam1 stopped after test:seam1: HEAD moved/);
+  });
+
+  it("stops when HEAD can no longer be read, and never checks a run that could not read it at the start", () => {
+    expect(headMoved(started, "", "lint")).toContain("HEAD moved from 5c894cfc9 to an unreadable HEAD");
+    expect(headMoved("", now, "lint")).toBeUndefined();
   });
 });
 

@@ -8,7 +8,7 @@ import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
-import { failureEnd, finalLine, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
+import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
 import { isRunning } from "./worktrees-stale.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
@@ -23,6 +23,7 @@ import { isRunning } from "./worktrees-stale.ts";
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
+// HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -107,6 +108,13 @@ if (!postgres) stopEarly("No Postgres in this worktree's .env: run `pnpm lane:en
 const postgresAnswers = () => tcpReachable(postgres.host, postgres.port);
 if (!(await postgresAnswers())) stopEarly(postgresDown(postgres));
 
+// The commit this run verifies (RP-1103): HEAD is checked against it after every step, and the last line names it.
+const readHead = () => {
+  const done = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
+  return done.status === 0 ? done.stdout.trim() : "";
+};
+const startedOn = readHead();
+
 const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) stopEarly("git diff against origin/main failed; run `git fetch origin main` first.", diff.status ?? 1);
 const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8" });
@@ -144,6 +152,12 @@ for (const { name, script } of steps) {
   if (outcome.passed) {
     out.info(`ok   ${outcome.label} (${seconds}s)`);
     passed.push(outcome.label);
+    // A pull or Auto-fix's merge of main mid-run (RP-1103): stop now, with no line to paste.
+    const moved = headMoved(startedOn, readHead(), name, runCommand(from));
+    if (moved !== undefined) {
+      out.end([moved], true);
+      process.exit(1);
+    }
     continue;
   }
   out.error(`FAIL ${name} (${seconds}s, exit ${exit}${outcome.reran ? ", after one re-run" : ""}). The last ${tailLines} lines it printed:`);
@@ -154,7 +168,7 @@ for (const { name, script } of steps) {
   out.end(failureEnd(name, outcome.output, answers, runCommand(from)), true);
   process.exit(outcome.status);
 }
-const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
+const sha = startedOn === "" ? "" : spawnSync("git", ["rev-parse", "--short", startedOn], { cwd: root, encoding: "utf8" }).stdout.trim();
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
