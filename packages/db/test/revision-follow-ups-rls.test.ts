@@ -7,6 +7,8 @@
 // RP-653-1: the counts are the follow-ups the viewer sees, never a discarded one. A Member who sees only
 // one of the two Snags counts one; C2, another Contractor of the same Trade not covering the Location,
 // sees neither Rev 1 nor a count; another Project's Member none.
+//
+// RP-655-1: `app.work_item_previous_raised_items` lists the same follow-ups one row each, under the same rules.
 import { randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sql } from "kysely";
@@ -67,6 +69,13 @@ const previous = (as: string, id: string) =>
     as,
     sql`select previous_revision_no, type_code, open_count::integer, closed_count::integer from app.work_item_previous_raised_item_counts(${id}::uuid)`,
   );
+/** The previous item's follow-ups `as` lists on `id` (RP-655), one row each. */
+const previousRows = (as: string, id: string) =>
+  call<{ work_item_id: string; type_code: string; title: string; closed: boolean }>(
+    as,
+    sql`select work_item_id, type_code, title, closed from app.work_item_previous_raised_items(${id}::uuid)`,
+  );
+let snagA = ""; // The first Snag, in Building A.
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -113,6 +122,7 @@ beforeAll(async () => {
   expect(await take(k1.members.manager, rev0, "revise_c", { remarks: "Seal the formwork" })).toBe("applied");
   const raised = (await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from' order by created_at, from_id", [rev0])).rows;
   expect(raised).toHaveLength(2);
+  snagA = raised[0].from_id as string;
   snagB = raised[1].from_id as string;
   // The second Snag is in Building B, which C1's Project Manager does not cover below.
   await migrator.query(
@@ -173,5 +183,42 @@ describe("RP-653-1: a Revision counts only the previous item's follow-ups the vi
     expect(await previous(c1.members.engineer, rev0)).toEqual([]);
     expect(await previous(k1.members.engineer, rev1)).toEqual([{ previous_revision_no: 0, type_code: "SNG", open_count: 2, closed_count: 0 }]);
     expect(await previous(k1BuildingA, rev1)).toEqual([{ previous_revision_no: 0, type_code: "SNG", open_count: 1, closed_count: 0 }]);
+  });
+});
+
+// RP-655-1: Rev 1 lists each follow-up of Rev 0, as the counts count them. Runs after RP-653-1, which leaves
+// C1's Project Manager and the K1 Manager covering Building A only.
+describe("RP-655-1: a Revision lists only the previous item's follow-ups the viewer sees", () => {
+  const ids = (rows: { work_item_id: string }[]) => rows.map((r) => r.work_item_id).sort();
+
+  it("C1's Engineer and K1's Engineer, who see both Snags, list both, open, with their Subjects", async () => {
+    for (const reader of [c1.members.engineer, k1.members.engineer]) {
+      const rows = await previousRows(reader, rev1);
+      expect(ids(rows), reader).toEqual([snagA, snagB].sort());
+      expect(rows.every((r) => r.type_code === "SNG" && !r.closed && r.title.length > 0), reader).toBe(true);
+    }
+  });
+
+  it("a Member who sees only the Snag in Building A lists that one, never the other", async () => {
+    for (const reader of [c1Pm, k1BuildingA]) {
+      expect(ids(await previousRows(reader, rev1)), reader).toEqual([snagA]);
+    }
+  });
+
+  it("C2 and another Project's Member list none; Rev 0, which follows no item, lists none", async () => {
+    for (const outsider of [c2.members.engineer, other.ap]) {
+      expect(await previousRows(outsider, rev1), outsider).toEqual([]);
+    }
+    expect(await previousRows(c1.members.engineer, rev0)).toEqual([]);
+  });
+
+  it("a discarded follow-up is never listed", async () => {
+    // A discarded item is a closed one (work_item_discarded_closed); both go back afterwards.
+    await migrator.query("update work_item set closed_at = now(), discarded_at = now() where id = $1", [snagB]);
+    try {
+      expect(ids(await previousRows(c1.members.engineer, rev1))).toEqual([snagA]);
+    } finally {
+      await migrator.query("update work_item set closed_at = null, discarded_at = null where id = $1", [snagB]);
+    }
   });
 });

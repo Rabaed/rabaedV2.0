@@ -1,4 +1,20 @@
-import { checklistAnswerSets, formatDate, isNegativeAnswer, snagTick, type BilingualText, type Locale, type ChecklistAnswers, type ChecklistCopy, type ChecklistItem, type ChecklistTemplateItem, type WorkItemActions, type WorkItemHistory } from "@rabaed/domain";
+import {
+  checklistAnswerSets,
+  formatDate,
+  formFields,
+  isNegativeAnswer,
+  snagTick,
+  type BilingualText,
+  type Locale,
+  type ChecklistAnswers,
+  type ChecklistCopy,
+  type ChecklistItem,
+  type ChecklistTemplateChoice,
+  type ChecklistTemplateItem,
+  type FormSchema,
+  type WorkItemActions,
+  type WorkItemHistory,
+} from "@rabaed/domain";
 
 // The WIR screens' own reading of the Consultant Engineer's checklist (RP-655): what the summary
 // bar, the tiles, the filter chips, the Send to Manager sheet and the code pop-up show. Counted
@@ -48,6 +64,27 @@ export function inspectionActions(transitions: readonly Offered[]): { send: Offe
     proposed: codes.find((t) => t.proposed)?.key ?? null,
     others: transitions.filter((t) => t !== send && !codes.includes(t)),
   };
+}
+
+/**
+ * The WIR request's offered actions (RP-655): `send`, its first Send or Submit, which the sticky bar
+ * holds; `others` stay at the top. `goesTo`: who it goes to, when the next Step can only be one
+ * Member of the viewer's own Participant (its Assign to, V14); else nobody is named.
+ */
+export function requestActions(transitions: readonly Offered[]): { send: Offered | null; others: Offered[]; goesTo: BilingualText | null } {
+  const send = transitions.find((t) => t.kind === "send" || t.kind === "submit") ?? null;
+  return {
+    send,
+    others: transitions.filter((t) => t !== send),
+    goesTo: send?.assignTo?.length === 1 ? send.assignTo[0]!.name : null,
+  };
+}
+
+/** The Checklist Template the request picked (RP-655): its Form's first `checklist_template` field's choice; null when none or unknown. */
+export function pickedTemplate(schema: FormSchema, answers: Readonly<Record<string, unknown>>, choices: readonly ChecklistTemplateChoice[]): ChecklistTemplateChoice | null {
+  const field = formFields(schema).find((f) => f.type === "checklist_template");
+  const value = field ? answers[field.key] : undefined;
+  return (typeof value === "string" && choices.find((c) => c.id === value)) || null;
 }
 
 /**

@@ -1111,7 +1111,14 @@
         "photoRequired": "Photo required on {answer}",
         "commentOptional": "Comment optional",
         "photoOptional": "Photos optional",
-        "raisesSnag": "{answer} raises a Snag"
+        "raisesSnag": "{answer} raises a Snag",
+        "forTrade": "Templates for ⁨{trade}⁩",
+        "otherTradesHidden": "{count, plural, one {1 for other Trades hidden} other {{n} for other Trades hidden}}",
+        "version": "v{n}",
+        "locked": "You can change the template until it is submitted; then it is locked.",
+        "hideItems": "Hide items",
+        "showItems": "Show items",
+        "negativeAsks": "{every, select, yes {{what, select, both {On {answer}, the Consultant must add a comment and a photo} comment {On {answer}, the Consultant must add a comment} other {On {answer}, the Consultant must add a photo}}} other {{what, select, both {On {answer}, some items need a comment or a photo from the Consultant} comment {On {answer}, some items need a comment from the Consultant} other {On {answer}, some items need a photo from the Consultant}}}}"
       },
       "linkQuestion": {
         "remove": "Remove {number}"
@@ -1170,6 +1177,21 @@
     },
     "inspection": {
       "breadcrumb": "Breadcrumb",
+      "request": {
+        "title": "Work Inspection Request",
+        "newWir": "New WIR",
+        "raisedBy": "Raised by ⁨{company}⁩",
+        "goesTo": "Goes to ⁨{name}⁩",
+        "numberOnSubmit": "Number given on submit",
+        "actions": "Request actions",
+        "previewTitle": "Template preview",
+        "previewEmpty": "Pick a Checklist Template to see its items here.",
+        "nextTitle": "What happens next",
+        "nextReview": "Your Company reviews it, then Returns it or Submits it to the Consultant with a Cover Note.",
+        "nextReviewBy": "⁨{name}⁩ reviews it, then Returns it or Submits it to the Consultant with a Cover Note.",
+        "nextInspect": "The Consultant inspects on site.",
+        "nextCode": "The Consultant Manager issues the Review Code."
+      },
       "requestedFor": "Requested for",
       "issuedBy": "Issued by {by} · {when}",
       "privacy": "Only {company} sees your answers until you send them.",
@@ -1252,7 +1274,9 @@
         "of": "Revision of",
         "number": "Rev {revision}",
         "neverBlocks": "Open Snags never block this code: the Consultant Manager can issue it either way.",
-        "openSnagList": "Open in Snag List"
+        "openSnagList": "Open in Snag List",
+        "rowOpen": "Open",
+        "rowClosed": "Closed"
       }
     },
     "attachments": {

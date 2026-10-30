@@ -1111,7 +1111,14 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "raisesSnag": "عند {answer} يُنشأ عيب"
+        "raisesSnag": "عند {answer} يُنشأ عيب",
+        "forTrade": "قوالب ⁨{trade}⁩",
+        "otherTradesHidden": "{count, plural, one {قالب واحد لتخصصات أخرى مخفي} two {قالبان لتخصصات أخرى مخفيان} few {{n} قوالب لتخصصات أخرى مخفية} many {{n} قالبًا لتخصصات أخرى مخفيًا} other {{n} قالب لتخصصات أخرى مخفي}}",
+        "version": "الإصدار {n}",
+        "locked": "يمكنك تغيير القالب حتى يُقدَّم، ثم يُقفل.",
+        "hideItems": "إخفاء البنود",
+        "showItems": "عرض البنود",
+        "negativeAsks": "{every, select, yes {{what, select, both {عند {answer}، يجب أن يضيف الاستشاري تعليقًا وصورة} comment {عند {answer}، يجب أن يضيف الاستشاري تعليقًا} other {عند {answer}، يجب أن يضيف الاستشاري صورة}}} other {{what, select, both {عند {answer}، تحتاج بعض البنود إلى تعليق أو صورة من الاستشاري} comment {عند {answer}، تحتاج بعض البنود إلى تعليق من الاستشاري} other {عند {answer}، تحتاج بعض البنود إلى صورة من الاستشاري}}}}"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
@@ -1170,6 +1177,21 @@
     },
     "inspection": {
       "breadcrumb": "مسار التنقل",
+      "request": {
+        "title": "طلب معاينة أعمال",
+        "newWir": "طلب معاينة جديد",
+        "raisedBy": "رفعته ⁨{company}⁩",
+        "goesTo": "يذهب إلى ⁨{name}⁩",
+        "numberOnSubmit": "يُعطى الرقم عند التقديم",
+        "actions": "إجراءات الطلب",
+        "previewTitle": "معاينة القالب",
+        "previewEmpty": "اختر قالب قائمة تحقق لترى بنوده هنا.",
+        "nextTitle": "ما الذي يحدث بعد ذلك",
+        "nextReview": "تراجعه شركتك، ثم تعيده أو تقدّمه إلى الاستشاري مع خطاب تغطية.",
+        "nextReviewBy": "يراجعه ⁨{name}⁩، ثم يعيده أو يقدّمه إلى الاستشاري مع خطاب تغطية.",
+        "nextInspect": "يعاين الاستشاري الأعمال في الموقع.",
+        "nextCode": "يصدر مدير الاستشاري رمز المراجعة."
+      },
       "requestedFor": "مطلوب في",
       "issuedBy": "أصدره {by} · {when}",
       "privacy": "لا يرى إجاباتك إلا {company} حتى ترسلها.",
@@ -1252,7 +1274,9 @@
         "of": "مراجعة لـ",
         "number": "المراجعة {revision}",
         "neverBlocks": "العيوب المفتوحة لا تمنع إصدار هذا الرمز أبدًا: يمكن لمدير الاستشاري إصداره في كل الأحوال.",
-        "openSnagList": "فتح في قائمة العيوب"
+        "openSnagList": "فتح في قائمة العيوب",
+        "rowOpen": "مفتوح",
+        "rowClosed": "مغلق"
       }
     },
     "attachments": {

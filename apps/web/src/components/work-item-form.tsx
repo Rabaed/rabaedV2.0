@@ -18,7 +18,7 @@ import {
   type SupplierChoice,
   type ChecklistTemplateChoice,
 } from "@rabaed/domain";
-import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
+import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type FormRendererProps, type LinkTargetNames } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -299,11 +299,17 @@ export function WorkItemAnswers({
   workItemId,
   documents,
   replyChecklists,
+  look,
+  saveRow = true,
 }: {
   locale: Locale;
   workItemId: string;
   documents: DocumentList;
   replyChecklists: AnsweredChecklists;
+  /** The Form's opt-in look on this page (the WIR request, RP-655); left out, as every Form. */
+  look?: FormRendererProps["look"];
+  /** Its own Save row under the Form; false where the page's bar holds Save draft (the WIR request). */
+  saveRow?: boolean;
 }) {
   const t = useTranslations("workItems.form");
   const formLabels = useFormRendererLabels();
@@ -361,6 +367,7 @@ export function WorkItemAnswers({
         labels={formLabels}
         onChange={form.change}
         idPrefix="answer"
+        {...(look ? { look } : {})}
         links={{
           targets: form.linkTargets,
           search: linkSearch(form.projectId),
@@ -407,7 +414,7 @@ export function WorkItemAnswers({
           </ul>
         </div>
       )}
-      {form.editable && (
+      {form.editable && saveRow && (
         <div className="flex justify-end border-t border-border pt-4">
           <Button
             variant={button.closes ? "primary" : "secondary"}
