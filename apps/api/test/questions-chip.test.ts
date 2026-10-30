@@ -53,7 +53,9 @@ beforeAll(async () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${participant}/visibility`, { trade: all, location }));
     return { company, participant };
   };
-  await join("owner");
+  const o1 = await join("owner");
+  // The Owner's project manager holds the QSO's Open.
+  await projectMember(api, o1.company, o1.participant, ["project_manager"]);
   const c2 = await join("contractor", only(buildingB));
   c2Engineer = await projectMember(api, c2.company, c2.participant, ["engineer"]);
   c1Qso = await asked(at.c1Engineer, "QSO", "Which façade lighting colour", at.buildingA);
