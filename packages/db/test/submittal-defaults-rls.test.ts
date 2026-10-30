@@ -5,8 +5,8 @@
 // test Workflow, as owner-review-rls.test.ts does): K1's Recommended Code is read by K1 and the
 // Owner only until the Owner confirms it. The eight are Rabaed's own data, read alike by every
 // Member of any Project; what a Project binds or duplicates reaches that Project only.
-// RP-598's "With Owner review" scenario waits for RP-1138 at this seam: the Contractor reads the
-// Owner as the holder here (its line stays in docs/visibility/untested-seams.txt).
+// RP-598's "With Owner review" scenario, that nothing names the Owner holding the review, is tested
+// at this seam in owner-review-holder-rls.test.ts (RP-1138).
 import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -240,7 +240,7 @@ describe("scenario RP-596-1: a new Project's DAR runs the Rabaed Default 1→1 �
     await expectHiddenFrom({ name: whoIs, label: "Code", read: (as: string) => codesRead(as, id), target: "B", seenBy: [people.k1Pm, people.owPm], hiddenFrom: [people.c1Pm, people.c1Engineer] });
     expect((await asRead(people.c1Pm, id)).item).toEqual({ outcome: null, closed: false });
     // C1 reads "Owner review" in place of the holder; K1, which recommended, and OW, which holds it, read the holder.
-    // (C1 still reads OW as the holder through the List row and app.work_item_holder: RP-1138.)
+    // (That no other read names OW as the holder: owner-review-holder-rls.test.ts, RP-1138.)
     const ownerReview = (as: string) => rows(as, sql`select app.with_owner_review(${id}::uuid) as label`);
     for (const by of [people.c1Pm, people.c1Engineer]) expect(await ownerReview(by), whoIs(by)).toEqual([{ label: { en: "Owner review", ar: "مراجعة المالك" } }]);
     for (const by of [people.k1Pm, people.owPm]) expect(await ownerReview(by), whoIs(by)).toEqual([{ label: null }]);
