@@ -136,7 +136,8 @@ export function PackagesBoard({
   const packages = filterPackages(all, filter);
   const narrowed = filter.q !== undefined || filter.trade.length > 0 || filter.company.length > 0;
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    // The board takes the rest of the window under the toolbar (RP-1135, as RP-1092's boards).
+    <div className="flex min-w-0 flex-col gap-4 fills-window:min-h-0 fills-window:flex-1">
       {toolbar && (
         <ListToolbar label={labels.toolbar} end={viewSwitch}>
           {onCreate && <NewPackageDialog labels={labels.create} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onCreate={onCreate} />}
@@ -268,7 +269,10 @@ function PackageColumns({
         // Focusable, so the board can be scrolled with the keyboard.
         tabIndex={0}
         data-packages-board=""
-        className={cn("relative -mx-4 overflow-x-auto bg-canvas px-4 pt-1 pb-[40px] sm:-mx-7 sm:px-7", focusRing)}
+        // The page gives it the rest of the window (`fills-window`, RP-1135); it scrolls itself, so the page doesn't.
+        // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
+        data-fills-window=""
+        className={cn("relative -mx-4 min-h-64 flex-1 overflow-auto bg-canvas px-4 pt-1 pb-[40px] sm:-mx-7 sm:px-7", focusRing, "focus-visible:-outline-offset-2")}
       >
         <ol className="flex w-max items-start gap-[18px]">
           {packageStatuses.map((status) => {
