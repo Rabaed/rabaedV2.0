@@ -9,6 +9,7 @@ import {
   databasesOfEnv,
   dropOrKeep,
   firstFreeLane,
+  freeLaneClashes,
   freeLaneOrder,
   holderAdvice,
   isPortTaken,
@@ -230,8 +231,15 @@ describe("lane 7, Main 7's harness data (RP-1101)", () => {
   });
 
   it("is never offered by lane:env --free, whatever lane it starts from", () => {
-    for (const start of [0, 6, 7, 8, 11, 42, 54]) expect(freeLaneOrder(start)).not.toContain(7);
+    for (const start of VALID_LANES) expect(freeLaneOrder(start)).not.toContain(7);
     expect(firstFreeLane(6, (n) => (n === 7 ? [] : ["taken"]))).toBeUndefined();
+  });
+
+  it("clashes for lane:env 7 --free even with nothing on it (only Main 7's volumes left), so --free moves on", () => {
+    expect(freeLaneClashes(7, [])).toEqual([`${protectedLaneReason("rabaed-lane7")}.`]);
+    expect(freeLaneClashes(7, ["Port 5532 is taken."])).toEqual(["Port 5532 is taken.", `${protectedLaneReason("rabaed-lane7")}.`]);
+    expect(freeLaneClashes(42, [])).toEqual([]);
+    expect(freeLaneClashes(42, ["Port 4420 is taken."])).toEqual(["Port 4420 is taken."]);
   });
 
   it("is never taken over by lane:env --force, even from a worktree that is gone", () => {

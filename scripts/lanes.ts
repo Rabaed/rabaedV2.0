@@ -191,13 +191,21 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
 export function freeLaneOrder(start: number): number[] {
   const lanesAD = VALID_LANES.filter((n) => n >= 10 && n % 10 !== 0);
   const rotate = (lanes: number[], from: number) => [...lanes.slice(from), ...lanes.slice(0, from)];
+  const unprotected = (lanes: number[]) => lanes.filter((n) => protectedLaneReason(laneProject(n)) === undefined);
+  if (start < 10) return unprotected([...rotate(LEGACY_LANES, Math.max(start, 1) - 1), ...lanesAD]);
   const main = Math.floor(start / 10);
   const own = lanesAD.filter((n) => Math.floor(n / 10) === main);
-  const order =
-    start < 10
-      ? [...rotate(LEGACY_LANES, Math.max(start, 1) - 1), ...lanesAD]
-      : [...rotate(own, Math.max(start % 10, 1) - 1), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)];
-  return order.filter((n) => protectedLaneReason(laneProject(n)) === undefined);
+  return unprotected([...rotate(own, Math.max(start % 10, 1) - 1), ...lanesAD.filter((n) => Math.floor(n / 10) !== main)]);
+}
+
+/**
+ * The clashes lane:env --free sees for the lane asked for: a protected lane always clashes (RP-1101),
+ * even with no container or .env claim on it (only Main 7's volumes left), so --free moves on.
+ * A plain `lane:env 7` is Main 7's own and is not refused here.
+ */
+export function freeLaneClashes(n: number, clashes: string[]): string[] {
+  const refusal = protectedLaneReason(laneProject(n));
+  return refusal === undefined ? clashes : [...clashes, `${refusal}.`];
 }
 
 /** The first lane in freeLaneOrder(start) with no clash. */
@@ -519,8 +527,8 @@ export function chooseTakeover(
   { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, holders, platform }: TakeoverInput,
 ): { takeOver: Container[]; from: string[]; refused: string[]; released: string[] } {
   const projects = laneProjects(n);
-  const kept = projects.map(protectedLaneReason).find((reason) => reason !== undefined);
-  if (kept !== undefined) return { takeOver: [], from: [], refused: [`lane:env --force refused: ${kept}.`], released: [] };
+  const refusal = projects.map(protectedLaneReason).find((reason) => reason !== undefined);
+  if (refusal !== undefined) return { takeOver: [], from: [], refused: [`lane:env --force refused: ${refusal}.`], released: [] };
   const mine = containers.filter((c) => projects.includes(c.project) && !samePath(c.workingDir, cwd, platform));
   const from: string[] = [];
   const refused: string[] = [];

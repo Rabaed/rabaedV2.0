@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, envClaims, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
+import { composeProjectOfEnv, envClaims, protectedLaneReason, readWorktreeEnv, type Container, type Volume } from "./lanes.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import type { LocalBranch } from "./worktrees.ts";
 
@@ -245,10 +245,10 @@ describe("choosePrune", () => {
       docker: { containers: [container("rabaed-lane7-db-1", "rabaed-lane7", "/w/harness", "exited")], volumes: [volume("rabaed-lane7")], currentProject: "rabaed-lane2" },
     });
     expect(p.remove).toEqual([]);
-    expect(reasons(p)[2]?.[1]).toContain("Main 7's UAT harness data");
+    expect(reasons(p)[2]?.[1]).toBe(protectedLaneReason("rabaed-lane7"));
     expect(p.projects).toEqual([]);
     expect(p.kept.map((k) => [k.project, k.path])).toEqual([["rabaed-lane7", "/w/harness"]]);
-    expect(p.kept[0]?.reason).toContain("Main 7's UAT harness data");
+    expect(p.kept[0]?.reason).toBe(protectedLaneReason("rabaed-lane7"));
   });
 
   it("keeps a stopped project whose folder a running Claude session works in, naming the session (RP-1101)", () => {

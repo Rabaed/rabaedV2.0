@@ -47,7 +47,7 @@ export function removalRefusal(t: RemoveTarget, { force, platform }: { force: bo
   if (samePath(t.path, t.currentRoot, platform)) return refuse("the current worktree");
   if (t.held !== undefined) return refuse(`held: ${t.held}`);
   const harness = protectedLaneReason(t.project);
-  if (harness !== undefined) return refuse(`lane 7's: ${harness}`);
+  if (harness !== undefined) return refuse(`kept: ${harness}`);
   if (t.registered === undefined && !isAppWorktree(t.path, t.mainRoot, platform)) return refuse("not a worktree of this clone (and not under .claude/worktrees/)");
   if (force) return undefined;
   const again = "; `--force` removes it anyway";
