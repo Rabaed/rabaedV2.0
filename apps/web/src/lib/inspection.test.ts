@@ -1,6 +1,6 @@
 import type { ChecklistCopy, ChecklistTemplateItem, FormSchema, ReplyChecklistRead, WorkItemActions, WorkItemHistory } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { changedItems, codeRemarks, coverNote, inspectionActions, inspectionTally, itemsShown, recommendedCodeSent, plainDateTime, sharedChecklists, snagsToRaise } from "./inspection.ts";
+import { changedItems, codeRemarks, coverNote, inspectionActions, inspectionTally, itemsShown, pickedTemplate, recommendedCodeSent, plainDateTime, requestActions, sharedChecklists, snagsToRaise } from "./inspection.ts";
 
 // The WIR screens' own reading of the Consultant Engineer's checklist (RP-655): what the summary
 // bar, the tiles, the filter chips, the Send to Manager sheet and the code pop-up show.
@@ -100,6 +100,30 @@ describe("the WIR's actions, exactly as the API offers them", () => {
     expect(split.others.map((t) => t.key)).toEqual(["send_for_review", "cancel", "approve_a"]);
     expect(split.codes).toEqual([]);
     expect(split.proposed).toBeNull();
+  });
+
+  it("the request's bar sends it forward: its first Send or Submit; Return and Cancel stay at the top; none on a fresh request", () => {
+    const send = offered("send_for_review", "send", { assignTo: [{ memberId: "00000000-0000-4000-8000-000000000001", name: text("Nasser Al Kaabi") }] });
+    expect(requestActions([offered("cancel", "cancel"), send])).toEqual({ send, others: [offered("cancel", "cancel")], goesTo: text("Nasser Al Kaabi") });
+    const submit = offered("submit", "submit");
+    expect(requestActions([offered("return", "return"), submit])).toEqual({ send: submit, others: [offered("return", "return")], goesTo: null });
+    // Several who may hold it next: no one is named.
+    const pooled = offered("send_for_review", "send", { assignTo: [{ memberId: "00000000-0000-4000-8000-000000000001", name: text("A") }, { memberId: "00000000-0000-4000-8000-000000000002", name: text("B") }] });
+    expect(requestActions([pooled]).goesTo).toBeNull();
+    expect(requestActions([])).toEqual({ send: null, others: [], goesTo: null });
+  });
+});
+
+describe("the WIR request's Checklist Template", () => {
+  const schema = (fields: { key: string; type: string }[]) =>
+    ({ sections: [{ key: "s", title: text("S"), fields: fields.map((f) => ({ ...f, label: text(f.key) })) }] }) as unknown as FormSchema;
+
+  it("is the Form's first checklist_template field, and its pick when it names one of the choices", () => {
+    const form = schema([{ key: "description", type: "textarea" }, { key: "checklist_template", type: "checklist_template" }]);
+    expect(pickedTemplate(form, { checklist_template: "v1" }, [{ id: "v1", tradeId: "t", offered: true }])).toEqual({ id: "v1", tradeId: "t", offered: true });
+    expect(pickedTemplate(form, { checklist_template: "gone" }, [{ id: "v1", tradeId: "t", offered: true }])).toBeNull();
+    expect(pickedTemplate(form, {}, [{ id: "v1", tradeId: "t", offered: true }])).toBeNull();
+    expect(pickedTemplate(schema([{ key: "description", type: "textarea" }]), { checklist_template: "v1" }, [{ id: "v1", tradeId: "t", offered: true }])).toBeNull();
   });
 });
 
