@@ -7,9 +7,9 @@ import { randomUUID } from "node:crypto";
 import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { projectMember, tryTake } from "./support/tower.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { LEGACY_MAR, expectHiddenFrom } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -299,6 +299,55 @@ describe("a hidden item's Documents", () => {
     await expectHidden(engineer.get(`${documentUrl(itemId, randomUUID())}/download`));
     await expectHidden(engineer.get(`${documentUrl(itemId, "not-a-uuid")}/download`));
     await expectHidden(engineer.get(documentsUrl(randomUUID())));
+  });
+});
+
+// Scenario RP-1068-1: the Submittal Panel reads a Document to preview it only through this URL.
+describe("RP-1068-1: the Submittal Panel's preview of a Document", () => {
+  let itemId = "";
+  let documentId = "";
+  const body = "%PDF-1.7 luminaire datasheet";
+
+  beforeAll(async () => {
+    itemId = await draft();
+    documentId = await uploaded(engineer, itemId, body, "Luminaire datasheet.pdf");
+    await attachDatasheet(engineer, itemId);
+    await ok(tryTake(engineer, itemId, "send_for_review"));
+    await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
+    await ok(tryTake(pm, itemId, "submit"));
+  });
+
+  it("reads the Document through its signed URL for a Company that sees the item, shown in the page, not saved", async () => {
+    const res = await fetch(await downloadUrl(k1Engineer, itemId, documentId));
+    expect({
+      status: res.status,
+      type: res.headers.get("content-type"),
+      disposition: res.headers.get("content-disposition")?.split(";")[0],
+      body: await res.text(),
+    }).toEqual({ status: 200, type: "application/pdf", disposition: "inline", body });
+  });
+
+  it("gives a Company that can't see the item, and a Member off the Project, the plain 404 for the URL, as for a made-up id", async () => {
+    const named = new Map<Caller, string>([[k1Engineer, "K1's engineer"], [c2Engineer, "C2's engineer"], [outsider, "a C1 Member off the Project"]]);
+    const name = (who: Caller) => named.get(who)!;
+    const listed = async (who: Caller) => {
+      const res = await who.get(documentsUrl(itemId));
+      if (res.statusCode === 200) return (res.json() as DocumentList).documents;
+      await expectHidden(res, documentsUrl(itemId)); // not hidden-from: the read's 404 check; expectHiddenFrom asserts below
+      return [];
+    };
+    const hidden = [c2Engineer, outsider];
+    await expectHiddenFrom({ read: listed, target: documentId, seenBy: k1Engineer, hiddenFrom: hidden, name, label: "the list" });
+    await expectHiddenFrom({
+      read: readById<{ url: string }>(`${documentUrl(itemId, documentId)}/download`),
+      target: documentId,
+      idOf: () => documentId,
+      seenBy: k1Engineer,
+      hiddenFrom: hidden,
+      name,
+      label: "the download URL",
+    });
+    for (const who of hidden) await expectHidden(who.get(`${documentUrl(itemId, randomUUID())}/download`)); // not hidden-from: a made-up id, no row to prove
   });
 });
 

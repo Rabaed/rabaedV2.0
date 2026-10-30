@@ -3174,6 +3174,38 @@
     "noLinks": "لا روابط",
     "none": "—"
   },
+  "submittalPanelAttachments": {
+    "title": "المرفقات",
+    "fileCount": "{count, plural, =0 {لا مستندات} one {مستند واحد} two {مستندان} few {{n} مستندات} many {{n} مستندًا} other {{n} مستند}}",
+    "none": "لا توجد مستندات مرفقة.",
+    "reading": "جارٍ قراءة المستندات…",
+    "unavailableList": "تعذرت قراءة المستندات. حاول مرة أخرى لاحقًا.",
+    "pdf": "PDF",
+    "image": "صورة",
+    "other": "مستند",
+    "pageCount": "{count, plural, one {صفحة واحدة} two {صفحتان} few {{n} صفحات} many {{n} صفحة} other {{n} صفحة}}",
+    "pageOf": "{page} / {pages}",
+    "ofAttachments": "{count, plural, one {مستند} two {مستندين} few {مستندات} many {مستندًا} other {مستند}}",
+    "page": "صفحة {n}",
+    "pages": "الصفحات",
+    "files": "المرفقات",
+    "preview": "معاينة",
+    "closePreview": "إغلاق المعاينة",
+    "openLarge": "فتح بحجم كبير",
+    "download": "تنزيل",
+    "print": "طباعة",
+    "back": "رجوع",
+    "close": "إغلاق",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "previousPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية",
+    "loading": "جارٍ فتح المستند…",
+    "unavailable": "تعذر فتح هذا المستند.",
+    "tryAgain": "حاول مرة أخرى",
+    "noPreview": "لا يمكن معاينة هذا النوع من المستندات. نزّله لفتحه.",
+    "documentOf": "{n} / {total}"
+  },
   "submittalPanel": {
     "position": "{n} / {total}",
     "previous": "التقديم السابق",
@@ -3195,6 +3227,31 @@
     "noNumber": "بلا رقم بعد",
     "loading": "جارٍ فتح التقديم…",
     "unavailable": "تعذّر فتح هذا التقديم.",
-    "tryAgain": "حاول مرة أخرى"
+    "tryAgain": "حاول مرة أخرى",
+    "numberCard": {
+      "title": "كيف يُبنى هذا الرقم",
+      "footnote": "يحدّده نمط الترقيم في المشروع. الرقم لا يتغيّر؛ وتضيف المراجعات «مراجعة 1» و«مراجعة 2»…",
+      "kinds": {
+        "project": "المشروع",
+        "type": "نوع البند",
+        "trade": "التخصص",
+        "participant": "رمز المشارك",
+        "location": "الموقع",
+        "text": "نص ثابت",
+        "sequence": "التسلسل"
+      },
+      "levels": {
+        "zone": "المنطقة",
+        "building": "المبنى",
+        "floor": "الطابق"
+      },
+      "lines": {
+        "project": "رمز المشروع",
+        "participant": "رمز المشارك لـ {company}",
+        "location": "{level} الخاص به",
+        "text": "ثابت في كل رقم",
+        "sequence": "الرقم التسلسلي، يُعطى عند خروجه من المسودة أول مرة"
+      }
+    }
   }
 }
