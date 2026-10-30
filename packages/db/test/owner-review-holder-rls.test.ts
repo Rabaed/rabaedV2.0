@@ -210,6 +210,13 @@ describe("scenario RP-598-1: K1's PM recommends Code A to OW, whose PM holds the
       label: "List row's holder",
       read: async (as: string) => (await seenRow(as, id)).flatMap((r) => (r.holder_participant_id === null ? [] : [{ id: r.holder_participant_id }])),
     });
+    // The List row's holder Company, by its (own) name: app.work_items_seen takes it from the holder above.
+    await expectHiddenFrom({
+      ...viewers,
+      target: OW_NAME,
+      label: "List row's holder Company",
+      read: async (as: string) => (await seenRow(as, id)).flatMap((r) => (r.holder_company_name === null ? [] : [{ id: (r.holder_company_name as { en: string }).en }])),
+    });
     await expectHiddenFrom({
       ...viewers,
       label: "app.work_item_holder",
