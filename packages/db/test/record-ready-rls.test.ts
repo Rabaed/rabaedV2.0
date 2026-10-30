@@ -32,7 +32,7 @@ let failed = "";
 
 const one = async (text: string, values: unknown[]): Promise<string | undefined> => (await migrator.query(text, values)).rows[0]?.id as string | undefined;
 const job = async (kind: string, key: string, id: string) => {
-  const found = await one("select id from outbox where kind = $1 and payload ->> $2 = $3 order by created_at desc limit 1", [kind, key, id]);
+  const found = await one("select id from outbox where kind = $1 and payload ->> $2 = $3 order by created_at desc, id desc limit 1", [kind, key, id]);
   if (!found) throw new Error(`no ${kind} job for ${id}`);
   return found;
 };

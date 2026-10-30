@@ -1,8 +1,12 @@
-import { getTranslations } from "next-intl/server";
+import { appearanceCookie, isLocale, type Locale } from "@rabaed/domain";
+import { getLocale, getTranslations } from "next-intl/server";
+import { cookies } from "next/headers";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { LanguageChoice } from "@/components/language-choice";
 import { SignInShowcase } from "@/components/sign-in-showcase";
+import { routing } from "@/i18n/routing";
+import { legalLinks, signInAppearance } from "@/lib/sign-in-page";
 
 /**
  * The owner's sign-in design (RP-1057): the form on the reading-start side, the dark brand panel on the
@@ -12,8 +16,16 @@ import { SignInShowcase } from "@/components/sign-in-showcase";
 export async function SignInFrame({ children }: { children: ReactNode }) {
   const t = await getTranslations("signIn");
   const app = await getTranslations("shell");
+  const current = await getLocale();
+  const locale: Locale = isLocale(current) ? current : routing.defaultLocale;
+  // Always the Grey theme, as the design (owner, 2026-10-30), whatever the page's own Theme.
+  const { theme, mode } = signInAppearance((await cookies()).get(appearanceCookie)?.value);
   return (
-    <div className="grid min-h-dvh bg-surface min-[961px]:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+    <div
+      data-theme={theme}
+      data-mode={mode}
+      className="grid min-h-dvh bg-surface text-text min-[961px]:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]"
+    >
       <div className="flex flex-col p-5 min-[961px]:px-12 min-[961px]:py-7">
         <header className="flex items-center gap-3">
           <Image src="/brand/rabaed-logo.svg" alt={app("appName")} width={120} height={40} unoptimized priority className="h-10 w-auto" />
@@ -22,7 +34,17 @@ export async function SignInFrame({ children }: { children: ReactNode }) {
         <main className="flex flex-1 items-center justify-center py-10">
           <div className="flex w-full max-w-100 flex-col gap-5">{children}</div>
         </main>
-        <footer className="text-caption text-faint">{t("copyright", { year: String(new Date().getFullYear()) })}</footer>
+        <footer className="flex flex-wrap items-center gap-4 text-[12.5px] text-faint">
+          <span className="me-auto">{t("copyright", { year: String(new Date().getFullYear()) })}</span>
+          {/* The design's Privacy and Terms, on the marketing site (owner, 2026-10-30); it has no Help page yet. */}
+          <nav aria-label={t("legal.label")} className="flex gap-4">
+            {legalLinks(locale).map(({ key, href }) => (
+              <a key={key} href={href} target="_blank" rel="noopener" className="font-medium text-muted hover:text-brand-fg hover:underline">
+                {t(`legal.${key}`)}
+              </a>
+            ))}
+          </nav>
+        </footer>
       </div>
       <SignInShowcase />
     </div>

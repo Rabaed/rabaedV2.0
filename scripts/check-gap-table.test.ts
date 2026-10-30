@@ -92,6 +92,14 @@ describe("checkGapTable", () => {
     expect(errors).toEqual([expect.stringMatching(/row 2.*not found in docs\/adr\/0017-signed-transitions\.md/)]);
   });
 
+  it("finds a quoted scenario in its Jira key's file under docs/visibility/scenarios/ (RP-1097)", () => {
+    write(repo, "docs/visibility/scenarios/RP-412.md", "# RP-412 scenarios\n\n| # | Scenario | Who | Expected |\n|---|---|---|---|\n| RP-412-1 | C2 opens C1's item | C2 | Hidden |\n");
+    const row = (rule: string) => table(`| 4 | C1's item | Rabaed Settings Workflows.html › screenshot 4 | shown | rule-forced | hide | ${rule} |`);
+    expect(check(row('docs/visibility/scenarios/RP-412.md RP-412-1: "C2 opens C1\'s item"'))).toEqual([]);
+    expect(check(row('docs/visibility.md RP-412-1: "C2 opens C1\'s item"'))).toEqual([expect.stringMatching(/row 4.*not found in docs\/visibility\.md/)]);
+    expect(check(row('docs/visibility/scenarios/RP-499.md: "C2 opens C1\'s item"'))).toEqual([expect.stringMatching(/row 4.*docs\/visibility\/scenarios\/RP-499\.md is not in the repo/)]);
+  });
+
   it("refuses an ADR number with no file", () => {
     const errors = check(table("| 2 | Signature | Rabaed Settings Workflows.html › screenshot 3 | none | rule-forced | sign it | ADR 0099: \"Every Transition is signed\" |"));
     expect(errors).toEqual([expect.stringMatching(/row 2.*ADR 0099/)]);

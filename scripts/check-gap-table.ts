@@ -83,6 +83,9 @@ function ruleFile(label: string, repo: string): { file: string } | { error: stri
     const name = existsSync(dir) ? readdirSync(dir).find((entry) => entry.startsWith(`${adr}-`)) : undefined;
     return name ? { file: `docs/adr/${name}` } : { error: `ADR ${adr} is not in docs/adr` };
   }
+  // A scenario from RP-nnn-1 on sits in its Jira key's own file (RP-1097); rows 1–81 and the rules in docs/visibility.md.
+  const scenarios = /\bdocs\/visibility\/scenarios\/RP-\d+\.md\b/.exec(label)?.[0];
+  if (scenarios) return existsSync(join(repo, scenarios)) ? { file: scenarios } : { error: `${scenarios} is not in the repo` };
   if (/\bvisibility\.md\b/i.test(label)) return { file: "docs/visibility.md" };
   if (/\bGLOSSARY\.md\b/i.test(label)) return { file: "GLOSSARY.md" };
   if (/\bCLAUDE\.md\b/i.test(label)) return { file: "CLAUDE.md" };

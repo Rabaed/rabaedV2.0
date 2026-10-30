@@ -441,10 +441,17 @@
     "hidePassword": "Hide password",
     "forgot": "Forgot password?",
     "submit": "Sign in",
-    "invalid": "That email and password don't match.",
+    "emailMissing": "Enter a valid email",
+    "passwordMissing": "Enter your password",
+    "invalid": "That email and password don't match. Check them and try again.",
     "unavailable": "Something went wrong. Try again.",
     "invite": "New to Rabaed? Ask your company's Authorized Person to add you.",
     "copyright": "© {year} Rabaed",
+    "legal": {
+      "label": "Legal",
+      "privacy": "Privacy",
+      "terms": "Terms"
+    },
     "languages": {
       "en": "English",
       "ar": "العربية"
@@ -460,7 +467,7 @@
       "headlineCompanies": "Three companies.",
       "headlineRecord": "One record.",
       "headlineAccountability": "Clear accountability.",
-      "lead": "Owner, consultant and contractor on one platform — every step recorded, dated and credited to whoever took it."
+      "lead": "Owner, consultant and contractor on one platform — every step recorded and dated in the name of whoever took it."
     }
   },
   "passwordReset": {
