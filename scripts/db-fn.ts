@@ -1,7 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { functionChanges } from "./check-migration-drift.ts";
-import { migrationsDir } from "./migrations.ts";
+import { type Migration, migrationsDir, workingTreeMigrations } from "./migrations.ts";
 
 // `pnpm db:fn <name>` (RP-539): the newest definition of an `app.*` function.
 // Migrations run in name order and the last `create or replace function` wins,
@@ -39,27 +38,42 @@ function statementEnd(code: string, start: number): number {
   return end === -1 ? code.length : end + 1;
 }
 
-/** Every create or drop of `app.<name>` in one migration's SQL, in order. */
-export function definitionsIn(file: string, sql: string, name: string): Definition[] {
+/** Every create or drop of an `app.*` function in one migration's SQL, by lower-case name, each in order. */
+export function definitionsByName(file: string, sql: string): Map<string, Definition[]> {
   const code = blankComments(sql);
   const head = /\b(?<op>create(?:\s+or\s+replace)?|drop)\s+function\s+(?:if\s+exists\s+)?app\."?(?<name>\w+)"?\s*(?:\()?/gi;
-  const matches = [...code.matchAll(head)].filter((m) => m.groups?.name?.toLowerCase() === name);
   // functionChanges reads the same statements, in the same order, for their argument types.
-  const changes = functionChanges(sql).filter((c) => c.name === name);
-  return matches.map((m, i) => ({
-    file,
-    line: code.slice(0, m.index).split("\n").length,
-    args: changes[i]?.args ?? null,
-    op: changes[i]?.op ?? "create",
-    // The original text (comments kept) over the same offsets.
-    text: sql.slice(m.index, statementEnd(code, m.index)),
-  }));
+  const changes = Map.groupBy(functionChanges(sql), (c) => c.name);
+  const found = new Map<string, Definition[]>();
+  for (const m of code.matchAll(head)) {
+    const name = m.groups!.name!.toLowerCase();
+    const list = found.get(name) ?? [];
+    const change = changes.get(name)?.[list.length];
+    list.push({
+      file,
+      line: code.slice(0, m.index).split("\n").length,
+      args: change?.args ?? null,
+      op: change?.op ?? "create",
+      // The original text (comments kept) over the same offsets.
+      text: sql.slice(m.index, statementEnd(code, m.index)),
+    });
+    found.set(name, list);
+  }
+  return found;
+}
+
+/** The definitions of every `app.*` function across the migrations, by lower-case name, each in file order. */
+export function allDefinitions(migrations: Migration[]): Map<string, Definition[]> {
+  const all = new Map<string, Definition[]>();
+  for (const m of migrations.toSorted((a, b) => (a.name < b.name ? -1 : 1))) {
+    for (const [name, list] of definitionsByName(m.name, m.sql)) all.set(name, [...(all.get(name) ?? []), ...list]);
+  }
+  return all;
 }
 
 /** The definitions of `app.<name>` across the migrations, in file order. */
-export function findDefinitions(migrations: { name: string; sql: string }[], name: string): Definition[] {
-  const wanted = name.replace(/^app\./i, "").toLowerCase();
-  return migrations.toSorted((a, b) => (a.name < b.name ? -1 : 1)).flatMap((m) => definitionsIn(m.name, m.sql, wanted));
+export function findDefinitions(migrations: Migration[], name: string): Definition[] {
+  return allDefinitions(migrations).get(name.replace(/^app\./i, "").toLowerCase()) ?? [];
 }
 
 /** The newest definition of each signature that is still live: not dropped after its last create. */
@@ -97,10 +111,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error("Usage: pnpm db:fn <name> [--list]");
     process.exit(2);
   }
-  const dir = resolve(import.meta.dirname, "..", migrationsDir);
-  const migrations = readdirSync(dir)
-    .filter((f) => f.endsWith(".sql"))
-    .map((f) => ({ name: f, sql: readFileSync(join(dir, f), "utf8") }));
+  const migrations = workingTreeMigrations(resolve(import.meta.dirname, ".."));
   const { out, found } = report(findDefinitions(migrations, names[0]!), names[0]!, list);
   (found ? console.log : console.error)(out);
   if (!found) process.exit(1);
