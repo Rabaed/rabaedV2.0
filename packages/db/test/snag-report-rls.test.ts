@@ -355,7 +355,7 @@ describe("RP-1110: a report is checked again each time its asker reads it", () =
   const report = (...items: object[]) => ({ ...content, items });
   const gone = [{ status: "gone", storage_key: null }];
 
-  /** A Snag raised by K1 on `location`: its id. */
+  /** A Snag of K1's on `location`: raised in Building A, K1's Draft elsewhere; its id. */
   async function raised(title: string, location: string): Promise<string> {
     const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
       k1(),
@@ -364,7 +364,8 @@ describe("RP-1110: a report is checked again each time its asker reads it", () =
         ${tower.tradeId}::uuid, ${location}::uuid, now())`,
     );
     expect(created!.outcome).toBe("created");
-    expect(await tower.take(k1(), created!.work_item_id, "raise")).toBe("applied");
+    // In Building B, both C1 and C2 cover it, so a Raise would ask K1 to pick one: K1's own Draft is enough to be seen.
+    if (location === tower.buildingA) expect(await tower.take(k1(), created!.work_item_id, "raise")).toBe("applied");
     return created!.work_item_id;
   }
 
