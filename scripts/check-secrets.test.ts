@@ -1,7 +1,9 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { addedLines, findSecrets, formatFinding, scanDiff, scanText } from "./check-secrets.ts";
+import { addedLines, findSecrets, formatFinding, scanDiff, scanStaged, scanText, scanTree, SECRET_RULES } from "./check-secrets.ts";
 
 // RP-1100. Every fake token here is built from parts at run time, so no file in
 // the repo holds anything shaped like a token: not this scan, gitleaks, nor a
@@ -36,6 +38,24 @@ const expectedRule: Record<keyof typeof tokens, string> = {
 };
 
 describe("findSecrets", () => {
+  it("has a test token for every rule", () => {
+    expect(new Set(Object.values(expectedRule))).toEqual(new Set(SECRET_RULES.map((rule) => rule.id)));
+  });
+
+  it("finds a real AWS key after the documented example on the same line", () => {
+    expect(findSecrets(join2("AK", "IA", "IOSFODNN7", "EXAMPLE ", tokens.awsKeyId))).toEqual(["aws-access-key-id"]);
+  });
+
+  it("finds a PGP private key block", () => {
+    expect(findSecrets(join2("-----BEGIN ", "PGP PRIVATE", " KEY BLOCK-----"))).toEqual(["private-key"]);
+  });
+
+  it("lets an assignment through whose value is a call or a plain identifier", () => {
+    expect(findSecrets("const jiraToken = loadJiraTokenFromEnvironment();")).toEqual([]);
+    expect(findSecrets("VERCEL_TOKEN = readVercelTokenFromSecretsManager()")).toEqual([]);
+    expect(findSecrets("const jiraToken = environmentVariableValue;")).toEqual([]);
+  });
+
   for (const [name, token] of Object.entries(tokens) as [keyof typeof tokens, string][]) {
     it(`finds a ${name} token`, () => {
       expect(findSecrets(`const x = "${token}";`)).toEqual([expectedRule[name]]);
@@ -51,8 +71,25 @@ describe("findSecrets", () => {
     expect(findSecrets(join2("JIRA_API", "_TOKEN=", chars(24)))).toEqual(["atlassian-api-token"]);
   });
 
-  it("lets AWS's documented example key through", () => {
+  it("finds a bare Vercel token passed to the CLI's --token flag", () => {
+    expect(findSecrets(join2("vercel deploy --prod --to", "ken=", chars(24)))).toEqual(["vercel-token"]);
+    expect(findSecrets(join2("vercel pull --to", "ken '", chars(24), "'"))).toEqual(["vercel-token"]);
+  });
+
+  it("finds an AWS secret key in SDK config and credentials JSON, and a session token", () => {
+    const secret = chars(40, "abcXYZ019/+");
+    expect(findSecrets(join2("  secret", "AccessKey: \"", secret, "\","))).toEqual(["aws-secret-access-key"]);
+    expect(findSecrets(join2("{\"Secret", "AccessKey\": \"", secret, "\"}"))).toEqual(["aws-secret-access-key"]);
+    expect(findSecrets(join2("aws_session", "_token=", chars(120, "abcXYZ019/+=")))).toEqual(["aws-secret-access-key"]);
+  });
+
+  it("lets AWS's documented example key and secret through", () => {
     expect(findSecrets(join2("AK", "IA", "IOSFODNN7", "EXAMPLE"))).toEqual([]);
+    expect(findSecrets(join2("aws_secret", "_access_key = ", "wJalrXUtnFEMI/K7MDENG/bPxRfiCY", "EXAMPLEKEY"))).toEqual([]);
+  });
+
+  it("lets the CLI's --token flag through when it reads a variable", () => {
+    expect(findSecrets('vercel deploy --prod --token="$VERCEL_TOKEN"')).toEqual([]);
   });
 
   it("lets ordinary code through: env reads, header builders, workflow secrets, short prefixes", () => {
@@ -110,14 +147,67 @@ describe("addedLines", () => {
   });
 
   it("reads a file path with spaces", () => {
-    expect(addedLines("+++ b/docs/my notes.md\n@@ -0,0 +1 @@\n+hello")).toEqual([{ file: "docs/my notes.md", line: 1, text: "hello" }]);
+    expect(addedLines("--- /dev/null\n+++ b/docs/my notes.md\n@@ -0,0 +1 @@\n+hello")).toEqual([{ file: "docs/my notes.md", line: 1, text: "hello" }]);
+  });
+
+  it("reads a path git quotes (a tab or quote in the name)", () => {
+    expect(addedLines('--- /dev/null\n+++ "b/docs/a\\tb \\"c\\".md"\n@@ -0,0 +1 @@\n+hello')).toEqual([{ file: 'docs/a\tb "c".md', line: 1, text: "hello" }]);
+  });
+
+  it("reads an added line that starts with ++ as content, not as a file header", () => {
+    const diff = ["--- a/a.ts", "+++ b/a.ts", "@@ -0,0 +1,2 @@", "+++ counter;", "+next"].join("\n");
+    expect(addedLines(diff)).toEqual([
+      { file: "a.ts", line: 1, text: "++ counter;" },
+      { file: "a.ts", line: 2, text: "next" },
+    ]);
   });
 });
 
 describe("scanDiff", () => {
   it("finds a token only on added lines: removing one is how it gets fixed", () => {
-    const diff = ["+++ b/a.ts", "@@ -1 +1,2 @@", `-const old = "${tokens.github}";`, "+const ok = 1;", `+const key = "${tokens.sendgrid}";`].join("\n");
+    const diff = ["--- a/a.ts", "+++ b/a.ts", "@@ -1 +1,2 @@", `-const old = "${tokens.github}";`, "+const ok = 1;", `+const key = "${tokens.sendgrid}";`].join("\n");
     expect(scanDiff(diff)).toEqual([{ file: "a.ts", line: 2, rule: "sendgrid-api-key" }]);
+  });
+});
+
+// CODING_STANDARDS.md › Tests: the input most likely to slip past the guard, from git itself.
+describe("scanStaged on real git output", () => {
+  it("finds tokens on a ++ line, under a path with a space, a tab or quotes, and after an example key", () => {
+    const repo = mkdtempSync(join(tmpdir(), "rabaed-secrets-staged-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+      writeFileSync(join(repo, "counter.ts"), `let i = 0;\n++ i; // ${tokens.github}\nconst after = "${tokens.sendgrid}";\n`);
+      writeFileSync(join(repo, "my notes.md"), `one\n${tokens.atlassian}\n`);
+      execFileSync("git", ["add", "-A"], { cwd: repo });
+      // Windows cannot name a file with quotes or a tab, so this one goes straight into the index.
+      const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo, input: `${join2("AK", "IA", "IOSFODNN7", "EXAMPLE")} ${tokens.awsKeyId}\n`, encoding: "utf8" }).trim();
+      execFileSync("git", ["-c", "core.protectNTFS=false", "update-index", "--add", "--cacheinfo", `100644,${blob},odd "name"\tx.md`], { cwd: repo });
+      expect(scanStaged(repo).sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)).toEqual([
+        { file: "counter.ts", line: 2, rule: "github-token" },
+        { file: "counter.ts", line: 3, rule: "sendgrid-api-key" },
+        { file: "my notes.md", line: 2, rule: "atlassian-api-token" },
+        { file: 'odd "name"\tx.md', line: 1, rule: "aws-access-key-id" },
+      ]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("scanTree", () => {
+  it("reads every tracked text file whole, and skips binary and untracked ones", () => {
+    const repo = mkdtempSync(join(tmpdir(), "rabaed-secrets-tree-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+      writeFileSync(join(repo, "clean.ts"), "const token = process.env.JIRA_API_TOKEN;\n");
+      writeFileSync(join(repo, "leak.md"), `# notes\n\nkey ${tokens.github}\n`);
+      writeFileSync(join(repo, "image.bin"), Buffer.concat([Buffer.from([0]), Buffer.from(tokens.github)]));
+      execFileSync("git", ["add", "-A"], { cwd: repo });
+      writeFileSync(join(repo, "untracked.ts"), tokens.sendgrid);
+      expect(scanTree(repo)).toEqual([{ file: "leak.md", line: 3, rule: "github-token" }]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
 
