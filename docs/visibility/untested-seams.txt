@@ -133,7 +133,3 @@ RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager
 
 # RP-1072
 RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
-
-# RP-1079
-RP-1079-1 api  # K1's PM adds a site photo to the Screen of its Recommendation to the Owner (a reply photos
-RP-1079-2 api  # The Owner Sends it Back; K1 adds another photo and Recommends C again; the Owner confirms 
