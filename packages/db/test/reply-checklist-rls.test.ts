@@ -310,8 +310,9 @@ describe("RP-577-1: the Snags a code raises are seen where the Inspection is", (
       expect(await checkItem(outsider), outsider).toBeNull();
       expect(await source(outsider), outsider).toEqual([]);
       expect(await snagCount(outsider), outsider).toEqual([]);
-      expect(await call(outsider, sql<object>`select * from app.raised_document_copies(${id}::uuid)`), outsider).toEqual([]);
     }
+    // (app.raised_document_copies gives nothing to anyone once the code has committed, the next test shows,
+    // so an outsider's empty read of it would prove nothing: RP-1095.)
   });
 
   it("the tick, taken off before the code, is K1's alone like the answers (V19), and the code shares it", async () => {

@@ -11,7 +11,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -241,13 +241,15 @@ describe("a Draft Revision (scenario 51)", () => {
   });
 
   it("returns nothing to K1 or the Owner, who see the closed item", async () => {
+    // C1 reads the Revision, so "nothing" below is K1's and the Owner's view, not an empty item (RP-1095).
+    const read = (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${revision}`);
+    await expectHiddenFrom({ read, target: revision, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: "the Draft Revision" });
     for (const other of [k1.member, ow.member]) {
       expect(await call(other, sql`select id from work_item where id = ${closed}`)).toEqual([{ id: closed }]);
       expect(await everythingOf(other, revision)).toEqual(nothing);
-      expect(await call(other, sql`select id from work_item_link where from_id = ${closed}`)).toEqual([]);
-      expect(await call(other, sql`select id from app.work_item_links(${closed}::uuid)`)).toEqual([]);
-      expect(await call(other, sql`select * from app.work_item_linked_from(${closed}::uuid)`)).toEqual([]);
     }
+    // No Link touches the Draft Revision or the closed item here, so a read of their Links proves nothing;
+    // the Revision's Links are read once it is Submitted, below.
   });
 
   it("can't be created again, nor discarded, by K1 or the Owner, and the refusal names nothing", async () => {
