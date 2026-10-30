@@ -48,6 +48,7 @@ function useSnagLabels(tableLabel: string): SnagListLabels {
     newOfType: (type) => t("newOfType", { type }),
     types: t("types"),
     allTypes: t("allTypes"),
+    questions: t("questions"),
     stage: l("stage"),
     trade: l("trade"),
     company: t("company"),
