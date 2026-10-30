@@ -10,7 +10,7 @@ import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type 
 import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
-import { failureEnd, finalLine, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
+import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
 import { isRunning } from "./worktrees-stale.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
@@ -27,6 +27,7 @@ import { isRunning } from "./worktrees-stale.ts";
 // waits for its Main's one verify slot: a run in another of the Main's lanes waits for this one (RP-1096).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
+// HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -102,6 +103,13 @@ try {
   stopEarly(error instanceof Error ? error.message : String(error));
 }
 if (claimsWarning) out.error(`${claimsWarning}\n`);
+
+// The commit this run verifies (RP-1103): HEAD is checked against it after every step, and the last line names it.
+const readHead = () => {
+  const done = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
+  return done.status === 0 ? done.stdout.trim() : "";
+};
+const startedOn = readHead();
 
 const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) stopEarly("git diff against origin/main failed; run `git fetch origin main` first.", diff.status ?? 1);
@@ -189,20 +197,31 @@ for (const { name, script } of steps) {
     postgresAnswers,
   );
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  // A pull or Auto-fix's merge of main mid-run (RP-1103): stop now, with no line to paste.
+  const moved = headMoved(startedOn, readHead());
   if (outcome.passed) {
     out.info(`ok   ${outcome.label} (${seconds}s)`);
     passed.push(outcome.label);
+    if (moved !== undefined) {
+      out.end([`${runCommand(from)} stopped after ${name}: ${moved}`], true);
+      process.exit(1);
+    }
     continue;
   }
   out.error(`FAIL ${name} (${seconds}s, exit ${exit}${outcome.reran ? ", after one re-run" : ""}). The last ${tailLines} lines it printed:`);
   out.error(tail(outcome.output, tailLines));
+  // The failure may come from the move rather than the diff: say so instead of the usual stop line.
+  if (moved !== undefined) {
+    out.end([`${runCommand(from)} stopped at ${name}: ${moved}`], true);
+    process.exit(outcome.status);
+  }
   // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
   // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).
   const answers = isSeamStep(name) ? await postgresAnswers() : true;
   out.end(failureEnd(name, outcome.output, answers, runCommand(from)), true);
   process.exit(outcome.status);
 }
-const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
+const sha = startedOn === "" ? "" : spawnSync("git", ["rev-parse", "--short", startedOn], { cwd: root, encoding: "utf8" }).stdout.trim();
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
