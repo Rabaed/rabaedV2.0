@@ -294,6 +294,9 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
     }
     // C1's answers_changed events: their changes hold the new comment and Y's Subject, read by C1 only (V5).
     const changes = async (by: Caller) => (await history(by, id)).filter((e) => e.type === "answers_changed").map((e) => e.changes);
+    // Any answers_changed event at all, whatever it changed, as one row.
+    const anyChange = async (by: Caller) => ((await changes(by)).length > 0 ? [{ id: "answers_changed" }] : []);
+    await hidden("C1's answers_changed events, any", anyChange, "answers_changed", engineer, [k1Pm, orEngineer, owner]);
     await hidden("C1's answers_changed events, with Y", holds("SBR-Y", changes), "SBR-Y", engineer, [k1Pm, orEngineer, owner]);
     await hidden("C1's answers_changed events, with the comment", holds("Bowed panel", changes), "Bowed panel", engineer, [k1Pm, orEngineer, owner]);
     await hidden("the history, anywhere", holds("SBR-Y", (by) => history(by, id)), "SBR-Y", engineer, [k1Pm, orEngineer, owner]);

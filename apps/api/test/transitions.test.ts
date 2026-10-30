@@ -253,14 +253,15 @@ describe("Pick up, Return and re-send", () => {
   });
 
   it("keeps the Return reason from everyone outside the Contractor (V5)", async () => {
-    // The Return's event, as a row: `[{ id }]` when the reader's history holds its reason, `[]` when not, or for the plain 404.
+    const seenBy = [engineer, pm1, pm2];
+    const hiddenFrom = [k1Engineer, orEngineer, c2Engineer];
+    // The returned Draft is C1's alone: its whole history is the plain 404 to them.
+    await expectHiddenFrom({ read: historyOf(id), target: id, seenBy, hiddenFrom, name: nameOf, label: "the history" });
+    // The Return's event, as a row: `[{ id }]` when the reason is anywhere in the reader's history, `[]` when not, or for the plain 404.
     const returnEvent = `${id}/return`;
     const reasonRead = async (by: Caller) =>
-      (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by))
-        .flatMap((h) => h.events)
-        .filter((e) => e.reason === "Wrong tray size")
-        .map(() => ({ id: returnEvent }));
-    await expectHiddenFrom({ read: reasonRead, target: returnEvent, seenBy: [engineer, pm1, pm2], hiddenFrom: [k1Engineer, orEngineer, c2Engineer], name: nameOf, label: "the Return reason" });
+      (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by)).filter((h) => JSON.stringify(h).includes("Wrong tray size")).map(() => ({ id: returnEvent }));
+    await expectHiddenFrom({ read: reasonRead, target: returnEvent, seenBy, hiddenFrom, name: nameOf, label: "the Return reason" });
   });
 });
 

@@ -54,11 +54,10 @@ const names = new Map<string, string>();
 const nameOf = (as: string) => names.get(as) ?? as;
 
 /**
- * The Position and Step names `as` reads anywhere in item `item`'s history. A name is the row here:
- * the read gives a Position or a Step no id, and the name is what V14 keeps from another Company.
+ * `name` as one row when it is anywhere in item `item`'s history as `as` reads it, in any column. A name
+ * is the row here: the read gives a Position or a Step no id, and the name is what V14 keeps from another Company.
  */
-const labelsOf = async (as: string, item: string) =>
-  (await historyOf(as, item)).flatMap((r) => [...(r.member_positions ?? []).map((p) => p.en), r.from_step_name?.en, r.to_step_name?.en]).flatMap((label) => (label ? [{ id: label }] : []));
+const mentions = (item: string, name: string) => async (as: string) => (JSON.stringify(await historyOf(as, item)).includes(`"${name}"`) ? [{ id: name }] : []);
 
 /**
  * Item `item`'s event ids in its history as `as` reads it. app.work_item_history gives a row no id (its
@@ -149,7 +148,7 @@ describe("scenario RP-1091-1: C1's engineer reads the history of a C1 item K1 re
     expect(rows.every((r) => r.company_name !== null)).toBe(true);
     // K1's manager reads their own Position and K1's Step in the same history; C1's engineer reads neither.
     for (const target of [MANAGER.en, "Consultant approval"]) {
-      await expectHiddenFrom({ read: (as: string) => labelsOf(as, id), target, seenBy: tower.k1.members.manager, hiddenFrom: tower.c1.members.engineer, name: nameOf, label: "K1's names" });
+      await expectHiddenFrom({ read: mentions(id, target), target, seenBy: tower.k1.members.manager, hiddenFrom: tower.c1.members.engineer, name: nameOf, label: "K1's names" });
     }
   });
 });
@@ -176,7 +175,7 @@ describe("scenario RP-1091-2: K1 reads the same history", () => {
     ]);
     // C1's engineer reads C1's Position and Step names in the same history; K1's manager reads neither.
     for (const target of [PROJECT_MANAGER.en, "Contractor review"]) {
-      await expectHiddenFrom({ read: (as: string) => labelsOf(as, id), target, seenBy: tower.c1.members.engineer, hiddenFrom: tower.k1.members.manager, name: nameOf, label: "C1's names" });
+      await expectHiddenFrom({ read: mentions(id, target), target, seenBy: tower.c1.members.engineer, hiddenFrom: tower.k1.members.manager, name: nameOf, label: "C1's names" });
     }
   });
 });

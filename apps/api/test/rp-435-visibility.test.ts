@@ -51,7 +51,6 @@ const listed: Read = async (by) => (await ok(by.get(`/v1/projects/${projectId}/w
 const activity: Read = async (by) => ((await ok(by.get(`/v1/projects/${projectId}/activity`), 200)).json() as ActivityFeed).entries.map((e) => ({ id: e.workItem.id }));
 const links = async (by: Caller, id: string): Promise<WorkItemLinks> => (await ok(by.get(`/v1/work-items/${id}/links`), 200)).json();
 const linkedFrom = async (by: Caller, id: string): Promise<LinkedFrom> => (await ok(by.get(`/v1/work-items/${id}/linked-from`), 200)).json();
-const linkedFromOf = (id: string): Read => async (by) => (await linkedFrom(by, id)).items.map((i) => ({ id: i.workItemId ?? "" }));
 const createReplacement = (by: Caller, id: string) => by.post(`/v1/work-items/${id}/replacements`, { idempotencyKey: randomUUID() });
 const refusal = async (by: Caller, id: string) => {
   const res = await createReplacement(by, id);
@@ -127,8 +126,8 @@ describe("scenario RP-435-1: a replacement of C1's MAR that K1 closed with Code 
   it("is named by neither the rejected MAR's Links nor its Linked from while it is a Draft, for C1 too", async () => {
     for (const who of [engineer, k1Manager, owPm]) {
       expect((await links(who, rejected)).links, named(who)).toEqual([]); // not hidden-from: the rejected MAR has no Link of its own, for C1 either (seam 2)
-      expect((await linkedFromOf(rejected)(who)).map((r) => r.id), named(who)).not.toContain(replacement); // not hidden-from: nobody reads it before Submit, C1 included; the same read names it once Submitted (below)
-      expect(JSON.stringify(await linkedFrom(who, rejected)), named(who)).not.toContain(replacement); // not hidden-from: nor its id anywhere in it, for C1 either; named once Submitted (below)
+      // The whole list, not one id: Linked from names an item the reader can't open by number with no id (E3).
+      expect((await linkedFrom(who, rejected)).items, named(who)).toEqual([]); // not hidden-from: nothing links to the rejected MAR before the Submit, for C1 either; the same read names the replacement once Submitted (below)
     }
   });
 
@@ -157,7 +156,7 @@ describe("scenario RP-435-1: a replacement of C1's MAR that K1 closed with Code 
     await expectHiddenFrom({ read: item(replacement), target: replacement, seenBy: [engineer, pm], hiddenFrom: [k1Engineer, k1Manager, owPm], name: named, label: "in C1's review" });
     // Its Send is the first event of it the Activity Feed lists: C1's alone.
     await expectHiddenFrom({ read: activity, target: replacement, seenBy: [engineer, pm], hiddenFrom: [k1Engineer, k1Manager, owPm], name: named, label: "the Activity Feed's events" });
-    for (const who of [engineer, k1Manager, owPm]) expect((await linkedFromOf(rejected)(who)).map((r) => r.id), named(who)).not.toContain(replacement); // not hidden-from: nobody reads it before Submit; the same read names it below
+    for (const who of [engineer, k1Manager, owPm]) expect((await linkedFrom(who, rejected)).items, named(who)).toEqual([]); // not hidden-from: nothing links to the rejected MAR before the Submit, its number included; the same read names it below
   });
 
   it("once Submitted, is in the rejected MAR's Linked from by number and Subject (E3), and lists it under its Links (E1)", async () => {

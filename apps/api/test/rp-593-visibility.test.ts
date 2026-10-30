@@ -121,7 +121,8 @@ describe("scenario RP-593-3: on an Electrical item OR covers, OR holds the Owner
     expect((await detail(orPm, id)).actions.transitions.map((t) => t.label.en).sort()).toEqual(["Confirm", "Send Back"]);
 
     // OR reads the Recommended Code; the Owner and C1 read none, in any channel.
-    expect((await history(orPm, id)).filter((e) => e.type === "recommend_code").map((e) => e.recommendedCode)).toEqual(["A"]);
+    // Each seenBy reader below reads the Recommendation itself, so their "A" is the Recommended Code, not another string.
+    for (const by of [orPm, at.k1Manager]) expect((await history(by, id)).filter((e) => e.type === "recommend_code").map((e) => e.recommendedCode), nameOf(by)).toEqual(["A"]);
     await expectHiddenFrom({
       read: (by: Caller) => codesRead(by, id, title),
       target: "A",

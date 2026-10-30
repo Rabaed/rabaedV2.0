@@ -54,9 +54,14 @@ const historyOf = (id: string) => async (by: Caller) => (await readById(`/v1/wor
 const documentsOf = (id: string) => async (by: Caller) => (await readById<DocumentList>(`/v1/work-items/${id}/documents`)(by)).flatMap((l) => l.documents);
 const chainOf = (id: string) => async (by: Caller) => (await readById<RevisionChain>(`/v1/work-items/${id}/revisions`)(by)).flatMap((c) => c.revisions);
 const listed = async (by: Caller) => (await ok(by.get(`/v1/projects/${projectId}/work-items`), 200)).json().items as { id: string }[];
-/** The items `id`'s Links and its Linked from name, for a reader who sees `id`. */
-const linksOf = (id: string) => async (by: Caller) => (await links(by, id)).links.map((l) => ({ id: l.workItemId ?? "" }));
-const linkedFromOf = (id: string) => async (by: Caller) => (await linkedFrom(by, id)).items.map((i) => ({ id: i.workItemId ?? "" }));
+/**
+ * The items `id`'s Links and its Linked from name, for a reader who sees `id`: each row twice, by its
+ * item's id and as `#<Document Number>`. A row of an item the reader can't open has no id, only its
+ * number (E3), so a hidden item is checked by its number too.
+ */
+const idAndNumber = (workItemId: string | null, documentNumber: string | null) => [{ id: workItemId ?? "(no id)" }, { id: `#${documentNumber}` }];
+const linksOf = (id: string) => async (by: Caller) => (await links(by, id)).links.flatMap((l) => idAndNumber(l.workItemId, l.documentNumber));
+const linkedFromOf = (id: string) => async (by: Caller) => (await linkedFrom(by, id)).items.flatMap((i) => idAndNumber(i.workItemId, i.documentNumber));
 
 /** Sends a Draft (a new MAR or a Revision) for review and Submits it to K1. */
 async function submit(id: string) {
@@ -495,7 +500,7 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
     });
     // orB doesn't see the original, so its Links and Linked from are read by those who see both.
     const ofClosed = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
-      expectHiddenFrom({ read, target: rev1, seenBy: [engineer, k1Manager], hiddenFrom: orA, name: named, label });
+      Promise.all([rev1, `#${base} Rev 1`].map((target) => expectHiddenFrom({ read, target, seenBy: [engineer, k1Manager], hiddenFrom: orA, name: named, label: `${label}, ${target}` })));
     await ofClosed(linksOf(closed), "the original's Links");
     await ofClosed(linkedFromOf(closed), "the original's Linked from");
     const body = (await orA.get(`/v1/work-items/${closed}/links`)).body + (await orA.get(`/v1/work-items/${closed}/linked-from`)).body;
@@ -511,6 +516,12 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
     });
     await hidden(linkedFromOf(rev1), [engineer, k1Manager], "Rev 1's Linked from");
     await hidden(linksOf(rev1), [engineer, k1Manager], "Rev 1's Links");
+    // A row of the original with no id would still carry its number (E3).
+    for (const [read, label] of [
+      [linkedFromOf(rev1), "Rev 1's Linked from, by number"],
+      [linksOf(rev1), "Rev 1's Links, by number"],
+    ] as const)
+      await expectHiddenFrom({ read, target: `#${base}`, seenBy: [engineer, k1Manager], hiddenFrom: orB, name: named, label });
     const answer = async (by: Caller) => ((await detail(by, rev1)).answers.related_submittals as string[]).map((id) => ({ id }));
     await hidden(answer, [engineer, k1Manager], "Rev 1's link answer");
     expect(JSON.stringify(await detail(orB, rev1))).not.toContain(`"${base}"`); // not hidden-from: nor the original's number anywhere in it; the reads above prove the rows by id
