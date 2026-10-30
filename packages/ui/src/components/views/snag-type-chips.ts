@@ -18,7 +18,8 @@ export type TypeChip =
  * to the Question Types the Module has. Without counts (under a search) no chip has a number.
  */
 export function typeChipsOf(types: readonly Type[], counts: readonly { code: string; count: number }[] | undefined): TypeChip[] {
-  const countOf = (codes: readonly string[]) => (counts ? codes.reduce((sum, code) => sum + (counts.find((c) => c.code === code)?.count ?? 0), 0) : undefined);
+  const byCode = counts && new Map(counts.map((c) => [c.code, c.count]));
+  const countOf = (codes: readonly string[]) => (byCode ? codes.reduce((sum, code) => sum + (byCode.get(code) ?? 0), 0) : undefined);
   const questions = types.filter((t) => questionTypes.includes(t.code)).map((t) => t.code);
   const chips: TypeChip[] = [];
   for (const type of types) {

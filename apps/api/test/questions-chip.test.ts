@@ -74,6 +74,7 @@ describe("the Questions chip counts only the Questions the viewer sees (seam 1, 
     // K1 reads all three: asked by it, asked of it, and informed of C1's QSO.
     expect(await questionIds(at.k1Manager)).toEqual([c1Qso, k1Qsc, c2Qsn].sort());
     expect(chip((await list(at.k1Manager)).typeCounts)).toBe(3);
+    expect(chip((await board(at.k1Manager)).typeCounts)).toBe(3);
   });
 
   it("the chip's filter, all three Question Types at once, lists exactly what the chip counts", async () => {
