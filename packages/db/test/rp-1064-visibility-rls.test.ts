@@ -24,7 +24,10 @@ const towerOptions = { projectCode: "RSS", k1Manager: true } as const;
 let tower: SeamTwoTower<typeof towerOptions>;
 
 type Seen = { id: string; step_key: string; holder_mine: boolean | null; holder_name: { en: string; ar: string } | null };
-/** Where `as` reads item `item`, as the map read reads it: the Step as seen, whether its holder is the reader's own Participant, and the holder's name. */
+/**
+ * Where `as` reads item `item`, from what the map read reads: the Step as seen, whether its holder is the reader's own
+ * Participant (null when no holder reaches them; the map takes "Owner review" as not their own), and the holder's name.
+ */
 const seen = async (as: string, item: string) =>
   tower.call<Seen>(
     as,
@@ -164,7 +167,8 @@ describe("scenario RP-1064-1: later the item waits at the Owner's review", () =>
   });
 
   it("reads to C1 as with Owner review, not as the Owner's Company", async () => {
-    expect(await seen(tower.c1.members.project_manager, id)).toEqual([{ id, step_key: "owner_review", holder_mine: false, holder_name: OWNER_REVIEW }]);
+    // No holder reaches C1 (RP-1138), so whether it is C1's own reads as nothing.
+    expect(await seen(tower.c1.members.project_manager, id)).toEqual([{ id, step_key: "owner_review", holder_mine: null, holder_name: OWNER_REVIEW }]);
   });
 
   it("gives the Owner's Step to the Owner only", async () => {

@@ -108,7 +108,6 @@ RP-596-1 db  # A new Project's DAR runs the Rabaed Default 1→1 → Owner revie
 RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflows of a submittal Type, an
 
 # RP-598
-RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
 RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
 
 # RP-1058
