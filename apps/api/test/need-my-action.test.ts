@@ -5,11 +5,11 @@
 // The count on the Project card is the toggle's rows minus my Drafts, and a
 // closed Project has none.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, readById, type Caller } from "./support/harness.ts";
 import { defaultModules } from "./support/default-types.ts";
 import { all, approvedSupplier, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
@@ -42,6 +42,9 @@ async function list(by: Caller, query: WorkItemQueryInput = {}, project = projec
   return (await ok(by.get(`/v1/projects/${project}/work-items?${workItemSearchParams({ needMyAction: true, ...query })}`), 200)).json();
 }
 const ids = (l: WorkItemList) => l.items.map((i) => i.id);
+/** `target` is in each Need My Action toggle of `seenBy` first, and of none in `hiddenFrom` (RP-1095). */
+const toggleHides = (target: string, seenBy: Caller | Caller[], hiddenFrom: Caller | Caller[], label: string) =>
+  expectHiddenFrom({ read: async (by: Caller) => (await list(by)).items, target, seenBy, hiddenFrom, label });
 
 /** The Project as the Projects page shows it to `by`. */
 async function card(by: Caller, project = projectId): Promise<ProjectSummary> {
@@ -122,10 +125,11 @@ describe("Need My Action", () => {
   it("lists my own Drafts but never counts them, and never lists a colleague's", async () => {
     const mine = await list(c1Engineer);
     expect(ids(mine)).toContain(myDraft);
-    expect(ids(mine)).not.toContain(colleaguesDraft);
-    // Sent on: nobody is waiting on me for these any more.
-    expect(ids(mine)).not.toContain(inReview);
-    expect(ids(mine)).not.toContain(pooled);
+    // A colleague's Draft is the colleague's alone (V1).
+    await toggleHides(colleaguesDraft, c1Colleague, c1Engineer, "a colleague's Draft");
+    // Sent on: nobody is waiting on me for these any more, though I still read them.
+    expect(ids(mine)).not.toContain(inReview); // not hidden-from: the toggle's rule; the raiser still reads the item in the List
+    expect(ids(mine)).not.toContain(pooled); // not hidden-from: the toggle's rule; the raiser still reads the item in the List
     expect((await card(c1Engineer)).needMyAction).toBe(0);
     expect(ids(await list(c1Colleague))).toEqual([colleaguesDraft]);
   });
@@ -146,7 +150,7 @@ describe("Need My Action", () => {
     await ok(k1A.post(`/v1/work-items/${pooled}/pick-up`));
     expect(ids(await list(k1A))).toEqual([pooled]);
     expect((await card(k1A)).needMyAction).toBe(1);
-    expect(ids(await list(k1B))).toEqual([]);
+    await toggleHides(pooled, k1A, k1B, "picked up by A");
     expect((await card(k1B)).needMyAction).toBe(0);
     // Without the toggle the item is still in the colleague's List.
     expect(ids(await list(k1B, { needMyAction: false }))).toContain(pooled);
@@ -179,18 +183,18 @@ describe("Need My Action", () => {
     await sql`update work_item set root_id = ${earlier}::uuid, revision_of_id = ${earlier}::uuid, revision_no = 1 where id = ${later}::uuid`.execute(migrator);
     const rows = ids(await list(c1Pm));
     expect(rows).toContain(later);
-    expect(rows).not.toContain(earlier);
+    expect(rows).not.toContain(earlier); // not hidden-from: the List's one-row-per-chain rule, both Revisions are C1's own
     expect((await card(c1Pm)).needMyAction).toBe(rows.length);
     expect((await card(c1Pm)).needMyAction).toBe(before - 1);
   });
 
   it("combines with the other filters", async () => {
-    expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]);
+    expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]); // not hidden-from: a Stage filter; the PM holds no Draft
     // C1's only PM holds every Step of C1's internal review at once (§3.3 rule 4).
     const mine = ids(await list(c1Pm, { with: ["me"] }));
     expect(mine).toContain(inReview);
     expect(mine).toEqual(ids(await list(c1Pm)));
-    expect(ids(await list(c1Pm, { with: ["not_picked_up"] }))).toEqual([]);
+    expect(ids(await list(c1Pm, { with: ["not_picked_up"] }))).toEqual([]); // not hidden-from: a With filter; the only PM holds every Step at once
   });
 });
 
@@ -219,14 +223,19 @@ describe("a closed Project", () => {
     const pm = await projectMember(api, c1, own, ["project_manager"]);
     const item = await draft(engineer, "Pumps", closing, { trade, location });
     await take(engineer, item, "send_for_review");
-    await draft(engineer, "A Draft", closing, { trade, location });
+    const aDraft = await draft(engineer, "A Draft", closing, { trade, location });
     expect((await card(pm, closing)).needMyAction).toBe(1);
-    expect(ids(await list(engineer, {}, closing))).toHaveLength(1);
+    const toggleOf = async (by: Caller) => ({ rows: (await list(by, {}, closing)).items });
+    const before = { pm: await toggleOf(pm), engineer: await toggleOf(engineer) };
+    expect(before.engineer.rows.map((i) => i.id)).toEqual([aDraft]);
 
     await sql`update project set status = 'closed', closed_at = now() where id = ${closing}`.execute(migrator);
     expect((await card(pm, closing)).needMyAction).toBe(0);
-    expect(ids(await list(pm, {}, closing))).toEqual([]);
-    expect(ids(await list(engineer, {}, closing))).toEqual([]);
+    // The same toggles, before the close and after: the PM's item and the engineer's Draft are gone.
+    const after = { pm: await toggleOf(pm), engineer: await toggleOf(engineer) };
+    for (const [who, target] of [["pm", item], ["engineer", aDraft]] as const) {
+      await expectHiddenFrom({ read: async (toggle: { rows: { id: string }[] }) => toggle.rows, target, seenBy: before[who], hiddenFrom: after[who], name: (toggle) => `${who} ${toggle === before[who] ? "before" : "after"} the close`, label: "a closed Project" });
+    }
     // Still readable without the toggle.
     expect(ids(await list(pm, { needMyAction: false }, closing))).toContain(item);
   });
@@ -253,14 +262,17 @@ describe("Module tabs", () => {
 
   it("each lead to their Module's List and Kanban, of that Module's Types only", async () => {
     const path = (module: string, view = "") => `/v1/projects/${projectId}/modules/${module}/work-items${view}`;
-    // Before the Project has a Site Reports Type, its Site Reports answer as if they didn't exist, like a made-up Module.
-    await expectHidden(c1Engineer.get(path("site_reports")));
-    await expectHidden(c1Engineer.get(path("site_reports", "/kanban")));
-    await expectHidden(c1Engineer.get(path("rfis")));
+    // Before the Project has a Site Reports Type, its Site Reports answer as if they didn't exist, like a made-up Module:
+    // the plain 404, where the same Member reads the Submittals.
+    const answered = (url: (module: string) => string, by = c1Engineer) => async (module: string) => (await readById(url(module))(by)).map(() => ({ id: "answered" }));
+    const urls = { list: (m: string) => path(m), kanban: (m: string) => path(m, "/kanban"), query: (m: string) => `/v1/projects/${projectId}/work-items?module=${m}` };
+    await expectHiddenFrom({ read: answered(urls.list), target: "answered", seenBy: "submittals", hiddenFrom: ["site_reports", "rfis"], label: "a Module's List" });
+    await expectHiddenFrom({ read: answered(urls.kanban), target: "answered", seenBy: "submittals", hiddenFrom: "site_reports", label: "a Module's Kanban" });
     // The same when the query names the Module (a Dashboard number's link).
-    await expectHidden(c1Engineer.get(`/v1/projects/${projectId}/work-items?module=site_reports`));
+    await expectHiddenFrom({ read: answered(urls.query), target: "answered", seenBy: "submittals", hiddenFrom: "site_reports", label: "a Module in the query" });
     const submittals: WorkItemList = (await ok(c1Engineer.get(path("submittals")), 200)).json();
     expect(submittals.items.length).toBeGreaterThan(0);
+    const aSubmittal = submittals.items[0]!.id;
     expect(submittals.filters.types.map((t) => t.code)).toContain("MAR");
 
     await sql`
@@ -270,14 +282,18 @@ describe("Module tabs", () => {
     `.execute(migrator);
     const reports: WorkItemList = (await ok(c1Engineer.get(path("site_reports")), 200)).json();
     expect(reports.filters.types.map((t) => t.code)).toEqual(["DSR"]);
-    // Not one Submittal.
-    expect(reports.items).toEqual([]);
-    expect((await ok(c1Engineer.get(path("site_reports", "/kanban")), 200)).json().columns.flatMap((c: { lanes: unknown[] }) => c.lanes)).toEqual([]);
-    // The Inspections list holds the Rabaed Default Inspections Types (RP-437), and no Submittal.
+    // Not one Submittal: the Submittal the Submittals List and Kanban hold is in neither the Site Reports' nor the Inspections'.
+    const listOf = async (module: string) => ((await ok(c1Engineer.get(path(module)), 200)).json() as WorkItemList).items;
+    const boardOf = async (module: string) =>
+      ((await ok(c1Engineer.get(path(module, "/kanban")), 200)).json() as { columns: { lanes: { cards: { id: string }[] }[] }[] }).columns.flatMap((c) => c.lanes.flatMap((l) => l.cards));
+    await expectHiddenFrom({ read: listOf, target: aSubmittal, seenBy: "submittals", hiddenFrom: ["site_reports", "inspections"], label: "a Submittal in another Module's List" });
+    await expectHiddenFrom({ read: boardOf, target: aSubmittal, seenBy: "submittals", hiddenFrom: "site_reports", label: "a Submittal on another Module's Kanban" });
+    // The Inspections list holds the Rabaed Default Inspections Types (RP-437).
     const inspections: WorkItemList = (await ok(c1Engineer.get(path("inspections")), 200)).json();
     expect(inspections.filters.types.map((t) => t.code).sort()).toEqual(["WIR"]);
-    expect(inspections.items).toEqual([]);
     // Another Company's Member who isn't on the Project: not found, as ever.
-    await expectHidden((await api.authorizedPerson()).caller.get(path("site_reports")));
+    const outsider = (await api.authorizedPerson()).caller;
+    const reportsList = async (by: Caller) => (await readById(path("site_reports"))(by)).map(() => ({ id: "the Site Reports" }));
+    await expectHiddenFrom({ read: reportsList, target: "the Site Reports", seenBy: c1Engineer, hiddenFrom: outsider, name: (by) => (by === outsider ? "outsider" : "C1 engineer") });
   });
 });

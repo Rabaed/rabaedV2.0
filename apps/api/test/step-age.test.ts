@@ -6,7 +6,7 @@
 // The seeded MAR has one Consultant Step, so this file uses a test-only Work Item
 // Type whose Workflow has two (support/internal-steps-type.ts).
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemSummary } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
@@ -46,8 +46,8 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
   expect(r.statusCode, r.body).toBe(status);
 }
 
-async function participant(c1: Company, role: "consultant" | "owner", legalName: string) {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+async function participant(c1: Company, role: "consultant" | "owner", legalName: string) { // not hidden-from: the helper's parameter
+  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) }); // not hidden-from: onboarding the test Company
   const company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   const participantId = await api.addParticipant(c1.caller, projectId, onboarded, role);
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
@@ -134,6 +134,9 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
   });
 
   it("shows the C1 PM and the Owner nothing of the internal moves: only the age changed", async () => {
+    // K1's own reads of the item hold each of K1's internal moves; the C1 PM's and the Owner's never do (RP-1095).
+    const k1 = await seenBy(k1Engineer, id);
+    type Seen = typeof k1;
     for (const who of ["pm", "owner"] as const) {
       const caller = who === "pm" ? pm : owner;
       const before = atSubmit[who];
@@ -141,7 +144,16 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
         expect({ ...now.detail, stepAgeWeeks: 1 }).toEqual({ ...before.detail, stepAgeWeeks: 1 });
         expect({ ...now.row, stepAgeWeeks: 1 }).toEqual({ ...before.row, stepAgeWeeks: 1 });
         expect(now.history).toEqual(before.history);
-        for (const secret of [MANAGER_STEP, RETURN_REASON, "Send to Manager"]) expect(now.body).not.toContain(secret);
+        for (const secret of [MANAGER_STEP, RETURN_REASON, "Send to Manager"]) {
+          await expectHiddenFrom({
+            read: async (seen: Seen) => (seen.body.includes(secret) ? [{ id: secret }] : []),
+            target: secret,
+            seenBy: k1,
+            hiddenFrom: now,
+            name: (seen) => (seen === k1 ? "K1 engineer" : who),
+            label: "K1's internal move",
+          });
+        }
       }
     }
   });

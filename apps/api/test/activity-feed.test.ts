@@ -13,11 +13,11 @@
 import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestWorkflow, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { activityFeedSearchParams, type ActivityFeed, type ActivityFeedEntry, type ActivityFeedQuery } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 
@@ -88,8 +88,8 @@ let owner: Caller;
 let c2Engineer: Caller;
 let outsider: Caller;
 
-const onboard = async (legalName: string): Promise<Company> => {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+const onboard = async (legalName: string): Promise<Company> => { // not hidden-from: the helper's parameter
+  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) }); // not hidden-from: onboarding the test Company
   return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
 };
 
@@ -133,6 +133,21 @@ async function feed(by: Caller, query: Partial<ActivityFeedQuery> = {}): Promise
 const ofItem = (entries: ActivityFeedEntry[], id: string) => entries.filter((e) => e.workItem.id === id);
 const what = (e: ActivityFeedEntry) => [e.type, e.transition?.en ?? null, e.audience];
 
+/** Something a viewer reads, for expectHiddenFrom: its rows by id. */
+type Reader = { name: string; rows: () => Promise<{ id: string }[]> };
+/** `target` is read by every Reader in `seenBy` first, and by none in `hiddenFrom` (RP-1095). */
+const hiddenFrom = (target: string, seenBy: Reader | Reader[], hidden: Reader | Reader[], label: string) =>
+  expectHiddenFrom({ read: (r: Reader) => r.rows(), target, seenBy, hiddenFrom: hidden, name: (r) => r.name, label });
+/** `by`'s whole feed: its events, by id. */
+const eventsIn = (by: Caller, name: string): Reader => ({ name: `${name}'s feed`, rows: async () => (await feed(by)).entries });
+/** The items `by`'s feed names, by id. */
+const itemsIn = (by: Caller, name: string): Reader => ({ name: `${name}'s feed`, rows: async () => (await feed(by)).entries.map((e) => ({ id: e.workItem.id })) });
+/** `text`, as the one row of a body that holds it. */
+const textIn = (name: string, body: () => Promise<string>, text: string): Reader => ({ name, rows: async () => ((await body()).includes(text) ? [{ id: text }] : []) });
+const feedText = (by: Caller, name: string, text: string) => textIn(`${name}'s feed`, async () => (await feed(by)).body, text);
+const historyText = (by: Caller, id: string, name: string, text: string) =>
+  textIn(`${name}'s history of the item`, async () => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).body, text);
+
 beforeAll(async () => {
   await addFeedType();
   c1 = await onboard(C1_NAME);
@@ -143,7 +158,7 @@ beforeAll(async () => {
   // C1 is the Project Admin, and sees every Participant.
   const k1ParticipantId = (await c1.caller.get(`/v1/projects/${tower.projectId}/participants`))
     .json()
-    .participants.find((p: { company: { legalName: { en: string } } }) => p.company.legalName.en === K1_NAME).id as string;
+    .participants.find((p: { company: { legalName: { en: string } } }) => p.company.legalName.en === K1_NAME).id as string; // not hidden-from: the setup finds K1's Participant by its name
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   k1Pm = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   const or = await onboard("Feed Owner Representative");
@@ -167,15 +182,16 @@ describe("scenario 34 through the feed: C1 PM Submits with an Internal Note", ()
 
   it("shows K1 and OR the Submit, by C1's name only, and never the Internal Note", async () => {
     for (const other of [tower.k1Manager, orEngineer]) {
-      const { entries, body } = await feed(other);
+      const { entries } = await feed(other);
       expect(ofItem(entries, id).map(what)).toEqual([["transition", "Submit", "shared"]]);
       expect(ofItem(entries, id)[0]).toMatchObject({ by: { companyName: bilingual(C1_NAME), memberName: null } });
-      expect(body).not.toContain(NOTE);
     }
+    // The Note's text is in C1's own history of the item; no K1 or OR feed holds it.
+    await hiddenFrom(NOTE, historyText(tower.c1Pm, id, "C1 PM", NOTE), [feedText(tower.k1Manager, "K1", NOTE), feedText(orEngineer, "OR", NOTE)], "the Internal Note");
   });
 
   it("shows C1 its own moves, newest first, with its people's names, but not the Note's text", async () => {
-    const { entries, body } = await feed(tower.c1Pm);
+    const { entries } = await feed(tower.c1Pm);
     expect(ofItem(entries, id).map(what)).toEqual([
       ["transition", "Submit", "shared"],
       ["internal_note", "Submit", "internal"],
@@ -188,7 +204,8 @@ describe("scenario 34 through the feed: C1 PM Submits with an Internal Note", ()
     expect(submit.by.memberName).not.toBeNull();
     expect(submit.workItem).toMatchObject({ id, title: "Feed FD-34", type: { code: TYPE } });
     expect(submit.workItem.documentNumber).toMatch(/^FEED-/);
-    expect(body).not.toContain(NOTE);
+    // The feed names the internal_note event, never its text, which C1's history of the item holds.
+    await hiddenFrom(NOTE, historyText(tower.c1Pm, id, "C1 PM", NOTE), feedText(tower.c1Pm, "C1 PM", NOTE), "the Internal Note's text");
   });
 });
 
@@ -205,11 +222,13 @@ describe("scenario 35 through the feed: K1 moves the Submitted item internally",
   });
 
   it("shows C1 only its own events: no K1 internal move, no K1 name", async () => {
-    const { entries, body } = await feed(tower.c1Pm);
+    const { entries } = await feed(tower.c1Pm);
     for (const e of ofItem(entries, id)) expect(e.by.companyName).toEqual(bilingual(C1_NAME));
-    expect(ofItem(entries, id).map((e) => e.transition?.en)).not.toContain("Send to Manager");
-    expect(body).not.toContain(K1_NAME);
-    expect(body).not.toContain("Return to Engineer");
+    // K1's two internal moves are K1's feed's events; neither reaches C1's.
+    const k1Moves = ofItem((await feed(tower.k1Manager)).entries, id).filter((e) => e.audience === "internal" && e.type === "transition");
+    expect(k1Moves.map((e) => e.transition?.en)).toEqual(["Return to Engineer", "Send to Manager"]);
+    for (const move of k1Moves) await hiddenFrom(move.id, eventsIn(tower.k1Manager, "K1"), eventsIn(tower.c1Pm, "C1 PM"), `K1's ${move.transition?.en}`);
+    for (const text of [K1_NAME, "Return to Engineer"]) await hiddenFrom(text, feedText(tower.k1Manager, "K1", text), feedText(tower.c1Pm, "C1 PM", text), `"${text}"`);
   });
 
   it("shows K1 its own internal moves, with its people's names", async () => {
@@ -239,16 +258,41 @@ describe("answer changes through the feed: C1 changes its Returned item twice", 
     await save({ model: CHANGED });
     // C1's own history holds both changes: the feed leaves them out for everyone.
     const history = (await ok(tower.c1Engineer.get(`/v1/work-items/${id}/history`), 200)).json().events as { type: string }[];
-    expect(history.filter((e) => e.type === "answers_changed")).toHaveLength(2);
+    expect(history.filter((e) => e.type === "answers_changed")).toHaveLength(2); // not hidden-from: C1's own history of its own item, the setup's proof of two changes
   });
 
   it("gives no answers_changed to C1 itself, K1, OR or OW", async () => {
-    for (const by of [tower.c1Engineer, tower.c1Pm, orEngineer, owner, k1Engineer, k1Pm]) {
-      const { entries, body } = await feed(by);
-      expect(ofItem(entries, id).map((e) => e.type)).not.toContain("answers_changed");
-      expect(entries.map((e) => e.type)).not.toContain("answers_changed");
-      expect(body).not.toContain(CHANGED);
-    }
+    const feeds = [
+      eventsIn(tower.c1Engineer, "C1 engineer"),
+      eventsIn(tower.c1Pm, "C1 PM"),
+      eventsIn(orEngineer, "OR"),
+      eventsIn(owner, "OW"),
+      eventsIn(k1Engineer, "K1 engineer"),
+      eventsIn(k1Pm, "K1 PM"),
+    ];
+    // The Project's answers_changed events, this item's two among them: no feed holds any.
+    const events: Reader = {
+      name: "the Project's events",
+      rows: () =>
+        migrator
+          .selectFrom("work_item_event")
+          .innerJoin("work_item", "work_item.id", "work_item_event.work_item_id")
+          .select("work_item_event.id")
+          .where("work_item.project_id", "=", tower.projectId)
+          .where("work_item_event.type", "=", "answers_changed")
+          .execute(),
+    };
+    const changes = await events.rows();
+    expect(changes.length).toBeGreaterThanOrEqual(2);
+    for (const change of changes) await hiddenFrom(change.id, events, feeds, "answers_changed");
+    // The changed answer is the item's to C1, in its detail; no feed's text holds it.
+    const changedIn = (by: Caller, name: string) => feedText(by, name, CHANGED);
+    await hiddenFrom(
+      CHANGED,
+      textIn("C1 engineer's item detail", async () => (await ok(tower.c1Engineer.get(`/v1/work-items/${id}`), 200)).body, CHANGED),
+      [changedIn(tower.c1Engineer, "C1 engineer"), changedIn(tower.c1Pm, "C1 PM"), changedIn(orEngineer, "OR"), changedIn(owner, "OW"), changedIn(k1Engineer, "K1 engineer"), changedIn(k1Pm, "K1 PM")],
+      "the changed answer",
+    );
   });
 });
 
@@ -259,26 +303,29 @@ describe("another Contractor", () => {
   });
 
   it("holds nothing of C1's in a C2 Member's feed", async () => {
-    const { entries, body } = await feed(c2Engineer);
+    const { entries } = await feed(c2Engineer);
     expect(new Set(entries.map((e) => e.workItem.id))).toEqual(new Set([own]));
-    expect(body).not.toContain(C1_NAME);
+    // K1's feed names C1; C2's never does.
+    await hiddenFrom(C1_NAME, feedText(tower.k1Manager, "K1", C1_NAME), feedText(c2Engineer, "C2", C1_NAME), "C1's name");
   });
 
   it("holds nothing of C2's in C1's, K1's or OR's feed while it is C2's Draft (V1)", async () => {
-    for (const by of [tower.c1Pm, tower.k1Manager, orEngineer]) {
-      expect(ofItem((await feed(by)).entries, own)).toEqual([]);
-    }
+    await hiddenFrom(own, itemsIn(c2Engineer, "C2"), [itemsIn(tower.c1Pm, "C1 PM"), itemsIn(tower.k1Manager, "K1"), itemsIn(orEngineer, "OR")], "C2's Draft");
   });
 
   it("answers a C1 item C2 reached by link with a 404, as one that doesn't exist", async () => {
     const c1Item = (await feed(tower.c1Pm)).entries[0]!.workItem.id;
-    await expectHidden(c2Engineer.get(`/v1/work-items/${c1Item}`));
-    await expectHidden(c2Engineer.get(`/v1/work-items/${c1Item}/history`));
+    const item = (path: string) => async (by: Caller) => (await readById(path)(by)).map(() => ({ id: c1Item }));
+    for (const path of [`/v1/work-items/${c1Item}`, `/v1/work-items/${c1Item}/history`]) {
+      await expectHiddenFrom({ read: item(path), target: c1Item, seenBy: tower.c1Pm, hiddenFrom: c2Engineer, name: (by) => (by === c2Engineer ? "C2" : "C1 PM"), label: path });
+    }
   });
 
   it("answers a Project the caller isn't on with a 404", async () => {
-    await expectHidden(outsider.get(`/v1/projects/${tower.projectId}/activity`));
-    await expectHidden(outsider.get(`/v1/projects/${randomUUID()}/activity`));
+    const feedOf = (projectId: string) => async (by: Caller) => (await readById(`/v1/projects/${projectId}/activity`)(by)).map(() => ({ id: projectId }));
+    await expectHiddenFrom({ read: feedOf(tower.projectId), target: tower.projectId, seenBy: tower.c1Pm, hiddenFrom: outsider, name: (by) => (by === outsider ? "outsider" : "C1 PM") });
+    // A made-up Project gets the same 404, from someone whose own Project's feed is read.
+    await expectHiddenFrom({ read: (projectId: string) => feedOf(projectId)(tower.c1Pm).then((rows) => rows.map(() => ({ id: "a feed" }))), target: "a feed", seenBy: tower.projectId, hiddenFrom: randomUUID() });
   });
 });
 
@@ -320,19 +367,19 @@ describe("paging and filters", () => {
   it("filters by Module and by Type, and combines them", async () => {
     const everything = (await feed(tower.c1Pm)).entries;
     expect((await feed(tower.c1Pm, { module: "submittals" })).entries).toEqual(everything);
-    expect((await feed(tower.c1Pm, { module: "inspections" })).entries).toEqual([]);
+    expect((await feed(tower.c1Pm, { module: "inspections" })).entries).toEqual([]); // not hidden-from: a Module filter; the Project has no Inspections
     const mars = (await feed(tower.c1Pm, { type: [LEGACY_MAR] })).entries;
     expect(new Set(mars.map((e) => e.workItem.id))).toEqual(new Set([marId]));
     expect((await feed(tower.c1Pm, { type: [LEGACY_MAR, TYPE] })).entries).toEqual(everything);
-    expect((await feed(tower.c1Pm, { module: "inspections", type: [LEGACY_MAR] })).entries).toEqual([]);
+    expect((await feed(tower.c1Pm, { module: "inspections", type: [LEGACY_MAR] })).entries).toEqual([]); // not hidden-from: Module and Type filters that exclude each other
   });
 
   it("keeps \"items I'm on\" to the ones I raised, held or acted on, combined with the other filters", async () => {
     // K1's engineer acted on (and held) the scenario items and k1Acted; the K1 PM acted on none.
     const engineerOn = new Set((await feed(k1Engineer, { mine: true })).entries.map((e) => e.workItem.id));
     expect(engineerOn).toContain(k1Acted);
-    expect(engineerOn).not.toContain(marId);
-    expect((await feed(k1Engineer, { mine: true, type: [LEGACY_MAR] })).entries).toEqual([]);
+    expect(engineerOn).not.toContain(marId); // not hidden-from: the "items I'm on" filter; K1's engineer sees the MAR in the whole feed
+    expect((await feed(k1Engineer, { mine: true, type: [LEGACY_MAR] })).entries).toEqual([]); // not hidden-from: the "items I'm on" filter with a Type filter
     // The manager held and acted on the scenario 35 item, and holds k1Acted and the MAR:
     // K1's only manager holds a Step whose pool is them alone at once (§3.3 rule 4).
     const managerOn = new Set((await feed(tower.k1Manager, { mine: true })).entries.map((e) => e.workItem.id));
@@ -342,7 +389,7 @@ describe("paging and filters", () => {
     // C1's engineer raised every C1 item: the MAR among them.
     expect(new Set((await feed(tower.c1Engineer, { mine: true, type: [LEGACY_MAR] })).entries.map((e) => e.workItem.id))).toEqual(new Set([marId]));
     // Nobody at the Owner acted on anything.
-    expect((await feed(owner, { mine: true })).entries).toEqual([]);
+    expect((await feed(owner, { mine: true })).entries).toEqual([]); // not hidden-from: the "items I'm on" filter; the Owner reads the items, acted on none
   });
 
   it("takes in the items I watch (RP-354), and lets them go when I stop watching", async () => {
@@ -351,7 +398,7 @@ describe("paging and filters", () => {
     expect(new Set(watched.map((e) => e.workItem.id))).toEqual(new Set([marId]));
     expect(watched).toEqual((await feed(owner, { type: [LEGACY_MAR] })).entries);
     await ok(owner.delete(`/v1/work-items/${marId}/watch`));
-    expect((await feed(owner, { mine: true })).entries).toEqual([]);
+    expect((await feed(owner, { mine: true })).entries).toEqual([]); // not hidden-from: the "items I'm on" filter once the Owner stops watching
   });
 
   it("refuses a tampered cursor or a filter that isn't one", async () => {
