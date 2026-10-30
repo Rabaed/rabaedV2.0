@@ -10,7 +10,7 @@ import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import type { AttachmentLoad } from "./attachment-files.ts";
 import { AttachmentTile, AttachmentView, AttachmentZoom, attachmentIcon, attachmentNameClass } from "./attachment-view.tsx";
-import { attachmentKind, attachmentZoomStep } from "./attachments-model.ts";
+import { attachmentZoomStep } from "./attachments-model.ts";
 import type { AttachmentPlace, SubmittalPanelAttachmentFile, SubmittalPanelAttachmentsLabels } from "./panel-attachments.tsx";
 
 export type SubmittalPanelAttachmentViewerProps = {
@@ -53,7 +53,7 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
   }, [panel]);
 
   const n = (value: number) => formatNumber(value, locale);
-  const kind = attachmentKind(file.contentType);
+  const kind = file.kind;
   const pages = load?.status === "ready" ? (load.file.pdf?.pages ?? null) : null;
   const index = files.findIndex((f) => f.id === file.id);
   const goTo = (page: number) => onPlace({ ...place, page, jump: { page, seq: (place.jump?.seq ?? 0) + 1 } });
@@ -149,7 +149,7 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
                 current ? "bg-on-inverse text-inverse" : "bg-on-inverse/10 hover:bg-on-inverse/20",
               )}
             >
-              <Icon name={attachmentIcon[attachmentKind(f.contentType)]} size={16} className="shrink-0" />
+              <Icon name={attachmentIcon[f.kind]} size={16} className="shrink-0" />
               <bdi dir="ltr" className="truncate">
                 {f.name}
               </bdi>

@@ -8,7 +8,7 @@ import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import { printAttachment, saveAttachment, useAttachmentFiles, type AttachmentLoad } from "./attachment-files.ts";
 import { AttachmentTile, AttachmentView, AttachmentZoom, attachmentIcon, attachmentNameClass, type AttachmentPageJump, type AttachmentViewLabels } from "./attachment-view.tsx";
-import { attachmentKind, attachmentLayerToClose, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
+import { attachmentLayerToClose, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import { SubmittalPanelAttachmentViewer } from "./panel-attachment-viewer.tsx";
 import { isTyping, layerSelector } from "./submittal-panel.tsx";
 
@@ -16,7 +16,8 @@ export type SubmittalPanelAttachmentFile = {
   /** The Document's id: what `fileUrl` is asked for, never shown. */
   id: string;
   name: string;
-  contentType: string;
+  /** What it previews as, from its content type (`attachmentKind`), worked out once where the list is built. */
+  kind: SubmittalPanelAttachmentKind;
   /** Its size, formatted ("2.4 MB"). */
   size: string;
 };
@@ -89,7 +90,6 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   // The control Open large was opened from, which has the focus back when it closes.
   const opener = useRef<HTMLElement | null>(null);
   const n = (value: number) => formatNumber(value, locale);
-  const kindOf = (file: SubmittalPanelAttachmentFile) => attachmentKind(file.contentType);
   // A Document no longer listed (the item read again) has no preview.
   const previewFile = files.find((f) => f.id === preview) ?? null;
   const largeFile = files.find((f) => f.id === large) ?? null;
@@ -100,7 +100,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   const openPreview = (file: SubmittalPanelAttachmentFile) => {
     setPreview(file.id);
     setPreviewPlace(start);
-    void load(file.id, kindOf(file));
+    void load(file.id, file.kind);
   };
   const closePreview = () => {
     if (!preview) return;
@@ -114,7 +114,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
     if (large === null) opener.current = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setLarge(file.id);
     setLargePlace(start);
-    void load(file.id, kindOf(file));
+    void load(file.id, file.kind);
   };
   const closeLarge = () => {
     const from = large;
@@ -123,17 +123,17 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
     else if (from) focusCard(from);
   };
   const download = async (file: SubmittalPanelAttachmentFile) => {
-    const read = await load(file.id, kindOf(file));
+    const read = await load(file.id, file.kind);
     if (read) saveAttachment(read, file.name);
   };
   // The print frame, taken away with the section: it never outlives the Document's URL.
   const printing = useRef<(() => void) | null>(null);
   useEffect(() => () => printing.current?.(), []);
   const print = async (file: SubmittalPanelAttachmentFile) => {
-    const read = await load(file.id, kindOf(file));
+    const read = await load(file.id, file.kind);
     if (read) printing.current = printAttachment(read);
   };
-  const retry = (file: SubmittalPanelAttachmentFile) => void load(file.id, kindOf(file));
+  const retry = (file: SubmittalPanelAttachmentFile) => void load(file.id, file.kind);
 
   // Esc closes Open large, else the preview, before the panel: taken first (the capture phase),
   // so the panel's own listener sees it taken. Another layer open (a menu, the number card) is first.
@@ -160,7 +160,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
 
   const meta = (file: SubmittalPanelAttachmentFile, fileLoad: AttachmentLoad | undefined) => {
     const pages = fileLoad?.status === "ready" ? fileLoad.file.pdf?.pages : undefined;
-    return [labels.kind[kindOf(file)], ...(pages === undefined ? [] : [labels.pageCount(n(pages), pages)]), file.size].join(" · ");
+    return [labels.kind[file.kind], ...(pages === undefined ? [] : [labels.pageCount(n(pages), pages)]), file.size].join(" · ");
   };
 
   return (
@@ -173,7 +173,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
        */}
       <div className="sdp-att-files grid grid-flow-row-dense grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-2">
         {files.map((file) => {
-          const kind = kindOf(file);
+          const kind = file.kind;
           const viewable = kind !== "other";
           const open = previewFile?.id === file.id;
           const previewId = previewIdOf(file.id);

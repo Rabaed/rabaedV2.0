@@ -2,6 +2,7 @@
 
 import { formatNumber, type DocumentList, type Locale, type WorkItemDetail } from "@rabaed/domain";
 import {
+  attachmentKind,
   SubmittalPanelAttachments,
   submittalPanelAttachmentDocuments,
   type SubmittalPanelAttachmentFile,
@@ -41,7 +42,7 @@ export function useSubmittalPanelAttachments({ item, locale, refreshKey }: { ite
         setRead({
           id,
           ok: true,
-          files: submittalPanelAttachmentDocuments(list.documents).map((d) => ({ id: d.id, name: d.fileName, contentType: d.contentType, size: size(d.sizeBytes) })),
+          files: submittalPanelAttachmentDocuments(list.documents).map((d) => ({ id: d.id, name: d.fileName, kind: attachmentKind(d.contentType), size: size(d.sizeBytes) })),
         });
       })
       .catch(() => {

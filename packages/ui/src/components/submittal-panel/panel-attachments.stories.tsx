@@ -7,6 +7,7 @@ import sitePhoto from "../../storybook/fixtures/site-photo.svg";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { DocNo } from "../doc-no/doc-no.tsx";
+import { attachmentKind } from "./attachments-model.ts";
 import { SubmittalPanelAttachments, type SubmittalPanelAttachmentFile, type SubmittalPanelAttachmentsLabels } from "./panel-attachments.tsx";
 import { SubmittalPanelSections } from "./panel-sections.tsx";
 import { SubmittalPanel, SubmittalPanelIdentity, useSubmittalPanelIds } from "./submittal-panel.tsx";
@@ -84,11 +85,11 @@ const mb = (size: string, locale: Locale) => (locale === "ar" ? `${size} م.ب` 
 const kb = (size: string, locale: Locale) => (locale === "ar" ? `${size} ك.ب` : `${size} KB`);
 
 const filesIn = (locale: Locale): SubmittalPanelAttachmentFile[] => [
-  { id: "datasheet", name: "LED-1200_Datasheet.pdf", contentType: "application/pdf", size: mb("2.4", locale) },
-  { id: "compliance", name: "Compliance_Statement.pdf", contentType: "application/pdf", size: kb("640", locale) },
+  { id: "datasheet", name: "LED-1200_Datasheet.pdf", kind: attachmentKind("application/pdf"), size: mb("2.4", locale) },
+  { id: "compliance", name: "Compliance_Statement.pdf", kind: attachmentKind("application/pdf"), size: kb("640", locale) },
   // The fixture is an SVG; the app previews JPEG, PNG and WebP the same way.
-  { id: "photo", name: "Sample_board_photo.jpg", contentType: "image/jpeg", size: mb("1.1", locale) },
-  { id: "drawing", name: "Ceiling_layout_L3.dwg", contentType: "image/vnd.dwg", size: mb("3.8", locale) },
+  { id: "photo", name: "Sample_board_photo.jpg", kind: attachmentKind("image/jpeg"), size: mb("1.1", locale) },
+  { id: "drawing", name: "Ceiling_layout_L3.dwg", kind: attachmentKind("image/vnd.dwg"), size: mb("3.8", locale) },
 ];
 
 /** The URLs the story's "api" hands out: a 3-page PDF, a 2-page one whose second page is landscape, and the photo. */
