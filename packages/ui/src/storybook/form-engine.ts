@@ -34,6 +34,16 @@ export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabel
     commentOptional: "Comment optional",
     photoOptional: "Photos optional",
     raisesSnag: (answer) => `${answer} raises a Snag`,
+    forTrade: (trade) => `Templates for ${trade}`,
+    otherTradesHidden: (n, count) => (count === 1 ? "1 for other Trades hidden" : `${n} for other Trades hidden`),
+    version: (n) => `v${n}`,
+    locked: "You can change the Checklist Template until the WIR is submitted; then it is locked.",
+    hideItems: "Hide items",
+    showItems: "Show items",
+    negativeAsks: (answer, what, every) =>
+      every
+        ? `On ${answer}, the Consultant must add ${what === "both" ? "a comment and a photo" : what === "comment" ? "a comment" : "a photo"}`
+        : `On ${answer}, some items need ${what === "both" ? "a comment or a photo" : what === "comment" ? "a comment" : "a photo"} from the Consultant`,
   },
   ar: {
     choose: "اختر…",
@@ -49,6 +59,16 @@ export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabel
     commentOptional: "التعليق اختياري",
     photoOptional: "الصور اختيارية",
     raisesSnag: (answer) => `عند ${answer} يُنشأ عيب`,
+    forTrade: (trade) => `قوالب ${trade}`,
+    otherTradesHidden: (n, count) => (count === 1 ? "قالب واحد لتخصصات أخرى مخفي" : count === 2 ? "قالبان لتخصصات أخرى مخفيان" : `${n} قوالب لتخصصات أخرى مخفية`),
+    version: (n) => `الإصدار ${n}`,
+    locked: "يمكنك تغيير قالب قائمة التحقق حتى يُقدَّم طلب المعاينة، ثم يُقفل.",
+    hideItems: "إخفاء البنود",
+    showItems: "عرض البنود",
+    negativeAsks: (answer, what, every) =>
+      every
+        ? `عند ${answer}، يجب أن يضيف الاستشاري ${what === "both" ? "تعليقًا وصورة" : what === "comment" ? "تعليقًا" : "صورة"}`
+        : `عند ${answer}، تحتاج بعض البنود إلى ${what === "both" ? "تعليق أو صورة" : what === "comment" ? "تعليق" : "صورة"} من الاستشاري`,
   },
 };
 

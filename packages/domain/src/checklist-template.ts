@@ -65,10 +65,11 @@ export function checklistTemplateChoices(templates: readonly ChecklistTemplate[]
     offered: t.status === "active",
     name: t.name,
     items: t.items,
+    versionNo: t.versionNo,
   }));
   for (const copy of copies) {
     if (!choices.some((c) => c.id === copy.versionId)) {
-      choices.push({ id: copy.versionId, tradeId: copy.tradeId, offered: false, name: copy.name, items: copy.items });
+      choices.push({ id: copy.versionId, tradeId: copy.tradeId, offered: false, name: copy.name, items: copy.items, versionNo: copy.versionNo });
     }
   }
   return choices;

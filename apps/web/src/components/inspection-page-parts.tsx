@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, workItemListHref, type BilingualText, type Locale, type WorkItemDetail } from "@rabaed/domain";
-import { cn, DocNo, focusRing, Icon, type IconName } from "@rabaed/ui";
+import { Badge, cn, DocNo, focusRing, Icon, type IconName } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
@@ -142,8 +142,8 @@ export function InspectionTextCard({ icon, title, text: card, locale }: { icon: 
 
 /**
  * A Revision's cards (RP-653, RP-655): the item it revises, with its Revision number, and the
- * Snags raised from it, "n closed / m open", which never block this one's code; the link opens
- * the Snag List filtered to that item, where the viewer again sees only its own.
+ * Snags raised from it, "n closed / m open" and each one, which never block this one's code; the
+ * link opens the Snag List filtered to that item, where the viewer again sees only its own.
  */
 export function InspectionRevision({ item, previous, locale }: { item: WorkItemDetail; previous: { id: string; documentNumber: string | null; revisionNo: number } | null; locale: Locale }) {
   const t = useTranslations("workItems");
@@ -172,13 +172,33 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
                 {t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) })}
               </p>
             </div>
+            {/* Each one, as the counts count them: only the follow-ups the viewer sees (RP-655-1). */}
+            <ul className="flex flex-col gap-2">
+              {counts.raised
+                .filter((r) => r.typeCode === f.type.code)
+                .map((r) => (
+                  <li key={r.id}>
+                    <Link
+                      href={`/work-items/${r.id}`}
+                      className={cn("flex min-h-11 items-center gap-3 rounded-md bg-surface-subtle px-3 py-2 text-sm hover:bg-hover", focusRing)}
+                    >
+                      {r.documentNumber && <DocNo value={r.documentNumber} className="shrink-0 font-ui text-xs font-bold text-muted" />}
+                      <bdi className="min-w-0 flex-1">{r.title}</bdi>
+                      <Badge tone={r.closed ? "success" : "warning"} className="shrink-0">
+                        {tInspection(r.closed ? "revision.rowClosed" : "revision.rowOpen")}
+                      </Badge>
+                    </Link>
+                  </li>
+                ))}
+            </ul>
             {f.type.code === "SNG" && (
               <p className="flex items-start gap-2 rounded-md bg-info-tint p-3 text-sm text-info-fg">
                 <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
                 {tInspection("revision.neverBlocks")}
               </p>
             )}
-            {counts.documentNumber && (
+            {/* The Snag List filters by Rev 0's number only: a Revision's (" Rev 1") is no filter value, so it would open unfiltered. */}
+            {counts.documentNumber && counts.revisionNo === 0 && (
               <Link
                 href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [counts.documentNumber] })}
                 className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md bg-surface-subtle px-3 text-sm font-semibold hover:bg-hover md:min-h-9"

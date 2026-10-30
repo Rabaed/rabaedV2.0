@@ -4,6 +4,7 @@ import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { formRendererLabels } from "../../storybook/form-engine.ts";
+import { ChecklistTemplatePreview } from "./checklist-template-field.tsx";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // The `checklist_template` field (RP-651, spec RP-649): the WIR's Checklist Template,
@@ -111,6 +112,75 @@ export const NoneForTrade: Story = {
   render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(context.canvas.getByText(storyText(context, copy.none))).toBeVisible();
+  },
+};
+
+const blockwork = "00000000-0000-4000-8000-0000000000a4";
+/** The WIR request's templates: two of Civil, with their Versions, and one of another Trade, hidden. */
+const cardTemplates: ChecklistTemplateChoice[] = [
+  { ...templates[0]!, versionNo: 5 },
+  { id: blockwork, tradeId: civil, offered: true, versionNo: 3, name: { en: "Blockwork before plastering", ar: "البلوك قبل اللياسة" }, items: items.slice(0, 2) },
+  { ...templates[2]!, versionNo: 1 },
+];
+const cardCopy = {
+  hidden: { en: "Templates for Civil · 1 for other Trades hidden", ar: "قوالب مدني · قالب واحد لتخصصات أخرى مخفي" },
+  meta: { en: "v3 · 2 items", ar: "الإصدار 3 · بندان" },
+  notice: { en: "On Fail, some items need a comment or a photo from the Consultant", ar: "عند مرفوض، تحتاج بعض البنود إلى تعليق أو صورة من الاستشاري" },
+  hide: { en: "Hide items", ar: "إخفاء البنود" },
+};
+
+/**
+ * The WIR request's look (RP-655): the sections in cards and the pick as radio cards, with the
+ * Version and count, the Trade's line and when the pick locks. On a phone the picked one's preview
+ * follows, which Hide items folds. Every other Form keeps the select.
+ */
+export const Cards: Story = {
+  args: {
+    checklistTemplates: cardTemplates,
+    look: { sections: "cards", checklistTemplate: "cards" },
+    choices: { trades: [{ id: civil, label: "Civil" }], locations: [], scopes: [] },
+  },
+  render: function Render(args, context) {
+    const locale = storyLocale(context);
+    const [values, setValues] = useState<Record<string, unknown>>({ trade: civil, location, checklist_template: version.pour });
+    return (
+      <FormRenderer
+        {...args}
+        choices={{ ...args.choices!, trades: [{ id: civil, label: locale === "ar" ? "مدني" : "Civil" }] }}
+        locale={locale}
+        labels={formRendererLabels[locale]}
+        answers={values}
+        onChange={(changes) => {
+          args.onChange?.(changes);
+          setValues((current) => ({ ...current, ...changes }));
+        }}
+      />
+    );
+  },
+  play: async (context) => {
+    const { canvas, args } = context;
+    await expect(canvas.getByText(storyText(context, cardCopy.hidden))).toBeVisible();
+    // Only the Trade's two templates are cards; the other Trade's is hidden.
+    await expect(canvas.getAllByRole("radio")).toHaveLength(2);
+    await expect(canvas.getByText(storyText(context, cardCopy.meta))).toBeVisible();
+    await userEvent.click(canvas.getByRole("radio", { name: new RegExp(storyText(context, { en: "Blockwork", ar: "البلوك" })) }));
+    await expect(args.onChange).toHaveBeenLastCalledWith({ checklist_template: blockwork });
+    await expect(canvas.getByRole("radio", { name: new RegExp(storyText(context, { en: "Blockwork", ar: "البلوك" })) })).toBeChecked();
+    // A wide screen (the story's) leaves the preview to the page, beside the Form.
+    await expect(canvas.getByRole("button", { name: storyText(context, cardCopy.hide), hidden: true })).not.toBeVisible();
+  },
+};
+
+/** The picked template at a glance (the WIR request's Template preview): name, Version and count, what a Fail asks for, the checks numbered. */
+export const Preview: Story = {
+  render: (_args, context) => {
+    const locale = storyLocale(context);
+    return <ChecklistTemplatePreview choice={cardTemplates[1]!} locale={locale} labels={formRendererLabels[locale].checklistTemplate} />;
+  },
+  play: async (context) => {
+    await expect(context.canvas.getByText(storyText(context, cardCopy.meta))).toBeVisible();
+    await expect(context.canvas.getByText(storyText(context, cardCopy.notice))).toBeVisible();
+    await expect(context.canvas.getAllByRole("listitem")).toHaveLength(2);
   },
 };
 

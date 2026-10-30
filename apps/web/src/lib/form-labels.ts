@@ -128,6 +128,13 @@ export function checklistTemplateLabels(t: Translate): FormRendererLabels["check
     commentOptional: t("checklistTemplateField.commentOptional"),
     photoOptional: t("checklistTemplateField.photoOptional"),
     raisesSnag: (answer) => t("checklistTemplateField.raisesSnag", { answer }),
+    forTrade: (trade) => t("checklistTemplateField.forTrade", { trade }),
+    otherTradesHidden: (n, count) => t("checklistTemplateField.otherTradesHidden", { n, count }),
+    version: (n) => t("checklistTemplateField.version", { n }),
+    locked: t("checklistTemplateField.locked"),
+    hideItems: t("checklistTemplateField.hideItems"),
+    showItems: t("checklistTemplateField.showItems"),
+    negativeAsks: (answer, what, every) => t("checklistTemplateField.negativeAsks", { answer, what, every: every ? "yes" : "no" }),
   };
 }
 

@@ -706,6 +706,8 @@ export type ChecklistTemplateChoice = {
   offered: boolean;
   name?: z.infer<typeof bilingualText>;
   items?: readonly ChecklistTemplateItem[];
+  /** The Version's number ("v3"), where known. */
+  versionNo?: number;
 };
 
 /**
