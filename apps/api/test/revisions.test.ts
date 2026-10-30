@@ -55,8 +55,8 @@ const documentsOf = (id: string) => async (by: Caller) => (await readById<Docume
 const chainOf = (id: string) => async (by: Caller) => (await readById<RevisionChain>(`/v1/work-items/${id}/revisions`)(by)).flatMap((c) => c.revisions);
 const listed = async (by: Caller) => (await ok(by.get(`/v1/projects/${projectId}/work-items`), 200)).json().items as { id: string }[];
 /** The items `id`'s Links and its Linked from name, for a reader who sees `id`. */
-const linksOf = (id: string) => async (by: Caller) => (await links(by, id)).links.map((l) => ({ id: l.workItemId }));
-const linkedFromOf = (id: string) => async (by: Caller) => (await linkedFrom(by, id)).items.map((i) => ({ id: i.workItemId }));
+const linksOf = (id: string) => async (by: Caller) => (await links(by, id)).links.map((l) => ({ id: l.workItemId ?? "" }));
+const linkedFromOf = (id: string) => async (by: Caller) => (await linkedFrom(by, id)).items.map((i) => ({ id: i.workItemId ?? "" }));
 
 /** Sends a Draft (a new MAR or a Revision) for review and Submits it to K1. */
 async function submit(id: string) {
