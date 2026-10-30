@@ -184,6 +184,58 @@ describe("dropLabelOnPush", () => {
     expect(text).toContain("stays");
   });
 
+  // RP-1121: once the bot's push starts workflows, this run sees its baseline commit; the review still holds.
+  // R (reviewed) <- B (bot baselines) <- N (merges main M); R <- H (a person's baselines); R <- X <- B2 (bot on an ordinary commit).
+  const pushes: Record<string, string[]> = { B: ["R"], N: ["B", "M"], H: ["R"], X: ["R"], B2: ["X"] };
+  const pushGit = (overrides: Partial<ReviewedGit> = {}) =>
+    git({
+      parents: (commit) => pushes[commit] ?? [],
+      identity: (commit) => (commit.startsWith("B") ? bot : human),
+      changedPaths: (commit) => (commit === "H" || commit.startsWith("B") ? [baseline] : ["apps/web/src/page.tsx"]),
+      ...overrides,
+    });
+
+  it("keeps the label when a bot pushed only the screenshot bot's baseline commit on the reviewed head", async () => {
+    const { removed, github } = recorder();
+    const text = await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed"], before: "R", after: "B", pushedByBot: true }, pushGit(), github);
+    expect(removed).toEqual([]);
+    expect(text).toContain("baseline commit");
+    expect(text).toContain("stays");
+  });
+
+  it("removes the label when a person pushed a commit that only claims the bot's email", async () => {
+    for (const pushedByBot of [false, undefined]) {
+      const { removed, github } = recorder();
+      await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed"], before: "R", after: "B", pushedByBot }, pushGit(), github);
+      expect(removed).toEqual([7]);
+    }
+  });
+
+  it("removes the label when the baselines came from a person, the bot's commit also changes code, it sits on a new commit, or the push holds more than it", async () => {
+    const cases: [string, Partial<ReviewedGit>][] = [
+      ["H", {}],
+      ["B", { changedPaths: () => [baseline, "scripts/verify.ts"] }],
+      ["B2", {}],
+      ["N", {}],
+    ];
+    for (const [after, overrides] of cases) {
+      const { removed, github } = recorder();
+      await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed"], before: "R", after, pushedByBot: true }, pushGit(overrides), github);
+      expect(removed).toEqual([7]);
+    }
+  });
+
+  it("removes the label when git cannot read the bot's push", async () => {
+    const { removed, github } = recorder();
+    const broken = pushGit({
+      parents: () => {
+        throw new Error("bad object");
+      },
+    });
+    await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed"], before: "R", after: "B", pushedByBot: true }, broken, github);
+    expect(removed).toEqual([7]);
+  });
+
   it("does nothing when the PR has no label", async () => {
     const { removed, github } = recorder();
     await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["other"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
