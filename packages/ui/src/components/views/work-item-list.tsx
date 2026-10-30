@@ -662,7 +662,8 @@ function WorkItemListBody({
   ];
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    // The Kanban takes the rest of the window under the toolbar (RP-1092).
+    <div className="flex min-w-0 flex-col gap-4 fills-window:min-h-0 fills-window:flex-1">
       <ListToolbar
         label={t("toolbar")}
         end={

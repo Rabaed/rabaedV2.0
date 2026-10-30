@@ -14,8 +14,11 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
+import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { overlay } from "../../storybook/overlay.ts";
+import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { boardLayoutMenuLabels, viewSwitchLabels, workItemBoardLabels, workItemListLabels } from "../../storybook/views.ts";
 import { BoardLayoutMenu } from "./board-layout-menu.tsx";
 import { WorkItemBoard, WorkItemViewSwitch } from "./work-item-board.tsx";
@@ -407,8 +410,9 @@ const crowded: WorkItemBoardData = {
 
 /**
  * A column with many cards grows with them, as the anatomy draws it: no inner
- * scroll, the page scrolls down. The board scrolls sideways in its own region
- * and the page never does (Epic RP-405, decision 7).
+ * scroll in the column. The board scrolls sideways in its own region and the
+ * page never does (Epic RP-405, decision 7); on its page it scrolls down too
+ * (FillsTheWindow, RP-1092).
  */
 export const ColumnsGrowWithTheirCards: Story = {
   args: { board: crowded },
@@ -591,6 +595,25 @@ export const FilterPanelOpen: Story = {
 
 /** The toolbar and the board on a phone. */
 export const WithToolbarNarrow: Story = { ...WithToolbar, parameters: phone, play: undefined };
+
+/**
+ * On its page (RP-1092), the board fills the window from under its toolbar to the bottom edge,
+ * so its sideways scrollbar sits on that edge, not under the tallest column. A column still
+ * grows with its cards; the board scrolls down inside itself, and the page doesn't scroll.
+ */
+export const FillsTheWindow: Story = {
+  parameters: { ...overlay, layout: "fullscreen" },
+  args: { board: crowded },
+  render: (args, context) => (
+    <StoryProjectPage context={context} current="submittals">
+      <Toolbar args={args} locale={storyLocale(context)} />
+    </StoryProjectPage>
+  ),
+  play: async (context) => {
+    const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
+    await expectFillsTheWindow(region, context.canvas.getByRole("region", { name: workItemListLabels[storyLocale(context)].toolbar }));
+  },
+};
 
 // Two of my own Steps under Internal Review (RP-519): the Engineer's review and the PM's.
 const pmStep = { key: "pm_review", name: b("PM review", "مراجعة مدير المشروع") };
