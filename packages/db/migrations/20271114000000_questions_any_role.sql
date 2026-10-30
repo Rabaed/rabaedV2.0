@@ -82,13 +82,15 @@ update work_item_type set asks_role = 'contractor' where owner_kind = 'rabaed' a
 -- Whether a Participant of base role `p_base_role` would ask its own role with Type `p_type_id`:
 -- the Owner Representative acts for the Owner (ADR 0022), so it never asks the Owner either.
 create function app.asks_own_role(p_type_id uuid, p_base_role text) returns boolean
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select coalesce((
-      select t.asks_role = p_base_role or (t.asks_role = 'owner' and p_base_role = 'owner_representative')
-      from work_item_type t where t.id = p_type_id
-    ), false)
+    begin
+      return coalesce((
+        select t.asks_role = p_base_role or (t.asks_role = 'owner' and p_base_role = 'owner_representative')
+        from work_item_type t where t.id = p_type_id
+      ), false);
+    end
   $$;
 revoke all on function app.asks_own_role(uuid, text) from public;
 
