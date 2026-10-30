@@ -224,7 +224,7 @@ export function SnagList({
       setExporting(false);
     }
   };
-  // The PDF report (RP-677): asked for, then asked after until the worker has made it.
+  // The PDF report (RP-677): asked for, then asked after until the worker has made it, or until it holds items the viewer no longer sees (RP-1110).
   const [report, setReport] = useState<{ status: "asking" | "preparing" | "ready" | "failed" | "gone"; id?: string; url?: string; count?: number } | null>(null);
   const exportPdf = async (ids: string[] | null) => {
     if (!bulk) return;

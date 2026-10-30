@@ -31,9 +31,9 @@ create or replace function app.snag_report_state(p_project_id uuid, p_report_id 
           select not exists (
             select 1 from jsonb_array_elements(coalesce(r.content -> 'items', '[]'::jsonb)) i
             where
-              -- Every item it holds, by its id (a row with none is seen by no one).
-              case when coalesce(i ->> 'id', '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then true
-                else not app.sees_work_item((i ->> 'id')::uuid) end
+              -- Every item it holds, by its id. A row with none (a report asked for before RP-1078 named
+              -- each row's item) is seen by no one: app.sees_work_item(null) is false.
+              not app.sees_work_item(app.uuid_or_null(i -> 'id'))
               -- Each photo it printed, as member_reads_documents lets the asker read it.
               or (jsonb_typeof(i -> 'photo') = 'object'
                 and not exists (
