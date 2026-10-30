@@ -11,11 +11,11 @@
 //
 // The Type is test-only, on the test Workflow with a Send Back (addSendBackType).
 import { createDb } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, LinkedFrom, LinkSearchResults, NotificationList, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
+import { createTestApi, readById, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
 
@@ -97,6 +97,31 @@ const history = async (by: Caller, id: string) => ((await ok(by.get(`/v1/work-it
 const notificationsAbout = async (by: Caller, id: string) =>
   ((await ok(by.get("/v1/notifications"), 200)).json() as NotificationList).notifications.filter((n) => n.workItemId === id);
 
+// The hidden-from asserts (RP-1095): each row is read first, by id, by someone who may see it.
+const names = new Map<Caller, string>();
+const named = (by: Caller) => names.get(by) ?? "a Member";
+type Read = (by: Caller) => Promise<readonly { id: string }[]>;
+/** `target` is read by each of `seenBy`, and by none of `hiddenFrom`. */
+const hidden = (label: string, read: Read, target: string, seenBy: Caller | Caller[], hiddenFrom: Caller | Caller[]) =>
+  expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, label });
+// A Linked from row of an item the reader can't open has no id (E3); every reader hidden from one here sees the item itself, so a leaked row would carry its id.
+const rows = (ids: readonly (string | null)[]) => ids.map((id) => ({ id: id ?? "(an item the reader can't open)" }));
+/** Item `id` at `path` (its page, Documents, Links or history): one row `{ id }` when `by` may open it, none on the 404. */
+const opens =
+  (id: string, path = ""): Read =>
+  async (by) =>
+    (await readById<unknown>(`/v1/work-items/${id}${path}`)(by)).map(() => ({ id }));
+/** Document `document` of item `id`: one row `{ id: document }` when `by` may download it, none on the 404. */
+const downloads =
+  (id: string, document: string): Read =>
+  async (by) =>
+    (await readById<unknown>(`/v1/work-items/${id}/documents/${document}/download`)(by)).map(() => ({ id: document }));
+/** `text` as one row when what `read` gives `by` holds it: a value unique to one change, which has no id of its own. */
+const holds =
+  (text: string, read: (by: Caller) => Promise<unknown>): Read =>
+  async (by) =>
+    JSON.stringify(await read(by)).includes(text) ? [{ id: text }] : [];
+
 const pdf = (fileName: string): TestFile => ({ fieldKey: "datasheet", fileName, contentType: "application/pdf", body: `%PDF-1.7 ${fileName}` });
 const photo = (fileName: string, itemKey?: string): TestFile => ({
   fieldKey: itemKey ? "pour_check" : "sample_photos",
@@ -149,6 +174,16 @@ beforeAll(async () => {
   owner = await projectMember(api, ow.company, ow.participantId, ["representative"]);
   const c2 = await otherParticipant("contractor");
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
+  for (const [by, name] of [
+    [engineer, "C1 engineer"],
+    [pm, "C1 PM"],
+    [k1Engineer, "K1 engineer"],
+    [k1Pm, "K1 second engineer"],
+    [orEngineer, "OR engineer"],
+    [owner, "Owner representative"],
+    [c2Engineer, "C2 engineer"],
+  ] as const)
+    names.set(by, name);
 });
 
 describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", () => {
@@ -208,8 +243,9 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
   });
 
   it("never lets them download, or learn of, a Document C1 added since", async () => {
-    for (const other of [k1Pm, orEngineer, owner]) {
-      for (const document of added) await expectHidden(other.get(`/v1/work-items/${id}/documents/${document}/download`));
+    for (const document of added) {
+      await hidden("a Document C1 added, downloaded", downloads(id, document), document, engineer, [k1Pm, orEngineer, owner]);
+      await hidden("a Document C1 added, in the Documents", async (by) => rows(await documentIds(by, id)), document, engineer, [k1Pm, orEngineer, owner]);
     }
   });
 
@@ -218,9 +254,8 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
       const { answers } = await detail(other, id);
       expect(answers.pour_check).toEqual({ formwork: { answer: "pass" } });
       expect(answers.related).toEqual([x]);
-      const body = (await other.get(`/v1/work-items/${id}`)).body;
-      expect(body).not.toContain("Bowed panel");
     }
+    await hidden("C1's new checklist comment on the item", holds("Bowed panel", (by) => detail(by, id)), "Bowed panel", engineer, [k1Pm, orEngineer, owner]);
   });
 
   it("shows them its free and link-question Links as they were at the Send Back", async () => {
@@ -228,10 +263,9 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
   });
 
   it("keeps it in X's Linked from, and out of Y's, until C1 Submits it again (scenario 59)", async () => {
-    for (const other of [k1Pm, orEngineer, owner]) {
-      expect(await linkedFrom(other, x)).toEqual([id]);
-      expect(await linkedFrom(other, y)).toEqual([]);
-    }
+    for (const other of [k1Pm, orEngineer, owner]) expect(await linkedFrom(other, x)).toEqual([id]);
+    // C1, holding it, has it in Y's Linked from already.
+    await hidden("Y's Linked from", async (by) => rows(await linkedFrom(by, y)), id, [engineer, pm], [k1Pm, orEngineer, owner]);
   });
 
   it("keeps it in their Link search, with the same Document Number and Subject (scenario 58)", async () => {
@@ -239,10 +273,11 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
   });
 
   it("shows C1, holding it, everything as it is now", async () => {
+    // C1 removed its Links to X: X's Linked from lacks it for C1, while the others have it as it was.
+    await hidden("X's Linked from, as C1 has it now", async (by) => rows(await linkedFrom(by, x)), id, k1Pm, [engineer, pm]);
     for (const c1Member of [engineer, pm]) {
       expect(await documentIds(c1Member, id)).toEqual([...before, ...added].sort());
       expect(await links(c1Member, id)).toEqual(asResubmitted().sort());
-      expect(await linkedFrom(c1Member, x)).toEqual([]);
       expect(await linkedFrom(c1Member, y)).toEqual([id]);
       expect((await detail(c1Member, id)).answers.pour_check).toEqual({ formwork: { answer: "fail", comment: "Bowed panel" } });
     }
@@ -252,13 +287,20 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
     expect((await notificationsAbout(k1Pm, id)).length).toBe(k1Notified);
     for (const other of [k1Pm, orEngineer, owner]) {
       expect((await notificationsAbout(other, id)).length).toBeLessThanOrEqual(k1Notified);
-      const events = await history(other, id);
-      expect(events.filter((e) => e.type === "answers_changed")).toEqual([]);
-      const body = JSON.stringify(events);
-      for (const name of ["datasheet-2.pdf", "sample-2.jpg", "formwork-2.jpg", "letter-2.txt", "SBR-Y", "Bowed panel"]) {
-        expect(body).not.toContain(name);
+      const body = JSON.stringify(await history(other, id));
+      for (const name of ["datasheet-2.pdf", "sample-2.jpg", "formwork-2.jpg", "letter-2.txt"]) {
+        expect(body).not.toContain(name); // not hidden-from: Documents write no history event, so no one's history names a file
       }
     }
+    // C1's answers_changed events: their changes hold the new comment and Y's Subject, read by C1 only (V5).
+    const changes = async (by: Caller) => (await history(by, id)).filter((e) => e.type === "answers_changed").map((e) => e.changes);
+    // Any answers_changed event at all, whatever it changed, as one row.
+    const anyChange = async (by: Caller) => ((await changes(by)).length > 0 ? [{ id: "answers_changed" }] : []);
+    await hidden("C1's answers_changed events, any", anyChange, "answers_changed", engineer, [k1Pm, orEngineer, owner]);
+    await hidden("C1's answers_changed events, with Y", holds("SBR-Y", changes), "SBR-Y", engineer, [k1Pm, orEngineer, owner]);
+    await hidden("C1's answers_changed events, with the comment", holds("Bowed panel", changes), "Bowed panel", engineer, [k1Pm, orEngineer, owner]);
+    await hidden("the history, anywhere", holds("SBR-Y", (by) => history(by, id)), "SBR-Y", engineer, [k1Pm, orEngineer, owner]);
+    await hidden("the history, anywhere", holds("Bowed panel", (by) => history(by, id)), "Bowed panel", engineer, [k1Pm, orEngineer, owner]);
   });
 
   it("makes everything C1 changed everyone's once C1 Submits it again", async () => {
@@ -267,7 +309,7 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
     for (const viewer of [engineer, k1Pm, orEngineer, owner]) {
       expect(await documentIds(viewer, id)).toEqual([...before, ...added].sort());
       expect(await links(viewer, id)).toEqual(asResubmitted().sort());
-      expect(await linkedFrom(viewer, x)).toEqual([]);
+      expect(await linkedFrom(viewer, x)).toEqual([]); // not hidden-from: C1 removed its Links to X; once Submitted, they are gone for everyone
       expect(await linkedFrom(viewer, y)).toEqual([id]);
       const { answers } = await detail(viewer, id);
       expect(answers.pour_check).toEqual({ formwork: { answer: "fail", comment: "Bowed panel" } });
@@ -282,15 +324,15 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
 describe("C2 searches for an item to link, before and after C1's item is Sent Back (scenario 60)", () => {
   it("is never offered C1's item, nor can it open it", async () => {
     const id = await submitted("SBR-60");
-    expect(await linkSearch(c2Engineer, "SBR-60")).toEqual([]);
+    const search = async (by: Caller) => rows(await linkSearch(by, "SBR-60"));
+    await hidden("Link search, Submitted", search, id, [engineer, k1Pm], c2Engineer);
     await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back");
-    expect(await linkSearch(c2Engineer, "SBR-60")).toEqual([]);
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documents`));
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/links`));
-    // K1 still finds it.
-    expect(await linkSearch(k1Pm, "SBR-60")).toEqual([id]);
+    // K1 still finds it, and opens it.
+    await hidden("Link search, Sent Back", search, id, [engineer, k1Pm], c2Engineer);
+    await hidden("the item", opens(id), id, [engineer, k1Pm], c2Engineer);
+    await hidden("its Documents", opens(id, "/documents"), id, [engineer, k1Pm], c2Engineer);
+    await hidden("its Links", opens(id, "/links"), id, [engineer, k1Pm], c2Engineer);
   });
 });
 
@@ -308,11 +350,9 @@ describe("C1's internal review reaches no other Company (scenario RP-625-5)", ()
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await take(pm, id, "return");
     await take(engineer, id, "send_for_review");
-    for (const other of [k1Pm, owner]) {
-      await expectHidden(other.get(`/v1/work-items/${id}`));
-      await expectHidden(other.get(`/v1/work-items/${id}/documents`));
-      await expectHidden(other.get(`/v1/work-items/${id}/history`));
-    }
+    await hidden("the item", opens(id), id, [engineer, pm], [k1Pm, owner]);
+    await hidden("its Documents", opens(id, "/documents"), id, [engineer, pm], [k1Pm, owner]);
+    await hidden("its history", opens(id, "/history"), id, [engineer, pm], [k1Pm, owner]);
     expect(await frozen(id)).toEqual([false]);
 
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
@@ -335,10 +375,8 @@ describe("C1's internal review reaches no other Company (scenario RP-625-5)", ()
     await take(engineer, id, "send_for_review");
     expect(await atSendBack(k1Pm)).toEqual(seen.k1);
     expect(await atSendBack(owner)).toEqual(seen.owner);
-    for (const other of [k1Pm, owner]) {
-      expect(await documentIds(other, id)).not.toContain(added);
-      await expectHidden(other.get(`/v1/work-items/${id}/documents/${added}/download`));
-    }
+    await hidden("C1's new Document, in the Documents", async (by) => rows(await documentIds(by, id)), added, engineer, [k1Pm, owner]);
+    await hidden("C1's new Document, downloaded", downloads(id, added), added, engineer, [k1Pm, owner]);
     expect(await frozen(id)).toEqual([false]);
 
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
@@ -353,11 +391,10 @@ describe("an item that has never left C1", () => {
     const target = await submitted("SBR-T");
     const id = await draftOf("SBR-D", { related: [target] });
     await take(engineer, id, "send_for_review");
-    for (const other of [k1Pm, orEngineer, owner, c2Engineer]) {
-      expect(await linkSearch(other, "SBR-D")).toEqual([]);
-      await expectHidden(other.get(`/v1/work-items/${id}`));
-      await expectHidden(other.get(`/v1/work-items/${id}/documents`));
-    }
-    for (const other of [k1Pm, orEngineer, owner]) expect(await linkedFrom(other, target)).toEqual([]);
+    const others = [k1Pm, orEngineer, owner, c2Engineer];
+    for (const by of [engineer, ...others]) expect(await linkSearch(by, "SBR-D")).toEqual([]); // not hidden-from: Link search offers only items Submitted at least once, so no one, C1 included, finds it; the reads below prove it hidden
+    await hidden("the item", opens(id), id, [engineer, pm], others);
+    await hidden("its Documents", opens(id, "/documents"), id, [engineer, pm], others);
+    for (const by of [engineer, k1Pm, orEngineer, owner]) expect(await linkedFrom(by, target)).toEqual([]); // not hidden-from: Linked from lists only items Submitted at least once, so no one, C1 included, has it there; the reads above prove it hidden
   });
 });

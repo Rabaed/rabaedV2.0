@@ -6,11 +6,11 @@
 // its Subject, Form answers, Documents and outcome.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -65,7 +65,7 @@ const unconfirmed = (by: Caller, id: string, transition: string, extra: Record<s
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  const onboarded = await api.onboardCompany({ legalName: bilingual(CONSULTANT) });
+  const onboarded = await api.onboardCompany({ legalName: bilingual(CONSULTANT) }); // not hidden-from: names the Consultant at onboarding, no compare
   k1 = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   at = await buildTower(api, { c1, k1 }, "CNF");
   k1ParticipantId = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`))
@@ -83,15 +83,20 @@ describe("a Transition without confirmation", () => {
       expect(res.json()).toEqual({ error: "not_confirmed" });
     }
     expect((await detail(at.c1Engineer, id)).stage.key).toBe("draft");
-    expect(await auditTrail(id)).toEqual([]);
+    expect(await auditTrail(id)).toEqual([]); // not hidden-from: the refused Transitions wrote no audit row, read by the migrator
     await take(at.c1Engineer, id, "send_for_review");
     expect((await detail(at.c1Engineer, id)).stage.key).toBe("internal_review");
   });
 
   it("is answered 404 when the item is hidden, as for a made-up id", async () => {
     const id = await draft(at, at.c1Engineer, "Hidden, unconfirmed");
-    const res = await unconfirmed(signer.caller, id, "send_for_review");
-    expect(res.statusCode, res.body).toBe(404);
+    const names = new Map<Caller, string>([
+      [at.c1Engineer, "C1 Engineer"],
+      [signer.caller, "K1 manager"],
+    ]);
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: at.c1Engineer, hiddenFrom: signer.caller, name: (c) => names.get(c) ?? "?", label: "C1's Draft" });
+    await expectHidden(unconfirmed(signer.caller, id, "send_for_review")); // not hidden-from: a refused write; the read above proves the row with expectHiddenFrom
+    await expectHidden(unconfirmed(signer.caller, randomUUID(), "send_for_review")); // not hidden-from: a made-up id, answered alike
   });
 });
 

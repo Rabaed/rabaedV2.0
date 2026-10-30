@@ -6,7 +6,6 @@
 # above what the file holds now. A new hidden-from assert uses expectHiddenFrom; a line that is no
 # visibility assert is marked `// not hidden-from: <why>`.
 
-apps/api/test/action-forms.test.ts empty 2
 apps/api/test/activity-feed.test.ts empty 20
 apps/api/test/activity-feed.test.ts text 6
 apps/api/test/after-send-back.test.ts empty 1
@@ -103,24 +102,18 @@ apps/api/test/pool-of-one.test.ts text 1
 apps/api/test/questions-any-role.test.ts empty 11
 apps/api/test/raisable-types.test.ts empty 3
 apps/api/test/raised-item-counts.test.ts empty 4
-apps/api/test/raiser-holder.test.ts empty 8
 apps/api/test/random-ids.test.ts text 2
 apps/api/test/reads-at-scale.test.ts empty 1
 apps/api/test/record-checks.test.ts empty 15
 apps/api/test/record-checks.test.ts text 12
 apps/api/test/register-import.test.ts empty 57
 apps/api/test/register-import.test.ts text 2
-apps/api/test/replacements.test.ts empty 12
 apps/api/test/return-in-internal-review.test.ts empty 2
 apps/api/test/revision-follow-up-counts.test.ts empty 1
 apps/api/test/revision-follow-up-counts.test.ts text 1
-apps/api/test/revisions.test.ts empty 29
-apps/api/test/revisions.test.ts text 3
 apps/api/test/sar-dar-forms.test.ts empty 1
 apps/api/test/screens.test.ts empty 14
 apps/api/test/send-back.test.ts empty 4
-apps/api/test/sent-back-as-it-was.test.ts empty 21
-apps/api/test/sent-back-built-ins.test.ts empty 10
 apps/api/test/sent-back-notifications.test.ts empty 4
 apps/api/test/sign-in-first.test.ts empty 2
 apps/api/test/sign-in.test.ts empty 3
@@ -143,14 +136,10 @@ apps/api/test/submit.test.ts text 6
 apps/api/test/submittal-workflows.test.ts empty 1
 apps/api/test/submittal-workflows.test.ts text 17
 apps/api/test/transition-actions.test.ts empty 3
-apps/api/test/transition-confirmed.test.ts empty 1
-apps/api/test/transition-confirmed.test.ts text 1
 apps/api/test/transition-notifications.test.ts empty 6
 apps/api/test/transition-notifications.test.ts text 3
 apps/api/test/transition-rules.test.ts empty 8
 apps/api/test/transition-rules.test.ts text 1
-apps/api/test/transitions.test.ts empty 15
-apps/api/test/transitions.test.ts text 2
 apps/api/test/verification.test.ts empty 26
 apps/api/test/verification.test.ts text 8
 apps/api/test/visibility.test.ts empty 8
@@ -164,11 +153,8 @@ apps/api/test/work-item-board-steps.test.ts empty 5
 apps/api/test/work-item-board.test.ts empty 12
 apps/api/test/work-item-board.test.ts text 5
 apps/api/test/work-item-discard-draft.test.ts empty 4
-apps/api/test/work-item-download-as-arrived.test.ts empty 3
 apps/api/test/work-item-download.test.ts empty 2
 apps/api/test/work-item-download.test.ts text 1
-apps/api/test/work-item-duplicate.test.ts empty 7
-apps/api/test/work-item-duplicate.test.ts text 1
 apps/api/test/work-item-list-dates.test.ts empty 5
 apps/api/test/work-item-list-pages.test.ts empty 4
 apps/api/test/work-item-list-pages.test.ts text 13
@@ -176,7 +162,6 @@ apps/api/test/work-item-list.test.ts empty 22
 apps/api/test/work-item-list.test.ts text 2
 apps/api/test/work-item-search.test.ts empty 9
 apps/api/test/work-item-search.test.ts text 5
-apps/api/test/work-items.test.ts empty 12
 apps/api/test/workflow-authoring.test.ts empty 22
 apps/api/test/workflow-authoring.test.ts text 5
 apps/api/test/workflow-binding.test.ts empty 1
@@ -226,8 +211,6 @@ packages/db/test/function-grants.test.ts text 1
 packages/db/test/grants.test.ts empty 3
 packages/db/test/handover-rls.test.ts empty 9
 packages/db/test/handover-rls.test.ts text 2
-packages/db/test/history-positions-rls.test.ts empty 9
-packages/db/test/history-positions-rls.test.ts text 1
 packages/db/test/id-defaults.test.ts empty 2
 packages/db/test/inspections-scenarios-rls.test.ts empty 5
 packages/db/test/inspections-scenarios-rls.test.ts text 2
@@ -254,10 +237,6 @@ packages/db/test/register-import-rls.test.ts empty 30
 packages/db/test/register-import-rls.test.ts text 3
 packages/db/test/reply-checklist-rls.test.ts empty 13
 packages/db/test/reply-checklist-rls.test.ts text 1
-packages/db/test/revision-follow-ups-rls.test.ts empty 5
-packages/db/test/revision-follow-ups-rls.test.ts text 1
-packages/db/test/revision-rls.test.ts empty 16
-packages/db/test/revision-rls.test.ts text 1
 packages/db/test/rls.test.ts empty 4
 packages/db/test/sar-adds-supplier-rls.test.ts empty 6
 packages/db/test/sar-adds-supplier-rls.test.ts text 2
@@ -279,8 +258,6 @@ packages/db/test/wir-approved-submittals-rls.test.ts text 1
 packages/db/test/work-item-link-rls.test.ts empty 3
 packages/db/test/work-item-linked-from-rls.test.ts empty 4
 packages/db/test/work-item-ref-rls.test.ts empty 4
-packages/db/test/work-item-rls.test.ts empty 22
-packages/db/test/work-item-rls.test.ts text 5
 packages/db/test/work-item-search-rls.test.ts empty 2
 packages/db/test/workflow-authoring-rls.test.ts empty 5
 packages/db/test/workflow-ownership-rls.test.ts empty 8

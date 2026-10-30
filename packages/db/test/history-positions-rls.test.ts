@@ -10,7 +10,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addTestWorkflow, bilingual, buildSeamTwoTower, c2Draft, digits, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestWorkflow, bilingual, buildSeamTwoTower, c2Draft, digits, expectHiddenFrom, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const letters = (n: number) => Array.from({ length: n }, () => String.fromCharCode(65 + randomInt(26))).join("");
@@ -50,6 +50,25 @@ const historyOf = (as: string, item: string) =>
 /** Each row as [type, Company, person, Positions], for one assertion. */
 const who = (rows: readonly Row[]) => rows.map((r) => [r.type, r.company_name?.en ?? null, r.member_name?.en ?? null, r.member_positions]);
 
+const names = new Map<string, string>();
+const nameOf = (as: string) => names.get(as) ?? as;
+
+/**
+ * `name` as one row when it is anywhere in item `item`'s history as `as` reads it, in any column. A name
+ * is the row here: the read gives a Position or a Step no id, and the name is what V14 keeps from another Company.
+ */
+const mentions = (item: string, name: string) => async (as: string) => (JSON.stringify(await historyOf(as, item)).includes(`"${name}"`) ? [{ id: name }] : []);
+
+/**
+ * Item `item`'s event ids in its history as `as` reads it. app.work_item_history gives a row no id (its
+ * seq counts only what the reader sees), so each row is matched to the migrator's event of its type and time.
+ */
+async function historyIdsOf(as: string, item: string): Promise<{ id: string }[]> {
+  const events = (await migrator.query("select id, type, created_at from work_item_event where work_item_id = $1", [item])).rows as { id: string; type: string; created_at: Date }[];
+  const rows = await tower.call<{ type: string; created_at: Date }>(as, sql`select type, created_at from app.work_item_history(${item}::uuid)`);
+  return rows.flatMap((r) => events.filter((e) => e.type === r.type && e.created_at.getTime() === r.created_at.getTime()).map((e) => ({ id: e.id })));
+}
+
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
@@ -69,6 +88,14 @@ beforeAll(async () => {
   );
   tower = await buildSeamTwoTower(app, migrator, towerOptions);
   const { c1, k1 } = tower;
+  for (const [as, name] of [
+    [c1.members.engineer, "C1's engineer"],
+    [c1.members.project_manager, "C1's PM"],
+    [k1.members.engineer, "K1's engineer"],
+    [k1.members.manager, "K1's manager"],
+    [tower.c2.members.engineer, "C2's engineer"],
+  ] as const)
+    names.set(as, name);
 
   // C1's Engineer raises it and sends it for review; C1's PM Submits it; K1's Engineer sends it to K1's Manager, who issues Code A.
   const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
@@ -113,14 +140,16 @@ describe("scenario RP-1091-1: C1's engineer reads the history of a C1 item K1 re
     ]);
   });
 
-  it("gives no K1 event a Position, a person or a Step name, but the Code's signer by name, with no Position", () => {
+  it("gives no K1 event a Position, a person or a Step name, but the Code's signer by name, with no Position", async () => {
     const k1 = rows.filter((r) => r.company_name?.en === "K1");
     expect(k1.map((r) => [r.type, r.audience, r.member_name?.en ?? null, r.member_positions, r.from_step_name, r.to_step_name])).toEqual([
       ["issue_code", "shared", "manager", null, null, null],
     ]);
     expect(rows.every((r) => r.company_name !== null)).toBe(true);
-    expect(JSON.stringify(rows)).not.toContain(`"${MANAGER.en}"`);
-    expect(JSON.stringify(rows)).not.toContain("Consultant approval");
+    // K1's manager reads their own Position and K1's Step in the same history; C1's engineer reads neither.
+    for (const target of [MANAGER.en, "Consultant approval"]) {
+      await expectHiddenFrom({ read: mentions(id, target), target, seenBy: tower.k1.members.manager, hiddenFrom: tower.c1.members.engineer, name: nameOf, label: "K1's names" });
+    }
   });
 });
 
@@ -139,13 +168,15 @@ describe("scenario RP-1091-2: K1 reads the same history", () => {
     ]);
   });
 
-  it("gives C1's Submit no C1 Position, no person and no C1 Step name", () => {
+  it("gives C1's Submit no C1 Position, no person and no C1 Step name", async () => {
     const c1 = rows.filter((r) => r.company_name?.en === "C1");
     expect(c1.map((r) => [r.type, r.member_name, r.member_positions, r.from_step_name, r.to_step_name, r.transition_label?.en])).toEqual([
       ["transition", null, null, null, null, "Submit"],
     ]);
-    expect(JSON.stringify(rows)).not.toContain(PROJECT_MANAGER.en);
-    expect(JSON.stringify(rows)).not.toContain("Contractor review");
+    // C1's engineer reads C1's Position and Step names in the same history; K1's manager reads neither.
+    for (const target of [PROJECT_MANAGER.en, "Contractor review"]) {
+      await expectHiddenFrom({ read: mentions(id, target), target, seenBy: tower.c1.members.engineer, hiddenFrom: tower.k1.members.manager, name: nameOf, label: "C1's names" });
+    }
   });
 });
 
@@ -172,29 +203,52 @@ describe("app.history_actor_positions called directly (RP-1091-1 to RP-1091-3)",
     const [createdId] = await eventsOf(id, tower.c1.participantId, true);
     expect(createdId).toBeDefined();
     const c1Events = await eventsOf(id, tower.c1.participantId, false);
-    expect(c1Events).toHaveLength(3);
+    expect(c1Events).toHaveLength(3); // not hidden-from: the migrator's count of C1's events, the setup
     const ids = await idsOf(tower.c1.members.engineer, id);
     expect(ids).toEqual(c1Events);
-    expect(ids).not.toContain(createdId);
+    expect(ids).not.toContain(createdId); // not hidden-from: the `created` event is read by nobody, C1 included (audit only); the line above proves the read gives C1's other events
   });
 
+  /** The event ids `as` reads through app.history_actor_positions, as rows. */
+  const read = async (as: string) => (await idsOf(as, id)).map((e) => ({ id: e }));
+
   it("gives K1's manager no C1 event, the `created` one included", async () => {
-    const c1Events = [...(await eventsOf(id, tower.c1.participantId, true)), ...(await eventsOf(id, tower.c1.participantId, false))];
+    const [createdId] = await eventsOf(id, tower.c1.participantId, true);
     const ids = await idsOf(tower.k1.members.manager, id);
     expect(ids).toEqual(await eventsOf(id, tower.k1.participantId, false));
-    expect(ids.filter((e) => c1Events.includes(e))).toEqual([]);
+    expect(ids).not.toContain(createdId); // not hidden-from: the `created` event is read by nobody (audit only); the other C1 events are proved below
+    for (const target of await eventsOf(id, tower.c1.participantId, false)) {
+      await expectHiddenFrom({ read, target, seenBy: tower.c1.members.engineer, hiddenFrom: tower.k1.members.manager, name: nameOf, label: "a C1 event" });
+    }
   });
 
   it("gives C2's engineer nothing of C1's item", async () => {
-    expect(await idsOf(tower.c2.members.engineer, id)).toEqual([]);
+    const { c1, k1, c2 } = tower;
+    for (const [participantId, seenBy] of [
+      [c1.participantId, c1.members.engineer],
+      [k1.participantId, k1.members.manager],
+    ] as const) {
+      for (const target of await eventsOf(id, participantId, false)) {
+        await expectHiddenFrom({ read, target, seenBy, hiddenFrom: c2.members.engineer, name: nameOf, label: "an event of C1's item" });
+      }
+    }
   });
 });
 
 describe("scenario RP-1091-3: a Member of a third Company on the Project", () => {
   it("reads nothing of C1's item's history, nor of a made-up id", async () => {
-    const { c2 } = tower;
-    expect(await historyOf(c2.members.engineer, id)).toEqual([]);
-    expect(await historyOf(c2.members.engineer, randomUUID())).toEqual([]);
+    const { c1, k1, c2 } = tower;
+    // Each event of C1's item is read in its history by a Member of the Participant whose event it is; never by C2.
+    const events = (await migrator.query("select id, actor_participant_id from work_item_event where work_item_id = $1 and type <> 'created'", [id])).rows as {
+      id: string;
+      actor_participant_id: string;
+    }[];
+    expect(events.length).toBeGreaterThan(0);
+    for (const event of events) {
+      const seenBy = event.actor_participant_id === k1.participantId ? k1.members.manager : c1.members.engineer;
+      await expectHiddenFrom({ read: (as: string) => historyIdsOf(as, id), target: event.id, seenBy, hiddenFrom: c2.members.engineer, name: nameOf, label: "C1's item's history" });
+    }
+    expect(await historyOf(c2.members.engineer, randomUUID())).toEqual([]); // not hidden-from: a made-up id, no item for anyone
   });
 
   it("reads its own item's history, its own people with each of their Positions (the positive control)", async () => {
