@@ -196,7 +196,8 @@ export const workItemRoutes =
       { schema: { params: workItemParams, response: { 200: workItemDetail } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(withNumberSegments(ctx.db, memberId, getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now())));
+        const item = await visibleOrNotFound(getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now()));
+        return withNumberSegments(ctx.db, memberId, item);
       },
     );
 
