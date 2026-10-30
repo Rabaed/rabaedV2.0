@@ -7,9 +7,9 @@ import { randomUUID } from "node:crypto";
 import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { projectMember, tryTake } from "./support/tower.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { LEGACY_MAR, expectHiddenFrom } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -328,11 +328,26 @@ describe("RP-1068-1: the Submittal Panel's preview of a Document", () => {
   });
 
   it("gives a Company that can't see the item, and a Member off the Project, the plain 404 for the URL, as for a made-up id", async () => {
-    for (const who of [c2Engineer, outsider]) {
-      await expectHidden(who.get(documentsUrl(itemId)));
-      await expectHidden(who.get(`${documentUrl(itemId, documentId)}/download`));
-      await expectHidden(who.get(`${documentUrl(itemId, randomUUID())}/download`));
-    }
+    const named = new Map<Caller, string>([[k1Engineer, "K1's engineer"], [c2Engineer, "C2's engineer"], [outsider, "a C1 Member off the Project"]]);
+    const name = (who: Caller) => named.get(who)!;
+    const listed = async (who: Caller) => {
+      const res = await who.get(documentsUrl(itemId));
+      if (res.statusCode === 200) return (res.json() as DocumentList).documents;
+      await expectHidden(res, documentsUrl(itemId)); // not hidden-from: the read's 404 check; expectHiddenFrom asserts below
+      return [];
+    };
+    const hidden = [c2Engineer, outsider];
+    await expectHiddenFrom({ read: listed, target: documentId, seenBy: k1Engineer, hiddenFrom: hidden, name, label: "the list" });
+    await expectHiddenFrom({
+      read: readById<{ url: string }>(`${documentUrl(itemId, documentId)}/download`),
+      target: documentId,
+      idOf: () => documentId,
+      seenBy: k1Engineer,
+      hiddenFrom: hidden,
+      name,
+      label: "the download URL",
+    });
+    for (const who of hidden) await expectHidden(who.get(`${documentUrl(itemId, randomUUID())}/download`)); // not hidden-from: a made-up id, no row to prove
   });
 });
 

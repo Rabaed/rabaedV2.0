@@ -6,7 +6,8 @@
 import { randomUUID } from "node:crypto";
 import type { SaveNumberingPatternRequest, WorkItemDetail } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type TestApi } from "./support/harness.ts";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
+import { createTestApi, readById, type Caller, type TestApi } from "./support/harness.ts";
 import { buildTower, detail, draft, ok, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 let api: TestApi;
@@ -45,7 +46,7 @@ describe("the item read's numberSegments", () => {
     });
     const drafted = await detail(t.c1Engineer, await draft(t, t.c1Engineer, "Still a Draft"));
     expect(drafted.documentNumber).toBeNull();
-    expect(drafted.numberSegments).toBeUndefined();
+    expect(drafted.numberSegments).toBeUndefined(); // not hidden-from: a Draft has no number, so no segments
   });
 
   it("stay those of the pattern the item was numbered under when the Project's pattern changes", async () => {
@@ -92,6 +93,7 @@ describe("visibility.md, Document Numbers", () => {
     expect(segments.map((s) => s.value).join(separator)).toBe(theirs.documentNumber);
     // Each part is its kind and the text the number prints (a Location's level), nothing else: no counter.
     expect(segments.flatMap((s) => Object.keys(s)).every((key) => ["kind", "value", "level"].includes(key))).toBe(true);
-    await expectHidden(outsider.caller.get(`/v1/work-items/${id}`), "a Company on no Project of these");
+    const named = new Map<Caller, string>([[t.k1Manager, "K1's manager"], [outsider.caller, "a Company on no Project of these"]]);
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: t.k1Manager, hiddenFrom: outsider.caller, name: (c) => named.get(c)! });
   });
 });
