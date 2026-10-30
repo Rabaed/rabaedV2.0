@@ -185,6 +185,7 @@ apps/api/test/visibility.test.ts empty 8
 apps/api/test/watch.test.ts empty 6
 apps/api/test/wir-checklist.test.ts empty 17
 apps/api/test/wir-form-v2.test.ts empty 7
+apps/api/test/wir-inspection-screens.test.ts empty 9
 apps/api/test/wir-snags.test.ts empty 8
 apps/api/test/wir-snags.test.ts text 3
 apps/api/test/wir-workflow-v2.test.ts empty 12
