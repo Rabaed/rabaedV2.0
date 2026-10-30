@@ -8,15 +8,15 @@ import { formatFormValue, formatTableCell, formFields, type FormAnswers, type Fo
 
 /**
  * The fixed sections, in the design's order (README §4.8). Links only, since Subtasks aren't built
- * (decision C2). Attachments (RP-1068) and the in-flow Workflow & approval log (RP-1067) slot in as
- * further sections of their own.
+ * (decision C2). The in-flow Workflow & approval log (RP-1067) slots in as a further section of its own.
  */
-export const submittalPanelSectionOrder = ["subject", "scope", "location", "supplier", "links"] as const;
+export const submittalPanelSectionOrder = ["subject", "scope", "location", "supplier", "attachments", "links"] as const;
 export type SubmittalPanelSectionKey = (typeof submittalPanelSectionOrder)[number];
 
 /**
  * The fixed sections this item's Form has data for: a section the Type's Form has no field for is
- * hidden (a DAR has no supplier). The Subject and Links are System Fields, on every item.
+ * hidden (a DAR has no supplier). The Subject, Attachments (RP-1068) and Links are System Fields,
+ * on every item.
  */
 export function submittalPanelSectionKeys(schema: FormSchema): SubmittalPanelSectionKey[] {
   const types = new Set(formFields(schema).map((f) => f.type));
@@ -25,6 +25,7 @@ export function submittalPanelSectionKeys(schema: FormSchema): SubmittalPanelSec
     scope: types.has("trade") || types.has("scopes"),
     location: types.has("location"),
     supplier: types.has("approved_supplier"),
+    attachments: true,
     links: true,
   };
   return submittalPanelSectionOrder.filter((key) => has[key]);

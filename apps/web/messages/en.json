@@ -3174,6 +3174,38 @@
     "noLinks": "No Links",
     "none": "—"
   },
+  "submittalPanelAttachments": {
+    "title": "Attachments",
+    "fileCount": "{count, plural, =0 {No Documents} one {1 Document} other {{n} Documents}}",
+    "none": "No Documents attached.",
+    "reading": "Reading the Documents…",
+    "unavailableList": "The Documents couldn't be read. Try again later.",
+    "pdf": "PDF",
+    "image": "Image",
+    "other": "Document",
+    "pageCount": "{count, plural, one {1 page} other {{n} pages}}",
+    "pageOf": "{page} / {pages}",
+    "ofAttachments": "{count, plural, one {Document} other {Documents}}",
+    "page": "Page {n}",
+    "pages": "Pages",
+    "files": "Attachments",
+    "preview": "Preview",
+    "closePreview": "Close preview",
+    "openLarge": "Open large",
+    "download": "Download",
+    "print": "Print",
+    "back": "Back",
+    "close": "Close",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "loading": "Opening the Document…",
+    "unavailable": "This Document couldn't be opened.",
+    "tryAgain": "Try again",
+    "noPreview": "This type of Document can't be previewed. Download it to open it.",
+    "documentOf": "{n} / {total}"
+  },
   "submittalPanel": {
     "position": "{n} / {total}",
     "previous": "Previous submittal",
@@ -3195,6 +3227,31 @@
     "noNumber": "No number yet",
     "loading": "Opening the submittal…",
     "unavailable": "This submittal couldn't be opened.",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "numberCard": {
+      "title": "How this number is built",
+      "footnote": "Set by the Project's Numbering Pattern. The number never changes; Revisions add Rev 1, Rev 2…",
+      "kinds": {
+        "project": "Project",
+        "type": "Work Item Type",
+        "trade": "Trade",
+        "participant": "Participant Code",
+        "location": "Location",
+        "text": "Fixed text",
+        "sequence": "Sequence"
+      },
+      "levels": {
+        "zone": "Zone",
+        "building": "Building",
+        "floor": "Floor"
+      },
+      "lines": {
+        "project": "the Project's code",
+        "participant": "{company}'s Participant Code",
+        "location": "its {level}",
+        "text": "the same on every number",
+        "sequence": "the running number, given when it first left Draft"
+      }
+    }
   }
 }
