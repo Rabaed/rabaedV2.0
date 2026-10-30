@@ -7,15 +7,18 @@ import { jiraOverHttp } from "./jira-close.ts";
 // epic review (RP-1087, RP-1081).
 //
 //   (no flag)   prints each story and scenario with the tasks that name it; exits 1 when one has none
-//   --close     also moves the spec to Done, with a comment, but only when nothing is missing
+//   --close     also moves the spec to Done, with a comment, but only when nothing is missing and every
+//               issue naming the spec is Done
 //
 // What counts:
 //   - Stories: the numbered lines under the spec's "User Stories" heading ("13. As a …"), up to the next
-//     heading of the same level. Sub-headings and bold group labels inside it are fine.
-//   - Scenarios: every `RP-nnn-n` the spec names, with "RP-23-1 to RP-23-5" read as a range.
+//     heading of the same level. Sub-headings and bold group labels inside it are fine. A spec that says
+//     "User Stories" but has no numbered line read under such a heading fails rather than passing empty.
+//   - Scenarios: every `RP-nnn-n` the spec names whose key is the spec's or its Epic's, with
+//     "RP-23-1 to RP-23-5" read as a range. Ids of other keys are cited rules of other specs: listed only.
 //   - A task names the spec when its summary or description has the spec's key (or one of its scenario
 //     ids). It names a story with "story 32", "stories 1–4, 7 and 9" or a "Stories: 1, 2" line, and a
-//     scenario by its id. Any status counts: a task closed as won't do still answers for its stories.
+//     scenario by its id. Any status counts for naming: a task closed as won't do still answers for its stories.
 //   - Only tasks whose parent is the spec's Epic are read, so a story number written for another spec of
 //     another Epic is not taken.
 //
@@ -86,6 +89,8 @@ function blocks(nodes: AdfNode[] | undefined): string[] {
         break;
       default:
         if (node.type !== undefined && INLINE.has(node.type)) out.push(...inline([node]).split("\n"));
+        // A container of inline nodes (a task or decision item) is one line, not one line per text run.
+        else if ((node.content ?? []).length > 0 && (node.content ?? []).every((child) => child.type !== undefined && INLINE.has(child.type))) out.push(...inline(node.content).split("\n"));
         else out.push(...blocks(node.content));
     }
   }
@@ -111,6 +116,11 @@ export function specStories(text: string): number[] {
       const depth = heading[1]?.length ?? 0;
       if (level !== undefined && depth <= level) level = undefined;
       if (level === undefined && /^\**\s*User Stories\b/i.test(heading[2] ?? "")) level = depth;
+      continue;
+    }
+    // "User Stories" as a line of its own (bold, not a heading) opens the section up to the next heading.
+    if (level === undefined && /^\**\s*User Stories\s*\**:?\s*$/i.test(line.trim())) {
+      level = 7;
       continue;
     }
     if (level === undefined) continue;
@@ -145,7 +155,6 @@ export function scenarioIds(text: string): string[] {
   });
 }
 
-export const namedScenarios = scenarioIds;
 
 /** Story numbers a task names: "story 32", "stories 1–4, 7 and 9", "Stories: 1, 2", "stories 40 to 41". */
 export function namedStories(text: string): number[] {
@@ -181,32 +190,43 @@ export interface SpecReport {
   scenarios: Named<string>[];
   missingStories: number[];
   missingScenarios: string[];
+  /** Scenario ids of other keys the spec only cites (another spec's rule it must keep): listed, not checked. */
+  cited: string[];
+  /** The spec says "User Stories" but no numbered story was read under it: fails, so a layout the check can't read never passes. */
+  unreadStories: boolean;
   /** Tasks under the Epic that name the spec. */
   children: string[];
-  /** Those of them not Done yet (information only). */
+  /** Those of them not Done yet: the spec is not closed while any is open. */
   openIssues: string[];
   ok: boolean;
 }
+
+/** A spec's own scenarios are keyed by the spec or its Epic (RP-632's are RP-23-n); any other key is cited. */
+const ownScenario = (id: string, spec: Issue) => [spec.key, spec.parent].some((key) => key !== undefined && id.startsWith(`${key}-`));
 
 export function checkSpec(spec: Issue, candidates: Issue[]): SpecReport {
   const children = candidates.filter((c) => c.key !== spec.key && namesSpec(`${c.summary}\n${c.text}`, spec.key)).sort((a, b) => keyNumber(a.key) - keyNumber(b.key));
   const told = children.map((c) => {
     const body = `${c.summary}\n${c.text}`;
-    return { key: c.key, stories: new Set(namedStories(body)), scenarios: new Set(namedScenarios(body)) };
+    return { key: c.key, stories: new Set(namedStories(body)), scenarios: new Set(scenarioIds(body)) };
   });
   const stories = specStories(spec.text).map((id) => ({ id, by: told.filter((t) => t.stories.has(id)).map((t) => t.key) }));
-  const scenarios = scenarioIds(spec.text).map((id) => ({ id, by: told.filter((t) => t.scenarios.has(id)).map((t) => t.key) }));
+  const allScenarios = scenarioIds(spec.text);
+  const scenarios = allScenarios.filter((id) => ownScenario(id, spec)).map((id) => ({ id, by: told.filter((t) => t.scenarios.has(id)).map((t) => t.key) }));
   const missingStories = stories.filter((s) => s.by.length === 0).map((s) => s.id);
   const missingScenarios = scenarios.filter((s) => s.by.length === 0).map((s) => s.id);
+  const unreadStories = stories.length === 0 && /\bUser Stories\b/i.test(spec.text);
   return {
     spec,
     stories,
     scenarios,
     missingStories,
     missingScenarios,
+    cited: allScenarios.filter((id) => !ownScenario(id, spec)),
+    unreadStories,
     children: children.map((c) => c.key),
     openIssues: children.filter((c) => c.statusCategory !== "done").map((c) => c.key),
-    ok: missingStories.length === 0 && missingScenarios.length === 0,
+    ok: missingStories.length === 0 && missingScenarios.length === 0 && !unreadStories,
   };
 }
 
@@ -219,9 +239,12 @@ export function formatReport(report: SpecReport): string {
   if (report.stories.length === 0 && report.scenarios.length === 0) lines.push("  No numbered stories and no RP-nnn-n scenarios in the spec.");
   for (const s of report.stories) lines.push(`  story ${s.id}: ${s.by.length > 0 ? s.by.join(", ") : "named by no issue"}`);
   for (const s of report.scenarios) lines.push(`  ${s.id}: ${s.by.length > 0 ? s.by.join(", ") : "named by no issue"}`);
+  if (report.cited.length > 0) lines.push(`  Cited from other keys, not checked: ${report.cited.join(", ")}`);
   if (report.openIssues.length > 0) lines.push(`Not Done yet: ${report.openIssues.join(", ")}`);
   if (report.ok) {
     lines.push(`OK: every story and scenario of ${spec.key} is named by an issue.`);
+  } else if (report.unreadStories) {
+    lines.push(`FAIL: ${spec.key} mentions its stories, but no numbered story was read under a stories heading. Write each one as a "1. As a …" line under it.`);
   } else {
     const parts = [report.missingStories.length > 0 ? count(report.missingStories.length, "story", "stories") : "", report.missingScenarios.length > 0 ? count(report.missingScenarios.length, "scenario", "scenarios") : ""].filter((p) => p !== "");
     const single = parts.length === 1 && (report.missingStories.length + report.missingScenarios.length === 1);
@@ -263,6 +286,10 @@ export async function run(args: { key: string; close: boolean }, jira: SpecJira)
   const lines = [formatReport(report)];
   if (!report.ok) {
     if (args.close) lines.push("Not closed: the spec stays open while a story or scenario is named by no issue.");
+    return { exitCode: 1, output: lines.join("\n") };
+  }
+  if (args.close && report.openIssues.length > 0) {
+    lines.push(`Not closed: ${count(report.openIssues.length, "issue", "issues")} naming the spec ${report.openIssues.length === 1 ? "is" : "are"} not Done yet (${report.openIssues.join(", ")}).`);
     return { exitCode: 1, output: lines.join("\n") };
   }
   if (args.close) {
@@ -315,7 +342,7 @@ export async function issuesUnderEpic(email: string, token: string, epic: string
     const found = (await call("POST", "search/jql", body)) as { issues: { key: string; fields: JiraFields }[]; nextPageToken?: string; isLast?: boolean };
     for (const issue of found.issues) issues.push(toIssue(issue.key, issue.fields));
     nextPageToken = found.nextPageToken;
-    if (found.isLast !== false || !nextPageToken) return issues;
+    if (found.isLast === true || !nextPageToken) return issues;
   }
   throw new Error(`more than 5000 issues under ${epic}: stopped`);
 }

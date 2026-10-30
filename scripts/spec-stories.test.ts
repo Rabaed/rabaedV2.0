@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adfText, checkSpec, formatReport, issuesUnderEpic, namedScenarios, namedStories, namesSpec, parseArgs, run, scenarioIds, specStories, type Issue, type SpecJira } from "./spec-stories.ts";
+import { adfText, checkSpec, formatReport, issuesUnderEpic, namedStories, namesSpec, parseArgs, run, scenarioIds, specJiraOverHttp, specStories, type Issue, type SpecJira } from "./spec-stories.ts";
 
 const text = (t: string) => ({ type: "text", text: t });
 const paragraph = (...content: unknown[]) => ({ type: "paragraph", content });
@@ -22,6 +22,11 @@ describe("adfText", () => {
       ),
     );
     expect(out).toBe("## User Stories\nTaking a Transition\n13. As a Member, C\n- outer\n  1. inner");
+  });
+
+  it("keeps a container of inline runs (a task item) on one line", () => {
+    const task = { type: "taskList", content: [{ type: "taskItem", content: [{ type: "text", text: "13.", marks: [{ type: "strong" }] }, text(" As a Member, D")] }] };
+    expect(adfText(doc(task))).toBe("13. As a Member, D");
   });
 
   it("reads text inside tables and panels, and returns a plain string as it is", () => {
@@ -51,6 +56,10 @@ describe("specStories", () => {
 
   it("lists the numbered lines under User Stories, across its sub-headings, and nothing after the next same-level heading", () => {
     expect(specStories(spec)).toEqual([1, 2, 13, 38]);
+  });
+
+  it("reads a bold \"User Stories\" line as the section's start, up to the next heading", () => {
+    expect(specStories("Intro\n**User Stories**\n1. As a Member, A\n2. As a Member, B\n## Out of Scope\n3. not a story")).toEqual([1, 2]);
   });
 
   it("is empty when the spec has no User Stories section", () => {
@@ -83,9 +92,9 @@ describe("namedStories", () => {
   });
 });
 
-describe("namedScenarios", () => {
+describe("scenarioIds in an issue", () => {
   it("lists the scenario ids an issue names, ranges expanded", () => {
-    expect(namedScenarios("Seam 2: RP-23-1 to RP-23-2 (scenario `RP-170-n`)")).toEqual(["RP-23-1", "RP-23-2"]);
+    expect(scenarioIds("Seam 2: RP-23-1 to RP-23-2 (scenario `RP-170-n`)")).toEqual(["RP-23-1", "RP-23-2"]);
   });
 });
 
@@ -119,6 +128,22 @@ describe("checkSpec", () => {
     const report = checkSpec(spec, [task("RP-90", "Spec RP-619, stories 55 to 57. RP-23-1 to RP-23-2")]);
     expect(report.missingStories).toEqual([55, 56, 57]);
     expect(report.children).toEqual([]);
+  });
+
+  it("checks only scenarios keyed by the spec or its Epic, and lists cited ones (RP-616 cites RP-588-1)", () => {
+    const citing = { ...spec, text: `${spec.text}\nAgainst RP-588-1 and RP-632-1.` };
+    const report = checkSpec(citing, [task("RP-85", "RP-632 stories 55–57, RP-23-1 to RP-23-2, RP-632-1")]);
+    expect(report.scenarios.map((s) => s.id)).toEqual(["RP-23-1", "RP-23-2", "RP-632-1"]);
+    expect(report.cited).toEqual(["RP-588-1"]);
+    expect(report.ok).toBe(true);
+    expect(formatReport(report)).toContain("Cited from other keys, not checked: RP-588-1");
+  });
+
+  it("fails a spec that mentions User Stories when none is read, rather than passing empty", () => {
+    const unreadable = { ...spec, text: "User Stories are in the attached page.\n- As a Member, I want A" };
+    const report = checkSpec(unreadable, []);
+    expect(report).toMatchObject({ ok: false, unreadStories: true, stories: [] });
+    expect(formatReport(report)).toContain("no numbered story was read");
   });
 
   it("is ok when every story and scenario is named, and when the spec numbers none", () => {
@@ -195,6 +220,15 @@ describe("run", () => {
     expect(closing.output).toContain("Closed RP-632.");
   });
 
+  it("refuses --close while an issue naming the spec is not Done", async () => {
+    const jira = fakeJira([spec], [task("RP-85", "RP-632 stories 55–57, RP-23-1 to RP-23-2", "In Progress")]);
+    const result = await run({ key: "RP-632", close: true }, jira);
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("Not closed: 1 issue naming the spec is not Done yet (RP-85).");
+    expect(jira.closed).toEqual([]);
+    expect((await run({ key: "RP-632", close: false }, jira)).exitCode).toBe(0);
+  });
+
   it("refuses --close on an issue without the spec label, or already Done", async () => {
     const notSpec = { ...spec, labels: [] };
     const jira = fakeJira([notSpec], [covering]);
@@ -240,8 +274,32 @@ describe("issuesUnderEpic", () => {
     expect(calls.every((c) => !c.url.includes("tok") && c.auth?.startsWith("Basic "))).toBe(true);
   });
 
+  it("keeps paging while a nextPageToken comes back, even with no isLast", async () => {
+    const pages = [
+      { issues: [{ key: "RP-85", fields: {} }], nextPageToken: "t2" },
+      { issues: [{ key: "RP-86", fields: {} }] },
+    ];
+    let n = 0;
+    const fetchImpl = (async () => response(pages[n++])) as unknown as typeof fetch;
+    expect((await issuesUnderEpic("a@b.c", "tok", "RP-23", "RP-632", fetchImpl)).map((i) => i.key)).toEqual(["RP-85", "RP-86"]);
+  });
+
   it("names only the status when Jira refuses, never Jira's error text", async () => {
     const fetchImpl = (async () => new Response("secret detail", { status: 401 })) as unknown as typeof fetch;
     await expect(issuesUnderEpic("a@b.c", "tok", "RP-23", "RP-632", fetchImpl)).rejects.toThrow(/^Jira POST search\/jql answered 401$/);
+  });
+});
+
+describe("specJiraOverHttp", () => {
+  it("reads one issue with the fields the check needs, its description as text", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      const fields = { summary: "Spec: Signing", description: doc(heading(2, "User Stories"), paragraph(text("1. As a Member, A"))), labels: ["spec"], status: { name: "In Progress", statusCategory: { key: "indeterminate" } }, parent: { key: "RP-23" } };
+      return new Response(JSON.stringify({ key: "RP-632", fields }), { status: 200 });
+    }) as typeof fetch;
+    const issue = await specJiraOverHttp("a@b.c", "tok", fetchImpl).issue("RP-632");
+    expect(urls).toEqual(["https://rabaedsa.atlassian.net/rest/api/3/issue/RP-632?fields=summary,description,labels,status,parent"]);
+    expect(issue).toEqual({ key: "RP-632", summary: "Spec: Signing", text: "## User Stories\n1. As a Member, A", labels: ["spec"], status: "In Progress", statusCategory: "indeterminate", parent: "RP-23" });
   });
 });
