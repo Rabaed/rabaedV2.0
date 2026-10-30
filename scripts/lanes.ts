@@ -708,8 +708,9 @@ export function listContainers(timeout?: number): Container[] | undefined {
   }
 }
 
-export function listVolumes(): Volume[] {
-  return parseVolumes(docker(["volume", "ls", "--format", volumeFormat]));
+/** All volumes; with timeout ms, throws when Docker does not answer in time (RP-1096). */
+export function listVolumes(timeout?: number): Volume[] {
+  return parseVolumes(docker(["volume", "ls", "--format", volumeFormat], timeout));
 }
 
 /**
