@@ -38,7 +38,6 @@ RP-410-1 db  # A C1 item is Submitted and picked up by K1's manager; C1's PM pic
 # RP-412
 RP-412-1 db  # Tower's Project Admin (C1, the Host Company) saves the Project pattern twice, gives the MA
 RP-412-2 db  # C1 has issued two MAR numbers; a C1 engineer, a C2 engineer and a K1 manager open Project 
-RP-412-3 api  # A C2 member who is also a Project Admin saves Tower's pattern; a Rabaed Engineer saves ano
 
 # RP-427
 RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
@@ -123,13 +122,6 @@ RP-651-2 api  # C1's engineer raises a Civil WIR picking "Concrete pour": its Ve
 
 # RP-1058
 RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
-
-# RP-1062
-RP-1062-1 api  # C1 Submits a WIR (a MAR at seam 1) to K1 and its Members post in its Chat; C2 Submits one 
-RP-1062-2 api  # K1's manager covers Building B only (seam 2), or Mechanical only (seam 1); C1's Submitted 
-RP-1062-3 api  # C1's engineer posts on an item still in C1's internal review
-RP-1062-4 api  # C1's engineer, K1's engineer (K1's manager at seam 1) and the Owner's Representative post 
-RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager (seam 1), reads an item's 
 
 # RP-1072
 RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
