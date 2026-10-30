@@ -1,12 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { matrixFile, scenarioFile, scenarioHeader, scenarioRows, scenarioTables, scenariosDir, type ScenarioRow, type ScenarioSource } from "./visibility-scenarios.ts";
 
-// The scenario matrix in docs/visibility.md is the visibility test suite's
-// index, and tests cite its rows ("scenario 58"). Rows 1–81 keep their plain
-// numbers; a new row takes an ID from the key of the ticket that adds it,
-// RP-nnn-1, RP-nnn-2, …, so two branches never take the same next number
-// (RP-397). A second 27–31 went unnoticed on main until then.
+// The visibility scenarios are the visibility test suite's index, and tests cite
+// them ("scenario 58"). Rows 1–81 keep their plain numbers, in docs/visibility.md;
+// a new row takes an ID from the key of the ticket that adds it, RP-nnn-1,
+// RP-nnn-2, …, so two branches never take the same next number (RP-397; a second
+// 27–31 went unnoticed on main until then), and goes in that ticket's own file,
+// docs/visibility/scenarios/RP-nnn.md, so two branches never edit the same lines
+// (RP-1097). scripts/visibility-scenarios.ts reads them.
 //
 // Checked by scripts/check-scenario-ids.test.ts, in the unit project. Only tests
 // and stories are read for citations: migration comments can't be corrected
@@ -15,35 +18,11 @@ import { join } from "node:path";
 /** The last plain number a matrix row may use; every later row is RP-nnn-n. */
 export const lastPlainNumber = 81;
 
-const matrixFile = "docs/visibility.md";
 const plainNumber = /^\d+$/;
-const jiraKeyRow = /^RP-\d+-\d+$/;
+const jiraKeyRow = /^RP-(\d+)-\d+$/;
+const keyFileName = new RegExp(`^${scenariosDir}/(RP-\\d+)\\.md$`);
 
-export type MatrixRow = { id: string; line: number };
 export type Citation = { file: string; text: string };
-
-/** The first cell of every row of the "Scenario matrix" table, with its 1-based line. */
-export function matrixScenarioIds(markdown: string): MatrixRow[] {
-  const lines = markdown.split("\n");
-  const heading = lines.findIndex((line) => line.startsWith("## Scenario matrix"));
-  if (heading < 0) return [];
-  const rows: MatrixRow[] = [];
-  let inTable = false;
-  for (let i = heading + 1; i < lines.length; i++) {
-    const line = lines[i]!;
-    if (!line.startsWith("|")) {
-      if (inTable) break;
-      continue;
-    }
-    if (!inTable) {
-      inTable = true;
-      i++; // the header row, then this skips the |---| row
-      continue;
-    }
-    rows.push({ id: line.split("|")[1]!.trim(), line: i + 1 });
-  }
-  return rows;
-}
 
 // "scenario 28", "scenarios 27 and 28", "scenarios 11, 30 and 31", "scenarios 27-28",
 // "scenario RP-397-1", and a list that wraps onto the next comment line.
@@ -81,34 +60,69 @@ function citedIdsWithOffsets(text: string): CitedId[] {
   return found;
 }
 
-/** What is wrong with the matrix's IDs and with the citations of them; empty when nothing is. */
-export function scenarioIdProblems(markdown: string, cited: Citation[]): string[] {
-  const rows = matrixScenarioIds(markdown);
-  const problems: string[] = [];
+/** What is wrong with a row of docs/visibility.md's matrix: rows 1–81 only. */
+function matrixRowProblem(row: ScenarioRow): string | undefined {
+  const at = `${row.file}:${row.line}: scenario ${row.id}`;
+  if (plainNumber.test(row.id)) {
+    return Number(row.id) > lastPlainNumber
+      ? `${at} is a plain number above ${lastPlainNumber}; new rows use RP-nnn-n (the Jira key), in ${scenariosDir}/RP-nnn.md`
+      : undefined;
+  }
+  const key = jiraKeyRow.exec(row.id)?.[1];
+  if (key === undefined) return `${at} is neither a plain number nor RP-nnn-n`;
+  const target = scenarioFile(`RP-${key}`);
+  return `${at}: move this row, unchanged, to ${target} (made like the others in ${scenariosDir}/: a "# RP-${key} scenarios" heading and one table headed \`${scenarioHeader}\`) and delete it here; since RP-1097 the table in ${matrixFile} holds rows 1–${lastPlainNumber} only, so parallel PRs never edit the same lines`;
+}
+
+/** What is wrong with a row of the file of the Jira key `key`: its own RP-key-n rows only. */
+function keyRowProblem(row: ScenarioRow, key: string): string | undefined {
+  const at = `${row.file}:${row.line}: scenario ${row.id}`;
+  const rowKey = jiraKeyRow.exec(row.id)?.[1];
+  if (rowKey !== undefined) {
+    return `RP-${rowKey}` === key ? undefined : `${at} goes in ${scenarioFile(`RP-${rowKey}`)}: ${key}.md holds only ${key}-n rows`;
+  }
+  if (plainNumber.test(row.id)) return `${at} goes in ${row.file} only as ${key}-n: plain numbers stop at ${lastPlainNumber}, in ${matrixFile}`;
+  return `${at} is not ${key}-n`;
+}
+
+/** What is wrong with where a source's scenarios are: a file's name and its one table. */
+function layoutProblems(source: ScenarioSource): string[] {
+  if (source.file === matrixFile) return [];
+  const key = keyFileName.exec(source.file)?.[1];
+  if (key === undefined) return [`${source.file}: the folder holds only RP-nnn.md, one per Jira key (RP-1097)`];
+  const [first, ...more] = scenarioTables(source);
+  if (first === undefined) return [`${source.file}: has no scenario table (\`${scenarioHeader}\`)`];
+  return [
+    ...(first.header === scenarioHeader ? [] : [`${source.file}:${first.line}: the table's heading row is not \`${scenarioHeader}\``]),
+    ...more.map((table) => `${source.file}:${table.line}: a second table; ${key}.md holds one, its scenarios`),
+  ];
+}
+
+/** What is wrong with the scenarios' IDs and places, and with the citations of them; empty when nothing is. */
+export function scenarioIdProblems(sources: ScenarioSource[], cited: Citation[]): string[] {
+  const problems = sources.flatMap(layoutProblems);
+  const placed = new Set(sources.filter((source) => source.file === matrixFile || keyFileName.test(source.file)).map((source) => source.file));
+  const rows = scenarioRows(sources).filter((row) => placed.has(row.file));
 
   for (const row of rows) {
-    if (plainNumber.test(row.id)) {
-      if (Number(row.id) > lastPlainNumber) {
-        problems.push(`${matrixFile}:${row.line}: scenario ${row.id} is a plain number above ${lastPlainNumber}; new rows use RP-nnn-n (the Jira key)`);
-      }
-    } else if (!jiraKeyRow.test(row.id)) {
-      problems.push(`${matrixFile}:${row.line}: scenario ${row.id} is neither a plain number nor RP-nnn-n`);
-    }
+    const key = keyFileName.exec(row.file)?.[1];
+    const problem = key === undefined ? matrixRowProblem(row) : keyRowProblem(row, key);
+    if (problem !== undefined) problems.push(problem);
   }
 
-  const linesById = Map.groupBy(rows, (row) => row.id);
-  for (const [scenario, same] of linesById) {
+  const rowsById = Map.groupBy(rows, (row) => row.id);
+  for (const [scenario, same] of rowsById) {
     if (same.length < 2) continue;
-    const lines = same.map((row) => row.line);
+    const places = same.map((row) => `${row.file}:${row.line}`);
     const times = same.length === 2 ? "twice" : `${same.length} times`;
-    problems.push(`${matrixFile}: scenario ${scenario} appears ${times} (lines ${lines.slice(0, -1).join(", ")} and ${lines.at(-1)})`);
+    problems.push(`scenario ${scenario} appears ${times} (${places.slice(0, -1).join(", ")} and ${places.at(-1)})`);
   }
 
   for (const { file, text } of cited) {
     for (const { id, index } of citedIdsWithOffsets(text)) {
-      if (linesById.has(id)) continue;
+      if (rowsById.has(id)) continue;
       const line = text.slice(0, index).split("\n").length;
-      problems.push(`${file}:${line} cites scenario ${id}, which is not in ${matrixFile}`);
+      problems.push(`${file}:${line} cites scenario ${id}, which is in neither ${matrixFile} nor ${scenariosDir}/`);
     }
   }
   return problems;

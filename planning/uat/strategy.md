@@ -512,7 +512,7 @@ One Test Case per built page or flow, run with the ui-ux-tester agent (report on
 
 ## 6. Visibility block
 
-Visibility is the top requirement. This block is driven by `docs/visibility.md`: its **Scenario matrix** (176 rows: 1 to 81, then `RP-nnn-n`) and its **Leak channels** table.
+Visibility is the top requirement. This block is driven by `docs/visibility.md`: its **Scenario matrix** (rows 1 to 81 there, then the `RP-nnn-n` rows, one file per Jira key in `docs/visibility/scenarios/`) and its **Leak channels** table.
 
 ### 6.1 How the matrix becomes UAT
 
@@ -600,7 +600,7 @@ For every item or setup a scenario creates, log in as each Company that must NOT
 
 ### 6.4 Matrix coverage: every row and the scenario that covers it
 
-Rows 1 to 81 and the `RP-nnn-n` rows of `docs/visibility.md`, in the order of the matrix.
+Rows 1 to 81 of `docs/visibility.md`, then the `RP-nnn-n` rows of `docs/visibility/scenarios/`, by Jira key.
 
 | Row | Scenario (shortened) | Covered by |
 |---|---|---|

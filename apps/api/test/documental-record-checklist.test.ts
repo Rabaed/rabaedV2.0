@@ -274,7 +274,7 @@ describe("Re-produce of the WIR's record", () => {
     await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(await recordDeps()) });
     const { rows } = await sql<{ run_kind: string; passed: boolean; problems: string[] }>`
       select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
-      where r.work_item_id = ${wir}::uuid order by c.ran_at
+      where r.work_item_id = ${wir}::uuid order by c.ran_at, c.id
     `.execute(migrator);
     expect(rows.at(-1)).toMatchObject({ run_kind: "reproduce", passed: true });
     const after = await download(hafiz.caller, wir);
