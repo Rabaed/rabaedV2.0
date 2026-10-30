@@ -64,13 +64,14 @@ async function closeWithRecord(id: string, code: string): Promise<void> {
 const addLink = async (from: string, to: string): Promise<string> => (await ok(at.c1Engineer.post(`/v1/work-items/${from}/links`, { workItemId: to }), 201)).json().id;
 const viaLink = (by: Caller, item: string, link: string) => by.get(`/v1/work-items/${item}/links/${link}/documental-record`);
 
-/** A record PDF read for expectHiddenFrom: `[{ id: Y }]` when the PDF comes, `[]` for the plain 404, anything else fails. */
+/**
+ * A record PDF read for expectHiddenFrom: `[{ id: Y }]` for any 200 (the only record there is to get,
+ * so a 200 where none is due fails as a read it must not make), `[]` for the plain 404, anything else
+ * fails. That the PDF is Y's own is the test "gives the viewer Y's PDF itself".
+ */
 const pdfRead = async (res: ReturnType<Caller["get"]>, path: string): Promise<{ id: string }[]> => {
   const got = await res;
-  if (got.statusCode === 200) {
-    expect(new Uint8Array(got.rawPayload), path).toEqual(PDF);
-    return [{ id: y }];
-  }
+  if (got.statusCode === 200) return [{ id: y }];
   await expectHidden(got, path);
   return [];
 };

@@ -19,8 +19,8 @@ const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
 let migrator: pg.Client;
 let app: Db;
 const asOwner = (text: string, values: unknown[]) => migrator.query(text, values);
-const people = { ap: "", colleague: "", other: "" };
-const companies = { a: "", b: "" };
+const people = { ap: "", colleague: "", other: "", third: "" };
+const companies = { a: "", b: "", c: "" };
 
 async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
@@ -75,8 +75,9 @@ beforeAll(async () => {
   const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
   const [a, ap, colleague] = await company(engineer, "Company A", 1);
   const [b, other] = await company(engineer, "Company B", 0);
-  Object.assign(companies, { a: a!, b: b! });
-  Object.assign(people, { ap: ap!, colleague: colleague!, other: other! });
+  const [c, third] = await company(engineer, "Company C", 0);
+  Object.assign(companies, { a: a!, b: b!, c: c! });
+  Object.assign(people, { ap: ap!, colleague: colleague!, other: other!, third: third! });
 });
 
 afterAll(async () => {
@@ -161,17 +162,16 @@ const filesRead = (fileIds: string[]) => (reader: string) =>
   rowsAs<{ id: string }>(reader, sql`select id from stored_file where id = any(${fileIds}::uuid[])`);
 
 /**
- * Company B's own Stamp, saved once by its Authorized Person: a file B's Member may read, so a
- * read of A's files as B is proven to work. Saved only from here on: the member_company_has_stamp
- * test above reads B as having none.
+ * Company C's own Stamp, saved once by its Authorized Person: a file C's Member may read, so a read
+ * of A's files as C is proven to work. Company C is these tests' own, so no other test's B changes.
  */
-let bStampId: string | undefined;
-async function bStamp(): Promise<string> {
-  if (bStampId === undefined) {
-    expect(await save(people.other, companies.b, "stamp")).toBe("set");
-    bStampId = (await filesOf(companies.b)).stamp!;
+let cStampId: string | undefined;
+async function cStamp(): Promise<string> {
+  if (cStampId === undefined) {
+    expect(await save(people.third, companies.c, "stamp")).toBe("set");
+    cStampId = (await filesOf(companies.c)).stamp!;
   }
-  return bStampId;
+  return cStampId;
 }
 
 describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
@@ -198,13 +198,14 @@ describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
     const aFiles = rows.map((r) => r.id as string);
     const current = await filesOf(companies.a);
     expect(aFiles).toEqual(expect.arrayContaining([current.logo, current.stamp]));
-    // One read names every file of A's (current and replaced) and B's own Stamp: B reads exactly its own.
-    const b = await bStamp();
-    const readIds = filesRead([...aFiles, b]);
+    // One read names every file of A's (current and replaced) and C's own Stamp: B reads none, C exactly its own.
+    const c = await cStamp();
+    const readIds = filesRead([...aFiles, c]);
     for (const target of [current.logo!, current.stamp!]) {
-      await expectHiddenFrom({ read: readIds, target, seenBy: [people.ap, people.colleague], hiddenFrom: people.other });
+      await expectHiddenFrom({ read: readIds, target, seenBy: [people.ap, people.colleague], hiddenFrom: [people.other, people.third] });
     }
-    expect((await readIds(people.other)).map((r) => r.id)).toEqual([b]);
+    await expectHiddenFrom({ read: readIds, target: c, seenBy: people.third, hiddenFrom: people.other });
+    expect((await readIds(people.third)).map((r) => r.id)).toEqual([c]);
   });
 
   it("a replaced file stays the Company's own: its Members no longer read it, nobody else ever did", async () => {
@@ -216,12 +217,13 @@ describe("scenario RP-617-1: company.logo_file_id and stamp_file_id", () => {
     const replaced = rows.map((r) => r.id as string);
     expect(replaced.length).toBeGreaterThan(0);
     // Nobody may read a replaced file, so one read also names files each reader may: A's Members get
-    // exactly A's current ones, B exactly its own Stamp, and neither gets a replaced one.
-    const b = await bStamp();
-    const readIds = filesRead([...replaced, current.logo!, current.stamp!, b]);
+    // exactly A's current ones, C exactly its own Stamp, and neither gets a replaced one.
+    const c = await cStamp();
+    const readIds = filesRead([...replaced, current.logo!, current.stamp!, c]);
     const ids = async (reader: string) => (await readIds(reader)).map((r) => r.id).sort();
     for (const reader of [people.ap, people.colleague]) expect(await ids(reader), reader).toEqual([current.logo, current.stamp].sort());
-    expect(await ids(people.other)).toEqual([b]);
+    expect(await ids(people.third)).toEqual([c]);
+    await expectHiddenFrom({ read: readIds, target: c, seenBy: people.third, hiddenFrom: [people.other, people.colleague] });
   });
 
   it("can't be written directly by the app role, even by the Authorized Person", async () => {
