@@ -5,7 +5,7 @@ Rabaed is a B2B construction management platform for KSA (Project Module first; 
 ## Read first
 
 - `GLOSSARY.md`: the glossary. Use its terms; avoid the terms it lists under _Avoid_.
-- `docs/visibility.md`: **visibility is the top requirement.** No company may see another company's work beyond these rules. Every feature is checked against it, and its scenarios are automated tests.
+- `docs/visibility.md`: **visibility is the top requirement.** No company may see another company's work beyond these rules. Every feature is checked against it, and its scenarios are automated tests: rows 1–81 there, plus one file per Jira key in `docs/visibility/scenarios/`.
 - `docs/adr/`, `docs/data-model.md`, `docs/workflow-engine.md`, `docs/form-engine.md`.
 - `docs/tech-stack.md`: what Rabaed is built with, and why.
 - **Implementing a ticket:** `planning/parallel-sessions.md` (app-made worktree, lane ports, collision rules). **Running the Orchestrator or a Main** (epic assignment, grilling, decisions, specs): its "How the Orchestrator works" and "How a Main works"; nothing is edited in the main folder. When CI fails: `docs/agents/ci-logs.md`.

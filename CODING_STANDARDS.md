@@ -17,7 +17,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **A hidden value is hidden in every column it was copied into.** When a value is hidden, find every column the writing function copies it into, and hide each one: `create_work_item`'s `v_at` is the Draft's start time, and also `step_assignment.claimed_at`/`created_at` and `work_item_access.since` (RP-309). A table whose row policy asks only whether the caller sees the item gives every column the app role reads to every Participant who sees it. (checked: seam-2 `item-visibility-tables.test.ts`, with a reviewed allow-list)
 - **A path on a role that bypasses row-level security names its scoping.** On any path that runs on a role with `bypassrls` (Rabaed Admin's `rabaed_admin`), list every security-invoker `app.*` function it calls and show how each is scoped to the caller's Project and Participant; customer-api code runs there only under the app role. Its tests make another Project's Type, Form and Workflow first, with `apps/api/test/support/foreign-project.ts`, so a cross-Project read fails on every run. RP-645's Register Import read another Project's Type through `app.new_item_workflow_version`; both reviewers had called it scoped, and the test caught it only because another test happened to create a Type at that moment (RP-960, RP-987, RP-1016). (judgement; checked in part: the Admin app-role check, RP-987)
 - **Every channel applies the same layers:** lists, counts, search, history, notifications, file links, logs, exports. A new channel adds a row to the leak-channel table and a scenario to the matrix. (checked: unit `scripts/check-leak-channels.test.ts`, for every notification and outbox kind)
-- **A new scenario's ID comes from its ticket key** (`RP-412-1`, `RP-412-2`), never "the next number": two branches both took 51, and 57/58, and `main` once held two rows 27–31 cited by different tests (RP-397). (checked: unit `scripts/check-scenario-ids.test.ts`: unique IDs, no plain number above 81, every cited scenario exists)
+- **A new scenario's ID comes from its ticket key** (`RP-412-1`, `RP-412-2`), never "the next number": two branches both took 51, and 57/58, and `main` once held two rows 27–31 cited by different tests (RP-397). Its rows go in `docs/visibility/scenarios/RP-nnn.md`, one file per key, not in `docs/visibility.md`, which keeps rows 1–81 (RP-1097). (checked: unit `scripts/check-scenario-ids.test.ts`: unique IDs, no plain number above 81, every cited scenario exists, each row in its place (RP-1097))
 
 ## Database
 
@@ -39,6 +39,10 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Log database errors by class and code only** (checked: `rabaed/no-raw-error-logging`), following `failureOf` (outbox) and the worker's logger. Database messages can quote row values such as titles and names (RP-238).
 - **User-facing errors and logs never include another item's title, number or Company.**
 - **An error or log line names a resource, never its AWS ARN or account id:** "the secret", not its ARN (checked: `rabaed/no-aws-ids-in-errors`, on string and template literals in thrown errors, `Error(…)` or `XxxError(…)` with or without `new`, and log or console calls, not tests; a phone number such as `+9665…` is not an account id).
+
+## Infrastructure (`packages/infra`)
+
+- **Review `packages/infra` against the ADRs, like app code.** An IAM role gets only the S3 prefixes and actions its code uses. RP-1084 granted an infra role wider S3 access than its code needs, and no review compared `packages/infra` with the ADRs (RP-1104). (checked: `packages/infra/test/iam-grants.test.ts` lists every role's allowed prefixes and actions and fails on anything wider; the ADR comparison is judgement)
 
 ## UI (`packages/ui/README.md`)
 
