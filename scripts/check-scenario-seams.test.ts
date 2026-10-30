@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverageProblems, parseGaps, repoCoverageProblems } from "./check-scenario-coverage.ts";
+import { seamProblems, parseGaps, repoSeamProblems } from "./check-scenario-seams.ts";
 import type { ScenarioRow } from "./visibility-scenarios.ts";
 
 // The fixtures build IDs in pieces, so this file never cites a scenario itself.
@@ -8,23 +8,23 @@ const row = (scenario: string): ScenarioRow => ({ id: scenario, file: "docs/visi
 const api = (text: string) => ({ file: "apps/api/test/a.test.ts", text });
 const db = (text: string) => ({ file: "packages/db/test/a-rls.test.ts", text });
 
-describe("coverageProblems", () => {
+describe("seamProblems", () => {
   it("passes a scenario that a test in each seam names", () => {
-    expect(coverageProblems([row(id(9, 1))], [api(`// ${id(9, 1)}`), db(`it("${id(9, 1)}: hidden")`)], [])).toEqual([]);
+    expect(seamProblems([row(id(9, 1))], [api(`// ${id(9, 1)}`), db(`it("${id(9, 1)}: hidden")`)], [])).toEqual([]);
   });
 
   it("names the seam a scenario has no test in", () => {
-    expect(coverageProblems([row(id(9, 1)), row(id(9, 2))], [api(`${id(9, 1)} ${id(9, 2)}`), db(id(9, 2))], [])).toEqual([
-      `docs/visibility/scenarios/x.md:7: scenario ${id(9, 1)} has no db test (packages/db/test/): add one, or, only for a gap already on main, a line "${id(9, 1)} db" in docs/visibility/coverage-gaps.txt`,
+    expect(seamProblems([row(id(9, 1)), row(id(9, 2))], [api(`${id(9, 1)} ${id(9, 2)}`), db(id(9, 2))], [])).toEqual([
+      `docs/visibility/scenarios/x.md:7: scenario ${id(9, 1)} has no db test (packages/db/test/): add one, or, only for a gap already on main, a line "${id(9, 1)} db" in docs/visibility/untested-seams.txt`,
     ]);
   });
 
   it("names both seams when neither has a test", () => {
-    expect(coverageProblems([row(id(9, 1))], [], [])).toHaveLength(2);
+    expect(seamProblems([row(id(9, 1))], [], [])).toHaveLength(2);
   });
 
   it("reads a whole ID only: RP-9-1 is not named by RP-9-10", () => {
-    expect(coverageProblems([row(id(9, 1))], [api(id(9, 10)), db(id(9, 10))], [])).toHaveLength(2);
+    expect(seamProblems([row(id(9, 1))], [api(id(9, 10)), db(id(9, 10))], [])).toHaveLength(2);
   });
 
   it("counts only test files in the seam's folder", () => {
@@ -33,34 +33,34 @@ describe("coverageProblems", () => {
       { file: "packages/db/test-support/a.test.ts", text: id(9, 1) },
       { file: "apps/api/test/support/tower.ts", text: id(9, 1) },
     ];
-    expect(coverageProblems([row(id(9, 1))], elsewhere, [])).toHaveLength(2);
+    expect(seamProblems([row(id(9, 1))], elsewhere, [])).toHaveLength(2);
   });
 
   it("skips rows 1–81, which have no Jira key", () => {
-    expect(coverageProblems([row("58")], [], [])).toEqual([]);
+    expect(seamProblems([row("58")], [], [])).toEqual([]);
   });
 
   it("lets a known gap stand", () => {
     const gaps = parseGaps(`${id(9, 1)} db\n`);
-    expect(coverageProblems([row(id(9, 1))], [api(id(9, 1))], gaps)).toEqual([]);
+    expect(seamProblems([row(id(9, 1))], [api(id(9, 1))], gaps)).toEqual([]);
   });
 
   it("refuses a known gap that a test now covers, so the list only shrinks", () => {
     const gaps = parseGaps(`${id(9, 1)} db\n`);
-    expect(coverageProblems([row(id(9, 1))], [api(id(9, 1)), db(id(9, 1))], gaps)).toEqual([
-      `docs/visibility/coverage-gaps.txt:1: ${id(9, 1)} has a db test now: delete this line`,
+    expect(seamProblems([row(id(9, 1))], [api(id(9, 1)), db(id(9, 1))], gaps)).toEqual([
+      `docs/visibility/untested-seams.txt:1: ${id(9, 1)} has a db test now: delete this line`,
     ]);
   });
 
   it("refuses a known gap for a scenario that doesn't exist", () => {
-    expect(coverageProblems([], [], parseGaps(`${id(9, 1)} api`))).toEqual([
-      `docs/visibility/coverage-gaps.txt:1: ${id(9, 1)} is no scenario in docs/visibility.md or docs/visibility/scenarios/`,
+    expect(seamProblems([], [], parseGaps(`${id(9, 1)} api`))).toEqual([
+      `docs/visibility/untested-seams.txt:1: ${id(9, 1)} is no scenario in docs/visibility.md or docs/visibility/scenarios/`,
     ]);
   });
 
   it("refuses a known gap listed twice", () => {
     const gaps = parseGaps(`${id(9, 1)} db\n${id(9, 1)} db`);
-    expect(coverageProblems([row(id(9, 1))], [api(id(9, 1))], gaps)).toEqual([`docs/visibility/coverage-gaps.txt:2: ${id(9, 1)} db is listed twice`]);
+    expect(seamProblems([row(id(9, 1))], [api(id(9, 1))], gaps)).toEqual([`docs/visibility/untested-seams.txt:2: ${id(9, 1)} db is listed twice`]);
   });
 });
 
@@ -73,12 +73,12 @@ describe("parseGaps", () => {
   });
 
   it("refuses a line it can't read", () => {
-    expect(() => parseGaps(`${id(9, 1)} web`)).toThrow("docs/visibility/coverage-gaps.txt:1: not `RP-nnn-n api` or `RP-nnn-n db`");
+    expect(() => parseGaps(`${id(9, 1)} web`)).toThrow("docs/visibility/untested-seams.txt:1: not `RP-nnn-n api` or `RP-nnn-n db`");
   });
 });
 
 describe("the repository", () => {
   it("tests every RP-nnn-n scenario at both seams, or lists the gap", () => {
-    expect(repoCoverageProblems(process.cwd())).toEqual([]);
+    expect(repoSeamProblems(process.cwd())).toEqual([]);
   });
 });

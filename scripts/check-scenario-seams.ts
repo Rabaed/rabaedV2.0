@@ -8,12 +8,12 @@ import { readScenarioRows, scenariosDir, matrixFile, type ScenarioRow } from "./
 // tested at the api only, and that is how the RP-1079 leak got through (RP-1095).
 //
 // A test "covers" a scenario when its file names the scenario's ID. The gaps already on main when
-// this check came are listed in docs/visibility/coverage-gaps.txt, one "RP-nnn-n api|db" a line,
+// this check came are listed in docs/visibility/untested-seams.txt, one "RP-nnn-n api|db" a line,
 // and the list only shrinks: a new gap fails, and so does a listed gap that has its test now.
-// Rows 1–81 have no Jira key and aren't checked. Checked by check-scenario-coverage.test.ts, in
+// Rows 1–81 have no Jira key and aren't checked. Checked by check-scenario-seams.test.ts, in
 // the unit project.
 
-export const gapsFile = "docs/visibility/coverage-gaps.txt";
+export const gapsFile = "docs/visibility/untested-seams.txt";
 
 export type Seam = "api" | "db";
 const seamFolder: Record<Seam, string> = { api: "apps/api/test/", db: "packages/db/test/" };
@@ -48,8 +48,8 @@ function namedIn(citations: Citation[], seam: Seam): Set<string> {
   return named;
 }
 
-/** What is wrong with the scenarios' test coverage and with the known gaps; empty when nothing is. */
-export function coverageProblems(rows: ScenarioRow[], citations: Citation[], gaps: Gap[]): string[] {
+/** What is wrong with the scenarios' tests at both seams and with the known gaps; empty when nothing is. */
+export function seamProblems(rows: ScenarioRow[], citations: Citation[], gaps: Gap[]): string[] {
   const problems: string[] = [];
   const named = { api: namedIn(citations, "api"), db: namedIn(citations, "db") };
   const listed = new Map<string, Gap>();
@@ -78,7 +78,7 @@ export function coverageProblems(rows: ScenarioRow[], citations: Citation[], gap
 }
 
 /** The problems of the repository at `repo`. */
-export function repoCoverageProblems(repo: string): string[] {
+export function repoSeamProblems(repo: string): string[] {
   const gaps = parseGaps(readFileSync(join(repo, gapsFile), "utf8"));
-  return coverageProblems(readScenarioRows(repo), repoCitations(repo), gaps);
+  return seamProblems(readScenarioRows(repo), repoCitations(repo), gaps);
 }
