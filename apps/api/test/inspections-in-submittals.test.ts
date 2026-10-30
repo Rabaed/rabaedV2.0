@@ -5,11 +5,11 @@
 // same column and List group as a submittal at the same Stage, matched by key (RP-674); the Need My
 // Action counts, the item pages and the Inspections List itself stay as they are, and nobody reads
 // a WIR they could not read before.
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { expectHiddenFrom, LEGACY_MAR } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checklistTemplate } from "./support/checklist-template.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { buildTower, draft, ok, projectMember, submitted, take, all, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -38,6 +38,11 @@ const ids = (list: WorkItemList) => list.items.map((i) => i.id).sort();
 /** The Project's card on the Projects page: its Submittals count. */
 const cardCount = async (by: Caller): Promise<number> => (await ok(by.get("/v1/projects"), 200)).json().submittals[projectId];
 const stageCount = (list: WorkItemList, key: string) => list.stages.find((s) => s.key === key)?.count;
+const named = (by: Caller) => (by === c1Engineer ? "C1 engineer" : by === c2Engineer ? "C2 engineer" : "someone");
+/** C1's engineer reads each of `targets` first, by id, and C2's engineer none of them. */
+async function hiddenFromC2(read: (by: Caller) => Promise<readonly { id: string }[]>, targets: string[], label: string) {
+  for (const target of targets) await expectHiddenFrom({ read, target, seenBy: c1Engineer, hiddenFrom: c2Engineer, name: named, label });
+}
 
 beforeAll(async () => {
   const c1 = await api.projectCreator();
@@ -90,22 +95,23 @@ describe("Show Inspections in the Submittals tab: off, as today", () => {
     expect(project.modules).toContain("inspections");
     const list = await submittals(c1Engineer);
     expect(ids(list)).toEqual([marId, marPendingId].sort());
-    expect(list.filters.types.map((t) => t.code)).not.toContain("WIR");
+    expect(list.filters.types.map((t) => t.code)).not.toContain("WIR"); // not hidden-from: with the setting off, the filter offers no WIR to C1 either
     expect(list.stages.some((s) => s.key.includes(":"))).toBe(false);
     expect(ids(await inspections(c1Engineer))).toEqual([wirId]);
   });
 
   it("reads a made-up Stage key as no group, and a `<module>:<key>` one (RP-652's form) as a bad request", async () => {
-    expect(ids(await submittals(c1Engineer, { stage: ["nonsense"] }))).toEqual([]);
+    expect(ids(await submittals(c1Engineer, { stage: ["nonsense"] }))).toEqual([]); // not hidden-from: no Stage has that key
     expect((await c1Engineer.get(`/v1/projects/${projectId}/modules/submittals/work-items?stage=inspections:pending_approval`)).statusCode).toBe(400);
     expect(ids(await inspections(c1Engineer, { stage: ["pending_approval"] }))).toEqual([wirId]);
   });
 
   it("is set by a Project Admin only; anyone else is told 404, like a made-up Project", async () => {
-    await expectHidden(setting(c1Engineer, true));
-    await expectHidden(setting(k1Manager, true));
-    await expectHidden(setting(c2Engineer, true));
-    await expectHidden(setting(admin, true, "00000000-0000-4000-8000-000000000000"));
+    // A write by a Member who isn't its Project Admin is told 404, like a made-up Project.
+    await expectHidden(setting(c1Engineer, true)); // not hidden-from: a refused write
+    await expectHidden(setting(k1Manager, true)); // not hidden-from: a refused write
+    await expectHidden(setting(c2Engineer, true)); // not hidden-from: a refused write
+    await expectHidden(setting(admin, true, "00000000-0000-4000-8000-000000000000")); // not hidden-from: no such Project
     expect((await summary(c1Engineer)).showInspectionsInSubmittals).toBe(false);
   });
 });
@@ -138,8 +144,8 @@ describe("Show Inspections in the Submittals tab: on", () => {
     expect(ids(await submittals(c1Engineer, { type: ["WIR"] }))).toEqual([wirId]);
     expect(ids(await submittals(c1Engineer, { type: [LEGACY_MAR] }))).toEqual([marId, marPendingId].sort());
     // One group per Stage, the Submittals' own: no "Inspections ·" group, no key of another Module.
-    expect(list.stages.some((s) => s.key.includes(":") || s.name.en.includes("Inspections"))).toBe(false);
-    expect(list.stages.filter((s) => s.key === "pending_approval")).toHaveLength(1);
+    expect(list.stages.some((s) => s.key.includes(":") || s.name.en.includes("Inspections"))).toBe(false); // not hidden-from: how the groups are named
+    expect(list.stages.filter((s) => s.key === "pending_approval")).toHaveLength(1); // not hidden-from: one group per Stage key
     // Counts follow the rows, each WIR once, in its Stage.
     expect(stageCount(list, "draft")).toBe(1);
     expect(stageCount(list, "pending_approval")).toBe(2);
@@ -152,8 +158,8 @@ describe("Show Inspections in the Submittals tab: on", () => {
   it("is the same on the Kanban: a MAR and the WIR at Pending Approval sit in one Pending Approval column", async () => {
     const board = await kanban(c1Engineer);
     const cardsOf = (stageKey: string) => board.columns.find((c) => c.stageKey === stageKey)!.lanes.flatMap((l) => l.cards.map((c) => c.id));
-    expect(board.stages.some((s) => s.key.includes(":") || s.name.en.includes("Inspections"))).toBe(false);
-    expect(board.columns.filter((c) => c.stageKey === "pending_approval")).toHaveLength(1);
+    expect(board.stages.some((s) => s.key.includes(":") || s.name.en.includes("Inspections"))).toBe(false); // not hidden-from: how the columns are named
+    expect(board.columns.filter((c) => c.stageKey === "pending_approval")).toHaveLength(1); // not hidden-from: one column per Stage key
     expect(cardsOf("pending_approval").sort()).toEqual([marPendingId, wirId].sort());
     expect(cardsOf("draft")).toEqual([marId]);
     expect(board.columns.reduce((sum, c) => sum + c.shown, 0)).toBe(3);
@@ -189,24 +195,27 @@ describe("Show Inspections in the Submittals tab: on", () => {
         .sort();
     expect(await exported(c1Engineer)).toEqual(ids(await submittals(c1Engineer)));
     expect(await exported(c1Engineer)).toContain(wirId);
-    expect(await exported(c2Engineer)).toEqual([]);
+    await hiddenFromC2(async (by) => (await exported(by)).map((id) => ({ id })), [marId, marPendingId, wirId], "the export");
+    // Nor any other row: C2 covers none of the Project's items.
+    expect((await exported(c2Engineer)).length).toBe(0);
   });
 
   it("shows another Contractor none of C1's WIRs: not in the list, the Stage counts, the Kanban, the filters or the card (V3, scenario RP-652-1)", async () => {
+    const rows = (query: WorkItemQueryInput) => async (by: Caller) => (await submittals(by, query)).items;
+    await hiddenFromC2(rows({}), [marId, marPendingId, wirId], "the Submittals List");
     const list = await submittals(c2Engineer);
-    expect(list.items).toEqual([]);
     expect(list.stages.reduce((sum, s) => sum + s.count, 0)).toBe(0);
-    expect(ids(await submittals(c2Engineer, { type: ["WIR"] }))).toEqual([]);
-    expect(ids(await submittals(c2Engineer, { q: "Rebar" }))).toEqual([]);
+    await hiddenFromC2(rows({ type: ["WIR"] }), [wirId], "filtered by Type");
+    await hiddenFromC2(rows({ q: "Rebar" }), [wirId], "searched");
     // The shared Pending Approval group holds none of C1's WIRs for C2: not as a row, not in its count.
-    expect(ids(await submittals(c2Engineer, { stage: ["pending_approval"] }))).toEqual([]);
+    await hiddenFromC2(rows({ stage: ["pending_approval"] }), [marPendingId, wirId], "the Pending Approval group");
     expect(stageCount(list, "pending_approval")).toBe(0);
+    await hiddenFromC2(async (by) => (await kanban(by)).columns.flatMap((c) => c.lanes.flatMap((l) => l.cards)), [marId, marPendingId, wirId], "the Kanban");
     const board = await kanban(c2Engineer);
-    expect(board.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards))).toEqual([]);
     expect(board.columns.reduce((sum, c) => sum + c.shown, 0)).toBe(0);
     expect(await cardCount(c2Engineer)).toBe(0);
     expect((await summary(c2Engineer)).needMyAction).toBe(0);
-    await expectHidden(c2Engineer.get(`/v1/work-items/${wirId}`));
+    await hiddenFromC2(readById(`/v1/work-items/${wirId}`), [wirId], "the WIR's page");
   });
 
   it("turned off again, the Submittals List is as before", async () => {
