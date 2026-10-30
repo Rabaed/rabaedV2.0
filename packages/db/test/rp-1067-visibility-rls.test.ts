@@ -70,7 +70,7 @@ const take = (as: string, transition: string, { answers = {}, note = "", code = 
   );
 
 /** A form of one optional textarea, `key`, for a Transition's pop-up. */
-const textForm = (key: string, label: string) => ({ sections: [{ key, title: bilingual(label), fields: [{ key, type: "textarea", label: bilingual(label) }] }] });
+const textForm = (key: string, label: string) => ({ sections: [{ key: `${key}_section`, title: bilingual(label), fields: [{ key, type: "textarea", label: bilingual(label) }] }] });
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });

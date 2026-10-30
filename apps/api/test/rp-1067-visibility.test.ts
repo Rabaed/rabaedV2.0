@@ -62,7 +62,7 @@ const eventsOf = async (participantId: string) =>
   ).rows;
 
 /** A form of one optional textarea, `key`, for a Transition's pop-up. */
-const textForm = (key: string, label: string) => ({ sections: [{ key, title: bilingual(label), fields: [{ key, type: "textarea", label: bilingual(label) }] }] });
+const textForm = (key: string, label: string) => ({ sections: [{ key: `${key}_section`, title: bilingual(label), fields: [{ key, type: "textarea", label: bilingual(label) }] }] });
 
 /** Rabaed Type TYPE on the test Workflow with Code B and a Recommended Code; its Return and Send Back ask a reason, its Submit a Cover Note. */
 async function addLogType(): Promise<void> {
