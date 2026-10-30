@@ -95,10 +95,6 @@ RP-521-1 db  # As in 12: K1's Mechanical manager opens the Link from a Mechanica
 # RP-555
 RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
 
-# RP-566
-RP-566-1 api  # A Rabaed Engineer adds an outcome to a Rabaed Default Type's set (MAR's shape; the test's 
-RP-566-1 db  # A Rabaed Engineer adds an outcome to a Rabaed Default Type's set (MAR's shape; the test's 
-
 # RP-580
 RP-580-1 db  # K1 Sends a Submitted item Back to C1's Draft Step, which says "After a Send Back: Comment 
 
@@ -135,29 +131,9 @@ RP-1062-3 api  # C1's engineer posts on an item still in C1's internal review
 RP-1062-4 api  # C1's engineer, K1's engineer (K1's manager at seam 1) and the Owner's Representative post 
 RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager (seam 1), reads an item's 
 
-# RP-1064
-RP-1064-1 api  # C1 Submits a MAR and K1's engineer sends it to K1's manager; C1 opens it in the Submittal 
-RP-1064-1 db  # C1 Submits a MAR and K1's engineer sends it to K1's manager; C1 opens it in the Submittal 
-
-# RP-1067
-RP-1067-1 api  # C1 Submits a MAR with a Cover Note; K1's engineer recommends Code B internally and K1 Send
-RP-1067-1 db  # C1 Submits a MAR with a Cover Note; K1's engineer recommends Code B internally and K1 Send
-RP-1067-2 api  # As in RP-1067-1
-RP-1067-2 db  # As in RP-1067-1
-RP-1067-3 api  # As in RP-1067-1; K1's engineer wrote an Internal Note; C1's PM Returned it once with a rea
-RP-1067-3 db  # As in RP-1067-1; K1's engineer wrote an Internal Note; C1's PM Returned it once with a rea
-
-# RP-1069
-RP-1069-1 api  # The Submittal Panel's Chat tab shows C1's Submitted item's thread to K1's engineer: messag
-RP-1069-1 db  # The Submittal Panel's Chat tab shows C1's Submitted item's thread to K1's engineer: messag
-
 # RP-1072
 RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
 
 # RP-1079
 RP-1079-1 api  # K1's PM adds a site photo to the Screen of its Recommendation to the Owner (a reply photos
 RP-1079-2 api  # The Owner Sends it Back; K1 adds another photo and Recommends C again; the Owner confirms 
-
-# RP-1093
-RP-1093-1 api  # As RP-1064-1; C1 opens the item in the Submittal Panel at Wide or Full, then below 880px
-RP-1093-1 db  # As RP-1064-1; C1 opens the item in the Submittal Panel at Wide or Full, then below 880px
