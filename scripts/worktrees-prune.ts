@@ -7,7 +7,8 @@
 //      the worktree is removed;
 //   2. every other local branch merged into origin/main and checked out nowhere
 //      (merge-base --is-ancestor origin/main, then `git branch -D`), never main;
-//   3. the orphaned compose projects lanes:prune finds.
+//   3. the orphaned compose projects lanes:prune finds;
+//   4. the rabaed-stories-* volumes of the worktrees it removes and of those git no longer lists (RP-1120).
 // It never touches the main checkout or the current worktree, nor one whose Claude
 // session is open: a "claude session" lock, or the desktop app's own record of the
 // worktree's path (desktop-sessions.ts, RP-608: the app does not lock its worktrees,
@@ -30,16 +31,22 @@
 // keeps a stale project whose existing folder a session works in, and prints what it kept, with
 // why, last, so a `| tail` keeps the reasons.
 //
+// RP-1120: it also removes the rabaed-stories-* volumes `pnpm test:stories:linux` keeps
+// (stories-volumes.ts): those of each worktree it removes, and the orphaned sets, whose hash
+// matches no worktree git lists with its folder present. A set whose worktree still exists, the
+// main checkout's included, stays; a volume a container uses is skipped and named, never forced.
+//
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
-//   pnpm worktrees:prune [--stale-days <n>] [--yes]     --yes skips the confirmation
+//   pnpm worktrees:prune [--stale-days <n>] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists
 import { existsSync } from "node:fs";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { keptLast, shallowRefusal } from "./prune-guards.ts";
+import { chooseStoriesVolumes, describeCount, inUseLine, listStoriesVolumes, listVolumeMounts, removeStoriesVolumesNow, storiesSets } from "./stories-volumes.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
@@ -63,14 +70,16 @@ import {
 } from "./worktrees.ts";
 
 const TARGET = "origin/main";
-const usage = "Usage: pnpm worktrees:prune [--stale-days <n>] [--yes]";
+const usage = "Usage: pnpm worktrees:prune [--stale-days <n>] [--yes] [--dry-run]";
 const args = process.argv.slice(2);
 let yes = false;
+let dryRun = false;
 let staleDays = DEFAULT_STALE_DAYS;
 for (let i = 0; i < args.length; i++) {
   const a = args[i]!;
   const days = staleDaysAt(args, i);
   if (a === "--yes") yes = true;
+  else if (a === "--dry-run") dryRun = true;
   else if (days !== undefined) {
     staleDays = days;
     i++;
@@ -122,9 +131,26 @@ const logged: string[] = [];
 const printKept = () => {
   for (const line of keptLast(kept, logged)) console.log(line);
 };
+// RP-1120: the stories volumes of the worktrees it removes and of those git no longer lists; the
+// worktrees it removes do not count as existing here, and are checked again just before.
+const toRemove = chosen.remove.map((w) => w.path);
+const storiesVolumes = docker && listStoriesVolumes();
+const storiesMounts = storiesVolumes && listVolumeMounts();
+const stories =
+  storiesVolumes && storiesMounts
+    ? chooseStoriesVolumes({
+        volumes: storiesVolumes,
+        existing: worktrees.map((w) => w.path).filter((p) => existsSync(p) && !toRemove.some((r) => samePath(r, p))),
+        mountedBy: storiesMounts,
+        orphans: true,
+        gone: toRemove,
+      })
+    : { remove: [], inUse: [] };
+kept.push(...stories.inUse.map(inUseLine));
 printStale(listed, staleDays);
-if (!docker) console.log("Docker is not running: compose projects are not checked (run `pnpm lanes:prune` later).");
-if (chosen.remove.length + chosen.branches.length + chosen.projects.length === 0) {
+if (!docker) console.log("Docker is not running: compose projects and stories volumes are not checked (run `pnpm lanes:prune` later).");
+else if (!storiesMounts) console.log("Docker did not list the stories volumes: they are not checked (run `pnpm worktrees:prune` later).");
+if (chosen.remove.length + chosen.branches.length + chosen.projects.length + stories.remove.length === 0) {
   console.log("Nothing to prune.");
   printKept();
   process.exit(0);
@@ -142,6 +168,14 @@ if (chosen.remove.length > 0) {
 if (chosen.branches.length > 0) {
   console.log(`Other local branches merged into ${TARGET}, to delete:`);
   for (const b of chosen.branches) console.log(`  ${b}`);
+}
+if (stories.remove.length > 0) {
+  console.log(`Stories volumes (test:stories:linux's node_modules) of worktrees that are gone or removed above, to remove: ${describeCount(stories.remove)}:`);
+  for (const set of storiesSets(stories.remove)) console.log(`  rabaed-stories-${set.hash}-* (${set.volumes.length})`);
+}
+if (dryRun) {
+  console.log("Dry run: nothing removed.");
+  process.exit(0);
 }
 
 await confirmOrExit("Remove them? Their databases are lost.", { yes, verb: "remove", done: "removed" });
@@ -184,6 +218,18 @@ removeProjectsNow({
     }),
   log: (line) => logged.push(line),
 });
+// RP-1120: only the stories volumes listed above, judged again on the worktrees git lists now
+// (one kept since the prompt keeps its set) and the containers using them now.
+if (stories.remove.length > 0) {
+  const existingNow = listWorktrees(mainRoot)
+    .map((w) => w.path)
+    .filter((p) => existsSync(p));
+  const result = removeStoriesVolumesNow({ orphans: true, only: new Set(stories.remove) }, existingNow);
+  if (result.removed.length > 0) console.log(`Removed stories volumes: ${describeCount(result.removed)}.`);
+  logged.push(...result.kept);
+  for (const e of result.errors) console.error(e);
+  failed += result.errors.length;
+}
 for (const b of chosen.branches) {
   attempt(`branch ${b}`, () => {
     // removeLinkedWorktree may have deleted it already (a worktree-agent-* branch).
