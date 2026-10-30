@@ -12,7 +12,7 @@
 // Just before each removal it checks again (RP-1073): a worktree's .env naming it now, a container of
 // it started from an existing folder, Docker not answering, or a connection to its Postgres
 // keeps it. With --lane N such a keep at listing exits 1.
-// RP-1101: lane 7 (the live UAT stack) is never a candidate and `--lane 7` is refused; a bare
+// RP-1101: lane 7 (Main 7's harness data) is never a candidate and `--lane 7` is refused; a bare
 // `--merged --yes` (no --lane N) is refused (RP-1007); --merged refuses on a shallow clone. What
 // was kept is printed last, with why, so a `| tail` keeps the reasons.
 //

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Holders } from "./claude-sessions.ts";
-import type { Container, StaleProject } from "./lanes.ts";
+import { protectedLaneReason, type Container, type StaleProject } from "./lanes.ts";
 import { isShallowRepo } from "./worktrees.ts";
 import {
   bareMergedYesRefusal,
@@ -13,7 +13,6 @@ import {
   laneRefusal,
   listedChanges,
   mergedLanes,
-  protectedLaneReason,
   sessionHeldProject,
   shallowRefusal,
   splitProtected,
@@ -22,14 +21,7 @@ import {
 const container = (name: string, project: string, workingDir: string, state = "exited"): Container => ({ name, state, project, workingDir, ports: [] });
 const stale = (project: string, reason = "not running"): StaleProject => ({ project, reason, containers: [`${project}-db-1`], volumes: [`${project}_db`] });
 
-describe("lane 7 (the live UAT stack)", () => {
-  it("is protected; other lanes, even 70-something names, are not", () => {
-    expect(protectedLaneReason("rabaed-lane7")).toContain("live UAT stack");
-    expect(protectedLaneReason("rabaed-lane71")).toBeUndefined();
-    expect(protectedLaneReason("rabaed-lane42")).toBeUndefined();
-    expect(protectedLaneReason(undefined)).toBeUndefined();
-  });
-
+describe("lane 7 (Main 7's harness data; lanes.test.ts tests which lane is protected)", () => {
   it("is split out of the candidates and kept with its reason and folder", () => {
     const containers = [container("rabaed-lane7-db-1", "rabaed-lane7", "G:/uat")];
     const { prune, kept } = splitProtected([stale("rabaed-lane7"), stale("rabaed-lane42")], containers);

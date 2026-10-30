@@ -35,6 +35,8 @@
 // A lane another worktree's .env names is held, even with its containers stopped or gone (RP-1007), and the refusal
 // names that worktree; --free skips it. --force takes it over only from a worktree that is merged into origin/main,
 // clean and held by no Claude session, and names it (its .env is left as it is).
+// Lane 7 holds Main 7's UAT harness data (RP-1101): --free never offers it and --force never takes it over
+// (lanes.ts protectedLaneReason); ask Main 7.
 // One lane:env runs at a time per clone (a lock in the common git folder, lanes-lock.ts), from reading the
 // lanes until .env is written, so two runs at once never choose the same lane.
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;

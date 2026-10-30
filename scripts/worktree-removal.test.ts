@@ -36,7 +36,7 @@ describe("removalRefusal", () => {
   it("never a folder a Claude session works in, nor lane 7's, even with --force", () => {
     const held = 'a running Claude session is in it: session "lane 52" (pid 52)';
     expect(removalRefusal(target({ held }), { force: true, platform: "win32" })).toContain(held);
-    expect(removalRefusal(target({ project: "rabaed-lane7" }), { force: true, platform: "win32" })).toContain("live UAT stack");
+    expect(removalRefusal(target({ project: "rabaed-lane7" }), { force: true, platform: "win32" })).toContain("Main 7's UAT harness data");
   });
 
   it("lists uncommitted and untracked files, and unpushed commits; --force removes it anyway", () => {

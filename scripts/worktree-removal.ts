@@ -1,6 +1,7 @@
+import { protectedLaneReason } from "./lanes.ts";
 import { isAppWorktree } from "./worktrees-pruning.ts";
 import { samePath } from "./paths.ts";
-import { listedChanges, protectedLaneReason } from "./prune-guards.ts";
+import { listedChanges } from "./prune-guards.ts";
 import { rdLongPath, type Worktree } from "./worktrees.ts";
 
 // `pnpm worktree:remove <path>` (RP-1101). On 2026-10-29 Main 4 three times had to finish by hand a
@@ -35,7 +36,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * Why the folder is not removed, or undefined when it goes. Never the main checkout, the current
- * worktree, one a Claude session works in, or lane 7's (the live UAT stack), even with force; a
+ * worktree, one a Claude session works in, or lane 7's (Main 7's harness data), even with force; a
  * folder git does not list only under .claude/worktrees/; uncommitted or untracked files (listed)
  * and unpushed commits only with force.
  */
@@ -45,8 +46,8 @@ export function removalRefusal(t: RemoveTarget, { force, platform }: { force: bo
   if (samePath(t.path, t.mainRoot, platform)) return refuse("the main checkout");
   if (samePath(t.path, t.currentRoot, platform)) return refuse("the current worktree");
   if (t.held !== undefined) return refuse(`held: ${t.held}`);
-  const uat = protectedLaneReason(t.project);
-  if (uat !== undefined) return refuse(`lane 7's: ${uat}`);
+  const harness = protectedLaneReason(t.project);
+  if (harness !== undefined) return refuse(`lane 7's: ${harness}`);
   if (t.registered === undefined && !isAppWorktree(t.path, t.mainRoot, platform)) return refuse("not a worktree of this clone (and not under .claude/worktrees/)");
   if (force) return undefined;
   const again = "; `--force` removes it anyway";
