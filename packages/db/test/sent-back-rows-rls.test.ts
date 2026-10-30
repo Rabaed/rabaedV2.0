@@ -398,34 +398,53 @@ describe("a Link C1 adds and removes again while it holds the Sent Back item", (
 });
 
 describe("an item the caller can't see, through app.item_row_seen (RP-309 review)", () => {
-  it("answers false whatever is asked, so it tells neither that the item exists nor how often it arrived, nor that it is closed", async () => {
-    const hidden = await draft("H"); // C1's own: K1 can't see it (V1).
-    const shared = await draft("S");
-    await submit(shared); // The stranger is not on the Project.
-    // Someone who sees each item gets true for one of these, so the false below is the caller's (RP-1095).
-    const seenFor = async (as: string, id: string) => {
-      const answers = [];
-      for (const arrival of [-1, 0, 1, 2]) {
-        for (const removed of [false, true]) {
-          answers.push((await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`))[0]!.seen);
-        }
-      }
-      return answers;
-    };
-    expect(await seenFor(c1.member, hidden)).toContain(true);
-    expect(await seenFor(k1.member, shared)).toContain(true);
-    for (const [as, id] of [
-      [k1.member, hidden],
-      [stranger.member, shared],
-      [stranger.ap, shared],
-    ] as const) {
-      for (const arrival of [-1, 0, 1, 2]) {
-        for (const removed of [false, true]) {
-          expect(
-            await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`),
-            `${arrival} ${removed}`,
-          ).toEqual([{ seen: false }]);
-        }
+  let hidden = ""; // C1's own Draft, held by C1: K1 can't see it (V1). It has never arrived anywhere (arrivals 0).
+  let shared = ""; // Submitted once, so held by K1 (arrivals 1). The stranger is not on the Project.
+  const seen = async (as: string, id: string, arrival: number, removed: boolean) =>
+    (await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`))[0]!.seen;
+  /** The item `id` when `as` gets true for this exact (arrival, removed), as a row by id; none when false. */
+  const rowSeen = (id: string, arrival: number, removed: boolean) => async (as: string) => ((await seen(as, id, arrival, removed)) ? [{ id }] : []);
+
+  beforeAll(async () => {
+    hidden = await draft("H");
+    shared = await draft("S");
+    await submit(shared);
+  });
+
+  // Each input the callers who can't see the item are asked is one a Member who sees it gets true for, so
+  // their false is the caller's (RP-1095): the holder reads a row not removed, whatever its arrival;
+  // another viewer reads a row of an earlier arrival, removed since or not.
+  type Asked = { what: string; item: () => string; seer: () => string; outsiders: () => string[]; arrival: number; removed: boolean };
+  const onHidden = (arrival: number): Asked => ({ what: "C1's Draft, to its holder C1", item: () => hidden, seer: () => c1.member, outsiders: () => [k1.member], arrival, removed: false });
+  const onShared = (arrival: number, removed: boolean, holder: boolean): Asked => ({
+    what: holder ? "the shared item, to its holder K1" : "the shared item, to C1, of an earlier arrival",
+    item: () => shared,
+    seer: () => (holder ? k1.member : c1.member),
+    outsiders: () => [stranger.member, stranger.ap],
+    arrival,
+    removed,
+  });
+  const asked: Asked[] = [
+    ...[-1, 0, 1, 2].map((arrival) => onHidden(arrival)),
+    ...[-1, 0, 1, 2].map((arrival) => onShared(arrival, false, true)),
+    ...[-1, 0].map((arrival) => onShared(arrival, true, false)),
+  ];
+  for (const { what, item, seer, outsiders, arrival, removed } of asked) {
+    it(`answers false to a caller who can't see the item, where a viewer gets true: ${what}, arrival ${arrival}, removed ${removed}`, async () => {
+      await expectHiddenFrom({ read: rowSeen(item(), arrival, removed), target: item(), seenBy: seer(), hiddenFrom: outsiders(), label: `${what} (${arrival}, ${removed})` });
+    });
+  }
+
+  // Not a visibility proof: for these inputs nobody gets true, the Members who see the item included, so the
+  // caller's false tells them nothing either: not a row the holder took away, nor one of the current arrival.
+  it("answers false to everyone, viewers included, for a removed row of its holder's, or one of the current arrival or later", async () => {
+    const none: [string, number, boolean][] = [
+      ...[-1, 0, 1, 2].map((arrival) => [hidden, arrival, true] as [string, number, boolean]),
+      ...[1, 2].map((arrival) => [shared, arrival, true] as [string, number, boolean]),
+    ];
+    for (const [id, arrival, removed] of none) {
+      for (const as of [c1.member, c1Pm, k1.member, ow.member, stranger.member, stranger.ap]) {
+        expect(await seen(as, id, arrival, removed), `${as} ${arrival} ${removed}`).toBe(false);
       }
     }
   });
