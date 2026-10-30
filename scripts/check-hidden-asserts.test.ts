@@ -42,7 +42,7 @@ describe("hiddenAssertProblems", () => {
     const baseline = parseBaseline(`${db} empty 1\n`);
     expect(hiddenAssertProblems(files({ [db]: "expect(x).toEqual([]);\nexpect(y).toEqual([]);", [api]: "expect(n).toHaveLength(2);" }), baseline)).toEqual([
       `${db}: 2 "hidden" asserts that an empty read passes, 1 allowed: prove the row first with expectHiddenFrom (@rabaed/db/test-support), or mark a line that is no hidden-from assert \`// not hidden-from: <why>\` (RP-1095)`,
-      `${api}: 1 compare by text or count, 0 allowed: compare by id (RP-1095)`,
+      `${api}: 1 compare by text or count, 0 allowed: compare by the row's uuid (RP-1095)`,
     ]);
   });
 

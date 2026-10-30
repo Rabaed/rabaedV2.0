@@ -25,14 +25,14 @@ const describeKind: Record<Kind, string> = {
 };
 const fixKind: Record<Kind, string> = {
   empty: "prove the row first with expectHiddenFrom (@rabaed/db/test-support), or mark a line that is no hidden-from assert `// not hidden-from: <why>`",
-  text: "compare by id",
+  text: "compare by the row's uuid",
 };
 
 const patterns: Record<Kind, RegExp> = {
   empty: /\.toEqual\(\[\]\)|\.toHaveLength\(0\)|\.not\.toContain\(|\.toBeUndefined\(\)|\bexpectHidden\(/g,
   text: /\blegalName\b|\bcompanyName\.en\b|\.name\.en\b|\.toHaveLength\([1-9]\d*\)/g,
 };
-const marker = /\/\/\s*not hidden-from:/;
+const skipLine = /\/\/\s*not hidden-from:/;
 
 export type Counts = Record<Kind, number>;
 
@@ -40,7 +40,7 @@ export type Counts = Record<Kind, number>;
 export function countAsserts(text: string): Counts {
   const counts: Counts = { empty: 0, text: 0 };
   for (const line of text.split("\n")) {
-    if (marker.test(line)) continue;
+    if (skipLine.test(line)) continue;
     for (const kind of kinds) counts[kind] += [...line.matchAll(patterns[kind])].length;
   }
   return counts;

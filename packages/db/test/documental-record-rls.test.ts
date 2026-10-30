@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { buildSeamTwoTower, c2Draft, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, expectHiddenFrom, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -133,9 +133,12 @@ describe("scenario RP-1083-2: app.documental_record_file", () => {
   });
 
   it("gives nothing for an item the Member can't see, the same as for a made-up id", async () => {
+    // Each record is read first by a Member who sees its item, by storage key, then not by the other (RP-1095).
+    const idOf = (r: { storage_key: string }) => r.storage_key;
+    await expectHiddenFrom({ read: (as: string) => recordFile(as, itemId), target: storageKey, seenBy: seer, hiddenFrom: other, idOf, label: "the seer's item" });
+    await expectHiddenFrom({ read: (as: string) => recordFile(as, othersItemId), target: othersStorageKey, seenBy: other, hiddenFrom: seer, idOf, label: "C2's item" });
     expect(await recordFile(other, itemId)).toEqual([]);
     expect(await recordFile(seer, randomUUID())).toEqual([]);
-    // Positive controls: the refused Member gets the record of an item they see, and the seer gets nothing of C2's Draft.
     expect(await recordFile(other, othersItemId)).toEqual([{ storage_key: othersStorageKey, file_name: expect.stringMatching(/\.pdf$/) }]);
     expect(await recordFile(seer, othersItemId)).toEqual([]);
   });
