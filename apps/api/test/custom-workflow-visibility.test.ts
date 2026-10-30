@@ -52,14 +52,14 @@ const names = new Map<Caller, string>();
 const named = (by: Caller) => names.get(by) ?? "someone";
 
 type HistoryEvent = WorkItemHistory["events"][number];
-/** The item's history as `by` reads it, or [] for the plain 404; an event is known by its time, since `seq` counts only what the reader sees. */
+/** The item's history as `by` reads it, or [] for the plain 404; an event is known by its time, type and audience, since `seq` counts only what the reader sees. */
 const history = async (by: Caller): Promise<HistoryEvent[]> => (await readById<WorkItemHistory>(`/v1/work-items/${item}/history`)(by)).flatMap((h) => h.events);
-const eventAt = (event: HistoryEvent) => new Date(event.at).toISOString();
-/** The time of the item's last event, as the migrator reads it. */
+const eventAt = (event: HistoryEvent) => `${new Date(event.at).toISOString()} ${event.type} ${event.audience}`;
+/** The key (time, type, audience) of the item's last Transition, as the migrator reads it; an `assigned` event shares its time. */
 const lastEventAt = async () =>
   (
-    await sql<{ at: Date }>`select created_at as at from work_item_event where work_item_id = ${item}::uuid order by seq desc limit 1`.execute(migrator)
-  ).rows[0]!.at.toISOString();
+    await sql<{ at: Date; type: string; audience: string }>`select created_at as at, type, audience from work_item_event where work_item_id = ${item}::uuid and type = 'transition' order by seq desc limit 1`.execute(migrator)
+  ).rows.map((e) => `${e.at.toISOString()} ${e.type} ${e.audience}`)[0]!;
 
 beforeAll(async () => {
   await addSendBackType(migrator, TYPE, bilingual("Custom Workflow (RP-1095)"), schema);

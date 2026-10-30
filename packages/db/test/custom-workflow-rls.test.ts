@@ -23,12 +23,14 @@ let item = "";
 
 /** The ids of the item rows `as` reads. */
 const items = (as: string) => tower.call<{ id: string }>(as, sql`select id from work_item where id = ${item}::uuid`);
-/** Item `item`'s history as `as` reads it; its seq is the reader's own count, so an event is known by its time. */
+/** Item `item`'s history as `as` reads it; its seq is the reader's own count, so an event is known by its key. */
 const history = (as: string) =>
   tower.call<{ created_at: Date; type: string; audience: string }>(as, sql`select created_at, type, audience from app.work_item_history(${item}::uuid)`);
-/** The time of the item's last event, as the migrator reads it: its id in `history`. */
+/** An event's key: its time, type and audience, so two events in one millisecond are told apart. */
+const eventKey = (e: { created_at: Date; type: string; audience: string }) => `${e.created_at.toISOString()} ${e.type} ${e.audience}`;
+/** The key of the item's last Transition, as the migrator reads it: its id in `history` (an `assigned` event shares its time). */
 const lastSeq = async () =>
-  ((await migrator.query<{ at: Date }>("select created_at as at from work_item_event where work_item_id = $1 order by seq desc limit 1", [item])).rows[0]!.at).toISOString();
+  eventKey((await migrator.query<{ created_at: Date; type: string; audience: string }>("select created_at, type, audience from work_item_event where work_item_id = $1 and type = 'transition' order by seq desc limit 1", [item])).rows[0]!);
 
 const name: Record<string, string> = {};
 const named = (member: string) => name[member] ?? member;
@@ -120,7 +122,7 @@ describe("scenario RP-1095-1: a Project's own Workflow", () => {
       target: submit,
       seenBy: [c1.members.project_manager, k1.members.engineer],
       hiddenFrom: c2.members.engineer,
-      idOf: (row) => row.created_at.toISOString(),
+      idOf: eventKey,
       name: named,
       label: "C1's Submit",
     });
@@ -136,11 +138,11 @@ describe("scenario RP-1095-1: a Project's own Workflow", () => {
       target: sent,
       seenBy: [k1.members.manager, k1.members.engineer],
       hiddenFrom: [c1.members.project_manager, c1.members.engineer],
-      idOf: (row) => row.created_at.toISOString(),
+      idOf: eventKey,
       name: named,
       label: "K1's send to its Manager",
     });
-    const asK1 = (await history(k1.members.manager)).find((row) => row.created_at.toISOString() === sent)!;
+    const asK1 = (await history(k1.members.manager)).find((row) => eventKey(row) === sent)!;
     expect(asK1).toMatchObject({ type: "transition", audience: "internal" });
   });
 });
