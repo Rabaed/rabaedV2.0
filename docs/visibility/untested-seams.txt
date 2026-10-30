@@ -104,16 +104,9 @@ RP-596-2 db  # Any Member of any Project reads the eight Rabaed Default Workflow
 RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
 RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con
 
-# RP-626
-RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
-
 # RP-1062
 RP-1062-1 api  # C1 Submits a WIR (a MAR at seam 1) to K1 and its Members post in its Chat; C2 Submits one 
 RP-1062-2 api  # K1's manager covers Building B only (seam 2), or Mechanical only (seam 1); C1's Submitted 
 RP-1062-3 api  # C1's engineer posts on an item still in C1's internal review
 RP-1062-4 api  # C1's engineer, K1's engineer (K1's manager at seam 1) and the Owner's Representative post 
 RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager (seam 1), reads an item's 
-
-# RP-1079
-RP-1079-1 api  # K1's PM adds a site photo to the Screen of its Recommendation to the Owner (a reply photos
-RP-1079-2 api  # The Owner Sends it Back; K1 adds another photo and Recommends C again; the Owner confirms 
