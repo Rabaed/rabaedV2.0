@@ -94,7 +94,7 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
         <div className="min-w-0 flex-1 leading-tight">
           <p className={cn(attachmentNameClass, "text-[13px] font-semibold")}>{file.name}</p>
           <p className="truncate text-[11.5px] text-on-inverse/70">
-            <bdi dir="ltr">{labels.pageOf(n(index + 1), n(files.length))}</bdi> {labels.ofAttachments(files.length)} · {file.size}
+            <bdi dir="ltr">{labels.documentOf(n(index + 1), n(files.length))}</bdi> {labels.ofAttachments(files.length)} · {file.size}
           </p>
         </div>
         {pages !== null && (

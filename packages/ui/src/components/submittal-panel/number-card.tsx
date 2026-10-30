@@ -42,7 +42,8 @@ export function SubmittalPanelNumberCard({ segments, labels, className }: Submit
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLSpanElement>(null);
   const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const stay = () => clearTimeout(leaving.current);
+  // A close the pointer leaving had set off is called off.
+  const cancelClose = () => clearTimeout(leaving.current);
   useEffect(() => () => clearTimeout(leaving.current), []);
   // Esc closes the open card first, wherever the focus is (a hover opens it with the focus on
   // the panel): taken before the panel's own listener, which then sees it taken and stays open.
@@ -59,12 +60,12 @@ export function SubmittalPanelNumberCard({ segments, labels, className }: Submit
   if (!card) return null;
 
   const show = () => {
-    stay();
+    cancelClose();
     setOpen(true);
   };
   // The pointer leaving closes it, unless the keyboard's focus is still on the ⓘ.
   const hideSoon = () => {
-    stay();
+    cancelClose();
     if (wrapper.current?.contains(document.activeElement)) return;
     leaving.current = setTimeout(() => setOpen(false), leaveDelay);
   };

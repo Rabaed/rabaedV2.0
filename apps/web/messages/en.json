@@ -3088,7 +3088,8 @@
     "loading": "Opening the Document…",
     "unavailable": "This Document couldn't be opened.",
     "tryAgain": "Try again",
-    "noPreview": "This type of Document can't be previewed. Download it to open it."
+    "noPreview": "This type of Document can't be previewed. Download it to open it.",
+    "documentOf": "{n} / {total}"
   },
   "submittalPanel": {
     "position": "{n} / {total}",

@@ -28,7 +28,9 @@ export type SubmittalPanelAttachmentsLabels = AttachmentViewLabels & {
   pageCount: (n: string, count: number) => string;
   /** "1 / 12": the page shown, left to right in Arabic too. */
   pageOf: (page: string, pages: string) => string;
-  /** "attachments", after Open large's "1 / 3" (the Document shown among the section's `count`). */
+  /** "2 / 4": Open large's Document among the section's, left to right in Arabic too. */
+  documentOf: (n: string, total: string) => string;
+  /** "Documents", after Open large's "2 / 4" (`documentOf`; the section has `count`). */
   ofAttachments: (count: number) => string;
   /** The Document switcher's name in Open large. */
   files: string;

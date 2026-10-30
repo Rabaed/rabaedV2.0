@@ -66,6 +66,7 @@ export function useSubmittalPanelAttachments({ item, locale, refreshKey }: { ite
     kind: { pdf: t("pdf"), image: t("image"), other: t("other") },
     pageCount: (n, pages) => t("pageCount", { count: pages, n }),
     pageOf: (page, pages) => t("pageOf", { page, pages }),
+    documentOf: (n, total) => t("documentOf", { n, total }),
     ofAttachments: (total) => t("ofAttachments", { count: total }),
     page: (n) => t("page", { n }),
     pages: t("pages"),

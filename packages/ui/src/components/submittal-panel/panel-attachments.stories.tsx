@@ -56,6 +56,7 @@ const labels = (locale: Locale): SubmittalPanelAttachmentsLabels => ({
   kind: { pdf: copy.pdf[locale], image: copy.image[locale], other: copy.other[locale] },
   pageCount: (n) => (locale === "ar" ? `${n} صفحات` : `${n} pages`),
   pageOf: (page, pages) => `${page} / ${pages}`,
+  documentOf: (n, total) => `${n} / ${total}`,
   ofAttachments: () => (locale === "ar" ? "مرفقات" : "attachments"),
   page: (n) => (locale === "ar" ? `صفحة ${n}` : `Page ${n}`),
   files: copy.files[locale],
