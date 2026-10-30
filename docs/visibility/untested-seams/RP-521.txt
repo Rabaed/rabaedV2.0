@@ -1,0 +1,1 @@
+RP-521-1 db  # As in 12: K1's Mechanical manager opens the Link from a Mechanical MAR to C1's Electrical

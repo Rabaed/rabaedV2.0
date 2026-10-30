@@ -1,0 +1,4 @@
+empty Cancel > is neither offered nor taken once the item has been Submitted, even back at the raiser's Steps :: expect(await takeable(c1Pm, id)).not.toContain("cancel_review");
+empty scenario RP-433-1: K1's engineer recommends Code A to their manager > is refused alike where the Transition doesn't offer it, with nothing written :: expect(await recommendable(k1.member, id, "send_back")).toEqual([]);
+empty scenario RP-433-1: K1's engineer recommends Code A to their manager > is refused alike where the Transition doesn't offer it, with nothing written :: expect(await recommendable(k1Manager, id, "send_to_manager")).toEqual([]);
+empty scenario RP-433-1: K1's engineer recommends Code A to their manager > is refused alike where the Transition doesn't offer it, with nothing written :: expect(await recommendable(c1Pm, id, "send_to_manager")).toEqual([]);

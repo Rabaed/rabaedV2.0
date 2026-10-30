@@ -1,0 +1,9 @@
+empty The Approved Supplier List (RP-592-1) > is changed only by a Project Admin: anyone else gets a 404 that names nothing :: await expectHidden(addSupplier(caller, trade.electrical, "Sneaky"), `${who} adds`);
+empty The Approved Supplier List (RP-592-1) > is changed only by a Project Admin: anyone else gets a 404 that names nothing :: for (const id of [najd, randomUUID()]) await expectHidden(withdraw(caller, id), `${who} withdraws ${id}`);
+empty The Approved Supplier List (RP-592-1) > is changed only by a Project Admin: anyone else gets a 404 that names nothing :: await expectHidden(host.caller.post("/v1/approved-suppliers/not-an-id/withdraw", {}));
+empty The Approved Supplier List (RP-592-1) > of another Project is never listed or reachable :: expect((await listSuppliers(caller)).map((s) => s.id)).not.toContain(otherSupplier);
+empty The Approved Supplier List (RP-592-1) > of another Project is never listed or reachable :: await expectHidden(caller.get(`/v1/projects/${projectB}/approved-suppliers`));
+empty The Approved Supplier List (RP-592-1) > of another Project is never listed or reachable :: await expectHidden(withdraw(host.caller, otherSupplier));
+empty The Approved Supplier List (RP-592-1) > of another Project is never listed or reachable :: await expectHidden(consultant.caller.get(`/v1/projects/${projectId}/approved-suppliers`));
+empty The Approved Supplier List (RP-592-1) > of another Project is never listed or reachable :: await expectHidden(other.caller.get(`/v1/projects/${projectId}/approved-suppliers`));
+empty The Approved Supplier List (RP-592-1) > of another Project is never listed or reachable :: await expectHidden(host.caller.get(`/v1/projects/${randomUUID()}/approved-suppliers`));

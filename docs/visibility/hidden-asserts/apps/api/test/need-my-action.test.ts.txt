@@ -1,0 +1,18 @@
+empty Need My Action > lists my own Drafts but never counts them, and never lists a colleague's :: expect(ids(mine)).not.toContain(colleaguesDraft);
+empty Need My Action > lists my own Drafts but never counts them, and never lists a colleague's :: expect(ids(mine)).not.toContain(inReview);
+empty Need My Action > lists my own Drafts but never counts them, and never lists a colleague's :: expect(ids(mine)).not.toContain(pooled);
+empty Need My Action > leaves the other pool members' Need My Action and counts when one of them picks it up (scenario 70) :: expect(ids(await list(k1B))).toEqual([]);
+empty Need My Action > counts one per Revision chain, as the toggle lists it: never a Revision that isn't the latest I see :: expect(rows).not.toContain(earlier);
+empty Need My Action > combines with the other filters :: expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]);
+empty Need My Action > combines with the other filters :: expect(ids(await list(c1Pm, { with: ["not_picked_up"] }))).toEqual([]);
+text a closed Project > has an empty Need My Action and a count of 0 :: expect(ids(await list(engineer, {}, closing))).toHaveLength(1);
+empty a closed Project > has an empty Need My Action and a count of 0 :: expect(ids(await list(pm, {}, closing))).toEqual([]);
+empty a closed Project > has an empty Need My Action and a count of 0 :: expect(ids(await list(engineer, {}, closing))).toEqual([]);
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: await expectHidden(c1Engineer.get(path("site_reports")));
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: await expectHidden(c1Engineer.get(path("site_reports", "/kanban")));
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: await expectHidden(c1Engineer.get(path("rfis")));
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: await expectHidden(c1Engineer.get(`/v1/projects/${projectId}/work-items?module=site_reports`));
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: expect(reports.items).toEqual([]);
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: expect((await ok(c1Engineer.get(path("site_reports", "/kanban")), 200)).json().columns.flatMap((c: { lanes: unknown[] }) => c.lanes)).toEqual([]);
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: expect(inspections.items).toEqual([]);
+empty Module tabs > each lead to their Module's List and Kanban, of that Module's Types only :: await expectHidden((await api.authorizedPerson()).caller.get(path("site_reports")));

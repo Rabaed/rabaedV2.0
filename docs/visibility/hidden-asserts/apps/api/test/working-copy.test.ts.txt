@@ -1,0 +1,14 @@
+empty (top level) :: await expectHidden(res, `working copy of ${id}`);
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: company: { legalName: { en: string } };
+text (top level) :: c1Name = participants.find((p) => p.isOwnCompany)!.company.legalName.en;
+text scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy while K1 reviews the MAR > is printed once on request: both ask, one job, then both get the same PDF through a short-lived link :: expect(await jobs(id)).toHaveLength(1);
+text scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy while K1 reviews the MAR > is printed once on request: both ask, one job, then both get the same PDF through a short-lived link :: expect(await jobs(id)).toHaveLength(1);
+empty scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy while K1 reviews the MAR > names no person and carries no Internal Note, Verification Code or Signature, and is not sealed :: for (const hidden of [...PEOPLE, INTERNAL_NOTE, "Verification", "Issued electronically"]) expect(text, hidden).not.toContain(squeeze(hidden));
+empty scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy while K1 reviews the MAR > is printed again when what it shows changes: the Project's new watermark :: expect(now).not.toContain("NotFinal");
+empty a Working Copy follows the item: a move makes a new one, never the old file > is printed afresh after the Submit, and K1, who got the 404 before it, now gets the new one :: expect(then).not.toContain("SubmissionDate");
+empty a Draft's Working Copy (V1) > is only for the Members who see the Draft; K1 and C2 get the 404 :: for (const person of PEOPLE) expect(text, person).not.toContain(squeeze(person));
+empty the Project's watermark text (Project Settings) > is set by a Project Admin only: anyone else gets the 404, and the text is never empty :: await expectHidden(c1Pm.request("PUT", path(), { watermark: { en: "Mine", ar: "لي" } }), "C1 PM, no Project Admin");
+empty the Project's watermark text (Project Settings) > is set by a Project Admin only: anyone else gets the 404, and the text is never empty :: await expectHidden(k1Pm.request("PUT", path(), { watermark: { en: "Mine", ar: "لي" } }), "K1");

@@ -1,0 +1,2 @@
+empty scenario RP-515-1: nobody receives a Draft's start time through Step Age > a Draft started weeks ago has no Step Age for its author or anyone of its Company; Returned, it counts from the Return :: expect((await list(by, { stepAgeMin: 1 })).items.map((i) => i.id)).not.toContain(id);
+empty scenario RP-515-1: nobody receives a Draft's start time through Step Age > a Draft started weeks ago has no Step Age for its author or anyone of its Company; Returned, it counts from the Return :: await expectHidden(k1Manager.get(`/v1/work-items/${id}`));

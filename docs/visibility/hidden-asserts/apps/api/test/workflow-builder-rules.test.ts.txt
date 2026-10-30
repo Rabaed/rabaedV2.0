@@ -1,0 +1,10 @@
+empty (top level) :: expect(checked.issues).toEqual([]);
+empty the builder's rule pickers > list the Type's Form fields that take answers, with their types, and nothing else :: expect(fields.map((f) => f.key)).not.toContain("remarks");
+empty the builder's rule pickers > list, by group, what publish accepts: a Restrict not the Action Form, an Effect only what the consultant fills :: expect(keys(fields.restrict)).not.toContain("remarks");
+empty the builder's rule pickers > list, by group, what publish accepts: a Restrict not the Action Form, an Effect only what the consultant fills :: expect(keys(fields.write)).not.toContain("manufacturer");
+empty each kind of rule, action and notification, added, edited and removed > adds one of every kind to a Transition, and the draft validates with no errors :: expect(errorsOf(problems), JSON.stringify(problems)).toEqual([]);
+text each kind of rule, action and notification, added, edited and removed > publishes it, and the published Version has every rule as written :: expect(transition.rules?.restrict).toHaveLength(5);
+text each kind of rule, action and notification, added, edited and removed > publishes it, and the published Version has every rule as written :: expect(transition.rules?.validate).toHaveLength(4);
+text each kind of rule, action and notification, added, edited and removed > publishes it, and the published Version has every rule as written :: expect(transition.actions).toHaveLength(3);
+empty each kind of rule, action and notification, added, edited and removed > edits a rule of each group and a recipient, and the next Version has the edits :: expect(errorsOf(problems), JSON.stringify(problems)).toEqual([]);
+empty each kind of rule, action and notification, added, edited and removed > removes every rule, action and notification, and the Transition comes back as it was before any :: expect(errorsOf(problems), JSON.stringify(problems)).toEqual([]);

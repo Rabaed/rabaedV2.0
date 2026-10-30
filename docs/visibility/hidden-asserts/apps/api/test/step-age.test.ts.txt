@@ -1,0 +1,4 @@
+text (top level) :: async function participant(c1: Company, role: "consultant" | "owner", legalName: string) {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty K1 moves the Submitted item internally (scenario 35) > shows the C1 PM and the Owner nothing of the internal moves: only the age changed :: for (const secret of [MANAGER_STEP, RETURN_REASON, "Send to Manager"]) expect(now.body).not.toContain(secret);

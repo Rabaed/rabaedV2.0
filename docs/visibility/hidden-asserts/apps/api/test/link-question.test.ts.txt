@@ -1,0 +1,9 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty a link question > changes its Links with the answer: added and removed on save :: expect(await questionLinks(tower.c1Engineer, lq)).toEqual([]);
+empty a link question > changes after a Return to the Draft, each change in the field-level history as numbers and Subjects, never ids :: expect(history).not.toContain(item.c1Approved);
+empty a link question > gives a reader who can't see a chosen item its number and Subject, never its id (scenario 81) :: expect(res.body).not.toContain(hidden);
+empty a link question > gives a reader who can't see a chosen item its number and Subject, never its id (scenario 81) :: expect((await ok(k1Mechanical.get(`/v1/work-items/${lq}/links`), 200)).body).not.toContain(hidden);
+empty a link question > gives a reader who can't see a chosen item its number and Subject, never its id (scenario 81) :: await expectHidden(k1Mechanical.get(`/v1/work-items/${item.c1Approved}`));
+empty an item already chosen that goes back to its raiser's Draft (Sent Back) > can still be chosen anew, as Link search still offers it :: expect(await questionLinks(tower.c1Engineer, lq)).toEqual([]);

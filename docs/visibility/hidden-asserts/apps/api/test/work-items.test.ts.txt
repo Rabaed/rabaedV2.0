@@ -1,0 +1,12 @@
+empty a Contractor engineer's Draft MAR > is not seen by their Company's Project Admin until their own Visibility covers it :: expect((await list(c1.caller)).items).toEqual([]);
+empty a Contractor engineer's Draft MAR > is not seen by the second Contractor on the same Trade: not listed, not counted, 404 (V3) :: expect(l.items).toEqual([]);
+empty a Contractor engineer's Draft MAR > is not seen by the second Contractor on the same Trade: not listed, not counted, 404 (V3) :: await expectHidden(res);
+empty a Contractor engineer's Draft MAR > is not seen by the Consultant or the Owner Representative (V1) :: expect(l.items).toEqual([]);
+empty a Contractor engineer's Draft MAR > is not seen by the Consultant or the Owner Representative (V1) :: await expectHidden(caller.get(`/v1/work-items/${draftId}`));
+empty a Contractor engineer's Draft MAR > is not seen by a Member of their own Company whose Visibility excludes its Location (V4) :: expect(l.items).toEqual([]);
+empty a Contractor engineer's Draft MAR > is not seen by a Member of their own Company whose Visibility excludes its Location (V4) :: await expectHidden(c1Narrow.get(`/v1/work-items/${draftId}`));
+empty a Contractor engineer's Draft MAR > is not found by a Member who is not on the Project, nor is the Project's list :: await expectHidden(c1Outsider.get(`/v1/work-items/${draftId}`));
+empty a Contractor engineer's Draft MAR > is not found by a Member who is not on the Project, nor is the Project's list :: await expectHidden(c1Outsider.get(`/v1/projects/${projectId}/work-items`));
+empty creating a Draft > is not found on a Project the Member is not on, or of an unknown Type :: await expectHidden(createDraft(c1Outsider));
+empty a Work Item link > that isn't a UUID, or doesn't exist, is 404 :: await expectHidden(c1Engineer.get("/v1/work-items/not-an-id"));
+empty a Work Item link > that isn't a UUID, or doesn't exist, is 404 :: await expectHidden(c1Engineer.get(`/v1/work-items/${randomUUID()}`));

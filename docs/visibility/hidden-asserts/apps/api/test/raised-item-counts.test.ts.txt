@@ -1,0 +1,4 @@
+empty a source counts the Snags raised from it, open and closed (seam 1) > shows no Snags line while none is raised from it, then follows the Snags as they close :: expect(await snagLines(at.c1Pm, source)).toEqual([]);
+empty a source counts the Snags raised from it, open and closed (seam 1) > never counts a discarded Snag :: expect(await snagLines(at.k1Manager, source)).toEqual([]);
+empty the counts follow what the viewer sees (seam 2, scenarios RP-624-1 and RP-624-2) > RP-624-1: C2 counts none of C1's Snags raised from a source it sees :: await expectHidden(await c2Engineer.get(`/v1/work-items/${forC1}`));
+empty the counts follow what the viewer sees (seam 2, scenarios RP-624-1 and RP-624-2) > RP-624-2: a viewer who sees one of two Snags counts one :: await expectHidden(await c1ElectricalOnly.get(`/v1/work-items/${mechanical}`));

@@ -1,0 +1,5 @@
+empty the app role and the definition tables > reads a draft through app.workflow_draft as its author only, never through the tables (scenario RP-427-3) :: expect(await call(admin, drafts)).toEqual([]);
+empty the app role and the definition tables > reads a draft through app.workflow_draft as its author only, never through the tables (scenario RP-427-3) :: expect(await call(engineer, drafts)).toEqual([]);
+empty the app role and the definition tables > reads a draft through app.workflow_draft as its author only, never through the tables (scenario RP-427-3) :: expect(await call(engineer, draft)).toEqual([]);
+empty a draft's name is read by its authors only (V20, scenario RP-427-5) > hides a Workflow with no published Version from everyone but its authors :: expect(await nameOf(engineer)).toEqual([]);
+empty a draft's name is read by its authors only (V20, scenario RP-427-5) > keeps a rename with the draft until it is published :: expect(await call(engineer, sql`select name from app.workflow_draft(${route}::uuid)`)).toEqual([]);

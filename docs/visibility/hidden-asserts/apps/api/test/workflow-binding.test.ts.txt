@@ -1,0 +1,1 @@
+empty scenario RP-426-1: the map is everyone's, an item's internal moves are not > C1 reads its item's Workflow and Version, but not K1's internal move on it :: expect(await moves(at.c1Pm)).not.toContain("Send to Manager");

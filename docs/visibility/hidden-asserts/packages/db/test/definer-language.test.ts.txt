@@ -1,0 +1,2 @@
+empty security definer functions in the app schema > are written in plpgsql :: expect(await appDefinerFunctionsInSql(migrator)).toEqual([]);
+empty security definer functions in the app schema > are caught when a new one is written in sql, and invoker ones are not :: expect(found).not.toContain("app.invoker_probe(integer)");

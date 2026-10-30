@@ -1,0 +1,2 @@
+empty publish check 7 > passes every published Workflow Version: each Action Form is a valid Form schema :: expect(workflowActionFormProblems(rows, { optionListIds: new Set(lists.rows.map((l) => l.id)) })).toEqual([]);
+empty taking a Transition with its Action Form > tells someone who can't take the Transition only that, never what its Action Form lacks :: await expectHidden(tryTake(k1Manager, id, "return", { answers: {} }));

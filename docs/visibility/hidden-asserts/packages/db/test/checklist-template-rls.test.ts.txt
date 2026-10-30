@@ -1,0 +1,4 @@
+empty RP-651-2: the copy on a WIR > is made by the Member who may save the WIR's answers, and refused to anyone else :: expect(await copiesAs(c1.ap)).toEqual([]);
+empty RP-651-2: the copy on a WIR > is made by the Member who may save the WIR's answers, and refused to anyone else :: for (const as of [k1.ap, k1Engineer, c2.ap, other.ap]) expect(await copiesAs(as), as).toEqual([]);
+empty RP-651-2: the copy on a WIR > is read by whoever sees the WIR once Submitted, never by another Contractor or another Project; and is fixed :: for (const as of [c2.ap, other.ap]) expect(await copiesAs(as), as).toEqual([]);
+text the copy on a WIR is keyed by its Project > is read only on a Project the reader is on, and the item they see :: expect(rows).toHaveLength(1);

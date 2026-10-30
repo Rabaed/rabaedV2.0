@@ -1,0 +1,19 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const companies: { company: { legalName: { en: string; ar: string } }; projectRole: { baseRole: string } }[] = (
+text (top level) :: names.c1 = companies.find((p) => p.projectRole.baseRole === "contractor")!.company.legalName;
+text (top level) :: names.k1 = companies.find((p) => p.projectRole.baseRole === "consultant")!.company.legalName;
+empty GET and POST /v1/work-items/:id/chat > posts trimmed text and reads it oldest first, with the count; own authors by name, another Company by name and Project Role only :: expect(res.body).not.toContain("Sara Writer");
+empty GET and POST /v1/work-items/:id/chat > posts trimmed text and reads it oldest first, with the count; own authors by name, another Company by name and Project Role only :: expect(res.body).not.toContain(c1Writer.id);
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: await expectHidden(c2Engineer.get(chatUrl(item.c1Submitted)), "read, C2");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: await expectHidden(postChat(c2Engineer, item.c1Submitted, "Hello?"), "post, C2");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: await expectHidden(c2Engineer.get(chatUrl(randomUUID())), "read, made-up id");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: await expectHidden(postChat(c2Engineer, randomUUID(), "Hello?"), "post, made-up id");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: await expectHidden(c2Engineer.get(chatUrl("not-an-id")), "read, malformed id");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: await expectHidden(postChat(c2Engineer, "not-an-id", "Hello?"), "post, malformed id");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a competing Contractor (V3), a made-up id and a malformed one; the same Member reads and posts on its own item :: expect(await bodies(tower.c1Pm, item.c1Submitted)).not.toContain("Hello?");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a Member outside the item's Trade (layer 4); the same Member reads and posts on one of their Trade :: await expectHidden(k1Mechanical.get(chatUrl(item.c1Submitted)), "read");
+empty GET and POST /v1/work-items/:id/chat > is 404 for a Member outside the item's Trade (layer 4); the same Member reads and posts on one of their Trade :: await expectHidden(postChat(k1Mechanical, item.c1Submitted, "Seen."), "post");
+empty GET and POST /v1/work-items/:id/chat > is 404 at once for a Member who loses access, who goes on reading where they still have it :: await expectHidden(k1Mechanical.get(chatUrl(item.c1Mechanical)), "read after");
+empty GET and POST /v1/work-items/:id/chat > is 404 at once for a Member who loses access, who goes on reading where they still have it :: await expectHidden(postChat(k1Mechanical, item.c1Mechanical, "Still here?"), "post after");

@@ -1,0 +1,17 @@
+text Send for Review > writes one outbox row in the Transition's transaction, and notifies nobody before delivery :: expect(await outboxRows(id)).toHaveLength(1);
+empty Send for Review > writes one outbox row in the Transition's transaction, and notifies nobody before delivery :: expect(await about(pm, id)).toEqual([]);
+empty Send for Review > is delivered to the PM pool's Members who still see the item, and nobody else (scenario 12) :: for (const who of [engineer, pmNarrowed, manager, k1Engineer, c2Engineer]) expect(await about(who, id), who.id).toEqual([]);
+empty Send for Review > is delivered to the PM pool's Members who still see the item, and nobody else (scenario 12) :: expect((await pmRemoved.caller.get("/v1/notifications")).json().notifications).toEqual([]);
+empty Send for Review > never notifies the Member whose move it was, even when they are in the pool :: expect(await about(engineerPm, own)).toEqual([]);
+text Send for Review > never notifies the Member whose move it was, even when they are in the pool :: expect(await about(pm, own)).toHaveLength(1);
+text Send for Review > is delivered once, however often the worker runs :: expect(await about(pm, id)).toHaveLength(1);
+text Return and Submit > notifies the Engineer the Return comes back to, not the PM who returned it :: expect(await about(engineer, id)).toHaveLength(1);
+empty Return and Submit > notifies the Engineer the Return comes back to, not the PM who returned it :: expect(await about(pm, id)).toEqual([]);
+empty Return and Submit > notifies the Consultant's pool on Submit, never the Consultant's Engineer or the second Contractor :: for (const who of [k1Engineer, c2Engineer]) expect(await about(who, id)).toEqual([]);
+empty Return and Submit > shows only the recipient's own notifications, with nothing of items that aren't theirs :: expect(body).not.toContain("Cable trays");
+empty Return and Submit > shows only the recipient's own notifications, with nothing of items that aren't theirs :: expect(body).not.toContain("Wrong tray size");
+empty Return and Submit > drops a delivered notification from the list and the count once the recipient no longer sees the item (V12) :: expect(await about(manager, id)).toEqual([]);
+empty a rolled-back Transition > leaves no outbox row, so nobody is notified :: expect(await outboxRows(id)).toEqual([]);
+empty a rolled-back Transition > leaves no outbox row, so nobody is notified :: expect(await about(pm, id)).toEqual([]);
+text a failing delivery > is retried later without blocking other rows, and dead-lettered after the last attempt :: expect(await about(pm, fine)).toHaveLength(1);
+empty a failing delivery > is retried later without blocking other rows, and dead-lettered after the last attempt :: expect(await about(pm, failing)).toEqual([]);

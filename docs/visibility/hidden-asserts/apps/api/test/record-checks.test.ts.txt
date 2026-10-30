@@ -1,0 +1,27 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty scenarios RP-155-1 and RP-155-2: a record that passes its checks > is published, and its download works (RP-155-2) :: expect(await alertsFor(id)).toEqual([]);
+text scenarios RP-155-1 and RP-155-2: a record that passes its checks > tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named (RP-155-1) :: expect(got, "a record ready notification").toHaveLength(1);
+empty scenarios RP-155-1 and RP-155-2: a record that passes its checks > tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named (RP-155-1) :: expect(JSON.stringify(got[0])).not.toContain("Checks Consultants");
+empty scenarios RP-155-1 and RP-155-2: a record that passes its checks > tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named (RP-155-1) :: expect(routes.rows.filter((r) => !(r.in_app && r.email === "digest"))).toEqual([]);
+text scenarios RP-155-1 and RP-155-2: a record that passes its checks > tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named (RP-155-1) :: expect(await bell(c1Pm, id)).toHaveLength(1);
+text scenario RP-950-1: record ready by email and in the digest > emails a Member who sees the item and chose immediately, once, with a link to the item and never to the file :: expect(got).toHaveLength(1);
+empty scenario RP-950-1: record ready by email and in the digest > emails a Member who sees the item and chose immediately, once, with a link to the item and never to the file :: expect(got[0]!.Text).not.toContain("documental-record");
+empty scenario RP-950-1: record ready by email and in the digest > names no Company and no person in it (V14) :: expect(text, name).not.toContain(name);
+text scenario RP-950-1: record ready by email and in the digest > emails it in Arabic to a Member whose preferred language is Arabic :: expect(got).toHaveLength(1);
+empty scenario RP-950-1: record ready by email and in the digest > emails it in Arabic to a Member whose preferred language is Arabic :: expect(got[0]!.Text).not.toContain("documental-record");
+text scenario RP-950-1: record ready by email and in the digest > emails no one at once who chose the digest or turned the email off, and nothing to a Member who can't see the item :: for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
+empty scenario RP-950-1: record ready by email and in the digest > lists it in the daily digest of a Member who kept the default, with a link to the item :: expect(text).not.toContain("documental-record");
+empty scenario RP-155-2: a record that fails its checks > publishes nothing: the item shows no record, nobody downloads one and nobody is told :: await expectHidden(c1Pm.get(`/v1/work-items/${id}/documental-record`), "failed record");
+empty scenario RP-155-2: a record that fails its checks > publishes nothing: the item shows no record, nobody downloads one and nobody is told :: await expectHidden(k1Pm.get(`/v1/work-items/${id}/documental-record`), "failed record, K1");
+empty scenario RP-155-2: a record that fails its checks > publishes nothing: the item shows no record, nobody downloads one and nobody is told :: await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documental-record`), "failed record, C2");
+empty scenario RP-155-2: a record that fails its checks > publishes nothing: the item shows no record, nobody downloads one and nobody is told :: for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect(await bell(by, id)).toEqual([]);
+text scenario RP-155-2: a record that fails its checks > publishes nothing: the item shows no record, nobody downloads one and nobody is told :: expect(jobs.rows).toHaveLength(1);
+text scenario RP-155-2: a record that fails its checks > raises an alert in Rabaed Admin, logged as a read with the Engineer's reason :: expect(alerts).toHaveLength(1);
+empty scenario RP-155-2: a record that fails its checks > is made good by a Re-produce that passes: published, the alert gone, everyone told :: expect(await alertsFor(id)).toEqual([]);
+text scenario RP-155-2: a record that fails its checks > is made good by a Re-produce that passes: published, the alert gone, everyone told :: for (const by of [c1Pm, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
+text scenario RP-155-3: Re-produce in Rabaed Admin > keeps the replaced PDF and its fingerprint, and the Engineer's reason :: expect(rows).toHaveLength(1);
+empty scenario RP-155-3: Re-produce in Rabaed Admin > replaces nothing when the new PDF fails its checks: the published record stays, and Rabaed Admin is alerted :: expect(await alertsFor(id2)).toEqual([]);
+empty scenario RP-155-3: Re-produce finds the Form photos again by their fingerprints > tells two photos of one name and no time apart, and prints both again :: expect(await alertsFor(id)).toEqual([]);
+empty scenario RP-155-3: Re-produce finds the Form photos again by their fingerprints > fails when a photo's file is not what the record printed: nothing is replaced, and Rabaed Admin is alerted :: expect(await alertsFor(id)).toEqual([]);

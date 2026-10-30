@@ -1,0 +1,1 @@
+empty the Types '+ New' offers > leave out a Draft held by the raiser when the Member's Positions lack its permission: the Owner's PM raises no Snag :: expect(await offered(ownerPm)).not.toContain("SNG");

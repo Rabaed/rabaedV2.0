@@ -1,0 +1,4 @@
+empty a pool of one holds the Step at once (seam 1) > Send for Review lands held by the only PM: no Pick up, an internal event, Need My Action, Return to pool refused :: expect(await needMyAction(at.c1Engineer, at.projectId)).not.toContain(id);
+empty a pool of one holds the Step at once (seam 1) > with two PMs it is pooled, and C1 reads who it waits on; a third and a fourth show as +n :: expect((await history(at.c1Pm, id)).map((e) => e.type)).not.toContain("assigned");
+text a pool of one holds the Step at once (seam 1) > with two PMs it is pooled, and C1 reads who it waits on; a third and a fourth show as +n :: expect((await detail(at.c1Engineer, four)).heldBy?.pool?.names).toHaveLength(4);
+empty scenario RP-513-1: K1 never reads C1's pool or holder > C1 reads K1's only manager holding it by K1's name only :: expect((await history(by, id)).map((e) => e.type)).not.toContain("assigned");

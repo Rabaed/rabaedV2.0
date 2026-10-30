@@ -1,0 +1,4 @@
+empty publish checks 4 and 8 > pass every published Workflow Version: Returns stay inside a Participant, and only a Send Back loops across :: expect(problems).toEqual([]);
+empty answer times never earlier than the Creation Date once numbered (RP-392-1) > still autosaves after the Send Back, on the times it read :: expect(res.json().keptFromOthers).toEqual([]);
+empty C1 starts a Draft, sends it for review two days later, and Submits it 17 days after that (scenario 61) > gives nobody the time the Draft was started, through any read of the item :: expect(body, url).not.toContain(createdAt);
+empty C1 starts a Draft, sends it for review two days later, and Submits it 17 days after that (scenario 61) > gives nobody the time the Draft was started, through any read of the item :: expect(body, url).not.toContain('"createdAt"');

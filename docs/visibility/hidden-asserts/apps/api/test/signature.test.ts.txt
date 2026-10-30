@@ -1,0 +1,2 @@
+empty No Signature, no Transition (RP-85-1) > is still the plain 404 for an item they can't see :: await expectHidden(tryTake(otherCompany, id, "send_for_review"));
+empty Every Transition records the Signature in force (RP-85-2) > the event's Signature is not read through the app role :: expect(res.body).not.toContain(first);

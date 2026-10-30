@@ -1,0 +1,2 @@
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(CONSULTANT) });
+empty a Transition without confirmation > is refused and changes nothing; confirmed, the same Transition is taken :: expect(await auditTrail(id)).toEqual([]);

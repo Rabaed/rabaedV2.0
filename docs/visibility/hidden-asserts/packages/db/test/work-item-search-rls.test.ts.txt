@@ -1,0 +1,2 @@
+empty the search index > finds nothing for a caller who is no Member, or none at all :: expect(await searched(randomUUID(), "Slab")).toEqual([]);
+empty the search index > finds nothing for a caller who is no Member, or none at all :: expect(rows).toEqual([]);

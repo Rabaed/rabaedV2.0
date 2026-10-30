@@ -1,0 +1,1 @@
+empty the app role check > passes for rabaed_app: RLS applies, and it cannot change the audit event table :: expect(await checkAppRole(app)).toEqual([]);

@@ -1,0 +1,14 @@
+text (top level) :: const company = await api.onboardCompany({ legalName: { en, ar } });
+text what Search finds > finds the Type, Trade and Location by name, in Arabic too :: expect((await search(tower.c1Engineer, "Material Approval Request")).items).toHaveLength(5);
+text what Search finds > finds the Type, Trade and Location by name, in Arabic too :: expect((await search(tower.c1Engineer, "طلب اعتماد مواد")).items).toHaveLength(5);
+text what Search finds > finds the Type, Trade and Location by name, in Arabic too :: expect(ids(await search(tower.c1Engineer, "Building A"))).toHaveLength(5);
+text what Search finds > finds the raiser's Company by its name, in English or Arabic :: expect((await search(k1Engineer, "Nakheel")).items).toHaveLength(4);
+empty what Search finds > takes every word, wherever each is :: expect((await search(tower.c1Engineer, "fixtures Mechanical")).items).toEqual([]);
+empty what Search finds > takes a LIKE wildcard as itself :: expect((await search(tower.c1Engineer, "%")).items).toEqual([]);
+empty what Search finds > takes a LIKE wildcard as itself :: expect((await search(tower.c1Engineer, "_")).items).toEqual([]);
+empty what Search never finds (V1, V3, V19) > scenario 66: a Consultant's reply (its Remarks with a Code) is never searched :: expect(result.items).toEqual([]);
+empty what Search never finds (V1, V3, V19) > never searches the raiser's own answers either :: expect((await search(tower.c1Engineer, "ACME")).items).toEqual([]);
+empty what Search never finds (V1, V3, V19) > never searches the raiser's own answers either :: expect((await search(tower.c1Engineer, "Galvanised")).items).toEqual([]);
+empty what Search never finds (V1, V3, V19) > a word matching only another Company's hidden item returns nothing and no count :: expect(result.items).toEqual([]);
+empty what Search never finds (V1, V3, V19) > scenario 1: a Draft is found by its raiser only :: expect(result.items).toEqual([]);
+empty Search on the Kanban (RP-349) > a word matching only another Company's hidden item gives an empty board with zero counts :: expect(cardIds(result)).toEqual([]);

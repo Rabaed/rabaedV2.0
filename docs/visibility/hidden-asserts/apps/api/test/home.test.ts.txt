@@ -1,0 +1,18 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: .participants.find((p: { company: { legalName: { en: string } } }) => p.company.legalName.en === name).id as string;
+text (top level) :: .participants.find((p: { company: { legalName: { en: string } } }) => p.company.legalName.en === name).id as string;
+empty a Member on two Projects (RP-407-6) > counts and lists each Project's Need My Action only for the Projects he is on :: expect(b.body).not.toContain(jcv.projectId);
+empty a Member on two Projects (RP-407-6) > counts and lists each Project's Need My Action only for the Projects he is on :: expect(b.body).not.toContain("Villa pumps");
+empty a second Contractor (RP-407-1) > never counts, lists or hears of a C1 item :: expect(h.needsMyAction).toEqual([]);
+empty a second Contractor (RP-407-1) > never counts, lists or hears of a C1 item :: expect(h.activity).toEqual([]);
+empty a second Contractor (RP-407-1) > never counts, lists or hears of a C1 item :: expect(h.body).not.toContain(c1Item);
+empty a second Contractor (RP-407-1) > never counts, lists or hears of a C1 item :: expect(h.body).not.toContain("C1 switchboards");
+empty a second Contractor (RP-407-1) > never counts, lists or hears of a C1 item :: expect(h.body).not.toContain("C1 busbars");
+text a second Contractor (RP-407-1) > never counts, lists or hears of a C1 item :: expect(h.projects.map((p) => p.hostCompany.legalName.en)).toEqual([C1_NAME]);
+empty a Draft (RP-407-2) > is never counted for anyone, not even its raiser, however long it has been a Draft :: expect(h.needsMyAction).toEqual([]);
+empty a Draft (RP-407-2) > is never counted for anyone, not even its raiser, however long it has been a Draft :: for (const who of [twr.c1Pm, k1A, k1B, c2Engineer]) expect((await home(who)).body).not.toContain(mine);
+empty a closed Project (RP-407-3) > contributes nothing: no active Project, count, row, aged item or activity :: expect(after.needsMyAction).toEqual([]);
+empty a closed Project (RP-407-3) > contributes nothing: no active Project, count, row, aged item or activity :: expect(after.activity).toEqual([]);
+empty Waiting with others: my own Company's items another Participant holds (RP-407-7) > never counts another Company's items, even the ones its holder sees :: for (const id of [sent, internal, mine]) expect(h.body).not.toContain(id);

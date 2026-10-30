@@ -1,0 +1,7 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty scenario 64: the Revision line while C1's Revision is a Draft > shows K1 both chains as awaiting revision, one figure, without the Draft (V1) :: expect(await listed(tower.k1Manager, tower.projectId, { module: "submittals", type: [LEGACY_MAR], bucket: [], codeC: [codeC] })).toEqual([]);
+empty refusals > answers a Member off the Project as if it didn't exist :: await expectHidden(outsider.get(`/v1/projects/${tower.projectId}/dashboard`));
+empty refusals > answers a Member off the Project as if it didn't exist :: await expectHidden(outsider.get(`/v1/projects/${randomUUID()}/dashboard`));
+empty refusals > answers a Member off the Project as if it didn't exist :: await expectHidden(tower.c1Pm.get(`/v1/projects/not-an-id/dashboard`));
