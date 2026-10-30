@@ -9,7 +9,7 @@
 //
 // C1 covers Building A, C2 Building B (V3); K1, the Consultant, raises Snags on both.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { type SnagBulkCandidates, type SnagBulkResult, type WorkItemExport, type WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
@@ -26,6 +26,7 @@ let at: Tower;
 let c2Participant = "";
 let c2Engineer: { id: string; caller: Caller };
 let c1Colleague: { id: string; caller: Caller };
+let c2Colleague: { id: string; caller: Caller };
 let buildingB = "";
 
 // K1's Snags: two on C1 (Building A), one on C2 (Building B).
@@ -43,6 +44,10 @@ const candidates = async (by: Caller, ids: string[]): Promise<SnagBulkCandidates
   (await ok(by.post(`${bulkPath()}/reassign-candidates`, { ids }), 200)).json();
 const exported = async (by: Caller, query = ""): Promise<WorkItemExport> => (await ok(by.get(`${snagPath()}/export${query}`), 200)).json();
 const reasons = (result: SnagBulkResult) => Object.fromEntries(result.skipped.map((s) => [s.id, s.reason]));
+const who = (by: Caller) =>
+  by === c2Engineer.caller ? "C2 engineer" : by === at.c1Pm ? "C1 PM" : by === at.k1Manager ? "K1 manager" : by === c1Colleague.caller ? "C1 colleague" : "someone";
+/** `text` as a row when `by`'s export mentions it anywhere: to prove a title or an id is in no field of an export. */
+const exportMentions = (text: string) => async (by: Caller) => (JSON.stringify(await exported(by)).includes(text) ? [{ id: text }] : []);
 
 async function snag(title: string, location: string): Promise<string> {
   const id = (
@@ -66,6 +71,7 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: only(buildingB) }));
   c2Engineer = await memberOnProject(api, c2, c2Participant, ["engineer"]);
   c1Colleague = await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"]);
+  c2Colleague = await memberOnProject(api, c2, c2Participant, ["engineer"]);
   first = await snag("Cable tray not bonded", at.buildingA);
   second = await snag("Duct insulation torn", at.buildingA);
   c2Snag = await snag("Paint drips on skirting", buildingB);
@@ -77,8 +83,18 @@ describe("reassign within my company (seam 1)", () => {
     expect(offered.reassignable).toBe(2);
     expect(offered.members.length).toBeGreaterThan(0);
     expect(offered.members.map((m) => m.memberId)).toContain(c1Colleague.id);
-    expect(offered.members.map((m) => m.memberId)).not.toContain(c2Engineer.id);
-    expect(JSON.stringify(offered)).not.toContain(c2Snag);
+    // C2's other engineer is offered to C2, for the Snag C2 holds, and never to C1.
+    type Asker = { caller: Caller; ids: string[]; name: string };
+    const offeredTo = async (by: Asker) => (await candidates(by.caller, by.ids)).members.map((m) => ({ id: m.memberId }));
+    await expectHiddenFrom({
+      read: offeredTo,
+      target: c2Colleague.id,
+      seenBy: { caller: c2Engineer.caller, ids: [c2Snag], name: "C2 engineer, for C2's Snag" },
+      hiddenFrom: { caller: at.c1Pm, ids: [first, second, c2Snag], name: "C1 PM" },
+      name: (by) => by.name,
+    });
+    // The reply names no item, only how many the viewer's Participant holds.
+    expect(Object.keys(offered).sort()).toEqual(["members", "reassignable"]);
   });
 
   it("offers nothing to a Participant that does not hold the items", async () => {
@@ -90,10 +106,10 @@ describe("reassign within my company (seam 1)", () => {
 
   it("never hands an item to another Company's Member, whoever asks", async () => {
     const toC2 = await reassign(at.c1Pm, [first, second], c2Engineer.id);
-    expect(toC2.done).toEqual([]);
+    expect(toC2.done).toEqual([]); // not hidden-from: nothing was done, each item is named below
     expect(reasons(toC2)).toEqual({ [first]: "not_offered", [second]: "not_offered" });
     const byK1 = await reassign(at.k1Manager, [first], c1Colleague.id);
-    expect(byK1.done).toEqual([]);
+    expect(byK1.done).toEqual([]); // not hidden-from: nothing was done, the item is named below
     expect(reasons(byK1)).toEqual({ [first]: "not_offered" });
     // Nobody's Need My Action changed.
     expect((await detail(at.c1Pm, first)).heldBy).toEqual((await detail(at.c1Pm, first)).heldBy);
@@ -103,7 +119,10 @@ describe("reassign within my company (seam 1)", () => {
     const result = await reassign(at.c1Pm, [first, c2Snag], c1Colleague.id);
     expect(result.done).toEqual([first]);
     expect(result.skipped).toEqual([{ id: c2Snag, documentNumber: null, title: null, reason: "not_found" }]);
-    expect(JSON.stringify(result)).not.toContain("Paint drips");
+    // K1, who sees C2's Snag but may not reassign it, has it named; C1 never does.
+    const named = async (by: Caller) =>
+      (await reassign(by, [c2Snag], c1Colleague.id)).skipped.filter((s) => s.title !== null || s.documentNumber !== null).map((s) => ({ id: s.id }));
+    await expectHiddenFrom({ read: named, target: c2Snag, seenBy: at.k1Manager, hiddenFrom: at.c1Pm, name: who });
   });
 
   it("holds the item with the new Member, who is told, and the history says so to the holding Company only", async () => {
@@ -141,7 +160,7 @@ describe("move Stage (seam 1)", () => {
     // C1's PM does not hold `first`; K1 holds neither; Closed is no Transition of the Contractor's.
     expect(reasons(await move(at.c1Pm, [first], "on_hold"))).toEqual({ [first]: "not_offered" });
     const byK1 = await move(at.k1Manager, [first, second], "on_hold");
-    expect(byK1.done).toEqual([]);
+    expect(byK1.done).toEqual([]); // not hidden-from: nothing was done, each item is named below
     expect(Object.values(reasons(byK1))).toEqual(["not_offered", "not_offered"]);
     expect(reasons(await move(c1Colleague.caller, [first], "closed"))).toEqual({ [first]: "not_offered" });
   });
@@ -150,7 +169,7 @@ describe("move Stage (seam 1)", () => {
     // Each move puts the item back in its Step Pool: the next holder picks it up.
     await ok(c1Colleague.caller.post(`/v1/work-items/${first}/pick-up`));
     const result = await move(c1Colleague.caller, [first], "resolved");
-    expect(result.done).toEqual([]);
+    expect(result.done).toEqual([]); // not hidden-from: nothing was done, the item is named below
     expect(result.skipped).toEqual([expect.objectContaining({ id: first, reason: "needs_input", title: "Cable tray not bonded", documentNumber: expect.any(String) })]);
     expect((await detail(c1Colleague.caller, first)).stage.key).toBe("in_progress");
   });
@@ -173,23 +192,31 @@ describe("move Stage (seam 1)", () => {
 
 describe("the export of the Snag List (scenario RP-629-1, seam 1)", () => {
   it("RP-629-1: C2's export holds none of C1's items, and C1's none of C2's", async () => {
-    const c2Export = await exported(c2Engineer.caller);
-    expect(c2Export.items.map((i) => i.id)).toEqual([c2Snag]);
-    for (const hidden of [first, second, at.c1ParticipantId, "Cable tray", "Duct insulation"]) expect(JSON.stringify(c2Export)).not.toContain(hidden);
-    const c1Export = await exported(at.c1Pm);
-    expect(c1Export.items.map((i) => i.id).sort()).toEqual([first, second].sort());
-    expect(JSON.stringify(c1Export)).not.toContain(c2Snag);
-    expect(JSON.stringify(c1Export)).not.toContain("Paint drips");
+    expect((await exported(c2Engineer.caller)).items.map((i) => i.id)).toEqual([c2Snag]);
+    expect((await exported(at.c1Pm)).items.map((i) => i.id).sort()).toEqual([first, second].sort());
     // The Consultant sees what it raised on both.
     expect((await exported(at.k1Manager)).items.map((i) => i.id).sort()).toEqual([first, second, c2Snag].sort());
+    // Each item's id and title are in no field of the other Contractor's export; K1's export has them.
+    const rows = async (by: Caller) => (await exported(by)).items;
+    for (const [target, title] of [
+      [first, "Cable tray"],
+      [second, "Duct insulation"],
+    ] as const) {
+      await expectHiddenFrom({ read: rows, target, seenBy: [at.c1Pm, at.k1Manager], hiddenFrom: c2Engineer.caller, name: who, label: "row" });
+      await expectHiddenFrom({ read: exportMentions(target), target, seenBy: at.k1Manager, hiddenFrom: c2Engineer.caller, name: who, label: "id" });
+      await expectHiddenFrom({ read: exportMentions(title), target: title, seenBy: at.k1Manager, hiddenFrom: c2Engineer.caller, name: who, label: "title" });
+    }
+    await expectHiddenFrom({ read: rows, target: c2Snag, seenBy: [c2Engineer.caller, at.k1Manager], hiddenFrom: at.c1Pm, name: who, label: "row" });
+    await expectHiddenFrom({ read: exportMentions(c2Snag), target: c2Snag, seenBy: at.k1Manager, hiddenFrom: at.c1Pm, name: who, label: "id" });
+    await expectHiddenFrom({ read: exportMentions("Paint drips"), target: "Paint drips", seenBy: at.k1Manager, hiddenFrom: at.c1Pm, name: who, label: "title" });
   });
 
   it("follows the List's filters, and carries Step Age in weeks and no due date", async () => {
     const filtered = await exported(at.c1Pm, "?stage=in_progress");
     expect(filtered.items.map((i) => i.id)).toEqual([first]);
     const text = JSON.stringify(filtered).toLowerCase();
-    expect(text).not.toContain("overdue");
-    expect(text).not.toContain("due");
+    expect(text).not.toContain("overdue"); // not hidden-from: Rabaed shows no due date
+    expect(text).not.toContain("due"); // not hidden-from: Rabaed shows no due date
     expect(filtered.items[0]).toHaveProperty("stepAgeWeeks");
     expect(filtered.capped).toBe(false);
   });

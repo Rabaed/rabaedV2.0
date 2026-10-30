@@ -97,12 +97,6 @@ RP-580-1 db  # K1 Sends a Submitted item Back to C1's Draft Step, which says "Af
 # RP-593
 RP-593-3 api  # The same on an Electrical item, which OR covers
 
-# RP-598
-RP-598-1 db  # K1's PM recommends Code A to OW, whose PM holds the Owner's review
-
-# RP-626
-RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
-
 # RP-1058
 RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
 
@@ -115,7 +109,3 @@ RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager
 
 # RP-1072
 RP-1072-1 db  # A Project Admin invites K1 (on Rabaed, in Arabic or English) and a CR number not on Rabaed
-
-# RP-1079
-RP-1079-1 api  # K1's PM adds a site photo to the Screen of its Recommendation to the Owner (a reply photos
-RP-1079-2 api  # The Owner Sends it Back; K1 adds another photo and Recommends C again; the Owner confirms 
