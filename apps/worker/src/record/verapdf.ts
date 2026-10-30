@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 
@@ -108,6 +109,42 @@ export interface PdfAValidatorSession extends PdfAValidator {
 }
 
 /**
+ * How long a session's container lives (RP-1122): longer than the longest test file, so a test
+ * that is killed or times out (its afterAll never calls close) still leaves no container behind:
+ * the sleep ends and `--rm` removes it.
+ */
+export const VERAPDF_SESSION_SECONDS = 3600;
+
+/**
+ * The `docker run` arguments of a session's container (RP-1122). Its name and label let
+ * `pnpm lanes:prune` (scripts/verapdf-containers.ts, which reads this name back) find it and
+ * remove it once the process `pid` that started it is gone. `hash` names the worktree, as
+ * scripts/test-stories-linux.ts's worktreeHash does; `n` counts the sessions of one process.
+ */
+export function veraPdfSessionArgs({ image, dir, hash, pid, n }: { image: string; dir: string; hash: string; pid: number; n: number }): string[] {
+  return [
+    "run",
+    "-d",
+    "--rm",
+    "--name",
+    `rabaed-verapdf-${hash}-${pid}-${n}`,
+    "--label",
+    `rabaed.verapdf=${hash}`,
+    "-v",
+    `${dir}:/data:ro`,
+    "--entrypoint",
+    "sleep",
+    image,
+    String(VERAPDF_SESSION_SECONDS),
+  ];
+}
+
+/** This worktree's hash: the sha1 of its root, spelled as Node resolves it (worktreeHash in scripts/test-stories-linux.ts). */
+const worktreeHash = () => createHash("sha1").update(resolve(import.meta.dirname, "../../../..")).digest("hex").slice(0, 8);
+
+let sessions = 0;
+
+/**
  * veraPDF in one Docker container kept for many PDFs (a test file's, started at its first PDF),
  * instead of a container for each: the PDFs go in through a folder mounted into it.
  */
@@ -116,7 +153,13 @@ export function veraPdfDockerSession(image: string): PdfAValidatorSession {
   let count = 0;
   const start = async () => {
     const dir = await sharedFolder();
-    const { stdout } = await run("docker", ["run", "-d", "--rm", "-v", `${dir}:/data:ro`, "--entrypoint", "sleep", image, "infinity"], { timeout: TIMEOUT_MS });
+    const args = veraPdfSessionArgs({ image, dir, hash: worktreeHash(), pid: process.pid, n: sessions++ });
+    const { stdout } = await run("docker", args, { timeout: TIMEOUT_MS }).catch(async (error: { stderr?: string }) => {
+      // A killed run's container still sleeping under this name: its pid was reused by this process, so it is ours to remove.
+      if (!error.stderr?.includes("is already in use")) throw error;
+      await run("docker", ["rm", "-f", args[args.indexOf("--name") + 1]!], { timeout: TIMEOUT_MS });
+      return run("docker", args, { timeout: TIMEOUT_MS });
+    });
     return { id: stdout.trim(), dir };
   };
   return {

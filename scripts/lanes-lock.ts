@@ -119,7 +119,7 @@ export function acquireLaneLock(file: string, deps: LockDeps, { waitMs = 120_000
 }
 
 /** Whether a process with this pid runs (one we may not signal still runs). */
-function pidAlive(pid: number): boolean {
+export function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
