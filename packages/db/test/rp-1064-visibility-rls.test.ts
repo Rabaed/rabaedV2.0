@@ -24,7 +24,10 @@ const towerOptions = { projectCode: "RSS", k1Manager: true } as const;
 let tower: SeamTwoTower<typeof towerOptions>;
 
 type Seen = { id: string; step_key: string; holder_mine: boolean | null; holder_name: { en: string; ar: string } | null };
-/** Where `as` reads item `item`, as the map read reads it: the Step as seen, whether its holder is the reader's own Participant, and the holder's name. */
+/**
+ * Where `as` reads item `item`, from what the map read reads: the Step as seen, whether its holder is the reader's own
+ * Participant (null when no holder reaches them; the map takes "Owner review" as not their own), and the holder's name.
+ */
 const seen = async (as: string, item: string) =>
   tower.call<Seen>(
     as,

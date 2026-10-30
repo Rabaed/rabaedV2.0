@@ -39,14 +39,14 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
         s.key as seen_step_key, app.work_item_raiser_role(w.id) as raiser_role,
         -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022):
         -- no holder reaches them (RP-1138), and the item is held outside their Participant.
-        case when app.with_owner_review(w.id) is not null then false
-          else a.participant_id in (select app.current_participant_ids()) end as holder_mine,
-        coalesce(app.with_owner_review(w.id), holder.legal_name) as holder_name
+        case when r.label is not null then false else a.participant_id in (select app.current_participant_ids()) end as holder_mine,
+        coalesce(r.label, holder.legal_name) as holder_name
       from work_item w
       join work_item_type t on t.id = w.work_item_type_id
       join app.work_item_workflow(w.id) wf on true
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
+      cross join lateral (select app.with_owner_review(w.id) as label) r
       left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
       where w.id = ${workItemId}::uuid
