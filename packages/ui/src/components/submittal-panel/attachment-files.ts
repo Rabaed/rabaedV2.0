@@ -85,8 +85,12 @@ export function saveAttachment(file: LoadedAttachment, name: string) {
   link.remove();
 }
 
-/** Prints a file read into this page from a hidden frame: the browser's print dialog, no new tab or window. */
-export function printAttachment(file: LoadedAttachment) {
+/**
+ * Prints a file read into this page from a hidden frame: the browser's print dialog, no new tab or
+ * window. The frame goes once the dialog closes; the returned function takes it away sooner (the
+ * section closing), so it never outlives the file's URL.
+ */
+export function printAttachment(file: LoadedAttachment): () => void {
   document.querySelector("iframe[data-attachment-print]")?.remove();
   const frame = document.createElement("iframe");
   frame.dataset.attachmentPrint = "";
@@ -94,7 +98,19 @@ export function printAttachment(file: LoadedAttachment) {
   frame.tabIndex = -1;
   // Laid out (a frame with display: none prints nothing) but out of sight.
   frame.style.cssText = "position: fixed; inset-inline-start: 0; bottom: 0; width: 0; height: 0; border: 0; visibility: hidden;";
-  frame.addEventListener("load", () => frame.contentWindow?.print(), { once: true });
+  const remove = () => frame.remove();
+  frame.addEventListener(
+    "load",
+    () => {
+      const view = frame.contentWindow;
+      if (!view) return remove();
+      // Printed or cancelled: once the dialog has closed (after its own event), the frame has done its work.
+      view.addEventListener("afterprint", () => setTimeout(remove), { once: true });
+      view.print();
+    },
+    { once: true },
+  );
   frame.src = file.url;
   document.body.append(frame);
+  return remove;
 }

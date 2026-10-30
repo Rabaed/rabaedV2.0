@@ -102,7 +102,8 @@ function useFileUrl(refused: readonly string[]) {
   }, [refused]);
 }
 
-function AttachmentsDemo({ context, width = 640, refused = [] }: { context: StoryContext; width?: number; refused?: string[] }) {
+/** `goneOnClose`: closing the panel takes the section away, as the app's panel unmounts when it closes. */
+function AttachmentsDemo({ context, width = 640, refused = [], goneOnClose = false }: { context: StoryContext; width?: number; refused?: string[]; goneOnClose?: boolean }) {
   const locale = storyLocale(context);
   const ids = useSubmittalPanelIds();
   const fileUrl = useFileUrl(refused);
@@ -148,7 +149,7 @@ function AttachmentsDemo({ context, width = 640, refused = [] }: { context: Stor
               icon: "paperclip",
               title: copy.attachments[locale],
               summary: locale === "ar" ? `${formatNumber(filesIn(locale).length, locale)} ملفات` : `${formatNumber(filesIn(locale).length, locale)} files`,
-              children: <SubmittalPanelAttachments locale={locale} labels={labels(locale)} files={filesIn(locale)} fileUrl={fileUrl} />,
+              children: goneOnClose && closed > 0 ? null : <SubmittalPanelAttachments locale={locale} labels={labels(locale)} files={filesIn(locale)} fileUrl={fileUrl} />,
             },
           ]}
           collapsed={collapsed}
@@ -281,6 +282,34 @@ export const Preview: Story = {
     await drawn(previewOf(context)!);
     // Back to page 1 at 100%, the screenshot's state; nothing focused.
     (document.activeElement as HTMLElement | null)?.blur();
+  },
+};
+
+/**
+ * Print prints the file from a hidden frame, never a new tab or window; the frame goes once the
+ * print dialog closes, and with the section, so it never outlives the file's URL.
+ */
+export const Print: Story = {
+  render: (_args, context) => <AttachmentsDemo context={context} goneOnClose />,
+  play: async (context) => {
+    const frames = () => [...document.querySelectorAll<HTMLIFrameElement>("iframe[data-attachment-print]")];
+    // The photo: a headless browser prints it at once, with no dialog to wait for.
+    await userEvent.click(button(cardOf(context, "photo"), context, copy.preview));
+    await drawn(previewOf(context)!);
+    await userEvent.click(button(previewOf(context)!, context, copy.print));
+    await waitFor(() => expect(frames()).toHaveLength(1));
+    await waitFor(() => expect(frames()).toHaveLength(0));
+
+    // The datasheet: a headless browser has no PDF viewer, so it is printing still when the
+    // section goes (the panel closes), and the frame goes with it.
+    await userEvent.click(button(cardOf(context, "photo"), context, copy.preview));
+    await userEvent.click(button(await openDatasheet(context), context, copy.print));
+    await waitFor(() => expect(frames()).toHaveLength(1));
+    await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
+    await expect(output(context).closed).toBe("1");
+    await expect(cardOf(context, "datasheet")).toBeNull();
+    await expect(frames()).toHaveLength(0);
   },
 };
 

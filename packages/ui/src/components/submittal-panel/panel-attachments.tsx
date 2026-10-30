@@ -120,9 +120,12 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
     const read = await load(file.id, kindOf(file));
     if (read) saveAttachment(read, file.name);
   };
+  // The print frame, taken away with the section: it never outlives the file's URL.
+  const printing = useRef<(() => void) | null>(null);
+  useEffect(() => () => printing.current?.(), []);
   const print = async (file: SubmittalPanelAttachmentFile) => {
     const read = await load(file.id, kindOf(file));
-    if (read) printAttachment(read);
+    if (read) printing.current = printAttachment(read);
   };
   const retry = (file: SubmittalPanelAttachmentFile) => void load(file.id, kindOf(file));
 
