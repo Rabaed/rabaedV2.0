@@ -184,14 +184,13 @@ function negativeAsks(items: readonly ChecklistTemplateItem[], locale: Locale, t
  * A picked template at a glance (RP-655, the WIR request's "Template preview"): its name, Version
  * and count, what a negative answer asks of the Consultant, and its checks numbered, text only.
  */
-export function ChecklistTemplatePreview({ choice, locale, labels: text, heading }: { choice: ChecklistTemplateChoice; locale: Locale; labels: ChecklistTemplateFieldLabels; heading?: "h2" | "h3" }) {
+export function ChecklistTemplatePreview({ choice, locale, labels: text }: { choice: ChecklistTemplateChoice; locale: Locale; labels: ChecklistTemplateFieldLabels }) {
   const items = choice.items ?? [];
   const notice = negativeAsks(items, locale, text);
-  const Heading = heading ?? "h3";
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <Heading className="text-body font-semibold text-text">{choice.name && <bdi>{choice.name[locale]}</bdi>}</Heading>
+        <h3 className="text-body font-semibold text-text">{choice.name && <bdi>{choice.name[locale]}</bdi>}</h3>
         <p className="text-sm text-muted">{templateMeta(choice, locale, text)}</p>
       </div>
       {notice && (
@@ -250,7 +249,7 @@ function TemplateCards({
             <label
               key={o.value}
               className={cn(
-                "flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus",
+                "flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border p-3",
                 checked ? "border-brand bg-brand-tint" : "border-border bg-surface hover:bg-hover",
               )}
             >
@@ -260,7 +259,7 @@ function TemplateCards({
                 value={o.value}
                 checked={checked}
                 onChange={() => onChange?.(o.value === noChoice ? undefined : o.value)}
-                className="mt-1 size-4 shrink-0 accent-brand"
+                className={cn("mt-1 size-4 shrink-0 accent-brand", focusRing)}
               />
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-body font-semibold text-text">
@@ -289,7 +288,7 @@ function TemplateCards({
           </button>
           {itemsShown && (
             <div className="rounded-lg bg-surface-subtle p-3">
-              <ChecklistTemplatePreview choice={picked} locale={locale} labels={text} heading="h3" />
+              <ChecklistTemplatePreview choice={picked} locale={locale} labels={text} />
             </div>
           )}
         </div>

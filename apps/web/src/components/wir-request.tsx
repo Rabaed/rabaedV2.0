@@ -3,7 +3,7 @@
 import type { BilingualText, ChecklistTemplateChoice, Locale, WorkItemActions } from "@rabaed/domain";
 import { Button, ChecklistTemplatePreview, cn, Icon } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { checklistTemplateLabels } from "@/lib/form-labels";
 import { pickedTemplate } from "@/lib/inspection";
 import { OpenerAlert, useTransitionOpener } from "./work-item-actions";
@@ -33,9 +33,10 @@ export function WirRequestColumns({ on = true, side, children }: { on?: boolean;
 export function WirTemplatePreview({ picked, locale }: { picked: ChecklistTemplateChoice | null; locale: Locale }) {
   const t = useTranslations("workItems.inspection.request");
   const tForm = useTranslations("workItems.form");
+  const headingId = useId();
   return (
-    <section aria-labelledby="wir-template-preview" className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
-      <h2 id="wir-template-preview" className="font-display text-h6 font-semibold">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+      <h2 id={headingId} className="font-display text-h6 font-semibold">
         {t("previewTitle")}
       </h2>
       {picked?.name ? (
@@ -50,9 +51,10 @@ export function WirTemplatePreview({ picked, locale }: { picked: ChecklistTempla
 /** What happens once it is sent: the Contractor's review, the inspection on site, the code. `reviewer`: the one Member it goes to, when the API names one. */
 export function WirNextSteps({ reviewer, locale, className }: { reviewer: BilingualText | null; locale: Locale; className?: string }) {
   const t = useTranslations("workItems.inspection.request");
+  const headingId = useId();
   return (
-    <section aria-labelledby={`wir-next-${className ? "end" : "side"}`} className={cn("flex flex-col gap-2 rounded-lg border border-border bg-surface p-4", className)}>
-      <h2 id={`wir-next-${className ? "end" : "side"}`} className="text-xs font-semibold tracking-wide text-muted uppercase">
+    <section aria-labelledby={headingId} className={cn("flex flex-col gap-2 rounded-lg border border-border bg-surface p-4", className)}>
+      <h2 id={headingId} className="text-xs font-semibold tracking-wide text-muted uppercase">
         {t("nextTitle")}
       </h2>
       <ol className="flex list-decimal flex-col gap-1.5 ps-5 text-sm">
@@ -66,7 +68,8 @@ export function WirNextSteps({ reviewer, locale, className }: { reviewer: Biling
 
 /**
  * The request's sticky bar: who raised it and where it goes next (or that its number comes on
- * submit), then Save draft and the move that sends it on, in reach while the Form scrolls.
+ * submit), then Save draft and the move that sends it on. The page puts it last in its column, so
+ * it stays at the bottom of the screen all the way down.
  */
 export function WirRequestBar({ company, goesTo, locale, children }: { company: BilingualText; goesTo: BilingualText | null; locale: Locale; children: ReactNode }) {
   const t = useTranslations("workItems.inspection.request");

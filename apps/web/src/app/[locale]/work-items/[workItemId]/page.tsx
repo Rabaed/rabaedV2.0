@@ -377,9 +377,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           replyChecklists={shownChecklists}
           {...(requesting ? { look: { sections: "cards", checklistTemplate: "cards" } as const, saveRow: false } : {})}
         />
-        {requesting && (
-          <WirDraftBar workItemId={item.id} actions={item.actions} send={request.send} goesTo={request.goesTo} company={item.raisedBy.companyName} locale={locale} />
-        )}
 
         {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
@@ -519,6 +516,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             documents={documents.documents}
             locale={locale}
           />
+        )}
+        {/* Last in the column, so it stays at the bottom of the screen all the way down (sticky), in reach over every part. */}
+        {requesting && (
+          <WirDraftBar workItemId={item.id} actions={item.actions} send={request.send} goesTo={request.goesTo} company={item.raisedBy.companyName} locale={locale} />
         )}
         </WirRequestColumns>
       </div>

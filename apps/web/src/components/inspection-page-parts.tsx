@@ -181,7 +181,6 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
                     <Link
                       href={`/work-items/${r.id}`}
                       className={cn("flex min-h-11 items-center gap-3 rounded-md bg-surface-subtle px-3 py-2 text-sm hover:bg-hover", focusRing)}
-                      data-testid="previous-raised-item"
                     >
                       {r.documentNumber && <DocNo value={r.documentNumber} className="shrink-0 font-ui text-xs font-bold text-muted" />}
                       <bdi className="min-w-0 flex-1">{r.title}</bdi>

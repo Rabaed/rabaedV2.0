@@ -1116,7 +1116,7 @@
         "forTrade": "Templates for \u2068{trade}\u2069",
         "otherTradesHidden": "{count, plural, one {1 for other Trades hidden} other {{n} for other Trades hidden}}",
         "version": "v{n}",
-        "locked": "You can change the template until it is submitted; then it is locked.",
+        "locked": "You can change the Checklist Template until the WIR is submitted; then it is locked.",
         "hideItems": "Hide items",
         "showItems": "Show items",
         "negativeAsks": "{every, select, yes {{what, select, both {On {answer}, the Consultant must add a comment and a photo} comment {On {answer}, the Consultant must add a comment} other {On {answer}, the Consultant must add a photo}}} other {{what, select, both {On {answer}, some items need a comment or a photo from the Consultant} comment {On {answer}, some items need a comment from the Consultant} other {On {answer}, some items need a photo from the Consultant}}}}"
@@ -1184,7 +1184,7 @@
         "goesTo": "Goes to \u2068{name}\u2069",
         "numberOnSubmit": "Number given on submit",
         "actions": "Save or send this WIR",
-        "previewTitle": "Template preview",
+        "previewTitle": "Checklist Template preview",
         "previewEmpty": "Pick a Checklist Template to see its items here.",
         "nextTitle": "What happens next",
         "nextReview": "Your Company reviews it, then Returns it or Submits it to the Consultant with a Cover Note.",

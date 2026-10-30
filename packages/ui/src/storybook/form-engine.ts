@@ -37,7 +37,7 @@ export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabel
     forTrade: (trade) => `Templates for ${trade}`,
     otherTradesHidden: (n, count) => (count === 1 ? "1 for other Trades hidden" : `${n} for other Trades hidden`),
     version: (n) => `v${n}`,
-    locked: "You can change the template until it is submitted; then it is locked.",
+    locked: "You can change the Checklist Template until the WIR is submitted; then it is locked.",
     hideItems: "Hide items",
     showItems: "Show items",
     negativeAsks: (answer, what, every) =>
@@ -62,7 +62,7 @@ export const checklistTemplateLabels: Record<Locale, ChecklistTemplateFieldLabel
     forTrade: (trade) => `قوالب ${trade}`,
     otherTradesHidden: (n, count) => (count === 1 ? "قالب واحد لتخصصات أخرى مخفي" : count === 2 ? "قالبان لتخصصات أخرى مخفيان" : `${n} قوالب لتخصصات أخرى مخفية`),
     version: (n) => `الإصدار ${n}`,
-    locked: "يمكنك تغيير القالب حتى يُقدَّم، ثم يُقفل.",
+    locked: "يمكنك تغيير قالب قائمة التحقق حتى يُقدَّم طلب المعاينة، ثم يُقفل.",
     hideItems: "إخفاء البنود",
     showItems: "عرض البنود",
     negativeAsks: (answer, what, every) =>
