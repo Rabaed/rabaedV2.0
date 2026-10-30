@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import { createDb, dailyDigestJob, notificationDigestHandler, notificationEmailHandler, processOutbox, runScheduledJobs, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationDigest, NotificationList, NotificationSettingsView, SignedUrl } from "@rabaed/domain";
 import { notificationDigestMessage, notificationMessage, renderEmail, type MailMessage } from "@rabaed/mailer";
 import {
@@ -33,7 +33,7 @@ import {
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestAdmin } from "../../admin/test/support/harness.ts";
-import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -239,6 +239,12 @@ const download = async (by: Caller, id: string): Promise<{ link: SignedUrl; byte
   return { link, bytes: new Uint8Array(await res.arrayBuffer()) };
 };
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+/** Who a Caller is, in a failure. */
+const who = (by: Caller) =>
+  by === c1Pm ? "C1 PM" : by === c1Engineer ? "C1 engineer" : by === k1Pm ? "K1 PM" : by === k1Engineer ? "K1 engineer (muted)" : by === orEngineer ? "OR" : by === c2Engineer ? "C2" : "someone";
+/** Item `id`'s record for expectHiddenFrom: `[{ id }]` when `by` gets its link (which names the item), `[]` for the plain 404. */
+const recordRead = (id: string) => async (by: Caller) =>
+  (await readById<SignedUrl>(`/v1/work-items/${id}/documental-record`)(by)).map((link) => ({ id: link.url.includes(`/work-items/${id}/`) ? id : link.url }));
 const location = (link: SignedUrl) => {
   const u = new URL(link.url);
   return u.origin + u.pathname;
@@ -258,19 +264,22 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
     await ok(k1Engineer.request("PUT", `/v1/projects/${at.projectId}/mute`));
     id = await closed("Cable trays for Building A");
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord, "before the job").toBe("preparing");
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/documental-record`), "C2");
-    await expectHidden(c1Pm.get(`/v1/work-items/${id}/documental-record`), "no record yet");
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: [c1Pm, c1Engineer, k1Pm, orEngineer], hiddenFrom: c2Engineer, name: who });
+    await expectHidden(c1Pm.get(`/v1/work-items/${id}/documental-record`), "no record yet"); // not hidden-from: no record exists yet for anyone; published below
   });
 
   it("is the same for C2 as for an item that does not exist: nothing, never 'being prepared' (RP-155-2)", async () => {
-    await expectHidden(c2Engineer.get(`/v1/work-items/${id}`), "C2 reads the item itself");
-    await expectHidden(c2Engineer.get("/v1/work-items/0198f5c0-0000-7000-8000-000000000000"), "made-up id");
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: c1Pm, hiddenFrom: c2Engineer, name: who, label: "C2 reads the item itself" });
+    // A made-up id answers what C2 got: the same plain 404 (readById fails on anything else), to someone who reads the real one.
+    const made = "0198f5c0-0000-7000-8000-000000000000";
+    await expectHiddenFrom({ read: (path: string) => readById(path)(c1Pm), target: id, seenBy: `/v1/work-items/${id}`, hiddenFrom: `/v1/work-items/${made}`, label: "made-up id" });
   });
 
   it("is published, and its download works (RP-155-2)", async () => {
     await drainOutbox(worker, real);
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord, "after").toBe("published");
     expect((await download(c1Pm, id)).bytes.length).toBeGreaterThan(1000);
+    await expectHiddenFrom({ read: recordRead(id), target: id, seenBy: [c1Pm, c1Engineer, k1Pm, orEngineer], hiddenFrom: c2Engineer, name: who });
     expect(await alertsFor(id)).toEqual([]);
     expect(await checksOf(id)).toEqual([["closure", true]]);
   });
@@ -293,8 +302,7 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
   });
 
   it("tells nobody who can't see the item, and nobody who muted the Project (RP-155-1)", async () => {
-    expect(await bell(c2Engineer, id)).toEqual([]);
-    expect(await bell(k1Engineer, id)).toEqual([]);
+    await expectHiddenFrom({ read: (by: Caller) => bell(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: [c1Pm, c1Engineer, k1Pm, orEngineer], hiddenFrom: [c2Engineer, k1Engineer], name: who });
   });
 });
 
@@ -369,16 +377,22 @@ describe("scenario RP-950-1: record ready by email and in the digest", { timeout
   });
 
   it("emails no one at once who chose the digest or turned the email off, and nothing to a Member who can't see the item", async () => {
-    expect(await readyEmails(emails.k1Pm)).toEqual([]);
-    expect(await readyEmails(emails.orEngineer)).toEqual([]);
-    expect((await caught(emails.c2Engineer)).filter((m) => m.Subject.includes(documentNumber))).toEqual([]);
-    expect(await bell(c2Engineer, id)).toEqual([]);
+    // Each email is known by the item it links to; C1's PM got this item's.
+    const about = (m: { Subject: string; Text: string }) => ({ id: m.Text.includes(`/work-items/${id}`) || m.Subject.includes(documentNumber) ? id : m.Subject });
+    const emailsAbout = async (to: string) => (await caught(to)).map(about);
+    const readyAbout = async (to: string) => (await readyEmails(to)).map(about);
+    await expectHiddenFrom({ read: readyAbout, target: id, seenBy: [emails.c1Pm, emails.c1Engineer], hiddenFrom: [emails.k1Pm, emails.orEngineer], label: "an immediate email" });
+    await expectHiddenFrom({ read: emailsAbout, target: id, seenBy: emails.c1Pm, hiddenFrom: emails.c2Engineer, label: "any email of this item" });
+    await expectHiddenFrom({ read: (by: Caller) => bell(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: c1Pm, hiddenFrom: c2Engineer, name: who });
     // No row at all, so no email and no digest entry whatever C2 chooses: read as the migrator, since no read shows a
     // notification the Member can't see.
-    const c2Rows = await sql`
-      select n.id from notification n join member m on m.id = n.member_id where n.work_item_id = ${id} and m.email = ${emails.c2Engineer}
-    `.execute(migrator);
-    expect(c2Rows.rows).toEqual([]);
+    const rowsFor = (email: string) =>
+      sql<{ id: string }>`
+        select n.work_item_id as id from notification n join member m on m.id = n.member_id where n.work_item_id = ${id} and m.email = ${email}
+      `
+        .execute(migrator)
+        .then((r) => r.rows);
+    await expectHiddenFrom({ read: rowsFor, target: id, seenBy: emails.c1Pm, hiddenFrom: emails.c2Engineer, label: "a notification row" });
     // The bell is unchanged by the email choice.
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
   });
@@ -395,7 +409,13 @@ describe("scenario RP-950-1: record ready by email and in the digest", { timeout
         .filter((i) => i.workItemId === id)
         .flatMap((i) => i.entries.map((e) => e.kind));
     expect(entriesFor(emails.k1Pm)).toEqual(["record_ready"]);
-    for (const to of [emails.c1Pm, emails.c1Engineer, emails.orEngineer, emails.c2Engineer]) expect(entriesFor(to), to).toEqual([]);
+    await expectHiddenFrom({
+      read: async (to: string) => entriesFor(to).map((kind) => ({ id: kind })),
+      target: "record_ready",
+      seenBy: emails.k1Pm,
+      hiddenFrom: [emails.c1Pm, emails.c1Engineer, emails.orEngineer, emails.c2Engineer],
+      label: "a digest entry",
+    });
     const digest = digests.find((d) => d.to === emails.k1Pm && d.projects.some((p) => p.items.some((i) => i.workItemId === id)))!;
     const message = notificationDigestMessage(digest, WEB_URL);
     const { text } = renderEmail(message.template, message.locale, message.values);
@@ -441,6 +461,8 @@ describe("scenario RP-155-2: a record that fails its checks", { timeout: SETUP_M
     await drainOutbox(worker, quick);
     expect((await detail(c1Pm, id)).documentalRecord).toBe("published");
     expect((await download(k1Pm, id)).bytes.length).toBeGreaterThan(1000);
+    // Published at last, and still never C2's: the record the checks failed on was hidden from them for who they are, too.
+    await expectHiddenFrom({ read: recordRead(id), target: id, seenBy: [c1Pm, k1Pm, orEngineer], hiddenFrom: c2Engineer, name: who });
     expect(await alertsFor(id)).toEqual([]);
     for (const by of [c1Pm, k1Pm, orEngineer]) expect(await bell(by, id)).toHaveLength(1);
     expect(await checksOf(id)).toEqual([

@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { formatDate, formatHijriDate, type SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -581,7 +581,12 @@ describe("page 1 of a Code B record with Comments, in both languages", () => {
     expect(recordB.text.split(code).length - 1).toBe(recordB.pages + 1);
   });
 
-  it("holds nothing the pages don't print: no Return, Internal Note or reason", () => {
+  it("holds nothing the pages don't print: no Return, Internal Note or reason", async () => {
+    // The Internal Note is on the item, for C1 only: the record leaves out text that exists.
+    const notes = await sql<{ note: string }>`
+      select payload ->> 'internal_note' as note from work_item_event where work_item_id = ${recordB.id}::uuid and type = 'internal_note'
+    `.execute(migrator);
+    expect(notes.rows.map((r) => r.note)).toEqual([INTERNAL_NOTE]);
     for (const hidden of [INTERNAL_NOTE, "recommend"]) {
       expect(recordB.xml.toLowerCase()).not.toContain(hidden.toLowerCase());
       expect(recordB.text.toLowerCase()).not.toContain(squeeze(hidden).toLowerCase());
@@ -615,8 +620,15 @@ describe("the Project's record language and Hijri dates", () => {
     await ok(setRecordSettings("ar", true));
     expect(await summary(c1Pm)).toMatchObject({ recordLanguage: "ar", recordHijriDates: true });
     await ok(setRecordSettings("bilingual", false));
-    await expectHidden(c1Pm.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "en", hijriDates: false }), "a Member who is no Project Admin");
-    await expectHidden(k1Pm.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "en", hijriDates: false }), "another Company's Member");
+    // The settings as they stand, so the Project Admin's save changes nothing: only who may save is told apart.
+    const saves = async (by: Caller) => {
+      const res = await by.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "bilingual", hijriDates: false });
+      if (res.statusCode < 300) return [{ id: at.projectId }];
+      await expectHidden(res, "save the record settings");
+      return [];
+    };
+    const name = (by: Caller) => (by === c1Pm ? "a Member who is no Project Admin" : by === k1Pm ? "another Company's Member" : "the Project Admin");
+    await expectHiddenFrom({ read: saves, target: at.projectId, seenBy: at.admin!, hiddenFrom: [c1Pm, k1Pm], name });
     expect(await summary(c1Pm)).toMatchObject({ recordLanguage: "bilingual" });
     const refused = await setRecordSettings("fr", false);
     expect(refused.statusCode).toBe(400);
@@ -698,8 +710,13 @@ describe("the Owner's review: Code D, and a Code the Owner sent back", () => {
     for (const value of ["Confirmedby", "Rejected"]) expect(record.text, value).toContain(value);
   });
 
-  it("never prints a Code the Owner sent back: not its Remarks, its Comments or its Recommendation", () => {
+  it("never prints a Code the Owner sent back: not its Remarks, its Comments or its Recommendation", async () => {
     const record = shared.sentBack;
+    // The Code the Owner sent back was given, with its Remarks: the record leaves out text that exists.
+    const given = await sql<{ n: number }>`
+      select count(*)::int as n from work_item_event where work_item_id = ${record.id}::uuid and payload::text like ${`%${REMARKS_B}%`}
+    `.execute(migrator);
+    expect(given.rows[0]!.n).toBeGreaterThan(0);
     for (const hidden of [REMARKS_B, "Seal the penetrations after the Owner's return", "Recommend B", "Send Back"]) {
       expect(record.xml, hidden).not.toContain(hidden);
       expect(record.text, hidden).not.toContain(squeeze(hidden));

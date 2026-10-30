@@ -39,12 +39,12 @@ apps/api/test/demo-seed.test.ts text 11
 apps/api/test/document-fingerprints.test.ts empty 1
 apps/api/test/documental-record-appendix.test.ts empty 15
 apps/api/test/documental-record-appendix.test.ts text 3
-apps/api/test/documental-record-checklist.test.ts empty 5
-apps/api/test/documental-record-page-one.test.ts empty 21
+apps/api/test/documental-record-checklist.test.ts empty 3
+apps/api/test/documental-record-page-one.test.ts empty 20
 apps/api/test/documental-record-page-one.test.ts text 10
 apps/api/test/documental-record-signatures.test.ts empty 31
 apps/api/test/documental-record-signatures.test.ts text 6
-apps/api/test/documental-record.test.ts empty 16
+apps/api/test/documental-record.test.ts empty 11
 apps/api/test/documental-record.test.ts text 7
 apps/api/test/documents.test.ts empty 14
 apps/api/test/draft-autosave.test.ts empty 2
@@ -72,7 +72,7 @@ apps/api/test/link-question.test.ts empty 6
 apps/api/test/link-question.test.ts text 3
 apps/api/test/link-search.test.ts empty 7
 apps/api/test/link-search.test.ts text 6
-apps/api/test/linked-documental-record.test.ts empty 11
+apps/api/test/linked-documental-record.test.ts empty 1
 apps/api/test/linked-documental-record.test.ts text 3
 apps/api/test/linked-from.test.ts empty 4
 apps/api/test/linked-from.test.ts text 3
@@ -128,7 +128,7 @@ apps/api/test/raised-item-counts.test.ts empty 4
 apps/api/test/raiser-holder.test.ts empty 8
 apps/api/test/random-ids.test.ts text 2
 apps/api/test/reads-at-scale.test.ts empty 1
-apps/api/test/record-checks.test.ts empty 27
+apps/api/test/record-checks.test.ts empty 15
 apps/api/test/record-checks.test.ts text 12
 apps/api/test/register-import.test.ts empty 57
 apps/api/test/register-import.test.ts text 2
@@ -229,7 +229,7 @@ apps/api/test/workflow-map.test.ts empty 1
 apps/api/test/workflow-map.test.ts text 4
 apps/api/test/workflow-settings.test.ts empty 17
 apps/api/test/workflow-settings.test.ts text 1
-apps/api/test/working-copy.test.ts empty 15
+apps/api/test/working-copy.test.ts empty 7
 apps/api/test/working-copy.test.ts text 7
 packages/db/test/admin-sign-in-rls.test.ts empty 2
 packages/db/test/app-role-check.test.ts empty 1
@@ -243,7 +243,6 @@ packages/db/test/code-b-comments-rls.test.ts empty 13
 packages/db/test/code-b-comments-rls.test.ts text 1
 packages/db/test/company-defaults-rls.test.ts empty 2
 packages/db/test/company-defaults-rls.test.ts text 1
-packages/db/test/company-stamp-rls.test.ts empty 3
 packages/db/test/definer-access.test.ts empty 4
 packages/db/test/definer-language.test.ts empty 2
 packages/db/test/definer-search-path.test.ts empty 3
@@ -271,12 +270,10 @@ packages/db/test/identity-rls.test.ts empty 4
 packages/db/test/inspections-scenarios-rls.test.ts empty 5
 packages/db/test/inspections-scenarios-rls.test.ts text 2
 packages/db/test/item-visibility-tables.test.ts empty 3
-packages/db/test/linked-documental-record-rls.test.ts empty 9
 packages/db/test/list-columns-rls.test.ts empty 1
 packages/db/test/member-appearance-rls.test.ts empty 1
 packages/db/test/member-management-rls.test.ts empty 4
 packages/db/test/member-project-counts-rls.test.ts empty 8
-packages/db/test/member-signature-rls.test.ts empty 2
 packages/db/test/notification-settings-rls.test.ts empty 5
 packages/db/test/number-fixed-fields.test.ts empty 2
 packages/db/test/numbering-counter-rls.test.ts empty 1

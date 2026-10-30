@@ -125,9 +125,6 @@ RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
 # RP-651
 RP-651-2 api  # C1's engineer raises a Civil WIR picking "Concrete pour": its Version 1 items are copied o
 
-# RP-670
-RP-670-1 api  # A record job fails and then runs out of attempts, and a Rabaed Engineer reads the failing 
-
 # RP-1058
 RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
 
