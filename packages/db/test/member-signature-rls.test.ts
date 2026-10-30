@@ -9,7 +9,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls, withoutSignature, withoutStamp } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls, withoutSignature, withoutStamp } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -103,6 +103,17 @@ describe("member_signature", () => {
       expect(await ownersRead(reader), reader).toEqual([reader]);
       expect(await fileUploadersRead(reader), reader).toEqual([reader]);
     }
+    // And by id: each Signature in force, and its file, is read by its own Member and nobody else.
+    for (const [owner, others] of [
+      [people.a, [people.colleague, people.b]],
+      [people.b, [people.a, people.colleague]],
+    ] as const) {
+      const { rows } = await migrator.query("select id, file_id from member_signature where member_id = $1 and active_to is null", [owner]);
+      const { id, file_id } = rows[0] as { id: string; file_id: string };
+      const name = (reader: string) => Object.entries(people).find(([, v]) => v === reader)![0];
+      await expectHiddenFrom({ read: (r: string) => rowsAs<{ id: string }>(r, sql`select id from member_signature`), target: id, seenBy: owner, hiddenFrom: others, name });
+      await expectHiddenFrom({ read: (r: string) => rowsAs<{ id: string }>(r, sql`select id from stored_file`), target: file_id, seenBy: owner, hiddenFrom: others, name });
+    }
   });
 
   it("is read by the owner, as the record job reads it: everyone's", async () => {
@@ -129,7 +140,7 @@ describe("member_signature", () => {
   });
 
   it("replacing it ends the old row, kept as it was, and makes the new one the only one in force", async () => {
-    expect(await rowsAs(people.colleague, sql`select 1 from member_signature where active_to is null`)).toEqual([]);
+    expect(await rowsAs(people.colleague, sql`select 1 from member_signature where active_to is null`)).toEqual([]); // not hidden-from: the colleague's own, before they save one
     const first = await save(people.colleague, "drawn");
     const second = await save(people.colleague, "uploaded");
     const rows = await rowsAs<{ id: string; method: string; ended: boolean }>(
@@ -183,9 +194,17 @@ describe("app.active_signature_id, as the app role", () => {
   it("gives the acting Member their own Signature in force, and nobody else's", async () => {
     const own = await rowsAs<{ id: string }>(people.a, sql`select id from member_signature where active_to is null`);
     expect(await rowsAs(people.a, sql`select app.active_signature_id(${people.a}::uuid) as id`)).toEqual(own);
-    // people.b has one in force, but the app role reads it as nobody's.
-    expect(await rowsAs(people.a, sql`select app.active_signature_id(${people.b}::uuid) as id`)).toEqual([{ id: null }]);
-    expect(await rowsAs(null, sql`select app.active_signature_id(${people.b}::uuid) as id`)).toEqual([{ id: null }]);
+    // people.b has one in force, which they read as theirs, but anyone else reads it as nobody's.
+    const { rows } = await migrator.query("select id from member_signature where member_id = $1 and active_to is null", [people.b]);
+    await expectHiddenFrom({
+      read: async (reader: string | null) =>
+        (await rowsAs<{ id: string | null }>(reader, sql`select app.active_signature_id(${people.b}::uuid) as id`)).filter((r) => r.id !== null),
+      target: rows[0].id as string,
+      idOf: (r) => r.id!,
+      seenBy: people.b,
+      hiddenFrom: [people.a, null],
+      name: (reader) => (reader === null ? "no Member" : reader === people.a ? "A" : "B"),
+    });
   });
 });
 
@@ -204,6 +223,6 @@ describe("the test database's defaults (test-defaults.ts)", () => {
     ]);
     expect(await rowsAs(id, sql`select method from member_signature where active_to is null`)).toEqual([{ method: "drawn" }]);
     await withoutSignature((text, values) => migrator.query(text, values), id);
-    expect(await rowsAs(id, sql`select 1 from member_signature where active_to is null`)).toEqual([]);
+    expect(await rowsAs(id, sql`select 1 from member_signature where active_to is null`)).toEqual([]); // not hidden-from: the Member's own, once ended
   });
 });

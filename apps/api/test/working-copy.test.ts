@@ -6,7 +6,7 @@
 // Project's watermark on every page. Anyone who doesn't see the item gets the plain 404.
 import { createHash } from "node:crypto";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkingCopyAnswer } from "@rabaed/domain";
 import { chromiumRenderer, fallbackFonts, projectFilesFromEnv, s3RecordFiles, workingCopyHandler } from "@rabaed/worker/record";
 import { sql } from "kysely";
@@ -50,6 +50,18 @@ const handler: OutboxHandler = workingCopyHandler({
 const ask = (by: Caller, id: string) => by.post(`/v1/work-items/${id}/working-copy`);
 const answer = async (by: Caller, id: string): Promise<WorkingCopyAnswer> => (await ok(ask(by, id), 200)).json() as WorkingCopyAnswer;
 const runWorker = () => drainOutbox(worker, { working_copy: handler });
+
+/** Item `id`'s Working Copy for expectHiddenFrom: `[{ id }]` when `by`'s ask is answered, `[]` for the plain 404. */
+const copyOf = (id: string) => async (by: Caller) => {
+  const res = await ask(by, id);
+  if (res.statusCode === 200) return [{ id }];
+  await expectHidden(res, `working copy of ${id}`);
+  return [];
+};
+/** Each in `seenBy` gets an answer for item `id`'s Working Copy, and nobody in `hiddenFrom` does. */
+const copyHiddenFrom = (id: string, seenBy: Caller | Caller[], hiddenFrom: Caller | Caller[], label: string) =>
+  expectHiddenFrom({ read: copyOf(id), target: id, seenBy, hiddenFrom, name: whoIs, label });
+const whoIs = (by: Caller) => (by === c1Engineer ? "C1 engineer" : by === c1Pm ? "C1 PM" : by === k1Pm ? "K1" : by === c2Engineer ? "C2" : "someone");
 
 /** The Working Copy as `by` downloads it once printed: the signed link, then the file. */
 async function download(by: Caller, id: string): Promise<{ link: WorkingCopyAnswer & { status: "ready" }; bytes: Uint8Array }> {
@@ -184,9 +196,11 @@ describe("scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy whil
   });
 
   it("is the plain 404 for C2, who doesn't see the item, and for a made-up id", async () => {
-    await expectHidden(ask(c2Engineer, id), "C2");
-    await expectHidden(ask(c1Pm, "0198f5c0-0000-7000-8000-000000000000"), "made-up id");
-    await expectHidden(ask(c1Pm, "not-an-id"), "malformed id");
+    await copyHiddenFrom(id, [c1Pm, k1Pm], c2Engineer, "the item");
+    // A made-up or malformed id gets the same 404, from someone who gets this item's copy.
+    for (const other of ["0198f5c0-0000-7000-8000-000000000000", "not-an-id"]) {
+      await expectHiddenFrom({ read: (item: string) => copyOf(item)(c1Pm).then((rows) => rows.map(() => ({ id: "a copy" }))), target: "a copy", seenBy: id, hiddenFrom: other });
+    }
   });
 
   it("is printed again when what it shows changes: the Project's new watermark", async () => {
@@ -207,7 +221,7 @@ describe("scenarios RP-23-3 and RP-1083-3: C1's PM downloads a Working Copy whil
     const closing = await withK1("Closed before its Working Copy");
     await take(k1Pm, closing, "approve_a");
     expect(await answer(c1Pm, closing)).toEqual({ status: "closed" });
-    await expectHidden(ask(c2Engineer, closing), "C2");
+    await copyHiddenFrom(closing, c1Pm, c2Engineer, "the closed item");
   });
 });
 
@@ -221,7 +235,7 @@ describe("a Working Copy follows the item: a move makes a new one, never the old
     expect(await answer(c1Engineer, id)).toEqual({ status: "preparing" });
     await runWorker();
     const before = await download(c1Engineer, id);
-    await expectHidden(ask(k1Pm, id), "K1 before the Submit");
+    await copyHiddenFrom(id, c1Engineer, k1Pm, "before the Submit");
     await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(c1Pm, id, "submit");
     // The stored copy is of the item as it was: the next ask prints the item as it is now.
@@ -248,7 +262,7 @@ describe("a Working Copy follows the item: a move makes a new one, never the old
     expect(await answer(k1Pm, id)).toEqual({ status: "preparing" });
     await runWorker();
     expect((await answer(k1Pm, id)).status).toBe("ready");
-    await expectHidden(ask(c2Engineer, id), "C2, the copy printed");
+    await copyHiddenFrom(id, k1Pm, c2Engineer, "the copy printed");
   }, 180_000);
 });
 
@@ -260,8 +274,7 @@ describe("a Draft's Working Copy (V1)", () => {
   }, 60_000);
 
   it("is only for the Members who see the Draft; K1 and C2 get the 404", async () => {
-    await expectHidden(ask(k1Pm, id), "K1");
-    await expectHidden(ask(c2Engineer, id), "C2");
+    await copyHiddenFrom(id, c1Engineer, [k1Pm, c2Engineer], "the Draft");
     expect(await answer(c1Engineer, id)).toEqual({ status: "preparing" });
     await runWorker();
     const { bytes } = await download(c1Engineer, id);
@@ -269,7 +282,7 @@ describe("a Draft's Working Copy (V1)", () => {
     expect(text).toContain(squeeze("Draft trays"));
     expect(text).toContain("NotFinal");
     for (const person of PEOPLE) expect(text, person).not.toContain(squeeze(person));
-    await expectHidden(ask(k1Pm, id), "K1 after it was printed");
+    await copyHiddenFrom(id, c1Engineer, k1Pm, "after it was printed");
   }, 120_000);
 });
 

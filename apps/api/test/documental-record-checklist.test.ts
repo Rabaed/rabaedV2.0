@@ -12,7 +12,7 @@
 // Rabaed Defaults (the WIR Form Version 3 and Workflow Version 4).
 import { createHash } from "node:crypto";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, DocumentList, SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -31,7 +31,7 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestAdmin } from "../../admin/test/support/harness.ts";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -255,8 +255,14 @@ describe("RP-982-1: never the Consultant's own work", () => {
   });
 
   it("is the plain 404 for C2, with the WIR and its photos", async () => {
-    await expectHidden(downloadLink(yousef.caller, wir), "C2");
-    await expectHidden(yousef.caller.get(`/v1/work-items/${wir}/documents`), "C2");
+    const name = (by: Caller) => (by === yousef.caller ? "C2" : by === faisal.caller ? "O1" : by === mohammed.caller ? "K1" : "C1");
+    // The record's signed link names the WIR it is of.
+    const recordOfWir = async (by: Caller) =>
+      (await readById<SignedUrl>(`/v1/work-items/${wir}/documental-record`)(by)).map((link) => ({ id: link.url.includes(`/work-items/${wir}/`) ? wir : link.url }));
+    await expectHiddenFrom({ read: recordOfWir, target: wir, seenBy: [ali.caller, mohammed.caller, faisal.caller], hiddenFrom: yousef.caller, name });
+    const documentsOfWir = async (by: Caller) => (await readById<DocumentList>(`/v1/work-items/${wir}/documents`)(by)).flatMap((list) => list.documents);
+    const [photo] = await documentsOfWir(hafiz.caller);
+    await expectHiddenFrom({ read: documentsOfWir, target: photo!.id, seenBy: [hafiz.caller, mohammed.caller], hiddenFrom: yousef.caller, name });
   });
 
   it("lists none of the checklist's photos with the shared Documents, and makes no appendix page of them", async () => {

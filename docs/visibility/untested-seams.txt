@@ -118,9 +118,6 @@ RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to
 # RP-626
 RP-626-3 api  # C1 asks a QSN and K1 asks a QSC, both Open (as the app role)
 
-# RP-670
-RP-670-1 api  # A record job fails and then runs out of attempts, and a Rabaed Engineer reads the failing 
-
 # RP-1058
 RP-1058-1 db  # A visitor, signed in nowhere, asks for a password reset link for a C1 engineer's email, fo
 

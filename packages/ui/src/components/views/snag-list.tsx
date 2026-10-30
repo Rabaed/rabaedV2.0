@@ -387,7 +387,8 @@ export function SnagList({
   // Below `md` the List is the phone's cards (RP-630); the Kanban, and a Module with no item at all, look the same everywhere.
   const phone = data.view === "list" && !(total === 0 && !filtered);
   const desktop = (
-    <div className={cn("flex min-w-0 flex-col gap-3", phone && "max-md:hidden")}>
+    // The Kanban takes the rest of the window under the type chips (RP-1092).
+    <div className={cn("flex min-w-0 flex-col gap-3 fills-window:min-h-0 fills-window:flex-1", phone && "max-md:hidden")}>
       <ListToolbar label={labels.toolbar} end={viewSwitch} className="gap-1.5">
         {newTypes.length > 0 && newAction}
         <ToolbarSearch
@@ -857,7 +858,11 @@ function SnagTable({
   );
 }
 
-/** The Kanban: a column per Stage (Drafts left out, as on every board), each with its count and its cards. */
+/**
+ * The Kanban: a column per Stage (Drafts left out, as on every board), each with its count and its cards.
+ * On its page it fills the window (RP-1092) and scrolls down and sideways in its own region, its
+ * scrollbar on the window's bottom edge; a column reaches the board's foot and grows with its cards.
+ */
 function SnagBoard({
   board,
   locale,
@@ -878,13 +883,21 @@ function SnagBoard({
   const n = (value: number) => formatNumber(value, locale);
   const columns = new Map(board.columns.map((c) => [c.stageKey, c]));
   return (
-    <section aria-label={labels.board} tabIndex={0} className={cn("flex min-w-0 gap-3 overflow-x-auto pb-2", focusRing)}>
+    <section
+      aria-label={labels.board}
+      tabIndex={0}
+      // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
+      // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
+      data-fills-window=""
+      className={cn("flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2", focusRing, "focus-visible:-outline-offset-2")}
+    >
       {board.stages
         .filter((s) => s.category !== "draft")
         .map((stage) => {
           const cards = (columns.get(stage.key)?.lanes ?? []).flatMap((l) => l.cards);
           return (
-            <section key={stage.key} aria-label={stage.name[locale]} className="flex w-[272px] shrink-0 flex-col rounded-md bg-surface-subtle">
+            // Stretched to the board's height, and never shorter than its cards.
+            <section key={stage.key} aria-label={stage.name[locale]} className="flex min-h-fit w-[272px] shrink-0 flex-col rounded-md bg-surface-subtle">
               <h2 className="flex h-11 items-center gap-2 px-3 text-[13.5px] font-semibold text-text">
                 <StageDot stage={stageColour(stage)} />
                 {stage.name[locale]}
