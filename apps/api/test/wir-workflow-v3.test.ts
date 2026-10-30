@@ -9,12 +9,12 @@
 // Rabaed Defaults.
 import { rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
 import { createDb, readPublishedVersionDefinition, withMember } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { parseWorkflowDefinition, type Home, type TypeOutcomes, type WorkItemBoard, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checklistTemplate } from "./support/checklist-template.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { pinToWorkflowVersion } from "./support/pin-version.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
@@ -196,7 +196,7 @@ describe("a WIR on Version 3 (seam 1 acceptance)", () => {
     expect(await detail(mohammed.caller, id)).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_manager" } });
     expect((await detail(mohammed.caller, id)).heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
     expect(await transitionKeys(mohammed.caller, id)).toEqual(["approve_a", "approve_b", "reject_d", "return_to_engineer", "revise_c"]);
-    expect(await transitionKeys(ahmed.caller, id)).toEqual([]);
+    expect(await transitionKeys(ahmed.caller, id)).toEqual([]); // not hidden-from: holds no Step, so takes nothing
   });
 
   it("the Manager Returns to the Engineer with a reason, who Sends to Manager again", async () => {
@@ -282,11 +282,26 @@ describe("RP-673-1: who reads the Consultant Engineer's Recommended Code of a WI
   /** What `as` reads of the item's events through row-level security, as the app role. */
   const eventsAs = (as: string) =>
     withMember(appDb, as, (trx) =>
-      sql<{ type: string; payload: unknown }>`select type, payload from work_item_event where work_item_id = ${id}::uuid order by seq`.execute(trx).then((r) => r.rows),
+      sql<{ id: string; type: string; payload: unknown }>`select id, type, payload from work_item_event where work_item_id = ${id}::uuid order by seq`.execute(trx).then((r) => r.rows),
     );
+  /** As the app role: the item's events whose row holds the Internal Note. */
+  const noteRowsAs = async (as: string) => (await eventsAs(as)).filter((e) => JSON.stringify(e.payload).includes(RECOMMENDATION_NOTE));
+  /** [the note] when `by`'s history of the item holds it (an event's `seq` counts only what its reader sees, so the note's own text is the key). */
+  const noteInHistory = async (by: Caller) =>
+    (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by)).filter((h) => JSON.stringify(h).includes(RECOMMENDATION_NOTE)).map(() => ({ id: RECOMMENDATION_NOTE }));
+  /** The id of the item's newest event the migrator reads under `where`. */
+  const eventId = async (where: string) =>
+    (await sql<{ id: string }>`select id from work_item_event where work_item_id = ${id}::uuid and ${sql.raw(where)} order by seq desc limit 1`.execute(migrator)).rows[0]!.id;
+  const names = new Map<string | Caller, string>();
+  const named = (who: string | Caller) => names.get(who) ?? "someone";
 
   beforeAll(async () => {
     id = await submitted("Visibility");
+    for (const [m, name] of [[hafiz, "Hafiz (C1)"], [ali, "Ali (C1)"], [ahmed, "Ahmed (K1)"], [mohammed, "Mohammed (K1)"], [yousef, "Yousef (C2)"]] as const) {
+      names.set(m.id, name);
+      names.set(m.caller, name);
+    }
+    names.set(faisal, "Faisal (O1)");
   });
 
   it("C1 and oversight read nothing of it, before or after the Code; K1 reads it", async () => {
@@ -306,31 +321,32 @@ describe("RP-673-1: who reads the Consultant Engineer's Recommended Code of a WI
       const events = await history(who, id);
       expect(events.some((e) => e.type === "recommend_code")).toBe(false);
       expect(events.map((e) => e.recommendedCode ?? null)).toEqual(events.map(() => null));
-      expect(JSON.stringify(events)).not.toContain(RECOMMENDATION_NOTE);
       expect(events.at(-1)).toMatchObject({ type: "issue_code", outcome: "C" });
     }
+    await expectHiddenFrom({ read: noteInHistory, target: RECOMMENDATION_NOTE, seenBy: [ahmed.caller, mohammed.caller], hiddenFrom: [hafiz.caller, ali.caller, faisal], name: named, label: "after the Code" });
   });
 
   it("as the app role, the event rows of the Recommended Code and the Internal Note are K1's alone", async () => {
-    for (const as of [ahmed.id, mohammed.id]) expect((await eventsAs(as)).map((e) => e.type)).toContain("recommend_code");
-    for (const as of [hafiz.id, ali.id]) {
-      const rows = await eventsAs(as);
-      expect(rows.map((e) => e.type)).not.toContain("recommend_code");
-      expect(JSON.stringify(rows)).not.toContain(RECOMMENDATION_NOTE);
-    }
+    const [seenBy, hiddenFrom] = [[ahmed.id, mohammed.id], [hafiz.id, ali.id]];
+    await expectHiddenFrom({ read: eventsAs, target: await eventId("type = 'recommend_code'"), seenBy, hiddenFrom, name: named, label: "the Recommended Code's row" });
+    const noteRow = await eventId(`payload::text like '%${RECOMMENDATION_NOTE}%'`);
+    await expectHiddenFrom({ read: noteRowsAs, target: noteRow, seenBy, hiddenFrom, name: named, label: "the Internal Note's row" });
   });
 
   it("another Contractor, C2, who doesn't cover the trade, reads nothing of the WIR: no item, history or events", async () => {
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}`));
-    await expectHidden(yousef.caller.get(`/v1/work-items/${id}/history`));
-    expect(await eventsAs(yousef.id)).toEqual([]);
+    const seenBy = [hafiz.caller, mohammed.caller];
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy, hiddenFrom: yousef.caller, name: named, label: "the item" });
+    const historyRead = async (by: Caller) => (await readById<WorkItemHistory>(`/v1/work-items/${id}/history`)(by)).map(() => ({ id }));
+    await expectHiddenFrom({ read: historyRead, target: id, seenBy, hiddenFrom: yousef.caller, name: named, label: "its history" });
+    // The Code, shared: C1 and K1 read its row as the app role, C2 doesn't.
+    await expectHiddenFrom({ read: eventsAs, target: await eventId("type = 'issue_code'"), seenBy: [hafiz.id, mohammed.id], hiddenFrom: yousef.id, name: named, label: "its events" });
   });
 });
 
 describe("the WIR Type issues Review Codes (ADR 0025)", () => {
   it("its outcomes on a Project are Codes A–D with a submittal's follow-ups, then the Inspection Results Versions 1 and 2 still issue", async () => {
     const set: TypeOutcomes = (await ok(hafiz.caller.get(`/v1/projects/${projectId}/work-item-types/WIR/outcomes`), 200)).json();
-    expect(set.outcomes.map((o) => [o.code, o.name.en, o.polarity, o.actions])).toEqual([
+    expect(set.outcomes.map((o) => [o.code, o.name.en, o.polarity, o.actions])).toEqual([ // not hidden-from: the Type's Codes and their names
       ["A", "Approved", "positive", []],
       ["B", "Approved with Comments", "positive", [{ kind: "create_items", type: "CMT" }]],
       ["C", "Revise and Resubmit", "negative", [{ kind: "offer_revision" }]],
@@ -350,7 +366,7 @@ describe("the Inspections Stages are the Submittals set (ADR 0025)", () => {
     const inspections = (await board(hafiz.caller, "inspections")).stages;
     expect(inspections.map((s) => s.key)).toEqual(submittalKeys);
     expect(inspections.map((s) => s.key)).toEqual(["draft", "internal_review", "pending_approval", "approved", "revise_resubmit", "cancelled", "rejected"]);
-    expect(inspections.map((s) => s.name.en)).toEqual(["Draft", "Internal Review", "Pending Approval", "Approved", "Revise & Resubmit", "Cancelled", "Rejected"]);
+    expect(inspections.map((s) => s.name.en)).toEqual(["Draft", "Internal Review", "Pending Approval", "Approved", "Revise & Resubmit", "Cancelled", "Rejected"]); // not hidden-from: the Stages' names
     const { rows } = await sql<{ key: string }>`
       select distinct key from stage where module_key = 'inspections' and owner_kind = 'rabaed' order by key
     `.execute(migrator);
@@ -392,7 +408,7 @@ describe("the Inspections Stages are the Submittals set (ADR 0025)", () => {
             and (project_id is null or project_id = ${projectId}::uuid)
           order by owner_kind desc
         `.execute(trx);
-        expect(names.rows.map((r) => [r.owner_kind, r.name.en])).toEqual([
+        expect(names.rows.map((r) => [r.owner_kind, r.name.en])).toEqual([ // not hidden-from: the Stage's names, as the migrator reads them
           ["rabaed", "Pending Approval"],
           ["project", "Awaiting the Consultant"],
         ]);
@@ -427,7 +443,7 @@ describe("the Inspections Stages are the Submittals set (ADR 0025)", () => {
         const own = await sql<{ key: string; name: { en: string } }>`
           select key, name from stage where project_id = ${projectId}::uuid and module_key = 'inspections' and key in ('pending_approval', 'on_site')
         `.execute(trx);
-        expect(own.rows.map((r) => [r.key, r.name.en])).toEqual([["on_site", "On Site"]]);
+        expect(own.rows.map((r) => [r.key, r.name.en])).toEqual([["on_site", "On Site"]]); // not hidden-from: the Project's own Stage, as the migrator reads it
         throw rollback;
       })
       .catch((e: unknown) => {
