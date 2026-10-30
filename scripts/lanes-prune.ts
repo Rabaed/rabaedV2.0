@@ -55,7 +55,7 @@ import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, type JudgedLane } from "./prune-guards.ts";
 import { gitChanges, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 import { pidAlive } from "./lanes-lock.ts";
-import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type Orphan } from "./verapdf-containers.ts";
+import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
 const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
 const argv = process.argv.slice(2);
@@ -232,7 +232,7 @@ printKept();
 if (failed > 0) process.exit(1);
 
 /** RP-1122: the veraPDF containers to remove; those kept go to `kept`, with why. */
-function veraPdfCandidates(): Orphan[] {
+function veraPdfCandidates(): GoneContainer[] {
   const listed = listVeraPdfContainers(DOCKER_TIMEOUT_MS);
   if (!listed) {
     kept.push({ what: "veraPDF containers", reason: "Docker did not list them; none removed" });

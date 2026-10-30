@@ -7,6 +7,9 @@
 //
 // Kept, and named: a container whose process still runs, one whose name carries no pid, and
 // any of a worktree that holds lane 7 (Main 7's harness).
+//
+// The pid is a host pid, checked on the machine running the prune. A session started from another
+// pid namespace on the same Docker (WSL, a Linux container) would look gone; none is started so today.
 import { execFileSync } from "node:child_process";
 import { protectedLaneReason } from "./lanes.ts";
 import { pathSpellings } from "./stories-volumes.ts";
@@ -17,7 +20,7 @@ export const VERAPDF_LABEL = "rabaed.verapdf";
 export type VeraPdfContainer = { name: string; hash: string; pid: number | undefined; state: string; age: string };
 export type KeptContainer = { what: string; reason: string };
 /** A container whose test process is gone. */
-export type Orphan = VeraPdfContainer & { pid: number };
+export type GoneContainer = VeraPdfContainer & { pid: number };
 
 const NAME = /^rabaed-verapdf-[0-9a-f]{8}-(\d+)-\d+$/;
 const psFormat = `{{.Names}}\t{{.Label "${VERAPDF_LABEL}"}}\t{{.State}}\t{{.RunningFor}}`;
@@ -53,8 +56,8 @@ export function chooseVeraPdfContainers({
   containers: VeraPdfContainer[];
   alive: (pid: number) => boolean;
   protectedHashes: Map<string, string>;
-}): { remove: Orphan[]; kept: KeptContainer[] } {
-  const remove: Orphan[] = [];
+}): { remove: GoneContainer[]; kept: KeptContainer[] } {
+  const remove: GoneContainer[] = [];
   const kept: KeptContainer[] = [];
   for (const c of containers) {
     const guarded = protectedHashes.get(c.hash);

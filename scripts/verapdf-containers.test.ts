@@ -1,6 +1,18 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { veraPdfSessionArgs, veraPdfWorktreeHash } from "../apps/worker/src/record/verapdf.ts";
 import { chooseVeraPdfContainers, parseVeraPdfContainers, protectedHashes } from "./verapdf-containers.ts";
 import { worktreeHash } from "./test-stories-linux.ts";
+
+describe("the worker's session containers (RP-1122)", () => {
+  it("carry the hash and pid the sweep reads back, the stories script's hash of this worktree", () => {
+    const hash = veraPdfWorktreeHash();
+    expect(hash).toBe(worktreeHash(resolve(import.meta.dirname, "..")));
+    const args = veraPdfSessionArgs({ image: "verapdf/cli:1.28.2", dir: "/tmp/x", hash, pid: 4312, n: 987654321 });
+    const name = args[args.indexOf("--name") + 1]!;
+    expect(parseVeraPdfContainers(`${name}\t${hash}\trunning\t1 minute ago\n`)[0]).toMatchObject({ hash, pid: 4312 });
+  });
+});
 
 // `docker ps -a --filter label=rabaed.verapdf --format ...` as Docker prints it: name, label, state, age.
 const ps = [
