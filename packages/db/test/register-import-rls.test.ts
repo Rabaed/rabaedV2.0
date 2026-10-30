@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { drainOutbox, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { drainOutbox, expectHiddenFrom, joinProject, LEGACY_MAR, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -100,13 +100,23 @@ const confirm = (as: string, importId: string) =>
   call<{ outcome: string; rows_created: number | null }>(as, sql`select outcome, rows_created from app.confirm_register_import(${importId}::uuid, now())`).then(
     (r) => r[0]!,
   );
-const importsSeen = (as: string) => call<{ id: string }>(as, sql`select id from submittal_register_import`).then((r) => r.map((x) => x.id));
 const rowsSeen = (as: string, importId: string) =>
   call<{ row_no: number }>(as, sql`select row_no from submittal_register_import_row where import_id = ${importId}::uuid order by row_no`).then((r) =>
     r.map((x) => x.row_no),
   );
 const results = (as: string, importId: string) =>
   call<{ row_no: number; created: boolean; work_item_id: string | null }>(as, sql`select * from app.register_import_results(${importId}::uuid)`);
+
+// Reads for expectHiddenFrom (RP-1095), each by id: the imports `as` reads, an import's rows
+// (each row as its import's id), an import's results (likewise), and the Drafts among `ids`.
+const importRows = (as: string) => call<{ id: string }>(as, sql`select id from submittal_register_import`);
+const rowsOf = (importId: string) => (as: string) =>
+  call<{ id: string }>(as, sql`select import_id as id from submittal_register_import_row where import_id = ${importId}::uuid`);
+const resultsOf = (importId: string) => (as: string) => results(as, importId).then((r) => r.map(() => ({ id: importId })));
+const workItemsOf = (ids: string[]) => (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = any (${ids}::uuid[])`);
+/** Who a Member id is, in a failure. */
+const names = new Map<string, string>();
+const whoIs = (as: string) => names.get(as) ?? as;
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -119,6 +129,12 @@ beforeAll(async () => {
   ow = await company(engineer, "OW");
   c1Colleague = await member(c1.id, "pm");
   c1Narrowed = await member(c1.id, "narrowed");
+  for (const [co, name] of [[c1, "C1"], [k1, "K1"], [c2, "C2"], [ow, "Owner"]] as const) {
+    names.set(co.ap, `${name} AP`);
+    names.set(co.member, `${name} member`);
+  }
+  names.set(c1Colleague, "C1 PM");
+  names.set(c1Narrowed, "C1 narrowed engineer");
 
   const [created] = await call<{ project_id: string }>(
     c1.ap,
@@ -188,13 +204,13 @@ describe("RP-589-1: only the importing Participant reads an import", () => {
   });
 
   it("keeps a preview to its importer, and creates nothing", async () => {
-    expect(await importsSeen(c1.member)).toContain(importId);
     expect(await rowsSeen(c1.member, importId)).toEqual([2, 3, 4]);
-    expect(await importsSeen(c1Colleague)).not.toContain(importId);
-    expect(await rowsSeen(c1Colleague, importId)).toEqual([]);
-    expect(await results(c1Colleague, importId)).toEqual([]);
+    const preview = { target: importId, seenBy: c1.member, hiddenFrom: c1Colleague, name: whoIs };
+    await expectHiddenFrom({ ...preview, read: importRows, label: "the preview" });
+    await expectHiddenFrom({ ...preview, read: rowsOf(importId), label: "the preview's rows" });
+    await expectHiddenFrom({ ...preview, read: resultsOf(importId), label: "the preview's results" });
     const { rows: made } = await migrator.query("select id from work_item where import_id = $1", [importId]);
-    expect(made).toEqual([]);
+    expect(made).toEqual([]); // not hidden-from: the migrator's read, the preview creates no Draft
   });
 
   it("records every reason a row is bad", async () => {
@@ -212,17 +228,17 @@ describe("RP-589-1: only the importing Participant reads an import", () => {
   it("on confirm, is read by every Member of C1, and by no one of C2, K1 or the Owner", async () => {
     expect(await confirm(c1.member, importId)).toEqual({ outcome: "created", rows_created: 2 });
     drafts = (await results(c1.member, importId)).flatMap((r) => (r.work_item_id ? [r.work_item_id] : []));
-    expect(drafts).toHaveLength(2);
-    expect(await importsSeen(c1Colleague)).toContain(importId);
+    expect(drafts).toHaveLength(2); // not hidden-from: the importer's own two Drafts
     expect(await rowsSeen(c1Colleague, importId)).toEqual([2, 3, 4]);
-    for (const other of [c2.member, c2.ap, k1.member, k1.ap, ow.member, ow.ap]) {
-      expect(await importsSeen(other)).toEqual([]);
-      expect(await rowsSeen(other, importId)).toEqual([]);
-      expect(await results(other, importId)).toEqual([]);
-      expect(await confirm(other, importId)).toEqual({ outcome: "not_found", rows_created: null });
-      const seen = await call<{ id: string }>(other, sql`select id from work_item where id = any (${drafts}::uuid[])`);
-      expect(seen).toEqual([]);
+    const others = [c2.member, c2.ap, k1.member, k1.ap, ow.member, ow.ap];
+    const confirmed = { target: importId, seenBy: [c1.member, c1Colleague], hiddenFrom: others, name: whoIs };
+    await expectHiddenFrom({ ...confirmed, read: importRows, label: "the import" });
+    await expectHiddenFrom({ ...confirmed, read: rowsOf(importId), label: "the import's rows" });
+    await expectHiddenFrom({ ...confirmed, read: resultsOf(importId), label: "the import's results" });
+    for (const draft of drafts) {
+      await expectHiddenFrom({ read: workItemsOf(drafts), target: draft, seenBy: [c1.member, c1Colleague], hiddenFrom: others, name: whoIs, label: "a Draft" });
     }
+    for (const other of others) expect(await confirm(other, importId)).toEqual({ outcome: "not_found", rows_created: null });
   });
 
   it("never gives the app role an import's times, its confirm's working column, a row's Draft or a Draft's import", async () => {
@@ -255,7 +271,7 @@ describe("RP-589-1: only the importing Participant reads an import", () => {
       "select e.work_item_id, e.actor_member_id, e.payload ->> 'import_id' as import_id from work_item_event e where e.work_item_id = any ($1) and e.type = 'created'",
       [drafts],
     );
-    expect(events).toHaveLength(2);
+    expect(events).toHaveLength(2); // not hidden-from: the migrator reads the two Drafts' events
     for (const e of events) expect(e).toMatchObject({ actor_member_id: c1.member, import_id: importId });
     const { rows: items } = await migrator.query("select import_id, document_number, created_by_member_id from work_item where id = any ($1)", [drafts]);
     for (const i of items) expect(i).toEqual({ import_id: importId, document_number: null, created_by_member_id: c1.member });
@@ -328,7 +344,7 @@ describe("A row is never created outside its raiser's Visibility", () => {
     await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${c1Colleague}::uuid, 'trade', false, ${[electrical]}::uuid[], now()) as outcome`);
     expect(await confirm(c1Colleague, previewed.import_id!)).toEqual({ outcome: "preview_outdated", rows_created: null });
     const { rows: made } = await migrator.query("select id from work_item where import_id = $1", [previewed.import_id]);
-    expect(made).toEqual([]);
+    expect(made).toEqual([]); // not hidden-from: the migrator's read, the refused confirm creates nothing
     const { rows: state } = await migrator.query("select status, confirm_txid from submittal_register_import where id = $1", [previewed.import_id]);
     expect(state).toEqual([{ status: "previewed", confirm_txid: null }]);
   });
@@ -355,7 +371,7 @@ describe("The clean-up of previews never confirmed", () => {
     const { rows: left } = await migrator.query("select id from submittal_register_import where id = any ($1)", [[stale, kept]]);
     expect(left).toEqual([{ id: kept }]);
     const { rows: orphans } = await migrator.query("select 1 from submittal_register_import_row where import_id = $1", [stale]);
-    expect(orphans).toEqual([]);
+    expect(orphans).toEqual([]); // not hidden-from: the migrator's read, the clean-up leaves no row
   });
 });
 
@@ -444,8 +460,15 @@ describe("Matched values, checked again by the database (RP-639)", () => {
       expect(await outcome(c1Colleague, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_editable");
       for (const other of [k1.member, c2.member, ow.member]) {
         expect(await outcome(other, sql`select app.set_work_item_paper_ref(${draft}::uuid, 'PR-9', now()) as outcome`)).toBe("not_found");
-        expect(await call(other, sql<{ paper_ref: string }>`select paper_ref from work_item where id = ${draft}::uuid`)).toEqual([]);
       }
+      await expectHiddenFrom({
+        read: (as: string) => call<{ id: string; paper_ref: string }>(as, sql`select id, paper_ref from work_item where id = ${draft}::uuid`),
+        target: draft,
+        seenBy: [c1.member, c1Colleague],
+        hiddenFrom: [k1.member, c2.member, ow.member],
+        name: whoIs,
+        label: "the Draft's Paper ref",
+      });
       expect(await outcome(c1.member, sql`select app.set_work_item_paper_ref(${draft}::uuid, ${"P".repeat(101)}, now()) as outcome`)).toBe("paper_ref_too_long");
       // The unique index keeps one per Participant even past the function's own check.
       const { rows: others } = await migrator.query(
@@ -575,7 +598,7 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
         "select w.id from work_item w where w.import_id = $1 and w.created_by_member_id = $2 and w.title like 'Pumps%'",
         [importId, c1Narrowed],
       );
-      expect(outside).toEqual([]);
+      expect(outside).toEqual([]); // not hidden-from: the migrator's read, no Draft outside the assignee's Visibility was made
     });
 
     it("names the importer as the actor of the assignee's Draft's `created` event, with the import", async () => {
@@ -589,11 +612,11 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
 
     it("tells nobody: no outbox row and no notification, for the assignee or anyone else (owner, 2026-10-19)", async () => {
       // Its time would be the import's, when the Drafts were started (scenario 61).
-      expect(outboxOfConfirm).toEqual([]);
+      expect(outboxOfConfirm).toEqual([]); // not hidden-from: the confirm writes no outbox row
       await drainOutbox(app);
       const ids = drafts.map((d) => d.work_item_id).filter((id) => id !== null);
       const { rows } = await migrator.query("select member_id from notification where work_item_id = any ($1)", [ids]);
-      expect(rows).toEqual([]);
+      expect(rows).toEqual([]); // not hidden-from: the migrator's read, no notification
     });
 
     it("lets the assignee read and edit their Draft as their own", async () => {
@@ -609,7 +632,7 @@ describe("RP-589-2: rows assigned to a Member, who raises their Drafts", () => {
     await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${noCreate}::uuid, 'trade', false, ${[electrical]}::uuid[], now()) as outcome`);
     expect(await confirm(importer, previewed.import_id!)).toEqual({ outcome: "preview_outdated", rows_created: null });
     const { rows: made } = await migrator.query("select id from work_item where import_id = $1", [previewed.import_id]);
-    expect(made).toEqual([]);
+    expect(made).toEqual([]); // not hidden-from: the migrator's read, the refused confirm creates nothing
   });
 });
 
@@ -651,6 +674,7 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
     adminDb = createDb(urls.admin, { max: 1 });
     engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Yousef Seam') returning id", [email("importing-eng")]);
     defaultMember = await member(c1.id, "default");
+    names.set(defaultMember, "C1 default Member");
     await call(c1.ap, sql<{ outcome: string }>`select app.add_project_member(${c1Participant}::uuid, ${defaultMember}::uuid, now())`);
     for (const kind of ["trade", "location"]) {
       await outcome(c1.ap, sql`select app.set_member_visibility(${c1Participant}::uuid, ${defaultMember}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`);
@@ -695,10 +719,15 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
       sql`select row_no, created from app.register_import_results_by_engineer(${engineer}::uuid, ${importId}::uuid)`,
     );
     expect(results.map((r) => r.row_no)).toEqual([2, 3, 4]);
-    for (const as of [defaultMember, c1Colleague]) {
-      expect(await importsSeen(as)).not.toContain(importId);
-      expect(await rowsSeen(as, importId)).toEqual([]);
-    }
+    // Its Engineer reads it, on Rabaed Admin's connection; no Member of C1 does, on the app role.
+    const byEngineer = "the Engineer";
+    const engineerReads = () =>
+      asAdmin<{ row_no: number }>(defaultMember, sql`select row_no from app.register_import_results_by_engineer(${engineer}::uuid, ${importId}::uuid)`).then((r) =>
+        r.map(() => ({ id: importId })),
+      );
+    const preview = { target: importId, seenBy: byEngineer, hiddenFrom: [defaultMember, c1Colleague], name: (as: string) => (as === byEngineer ? as : whoIs(as)) };
+    await expectHiddenFrom({ ...preview, read: (as) => (as === byEngineer ? engineerReads() : importRows(as)), label: "the Engineer's preview" });
+    await expectHiddenFrom({ ...preview, read: (as) => (as === byEngineer ? engineerReads() : rowsOf(importId)(as)), label: "the Engineer's preview's rows" });
     expect(await failure(defaultMember, sql`select run_by_engineer_id from submittal_register_import`)).toBe("42501");
   });
 
@@ -716,7 +745,7 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
     });
 
     it("makes the default Member the Drafts' raiser, the Engineer their created event's actor, and names the import", async () => {
-      expect(drafts).toHaveLength(2);
+      expect(drafts).toHaveLength(2); // not hidden-from: the default Member's own two Drafts
       const { rows: items } = await migrator.query("select created_by_member_id from work_item where id = any ($1)", [drafts]);
       for (const i of items) expect(i).toEqual({ created_by_member_id: defaultMember });
       const { rows: events } = await migrator.query(
@@ -735,10 +764,13 @@ describe("RP-589-3: a Rabaed Engineer's import for C1, run in Rabaed Admin as C1
         expect(seen).toEqual({ run_by_member_id: null, default_member_id: defaultMember, status: "created" });
         expect(await importOf(as, drafts[0]!)).toEqual([{ import_id: importId, file_name: "engineer-register.xlsx", member_name: null, by_rabaed: true }]);
       }
-      for (const as of [k1.member, k1.ap, c2.member, ow.member]) {
-        expect(await importsSeen(as)).not.toContain(importId);
-        expect(await importOf(as, drafts[0]!)).toEqual([]);
-      }
+      const others = { target: importId, seenBy: [defaultMember, c1Colleague], hiddenFrom: [k1.member, k1.ap, c2.member, ow.member], name: whoIs };
+      await expectHiddenFrom({ ...others, read: importRows, label: "the Engineer's import" });
+      await expectHiddenFrom({
+        ...others,
+        read: (as: string) => importOf(as, drafts[0]!).then((r) => r.map((x) => ({ id: x.import_id }))),
+        label: "the import of its Draft",
+      });
     });
   });
 
@@ -797,7 +829,9 @@ describe("RP-589-1: Packages from C1's import (RP-644)", () => {
     (await call<{ package_id: string }>(as, sql`select package_id from app.create_package(${projectId}::uuid, ${JSON.stringify({ en: name, ar: name })}::jsonb, now())`))[0]!
       .package_id;
   const packagesOf = (as: string) => call<{ package_id: string; seq: number; status: string }>(as, sql`select package_id, seq, status from app.register_import_packages(${projectId}::uuid)`);
-  const packagesSeen = (as: string) => call<{ id: string }>(as, sql`select id from package`).then((r) => r.map((x) => x.id));
+  const packagesSeen = (as: string) => call<{ id: string }>(as, sql`select id from package`);
+  /** The Packages the import offers `as`, by id, for expectHiddenFrom. */
+  const offeredTo = (as: string) => packagesOf(as).then((r) => r.map((p) => ({ id: p.package_id })));
   const reasonsOf = (as: string, id: string) =>
     call<{ row_no: number; reasons: string[] }>(as, sql`select row_no, reasons from submittal_register_import_row where import_id = ${id}::uuid order by row_no`).then((r) =>
       Object.fromEntries(r.map((x) => [x.row_no, x.reasons])),
@@ -826,9 +860,11 @@ describe("RP-589-1: Packages from C1's import (RP-644)", () => {
         [started, "in_progress"],
       ]),
     );
-    expect((await packagesOf(c1.member)).map((p) => p.package_id)).not.toContain(theirs);
     expect((await packagesOf(c2.member)).map((p) => p.package_id)).toEqual([theirs]);
-    for (const as of [k1.member, ow.member]) expect(await packagesOf(as)).toEqual([]);
+    await expectHiddenFrom({ read: offeredTo, target: theirs, seenBy: c2.member, hiddenFrom: [c1.member, k1.member, ow.member], name: whoIs, label: "C2's Package" });
+    for (const target of [open, started]) {
+      await expectHiddenFrom({ read: offeredTo, target, seenBy: c1.member, hiddenFrom: [c2.member, k1.member, ow.member], name: whoIs, label: "C1's Package" });
+    }
   });
 
   it("refuses the whole preview naming another Participant's Package, a discarded one or a made-up one, whoever matched it", async () => {
@@ -905,11 +941,12 @@ describe("RP-589-1: Packages from C1's import (RP-644)", () => {
     });
 
     it("is read by C1's Members and by nobody of C2, K1 or the Owner", async () => {
-      expect(await packagesSeen(c1Colleague)).toEqual(expect.arrayContaining([created, open]));
-      for (const other of [c2.member, c2.ap, k1.member, k1.ap, ow.member, ow.ap]) {
-        const seen = await packagesSeen(other);
-        expect(seen).not.toContain(created);
-        expect(seen).not.toContain(open);
+      const others = [c2.member, c2.ap, k1.member, k1.ap, ow.member, ow.ap];
+      for (const target of [created, open]) {
+        await expectHiddenFrom({ read: packagesSeen, target, seenBy: [c1.member, c1Colleague], hiddenFrom: others, name: whoIs, label: "C1's Package" });
+      }
+      expect(await call(c1Colleague, sql<{ sees: boolean }>`select app.sees_package(${created}::uuid) as sees`)).toEqual([{ sees: true }]);
+      for (const other of others) {
         expect(await call(other, sql<{ sees: boolean }>`select app.sees_package(${created}::uuid) as sees`)).toEqual([{ sees: false }]);
       }
     });
@@ -926,7 +963,7 @@ describe("RP-589-1: Packages from C1's import (RP-644)", () => {
     expect(await confirm(c1.member, previewed.import_id!)).toEqual({ outcome: "preview_outdated", rows_created: null });
     expect(await packagesOf(c1.member)).toHaveLength(before);
     const { rows: made } = await migrator.query("select id from work_item where import_id = $1", [previewed.import_id]);
-    expect(made).toEqual([]);
+    expect(made).toEqual([]); // not hidden-from: the migrator's read, the refused confirm creates nothing
   });
 
   it("puts an assignee's Draft in the Package as its raiser", async () => {
@@ -979,7 +1016,7 @@ describe("The original register of an import (RP-644)", () => {
     const taken = (await call<{ key: string }>(c1.member, sql`select app.take_register_import_file_removals(100) as key`)).map((r) => r.key);
     expect(taken).toContain(key);
     const again = (await call<{ key: string }>(c1.member, sql`select app.take_register_import_file_removals(100) as key`)).map((r) => r.key);
-    expect(again).not.toContain(key);
+    expect(again).not.toContain(key); // not hidden-from: a removal is taken off once
   });
 });
 
@@ -990,19 +1027,20 @@ describe("Saved mappings (RP-644)", () => {
       (r) => r[0]!,
     );
   const listedBy = (as: string) => call<{ name: string }>(as, sql`select name from app.register_import_mappings(${projectId}::uuid)`).then((r) => r.map((x) => x.name));
-  const tableBy = (as: string) => call<{ name: string }>(as, sql`select name from register_import_mapping`).then((r) => r.map((x) => x.name));
+  // By id, for expectHiddenFrom: the mappings the import offers `as`, and the ones `as` reads in the table.
+  const offeredTo = (as: string) => call<{ id: string }>(as, sql`select mapping_id as id from app.register_import_mappings(${projectId}::uuid)`);
+  const tableBy = (as: string) => call<{ id: string }>(as, sql`select id from register_import_mapping`);
 
   it("is saved by a Member for their Participant, read by its Members, and by no other Company", async () => {
     const saved = await save(c1.member, "Monthly register");
     expect(saved.outcome).toBe("saved");
     expect(await save(c1Colleague, " monthly REGISTER ")).toEqual({ outcome: "name_taken", mapping_id: null });
-    for (const as of [c1.member, c1Colleague]) {
-      expect(await listedBy(as)).toContain("Monthly register");
-      expect(await tableBy(as)).toContain("Monthly register");
-    }
-    for (const other of [c2.member, k1.member, ow.member]) {
-      expect(await listedBy(other)).not.toContain("Monthly register");
-      expect(await tableBy(other)).not.toContain("Monthly register");
+    for (const as of [c1.member, c1Colleague]) expect(await listedBy(as)).toContain("Monthly register");
+    const others = [c2.member, k1.member, ow.member];
+    const ours = { target: saved.mapping_id!, seenBy: [c1.member, c1Colleague], hiddenFrom: others, name: whoIs };
+    await expectHiddenFrom({ ...ours, read: offeredTo, label: "the mappings offered" });
+    await expectHiddenFrom({ ...ours, read: tableBy, label: "the mapping table" });
+    for (const other of others) {
       expect(await outcome(other, sql`select app.rename_register_import_mapping(${saved.mapping_id}::uuid, 'Theirs') as outcome`)).toBe("not_found");
       expect(await outcome(other, sql`select app.delete_register_import_mapping(${saved.mapping_id}::uuid) as outcome`)).toBe("not_found");
     }
@@ -1021,7 +1059,7 @@ describe("Saved mappings (RP-644)", () => {
     }
     expect(await failure(c1.member, sql`delete from register_import_mapping`)).toBe("42501");
     expect(await outcome(c1Colleague, sql`select app.delete_register_import_mapping(${saved.mapping_id}::uuid) as outcome`)).toBe("removed");
-    expect(await listedBy(c1.member)).not.toContain("Long lead");
+    expect(await listedBy(c1.member)).not.toContain("Long lead"); // not hidden-from: deleted by its own Participant, not hidden
   });
 });
 
@@ -1032,12 +1070,17 @@ describe("RP-589-3: an Engineer's import never reaches another Participant's Pac
   let engineer = "";
   let theirs = "";
   let ours = "";
+  let c2Mapping = "";
 
   const asAdmin = <T extends object>(memberId: string, query: ReturnType<typeof sql<T>>) =>
     adminDb.transaction().execute(async (trx) => {
       await sql`select set_config('app.member_id', ${memberId}, true)`.execute(trx);
       return (await query.execute(trx)).rows;
     });
+  /** The Engineer's import, on Rabaed Admin's connection as C1's default Member; else a Member on the app role. */
+  const byEngineer = "the Engineer as C1's Member";
+  const viewer = { name: (as: string) => (as === byEngineer ? as : whoIs(as)) };
+  const asViewer = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) => (as === byEngineer ? asAdmin(c1.member, query) : call(as, query));
   const engineerPreview = (of: Row[]) =>
     asAdmin<{ outcome: string; import_id: string | null }>(
       c1.member,
@@ -1052,7 +1095,9 @@ describe("RP-589-3: an Engineer's import never reaches another Participant's Pac
     const name = (n: string) => JSON.stringify({ en: n, ar: n });
     theirs = (await call<{ package_id: string }>(c2.member, sql`select package_id from app.create_package(${projectId}::uuid, ${name("Shared name")}::jsonb, now())`))[0]!.package_id;
     ours = (await call<{ package_id: string }>(c1.member, sql`select package_id from app.create_package(${projectId}::uuid, ${name("Ours")}::jsonb, now())`))[0]!.package_id;
-    await call(c2.member, sql<{ outcome: string }>`select * from app.save_register_import_mapping(${projectId}::uuid, 'C2 only', ${JSON.stringify(mapping)}::jsonb, now())`);
+    c2Mapping = (
+      await call<{ mapping_id: string }>(c2.member, sql`select mapping_id from app.save_register_import_mapping(${projectId}::uuid, 'C2 only', ${JSON.stringify(mapping)}::jsonb, now())`)
+    )[0]!.mapping_id;
   });
   afterAll(() => adminDb.destroy());
 
@@ -1062,9 +1107,22 @@ describe("RP-589-3: an Engineer's import never reaches another Participant's Pac
       (await call<{ package_id: string }>(c1.member, sql`select package_id from app.register_import_packages(${projectId}::uuid)`)).map((p) => p.package_id).sort(),
     );
     expect(offered.map((p) => p.package_id)).toContain(ours);
-    expect(offered.map((p) => p.package_id)).not.toContain(theirs);
-    const mappings = await asAdmin<{ name: string }>(c1.member, sql`select name from app.register_import_mappings(${projectId}::uuid)`);
-    expect(mappings.map((m) => m.name)).not.toContain("C2 only");
+    await expectHiddenFrom({
+      ...viewer,
+      read: (as: string) => asViewer<{ id: string }>(as, sql`select package_id as id from app.register_import_packages(${projectId}::uuid)`),
+      target: theirs,
+      seenBy: c2.member,
+      hiddenFrom: [byEngineer, c1.member],
+      label: "C2's Package",
+    });
+    await expectHiddenFrom({
+      ...viewer,
+      read: (as: string) => asViewer<{ id: string }>(as, sql`select mapping_id as id from app.register_import_mappings(${projectId}::uuid)`),
+      target: c2Mapping,
+      seenBy: c2.member,
+      hiddenFrom: [byEngineer, c1.member],
+      label: "C2's mapping",
+    });
   });
 
   it("refuses another Participant's Package with the Member's answer, and adds nothing to it", async () => {
@@ -1086,5 +1144,155 @@ describe("RP-589-3: an Engineer's import never reaches another Participant's Pac
       [previewed.import_id],
     );
     expect(rows).toEqual([{ participant_id: c1Participant, created_by_member_id: c1.member }]);
+  });
+});
+
+// RP-954 at seam 2 (visibility.md RP-589-5): "Open the Drafts" lists the Submittals the viewer
+// sees (app.work_items_seen) that app.register_import_results gives for the import, as the api's
+// `importId` filter reads them (apps/api/src/work-items/query.ts). The results name a Draft only
+// for a reader of the import who sees it, so another Company, or a made-up id, lists nothing,
+// even an item of the import it sees once Submitted.
+describe("RP-589-5: the List of one import's Drafts, through app.register_import_results (RP-954)", () => {
+  let pm = ""; // C1's PM, seeing all of the Project: imports, and Submits.
+  let sender = ""; // A C1 engineer the import assigns one row to, who sends it for review.
+  let electricalOnly = ""; // A C1 engineer whose Trade Visibility is Electrical only.
+  let importId = "";
+  let otherImportId = "";
+  /** The import's Drafts by Subject. */
+  let byTitle: Record<string, string> = {};
+  /** A C1 Draft raised by hand, and one of another import. */
+  let byHand = "";
+  let otherImport = "";
+
+  /** The ids of the Submittals `as` lists, filtered to the import `filter` (null: unfiltered). */
+  const listed = (as: string, filter: string | null) =>
+    call<{ id: string }>(
+      as,
+      filter === null
+        ? sql`select w.id from app.work_items_seen(${projectId}::uuid, ${["submittals"]}::text[], false) w`
+        : sql`select w.id from app.work_items_seen(${projectId}::uuid, ${["submittals"]}::text[], false) w
+            where w.id in (select x.work_item_id from app.register_import_results(${filter}::uuid) x where x.work_item_id is not null)`,
+    );
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id).sort();
+  /** A filter, in a failure. */
+  const filterName = (filter: string | null) => (filter === null ? "unfiltered" : filter === importId ? "the import" : filter === otherImportId ? "the other import" : "a made-up id");
+  const located = { location: "BA", location_id: "" };
+  const importBy = async (as: string, of: Row[]) => {
+    const previewed = await preview(as, of);
+    expect(previewed.outcome).toBe("previewed");
+    expect((await confirm(as, previewed.import_id!)).outcome).toBe("created");
+    return previewed.import_id!;
+  };
+  const take = (as: string, item: string, transition: string) =>
+    outcome(
+      as,
+      sql`select app.take_transition(${item}::uuid, ${transition}, '{}', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+    );
+
+  beforeAll(async () => {
+    located.location_id = buildingA;
+    pm = await member(c1.id, "odr-pm");
+    sender = await member(c1.id, "odr-sender");
+    electricalOnly = await member(c1.id, "odr-electrical");
+    names.set(pm, "C1 PM (RP-589-5)");
+    names.set(sender, "C1 sender");
+    names.set(electricalOnly, "C1 engineer narrowed to Electrical");
+    for (const [m, positions] of [
+      [pm, ["project_manager"]],
+      [sender, ["engineer"]],
+      [electricalOnly, ["engineer"]],
+    ] as const) {
+      await call(c1.ap, sql<{ outcome: string }>`select app.add_project_member(${c1Participant}::uuid, ${m}::uuid, now())`);
+      for (const kind of ["trade", "location"]) {
+        const narrowed = m === electricalOnly && kind === "trade";
+        expect(
+          await outcome(
+            c1.ap,
+            sql`select app.set_member_visibility(${c1Participant}::uuid, ${m}::uuid, ${kind}, ${!narrowed}, ${narrowed ? [electrical] : []}::uuid[], now()) as outcome`,
+          ),
+        ).toBe("set");
+      }
+      expect(await outcome(c1.ap, sql`select app.set_project_member_positions(${c1Participant}::uuid, ${m}::uuid, ${[...positions]}::text[]) as outcome`)).toBe("set");
+    }
+    // K1's Manager, to hold the Consultant's review the Submit sends the item to.
+    const k1Participant = await one("select id from participant where project_id = $1 and company_id = $2", [projectId, k1.id]);
+    const k1Manager = await member(k1.id, "odr-k1-manager");
+    await call(k1.ap, sql<{ outcome: string }>`select app.add_project_member(${k1Participant}::uuid, ${k1Manager}::uuid, now())`);
+    for (const kind of ["trade", "location"]) {
+      await outcome(k1.ap, sql`select app.set_member_visibility(${k1Participant}::uuid, ${k1Manager}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`);
+    }
+    expect(await outcome(k1.ap, sql`select app.set_project_member_positions(${k1Participant}::uuid, ${k1Manager}::uuid, ${["manager"]}::text[]) as outcome`)).toBe("set");
+    if (!matched.types.includes(LEGACY_MAR)) matched.types.push(LEGACY_MAR);
+
+    const [made] = await call<{ outcome: string; work_item_id: string }>(
+      pm,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'MAR', 'Raised by hand', app.new_item_form_version(${projectId}::uuid, 'MAR'), '{}'::jsonb, ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(made!.outcome).toBe("created");
+    byHand = made!.work_item_id;
+    otherImportId = await importBy(pm, [row(2, "Another register's row", "MAR", "Electrical", located)]);
+    otherImport = (await results(pm, otherImportId))[0]!.work_item_id!;
+    importId = await importBy(pm, [
+      row(2, "Panels", LEGACY_MAR, "Electrical", { ...located, assignee: "", assignee_member_id: sender }),
+      row(3, "Pumps", "MAR", "ME", located),
+      row(4, "Cables", "SAR", "Electrical", located),
+      row(5, "", "MAR", "Electrical", located),
+    ]);
+    const subjects: Record<number, string> = { 2: "Panels", 3: "Pumps", 4: "Cables" };
+    byTitle = Object.fromEntries((await results(pm, importId)).flatMap((r) => (r.work_item_id ? [[subjects[r.row_no]!, r.work_item_id]] : [])));
+  });
+
+  it("lists the PM exactly the import's created items, and nothing raised by hand or by another import", async () => {
+    expect(Object.keys(byTitle).sort()).toEqual(["Cables", "Panels", "Pumps"]);
+    expect(ids(await listed(pm, importId))).toEqual(Object.values(byTitle).sort());
+    const byFilter = { read: (filter: string | null) => listed(pm, filter), hiddenFrom: importId, name: filterName };
+    await expectHiddenFrom({ ...byFilter, target: byHand, seenBy: null, label: "a Draft raised by hand" });
+    await expectHiddenFrom({ ...byFilter, target: otherImport, seenBy: [null, otherImportId], label: "another import's Draft" });
+  });
+
+  it("lists the engineer narrowed to Electrical only the import's Electrical items", async () => {
+    expect(ids(await listed(electricalOnly, importId))).toEqual([byTitle.Panels!, byTitle.Cables!].sort());
+    await expectHiddenFrom({
+      read: (as: string) => listed(as, importId),
+      target: byTitle.Pumps!,
+      seenBy: pm,
+      hiddenFrom: electricalOnly,
+      name: whoIs,
+      label: "the import's Mechanical item",
+    });
+  });
+
+  describe("once its assigned item is sent for review and Submitted", () => {
+    beforeAll(async () => {
+      const panels = byTitle.Panels!;
+      expect(await take(sender, panels, "send_for_review")).toBe("applied");
+      expect(await outcome(pm, sql`select app.pick_up_step(${panels}::uuid, now()) as outcome`)).toBe("picked_up");
+      expect(await take(pm, panels, "submit")).toBe("applied");
+    });
+
+    it("lets K1 list the Submitted item unfiltered", async () => {
+      expect(ids(await listed(k1.member, null))).toContain(byTitle.Panels);
+    });
+
+    it("lists K1 and C2 nothing with C1's import id, the Submitted item included, while the PM lists them all", async () => {
+      for (const target of Object.values(byTitle)) {
+        await expectHiddenFrom({
+          read: (as: string) => listed(as, importId),
+          target,
+          seenBy: pm,
+          hiddenFrom: [k1.member, c2.member],
+          name: whoIs,
+          label: "an item of C1's import, filtered to it",
+        });
+      }
+    });
+
+    it("lists nothing for a made-up id", async () => {
+      const madeUp = randomUUID();
+      for (const target of Object.values(byTitle)) {
+        await expectHiddenFrom({ read: (filter: string) => listed(pm, filter), target, seenBy: importId, hiddenFrom: madeUp, name: filterName, label: "the PM's List" });
+      }
+    });
   });
 });

@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -105,6 +105,12 @@ const raw = async (en: string) =>
       [projectId, en],
     )
   ).rows;
+/** The supplier named `en` on the Project, by id, as the migrator reads it. */
+const supplierNamed = async (en: string) =>
+  (await migrator.query("select id from approved_supplier where project_id = $1 and name ->> 'en' = $2", [projectId, en])).rows[0].id as string;
+/** Item `id` as `as` reads it, for expectHiddenFrom: `[{ id }]` or none. */
+const itemOf = (id: string) => (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${id}::uuid`);
+const whoIs = (as: string) => (as === c1.member ? "C1 engineer" : as === k1.member ? "K1 engineer" : as === c2.member ? "C2 engineer" : as);
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -217,16 +223,16 @@ describe("scenario RP-594-1: a SAR closed at Code A or B adds its supplier to th
 
   it("at C nothing is added", async () => {
     await closedSar({ en: "Rejected Wires", ar: "أسلاك مرفوضة" }, "revise_c");
-    expect(await raw("Rejected Wires")).toEqual([]);
+    expect(await raw("Rejected Wires")).toEqual([]); // not hidden-from: the migrator's read, Code C added no row
   });
 
   it("is not added twice for a Trade: the same name in English or Arabic, case and outer spaces ignored", async () => {
     await closedSar({ en: "Once Only Supply", ar: "التوريد مرة" }, "approve_a");
     await closedSar({ en: "  once only SUPPLY ", ar: "اسم آخر" }, "approve_a");
     await closedSar({ en: "Another English Name", ar: " التوريد مرة " }, "approve_a");
-    expect(await raw("Once Only Supply")).toHaveLength(1);
-    expect(await raw("once only SUPPLY")).toEqual([]);
-    expect(await raw("Another English Name")).toEqual([]);
+    expect((await raw("Once Only Supply")).map((r) => r.trade_value_id)).toEqual([electrical]);
+    expect(await raw("once only SUPPLY")).toEqual([]); // not hidden-from: the migrator's read, no second row was added
+    expect(await raw("Another English Name")).toEqual([]); // not hidden-from: the migrator's read, no second row was added
   });
 
   it("the same supplier of another Trade is its own entry", async () => {
@@ -240,23 +246,24 @@ describe("scenario RP-594-1: a SAR closed at Code A or B adds its supplier to th
 describe("scenario RP-594-1 (seam 2): the other Contractor reads the supplier, never the SAR", () => {
   it("C2 reads the row's name, Trade and Scope, and has no grant on `source_work_item_id`", async () => {
     const sar = await closedSar({ en: "Visible Supplier", ar: "مورد ظاهر" }, "approve_a");
-    expect((await listed(c2.member)).map((r) => r.name.en)).toContain("Visible Supplier");
+    const supplierId = await supplierNamed("Visible Supplier");
+    const ids = await call<{ id: string }>(c2.member, sql`select id from approved_supplier where project_id = ${projectId}::uuid`);
+    expect(ids.map((r) => r.id)).toContain(supplierId);
     for (const column of ["source_work_item_id", "source", "added_by_member_id"]) {
       await expect(
         call(c2.member, sql.raw(`select ${column} from approved_supplier where project_id = '${projectId}'`) as ReturnType<typeof sql<object>>),
         column,
       ).rejects.toThrow(/permission denied/);
     }
-    // And the SAR itself stays hidden from C2 (V1): no item, no event.
-    expect(await call(c2.member, sql<{ id: string }>`select id from work_item where id = ${sar}::uuid`)).toEqual([]);
+    // And the SAR itself stays hidden from C2 (V1), though C1 and K1 read it.
+    await expectHiddenFrom({ read: itemOf(sar), target: sar, seenBy: [c1.member, k1.member], hiddenFrom: c2.member, name: whoIs, label: "the SAR" });
   });
 });
 
 describe("scenario RP-598-2 (seam 2): a MAR names its supplier, never the SAR that approved it", () => {
   it("C2's MAR holds the id of the supplier C1's SAR added; C2 reads it as the supplier's name only", async () => {
     const sar = await closedSar({ en: "Shared Cables", ar: "كابلات مشتركة" }, "approve_a");
-    const supplierId = (await migrator.query("select id from approved_supplier where project_id = $1 and name ->> 'en' = 'Shared Cables'", [projectId])).rows[0]
-      .id as string;
+    const supplierId = await supplierNamed("Shared Cables");
     const [created] = await call<{ work_item_id: string }>(
       c2.member,
       sql`select work_item_id from app.create_work_item(
@@ -266,12 +273,13 @@ describe("scenario RP-598-2 (seam 2): a MAR names its supplier, never the SAR th
     const mar = created!.work_item_id;
     // The answer is the supplier's id, as stored: it is Project-wide (V10), so nothing strips it, and nothing adds the SAR.
     const [read] = await call<{ data: Record<string, unknown> }>(c2.member, sql`select app.work_item_answers(${mar}::uuid) as data`);
-    expect(read!.data.supplier).toBe(supplierId);
-    expect(JSON.stringify(read!.data)).not.toContain(sar);
+    expect(read!.data).toEqual({ supplier: supplierId, trade: electrical, location: buildingA });
     // The id reads as the supplier's name on the list, and no further: the SAR is hidden from C2 (V1, V10).
     expect(
       await call<{ id: string; name: { en: string; ar: string } }>(c2.member, sql`select id, name from approved_supplier where id = ${supplierId}::uuid`),
     ).toEqual([{ id: supplierId, name: { en: "Shared Cables", ar: "كابلات مشتركة" } }]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from work_item where id = ${sar}::uuid`)).toEqual([]);
+    await expectHiddenFrom({ read: itemOf(sar), target: sar, seenBy: [c1.member, k1.member], hiddenFrom: c2.member, name: whoIs, label: "the SAR" });
+    // C2's own MAR is C2's: C1, whose SAR added the supplier, reads nothing of it.
+    await expectHiddenFrom({ read: itemOf(mar), target: mar, seenBy: c2.member, hiddenFrom: [c1.member, k1.member], name: whoIs, label: "C2's MAR" });
   });
 });
