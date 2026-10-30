@@ -1,3 +1,0 @@
-empty scenario RP-409-2: Download is the item as it last arrived, whoever holds it > holds the Links and answers it arrived with, each linked item by number and Subject only :: expect(JSON.stringify(item)).not.toContain(x);
-empty scenario RP-409-2: Download is the item as it last arrived, whoever holds it > is nothing for another Contractor :: await expectHidden(c2Engineer.get(`/v1/work-items/${id}/shared`));
-empty scenario RP-409-2: Download is the item as it last arrived, whoever holds it > leaves out a Link to an item never numbered, and still downloads :: expect(JSON.stringify(item)).not.toContain("DLA-D");

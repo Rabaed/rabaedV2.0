@@ -10,10 +10,10 @@
 //
 // The Type is test-only, on the test Workflow with a Send Back (addSendBackType).
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { workItemSearchParams, type WorkItemBoard, type WorkItemDetail, type WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, detail, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
@@ -61,6 +61,17 @@ const cards = async (by: Caller) =>
     c.lanes.flatMap((l) => l.cards),
   );
 const scopeIds = (d: WorkItemDetail) => d.scopes.map((s) => s.id);
+const names = new Map<Caller, string>();
+const named = (by: Caller) => names.get(by) ?? "a Member";
+/** `id` is read, by id, by each `seenBy`, and by none of `hiddenFrom`: in the item, the List (with `query`) and the Kanban. */
+async function hiddenEverywhere(id: string, seenBy: Caller[], hiddenFrom: Caller, query: Parameters<typeof workItemSearchParams>[0]) {
+  const at = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
+    expectHiddenFrom({ read, target: id, seenBy, hiddenFrom, name: named, label });
+  await at(readById(`/v1/work-items/${id}`), "the item");
+  await at((by) => list(by), "the List");
+  await at((by) => list(by, query), `the List, searched for ${JSON.stringify(query)}`);
+  await at(cards, "the Kanban");
+}
 
 beforeAll(async () => {
   await addSendBackType(migrator, TYPE, bilingual("Daily report (test)"), schema, { afterSendBack: { draft: "edit_form" } });
@@ -96,6 +107,14 @@ beforeAll(async () => {
   };
   orTower1 = await orMember(tower1);
   orBuildingA = await orMember(buildingA);
+  for (const [by, name] of [
+    [engineer, "C1 engineer"],
+    [pm, "C1 PM"],
+    [k1Engineer, "K1 engineer"],
+    [orTower1, "OR Tower 1 engineer"],
+    [orBuildingA, "OR Building A engineer"],
+  ] as const)
+    names.set(by, name);
 });
 
 describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\" Step from Tower 1 to Building A", () => {
@@ -129,12 +148,14 @@ describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\"
     expect(scopeIds(d)).toEqual([lighting]);
     expect((await row(orTower1, id))?.location?.id).toBe(tower1);
     expect(await row(orTower1, id, { location: [tower1] })).toBeDefined();
-    expect(await row(orTower1, id, { location: [buildingA] })).toBeUndefined();
+    // C1, who has it at Building Alpha, finds it there; the Tower 1 engineer doesn't.
+    await expectHiddenFrom({ read: (by: Caller) => list(by, { location: [buildingA] }), target: id, seenBy: engineer, hiddenFrom: orTower1, name: named, label: "the Building A filter" });
     expect((await cards(orTower1)).find((c) => c.id === id)?.location?.id).toBe(tower1);
     expect(await row(orTower1, id, { q: "Tower One" })).toBeDefined();
     // Nothing tells it where C1 moved the report.
-    expect(await row(orTower1, id, { q: "Alpha" })).toBeUndefined();
-    expect(JSON.stringify(d)).not.toContain(buildingA);
+    await expectHiddenFrom({ read: (by: Caller) => list(by, { q: "Alpha" }), target: id, seenBy: engineer, hiddenFrom: orTower1, name: named, label: "a search for Alpha" });
+    const holdsBuildingA = async (by: Caller) => (JSON.stringify(await detail(by, id)).includes(buildingA) ? [{ id: buildingA }] : []);
+    await expectHiddenFrom({ read: holdsBuildingA, target: buildingA, seenBy: engineer, hiddenFrom: orTower1, name: named, label: "Building A on the item" });
   });
 
   it("keeps K1 on Lighting, as it was at the Send Back (a Scope change: rows only, Scopes grant nothing)", async () => {
@@ -144,10 +165,8 @@ describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\"
   });
 
   it("gives the Building A engineer nothing of it", async () => {
-    await expectHidden(orBuildingA.get(`/v1/work-items/${id}`));
-    expect(await row(orBuildingA, id)).toBeUndefined();
-    expect(await row(orBuildingA, id, { q: "Daily" })).toBeUndefined();
-    expect((await cards(orBuildingA)).find((c) => c.id === id)).toBeUndefined();
+    // The Tower 1 engineer still has it as it was, and C1 as it is now.
+    await hiddenEverywhere(id, [orTower1, engineer], orBuildingA, { q: "Daily" });
   });
 
   describe("scenario RP-582-2: once C1 Submits it again (V12)", () => {
@@ -158,9 +177,9 @@ describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\"
     });
 
     it("the Tower 1 engineer loses it", async () => {
-      await expectHidden(orTower1.get(`/v1/work-items/${id}`));
-      expect(await row(orTower1, id)).toBeUndefined();
-      expect(await row(orTower1, id, { q: "Tower One" })).toBeUndefined();
+      // The Building A engineer, who gains it, reads it in each.
+      await hiddenEverywhere(id, [orBuildingA, engineer], orTower1, { q: "Daily" });
+      expect(await row(orTower1, id, { q: "Tower One" })).toBeUndefined(); // not hidden-from: it is at Building Alpha now, so nobody finds it by Tower One; the reads above prove it hidden
     });
 
     it("the Building A engineer gains it, at Building Alpha with Power", async () => {

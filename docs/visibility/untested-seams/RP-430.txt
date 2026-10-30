@@ -1,3 +1,0 @@
-RP-430-1 api  # K1's manager sends a MAR to the Manager step, then picks it up; its Approve says "not the
-RP-430-2 api  # A K1 Transition's rule asks whether the item has been through C1's Contractor review (whic
-RP-430-3 api  # K1's Reject says "all Comments closed"; a Comment raised from the MAR is a C1 Draft, later

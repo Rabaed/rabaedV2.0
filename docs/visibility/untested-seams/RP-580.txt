@@ -1,1 +1,0 @@
-RP-580-1 db  # K1 Sends a Submitted item Back to C1's Draft Step, which says "After a Send Back: Comment

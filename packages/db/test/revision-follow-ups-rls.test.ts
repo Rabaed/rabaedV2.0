@@ -15,7 +15,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, buildSeamTwoTower, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, buildSeamTwoTower, expectHiddenFrom, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -121,7 +121,7 @@ beforeAll(async () => {
   expect(await pickUp(k1.members.manager, rev0)).toBe("picked_up");
   expect(await take(k1.members.manager, rev0, "revise_c", { remarks: "Seal the formwork" })).toBe("applied");
   const raised = (await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from' order by created_at, from_id", [rev0])).rows;
-  expect(raised).toHaveLength(2);
+  expect(raised).toHaveLength(2); // not hidden-from: setup, read as the migrator: Code C raised the two Snags
   snagA = raised[0].from_id as string;
   snagB = raised[1].from_id as string;
   // The second Snag is in Building B, which C1's Project Manager does not cover below.
@@ -168,19 +168,20 @@ describe("RP-653-1: a Revision counts only the previous item's follow-ups the vi
         sql`select app.set_member_visibility(${c1.participantId}::uuid, ${c1Pm}::uuid, 'location', false, ${[tower.buildingA]}::uuid[], now()) as outcome`,
       ),
     ).toBe("set");
-    expect((await call(c1Pm, sql<{ id: string }>`select id from work_item where id = ${snagB}::uuid`))).toEqual([]);
+    const snagBById = (as: string) => call(as, sql<{ id: string }>`select id from work_item where id = ${snagB}::uuid`);
+    await expectHiddenFrom({ read: snagBById, target: snagB, seenBy: c1.members.engineer, hiddenFrom: c1Pm, label: "the Snag in Building B" });
     expect(await previous(c1Pm, rev1)).toEqual([{ previous_revision_no: 0, type_code: "SNG", open_count: 1, closed_count: 0 }]);
     expect(await previous(c1.members.engineer, rev1)).toEqual([{ previous_revision_no: 0, type_code: "SNG", open_count: 2, closed_count: 0 }]);
   });
 
   it("C2 and another Project's Member count none: they see neither Rev 1 nor Rev 0", async () => {
-    for (const outsider of [c2.members.engineer, other.ap]) {
-      expect(await previous(outsider, rev1), outsider).toEqual([]);
-    }
+    // A count row has no id of its own: it is Rev 0's per Type, so it is keyed by the Revision number and the Type.
+    const counts = (as: string) => previous(as, rev1).then((rows) => rows.map((r) => ({ id: `${r.previous_revision_no}:${r.type_code}` })));
+    await expectHiddenFrom({ read: counts, target: "0:SNG", seenBy: [c1.members.engineer, k1.members.engineer], hiddenFrom: [c2.members.engineer, other.ap], label: "Rev 0's Snag count" });
   });
 
   it("Rev 0, which follows no item, has no previous counts; K1, who sees Rev 1, counts what it sees of Rev 0's", async () => {
-    expect(await previous(c1.members.engineer, rev0)).toEqual([]);
+    expect(await previous(c1.members.engineer, rev0)).toEqual([]); // not hidden-from: Rev 0 follows no item, so it has no previous counts for anyone
     expect(await previous(k1.members.engineer, rev1)).toEqual([{ previous_revision_no: 0, type_code: "SNG", open_count: 2, closed_count: 0 }]);
     expect(await previous(k1BuildingA, rev1)).toEqual([{ previous_revision_no: 0, type_code: "SNG", open_count: 1, closed_count: 0 }]);
   });
@@ -206,10 +207,11 @@ describe("RP-655-1: a Revision lists only the previous item's follow-ups the vie
   });
 
   it("C2 and another Project's Member list none; Rev 0, which follows no item, lists none", async () => {
-    for (const outsider of [c2.members.engineer, other.ap]) {
-      expect(await previousRows(outsider, rev1), outsider).toEqual([]);
+    const listed = (as: string) => previousRows(as, rev1).then((rows) => rows.map((r) => ({ id: r.work_item_id })));
+    for (const snag of [snagA, snagB]) {
+      await expectHiddenFrom({ read: listed, target: snag, seenBy: [c1.members.engineer, k1.members.engineer], hiddenFrom: [c2.members.engineer, other.ap], label: "Rev 0's follow-ups" });
     }
-    expect(await previousRows(c1.members.engineer, rev0)).toEqual([]);
+    expect(await previousRows(c1.members.engineer, rev0)).toEqual([]); // not hidden-from: Rev 0 follows no item, so it lists no previous follow-ups for anyone
   });
 
   it("a discarded follow-up is never listed", async () => {

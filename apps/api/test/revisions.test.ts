@@ -10,9 +10,9 @@
 import { randomUUID } from "node:crypto";
 import type { DocumentList, LinkedFrom, RevisionChain, WorkItemLinks } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, only, projectMember, take, type Company } from "./support/tower.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { expectHiddenFrom, LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -44,6 +44,24 @@ const discard = (by: Caller, id: string) => by.post(`/v1/work-items/${id}/discar
 const links = async (by: Caller, id: string): Promise<WorkItemLinks> => (await ok(by.get(`/v1/work-items/${id}/links`), 200)).json();
 const linkedFrom = async (by: Caller, id: string): Promise<LinkedFrom> => (await ok(by.get(`/v1/work-items/${id}/linked-from`), 200)).json();
 const counters = async () => (await ok(c1.caller.get(`/v1/projects/${projectId}/numbering/counters`), 200)).json().counters;
+
+// Reads for expectHiddenFrom (RP-1095, RP-1126): each gives the rows `by` reads, by id.
+const names = new Map<Caller, string>();
+const named = (by: Caller) => names.get(by) ?? "someone";
+const item = (id: string) => readById(`/v1/work-items/${id}`);
+/** The item's history, as one row of the item's id when `by` may read it: its events carry no stable id. */
+const historyOf = (id: string) => async (by: Caller) => (await readById(`/v1/work-items/${id}/history`)(by)).map(() => ({ id }));
+const documentsOf = (id: string) => async (by: Caller) => (await readById<DocumentList>(`/v1/work-items/${id}/documents`)(by)).flatMap((l) => l.documents);
+const chainOf = (id: string) => async (by: Caller) => (await readById<RevisionChain>(`/v1/work-items/${id}/revisions`)(by)).flatMap((c) => c.revisions);
+const listed = async (by: Caller) => (await ok(by.get(`/v1/projects/${projectId}/work-items`), 200)).json().items as { id: string }[];
+/**
+ * The items `id`'s Links and its Linked from name, for a reader who sees `id`: each row twice, by its
+ * item's id and as `#<Document Number>`. A row of an item the reader can't open has no id, only its
+ * number (E3), so a hidden item is checked by its number too.
+ */
+const idAndNumber = (workItemId: string | null, documentNumber: string | null) => [{ id: workItemId ?? "(no id)" }, { id: `#${documentNumber}` }];
+const linksOf = (id: string) => async (by: Caller) => (await links(by, id)).links.flatMap((l) => idAndNumber(l.workItemId, l.documentNumber));
+const linkedFromOf = (id: string) => async (by: Caller) => (await linkedFrom(by, id)).items.flatMap((i) => idAndNumber(i.workItemId, i.documentNumber));
 
 /** Sends a Draft (a new MAR or a Revision) for review and Submits it to K1. */
 async function submit(id: string) {
@@ -97,6 +115,8 @@ beforeAll(async () => {
   const or = await otherParticipant("owner_representative");
   orEngineer = await projectMember(api, or.company, or.participantId, ["engineer"]);
   stranger = (await api.authorizedPerson()).caller;
+  for (const [by, name] of [[engineer, "C1 engineer"], [pm, "C1 PM"], [viewer, "C1 viewer"], [k1Engineer, "K1 engineer"], [k1Manager, "K1 manager"], [orEngineer, "OR engineer"], [stranger, "stranger"]] as const)
+    names.set(by, name);
 });
 
 describe("C1 creates a Revision of a MAR that got Code C", () => {
@@ -156,18 +176,17 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
   });
 
   it("is hidden from K1 and the Owner Representative while it is a Draft (V1, scenario 51)", async () => {
-    for (const who of [k1Engineer, k1Manager, orEngineer, stranger]) {
-      await expectHidden(who.get(`/v1/work-items/${revision}`));
-      await expectHidden(who.get(`/v1/work-items/${revision}/history`));
-      await expectHidden(who.get(`/v1/work-items/${revision}/documents`));
-    }
-    for (const who of [k1Manager, orEngineer]) {
-      const list = (await ok(who.get(`/v1/projects/${projectId}/work-items`), 200)).json();
-      expect(list.items.map((i: { id: string }) => i.id)).not.toContain(revision);
-      const links: WorkItemLinks = (await ok(who.get(`/v1/work-items/${closed}/links`), 200)).json();
-      expect(JSON.stringify(links)).not.toContain(revision);
-      expect(links.links).toEqual([]);
-    }
+    const seenBy = [engineer, pm];
+    const hiddenFrom = [k1Engineer, k1Manager, orEngineer, stranger];
+    const hidden = (read: (by: Caller) => Promise<readonly { id: string }[]>, target: string, label: string) =>
+      expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, label });
+    await hidden(item(revision), revision, "the Draft Revision");
+    await hidden(historyOf(revision), revision, "its history");
+    const copy = (await documentsOf(revision)(engineer))[0]!.id;
+    await hidden(documentsOf(revision), copy, "its copied Document");
+    await expectHiddenFrom({ read: listed, target: revision, seenBy, hiddenFrom: [k1Manager, orEngineer], name: named, label: "the item List" });
+    // The closed MAR's Link to a Draft Revision reaches nobody yet, C1 included (as at seam 2); "the Revision's Document Number" reads it once Submitted.
+    for (const who of [engineer, k1Manager, orEngineer]) expect((await links(who, closed)).links, named(who)).toEqual([]); // not hidden-from: nobody reads it before Submit, C1 included
   });
 
   it("is offered to nobody else while it is open: one open Revision per chain", async () => {
@@ -194,8 +213,9 @@ describe("who may create a Revision", () => {
       const res = await createRevision(who, closed);
       expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "revision_not_allowed" } });
     }
-    await expectHidden(createRevision(stranger, closed));
-    await expectHidden(createRevision(engineer, randomUUID()));
+    await expectHiddenFrom({ read: item(closed), target: closed, seenBy: [engineer, k1Manager], hiddenFrom: stranger, name: named, label: "the closed MAR" });
+    await expectHidden(createRevision(stranger, closed)); // not hidden-from: a refused write; the read above proves the row with expectHiddenFrom
+    await expectHidden(createRevision(engineer, randomUUID())); // not hidden-from: no item has this id
   });
 
   it("is refused for an item without Code C", async () => {
@@ -231,7 +251,8 @@ describe("the Revision's Document Number", () => {
   });
 
   it("reaches K1 when Submitted, with a related Link from the closed item", async () => {
-    await expectHidden(k1Manager.get(`/v1/work-items/${rev1}`));
+    await expectHiddenFrom({ read: item(rev1), target: rev1, seenBy: [engineer, pm], hiddenFrom: k1Manager, name: named, label: "Rev 1 in C1's review" });
+    for (const who of [engineer, k1Manager]) expect((await linksOf(closed)(who)).map((l) => l.id), named(who)).not.toContain(rev1); // not hidden-from: nobody reads the Link before Submit, C1 included; the same read gives it below
     await ok(pm.post(`/v1/work-items/${rev1}/pick-up`));
     await take(pm, rev1, "submit");
     expect(await detail(k1Manager, rev1)).toMatchObject({ documentNumber: `${base} Rev 1`, revisionNo: 1 });
@@ -342,8 +363,10 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
   it("lists only the original to K1 and the Owner Representative while Rev 1 is C1's (scenario 51)", async () => {
     for (const who of [k1Engineer, k1Manager, orEngineer]) {
       expect(await chain(who, closed)).toEqual({ revisions: [{ id: closed, documentNumber: base, revisionNo: 0 }] });
-      await expectHidden(who.get(`/v1/work-items/${rev1}/revisions`));
     }
+    const hiddenFrom = [k1Engineer, k1Manager, orEngineer];
+    await expectHiddenFrom({ read: chainOf(closed), target: rev1, seenBy: [engineer, pm], hiddenFrom, name: named, label: "the original's drop-down" });
+    await expectHiddenFrom({ read: chainOf(rev1), target: rev1, seenBy: [engineer, pm], hiddenFrom, name: named, label: "Rev 1's drop-down" });
   });
 
   it("lists the original and the Draft Rev 1, with no number yet, to C1", async () => {
@@ -360,9 +383,9 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
   });
 
   it("answers a 404 naming nothing to whoever can't see the item", async () => {
-    await expectHidden(stranger.get(`/v1/work-items/${closed}/revisions`));
-    await expectHidden(engineer.get(`/v1/work-items/${randomUUID()}/revisions`));
-    await expectHidden(engineer.get(`/v1/work-items/not-an-id/revisions`));
+    await expectHiddenFrom({ read: chainOf(closed), target: closed, seenBy: [engineer, k1Manager], hiddenFrom: stranger, name: named, label: "the drop-down" });
+    await expectHidden(engineer.get(`/v1/work-items/${randomUUID()}/revisions`)); // not hidden-from: no item has this id
+    await expectHidden(engineer.get(`/v1/work-items/not-an-id/revisions`)); // not hidden-from: not an id at all
   });
 
   it("lists the original and Rev 1 to K1 once Submitted, and the original keeps its own answers, Documents and history (scenario 52)", async () => {
@@ -381,12 +404,12 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
     expect(await detail(k1Manager, rev1)).toMatchObject({ outcome: null, answers: { manufacturer: "Schneider" } });
     const documents = async (id: string): Promise<DocumentList> => (await ok(k1Manager.get(`/v1/work-items/${id}/documents`), 200)).json();
     const [originalDocs, revisionDocs] = [await documents(closed), await documents(rev1)];
-    expect(originalDocs.documents).toHaveLength(1);
-    expect(revisionDocs.documents).toHaveLength(1);
+    expect(originalDocs.documents).toHaveLength(1); // not hidden-from: the one datasheet, read by K1, who sees it
+    expect(revisionDocs.documents).toHaveLength(1); // not hidden-from: its one copy, read by K1, who sees it
     expect(revisionDocs.documents[0]!.id).not.toBe(originalDocs.documents[0]!.id);
     const history = async (id: string) => (await ok(k1Manager.get(`/v1/work-items/${id}/history`), 200)).json().events as { type: string }[];
     expect((await history(closed)).map((e) => e.type)).toContain("issue_code");
-    expect((await history(rev1)).map((e) => e.type)).not.toContain("issue_code");
+    expect((await history(rev1)).map((e) => e.type)).not.toContain("issue_code"); // not hidden-from: Rev 1 has no Code yet; the closed MAR's stays its own
   });
 });
 
@@ -401,12 +424,15 @@ describe("discarding a Draft Revision (scenario 56)", () => {
   it("is offered only on a Revision still in Draft, to C1", async () => {
     expect((await detail(engineer, closed)).actions.discardRevision).toBe(false);
     expect((await discard(engineer, closed)).statusCode).toBe(409);
-    await expectHidden(discard(k1Manager, discarded));
+    await expectHiddenFrom({ read: item(discarded), target: discarded, seenBy: [engineer, pm], hiddenFrom: k1Manager, name: named, label: "the Draft Revision" });
+    await expectHidden(discard(k1Manager, discarded)); // not hidden-from: a refused write; the read above proves the row with expectHiddenFrom
   });
 
   it("takes it away for everyone, and the next Revision is Rev 1 again", async () => {
+    // Read by id just before, so the 404s after the discard can't pass on a row never made or a broken read.
+    for (const who of [engineer, pm]) expect((await item(discarded)(who)).map((r) => r.id), named(who)).toEqual([discarded]);
     await ok(discard(engineer, discarded));
-    for (const who of [engineer, pm, k1Manager, orEngineer]) await expectHidden(who.get(`/v1/work-items/${discarded}`));
+    for (const who of [engineer, pm, k1Manager, orEngineer]) await expectHidden(who.get(`/v1/work-items/${discarded}`)); // not hidden-from: discarded, so nobody reads it; C1 read it by id just before
     expect((await detail(engineer, closed)).actions.createRevision).toBe(true);
     const again = await revisionOf(closed);
     expect(again).not.toBe(discarded);
@@ -414,7 +440,7 @@ describe("discarding a Draft Revision (scenario 56)", () => {
     await submit(again);
     const base = (await detail(engineer, closed)).documentNumber!;
     expect((await detail(k1Manager, again)).documentNumber).toBe(`${base} Rev 1`);
-    await expectHidden(k1Manager.get(`/v1/work-items/${discarded}`));
+    await expectHidden(k1Manager.get(`/v1/work-items/${discarded}`)); // not hidden-from: the discarded one stays gone once the next is Submitted; read by id before the discard
   });
 
   it("is refused once the Revision has left Draft", async () => {
@@ -465,26 +491,40 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
   });
 
   it("never shows Rev 1 to a reader who sees only the original", async () => {
-    await expectHidden(orA.get(`/v1/work-items/${rev1}`));
+    names.set(orA, "OR of Building A").set(orB, "OR of Building B");
+    const hidden = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
+      expectHiddenFrom({ read, target: rev1, seenBy: [engineer, k1Manager, orB], hiddenFrom: orA, name: named, label });
+    await hidden(item(rev1), "Rev 1");
     expect((await ok(orA.get(`/v1/work-items/${closed}/revisions`), 200)).json()).toEqual({
       revisions: [{ id: closed, documentNumber: base, revisionNo: 0 }],
     });
-    expect((await links(orA, closed)).links).toEqual([]);
-    expect((await linkedFrom(orA, closed)).items).toEqual([]);
+    // orB doesn't see the original, so its Links and Linked from are read by those who see both.
+    const ofClosed = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
+      Promise.all([rev1, `#${base} Rev 1`].map((target) => expectHiddenFrom({ read, target, seenBy: [engineer, k1Manager], hiddenFrom: orA, name: named, label: `${label}, ${target}` })));
+    await ofClosed(linksOf(closed), "the original's Links");
+    await ofClosed(linkedFromOf(closed), "the original's Linked from");
     const body = (await orA.get(`/v1/work-items/${closed}/links`)).body + (await orA.get(`/v1/work-items/${closed}/linked-from`)).body;
-    expect(body).not.toContain(`${base} Rev 1`);
+    expect(body).not.toContain(`${base} Rev 1`); // not hidden-from: nor its number anywhere in them; the reads above prove the rows by id
   });
 
   it("never shows the original to a reader who sees only Rev 1", async () => {
-    await expectHidden(orB.get(`/v1/work-items/${closed}`));
+    const hidden = (read: (by: Caller) => Promise<readonly { id: string }[]>, seenBy: Caller[], label: string) =>
+      expectHiddenFrom({ read, target: closed, seenBy, hiddenFrom: orB, name: named, label });
+    await hidden(item(closed), [engineer, k1Manager, orA], "the original");
     expect((await ok(orB.get(`/v1/work-items/${rev1}/revisions`), 200)).json()).toEqual({
       revisions: [{ id: rev1, documentNumber: `${base} Rev 1`, revisionNo: 1 }],
     });
-    expect((await linkedFrom(orB, rev1)).items).toEqual([]);
-    expect((await links(orB, rev1)).links).toEqual([]);
-    const d = await detail(orB, rev1);
-    expect(d.answers).toMatchObject({ related_submittals: [] });
-    expect(JSON.stringify(d)).not.toContain(`"${base}"`);
+    await hidden(linkedFromOf(rev1), [engineer, k1Manager], "Rev 1's Linked from");
+    await hidden(linksOf(rev1), [engineer, k1Manager], "Rev 1's Links");
+    // A row of the original with no id would still carry its number (E3).
+    for (const [read, label] of [
+      [linkedFromOf(rev1), "Rev 1's Linked from, by number"],
+      [linksOf(rev1), "Rev 1's Links, by number"],
+    ] as const)
+      await expectHiddenFrom({ read, target: `#${base}`, seenBy: [engineer, k1Manager], hiddenFrom: orB, name: named, label });
+    const answer = async (by: Caller) => ((await detail(by, rev1)).answers.related_submittals as string[]).map((id) => ({ id }));
+    await hidden(answer, [engineer, k1Manager], "Rev 1's link answer");
+    expect(JSON.stringify(await detail(orB, rev1))).not.toContain(`"${base}"`); // not hidden-from: nor the original's number anywhere in it; the reads above prove the rows by id
   });
 
   it("keeps the original in Rev 1's link answer for whoever sees it", async () => {
@@ -514,7 +554,9 @@ describe("the Links of a discarded Revision", () => {
     await codeC(closed);
     discarded = await revisionOf(closed);
     expect((await links(engineer, discarded)).links).toEqual([expect.objectContaining({ kind: "relies_on", workItemId: target })]);
-    expect((await ok(engineer.get(`/v1/work-items/${discarded}/documents`), 200)).json().documents).toHaveLength(1);
+    expect((await ok(engineer.get(`/v1/work-items/${discarded}/documents`), 200)).json().documents).toHaveLength(1); // not hidden-from: the one datasheet it copied, read by its raiser
+    // Its Links and Documents (above) and its Linked from read by id before the discard, so the 404s below can't pass on a row never made or a broken read.
+    await ok(engineer.get(`/v1/work-items/${discarded}/linked-from`), 200);
     await ok(discard(engineer, discarded));
   });
 
@@ -522,16 +564,17 @@ describe("the Links of a discarded Revision", () => {
     for (const who of [engineer, pm, k1Manager, orEngineer]) {
       const from = (await linkedFrom(who, target)).items;
       expect(from.map((i) => i.workItemId)).toEqual([closed]);
-      expect(JSON.stringify(from)).not.toContain(discarded);
+      expect(JSON.stringify(from)).not.toContain(discarded); // not hidden-from: nor its id anywhere in it; the ids above are pinned, and a Draft is in nobody's Linked from
       expect((await links(who, closed)).links.map((l) => l.workItemId)).toEqual([target]);
     }
   });
 
   it("answers its Links, Linked from and Documents with a 404 naming nothing", async () => {
+    // Each of these C1 read by id with a 200 before the discard (beforeAll).
     for (const who of [engineer, k1Manager]) {
-      await expectHidden(who.get(`/v1/work-items/${discarded}/links`));
-      await expectHidden(who.get(`/v1/work-items/${discarded}/linked-from`));
-      await expectHidden(who.get(`/v1/work-items/${discarded}/documents`));
+      await expectHidden(who.get(`/v1/work-items/${discarded}/links`)); // not hidden-from: discarded, so nobody reads it; read by id before
+      await expectHidden(who.get(`/v1/work-items/${discarded}/linked-from`)); // not hidden-from: discarded, so nobody reads it; read by id before
+      await expectHidden(who.get(`/v1/work-items/${discarded}/documents`)); // not hidden-from: discarded, so nobody reads it; read by id before
     }
   });
 });

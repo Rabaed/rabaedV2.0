@@ -1,6 +1,0 @@
-text (top level) :: expect(raised).toHaveLength(2);
-empty RP-653-1: a Revision counts only the previous item's follow-ups the viewer sees > a Member who sees only the Snag in Building A counts one; both Snags still count for those who see both :: expect((await call(c1Pm, sql<{ id: string }>`select id from work_item where id = ${snagB}::uuid`))).toEqual([]);
-empty RP-653-1: a Revision counts only the previous item's follow-ups the viewer sees > C2 and another Project's Member count none: they see neither Rev 1 nor Rev 0 :: expect(await previous(outsider, rev1), outsider).toEqual([]);
-empty RP-653-1: a Revision counts only the previous item's follow-ups the viewer sees > Rev 0, which follows no item, has no previous counts; K1, who sees Rev 1, counts what it sees of Rev 0's :: expect(await previous(c1.members.engineer, rev0)).toEqual([]);
-empty RP-655-1: a Revision lists only the previous item's follow-ups the viewer sees > C2 and another Project's Member list none; Rev 0, which follows no item, lists none :: expect(await previousRows(outsider, rev1), outsider).toEqual([]);
-empty RP-655-1: a Revision lists only the previous item's follow-ups the viewer sees > C2 and another Project's Member list none; Rev 0, which follows no item, lists none :: expect(await previousRows(c1.members.engineer, rev0)).toEqual([]);
