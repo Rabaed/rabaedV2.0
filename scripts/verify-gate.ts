@@ -50,6 +50,26 @@ const stampedCommits = (lines: { commit: string; stamped: boolean }[]) => lines.
 /** The commits the body's stamped verify lines name; a line without a valid stamp is left out. */
 export const verifiedCommits = (body: string): string[] => stampedCommits(readLines(body));
 
+/**
+ * `body` with `line` in place of the verify line(s) it holds (RP-1171, `pnpm verify --pr`): the first is
+ * replaced where it stands, the others go, and a line that held only a stale one goes with it. Read by the
+ * same pattern as the gate, so what is replaced is what the gate would have read. `replaced` is false when
+ * the body had none.
+ */
+export function replaceVerifyLines(body: string, line: string): { body: string; replaced: boolean } {
+  let replaced = false;
+  const kept: string[] = [];
+  for (const text of body.split("\n")) {
+    if (text.search(LINE) < 0) {
+      kept.push(text);
+      continue;
+    }
+    const next = text.replace(LINE, () => (replaced ? "" : ((replaced = true), line)));
+    if (!/^\s*(?:[-*]\s*)?$/.test(next)) kept.push(next);
+  }
+  return { body: replaced ? kept.join("\n") : body, replaced };
+}
+
 export type VerifyGate = { ok: true; commit: string } | { ok: false; reason: string };
 
 /** Passes when a stamped line names `head` or a commit only clean merges of main (and baseline-only bot commits) led to it from. */
@@ -71,7 +91,7 @@ export function verifyGate(body: string, head: string, git: ReviewedGit): Verify
 export const needsVerify = (labels: string[], changedFiles: string[]): boolean => !(labels.includes(DOCS_ONLY_LABEL) && changedFiles.every(isDoc));
 
 /** The fix both the check and `pnpm queue` print. */
-export const verifyFix = (pr: number, head: string) => `Fix: run \`pnpm verify\` on ${head} (a clean checkout of it), put its last line, stamp included, in the PR body (\`gh pr edit ${pr} --body-file <file>\`)`;
+export const verifyFix = (pr: number, head: string) => `Fix: run \`pnpm verify\` on ${head} (a clean checkout of it), put its last line, stamp included, in the PR body: \`pnpm verify --pr ${pr}\` writes it there (or \`gh pr edit ${pr} --body-file <file>\`)`;
 
 export interface GateSeam extends ReviewedGit {
   /** The PR now: its body, head and labels. */
