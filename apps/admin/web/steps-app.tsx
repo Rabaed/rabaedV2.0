@@ -85,7 +85,8 @@ function Steps({ locale }: { locale: Locale }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [number, setNumber] = useState("");
-  const [found, setFound] = useState<WorkItemStep | null>(null);
+  /** The item shown, with the Project it was found on. */
+  const [found, setFound] = useState<(WorkItemStep & { projectId: string }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -105,14 +106,18 @@ function Steps({ locale }: { locale: Locale }) {
     setBusy(false);
   }
 
-  async function find(quiet = false) {
-    if (!why || !projectId || !numberText) return;
+  /**
+   * Finds the item numbered `documentNumber` on Project `inProject`: by default what the form says; after a
+   * reassign, the item just shown, whatever the form says now. `quiet` keeps the notice.
+   */
+  async function find({ inProject = projectId, documentNumber = numberText, quiet = false } = {}) {
+    if (!why || !inProject || !documentNumber) return;
     setBusy(true);
     setError(null);
     if (!quiet) setNotice(null);
     try {
-      const query = new URLSearchParams({ projectId, documentNumber: numberText, reason: why });
-      setFound(await api<WorkItemStep>("GET", `/v1/steps?${query.toString()}`));
+      const query = new URLSearchParams({ projectId: inProject, documentNumber, reason: why });
+      setFound({ ...(await api<WorkItemStep>("GET", `/v1/steps?${query.toString()}`)), projectId: inProject });
     } catch (e) {
       setFound(null);
       setError(e instanceof ApiError && e.status === 404 ? w.notFound : w.findFailed);
@@ -307,7 +312,7 @@ function Steps({ locale }: { locale: Locale }) {
             return (w.refusals as Record<string, string>)[code] ?? w.reassignFailed;
           }
           setNotice(to ? fill(w.reassigned, { name: to.name[locale] }) : w.returned);
-          void find(true);
+          void find({ inProject: found!.projectId, documentNumber: found!.documentNumber, quiet: true });
           return null;
         }}
       />

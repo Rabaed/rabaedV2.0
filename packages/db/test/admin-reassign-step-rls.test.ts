@@ -44,11 +44,11 @@ type Found = {
 /** What the Engineer reads of the item numbered `number` on the Tower's Project. */
 const find = async (number: string) =>
   (await sql<Found>`select * from app.work_item_step_for_engineer(${tower.projectId}::uuid, ${number})`.execute(adminDb)).rows;
-/** The Engineer hands the item's Step to `to`, or back to the pool when `to` is null. */
-const reassign = async (to: string | null) =>
+/** The Engineer hands item `item`'s Step (the Snag's by default) to `to`, or back to the pool when `to` is null. */
+const reassign = async (to: string | null, item = snag) =>
   (
     await sql<{ result: string; from_member_id: string | null; to_member_id: string | null }>`
-      select * from app.reassign_step_by_engineer(${snag}::uuid, ${to}::uuid, ${engineerId}::uuid, ${randomUUID()}::uuid, now())
+      select * from app.reassign_step_by_engineer(${item}::uuid, ${to}::uuid, ${engineerId}::uuid, ${randomUUID()}::uuid, now())
     `.execute(adminDb)
   ).rows[0]!;
 const holder = async () => (await migrator.query("select status, assignee_member_id from step_assignment where work_item_id = $1 and status in ('pooled', 'picked_up')", [snag])).rows;
@@ -136,6 +136,24 @@ describe("the Engineer's read of a stuck Step (RP-1162)", () => {
     await expect(
       call(c1Pm, sql<{ result: string }>`select * from app.reassign_step_by_engineer(${snag}::uuid, ${c1Engineer}::uuid, ${engineerId}::uuid, ${randomUUID()}::uuid, now())`),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("the reassign's other refusals (RP-1162)", () => {
+  it("refuses a Draft (its raiser's own Members hand it over) and an item Rabaed does not know, writing nothing", async () => {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      k1,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${tower.projectId}::uuid, 'SNG', 'Loose ceiling tile', app.latest_form_version('SNG'), '{"description": "Loose ceiling tile"}'::jsonb,
+        ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
+    );
+    const draft = created!.work_item_id;
+    const eventsOf = async (id: string) => (await migrator.query("select count(*)::int as n from work_item_event where work_item_id = $1", [id])).rows[0].n;
+    const before = await eventsOf(draft);
+    expect((await reassign(c1Pm, draft)).result).toBe("draft_step");
+    expect((await reassign(null, draft)).result).toBe("draft_step");
+    expect(await eventsOf(draft)).toBe(before);
+    expect((await reassign(c1Pm, randomUUID())).result).toBe("not_found");
   });
 });
 
