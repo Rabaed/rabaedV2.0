@@ -119,7 +119,7 @@ describe("ageChanges", () => {
 
 describe("inside the GitHub job: the log is public (Orchestrator, 2026-10-31)", () => {
   // Texts no Document Number holds, so finding one in the output means item text leaked.
-  const secret = ["Hidden lintel", "Private pour", "Quiet mast", "Covert slab"];
+  const secret = ["Hidden lintel", "Private pour", "Quiet mast", "Covert slab", "Level-3-Slab"];
   const list = [
     item("TWR-MAR-01-0020", "Hidden lintel"),
     item("TWR-MAR-01-0021", "Private pour"),
@@ -127,6 +127,8 @@ describe("inside the GitHub job: the log is public (Orchestrator, 2026-10-31)", 
     item(null, "Quiet mast"),
     item("TWR-MAR-01-0023", "Covert slab", { closed: true }),
     item("TWR-MAR-01-0024", "Covert slab extra"),
+    // A Subject shaped like a Document Number (Main 6, Note 1): it must never match by its Subject.
+    item("TWR-MAR-01-0025", "Level-3-Slab"),
   ];
   const leaks = (lines: string[]) => lines.filter((line) => secret.some((text) => line.toLowerCase().includes(text.toLowerCase())));
 
@@ -142,13 +144,13 @@ describe("inside the GitHub job: the log is public (Orchestrator, 2026-10-31)", 
     expect(parseAgeArgs(["--item", "Hidden lintel", "--weeks", "4"], { COMPOSE_PROJECT_NAME: "rabaed-lane42" })).toMatchObject({ items: ["Hidden lintel"] });
   });
 
-  it("names every item by its Document Number or --item <n> only, in every refusal", () => {
-    const result = ageChanges({ items: ["Hidden", "Private pour", "Quiet mast", "Covert slab", "TWR-MAR-01-0020", "Hidden lintel"], weeks: 4 }, list, now, { itemText: false });
+  it("matches by Document Number only, never by Subject, and names items by number or --item <n> in every refusal", () => {
+    const result = ageChanges({ items: ["TWR-MAR-01", "Level-3-Slab", "Hidden lintel", "TWR-MAR-01-0023", "TWR-MAR-01-0020", "twr-mar-01-0020"], weeks: 4 }, list, now, { itemText: false });
     if (!("errors" in result)) throw new Error("expected refusals");
     expect(result.errors).toEqual([
-      "--item 1 matches no item by Document Number or exact Subject. Close: TWR-MAR-01-0020",
-      "--item 2 matches 2 items; give one of their Document Numbers: TWR-MAR-01-0021, TWR-WIR-01-0022",
-      "--item 3 is a Draft: a Draft has no Step Age (ADR 0020)",
+      "--item 1 matches no item by Document Number",
+      "--item 2 matches no item by Document Number",
+      "--item 3 matches no item by Document Number",
       "TWR-MAR-01-0023 is closed: a closed item has no Step Age",
       "TWR-MAR-01-0020 is named twice",
     ]);
@@ -156,7 +158,7 @@ describe("inside the GitHub job: the log is public (Orchestrator, 2026-10-31)", 
   });
 
   it("prints a change by Document Number and Step Age only", () => {
-    const result = ageChanges({ items: ["Hidden lintel"], weeks: 4 }, list, now, { itemText: false });
+    const result = ageChanges({ items: ["TWR-MAR-01-0020"], weeks: 4 }, list, now, { itemText: false });
     if ("errors" in result) throw new Error(result.errors.join("; "));
     const line = describeChange(result.items[0]!, { itemText: false });
     expect(line).toMatch(/^TWR-MAR-01-0020: Step Age 1 → 4 for its holder's Company/);
