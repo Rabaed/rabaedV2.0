@@ -267,7 +267,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
         : {})}
       footer={
         <>
-          {item.actions.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard />}
+          {item.actions.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard look="page" />}
           <OpenerAlert opener={opener} />
         </>
       }

@@ -2,7 +2,9 @@
 
 import type { RevisionRefusal } from "@rabaed/domain";
 import { useState } from "react";
+import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
+import { Icon } from "../icon/icon.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "../overlay/dialog.tsx";
 
 // Create Revision and Discard Revision on the item page (RP-316; workflow-engine.md
@@ -38,9 +40,15 @@ export type RevisionActionsProps = {
   canDiscard: boolean;
   onCreate: RevisionCall;
   onDiscard: RevisionCall;
+  /**
+   * `page`: inside the Work Item page's Actions card (RP-1188, gap table row 32): no bordered section, and
+   * Discard Revision the design's red text button with a bin, the card's width. It still asks first.
+   */
+  look?: "section" | "page";
 };
 
-export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDiscard }: RevisionActionsProps) {
+export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDiscard, look = "section" }: RevisionActionsProps) {
+  const page = look === "page";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -62,7 +70,7 @@ export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDis
 
   if (!canCreate && !canDiscard) return null;
   return (
-    <section aria-label={labels.section} className="space-y-3 rounded-md border border-border p-4">
+    <div {...(page ? {} : { role: "region", "aria-label": labels.section })} className={cn("space-y-3", !page && "rounded-md border border-border p-4")}>
       {canCreate && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-body text-muted">{labels.createIntro}</p>
@@ -74,9 +82,16 @@ export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDis
       {canDiscard && (
         <Dialog open={confirming} onOpenChange={setConfirming}>
           <DialogTrigger asChild>
-            <Button variant="secondary" disabled={pending}>
-              {labels.discard}
-            </Button>
+            {page ? (
+              <Button variant="secondary" disabled={pending} className="w-full text-danger-fg hover:text-danger-fg">
+                <Icon name="trash" />
+                {labels.discard}
+              </Button>
+            ) : (
+              <Button variant="secondary" disabled={pending}>
+                {labels.discard}
+              </Button>
+            )}
           </DialogTrigger>
           <DialogContent title={labels.discardTitle} description={labels.discardIntro} closeLabel={labels.close}>
             {error && (
@@ -106,6 +121,6 @@ export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDis
           {error}
         </p>
       )}
-    </section>
+    </div>
   );
 }

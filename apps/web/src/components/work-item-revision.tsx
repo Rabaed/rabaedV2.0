@@ -46,11 +46,14 @@ export function WorkItemRevision({
   projectId,
   canCreate,
   canDiscard,
+  look,
 }: {
   workItemId: string;
   projectId: string;
   canCreate: boolean;
   canDiscard: boolean;
+  /** "page": in the Work Item page's Actions card (RP-1188, gap table row 32). */
+  look?: "page";
 }) {
   const router = useRouter();
   const t = useTranslations("revision");
@@ -82,5 +85,5 @@ export function WorkItemRevision({
     },
   };
 
-  return <RevisionActions labels={labels} canCreate={canCreate} canDiscard={canDiscard} onCreate={create} onDiscard={discard} />;
+  return <RevisionActions labels={labels} canCreate={canCreate} canDiscard={canDiscard} onCreate={create} onDiscard={discard} {...(look ? { look } : {})} />;
 }
