@@ -168,6 +168,6 @@ export function reproduceHandler(deps: RecordJobDeps): OutboxHandler {
       newPdf: { sha256: await sha256(pdf), size: pdf.length, sealedAt },
       verdict,
     });
-    if (verdict.passed) await saveDocumentalRecordFace(trx, row.id, recordFace(data)); // the verification page's (RP-157)
+    if (verdict.passed) await saveDocumentalRecordFace(trx, row.id, recordFace(data, (await deps.signer()).test)); // the verification page's (RP-157)
   };
 }

@@ -6,7 +6,8 @@
 // how many do. A hidden item is the plain 404.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { buildTower, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -22,6 +23,9 @@ let k1Mechanical: Caller; // K1 engineer whose Visibility is Mechanical only: th
 let stranger: Caller; // A Company on no Project of these.
 
 const watchRead = (by: Caller, id: string) => by.get(`/v1/work-items/${id}/watch`);
+/** A caller as a failure names them. */
+const named = (by: Caller) =>
+  by === at.c1Engineer ? "C1 engineer" : by === k1Engineer ? "K1 engineer" : by === k1Mechanical ? "K1 Mechanical engineer" : by === stranger ? "a stranger" : "someone";
 const watching = async (by: Caller, id: string): Promise<boolean> => (await ok(watchRead(by, id), 200)).json().watching;
 const watch = (by: Caller, id: string) => ok(by.request("PUT", `/v1/work-items/${id}/watch`));
 const unwatch = (by: Caller, id: string) => ok(by.delete(`/v1/work-items/${id}/watch`));
@@ -131,7 +135,7 @@ describe("a Revision chain", () => {
   });
 
   it("keeps a Draft Revision hidden from another Company's watcher (V1), until it is Submitted", async () => {
-    await expectHidden(watchRead(k1Engineer, rev1));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${rev1}/watch`), target: rev1, idOf: () => rev1, seenBy: at.c1Engineer, hiddenFrom: k1Engineer, name: named });
     await take(at.c1Engineer, rev1, "send_for_review");
     await ok(at.c1Pm.post(`/v1/work-items/${rev1}/pick-up`));
     await take(at.c1Pm, rev1, "submit");
@@ -159,15 +163,18 @@ describe("a hidden item", () => {
   });
 
   it("is the plain 404 to read, watch or unwatch, exactly like a made-up id", async () => {
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}/watch`), target: id, idOf: () => id, seenBy: [at.c1Engineer, k1Engineer], hiddenFrom: [k1Mechanical, stranger], name: named });
     for (const [who, item] of [
       [k1Mechanical, id],
       [stranger, id],
       [at.c1Engineer, randomUUID()],
       [at.c1Engineer, "not-an-id"],
     ] as const) {
-      await expectHidden(watchRead(who, item));
       await expectHidden(who.request("PUT", `/v1/work-items/${item}/watch`));
       await expectHidden(who.delete(`/v1/work-items/${item}/watch`));
+    }
+    for (const item of [randomUUID(), "not-an-id"]) {
+      await expectHidden(watchRead(at.c1Engineer, item)); // not hidden-from: a made-up id
     }
     // Nothing was written by the refused Watch: once the item is in sight, it isn't watched.
     await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${await memberIdOf(k1Mechanical)}/visibility`, {

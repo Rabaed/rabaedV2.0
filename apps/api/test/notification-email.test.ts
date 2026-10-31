@@ -8,7 +8,7 @@
 // appears by name only, with the signer of a final Code (V14).
 import { randomUUID } from "node:crypto";
 import { createDb, notificationEmailHandler, processOutbox, withMember } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationEmail, NotificationSettings, NotificationSettingsView, VisibilityGrant } from "@rabaed/domain";
 import { notificationMessage, renderEmail, type MailMessage, type RenderedEmail } from "@rabaed/mailer";
 import { sql } from "kysely";
@@ -41,6 +41,11 @@ const drain = () => drainOutbox(worker, { email: emailHandler });
 const to = (email: string): (RenderedEmail & { message: MailMessage })[] =>
   sent.filter((m) => m.to === email).map((message) => ({ message, ...renderEmail(message.template, message.locale, message.values as never) }));
 const about = (email: string, subject: string) => to(email).filter((m) => m.subject.includes(subject));
+/** The item an email is about, by id. */
+const itemOf = (m: { message: MailMessage }) => (m.message.values as { workItemId: string | null }).workItemId;
+/** A Person as a failure names them. */
+const named = (p: Person) =>
+  p === raiser ? "C1 raiser" : p === pm ? "C1 PM" : p === signer ? "K1 signer" : p === k1Manager ? "K1 manager" : p === c2Engineer ? "C2 engineer" : p.email;
 
 let c1: Company;
 let k1: Company;
@@ -168,7 +173,7 @@ describe("scenario 69: K1 issues Code B on C1's item", () => {
 
   it("emails the C1 raiser a subject of only the Document Number, Subject and Code B", async () => {
     const [email, ...more] = about(raiser.email, "Code B");
-    expect(more).toEqual([]);
+    expect(more).toEqual([]); // not hidden-from: one email, not two
     expect(email!.message).toMatchObject({ template: "notification-watched-event", locale: "en" });
     expect(email!.subject).toBe(`\u2066${item.documentNumber}\u2069 · Pumps · Code B`);
   });
@@ -176,7 +181,7 @@ describe("scenario 69: K1 issues Code B on C1's item", () => {
   it("names K1 as a Company and the Code's signer, nothing of K1's internal Steps, and links to the item", async () => {
     const [email] = about(raiser.email, "Code B");
     const { rows } = await sql<{ name: { en: string } }>`select legal_name as name from company where id = ${k1.company.companyId}`.execute(migrator);
-    const k1Name = rows[0]!.name.en;
+    const k1Name = rows[0]!.name.en; // not hidden-from: K1 is named as a Company, as V14 allows
     expect(email!.text).toContain(k1Name);
     expect(email!.text).toContain("Khalid Signer");
     expect(email!.text).toContain(`${WEB_URL}/en/work-items/${item.id}`);
@@ -187,7 +192,7 @@ describe("scenario 69: K1 issues Code B on C1's item", () => {
 
   it("emails the Submitter in their language, Arabic, with the Document Number left to right", () => {
     const [email, ...more] = about(pm.email, "B");
-    expect(more.filter((m) => m.subject.endsWith("الرمز B"))).toEqual([]);
+    expect(more.filter((m) => m.subject.endsWith("الرمز B"))).toEqual([]); // not hidden-from: one email, not two
     expect(email!.message.locale).toBe("ar");
     expect(email!.subject).toBe(`\u2066${item.documentNumber}\u2069 · Pumps · الرمز B`);
     expect(email!.html).toContain(`<bdi dir="ltr">${item.documentNumber}</bdi>`);
@@ -195,8 +200,8 @@ describe("scenario 69: K1 issues Code B on C1's item", () => {
     expect(email!.text).toContain(`${WEB_URL}/ar/work-items/${item.id}`);
   });
 
-  it("scenario 19: sends nothing to C2", () => {
-    expect(to(c2Engineer.email)).toEqual([]);
+  it("scenario 19: sends nothing to C2", async () => {
+    await expectHiddenFrom({ read: async (p: Person) => to(p.email).map(itemOf), target: item.id, idOf: (id) => id ?? "", seenBy: [raiser, pm], hiddenFrom: c2Engineer, name: named });
     expect(sent.map((m) => JSON.stringify(m.values)).join()).not.toContain(c2Engineer.email);
   });
 
@@ -214,20 +219,20 @@ describe("a Step reached", () => {
     await drain();
     for (const who of [signer, k1Manager]) {
       const [email, ...more] = to(who.email).filter((m) => m.message.template === "notification-step-reached" && m.subject.includes(documentNumber));
-      expect(more).toEqual([]);
+      expect(more).toEqual([]); // not hidden-from: one email, not two
       expect(email!.subject).toBe(`\u2066${documentNumber}\u2069 · Valves · Reached you at Consultant review`);
     }
     // The PM Submitted it: the PM's own move tells the PM nothing.
-    expect(to(pm.email).filter((m) => m.message.template === "notification-step-reached" && m.subject.includes(documentNumber))).toEqual([]);
+    expect(to(pm.email).filter((m) => m.message.template === "notification-step-reached" && m.subject.includes(documentNumber))).toEqual([]); // not hidden-from: the mover's own move tells them nothing
     expect(id).not.toBe("");
   });
 
   it("is emailed by the default 'immediately' choice, which no longer comes with a bell switch", async () => {
     const quiet = await person(k1, k1ParticipantId, ["manager"]);
     await saveSettings(quiet.caller, { settings: { step_reached: { email: "immediate" } } });
-    const { documentNumber } = await submittedItem(raiser, pm, "Fans");
+    const { id, documentNumber } = await submittedItem(raiser, pm, "Fans");
     await drain();
-    expect(about(quiet.email, documentNumber)).toHaveLength(1);
+    expect(about(quiet.email, documentNumber).map(itemOf)).toEqual([id]);
   });
 
   it("is not emailed to a pool colleague once another has picked it up before the send (withdrawn)", async () => {
@@ -236,8 +241,8 @@ describe("a Step reached", () => {
     await deliverOnly();
     await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
     await sendHeldEmails();
-    expect(about(colleague.email, documentNumber)).toEqual([]);
-    expect(about(signer.email, documentNumber)).toHaveLength(1);
+    expect(about(colleague.email, documentNumber)).toEqual([]); // not hidden-from: withdrawn once picked up
+    expect(about(signer.email, documentNumber).map(itemOf)).toEqual([id]);
   });
 });
 
@@ -269,10 +274,10 @@ describe("checked again at send time", () => {
     await saveSettings(paused.caller, { emailPaused: true });
     await ok(muted.caller.request("PUT", `/v1/projects/${at.projectId}/mute`));
     await sendHeldEmails();
-    expect(about(paused.email, "Boilers")).toEqual([]);
-    expect(about(muted.email, "Boilers")).toEqual([]);
+    expect(about(paused.email, "Boilers")).toEqual([]); // not hidden-from: their own pause
+    expect(about(muted.email, "Boilers")).toEqual([]); // not hidden-from: their own mute
     // Their colleague in the same pool is emailed.
-    expect(about(pm.email, "Boilers")).toHaveLength(1);
+    expect(about(pm.email, "Boilers").map(itemOf)).toEqual([id]);
   });
 
   it("nothing is sent when paused or muted at delivery either", async () => {
@@ -285,8 +290,8 @@ describe("checked again at send time", () => {
     ).json().id as string;
     await take(raiser.caller, id, "send_for_review");
     await drain();
-    expect(about(paused.email, "Heaters")).toEqual([]);
-    expect(about(muted.email, "Heaters")).toEqual([]);
+    expect(about(paused.email, "Heaters")).toEqual([]); // not hidden-from: their own pause
+    expect(about(muted.email, "Heaters")).toEqual([]); // not hidden-from: their own mute
   });
 
   it("a watcher who lost access between the event and the send gets nothing", async () => {
@@ -299,9 +304,11 @@ describe("checked again at send time", () => {
     await deliverOnly();
     await ok(or.caller.request("PUT", `/v1/participants/${orParticipantId}/members/${orEngineer.id}/visibility`, { trade: only(at.mechanical), location: all }));
     await sendHeldEmails();
-    expect(to(orEngineer.email)).toEqual([]);
-    // The raiser, who still sees it, is emailed.
-    expect(about(raiser.email, `${item.documentNumber}\u2069 · Cooling towers · Code B`)).toHaveLength(1);
+    // The raiser, who still sees it, is emailed the same Code B.
+    const codeB = async (p: Person) => about(p.email, "Code B").map(itemOf);
+    await expectHiddenFrom({ read: codeB, target: item.id, idOf: (id) => id ?? "", seenBy: raiser, hiddenFrom: orEngineer, name: named });
+    expect(to(orEngineer.email)).toEqual([]); // not hidden-from: Code B is proved above; this covers every email to them
+    expect(about(raiser.email, `${item.documentNumber}\u2069 · Cooling towers · Code B`).map(itemOf)).toEqual([item.id]);
   });
 });
 
@@ -334,10 +341,11 @@ describe("a Send Back (RP-356)", () => {
     const { rows } = await sql<{ name: { en: string; ar: string } }>`select legal_name as name from company where id = ${k1.company.companyId}`.execute(migrator);
     const [en] = about(raiser.email, `${item.documentNumber}\u2069 · Dampers · Sent Back to you`);
     expect(en!.message.template).toBe("notification-sent-back");
-    expect(en!.text).toContain(rows[0]!.name.en);
+    expect(en!.text).toContain(rows[0]!.name.en); // not hidden-from: K1 is named as a Company, as V14 allows
     expect(`${en!.subject}\n${en!.text}`).not.toMatch(K1_INTERNAL);
-    expect(about(pm.email, `${item.documentNumber}\u2069 · Dampers · أُرجع إليكم`)).toHaveLength(1);
-    for (const who of [signer, k1Manager, c2Engineer]) expect(about(who.email, "Sent Back")).toEqual([]);
+    expect(about(pm.email, `${item.documentNumber}\u2069 · Dampers · أُرجع إليكم`).map(itemOf)).toEqual([item.id]);
+    const sentBack = async (p: Person) => to(p.email).filter((m) => m.message.template === "notification-sent-back").map(itemOf);
+    await expectHiddenFrom({ read: sentBack, target: item.id, idOf: (id) => id ?? "", seenBy: [raiser, pm], hiddenFrom: [signer, k1Manager, c2Engineer], name: named });
   });
 });
 
@@ -358,7 +366,7 @@ describe("a closed Project", () => {
     await deliverOnly();
     await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
     await sendHeldEmails();
-    expect(about(pm.email, "Pumps 2")).toEqual([]);
+    expect(about(pm.email, "Pumps 2")).toEqual([]); // not hidden-from: a closed Project is quiet
     expect((await emailRows(id)).every((r) => r.processed_at !== null)).toBe(true);
   });
 });

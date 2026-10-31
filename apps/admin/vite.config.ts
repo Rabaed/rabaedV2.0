@@ -28,6 +28,8 @@ export default defineConfig({
         workflows: fileURLToPath(new URL("./web/main.tsx", import.meta.url)),
         imports: fileURLToPath(new URL("./web/imports-main.tsx", import.meta.url)),
         records: fileURLToPath(new URL("./web/records-main.tsx", import.meta.url)),
+        // Stuck Steps (RP-1162).
+        steps: fileURLToPath(new URL("./web/steps-main.tsx", import.meta.url)),
       },
       output: {
         entryFileNames: "[name].js",

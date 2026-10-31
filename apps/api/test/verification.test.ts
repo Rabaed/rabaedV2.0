@@ -244,9 +244,11 @@ describe("scenarios RP-23-4 and RP-1083-4: a visitor not signed in scans the rec
   });
 
   it("shows exactly the fields of the Verification page row, and nothing more", () => {
+    // testKey: these records are sealed with the local test key, so the page says they are test records (RP-1042).
     expect(Object.keys(shown).sort()).toEqual(
-      ["documentNumber", "fingerprints", "outcome", "project", "sealedAt", "signers", "status", "subject"].sort(),
+      ["documentNumber", "fingerprints", "outcome", "project", "sealedAt", "signers", "status", "subject", "testKey"].sort(),
     );
+    expect(shown.testKey).toBe(true);
     expect(Object.keys(shown.outcome).sort()).toEqual(["code", "name"]);
     expect(Object.keys(shown.fingerprints).sort()).toEqual(["current", "replaced"]);
     for (const signer of shown.signers) expect(Object.keys(signer).sort()).toEqual(["company", "name", "positions"]);

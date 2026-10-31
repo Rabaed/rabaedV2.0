@@ -10,6 +10,7 @@ const text = {
     workflowsLink: "Workflows",
     importsLink: "Imports",
     recordsLink: "Records",
+    stepsLink: "Stuck Steps",
     signOut: "Sign out",
     signInTitle: "Sign in",
     email: "Email",
@@ -157,6 +158,7 @@ const text = {
     workflowsLink: "سير العمل",
     importsLink: "عمليات الاستيراد",
     recordsLink: "السجلات",
+    stepsLink: "الخطوات المتوقفة",
     signOut: "تسجيل الخروج",
     signInTitle: "تسجيل الدخول",
     email: "البريد الإلكتروني",
@@ -354,6 +356,7 @@ function show(view, who) {
   $("workflows-link").hidden = view !== "home";
   $("imports-link").hidden = view !== "home";
   $("records-link").hidden = view !== "home";
+  $("steps-link").hidden = view !== "home";
   $("who").textContent = view === "home" ? who : "";
   if (view === "sign-in") {
     $("password-form").hidden = false;

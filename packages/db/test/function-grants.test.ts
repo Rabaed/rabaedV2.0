@@ -78,6 +78,9 @@ const allow: GrantAllowList = {
   // RP-644: the default Member's own Packages and saved mappings, which the Admin wizard offers.
   "app.register_import_packages": both,
   "app.register_import_mappings": both,
+  // RP-1162: a stuck Step, read and reassigned by a Rabaed Engineer in Rabaed Admin only.
+  "app.work_item_step_for_engineer": ["rabaed_admin"],
+  "app.reassign_step_by_engineer": ["rabaed_admin"],
 };
 
 // Function names with more than one overload on purpose. Empty: a second

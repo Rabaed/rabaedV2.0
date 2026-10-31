@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -29,6 +29,8 @@ const countsAs = (memberId: string) =>
   withMember(app, memberId, (trx) => sql<{ member_id: string; project_count: number }>`select * from app.member_project_counts()`.execute(trx)).then(
     (r) => Object.fromEntries(r.rows.map((x) => [x.member_id, x.project_count])),
   );
+/** The Members whose count `memberId` reads, as rows by id, for expectHiddenFrom. */
+const countedAs = (memberId: string) => countsAs(memberId).then((counts) => Object.keys(counts).map((id) => ({ id })));
 
 /** A Company with two Projects: its Authorized Person is on both (as creator), a colleague on the first, one Member on none. */
 async function side(engineer: string, name: string, codes: [string, string]): Promise<Side> {
@@ -87,7 +89,7 @@ async function joinedMember(s: Side, participant?: string): Promise<string> {
 }
 const asAuthorizedPerson = (s: Side, query: ReturnType<typeof sql>) => withMember(app, s.member, (trx) => query.execute(trx));
 
-describe("app.member_project_counts", () => {
+describe("scenario RP-413-1: app.member_project_counts", () => {
   it("gives a plain Member the counts of their own Company's Members, who may be on Projects they are not", async () => {
     const counts = await countsAs(a.colleague);
     expect(counts[a.member]).toBe(2);
@@ -101,9 +103,12 @@ describe("app.member_project_counts", () => {
   });
 
   it("names no Member of another Company, for either Company", async () => {
-    const seenByA = Object.keys(await countsAs(a.colleague));
-    expect(seenByA).not.toContain(b.member);
-    expect(seenByA).not.toContain(b.colleague);
+    for (const target of [b.member, b.colleague]) {
+      await expectHiddenFrom({ read: countedAs, target, seenBy: [b.member, b.colleague], hiddenFrom: [a.member, a.colleague], label: "B's Member" });
+    }
+    for (const target of [a.member, a.colleague]) {
+      await expectHiddenFrom({ read: countedAs, target, seenBy: [a.member, a.colleague], hiddenFrom: [b.member, b.colleague], label: "A's Member" });
+    }
     expect(Object.keys(await countsAs(b.colleague)).sort()).toEqual([b.member, b.colleague].sort());
   });
 
@@ -124,7 +129,7 @@ describe("app.member_project_counts", () => {
   });
 });
 
-describe("app.member_project_counts, as people come and go", () => {
+describe("scenario RP-413-1: app.member_project_counts, as people come and go", () => {
   it("keeps a deactivated Member's count, and answers nothing to them", async () => {
     const gone = await joinedMember(c, c.participant);
     expect((await countsAs(c.member))[gone]).toBe(1);
@@ -157,9 +162,10 @@ describe("app.member_project_counts, as people come and go", () => {
     const seenByC = await countsAs(visitor);
     // D's Authorized Person and colleague are on the Project; C's Member is on it as C's Participant.
     expect(seenByD[d.colleague]).toBe(1);
-    expect(Object.keys(seenByD)).not.toContain(visitor);
     expect(seenByC[visitor]).toBe(1);
-    expect(Object.keys(seenByC)).not.toContain(d.colleague);
-    expect(Object.keys(seenByC)).not.toContain(d.member);
+    await expectHiddenFrom({ read: countedAs, target: visitor, seenBy: [visitor, c.member], hiddenFrom: [d.member, d.colleague], label: "C's Member on D's Project" });
+    for (const target of [d.member, d.colleague]) {
+      await expectHiddenFrom({ read: countedAs, target, seenBy: [d.member, d.colleague], hiddenFrom: visitor, label: "D's Member" });
+    }
   });
 });

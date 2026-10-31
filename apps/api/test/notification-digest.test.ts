@@ -15,7 +15,7 @@ import {
   runScheduledJobs,
   withMember,
 } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationDigest, NotificationSettings, NotificationSettingsView, VisibilityGrant } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -56,6 +56,8 @@ async function poll(now: Date) {
 const digestsTo = (email: string) => digests.filter((d) => d.to === email);
 /** The items of `email`'s digests, with their entries' kinds. */
 const itemsTo = (email: string) => digestsTo(email).flatMap((d) => d.projects.flatMap((p) => p.items));
+/** A Member as a failure names them. */
+const named = (p: Person) => (p === raiser ? "C1 raiser" : p === pm ? "C1 PM" : p === c2Engineer ? "C2 engineer" : p.email);
 
 let c1: Company;
 let k1: Company;
@@ -167,10 +169,9 @@ describe("a Member with two notifications for the digest", () => {
 
   it("gets one email: their Project, the item, and what happened to it, oldest first", () => {
     const [digest, ...more] = digestsTo(raiser.email);
-    expect(more).toEqual([]);
+    expect(more).toEqual([]); // not hidden-from: one digest, not two
     expect(digest!.language).toBe("en");
-    expect(digest!.projects).toHaveLength(1);
-    expect(digest!.projects[0]!.projectId).toBe(at.projectId);
+    expect(digest!.projects.map((p) => p.projectId)).toEqual([at.projectId]);
     const [entry] = digest!.projects[0]!.items;
     expect(entry).toMatchObject({ workItemId: item.id, documentNumber: item.documentNumber, subject: "Pumps" });
     const events = entry!.entries.map((e) => e.event);
@@ -189,10 +190,10 @@ describe("a Member with two notifications for the digest", () => {
     expect(digest!.projects[0]!.items.map((i) => i.workItemId)).toEqual([item.id]);
   });
 
-  it("a Member with nothing collected gets nothing; another Contractor nothing of C1's", () => {
+  it("a Member with nothing collected gets nothing; another Contractor nothing of C1's", async () => {
     // K1's Steps reached it: emailed at once (the default), not in a digest.
-    expect(digestsTo(signer.email)).toEqual([]);
-    expect(digestsTo(c2Engineer.email)).toEqual([]);
+    expect(digestsTo(signer.email)).toEqual([]); // not hidden-from: routed to immediate email, not the digest
+    await expectHiddenFrom({ read: async (p: Person) => itemsTo(p.email), target: item.id, idOf: (i) => i.workItemId ?? "", seenBy: [raiser, pm], hiddenFrom: c2Engineer, name: named });
     expect(JSON.stringify(digests)).not.toContain(c2Engineer.email);
   });
 
@@ -200,7 +201,7 @@ describe("a Member with two notifications for the digest", () => {
     expect(await runScheduledJobs(worker, [dailyDigestJob], riyadh(11, "07:05"))).toMatchObject([{ outcome: "already_ran" }]);
     await drain();
     await poll(riyadh(12));
-    expect(digestsTo(raiser.email)).toHaveLength(1);
+    expect(digestsTo(raiser.email)).toHaveLength(1); // not hidden-from: sent once
   });
 });
 
@@ -211,9 +212,9 @@ describe("Friday and Saturday", () => {
     await drain();
     await issueCodeB(item.id, signer);
     await drain();
-    expect(await poll(riyadh(16))).toEqual([]);
-    expect(await poll(riyadh(17, "09:00"))).toEqual([]);
-    expect(digestsTo(raiser.email)).toEqual([]);
+    expect(await poll(riyadh(16))).toEqual([]); // not hidden-from: no job on a Friday
+    expect(await poll(riyadh(17, "09:00"))).toEqual([]); // not hidden-from: no job on a Saturday
+    expect(digestsTo(raiser.email)).toEqual([]); // not hidden-from: nothing sent before Sunday
     await poll(riyadh(18));
     expect(itemsTo(raiser.email).map((i) => i.subject)).toEqual(["Valves"]);
   });
@@ -232,7 +233,9 @@ describe("checked again per entry at send time", () => {
     await ok(or.caller.request("PUT", `/v1/participants/${orParticipantId}/members/${orEngineer.id}/visibility`, { trade: only(at.electrical), location: all }));
     await poll(SUNDAY);
     expect(itemsTo(orEngineer.email).map((i) => i.workItemId)).toEqual([seen.id]);
-    expect(JSON.stringify(digestsTo(orEngineer.email))).not.toContain("Chillers");
+    // The raiser, who still sees Chillers, gets it in the same morning's digest.
+    const read = async (p: Person) => itemsTo(p.email);
+    await expectHiddenFrom({ read, target: lost.id, idOf: (i) => i.workItemId ?? "", seenBy: raiser, hiddenFrom: orEngineer, name: named, label: "Chillers" });
   });
 
   it("sends nothing while email is paused, nor of a muted Project; what was left out is not sent later", async () => {
@@ -247,16 +250,16 @@ describe("checked again per entry at send time", () => {
     await saveSettings(paused.caller, { emailPaused: true });
     await ok(muted.caller.request("PUT", `/v1/projects/${at.projectId}/mute`));
     await poll(SUNDAY);
-    expect(digestsTo(paused.email)).toEqual([]);
-    expect(digestsTo(muted.email)).toEqual([]);
+    expect(digestsTo(paused.email)).toEqual([]); // not hidden-from: their own pause
+    expect(digestsTo(muted.email)).toEqual([]); // not hidden-from: their own mute
     // The raiser, watching the same item, gets it.
     expect(itemsTo(raiser.email).map((i) => i.subject)).toEqual(["Boilers"]);
 
     await saveSettings(paused.caller, { emailPaused: false });
     await ok(muted.caller.request("DELETE", `/v1/projects/${at.projectId}/mute`));
     await poll(riyadh(12));
-    expect(digestsTo(paused.email)).toEqual([]);
-    expect(digestsTo(muted.email)).toEqual([]);
+    expect(digestsTo(paused.email)).toEqual([]); // not hidden-from: what was left out is not sent later
+    expect(digestsTo(muted.email)).toEqual([]); // not hidden-from: what was left out is not sent later
   });
 
   it("an entry moved to immediate email after it was collected is left out", async () => {
@@ -267,7 +270,7 @@ describe("checked again per entry at send time", () => {
     await drain();
     await saveSettings(raiser.caller, { settings: { watched: { email: "immediate", outcomes: ["A", "B", "C", "D", "cancelled"] } } });
     await poll(SUNDAY);
-    expect(itemsTo(raiser.email)).toEqual([]);
+    expect(itemsTo(raiser.email)).toEqual([]); // not hidden-from: moved to immediate email
     await saveSettings(raiser.caller, { settings: { watched: { email: "digest", outcomes: ["A", "B", "C", "D", "cancelled"] } } });
   });
 });
@@ -313,7 +316,7 @@ describe("a new Revision (scenario 75)", () => {
     const rev = (await ok(raiser.caller.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
     await drain();
     await poll(riyadh(15));
-    expect(itemsTo(pm.email).map((i) => i.workItemId)).not.toContain(rev);
+    expect(itemsTo(pm.email).map((i) => i.workItemId)).not.toContain(rev); // not hidden-from: not collected while a Draft, for its own Company too
 
     await take(raiser.caller, rev, "send_for_review");
     await drain();
@@ -333,7 +336,7 @@ describe("a closed Project", () => {
     await drain();
     await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
     await poll(SUNDAY);
-    expect(digestsTo(raiser.email)).toEqual([]);
-    expect(digestsTo(pm.email)).toEqual([]);
+    expect(digestsTo(raiser.email)).toEqual([]); // not hidden-from: a closed Project is quiet
+    expect(digestsTo(pm.email)).toEqual([]); // not hidden-from: a closed Project is quiet
   });
 });

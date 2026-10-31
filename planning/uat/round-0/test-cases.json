@@ -2092,7 +2092,7 @@
   "partName": "Notifications",
   "title": "Weekly Step Age report",
   "who": "Ali (TMC PM holding Assign); Yousef",
-  "steps": "1) Needs aged items (AGE fixture) and the lane engineer to run the job (OQ-2). 2) Read Ali and Yousef mail and open the link.",
+  "steps": "1) Setup first: give the tester's Position (Ahmed's on the Vercel UAT, Ali's on lane 7) Assign on Submittals. No demo Position holds Assign, so the report has no recipients until one does (RP-922). The report covers Submittals only, not WIRs. 2) Needs aged items (AGE fixture; the demo has only TWR-MAR-01-0002 and TWR-MAR-01-0003 Rev 1 open and numbered) and the lane engineer to run the job (OQ-2). 3) Read Ali and Yousef mail and open the link.",
   "expected": "Grouped 4+, 3, 2 and 1 weeks; lists only items the reader can open, never an un-numbered Draft; another Company by name only; Yousef lists only Beta Build items; an empty report is not sent; the link opens the List with the same filter.",
   "priority": "Medium",
   "mode": "Manual",

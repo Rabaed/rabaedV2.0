@@ -590,7 +590,7 @@ describe("the List's row commands (RP-409)", () => {
     expect(await outcome(c1.member, sql`select app.discard_draft(${closed}::uuid, now()) as outcome`)).toBe("not_discardable");
   });
 
-  it("names only the fields last written by the acting Member's own Participant", async () => {
+  it("names only the fields last written by the acting Member's own Participant (scenario RP-409-1)", async () => {
     await migrator.query(
       `update work_item set field_times = jsonb_build_object('model', jsonb_build_object('at', now(), 'by', $2::text),
         'verdict', jsonb_build_object('at', now(), 'by', $3::text)) where id = $1`,
@@ -604,7 +604,7 @@ describe("the List's row commands (RP-409)", () => {
     await expectHiddenFrom({ read: owned, target: "verdict", seenBy: k1.member, hiddenFrom: [c1.member, c1Pm, ow.member], label: "K1's field" });
   });
 
-  it("keeps a Duplicate's source on the new Draft, named to C1 only, with no time, and finds it again by its key", async () => {
+  it("keeps a Duplicate's source on the new Draft, named to C1 only, with no time, and finds it again by its key (scenario RP-409-1)", async () => {
     const copy = await newDraft("Fire doors");
     const key = randomUUID();
     expect(await outcome(k1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("not_found");

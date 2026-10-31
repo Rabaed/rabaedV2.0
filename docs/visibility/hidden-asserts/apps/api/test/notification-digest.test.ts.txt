@@ -1,18 +1,1 @@
-empty a Member with two notifications for the digest > gets one email: their Project, the item, and what happened to it, oldest first :: expect(more).toEqual([]);
-text a Member with two notifications for the digest > gets one email: their Project, the item, and what happened to it, oldest first :: expect(digest!.projects).toHaveLength(1);
-empty a Member with two notifications for the digest > a Member with nothing collected gets nothing; another Contractor nothing of C1's :: expect(digestsTo(signer.email)).toEqual([]);
-empty a Member with two notifications for the digest > a Member with nothing collected gets nothing; another Contractor nothing of C1's :: expect(digestsTo(c2Engineer.email)).toEqual([]);
 empty a Member with two notifications for the digest > a Member with nothing collected gets nothing; another Contractor nothing of C1's :: expect(JSON.stringify(digests)).not.toContain(c2Engineer.email);
-text a Member with two notifications for the digest > is sent once per morning, and not again the next morning when nothing new collected :: expect(digestsTo(raiser.email)).toHaveLength(1);
-empty Friday and Saturday > send nothing; what collected goes in Sunday's digest :: expect(await poll(riyadh(16))).toEqual([]);
-empty Friday and Saturday > send nothing; what collected goes in Sunday's digest :: expect(await poll(riyadh(17, "09:00"))).toEqual([]);
-empty Friday and Saturday > send nothing; what collected goes in Sunday's digest :: expect(digestsTo(raiser.email)).toEqual([]);
-empty checked again per entry at send time > leaves out an item the Member can no longer see, and keeps the rest :: expect(JSON.stringify(digestsTo(orEngineer.email))).not.toContain("Chillers");
-empty checked again per entry at send time > sends nothing while email is paused, nor of a muted Project; what was left out is not sent later :: expect(digestsTo(paused.email)).toEqual([]);
-empty checked again per entry at send time > sends nothing while email is paused, nor of a muted Project; what was left out is not sent later :: expect(digestsTo(muted.email)).toEqual([]);
-empty checked again per entry at send time > sends nothing while email is paused, nor of a muted Project; what was left out is not sent later :: expect(digestsTo(paused.email)).toEqual([]);
-empty checked again per entry at send time > sends nothing while email is paused, nor of a muted Project; what was left out is not sent later :: expect(digestsTo(muted.email)).toEqual([]);
-empty checked again per entry at send time > an entry moved to immediate email after it was collected is left out :: expect(itemsTo(raiser.email)).toEqual([]);
-empty a new Revision (scenario 75) > collects for the watchers' digest when it gets its number, never while it is a Draft :: expect(itemsTo(pm.email).map((i) => i.workItemId)).not.toContain(rev);
-empty a closed Project > sends nothing of it :: expect(digestsTo(raiser.email)).toEqual([]);
-empty a closed Project > sends nothing of it :: expect(digestsTo(pm.email)).toEqual([]);

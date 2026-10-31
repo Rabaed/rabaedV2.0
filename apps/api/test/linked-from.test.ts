@@ -13,7 +13,8 @@
 import { randomUUID } from "node:crypto";
 import type { LinkedFrom } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, approvedSupplier, bilingual, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -54,11 +55,16 @@ const linkedFromUrl = (id: string) => `/v1/work-items/${id}/linked-from`;
 const linkedFrom = async (by: Caller, id: string): Promise<LinkedFrom> => (await ok(by.get(linkedFromUrl(id)), 200)).json();
 const link = (from: string, to: string) => ok(c1Engineer.post(`/v1/work-items/${from}/links`, { workItemId: to }), 201);
 const number = async (id: string) => (await c1Engineer.get(`/v1/work-items/${id}`)).json().documentNumber as string;
+/** A read for expectHiddenFrom: `target`, when the 200 body at `path` names it anywhere; else nothing. */
+const naming = (path: string, target: string) => async (by: Caller) => ((await ok(by.get(path), 200)).body.includes(target) ? [{ id: target }] : []);
+/** A caller as a failure names them. */
+const named = (by: Caller) =>
+  by === k1Manager ? "K1 manager" : by === k1Mechanical ? "K1 Mechanical manager" : by === c2Engineer ? "C2 engineer" : by === c1Engineer ? "C1 engineer" : "someone";
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  const onboard = async (legalName: string): Promise<Company> => {
-    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+  const onboard = async (legalName: string): Promise<Company> => { // not hidden-from: names a Company to onboard
+    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) }); // not hidden-from: names a Company to onboard
     return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   };
   k1 = await onboard("Design Consultants LLC");
@@ -111,20 +117,22 @@ describe("Linked from", () => {
   it("shows a linking item the reader can't see as its number and Subject only; everything else about it is 404 (E3, scenario 77)", async () => {
     const res = await ok(k1Mechanical.get(linkedFromUrl(chillers)), 200);
     expect(res.json()).toEqual({ items: [{ documentNumber: await number(busbars), subject: "Busbars", workItemId: null }] });
-    expect(res.body).not.toContain(busbars);
+    await expectHiddenFrom({ read: naming(linkedFromUrl(chillers), busbars), target: busbars, seenBy: k1Manager, hiddenFrom: k1Mechanical, name: named });
     for (const path of ["", "/form", "/history", "/documents", "/links", "/linked-from"]) {
-      await expectHidden(k1Mechanical.get(`/v1/work-items/${busbars}${path}`), path);
+      const read = readById(`/v1/work-items/${busbars}${path}`);
+      await expectHiddenFrom({ read, target: busbars, idOf: () => busbars, seenBy: k1Manager, hiddenFrom: k1Mechanical, name: named, label: path });
     }
   });
 
   it("is hidden like the item from whoever can't see it, and for signed-in Members only", async () => {
-    for (const r of [
-      c2Engineer.get(linkedFromUrl(chillers)),
-      k1Mechanical.get(linkedFromUrl(busbars)),
-      c1Engineer.get(linkedFromUrl(randomUUID())),
-      c1Engineer.get(linkedFromUrl("not-an-id")),
-    ]) {
-      await expectHidden(r);
+    for (const [item, seenBy, hiddenFrom] of [
+      [chillers, k1Manager, c2Engineer],
+      [busbars, k1Manager, k1Mechanical],
+    ] as const) {
+      await expectHiddenFrom({ read: readById(linkedFromUrl(item)), target: item, idOf: () => item, seenBy, hiddenFrom, name: named });
+    }
+    for (const r of [c1Engineer.get(linkedFromUrl(randomUUID())), c1Engineer.get(linkedFromUrl("not-an-id"))]) {
+      await expectHidden(r); // not hidden-from: a made-up id
     }
     expect((await api.anonymous().get(linkedFromUrl(chillers))).statusCode).toBe(401);
   });
@@ -138,7 +146,7 @@ describe("Linked from", () => {
     await submit(trays);
     const numbers = [await number(busbars), await number(trays)].sort();
     expect((await linkedFrom(k1Manager, chillers)).items.map((i) => i.documentNumber)).toEqual(numbers);
-    expect((await linkedFrom(k1Manager, trays)).items).toEqual([]);
+    expect((await linkedFrom(k1Manager, trays)).items).toEqual([]); // not hidden-from: Linked from lists no Link from the item itself
     expect((await linkedFrom(k1Manager, busbars)).items.map((i) => i.workItemId)).toEqual([trays]);
   });
 });

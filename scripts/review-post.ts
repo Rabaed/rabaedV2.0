@@ -12,7 +12,7 @@ import { reviewMarker } from "./reviewed-add.ts";
 // review's summary (its findings and what was fixed) to a file and runs this after the last fix is pushed. The comment
 // starts with `<!-- code-review: <head sha> -->`. CI adds `reviewed` once that comment and a stamped verify line both
 // name the head (scripts/reviewed-add.ts). It refuses unless the checkout is clean and its HEAD is the PR's head, so
-// the marker names the commit that was reviewed. It runs as the `gh` account, one of the repo's own accounts.
+// the marker names the commit that was reviewed. It runs as the `gh` account, which needs write access to the repo for the marker to count.
 
 const USAGE = "Usage: node scripts/review-post.ts <pr> <summary-file>";
 

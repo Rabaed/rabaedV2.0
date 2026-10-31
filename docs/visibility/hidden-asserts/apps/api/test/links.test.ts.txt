@@ -1,14 +1,1 @@
-text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
-text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
-text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
-empty free Links > are added by the raiser in Draft, and read as Document Number and Subject with the linked item's id :: expect(await linksChanges(tower.c1Engineer, mar)).toEqual([]);
-empty free Links > are removed by the raiser in Draft; a Link not on the item is not found :: await expectHidden(removeLink(tower.c1Engineer, mar, added));
-empty free Links > are removed by the raiser in Draft; a Link not on the item is not found :: await expectHidden(removeLink(tower.c1Engineer, mar, randomUUID()));
-empty free Links > are removed by the raiser in Draft; a Link not on the item is not found :: await expectHidden(removeLink(tower.c1Engineer, mar, "not-an-id"));
-empty free Links > show a linked item the reader can't see as its number and Subject only, never its id; its URL is 404 (scenario 12) :: expect(res.body).not.toContain(item.c1Approved);
-empty free Links > show a linked item the reader can't see as its number and Subject only, never its id; its URL is 404 (scenario 12) :: await expectHidden(k1Mechanical.get(`/v1/work-items/${item.c1Approved}`));
-empty free Links > show a linked item the reader can't see as its number and Subject only, never its id; its URL is 404 (scenario 12) :: expect(await linksChanges(tower.k1Manager, mar)).toEqual([]);
-empty free Links > open, by the Link's own id, as the hidden item's number and Subject only, never its id; its URL is 404 (RP-521-1) :: expect(res.body).not.toContain(item.c1Approved);
-empty free Links > open, by the Link's own id, as the hidden item's number and Subject only, never its id; its URL is 404 (RP-521-1) :: await expectHidden(k1Mechanical.get(`/v1/work-items/${item.c1Approved}`));
-empty free Links > open, by the Link's own id, as the hidden item's number and Subject only, never its id; its URL is 404 (RP-521-1) :: await expectHidden(r);
 empty free Links > are changed by nobody but the raiser's Company, and hidden like the item from whoever can't see it :: await expectHidden(r);
