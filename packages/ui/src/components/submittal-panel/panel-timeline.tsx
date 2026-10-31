@@ -4,6 +4,7 @@ import { formatDate, formatNumber, type BilingualText, type Locale } from "@raba
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Badge } from "../data/badge.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import {
   submittalPositionsText,
@@ -38,6 +39,12 @@ export type SubmittalTimelineItem = {
   at?: string;
   /** Another Company's collapsed internal Steps: drawn quieter, with no time. */
   collapsed?: boolean;
+  /** Its number as the viewer reads the list (the Work Item page's History, RP-1151), formatted. */
+  n?: string;
+  /** A pill under it, e.g. the amber "Internal: only your Company sees this" (V5). */
+  pill?: string;
+  /** More about it, folded behind a "Details" toggle (the page's History). */
+  details?: { label: string; content: ReactNode };
 };
 
 const dotTone: Record<SubmittalTimelineTone, string> = {
@@ -64,7 +71,14 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
             <Icon name={item.icon} size={14} />
           </span>
           <div className="min-w-0 pt-[3px]">
-            <p className={cn("text-[13px] font-semibold", item.collapsed && "text-text-secondary")}>{item.move}</p>
+            <p className={cn("text-[13px] font-semibold", item.collapsed && "text-text-secondary")}>
+              {item.n && (
+                <span className="me-1.5 inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-surface px-1 align-[1px] text-[11px] font-bold text-muted tabular-nums shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+                  {item.n}
+                </span>
+              )}
+              {item.move}
+            </p>
             {item.who && (item.who.person || item.who.company) && (
               <p className="mt-1 text-[12.5px] [overflow-wrap:anywhere]">
                 {/* Name · Position · Company, each part only when given; a Position only with its person. */}
@@ -95,6 +109,18 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
               </p>
             ))}
             {item.chip && <div className="mt-2">{item.chip}</div>}
+            {item.pill && (
+              <p className="mt-2 inline-flex h-[22px] items-center gap-1.5 rounded-[6px] bg-warning-tint px-2 text-[11.5px] font-semibold text-warning-fg">
+                <Icon name="lock" size={13} />
+                {item.pill}
+              </p>
+            )}
+            {item.details && (
+              <details className="mt-1.5 text-[12.5px]">
+                <summary className={cn("w-fit cursor-pointer rounded-xs text-[12px] font-semibold text-muted hover:text-text", focusRing)}>{item.details.label}</summary>
+                <div className="mt-1.5 flex flex-col gap-1 text-text-secondary [overflow-wrap:anywhere]">{item.details.content}</div>
+              </details>
+            )}
             {item.at && (
               <time dateTime={item.at} className="mt-1.5 block text-[11px] text-muted tabular-nums">
                 {formatDate(new Date(item.at), locale, { dateStyle: "medium", timeStyle: "short" })}
