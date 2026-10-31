@@ -211,15 +211,7 @@ function OwnStepCard({ step, labels, locale, holder }: { step: RouteStep; labels
         {step.current && <em className="ms-auto text-[11px] font-bold text-brand-fg not-italic">{labels.hereNow}</em>}
       </span>
       <b className="text-[14px] font-bold">{step.step.name[locale]}</b>
-      {step.happens.length > 0 && (
-        <ul aria-label={labels.happens} className="flex flex-wrap gap-1">
-          {step.happens.map((label, j) => (
-            <li key={j} className="rounded-[7px] bg-surface-subtle px-1.5 py-0.5 text-[11.5px] text-text-secondary">
-              {label[locale]}
-            </li>
-          ))}
-        </ul>
-      )}
+      <Happens labels={step.happens} name={labels.happens} locale={locale} />
       {holder && (
         <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-surface-subtle px-2 py-0.5 text-[12px] font-semibold">
           {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name: a person holds the Step. */}
@@ -244,13 +236,14 @@ function MapView({ route, locale, labels }: ViewProps) {
           // Another Company holds the item somewhere in this stop: the stop is marked, not a Step (V14).
           const held = stop.companyName !== null;
           return (
-            <li key={i} data-map-stop={i} className={cn("rounded-[14px]", held && "p-2 shadow-[inset_0_0_0_1.5px_var(--brand)]")}>
+            <li key={i} data-map-stop={i} aria-current={held ? "step" : undefined} className={cn("rounded-[14px]", held && "p-2 shadow-[inset_0_0_0_1.5px_var(--brand)]")}>
               {held && <p className="mb-2 px-1 text-[12.5px] font-bold text-brand-fg">{labels.withCompany(stop.companyName![locale])}</p>}
               <ol className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2.5">
                 {steps.map((s) => (
                   <li
                     key={s.step.key}
                     data-map-step={s.step.key}
+                    aria-current={s.current ? "step" : undefined}
                     className={cn(
                       "flex flex-col gap-2.5 rounded-[12px] bg-surface p-3",
                       s.current ? "shadow-[inset_0_0_0_1.5px_var(--brand)]" : "shadow-[inset_0_0_0_1px_var(--border-subtle)]",
@@ -264,6 +257,7 @@ function MapView({ route, locale, labels }: ViewProps) {
                       </span>
                       {s.current && <em className="self-start text-[10.5px] font-bold text-brand-fg not-italic">{labels.youAreHere}</em>}
                     </div>
+                    <Happens labels={s.happens} name={labels.happens} locale={locale} />
                   </li>
                 ))}
               </ol>
@@ -272,5 +266,19 @@ function MapView({ route, locale, labels }: ViewProps) {
         })}
       </ol>
     </div>
+  );
+}
+
+/** What happens at a Step: the labels of the Transitions leaving it, as small chips; nothing when none leave it. */
+function Happens({ labels, name, locale }: { labels: RouteStep["happens"]; name: string; locale: Locale }) {
+  if (labels.length === 0) return null;
+  return (
+    <ul aria-label={name} className="flex flex-wrap gap-1">
+      {labels.map((label, j) => (
+        <li key={j} className="rounded-[7px] bg-surface-subtle px-1.5 py-0.5 text-[11.5px] text-text-secondary">
+          {label[locale]}
+        </li>
+      ))}
+    </ul>
   );
 }
