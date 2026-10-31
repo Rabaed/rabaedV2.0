@@ -118,7 +118,7 @@ export type WorkItemActionsCardProps = {
   /** The Transitions the viewer may take, stacked (the rail; the bottom bar holds them under 880px), and Pick up. */
   transitions?: ReactNode;
   /** "1 field needs your attention before sending." */
-  note?: string;
+  attention?: string;
   /** What there is to do, or why nothing is: "Nothing for you to do while it is with the Consultant." */
   none?: string;
   /** The Create Revision card, after Code C for the raiser. */
@@ -128,7 +128,7 @@ export type WorkItemActionsCardProps = {
 };
 
 /** The Actions card (gap table rows 24–33): in the rail from 880px, in the flow under the key facts below it. */
-export function WorkItemActionsCard({ title, with: holder, transitions, note, none, revision, footer }: WorkItemActionsCardProps) {
+export function WorkItemActionsCard({ title, with: holder, transitions, attention, none, revision, footer }: WorkItemActionsCardProps) {
   const id = useId();
   return (
     <section aria-labelledby={id} data-actions-card="" className="flex flex-col gap-3 rounded-[12px] bg-surface p-3.5 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
@@ -152,10 +152,10 @@ export function WorkItemActionsCard({ title, with: holder, transitions, note, no
         {holder.end}
       </div>
       {transitions && <div className="wi-transitions flex flex-col gap-1.5 [&>button]:h-[38px] [&>button]:justify-start">{transitions}</div>}
-      {note && (
+      {attention && (
         <p className="flex gap-1.5 text-[12px] leading-snug font-semibold text-danger-fg">
           <Icon name="alert-circle" size={15} className="mt-px shrink-0" />
-          {note}
+          {attention}
         </p>
       )}
       {none && <p className="text-[12.5px] leading-[1.45] text-muted">{none}</p>}

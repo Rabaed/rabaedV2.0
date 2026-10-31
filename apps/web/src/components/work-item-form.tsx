@@ -18,7 +18,17 @@ import {
   type SupplierChoice,
   type ChecklistTemplateChoice,
 } from "@rabaed/domain";
-import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type FormRendererProps, type LinkTargetNames } from "@rabaed/ui";
+import {
+  Button,
+  FormRenderer,
+  SaveStatus,
+  SubmittalPanelSections,
+  type BuiltInChoices,
+  type FormRendererProps,
+  type LinkTargetNames,
+  type SubmittalPanelSectionItem,
+  type SubmittalPanelSectionsLabels,
+} from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -301,6 +311,7 @@ export function WorkItemAnswers({
   replyChecklists,
   look,
   saveRow = true,
+  folding,
 }: {
   locale: Locale;
   workItemId: string;
@@ -310,6 +321,20 @@ export function WorkItemAnswers({
   look?: FormRendererProps["look"];
   /** Its own Save row under the Form; false where the page's bar holds Save draft (the WIR request). */
   saveRow?: boolean;
+  /**
+   * The Work Item page (RP-1151, gap table rows 43–45): each Form section a card that folds to a
+   * one-line summary, between the page's own cards (`lead` first, `tail` after). The page's bar then
+   * holds Save Draft and the saved time, and the banner alone lists the fields to fix.
+   */
+  folding?: {
+    lead: SubmittalPanelSectionItem[];
+    tail: SubmittalPanelSectionItem[];
+    labels: SubmittalPanelSectionsLabels;
+    /** A folded section with nothing answered says this. */
+    nothing: string;
+    /** The cards folded when the page opens (the Details card). */
+    folded?: readonly string[];
+  };
 }) {
   const t = useTranslations("workItems.form");
   const formLabels = useFormRendererLabels();
@@ -322,6 +347,7 @@ export function WorkItemAnswers({
     documents.documents.filter((d) => d.fieldKey !== null && photoKeys.has(d.fieldKey)),
   );
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => Object.fromEntries((folding?.folded ?? []).map((key) => [key, true])));
   if (!form) return null;
   const button = saveButton({ documentNumber: form.documentNumber, dirty: form.dirty, pending: form.pending });
   /** Saves anything pending (quietly: the page is left), then goes to the Project's Submittals list. A refused save stays. */
@@ -368,6 +394,29 @@ export function WorkItemAnswers({
         onChange={form.change}
         idPrefix="answer"
         {...(look ? { look } : {})}
+        {...(folding
+          ? {
+              sectionsAs: (sections) => (
+                <SubmittalPanelSections
+                  locale={locale}
+                  labels={folding.labels}
+                  sections={[
+                    ...folding.lead,
+                    ...sections.map((section) => ({
+                      key: `form-${section.key}`,
+                      icon: "file-text" as const,
+                      title: section.title,
+                      summary: section.summary ?? folding.nothing,
+                      children: section.content,
+                    })),
+                    ...folding.tail,
+                  ]}
+                  collapsed={collapsed}
+                  onCollapsedChange={setCollapsed}
+                />
+              ),
+            }
+          : {})}
         links={{
           targets: form.linkTargets,
           search: linkSearch(form.projectId),
@@ -391,6 +440,7 @@ export function WorkItemAnswers({
           {form.message}
         </p>
       )}
+      {!folding && (
       <SaveStatus
         locale={locale}
         savedAt={form.editable ? form.savedAt : null}
@@ -399,12 +449,13 @@ export function WorkItemAnswers({
           return [{ fieldLabel: field && "label" in field ? field.label[locale] : key, memberName }];
         })}
       />
+      )}
       {files.message && (
         <p role="status" className="text-sm text-muted">
           {files.message}
         </p>
       )}
-      {toFix.length > 0 && (
+      {toFix.length > 0 && !folding && (
         <div role="alert" className="text-sm">
           <p className="font-medium">{t("toFix")}</p>
           <ul className="list-disc ps-6">
@@ -414,7 +465,7 @@ export function WorkItemAnswers({
           </ul>
         </div>
       )}
-      {form.editable && saveRow && (
+      {form.editable && saveRow && !folding && (
         <div className="flex justify-end border-t border-border pt-4">
           <Button
             variant={button.closes ? "primary" : "secondary"}

@@ -278,6 +278,11 @@ export type SubmittalPanelFactsProps = {
   stepAgeWeeks: number | null;
   /** The plan location, top level first; empty when it has none. */
   place: string[];
+  /**
+   * The Step it waits at, in place of Step Age (the Work Item page, RP-1151 row 19: its Step Age is a
+   * pill beside the Stage). Left out, the panel's Step Age fact.
+   */
+  step?: { label: string; name: string | null };
 };
 
 /**
@@ -285,7 +290,7 @@ export type SubmittalPanelFactsProps = {
  * the Location. No due date. Another Company is named by its Company name only, with no person
  * and no avatar (V14).
  */
-export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks, place }: SubmittalPanelFactsProps) {
+export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks, place, step }: SubmittalPanelFactsProps) {
   const none = <span className="text-faint">{labels.none}</span>;
   const fact = (key: string, label: string, value: ReactNode) => (
     <div key={key} data-fact={key} className="min-w-0 bg-surface px-3 py-2.5">
@@ -318,7 +323,7 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
           <span className="min-w-0">{holder.name}</span>
         ),
       )}
-      {fact(
+      {step ? fact("step", step.label, step.name === null ? none : <span className="min-w-0">{step.name}</span>) : fact(
         "stepAge",
         labels.stepAge,
         stepAgeWeeks === null ? (

@@ -3255,5 +3255,43 @@
         "sequence": "الرقم التسلسلي، يُعطى عند خروجه من المسودة أول مرة"
       }
     }
+  },
+  "workItemPage": {
+    "rail": "الانتقالات وسير العمل والسجل",
+    "form": "النموذج",
+    "internalShort": "داخلي",
+    "nothingAnswered": "لا إجابات بعد",
+    "details": "التفاصيل",
+    "attachmentsSummary": "{count, plural, one {مستند واحد} two {مستندان} few {{n} مستندات} many {{n} مستندًا} other {{n} مستند}}",
+    "linksSummary": "{count, plural, one {رابط واحد} two {رابطان} few {{n} روابط} many {{n} رابطًا} other {{n} رابط}} · مرتبط من {from}",
+    "workflowSection": "سير العمل والسجل",
+    "workflowSummary": "{count, plural, one {سجل واحد} two {سجلان} few {{n} سجلات} many {{n} سجلًا} other {{n} سجل}}",
+    "history": {
+      "title": "السجل",
+      "details": "التفاصيل",
+      "empty": "لم يحدث شيء بعد."
+    },
+    "actions": {
+      "title": "الانتقالات",
+      "bar": "الانتقالات",
+      "you": "{name} (أنت)",
+      "with": "لدى {company}",
+      "none": "لا شيء عليك بينما العنصر لدى {company}.",
+      "pickUpHelp": "استلمها لتتمكن من أزرار الانتقال.",
+      "ended": "لا شيء معلّق",
+      "attention": "{count, plural, one {حقل واحد يحتاج انتباهك قبل الإرسال.} two {حقلان يحتاجان انتباهك قبل الإرسال.} few {{n} حقول تحتاج انتباهك قبل الإرسال.} many {{n} حقلًا يحتاج انتباهك قبل الإرسال.} other {{n} حقل يحتاج انتباهك قبل الإرسال.}}",
+      "revisionText": "أنهى الرمز {code} هذا العنصر. ابدأ المراجعة {n} من نموذجه؛ يأخذ الرقم Rev {n} عند التقديم."
+    },
+    "result": {
+      "issued": "صدر رمز المراجعة · {date}",
+      "signedBy": "وقّعه"
+    },
+    "revisions": {
+      "title": "المراجعات المتاحة لك",
+      "open": "مفتوح",
+      "original": "الأصل",
+      "draft": "مسودة",
+      "revision": "المراجعة {n}"
+    }
   }
 }

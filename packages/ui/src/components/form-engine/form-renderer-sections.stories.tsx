@@ -58,7 +58,7 @@ function Folding({ context }: { context: StoryContext }) {
           <SubmittalPanelSections
             locale={locale}
             labels={{ count: () => storyText(context, copy.count), collapseAll: storyText(context, copy.collapseAll), expandAll: storyText(context, copy.expandAll) }}
-            sections={sections.map((s) => ({ key: s.key, icon: "forms", title: s.title, summary: s.summary ?? storyText(context, copy.nothing), children: s.content }))}
+            sections={sections.map((s) => ({ key: s.key, icon: "file-text", title: s.title, summary: s.summary ?? storyText(context, copy.nothing), children: s.content }))}
             collapsed={collapsed}
             onCollapsedChange={setCollapsed}
           />

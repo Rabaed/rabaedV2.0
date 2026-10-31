@@ -11,8 +11,8 @@ const copy = {
   back: b("Submittals", "التقديمات"),
   watch: b("Watch", "متابعة"),
   workflow: b("View workflow", "عرض سير العمل"),
-  rail: b("Actions and History", "الإجراءات والسجل"),
-  bar: b("Transitions", "أزرار الانتقال"),
+  rail: b("Transitions and History", "الانتقالات والسجل"),
+  bar: b("Transitions", "الانتقالات"),
   approve: b("Approve – Code A", "اعتماد – الرمز A"),
   subject: b("LED light fixtures — Tower 2 typical floors", "وحدات إنارة LED — الطوابق النموذجية للبرج 2"),
 };

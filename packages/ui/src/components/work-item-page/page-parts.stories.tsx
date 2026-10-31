@@ -8,7 +8,7 @@ import { CodeTile, StepAgePill, WorkItemActionsCard, WorkItemResultCard } from "
 // in the rail: the Actions card in its states, and the result card after a Code. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
-  actions: b("Actions", "الإجراءات"),
+  actions: b("Transitions", "الانتقالات"),
   step: b("Review & issue Code", "المراجعة وإصدار الرمز"),
   pool: b("Design Consultants LLC · not picked up yet: Mohammed Al Shamsi", "ديزاين للاستشارات · لم يُستلم بعد: محمد الشامسي"),
   pickUp: b("Pick up", "استلام"),
@@ -33,7 +33,7 @@ const copy = {
 const meta = {
   title: "Work Item page/Parts",
   component: WorkItemActionsCard,
-  args: { title: "Actions", with: { step: "Review & issue Code", holder: null } },
+  args: { title: "Transitions", with: { step: "Review & issue Code", holder: null } },
   decorators: [(Story) => <div className="max-w-[340px]">{Story()}</div>],
 } satisfies Meta<typeof WorkItemActionsCard>;
 
