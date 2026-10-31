@@ -1169,7 +1169,18 @@
       "unavailable": "Something went wrong. Try again.",
       "gateUnavailable": "Your Signature and your Company's Stamp couldn't be checked, so the Transition didn't open. Try again.",
       "internalNote": "Internal Note",
-      "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
+      "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form.",
+      "popup": {
+        "goesBackTo": "Goes back to {company}",
+        "closesFor": "Closes the item for {company}",
+        "optional": "Optional",
+        "required": "Required",
+        "internalNoteShort": "Only your Company sees it",
+        "internalNotePlaceholder": "For {company} only…",
+        "remarksRequired": "Required with Code {code}",
+        "remarksHelp": "{company} sees these Remarks with your name as signer.",
+        "remarksMissing": "Write the Remarks for Code {code}."
+      }
     },
     "replyChecklist": {
       "intro": "Answer each item on site; it saves as you go. Only your Company sees it until the code shares it.",
@@ -1287,6 +1298,8 @@
       "limits": "PDF, images, Office documents, drawings, text or zip, up to {size}. Once Submitted, Documents can't be changed.",
       "open": "Open",
       "remove": "Remove",
+      "openDocument": "Open {document}",
+      "removeDocument": "Remove {document}",
       "frozenLabel": "Submitted: can't be changed",
       "annotatedSaved": "Annotated photo saved. The original is kept.",
       "annotateFrozen": "This photo was Submitted, so it can't be annotated.",
@@ -1321,7 +1334,7 @@
       },
       "linkedFrom": {
         "title": "Linked from",
-        "none": "No Submitted item links here yet."
+        "none": "Nothing links here yet."
       },
       "search": {
         "label": "Find an item to link",
@@ -1424,7 +1437,11 @@
     "youAreHere": "You are here",
     "happens": "What happens here",
     "newOnly": "Changes apply to new submittals only.",
-    "openSettings": "Open in Workflow settings"
+    "openSettings": "Open in Workflow settings",
+    "stepsTab": "Steps",
+    "mapTab": "Map",
+    "hereNow": "Here now",
+    "privateSteps": "Who works on these Steps, and which one has it, stays with them."
   },
   "workflowMap": {
     "line": "Workflow: {name} · Version {version}",

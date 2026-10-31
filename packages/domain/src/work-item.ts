@@ -384,6 +384,8 @@ export const revisionChain = z.object({
       documentNumber: z.string().nullable(),
       /** 0 for the original, then 1, 2… */
       revisionNo: z.number().int().nonnegative(),
+      /** Its Stage as its own page shows the viewer (app.step_as_seen; RP-1188), the menu's line under it. */
+      stage: z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) }),
     }),
   ),
 });

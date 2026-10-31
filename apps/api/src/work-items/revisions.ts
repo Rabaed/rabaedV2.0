@@ -1,5 +1,5 @@
 import { withMember, type Db } from "@rabaed/db";
-import { createReplacementRefusals, createRevisionRefusals, discardRevisionRefusals, type RevisionChain } from "@rabaed/domain";
+import { createReplacementRefusals, createRevisionRefusals, discardRevisionRefusals, type BilingualText, type RevisionChain } from "@rabaed/domain";
 import { sql } from "kysely";
 import { withFileCopies } from "../documents/copy-files.ts";
 import type { FileStore } from "../documents/file-store.ts";
@@ -92,15 +92,37 @@ export function discardRevision(db: Db, memberId: string, workItemId: string, no
 /**
  * The Revision drop-down (RP-318): the Revisions of the item's chain the Member
  * sees, the original first, each by V1 on its own (app.revision_chain); null when
- * the Member can't see the item.
+ * the Member can't see the item. Each with its Stage as its own page shows the
+ * Member (app.step_as_seen, as the item's read does; RP-1188): never its Step.
  */
 export function getRevisionChain(db: Db, memberId: string, workItemId: string): Promise<RevisionChain | null> {
   return withMember(db, memberId, async (trx) => {
-    const { rows } = await sql<{ work_item_id: string; document_number: string | null; revision_no: number }>`
-      select work_item_id, document_number, revision_no from app.revision_chain(${workItemId}::uuid)
+    const { rows } = await sql<{
+      work_item_id: string;
+      document_number: string | null;
+      revision_no: number;
+      stage_key: string;
+      stage_name: BilingualText;
+      stage_category: RevisionChain["revisions"][number]["stage"]["category"];
+    }>`
+      select c.work_item_id, c.document_number, c.revision_no,
+        st.key as stage_key, st.name as stage_name, st.category as stage_category
+      from app.revision_chain(${workItemId}::uuid) c
+      join work_item w on w.id = c.work_item_id
+      cross join lateral app.step_as_seen(w.id) seen
+      join work_item_type t on t.id = w.work_item_type_id
+      join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
+      order by c.revision_no
     `.execute(trx);
     // The item itself is always in its own chain, so nothing back means it is hidden.
     if (rows.length === 0) return null;
-    return { revisions: rows.map((r) => ({ id: r.work_item_id, documentNumber: r.document_number, revisionNo: r.revision_no })) };
+    return {
+      revisions: rows.map((r) => ({
+        id: r.work_item_id,
+        documentNumber: r.document_number,
+        revisionNo: r.revision_no,
+        stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
+      })),
+    };
   });
 }

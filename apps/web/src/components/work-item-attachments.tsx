@@ -1,7 +1,7 @@
 "use client";
 
 import { isAnnotatedCopy, type DocumentList, type Locale } from "@rabaed/domain";
-import { Button, Icon } from "@rabaed/ui";
+import { AttachmentChips, Button, Icon } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useId, useRef } from "react";
 import { useDocuments } from "./use-documents";
@@ -12,13 +12,61 @@ import { useDocuments } from "./use-documents";
 // edits the Form, with Attach). Submitted, the Documents are frozen (ADR 0020). The Form's own
 // `attachments` fields show theirs inside the Form (RP-281).
 
-/** `titleHidden`: its heading names the section for screen readers only, where a card already shows it (the Work Item page, RP-1151). */
-export function WorkItemAttachments({ workItemId, list, locale, titleHidden = false }: { workItemId: string; list: DocumentList; locale: Locale; titleHidden?: boolean }) {
+/**
+ * `titleHidden`: its heading names the section for screen readers only, where a card already shows it (the Work
+ * Item page, RP-1151). `look="chips"`: the Work Item page's chips (RP-1188, gap table row 50), with Open and
+ * Remove on each and "Attach a Document" for the holder; the same Documents read, so a close shows only what
+ * was handed over (ADR 0027).
+ */
+export function WorkItemAttachments({
+  workItemId,
+  list,
+  locale,
+  titleHidden = false,
+  look,
+}: {
+  workItemId: string;
+  list: DocumentList;
+  locale: Locale;
+  titleHidden?: boolean;
+  look?: "chips";
+}) {
   const t = useTranslations("workItems.attachments");
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const { upload, open, remove, size, message, systemPending: pending } = useDocuments(workItemId, list.limits);
   const documents = list.documents.filter((d) => d.fieldKey === null && !isAnnotatedCopy(d));
+
+  if (look === "chips") {
+    return (
+      <section className="space-y-3" aria-labelledby={`${inputId}-title`} data-testid="work-item-attachments">
+        <h2 id={`${inputId}-title`} className="sr-only">
+          {t("title")}
+        </h2>
+        <AttachmentChips
+          labels={{
+            none: t("none"),
+            attach: t("add"),
+            open: (document) => t("openDocument", { document }),
+            remove: (document) => t("removeDocument", { document }),
+          }}
+          documents={documents}
+          canChange={list.canChange}
+          pending={pending}
+          accept={list.limits.contentTypes}
+          help={t("limits", { size: size(list.limits.maxBytes) })}
+          onOpen={(id) => void open(id)}
+          onRemove={(id) => void remove(id)}
+          onAttach={(file) => void upload([file])}
+        />
+        {message && (
+          <p role="status" className="text-sm text-muted">
+            {message}
+          </p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-3" aria-labelledby={`${inputId}-title`} data-testid="work-item-attachments">

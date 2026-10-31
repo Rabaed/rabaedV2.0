@@ -101,3 +101,22 @@ export const Phone: Story = {
     await expectTouchTarget(context.canvas.getByRole("button", { name: labelsOf(context).create }));
   },
 };
+
+/**
+ * In the Work Item page's Actions card (RP-1188, gap table row 32): Discard Revision is the design's red text
+ * button with a bin, the card's width, and no bordered section of its own; it still asks first.
+ */
+export const DiscardOnThePage: Story = {
+  parameters: overlay,
+  args: { canDiscard: true, look: "page" },
+  play: async (context) => {
+    const { canvas, args } = context;
+    await expect(canvas.queryByRole("region")).toBeNull();
+    const button = canvas.getByRole("button", { name: labelsOf(context).discard });
+    await expect(button).toHaveClass("text-danger-fg");
+    await expect(button.querySelector("svg")).not.toBeNull();
+    await userEvent.click(button);
+    await screen.findByRole("dialog", { name: labelsOf(context).discardTitle });
+    await expect(args.onDiscard).not.toHaveBeenCalled();
+  },
+};

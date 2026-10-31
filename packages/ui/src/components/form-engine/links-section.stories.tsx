@@ -3,7 +3,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { linksSectionLabels } from "../../storybook/form-engine.ts";
+import { linkedFromLabels, linksSectionLabels } from "../../storybook/form-engine.ts";
+import { LinkedFromList } from "./linked-from.tsx";
 import { LinksSection } from "./links-section.tsx";
 
 // The Links System Field (RP-291, spec RP-289): an item's Links, each the other
@@ -197,5 +198,41 @@ export const Phone: Story = {
     await expectTouchTarget(within(list).getByRole("button", { expanded: false }));
     await expectTouchTarget(canvas.getByRole("button", { name: removeLabel(locale, numbers[0]!) }));
     await expectTouchTarget(canvas.getByRole("searchbox", { name: storyText(context, copy.find) }));
+  },
+};
+
+/**
+ * The Work Item page's Links card (RP-1188, gap table rows 52–53): Links and Linked from side by side, each
+ * under its small label, as bordered rows: the number on one line, the Subject, an arrow; the picker under
+ * the Links. Narrow columns, so a long number would wrap if it could.
+ */
+export const OnThePage: Story = {
+  decorators: [(Story) => <div className="@container/sdp w-[640px]">{Story()}</div>],
+  render: (args, context) => {
+    const locale = storyLocale(context);
+    return section(args, locale, [link(locale, 0), link(locale, 1)], {
+      look: "rows",
+      titleHidden: true,
+      children: (
+        <LinkedFromList
+          look="rows"
+          labels={linkedFromLabels[locale]}
+          items={[{ workItemId: itemId(2), documentNumber: "TWR-TMC-EL-RFI-0007", subject: subjects[locale][2]! }, { workItemId: itemId(3), documentNumber: "TWR-TMC-EL-WIR-0021", subject: subjects[locale][3]! }]}
+          hrefFor={(id) => `#/work-items/${id}`}
+        />
+      ),
+    });
+  },
+  play: async (context) => {
+    const { canvasElement } = context;
+    const numbersShown = [...canvasElement.querySelectorAll<HTMLElement>("bdi[dir='ltr']")];
+    await expect(numbersShown).toHaveLength(4);
+    // Each number on one line: no taller than one line of its text.
+    for (const number of numbersShown) await expect(number.getBoundingClientRect().height).toBeLessThan(24);
+    // Two columns: Linked from beside the Links, not under them.
+    const links = context.canvas.getByRole("list", { name: storyText(context, copy.title) });
+    const from = canvasElement.querySelector<HTMLElement>("[data-testid='work-item-linked-from']")!;
+    await expect(Math.abs(from.getBoundingClientRect().top - links.getBoundingClientRect().top)).toBeLessThan(40);
+    await expect(within(links).getAllByRole("link")).toHaveLength(2);
   },
 };
