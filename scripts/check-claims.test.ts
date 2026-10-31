@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Comment } from "./claims.ts";
-import { branchChanges, branchKey, checkClaims, laneOwner, type ClaimsInput } from "./check-claims.ts";
+import { branchChanges, branchKey, branchOverlaps, checkClaims, laneOwner, type ClaimsInput } from "./check-claims.ts";
 
 // RP-603's comments are stubbed; the shared-files list is the real one in docs/agents/issue-tracker.md.
 const sharedList = readFileSync(join(import.meta.dirname, "..", "docs", "agents", "issue-tracker.md"), "utf8");
@@ -127,6 +127,19 @@ describe("branchChanges", () => {
   it("reads a quoted name and a head across lines as the same function", () => {
     write("packages/db/migrations/20271101000000_x.sql", 'create or replace function "app"."take_transition"(p uuid) returns void as $$ $$;\ncreate or replace\n  function app."sync_work_item_checklists"() returns void as $$ $$;\n');
     expect(branchChanges(repo, commit()).redefined).toEqual(["app.sync_work_item_checklists", "app.take_transition"]);
+  });
+
+  it("branchOverlaps names the open PRs that share this branch's committed files, through an injected seam", async () => {
+    write("apps/api/src/work-items/query.ts", "export {};\n");
+    commit();
+    const seam = {
+      openPrs: async () => [{ number: 77, ref: "RP-77-y", head: "7".repeat(40), files: ["apps/api/src/work-items/query.ts", "docs/x.md"], stamped: false }],
+      conflictsWith: async () => ["apps/api/src/work-items/query.ts"],
+    };
+    const text = await branchOverlaps(repo, seam);
+    expect(text).toContain("#77 (RP-77-y) would conflict in: apps/api/src/work-items/query.ts");
+    expect(text).toContain("this verify will be voided by #77 if #77 merges first");
+    expect(await branchOverlaps(repo, { ...seam, openPrs: async () => [] })).toBe("");
   });
 
   it("without a commit, reads the working tree, untracked files included", () => {

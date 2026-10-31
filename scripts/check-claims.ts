@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { claimCovers, fetchComments, globRegex, readClaims, type Claim, type Comment } from "./claims.ts";
+import type { OverlapSeam } from "./pr-overlap.ts";
 
 /** What a check says: refused (`ok` false), a warning, or "" when there is nothing to say. */
 export interface ClaimsVerdict {
@@ -176,10 +177,30 @@ export async function branchClaims(repo: string, push?: { commit: string; branch
   });
 }
 
+/**
+ * The open PRs that change the same files as this branch, which of them would conflict, and the merge order
+ * (scripts/pr-overlap.ts, RP-1172): a warning to print, "" when there is none; it never refuses or throws.
+ * `pr-overlap.ts` is loaded here, not at the top, so the pre-push hook and `pnpm verify`, which load this file
+ * for `branchClaims`, neither wait for GitHub nor need the module. `pnpm queue` and `pnpm verify` can call
+ * `overlapWarning` themselves.
+ */
+export async function branchOverlaps(repo: string, seam?: OverlapSeam): Promise<string> {
+  try {
+    const { overlapWarning } = await import("./pr-overlap.ts");
+    return await overlapWarning(repo, seam);
+  } catch (error) {
+    // A module that won't load must not fail a lane whose claims are fine.
+    return `Warning: check:claims could not run the overlap look (${error instanceof Error ? error.message : String(error)}).`;
+  }
+}
+
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   try {
     const result = await branchClaims(process.cwd());
     if (result.message) (result.ok ? console.log : console.error)(result.message);
+    // A warning only: it never changes the exit code.
+    const overlaps = await branchOverlaps(process.cwd());
+    if (overlaps) console.log(overlaps);
     process.exitCode = result.ok ? 0 : 1;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
