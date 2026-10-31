@@ -213,7 +213,7 @@ describe("an outcome's code, closing and polarity (decided 2026-10-09)", () => {
     expect(await addE(creator, project, "F")).toBe("added");
     expect(await change("F", "F2", false, "negative")).toBe("changed");
     expect((await setOf(project)).find((o) => o.code === "F2")).toEqual({ code: "F2", name: e, closing: false, polarity: "negative", actions: [] });
-    expect((await setOf(project)).find((o) => o.code === "F")).toBeUndefined();
+    expect((await setOf(project)).find((o) => o.code === "F")).toBeUndefined(); // not hidden-from: the old code is gone once renamed
     const { rows } = await migrator.query("select payload from setup_event where project_id = $1 and type = 'outcome_changed'", [project]);
     expect(rows).toEqual([
       {

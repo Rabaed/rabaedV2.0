@@ -8,7 +8,7 @@
 // in the list, no Package on an item's row.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import {
   filterPackages,
   packageFilterChoices,
@@ -22,7 +22,7 @@ import {
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { demoSignaturePng } from "../src/demo/demo-signature.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { lockedWhileWaitingOnPackage } from "./support/lock-order.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import {
@@ -94,6 +94,33 @@ async function rows(by: Caller): Promise<Map<string, WorkItemRow>> {
   return new Map((list.items as WorkItemRow[]).map((r) => [r.id, r]));
 }
 
+// Reads for expectHiddenFrom (RP-1095): each gives the rows `by` reads, `[]` for the plain 404 of a
+// Project they aren't on, so a broken read never passes as "hidden".
+
+/** The Tower's Packages board as `by` reads it. */
+const board = async (by: Caller): Promise<PackageSummary[]> =>
+  (await readById<{ packages: PackageSummary[] }>(`/v1/projects/${at.projectId}/packages`)(by)).flatMap((b) => b.packages);
+
+/** The Packages the rows of the Tower's Submittals List name for `by`, as `{ id }` rows. */
+const packagesOnRows = async (by: Caller): Promise<{ id: string }[]> =>
+  (await readById<{ items: WorkItemRow[] }>(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`)(by))
+    .flatMap((b) => b.items)
+    .flatMap((r) => (r.package ? [{ id: r.package.id }] : []));
+
+/** `[{ id }]` when `by`'s answer to GET `path` names `id` anywhere, else `[]`. */
+const mentions = (path: string, id: string) => async (by: Caller) => ((await ok(by.get(path), 200)).body.includes(id) ? [{ id }] : []);
+
+/** How a failure names `by`. */
+const whoIs = (by: Caller) =>
+  new Map<Caller, string>([
+    [at.c1Engineer, "C1's engineer"],
+    [at.c1Pm, "C1's PM"],
+    [at.k1Manager, "K1's manager"],
+    [k1.caller, "K1's Authorized Person"],
+    [c2Engineer, "C2's engineer"],
+    [owner, "the Owner"],
+  ]).get(by) ?? "another Member";
+
 /** A refused command's status and body. */
 const refusal = async (res: ReturnType<Caller["post"]>) => {
   const r = await res;
@@ -129,7 +156,7 @@ describe("building an Open Package", () => {
         status: "open",
         items: [],
       });
-      expect(p.owner.companyName.en).toBeTruthy();
+      expect(p.owner.companyName.en).toBeTruthy(); // not hidden-from: the owner's own name is there
       expect((await listPackages(by)).map((x) => x.id)).toContain(created.id);
     }
   });
@@ -176,29 +203,24 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
   });
 
   it("K1, C2 and the Owner read nothing of it: a 404 that names nothing, no row, no name, no Package on an item's row", async () => {
-    for (const [who, by] of [
-      ["K1's manager", at.k1Manager],
-      ["K1's Authorized Person", k1.caller],
-      ["C2's engineer", c2Engineer],
-      ["the Owner", owner],
-    ] as const) {
-      for (const id of [pkg.id, other]) await expectHidden(by.get(`/v1/packages/${id}`), `${who} reads ${id}`);
-      const listed = await by.get(`/v1/projects/${at.projectId}/packages`);
-      if (listed.statusCode === 200) {
-        // The In Progress Packages of earlier tests may be listed (RP-588-2); never these.
-        const ids = (listed.json().packages as PackageSummary[]).map((p) => p.id);
-        expect(ids, who).not.toContain(pkg.id);
-        expect(ids, who).not.toContain(other);
-        for (const text of ["Bathrooms – Tower 2", "Cables"]) expect(listed.body, who).not.toContain(text);
-        // The List's rows hold neither, nor their names.
-        const seen = await rows(by);
-        for (const r of seen.values()) expect([pkg.id, other], who).not.toContain(r.package?.id);
-        const body = (await by.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`)).body;
-        for (const text of ["Bathrooms – Tower 2", "Cables"]) expect(body, who).not.toContain(text);
-      } else {
-        // K1's Authorized Person is not a Project Member: the Project itself is hidden.
-        await expectHidden(Promise.resolve(listed), who);
-      }
+    // C1's Members read each first; K1's Authorized Person, not a Project Member, reads the plain 404 of the Project.
+    const seenBy = [at.c1Engineer, at.c1Pm];
+    const hiddenFrom = [at.k1Manager, k1.caller, c2Engineer, owner];
+    for (const id of [pkg.id, other]) {
+      const hidden = { target: id, seenBy, hiddenFrom, name: whoIs };
+      await expectHiddenFrom({ ...hidden, read: readById(`/v1/packages/${id}`), label: `GET ${id}` });
+      // The In Progress Packages of earlier tests may be listed (RP-588-2); never these.
+      await expectHiddenFrom({ ...hidden, read: board, label: `the board, ${id}` });
+      // The List's rows name neither.
+      await expectHiddenFrom({ ...hidden, read: packagesOnRows, label: `a List row's Package, ${id}` });
+    }
+    // Nor their names, on the board or the List.
+    for (const by of [at.k1Manager, c2Engineer, owner]) {
+      const bodies = [
+        (await ok(by.get(`/v1/projects/${at.projectId}/packages`), 200)).body,
+        (await ok(by.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`), 200)).body,
+      ];
+      for (const body of bodies) for (const text of ["Bathrooms – Tower 2", "Cables"]) expect(body, whoIs(by)).not.toContain(text);
     }
   });
 
@@ -210,7 +232,7 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
       await expectHidden(by.request("DELETE", `/v1/packages/${pkg.id}`));
     }
     expect((await getPackage(at.c1Engineer, pkg.id)).name).toEqual(name("Bathrooms – Tower 2"));
-    expect((await getPackage(at.c1Engineer, pkg.id)).items).toHaveLength(2);
+    expect((await getPackage(at.c1Engineer, pkg.id)).items.map((i) => i.id).sort()).toEqual([...drafts].sort());
   });
 });
 
@@ -232,7 +254,7 @@ describe("what a Package refuses", () => {
     const sent = await submitted(at, at.c1Engineer, at.c1Pm, "Seen by K1");
     const k1Package = await createPackage(at.k1Manager, "K1's own");
     expect(await refusal(addItem(at.k1Manager, k1Package.id, sent))).toEqual(notOffered);
-    expect((await getPackage(at.k1Manager, k1Package.id)).items).toEqual([]);
+    expect((await getPackage(at.k1Manager, k1Package.id)).items).toEqual([]); // not hidden-from: the refused add left K1's own Package empty
   });
 
   it("an item the Member doesn't see: C1's engineer's Draft is not C2's to add", async () => {
@@ -258,7 +280,7 @@ describe("what a Package refuses", () => {
     await ok(addItem(at.c1Pm, pkg.id, sent));
     const second = await createPackage(at.c1Pm, "Second");
     expect(await refusal(addItem(at.c1Pm, second.id, sent))).toEqual({ status: 409, body: { error: "in_another_package" } });
-    expect((await getPackage(at.c1Pm, second.id)).items).toEqual([]);
+    expect((await getPackage(at.c1Pm, second.id)).items).toEqual([]); // not hidden-from: the refused add left the second Package empty
   });
 
   it("a Draft the Member may not edit: C1's PM sees the engineer's Draft but doesn't hold it", async () => {
@@ -276,10 +298,10 @@ describe("what a Package refuses", () => {
 
   it("a Project the Member isn't on, and a made-up Package: the plain 404", async () => {
     await expectHidden(k1.caller.post(`/v1/projects/${at.projectId}/packages`, { name: name("Not a Member") }));
-    await expectHidden(at.c1Pm.post(`/v1/projects/${randomUUID()}/packages`, { name: name("Nowhere") }));
-    await expectHidden(at.c1Pm.get(`/v1/packages/${randomUUID()}`));
-    await expectHidden(at.c1Pm.get("/v1/packages/not-an-id"));
-    await expectHidden(addItem(at.c1Pm, randomUUID(), randomUUID()));
+    await expectHidden(at.c1Pm.post(`/v1/projects/${randomUUID()}/packages`, { name: name("Nowhere") })); // not hidden-from: a made-up id
+    await expectHidden(at.c1Pm.get(`/v1/packages/${randomUUID()}`)); // not hidden-from: a made-up id
+    await expectHidden(at.c1Pm.get("/v1/packages/not-an-id")); // not hidden-from: a made-up id
+    await expectHidden(addItem(at.c1Pm, randomUUID(), randomUUID())); // not hidden-from: made-up ids
   });
 });
 
@@ -291,7 +313,9 @@ describe("reshaping an Open Package", () => {
 
     await ok(removeItem(at.c1Engineer, pkg.id, removed));
     expect((await getPackage(at.c1Engineer, pkg.id)).items.map((i) => i.id)).toEqual([kept]);
-    expect((await rows(at.c1Engineer)).get(removed)?.package).toBeUndefined();
+    const removedRow = (await rows(at.c1Engineer)).get(removed);
+    expect(removedRow?.id).toBe(removed);
+    expect(removedRow?.package).toBeUndefined(); // not hidden-from: the row, read above, is in no Package
     // Removing it again, or an item that never was in it, is refused.
     expect(await refusal(removeItem(at.c1Engineer, pkg.id, removed))).toEqual({ status: 422, body: { error: "item_not_in_package" } });
     // The removed Draft may join another Package now.
@@ -305,14 +329,14 @@ describe("reshaping an Open Package", () => {
     expect((await getPackage(at.c1Engineer, pkg.id)).actions).toEqual({ rename: true, addItems: true, removeItems: true, delete: true, submit: false });
     await ok(at.c1Pm.request("DELETE", `/v1/packages/${pkg.id}`));
     for (const by of [at.c1Engineer, at.c1Pm]) {
-      await expectHidden(by.get(`/v1/packages/${pkg.id}`));
-      expect((await listPackages(by)).map((p) => p.id)).not.toContain(pkg.id);
+      await expectHidden(by.get(`/v1/packages/${pkg.id}`)); // not hidden-from: deleted, gone for its own Members too, read above
+      expect((await listPackages(by)).map((p) => p.id)).not.toContain(pkg.id); // not hidden-from: deleted, gone for its own Members too
     }
     // Its Draft is as it was, without a Package, and may join another.
     expect((await rows(at.c1Engineer)).get(kept)).toMatchObject({ title: "Kept", documentNumber: null });
-    expect((await rows(at.c1Engineer)).get(kept)?.package).toBeUndefined();
+    expect((await rows(at.c1Engineer)).get(kept)?.package).toBeUndefined(); // not hidden-from: the row, read above, is in no Package
     await ok(addItem(at.c1Engineer, other.id, kept));
-    await expectHidden(addItem(at.c1Engineer, pkg.id, kept));
+    await expectHidden(addItem(at.c1Engineer, pkg.id, kept)); // not hidden-from: deleted, gone for its own Members too
   });
 });
 
@@ -426,7 +450,7 @@ describe("Submit Package", () => {
     expect(refused.status).toBe(409);
     expect(refused.body.error).toBe("package_not_ready");
     expect(refused.body.othersNotReady, JSON.stringify(refused.body)).toBe(false);
-    expect(refused.body.notReady, JSON.stringify(refused.body)).toHaveLength(2);
+    expect(refused.body.notReady, JSON.stringify(refused.body)).toHaveLength(2); // not hidden-from: no item twice; the ids are compared below
     expect(new Map(refused.body.notReady.map((i: { id: string; reason: string }) => [i.id, i.reason]))).toEqual(
       new Map([
         [pooled, "pick_up_first"],
@@ -436,7 +460,7 @@ describe("Submit Package", () => {
     expect(refused.body.notReady.find((i: { id: string }) => i.id === pooled)).toMatchObject({ title: "Waiting in the pool" });
     // Nothing was taken: the ready one is where it was, and the Package still Open.
     expect(await detail(at.c1Pm, ready)).toMatchObject({ step: { key: "internal_review" } });
-    await expectHidden(at.k1Manager.get(`/v1/work-items/${ready}`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${ready}`), target: ready, seenBy: at.c1Pm, hiddenFrom: at.k1Manager, name: whoIs });
     expect((await getPackage(at.c1Pm, pkg.id)).status).toBe("open");
 
     // Once each waits for the PM, Submit Package is offered and takes all three.
@@ -446,7 +470,8 @@ describe("Submit Package", () => {
     const readyNow = await getPackage(at.c1Pm, pkg.id);
     expect(readyNow.actions.submit).toBe(true);
     expect(readyNow.items.map((i) => i.notReady)).toEqual([null, null, null]);
-    expect((await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(3);
+    const taken = (await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted as { id: string }[];
+    expect(taken.map((i) => i.id).sort()).toEqual([ready, pooled, engineersDraft].sort());
   });
 
   /** `by`'s Package of two items they picked up; Submit Package is refused, naming `reason` on each, and nothing is Submitted. */
@@ -500,7 +525,7 @@ describe("Submit Package", () => {
     expect(first.submitted.map((i: { id: string }) => i.id)).toEqual([id]);
     expect((await ok(submitPackage(at.c1Pm, pkg.id, key), 200)).json()).toEqual(first);
     const history = (await ok(at.k1Manager.get(`/v1/work-items/${id}/history`), 200)).json() as WorkItemHistory;
-    expect(history.events.filter((e) => e.type === "transition")).toHaveLength(1);
+    expect(history.events.filter((e) => e.type === "transition")).toHaveLength(1); // not hidden-from: a count of the item's own Transitions
   });
 });
 
@@ -649,13 +674,12 @@ describe("an item still to Submit that the Member doesn't see", () => {
     // RP-974: the read says so before any attempt, without naming it; theirs stops nothing.
     expect(p.othersNotReady).toBe(true);
     expect(p.items.map((i) => i.notReady)).toEqual([null]);
-    expect((await narrowedPm.get(`/v1/packages/${pkg.id}`)).body).not.toContain(electrical);
+    await expectHiddenFrom({ read: mentions(`/v1/packages/${pkg.id}`, electrical), target: electrical, seenBy: at.c1Pm, hiddenFrom: narrowedPm, name: whoIs });
     const res = await submitPackage(narrowedPm, pkg.id);
     expect({ status: res.statusCode, body: res.json() }).toEqual({
       status: 409,
       body: { error: "package_not_ready", notReady: [], othersNotReady: true },
     });
-    expect(res.body).not.toContain(electrical);
     // Once C1's PM has Submitted the Electrical one, only theirs is left.
     await take(at.c1Pm, electrical, "submit");
     expect((await getPackage(narrowedPm, pkg.id)).actions.submit).toBe(true);
@@ -713,6 +737,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
   let k1Electrical: Caller; // A K1 engineer who sees Electrical only.
   let c1Name = { en: "", ar: "" };
   let k1Name = { en: "", ar: "" };
+  let k1ParticipantId = "";
   const electricalItems: string[] = [];
   const mechanicalItems: string[] = [];
   const nothingOffered = { rename: false, addItems: false, removeItems: false, delete: false, submit: false };
@@ -731,18 +756,21 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
   beforeAll(async () => {
     const participants = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants as {
       id: string;
-      company: { id: string; legalName: { en: string; ar: string } };
+      company: { id: string; legalName: { en: string; ar: string } }; // not hidden-from: the shape of the Participants read
     }[];
+    // The owners' names, which the rows below show whole.
     const k1Participant = participants.find((p) => p.company.id === k1.company.companyId)!;
-    k1Name = k1Participant.company.legalName;
-    c1Name = participants.find((p) => p.id === at.c1ParticipantId)!.company.legalName;
+    k1ParticipantId = k1Participant.id;
+    k1Name = k1Participant.company.legalName; // not hidden-from: the name K1's rows show
+    c1Name = participants.find((p) => p.id === at.c1ParticipantId)!.company.legalName; // not hidden-from: the name C1's rows show
     k1Electrical = await projectMember(api, k1, k1Participant.id, ["engineer"], { trade: only(at.electrical) });
 
     pkg = await createPackage(at.c1Pm, "Plant room – Tower 1");
     for (let i = 1; i <= 6; i++) electricalItems.push(await readyForPm(`Plant room EL ${i}`));
     for (let i = 1; i <= 2; i++) mechanicalItems.push(await readyForPm(`Plant room ME ${i}`, at.mechanical));
     for (const id of [...electricalItems, ...mechanicalItems]) await ok(addItem(at.c1Pm, pkg.id, id));
-    expect((await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(8);
+    const taken = (await ok(submitPackage(at.c1Pm, pkg.id), 200)).json().submitted as { id: string }[];
+    expect(taken.map((i) => i.id).sort()).toEqual([...electricalItems, ...mechanicalItems].sort());
     // K1's manager codes one of each Trade: an Electrical one A, a Mechanical one C.
     await ok(at.k1Manager.post(`/v1/work-items/${electricalItems[0]}/pick-up`));
     await take(at.k1Manager, electricalItems[0]!, "approve_a");
@@ -770,7 +798,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       expect(await boardEntry(by)).toEqual(all);
       const p = await getPackage(by, pkg.id);
       expect(p).toMatchObject(all);
-      expect(p.items).toHaveLength(8);
+      expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems, ...mechanicalItems].sort());
     }
 
     const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } }, tradesOf(at.electrical));
@@ -805,21 +833,28 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     expect(packageFilterChoices(managers, "en").trades.map((t) => t.id)).toContain(at.mechanical);
 
     const listed = await listPackages(k1Electrical);
-    const ids = listed.map((p) => p.id);
-    expect(ids).toContain(pkg.id);
-    expect(ids).not.toContain(mechanicalOnly.id);
-    expect(ids).not.toContain(c2Open.id);
+    expect(listed.map((p) => p.id)).toContain(pkg.id);
+    const narrowedName = (by: Caller) => (by === k1Electrical ? "K1's Electrical engineer" : whoIs(by));
+    await expectHiddenFrom({ read: board, target: mechanicalOnly.id, seenBy: at.k1Manager, hiddenFrom: k1Electrical, name: narrowedName });
+    // C2's Open Package is C2's alone.
+    await expectHiddenFrom({ read: board, target: c2Open.id, seenBy: c2Engineer, hiddenFrom: [k1Electrical, at.k1Manager, at.c1Pm, owner], name: narrowedName });
     // Each Package's Trades are those of the items the engineer sees: Electrical only (K1's own empty Open Package has none).
     for (const p of listed) expect(p.trades.map((t) => t.id)).toEqual(p.counts.total === 0 ? [] : [at.electrical]);
     const choices = packageFilterChoices(listed, "en");
     expect(choices.trades.map((t) => t.id)).toEqual([at.electrical]);
     // The owning Companies of the Packages they see: C1, and their own K1 (its own Open Package); never C2, whose Package is Open.
-    expect(choices.companies.map((c) => c.companyName)).toContainEqual(c1Name);
-    for (const c of choices.companies) expect([c1Name, k1Name]).toContainEqual(c.companyName);
-    const body = (await k1Electrical.get(`/v1/projects/${at.projectId}/packages`)).body;
+    expect(choices.companies.map((c) => c.participantId)).toContain(at.c1ParticipantId);
+    for (const c of choices.companies) expect([at.c1ParticipantId, k1ParticipantId]).toContain(c.participantId);
+    const c2ParticipantId = (await listPackages(c2Engineer)).find((p) => p.id === c2Open.id)!.owner.participantId;
+    const companyChoices = async (by: Caller) => packageFilterChoices(await board(by), "en").companies.map((c) => ({ id: c.participantId }));
+    await expectHiddenFrom({ read: companyChoices, target: c2ParticipantId, seenBy: c2Engineer, hiddenFrom: k1Electrical, name: narrowedName });
+    const body = (await ok(k1Electrical.get(`/v1/projects/${at.projectId}/packages`), 200)).body;
     for (const text of [at.mechanical, mechanicalOnly.id, "Chillers", "C2's"]) expect(body).not.toContain(text);
-    // Filtering by Mechanical leaves them nothing; their search finds the Package by number and by either name.
-    expect(filterPackages(listed, { trade: [at.mechanical], company: [] })).toEqual([]);
+    // Filtering by Mechanical leaves them nothing (K1's manager finds both); their search finds the Package by number and by either name.
+    const mechanicalFilter = async (by: Caller) => filterPackages(await board(by), { trade: [at.mechanical], company: [] });
+    for (const target of [pkg.id, mechanicalOnly.id]) {
+      await expectHiddenFrom({ read: mechanicalFilter, target, seenBy: at.k1Manager, hiddenFrom: k1Electrical, name: narrowedName, label: "filtered by Mechanical" });
+    }
     for (const q of [pkg.number, "plant room", name("Plant room – Tower 1").ar]) {
       expect(filterPackages(listed, { q, trade: [], company: [] }).map((p) => p.id)).toContain(pkg.id);
     }
@@ -845,10 +880,11 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
   });
 
   it("RP-588-3: C2 reads nothing of it, while K1 and the Owner do; and only C1 may change it", async () => {
-    await expectHidden(c2Engineer.get(`/v1/packages/${pkg.id}`));
-    expect((await listPackages(c2Engineer)).map((p) => p.id)).not.toContain(pkg.id);
-    expect((await c2Engineer.get(`/v1/projects/${at.projectId}/packages`)).body).not.toContain("Plant room");
-    expect((await c2Engineer.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`)).body).not.toContain("Plant room");
+    const hidden = { target: pkg.id, seenBy: [at.c1Pm, at.k1Manager, owner], hiddenFrom: c2Engineer, name: whoIs };
+    await expectHiddenFrom({ ...hidden, read: readById(`/v1/packages/${pkg.id}`), label: "GET" });
+    await expectHiddenFrom({ ...hidden, read: board, label: "the board" });
+    expect((await ok(c2Engineer.get(`/v1/projects/${at.projectId}/packages`), 200)).body).not.toContain("Plant room");
+    expect((await ok(c2Engineer.get(`/v1/projects/${at.projectId}/work-items?page=1&pageSize=50`), 200)).body).not.toContain("Plant room");
 
     for (const by of [at.k1Manager, k1Electrical, owner]) {
       expect((await getPackage(by, pkg.id)).actions).toEqual(nothingOffered);
@@ -860,7 +896,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     }
     const p = await getPackage(at.c1Pm, pkg.id);
     expect(p).toMatchObject({ name: name("Plant room – Tower 1"), actions: { rename: true, addItems: true, removeItems: false, delete: false } });
-    expect(p.items).toHaveLength(8);
+    expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems, ...mechanicalItems].sort());
   });
 });
 
@@ -1059,12 +1095,16 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
   let electricalItems: string[] = [];
   let mechanicalItem = "";
   let loose = ""; // A submittal in no Package.
+  let inOther = ""; // The other Package's submittal.
+  let c2Own = ""; // C2's own Draft.
 
   /** The ids of the Submittals List `by` reads with `query`. */
   const listedIds = async (by: Caller, query: string) => {
     const res = await ok(by.get(`/v1/projects/${tower.projectId}/work-items?page=1&pageSize=50&${query}`), 200);
     return ((res.json().items as WorkItemRow[]).map((r) => r.id)).sort();
   };
+  /** How a failure names `by`. */
+  const viewer = (by: Caller) => (by === c2 ? "C2" : by === tower.c1Pm ? "C1's PM" : by === tower.k1Manager ? "K1's manager" : "K1's Electrical engineer");
 
   /** A submittal of the Code B Type raised by C1's engineer, at C1's PM's internal review, picked up. */
   async function readyForPmB(title: string, trade: string): Promise<string> {
@@ -1104,23 +1144,26 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
     const c2Participant = await api.addParticipant(c1.caller, tower.projectId, c2Company.company, "contractor");
     await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
     c2 = await projectMember(api, c2Company, c2Participant, ["engineer"]);
-    await ok(
-      c2.post(`/v1/projects/${tower.projectId}/work-items`, {
-        type: CODE_B_TYPE,
-        title: "C2's own",
-        answers: { model: "C2's own", trade: tower.electrical, location: tower.buildingA },
-      }),
-      201,
-    );
+    c2Own = (
+      await ok(
+        c2.post(`/v1/projects/${tower.projectId}/work-items`, {
+          type: CODE_B_TYPE,
+          title: "C2's own",
+          answers: { model: "C2's own", trade: tower.electrical, location: tower.buildingA },
+        }),
+        201,
+      )
+    ).json().id as string;
 
     pkg = await createPackage(tower.c1Pm, "Switchgear – Tower 2", tower.projectId);
     electricalItems = [await readyForPmB("Switchgear EL 1", tower.electrical), await readyForPmB("Switchgear EL 2", tower.electrical)];
     mechanicalItem = await readyForPmB("Switchgear ME 1", tower.mechanical);
     for (const id of [...electricalItems, mechanicalItem]) await ok(addItem(tower.c1Pm, pkg.id, id));
-    expect((await ok(submitPackage(tower.c1Pm, pkg.id), 200)).json().submitted).toHaveLength(3);
+    const taken = (await ok(submitPackage(tower.c1Pm, pkg.id), 200)).json().submitted as { id: string }[];
+    expect(taken.map((i) => i.id).sort()).toEqual([...electricalItems, mechanicalItem].sort());
 
     other = await createPackage(tower.c1Pm, "Other set", tower.projectId);
-    const inOther = await readyForPmB("Other set EL", tower.electrical);
+    inOther = await readyForPmB("Other set EL", tower.electrical);
     await ok(addItem(tower.c1Pm, other.id, inOther));
     await ok(submitPackage(tower.c1Pm, other.id), 200);
     loose = await readyForPmB("Loose EL", tower.electrical);
@@ -1133,25 +1176,30 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
     for (const by of [tower.c1Pm, tower.k1Manager]) expect(await listedIds(by, q)).toEqual([...electricalItems, mechanicalItem].sort());
     expect(await listedIds(k1Electrical, q)).toEqual(electricalItems);
     // Unfiltered, the other Package's item and the loose one are listed too.
-    expect(await listedIds(tower.k1Manager, "")).toEqual(expect.arrayContaining([loose]));
-    expect((await listedIds(tower.k1Manager, "")).length).toBe(5);
+    expect(await listedIds(tower.k1Manager, "")).toEqual([...electricalItems, mechanicalItem, inOther, loose].sort());
   });
 
   it("RP-647-1: a Package the viewer doesn't see filters to nothing, the same answer as a made-up id", async () => {
     const path = (id: string) => `/v1/projects/${tower.projectId}/work-items?page=1&pageSize=50&packageId=${id}`;
     // C2 has its own Draft in the List, and sees none of the Package's items.
-    expect((await listedIds(c2, "")).length).toBe(1);
+    expect(await listedIds(c2, "")).toEqual([c2Own]);
     // C1's Open Package holds a Draft: K1 sees neither.
     const open = await createPackage(tower.c1Pm, "Still open", tower.projectId);
-    await ok(addItem(tower.c1Pm, open.id, await readyForPmB("Still open EL", tower.electrical)));
-    expect(await listedIds(tower.c1Pm, `packageId=${open.id}`)).toHaveLength(1);
+    const stillOpen = await readyForPmB("Still open EL", tower.electrical);
+    await ok(addItem(tower.c1Pm, open.id, stillOpen));
+    expect(await listedIds(tower.c1Pm, `packageId=${open.id}`)).toEqual([stillOpen]);
+    // Who sees each Package's items through the filter, first, and who doesn't.
+    const filtered = (id: string) => async (by: Caller) => (await listedIds(by, `packageId=${id}`)).map((item) => ({ id: item }));
+    for (const item of [...electricalItems, mechanicalItem]) {
+      await expectHiddenFrom({ read: filtered(pkg.id), target: item, seenBy: [tower.c1Pm, tower.k1Manager], hiddenFrom: c2, name: viewer });
+    }
+    await expectHiddenFrom({ read: filtered(open.id), target: stillOpen, seenBy: tower.c1Pm, hiddenFrom: [tower.k1Manager, k1Electrical], name: viewer });
     for (const [by, id] of [
       [c2, pkg.id],
       [tower.k1Manager, open.id],
       [k1Electrical, open.id],
     ] as const) {
       const unseen = await ok(by.get(path(id)), 200);
-      expect(unseen.json().items).toEqual([]);
       expect(unseen.body).toBe((await ok(by.get(path(randomUUID())), 200)).body);
       expect(unseen.body).not.toContain(id);
     }
@@ -1205,10 +1253,16 @@ describe("RP-647: the packageId filter and the Package's Comments (scenario RP-6
       const body = (await k1Electrical.get(`/v1/packages/${pkg.id}/comments`)).body;
       for (const text of ["ventilation", mechanicalItem, numbers.get(mechanicalItem)!, "Not in any Package"]) expect(body).not.toContain(text);
 
-      await expectHidden(c2.get(`/v1/packages/${pkg.id}/comments`));
-      await expectHidden(c2.get(`/v1/packages/${randomUUID()}/comments`));
+      // The Comments of the mechanical item: K1's manager reads them here, the Electrical engineer doesn't.
+      const raisedFrom = async (by: Caller) => (await comments(by)).comments.map((c) => c.raisedFrom);
+      await expectHiddenFrom({ read: raisedFrom, target: mechanicalItem, seenBy: [tower.c1Pm, tower.k1Manager], hiddenFrom: k1Electrical, name: viewer });
+
+      // C2 sees none of its items: the Package's Comments are the plain 404 (the answer is Package pkg's, so its id).
+      const pkgComments = readById(`/v1/packages/${pkg.id}/comments`);
+      await expectHiddenFrom({ read: pkgComments, target: pkg.id, seenBy: tower.c1Pm, hiddenFrom: c2, idOf: () => pkg.id, name: viewer });
+      await expectHidden(c2.get(`/v1/packages/${randomUUID()}/comments`)); // not hidden-from: a made-up id
       // Another Package's submittals raised none.
-      expect((await comments(tower.c1Pm, other.id)).comments).toEqual([]);
+      expect((await comments(tower.c1Pm, other.id)).comments).toEqual([]); // not hidden-from: the other Package's submittals raised no Comment
     });
   });
 });
@@ -1225,13 +1279,13 @@ describe("RP-659: the item page's Package chip", () => {
     // With its owning Company beside the number (RP-974): two Participants' Packages can both be PKG-001.
     const companyName = (await getPackage(at.c1Engineer, pkg.id)).owner.companyName;
     expect((await itemPage(at.c1Engineer, d)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – Open"), companyName });
-    expect((await itemPage(at.c1Engineer, outside)).package).toBeUndefined();
+    expect((await itemPage(at.c1Engineer, outside)).package).toBeUndefined(); // not hidden-from: the item, read by its owner, is in no Package
     // Removed, or its Package deleted: the item has none again.
     await ok(removeItem(at.c1Engineer, pkg.id, d));
-    expect((await itemPage(at.c1Engineer, d)).package).toBeUndefined();
+    expect((await itemPage(at.c1Engineer, d)).package).toBeUndefined(); // not hidden-from: the item, read by its owner, is in no Package
     await ok(addItem(at.c1Engineer, pkg.id, d));
     await ok(at.c1Engineer.request("DELETE", `/v1/packages/${pkg.id}`));
-    expect((await itemPage(at.c1Engineer, d)).package).toBeUndefined();
+    expect((await itemPage(at.c1Engineer, d)).package).toBeUndefined(); // not hidden-from: the item, read by its owner, is in no Package
   });
 
   it("names an In Progress Package to another Company that sees the item, and nothing of it to one that doesn't see the item", async () => {
@@ -1243,6 +1297,6 @@ describe("RP-659: the item page's Package chip", () => {
     for (const by of [at.c1Pm, at.k1Manager]) {
       expect((await itemPage(by, sent)).package).toEqual({ id: pkg.id, number: pkg.number, name: name("Chip – In Progress"), companyName });
     }
-    await expectHidden(c2Engineer.get(`/v1/work-items/${sent}`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${sent}`), target: sent, seenBy: [at.c1Pm, at.k1Manager], hiddenFrom: c2Engineer, name: whoIs });
   });
 });

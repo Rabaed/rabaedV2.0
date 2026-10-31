@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Responsive anatomy</title>
+<meta name="ext-resource-dependency" content="../../assets/brand/rabaed-mark.svg" data-resource-id="raMark">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="responsive/ra.css">
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f8552f"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#f8552f"/><rect x="330" y="250" width="380" height="300" rx="28" fill="none" stroke="#fff" stroke-width="22"/><rect x="760" y="230" width="150" height="340" rx="30" fill="none" stroke="#fff" stroke-width="22"/></svg></template>
+<div class="ra-top"><b>Responsive anatomy</b><nav class="ra-nav" id="ra-nav"></nav><div class="ra-seg" id="mode"><button data-m="light" class="on">Light</button><button data-m="dark">Dark</button></div></div>
+<div class="ra-doc">
+<div class="ra-hero"><h1>Rabaed on iPad and iPhone</h1><p>Web-responsive anatomy for every screen built so far, shown at three Safari viewports: iPad Pro 13″ landscape (1376), iPad Pro 13″ portrait (1032) and iPhone 18 Pro (402). Numbered pins on each frame match the notes below it. iPad frames are drawn at 40%, iPhone at 66%.</p></div>
+<div id="ra"></div>
+</div>
+<script src="responsive/kit.js"></script>
+<script src="responsive/sec-a.js"></script>
+<script src="responsive/sec-b.js"></script>
+<script src="responsive/sec-c.js"></script>
+<script>
+const K='ra-mode';const setMode=m=>{document.body.classList.toggle('theme-dark',m==='dark');document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));try{localStorage.setItem(K,m)}catch(e){}};
+document.getElementById('mode').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setMode(b.dataset.m)});
+RA.render(document.getElementById('ra'));
+setMode((()=>{try{return localStorage.getItem(K)}catch(e){}})()||'light');
+</script>
+</body>
+</html>
