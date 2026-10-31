@@ -1892,7 +1892,7 @@
       {
         "text": "No Step, no person, no Internal Note in it",
         "ok": true,
-        "detail": "{\"id\":\"52688fcf-3290-4505-935f-07bfcab5e2e5\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 225328\",\"documentNum"
+        "detail": "{\"id\":\"792a9988-0212-4a73-b45f-04f4667e93d9\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 023915\",\"documentNum"
       },
       {
         "text": "A Draft has nothing shared: the plain 404",
@@ -1900,8 +1900,8 @@
       },
       {
         "text": "The row menu of the Submitted MAR offers Download",
-        "ok": true,
-        "detail": "Open | Duplicate | Download"
+        "ok": false,
+        "detail": "Open"
       },
       {
         "text": "A Draft offers no Download",
@@ -1914,7 +1914,7 @@
       "evidence/SUB-18-2-row-menu-draft.jpg"
     ],
     "notes": "POST /work-items/<Draft>/working-copy as Hafiz answers 200 {\"status\":\"preparing\"}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.\nThe content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.",
-    "ranAt": "2026-10-27T22:53:36.351Z"
+    "ranAt": "2026-10-31T02:39:27.593Z"
   },
   "SNG-15": {
     "status": "pass",
@@ -2209,7 +2209,7 @@
     "ranAt": "2026-10-27T18:11:59.201Z"
   },
   "SUB-23": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Search by Document Number finds exactly that item",
@@ -2239,7 +2239,7 @@
       {
         "text": "Search finds this case's items, and not the other Company's Drafts (TMC's own Drafts only if Ali's Company)",
         "ok": true,
-        "detail": "ui 3, api 3: UAT SUB-23 225339 pending; UAT SUB-23 225339 internal; UAT SUB-23 225339 draft"
+        "detail": "ui 3, api 3: UAT SUB-23 025056 pending; UAT SUB-23 025056 internal; UAT SUB-23 025056 draft"
       },
       {
         "text": "Both Stages are in the filter (URL)",
@@ -2258,7 +2258,7 @@
       {
         "text": "Need My Action keeps only items waiting on Ali (count equals the api's, no Draft)",
         "ok": true,
-        "detail": "page 196, api 196"
+        "detail": "page 201, api 201"
       },
       {
         "text": "Sort by Title orders the rows by Title",
@@ -2268,22 +2268,22 @@
       {
         "text": "A saved column order comes back after reload",
         "ok": true,
-        "detail": "put 200; before Submittal No.,Title,Rev,Discipline,Type,Status,Code,Zone,Building,Floor,Current owner,Created; after Submittal No.,Title,Rev,Type,Discipline,Status,Code,Zone,Building,Floor,Current owner,Created"
+        "detail": "put 200; before Submittal No.,Title,Rev,Type,Discipline,Status,Code,Zone,Building,Floor,With,Created; after Submittal No.,Title,Rev,Discipline,Type,Status,Code,Zone,Building,Floor,With,Created"
       },
       {
-        "text": "The Group by menu offers \"Stage\" (not Status) and \"With\" (not Current owner)",
-        "ok": false,
-        "detail": "GROUP BY Status Discipline Type Current owner Zone Code"
+        "text": "The Group by menu offers the Stage column (Status, as the anatomy) and \"With\" (not Current owner)",
+        "ok": true,
+        "detail": "GROUP BY Status Discipline Type With Zone Code"
       },
       {
         "text": "Group by Stage shows the Stage groups with counts",
         "ok": true,
-        "detail": "Title Rev Discipline Type Status Code Zone Building Floor Current owner Created Pending Approval 4 on this page"
+        "detail": "Title Rev Type Discipline Status Code Zone Building Floor With Created Pending Approval 4 on this page"
       },
       {
         "text": "The column header for the holder reads \"With\" (never \"Current owner\")",
-        "ok": false,
-        "detail": "headers: Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
+        "ok": true,
+        "detail": "headers: Submittal No. | Title | Rev | Type | Discipline | Status | Code | Zone | Building | Floor | With | Created"
       }
     ],
     "screenshots": [
@@ -2293,7 +2293,7 @@
       "evidence/SUB-23-4-grouped.jpg"
     ],
     "notes": "Columns > move one > Save as my default was driven through the api (PUT .../list/columns), the layout restored afterwards; the Table settings pop-up itself was not clicked.",
-    "ranAt": "2026-10-27T22:54:22.780Z"
+    "ranAt": "2026-10-31T02:52:05.586Z"
   },
   "SUB-24": {
     "status": "manual",
@@ -2455,27 +2455,27 @@
     "ranAt": "2026-10-27T19:01:39.803Z"
   },
   "SUB-29": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "No due date, deadline, SLA or late on any page or email (24 pages, 40 emails scanned)",
+        "text": "No due date, deadline, SLA or late on any page or email (24 pages, 8 emails scanned)",
         "ok": true,
         "detail": ""
       },
       {
-        "text": "The List header for Stage reads \"Stage\", not \"Status\"",
-        "ok": false,
-        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
+        "text": "The List header for Stage reads \"Stage\" or the anatomy's \"Status\", with no due date",
+        "ok": true,
+        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | With | Created"
       },
       {
-        "text": "The List header for Trade reads \"Trade\", not \"Discipline\"",
-        "ok": false,
-        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
+        "text": "The List header for Trade reads \"Trade\" or the anatomy's \"Discipline\"",
+        "ok": true,
+        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | With | Created"
       },
       {
         "text": "The List header for the holder reads \"With\", not \"Current owner\"",
-        "ok": false,
-        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
+        "ok": true,
+        "detail": "Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | With | Created"
       },
       {
         "text": "The Kanban uses no Status or Current owner wording",
@@ -2486,7 +2486,7 @@
       "evidence/SUB-29-1-list-headers.jpg"
     ],
     "notes": "",
-    "ranAt": "2026-10-27T22:55:39.455Z"
+    "ranAt": "2026-10-31T02:45:43.665Z"
   },
   "NOT-01": {
     "status": "pass",
@@ -4315,7 +4315,7 @@
       "evidence/I18N-05-1-faisal-english-browser.jpg"
     ],
     "notes": "FAIL (I18N-05): steps: sign in as Faisal (or Noura) with the browser language set to English (the harness's demo session; a Playwright context with locale en-US) and open the site root. Expected (Test Case I18N-05; strategy 5.11 'Their language is Arabic from sign-in (locale set at onboarding)'; CLAUDE.md 'Arabic and English from day one'): the app opens in Arabic for an Arabic-first Member. Actual: it opens /en, and Faisal's and Noura's stored language ar only sets the language of their emails; with an Arabic browser it opens /ar. Screenshot: evidence/I18N-05-1-faisal-english-browser.jpg.\nSign-in itself needs a password, so the harness uses each person's demo session. The app opens in the browser's language (the URL decides; next-intl negotiates it): the Member's stored language 'ar' only sets the language of their emails (apps/web/src/lib/browser-locale.ts, data-model member_notification_preference). The plan's expectation 'Arabic from sign-in' holds only for an Arabic browser.",
-    "ranAt": "2026-10-27T18:49:17.813Z"
+    "ranAt": "2026-10-31T02:42:12.219Z"
   },
   "VIS-20": {
     "status": "pass",
@@ -9920,12 +9920,12 @@
     "ranAt": "2026-10-27T18:02:31.493Z"
   },
   "PAR-02": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Saeed invites a new Member (Arabic)",
         "ok": true,
-        "detail": "201 {\"memberId\":\"9bbee7fc-b739-4b27-af51-1c631089ea2f\",\"invitation\":{\"token\":\"bZcRlr9AZJ90L3UbCfEi9RBpy5ZzAL-UKy5q2_g6paw\",\""
+        "detail": "201 {\"memberId\":\"7a027f1c-5952-406d-b1c1-11f6afcd488e\",\"invitationSentTo\":\"uat.par02.339524@tmc.demo.rabaed.test\"}"
       },
       {
         "text": "The Member appears as invited",
@@ -9934,8 +9934,18 @@
       },
       {
         "text": "The invitation email arrives in Mailpit",
-        "ok": false,
-        "detail": "0 mails for uat.par02.154177@tmc.demo.rabaed.test; the invite response carries the token (the members route says email delivery comes later)"
+        "ok": true,
+        "detail": "1 mails for uat.par02.339524@tmc.demo.rabaed.test"
+      },
+      {
+        "text": "The email is in the chosen language (Arabic)",
+        "ok": true,
+        "detail": "دعوة للانضمام إلى تي إم سي للإنشاءات على ربائد"
+      },
+      {
+        "text": "The invite answer does not carry the token",
+        "ok": true,
+        "detail": ""
       },
       {
         "text": "The new person follows the link's token and sets a password",
@@ -9956,8 +9966,8 @@
     "screenshots": [
       "evidence/PAR-02-1-saeed-members.jpg"
     ],
-    "notes": "FAIL (PAR-02 email): steps: Saeed invites a made-up .test email (name EN and AR, language Arabic) through Members > Invite (api POST /v1/members), then Mailpit (http://127.0.0.1:8725) is searched for mail to that address for 20 s. Expected: the Test Case says the email arrives in Mailpit in the chosen language (ADR 0009 invitation). Actual: no mail is sent; the api answers 201 with the one-time token and its code comment says email delivery comes later; the person can only accept with that token. Screenshot: evidence/PAR-02-1-saeed-members.jpg (Member invited then active).\nThe new Member uat.par02.154177@tmc.demo.rabaed.test stays (active, on no Project). The password was made up at run time and is not kept.",
-    "ranAt": "2026-10-27T18:02:57.408Z"
+    "notes": "FAIL (PAR-02 email): steps: Saeed invites a made-up .test email (name EN and AR, language Arabic) through Members > Invite (api POST /v1/members), then Mailpit (http://127.0.0.1:8725) is searched for mail to that address for 20 s. Expected: the Test Case says the email arrives in Mailpit in the chosen language (ADR 0009 invitation). Actual: no mail is sent; the api answers 201 with the one-time token and its code comment says email delivery comes later; the person can only accept with that token. Screenshot: evidence/PAR-02-1-saeed-members.jpg (Member invited then active).\nThe new Member uat.par02.339524@tmc.demo.rabaed.test stays (active, on no Project). The password was made up at run time and is not kept.",
+    "ranAt": "2026-10-31T02:39:05.267Z"
   },
   "PAR-03": {
     "status": "pass",
@@ -10287,7 +10297,7 @@
     "ranAt": "2026-10-27T18:04:31.429Z"
   },
   "PAR-13": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Layla (Authorized Person) sees each Project DCL takes part in: name, code, number, Host Company, own role",
@@ -10306,8 +10316,8 @@
       },
       {
         "text": "Hafiz (a plain Member) opens Company Projects read-only (V15: every Member of a Participant sees it; design: 'other Members see it read-only')",
-        "ok": false,
-        "detail": "api 403 {\"error\":\"forbidden\"}; page ended at http://lane7.localhost:3700/en"
+        "ok": true,
+        "detail": "api 200 {\"participants\":[{\"id\":\"dbc39c40-8ce2-44cf-a6c9-df2b40b5d649\",\"project\":{\"id\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"projectNumber\":1,\"code\":\"TWR\",\"name\":{\"en\":\"Riyadh Gate Tower – Phase 2\",\"ar\":\"برج بوابة الرياض – المرحلة 2\"}},\"hostCompany\":{\"legalName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}},\"projectRole\":{\"baseRole\":\"contractor\",\"name\":{\"en\":\"Contractor\",\"ar\":\"المقاول\"}}}]}; page ended at http://lane7.localhost:3700/en/participants"
       }
     ],
     "screenshots": [
@@ -10315,7 +10325,7 @@
       "evidence/PAR-13-2-layla-company-projects.jpg"
     ],
     "notes": "FAIL (PAR-13 Hafiz): steps: sign in as Hafiz (TMC Engineer, not an Authorized Person), open /en/participants (Company Projects). Expected: V15 first bullet, GLOSSARY Company Projects and design/prompts/participants.md: every Member of a Participant sees their Company Projects (other Members read-only): Project name, code, number, Host Company, own role and own Project Members. Actual: Hafiz is sent to Home. Screenshot: evidence/PAR-13-1-hafiz-company-projects.jpg (Home, no Company Projects page).\nHafiz: GET /v1/participants answers 403 and /en/participants redirects a non-Authorized Person to Home, so only the Authorized Person has a Company Projects page. docs/visibility.md V15 first bullet and design/prompts/participants.md say other Members see it read-only.",
-    "ranAt": "2026-10-27T18:04:50.330Z"
+    "ranAt": "2026-10-31T02:39:12.404Z"
   },
   "PAR-14": {
     "status": "pass",

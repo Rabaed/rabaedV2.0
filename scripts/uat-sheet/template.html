@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed UAT – __ROUND__</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2433; --muted:#5d6678; --line:#dde1e8; --accent:#c8431f; --navy:#16213a;
+          --pass:#1e7e45; --fail:#b42318; --blocked:#6941c6; --notrun:#5d6678; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, "Segoe UI", Tahoma, Arial, sans-serif; }
+  header { background:var(--navy); color:#fff; padding:14px 20px; display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center; }
+  header h1 { margin:0; font-size:19px; flex:1 1 auto; }
+  header p { margin:0; color:#c9d2e3; font-size:13px; width:100%; }
+  header button { background:transparent; color:#fff; border-color:#3b4a6b; }
+  main { padding:14px 20px 80px; max-width:1400px; margin:0 auto; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  input, select, textarea, button { font:inherit; }
+  input[type=text], input[type=search], select { padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; min-width:130px; }
+  button { padding:7px 12px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; color:inherit; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:hover { filter:brightness(.96); }
+  .counts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .count { border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:13px; }
+  .count b { font-size:16px; margin-inline-end:4px; }
+  .help { font-size:13px; color:var(--muted); margin:6px 0 0; }
+  .case { background:var(--card); border:1px solid var(--line); border-inline-start:4px solid var(--line); border-radius:8px; margin-bottom:10px;
+          display:grid; grid-template-columns:minmax(0,1fr) 360px; }
+  .case.st-pass { border-inline-start-color:var(--pass); } .case.st-fail { border-inline-start-color:var(--fail); }
+  .case.st-blocked { border-inline-start-color:var(--blocked); } .case.active { box-shadow:0 0 0 2px #f1b9a8; }
+  .case .body { padding:10px 14px; min-width:0; }
+  .case .rec { padding:10px 14px; border-inline-start:1px solid var(--line); background:#fafbfc; }
+  .case h3 { margin:0 0 4px; font-size:15px; }
+  .meta { font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 12px; margin-bottom:6px; }
+  .meta code { color:var(--ink); }
+  ol.steps { margin:4px 0 6px; padding-inline-start:20px; }
+  .exp { margin:4px 0; }
+  .lbl { font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  .status { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+  .status button { padding:4px 10px; font-size:13px; }
+  .status button[aria-pressed=true].pass { background:var(--pass); color:#fff; border-color:var(--pass); }
+  .status button[aria-pressed=true].fail { background:var(--fail); color:#fff; border-color:var(--fail); }
+  .status button[aria-pressed=true].blocked { background:var(--blocked); color:#fff; border-color:var(--blocked); }
+  .status button[aria-pressed=true].notrun { background:var(--notrun); color:#fff; border-color:var(--notrun); }
+  .rec textarea { width:100%; min-height:80px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
+  .drop { margin-top:8px; border:1px dashed #b8c0cc; border-radius:6px; padding:8px; font-size:12px; color:var(--muted); text-align:center; outline:none; }
+  .drop:focus, .drop.over { border-color:var(--accent); background:#fff6f3; }
+  .shots { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .shot { position:relative; }
+  .shot img { height:72px; max-width:120px; object-fit:cover; border:1px solid var(--line); border-radius:4px; display:block; cursor:zoom-in; }
+  .shot button { position:absolute; top:-6px; inset-inline-end:-6px; padding:0 6px; border-radius:10px; font-size:12px; line-height:18px; background:#fff; }
+  .saved { font-size:11px; color:var(--muted); margin-top:6px; min-height:14px; }
+  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.82); display:none; align-items:center; justify-content:center; z-index:9; }
+  #lightbox img { max-width:94vw; max-height:88vh; background:#fff; }
+  #lightbox p { position:absolute; bottom:10px; color:#fff; font-size:13px; }
+  .empty { padding:30px; text-align:center; color:var(--muted); }
+  @media (max-width: 900px) { .case { grid-template-columns:1fr; } .case .rec { border-inline-start:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1><span data-t="title"></span> – __ROUND__</h1>
+  <button id="lang" type="button">العربية</button>
+  <p><span data-t="intro"></span> <span id="built"></span></p>
+</header>
+<main>
+  <section class="panel">
+    <div class="row">
+      <label><span data-t="tester"></span><input type="text" id="tester" dir="auto"></label>
+      <button class="primary" id="export" type="button" data-t="export"></button>
+      <button id="saveJson" type="button" data-t="saveJson"></button>
+      <button id="importBtn" type="button" data-t="importJson"></button>
+      <input type="file" id="importFile" accept=".json" hidden>
+      <span id="msg" class="help" role="status"></span>
+    </div>
+    <p class="help" data-t="howto"></p>
+  </section>
+  <section class="panel">
+    <div class="row">
+      <label><span data-t="part"></span><select id="fPart"></select></label>
+      <label><span data-t="round"></span><select id="fRound"></select></label>
+      <label><span data-t="status"></span><select id="fStatus"></select></label>
+      <label style="flex:1 1 220px"><span data-t="search"></span><input type="search" id="fText" dir="auto" style="width:100%"></label>
+    </div>
+    <div class="counts" id="counts"></div>
+  </section>
+  <div id="list"></div>
+</main>
+<div id="lightbox"><img alt=""><p></p></div>
+<input type="file" id="pick" accept="image/*" multiple hidden>
+<script>/*__FFLATE__*/</script>
+<script>/*__XLSX__*/</script>
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+const STATUSES = ["pass", "fail", "blocked", "notrun"];
+const T = {
+  en: { title: "Rabaed UAT test sheet", intro: "Built on", tester: "Your name", export: "Export to Excel", saveJson: "Save work (.json)",
+        importJson: "Load work (.json)", part: "Part", round: "Round", status: "Status", search: "Search", all: "All",
+        pass: "Pass", fail: "Fail", blocked: "Blocked", notrun: "Not run", unset: "Not set", who: "Sign in as", steps: "Steps", expected: "Expected result",
+        open: "Open on UAT", comment: "Comment", drop: "Paste a screenshot here (Ctrl+V), drop images, or click to pick files",
+        remove: "Remove", saved: "Saved", notSaved: "Could not save in this browser: use Save work (.json)", none: "No Test Case matches the filters.",
+        exported: "Excel file downloaded.", savedJson: "Work saved as .json.", loaded: "Work loaded:", cases: "cases",
+        badJson: "That file is not a work file from this sheet.",
+        howto: "Pick a status for each Test Case, write what you saw, and add screenshots (paste with Ctrl+V into the case you are on, drag them in, or pick files). Everything is kept in this browser as you go, so closing the tab loses nothing. When you finish, press Export to Excel and send the .xlsx back. To move to another computer, Save work (.json) there and Load it here. Demo data only: never type real names or documents." },
+  ar: { title: "ورقة اختبار قبول رابض", intro: "أُنشئت في", tester: "اسمك", export: "تصدير إلى Excel", saveJson: "حفظ العمل (.json)",
+        importJson: "تحميل العمل (.json)", part: "الجزء", round: "الجولة", status: "الحالة", search: "بحث", all: "الكل",
+        pass: "ناجح", fail: "فاشل", blocked: "متعذّر", notrun: "لم يُنفَّذ", unset: "لم تُحدَّد", who: "سجّل الدخول باسم", steps: "الخطوات", expected: "النتيجة المتوقعة",
+        open: "افتح على بيئة الاختبار", comment: "ملاحظة", drop: "الصق لقطة شاشة هنا (Ctrl+V)، أو اسحب الصور، أو انقر لاختيار ملفات",
+        remove: "إزالة", saved: "حُفظ", notSaved: "تعذّر الحفظ في هذا المتصفح: استخدم حفظ العمل (.json)", none: "لا توجد حالة اختبار تطابق التصفية.",
+        exported: "نُزّل ملف Excel.", savedJson: "حُفظ العمل بصيغة .json.", loaded: "حُمّل العمل:", cases: "حالة",
+        badJson: "هذا الملف ليس ملف عمل من هذه الورقة.",
+        howto: "اختر حالة لكل حالة اختبار، واكتب ما رأيت، وأضف لقطات الشاشة (الصقها بـ Ctrl+V في الحالة التي تعمل عليها، أو اسحبها، أو اختر ملفات). يُحفظ كل شيء في هذا المتصفح أولًا بأول، فإغلاق التبويب لا يُضيّع شيئًا. عند الانتهاء اضغط تصدير إلى Excel وأرسل ملف .xlsx. للانتقال إلى جهاز آخر احفظ العمل (.json) هناك وحمّله هنا. بيانات تجريبية فقط: لا تكتب أسماء أو مستندات حقيقية." },
+};
+let lang = "en";
+const t = (k) => T[lang][k] ?? T.en[k] ?? k;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const now = () => new Date().toLocaleString("en-GB", { hour12: false });
+const cases = DATA.cases;
+const byKey = new Map(cases.map((c) => [c.key, c]));
+
+// ---- Storage: IndexedDB, as screenshots are large. One database per round. ----
+const DB_NAME = "rabaed-uat-sheet:" + DATA.round;
+let db;
+const entries = new Map(); // key -> { status, comment, shots: [id], at }
+const shots = new Map(); // id -> { id, key, name, type, w, h, blob, url }
+function openDb() {
+  return new Promise((ok, no) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => { const d = req.result; d.createObjectStore("entries"); d.createObjectStore("shots", { keyPath: "id" }); d.createObjectStore("meta"); };
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => no(req.error);
+  });
+}
+const tx = (store, mode, fn) => new Promise((ok, no) => {
+  const x = db.transaction(store, mode); const s = x.objectStore(store); const r = fn(s);
+  x.oncomplete = () => ok(r && "result" in r ? r.result : undefined); x.onerror = () => no(x.error);
+});
+const all = (store) => new Promise((ok, no) => {
+  const out = []; const req = db.transaction(store).objectStore(store).openCursor();
+  req.onsuccess = () => { const c = req.result; if (c) { out.push([c.key, c.value]); c.continue(); } else ok(out); };
+  req.onerror = () => no(req.error);
+});
+const entry = (key) => entries.get(key) ?? { status: "", comment: "", shots: [], at: "" };
+
+async function saveEntry(key, e) {
+  e.at = now(); entries.set(key, e);
+  const card = document.querySelector(`.case[data-key="${key}"] .saved`);
+  try { if (!db) throw new Error("no db"); await tx("entries", "readwrite", (s) => s.put(e, key)); if (card) card.textContent = t("saved") + " " + e.at; }
+  catch { if (card) card.textContent = t("notSaved"); }
+  counts();
+}
+
+// ---- Images: PNG or JPEG kept as is; anything else is redrawn as PNG. ----
+function dims(blob) {
+  return new Promise((ok, no) => { const u = URL.createObjectURL(blob); const img = new Image(); img.onload = () => { ok({ w: img.naturalWidth, h: img.naturalHeight, img }); URL.revokeObjectURL(u); }; img.onerror = no; img.src = u; });
+}
+async function normalise(file) {
+  const { w, h, img } = await dims(file);
+  if (file.type === "image/png" || file.type === "image/jpeg") return { blob: file, type: file.type, w, h };
+  const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img, 0, 0);
+  const blob = await new Promise((ok) => c.toBlob(ok, "image/png"));
+  return { blob, type: "image/png", w, h };
+}
+// One change at a time per case, so two quick pastes don't both start from the old list.
+const queues = new Map();
+function queued(key, fn) {
+  const p = (queues.get(key) ?? Promise.resolve()).then(fn);
+  queues.set(key, p.catch(() => {}));
+  return p;
+}
+const addShots = (key, files) => queued(key, () => addShotsNow(key, files));
+const removeShot = (key, id) => queued(key, () => removeShotNow(key, id));
+async function addShotsNow(key, files) {
+  const e = entry(key);
+  for (const f of files) {
+    if (!f.type.startsWith("image/")) continue;
+    try {
+      const n = await normalise(f);
+      const id = key + ":" + Date.now() + ":" + Math.random().toString(36).slice(2, 7);
+      const name = f.name && f.name !== "image.png" ? f.name : `${byKey.get(key).id}-${e.shots.length + 1}.${n.type === "image/jpeg" ? "jpg" : "png"}`;
+      const rec = { id, key, name, type: n.type, w: n.w, h: n.h, blob: n.blob };
+      if (db) await tx("shots", "readwrite", (s) => s.put(rec));
+      shots.set(id, { ...rec, url: URL.createObjectURL(n.blob) });
+      e.shots = [...e.shots, id];
+    } catch { /* not an image this browser can read */ }
+  }
+  await saveEntry(key, e);
+  drawShots(key);
+}
+async function removeShotNow(key, id) {
+  const e = entry(key); e.shots = e.shots.filter((x) => x !== id);
+  const s = shots.get(id); if (s) URL.revokeObjectURL(s.url); shots.delete(id);
+  if (db) await tx("shots", "readwrite", (st) => st.delete(id));
+  await saveEntry(key, e); drawShots(key);
+}
+
+// ---- Page ----
+function applyLang() {
+  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
+  $("lang").textContent = lang === "ar" ? "English" : "العربية";
+  fillFilters(); render();
+}
+function fillFilters() {
+  const opt = (sel, values, label) => {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${esc(t("all"))}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(label ? label(v) : v)}</option>`).join("");
+    sel.value = cur;
+  };
+  opt($("fPart"), [...new Set(cases.map((c) => c.part))].sort());
+  opt($("fRound"), [...new Set(cases.map((c) => c.round).filter(Boolean))].sort());
+  opt($("fStatus"), [...STATUSES, "unset"], (s) => t(s));
+}
+function visible() {
+  const p = $("fPart").value, r = $("fRound").value, s = $("fStatus").value, q = $("fText").value.trim().toLowerCase();
+  return cases.filter((c) => {
+    const st = entry(c.key).status || "unset";
+    return (!p || c.part === p) && (!r || c.round === r) && (!s || st === s) &&
+      (!q || [c.key, c.id, c.title, c.who, c.expected, ...c.steps, entry(c.key).comment].join(" ").toLowerCase().includes(q));
+  });
+}
+function counts() {
+  const n = (s) => cases.filter((c) => (entry(c.key).status || "unset") === s).length;
+  $("counts").innerHTML = [...STATUSES, "unset"].map((s) => `<span class="count"><b>${n(s)}</b>${esc(t(s))}</span>`).join("") +
+    `<span class="count"><b>${cases.length}</b>${esc(t("all"))}</span>`;
+}
+function caseHtml(c) {
+  const e = entry(c.key);
+  return `<article class="case st-${e.status || "unset"}" data-key="${esc(c.key)}">
+    <div class="body">
+      <h3 dir="auto"><code>${esc(c.id)}</code> ${esc(c.title)}</h3>
+      <div class="meta"><span><code>${esc(c.key)}</code></span><span>${esc(t("part"))} ${esc(c.part)}</span>${c.round ? `<span>${esc(t("round"))} ${esc(c.round)}</span>` : ""}
+        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))}</a></div>
+      ${c.who ? `<div><span class="lbl">${esc(t("who"))}</span> <span dir="auto">${esc(c.who)}</span></div>` : ""}
+      ${c.steps.length ? `<div class="lbl">${esc(t("steps"))}</div><ol class="steps" dir="auto">${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
+      ${c.expected ? `<div class="lbl">${esc(t("expected"))}</div><p class="exp" dir="auto">${esc(c.expected)}</p>` : ""}
+    </div>
+    <div class="rec">
+      <div class="status" role="group">${STATUSES.map((s) => `<button type="button" class="${s}" data-s="${s}" aria-pressed="${e.status === s}">${esc(t(s))}</button>`).join("")}</div>
+      <label>${esc(t("comment"))}<textarea data-f="comment" dir="auto">${esc(e.comment)}</textarea></label>
+      <div class="drop" tabindex="0">${esc(t("drop"))}</div>
+      <div class="shots"></div>
+      <div class="saved">${e.at ? esc(t("saved") + " " + e.at) : ""}</div>
+    </div>
+  </article>`;
+}
+function drawShots(key) {
+  const box = document.querySelector(`.case[data-key="${key}"] .shots`);
+  if (!box) return;
+  box.innerHTML = entry(key).shots.map((id) => shots.get(id)).filter(Boolean)
+    .map((s) => `<span class="shot"><img src="${s.url}" alt="${esc(s.name)}" title="${esc(s.name)}" data-id="${esc(s.id)}"><button type="button" data-rm="${esc(s.id)}" aria-label="${esc(t("remove"))}">×</button></span>`).join("");
+}
+function render() {
+  const list = visible();
+  $("list").innerHTML = list.length ? list.map(caseHtml).join("") : `<div class="empty">${esc(t("none"))}</div>`;
+  list.forEach((c) => drawShots(c.key));
+  counts();
+}
+
+let activeKey = "";
+const setActive = (key) => {
+  if (activeKey === key) return;
+  document.querySelector(".case.active")?.classList.remove("active");
+  activeKey = key; document.querySelector(`.case[data-key="${key}"]`)?.classList.add("active");
+};
+$("list").addEventListener("focusin", (ev) => { const a = ev.target.closest(".case"); if (a) setActive(a.dataset.key); });
+$("list").addEventListener("click", async (ev) => {
+  const art = ev.target.closest(".case"); if (!art) return;
+  const key = art.dataset.key; setActive(key);
+  const sb = ev.target.closest("[data-s]");
+  if (sb) {
+    const e = entry(key); e.status = e.status === sb.dataset.s ? "" : sb.dataset.s;
+    art.querySelectorAll("[data-s]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === e.status)));
+    art.className = `case active st-${e.status || "unset"}`;
+    await saveEntry(key, e); return;
+  }
+  const rm = ev.target.closest("[data-rm]"); if (rm) { await removeShot(key, rm.dataset.rm); return; }
+  const im = ev.target.closest("img[data-id]");
+  if (im) { const lb = $("lightbox"); lb.querySelector("img").src = im.src; lb.querySelector("p").textContent = im.title; lb.style.display = "flex"; return; }
+  if (ev.target.closest(".drop")) { $("pick").dataset.key = key; $("pick").click(); }
+});
+$("pick").addEventListener("change", async () => { const key = $("pick").dataset.key; if (key) await addShots(key, [...$("pick").files]); $("pick").value = ""; });
+// A timer per case: typing in the next case never cancels this one's save.
+const typing = new Map();
+$("list").addEventListener("input", (ev) => {
+  const art = ev.target.closest(".case"); if (!art || ev.target.dataset.f !== "comment") return;
+  const key = art.dataset.key, e = entry(key); e.comment = ev.target.value; entries.set(key, e);
+  clearTimeout(typing.get(key)); typing.set(key, setTimeout(() => { typing.delete(key); saveEntry(key, e); }, 400));
+});
+$("list").addEventListener("dragover", (ev) => { const d = ev.target.closest(".drop"); if (d) { ev.preventDefault(); d.classList.add("over"); } });
+$("list").addEventListener("dragleave", (ev) => ev.target.closest(".drop")?.classList.remove("over"));
+$("list").addEventListener("drop", async (ev) => {
+  const d = ev.target.closest(".drop"); if (!d) return;
+  ev.preventDefault(); d.classList.remove("over");
+  const key = d.closest(".case").dataset.key; setActive(key); await addShots(key, [...ev.dataTransfer.files]);
+});
+document.addEventListener("paste", async (ev) => {
+  const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  // The case the paste is in, else the last one clicked if it is still on screen (not filtered away).
+  const key = ev.target.closest?.(".case")?.dataset.key || (document.querySelector(`.case[data-key="${activeKey}"]`) ? activeKey : "");
+  if (!key) return;
+  ev.preventDefault(); await addShots(key, files);
+});
+$("lightbox").addEventListener("click", () => ($("lightbox").style.display = "none"));
+["fPart", "fRound", "fStatus"].forEach((id) => $(id).addEventListener("change", render));
+$("fText").addEventListener("input", render);
+$("lang").addEventListener("click", () => { lang = lang === "en" ? "ar" : "en"; try { localStorage.setItem("rabaed-uat-sheet-lang", lang); } catch {} applyLang(); });
+$("tester").addEventListener("input", () => { if (db) tx("meta", "readwrite", (s) => s.put($("tester").value, "tester")).catch(() => {}); });
+
+function flash(m) { $("msg").textContent = m; setTimeout(() => ($("msg").textContent = ""), 6000); }
+function download(name, blob) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+const fileTag = () => { const n = $("tester").value.trim(); return n ? n.replace(/[^\p{L}\p{N}]+/gu, "-") + "-" : ""; };
+const roundTag = DATA.round.replace(/[^\p{L}\p{N}]+/gu, "-");
+
+// ---- Excel: Test Cases, Screenshots (pictures in their row), Summary ----
+const EN = (s) => T.en[s || "unset"];
+$("export").addEventListener("click", async () => {
+  const tester = $("tester").value.trim(), when = now();
+  const head = ["Key", "ID", "Part", "Round", "Title", "Sign in as", "Steps", "Expected result", "UAT link", "Status", "Comment", "Screenshots", "Tester", "Updated"];
+  const table = [head, ...cases.map((c) => {
+    const e = entry(c.key);
+    const names = e.shots.map((id) => shots.get(id)?.name).filter(Boolean);
+    return [c.key, c.id, c.part, c.round, c.title, c.who, c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"), c.expected, c.url,
+      EN(e.status), e.comment, names.length ? `${names.length} on the Screenshots sheet: ${names.join(", ")}` : "", e.status || e.comment || names.length ? tester : "", e.at];
+  })];
+  const shotRows = [["Key", "ID", "File", "Screenshot"]], images = [], heights = {};
+  for (const c of cases) for (const id of entry(c.key).shots) {
+    const s = shots.get(id); if (!s) continue;
+    const scale = Math.min(1, 480 / s.w, 360 / s.h), w = Math.round(s.w * scale), h = Math.round(s.h * scale);
+    const row = shotRows.length;
+    shotRows.push([c.key, c.id, s.name, ""]);
+    images.push({ row, col: 3, data: new Uint8Array(await s.blob.arrayBuffer()), ext: s.type === "image/jpeg" ? "jpeg" : "png", width: w, height: h, offsetX: 4, offsetY: 4 });
+    heights[row] = Math.ceil((h + 8) * 0.75);
+  }
+  const n = (st) => cases.filter((c) => (entry(c.key).status || "") === st).length;
+  const summary = [["Item", "Value"], ["Round", DATA.round], ["Tester", tester], ["Exported", when], ["Sheet built", DATA.built], ["Test Cases", cases.length],
+    ["Pass", n("pass")], ["Fail", n("fail")], ["Blocked", n("blocked")], ["Not run", n("notrun")], ["Not set", n("")], ["Screenshots", images.length]];
+  const bytes = buildXlsx([
+    { name: "Test Cases", table, widths: [9, 9, 6, 7, 40, 24, 60, 50, 28, 9, 50, 30, 14, 18] },
+    { name: "Screenshots", table: shotRows, widths: [9, 9, 26, 70], rowHeights: heights, images },
+    { name: "Summary", table: summary, widths: [16, 40] },
+  ], fflate);
+  download(`Rabaed-UAT-${roundTag}-${fileTag()}${stamp()}.xlsx`, new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  flash(t("exported"));
+});
+
+// ---- JSON: the work and its screenshots, to move between machines ----
+const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+$("saveJson").addEventListener("click", async () => {
+  const out = { sheet: "rabaed-uat-sheet", round: DATA.round, tester: $("tester").value, at: new Date().toISOString(), entries: {}, shots: [] };
+  for (const [k, e] of entries) if (e.status || e.comment || e.shots.length) out.entries[k] = e;
+  for (const s of shots.values()) out.shots.push({ id: s.id, key: s.key, name: s.name, type: s.type, w: s.w, h: s.h, data: b64(new Uint8Array(await s.blob.arrayBuffer())) });
+  download(`Rabaed-UAT-${roundTag}-${fileTag()}${stamp()}.json`, new Blob([JSON.stringify(out)], { type: "application/json" }));
+  flash(t("savedJson"));
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async () => {
+  const f = $("importFile").files[0]; $("importFile").value = ""; if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); if (data.sheet !== "rabaed-uat-sheet") throw new Error(); } catch { flash(t("badJson")); return; }
+  for (const s of data.shots ?? []) {
+    if (!byKey.has(s.key)) continue;
+    const blob = new Blob([fromB64(s.data)], { type: s.type });
+    const rec = { id: s.id, key: s.key, name: s.name, type: s.type, w: s.w, h: s.h, blob };
+    if (db) await tx("shots", "readwrite", (st) => st.put(rec));
+    shots.set(s.id, { ...rec, url: URL.createObjectURL(blob) });
+  }
+  let n = 0;
+  for (const [k, e] of Object.entries(data.entries ?? {})) {
+    if (!byKey.has(k)) continue;
+    // Screenshots of the entry being replaced that the loaded one doesn't keep are removed, not left orphaned.
+    for (const old of entry(k).shots) if (!e.shots.includes(old)) {
+      const s = shots.get(old); if (s) URL.revokeObjectURL(s.url); shots.delete(old);
+      if (db) await tx("shots", "readwrite", (st) => st.delete(old));
+    }
+    entries.set(k, e); n++;
+    if (db) await tx("entries", "readwrite", (st) => st.put(e, k));
+  }
+  if (data.tester && !$("tester").value) $("tester").value = data.tester;
+  render(); flash(`${t("loaded")} ${n} ${t("cases")}`);
+});
+
+// ---- Start ----
+(async () => {
+  $("built").textContent = DATA.built;
+  try { lang = localStorage.getItem("rabaed-uat-sheet-lang") === "ar" ? "ar" : "en"; } catch {}
+  try {
+    db = await openDb();
+    for (const [k, e] of await all("entries")) entries.set(k, e);
+    for (const [, s] of await all("shots")) shots.set(s.id, { ...s, url: URL.createObjectURL(s.blob) });
+    const tester = await tx("meta", "readonly", (s) => s.get("tester"));
+    if (tester) $("tester").value = tester;
+  } catch { db = undefined; flash(T.en.notSaved); }
+  applyLang();
+})();
+</script>
+</body>
+</html>

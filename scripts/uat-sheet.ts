@@ -1,0 +1,241 @@
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { credentialsFrom, type Credentials } from "./jira-upload.ts";
+
+// The UAT test sheet (RP-1163): one self-contained HTML file a tester opens with no server or
+// sign-in. It lists a round's Test Cases, records a status, a comment and screenshots for each
+// (kept in the browser's IndexedDB), and exports them to Excel with the screenshots embedded.
+//
+// Usage:
+//   node scripts/uat-sheet.ts --round "Round 1" [--jql "<JQL>"] [--uat-url <web url>] [--out <file>]
+//   node scripts/uat-sheet.ts --round "Round 1" --issues <issues.json>
+//   node scripts/uat-sheet.ts --round "Round 1" --scenarios planning/uat/round-0/test-cases.json
+//   add --rounds 0,1 to keep only the cases whose first round is one of those.
+// With --issues it reads Jira's search answer (or a list of issues) from a file; with --scenarios the
+// round's local test-cases.json (the scenarios the Jira Test Cases were made from); otherwise it
+// asks Jira with JIRA_EMAIL and JIRA_API_TOKEN from the environment (never printed, never written).
+// The HTML holds Test Case text only: no secrets, no tokens, no customer data.
+
+const JIRA = "https://rabaedsa.atlassian.net";
+const here = dirname(fileURLToPath(import.meta.url));
+const root = resolve(here, "..");
+export const DEFAULT_JQL = 'project = RP AND issuetype = "Test Case" AND labels = uat ORDER BY key';
+export const DEFAULT_UAT_URL = "https://rabaed-uat-web.vercel.app";
+
+export interface JiraIssue {
+  key: string;
+  fields: { summary: string; labels?: string[]; description?: unknown; status?: { name: string } };
+}
+
+export interface SheetCase {
+  key: string;
+  id: string;
+  title: string;
+  part: string;
+  round: string;
+  who: string;
+  steps: string[];
+  expected: string;
+  url: string;
+}
+
+type Node = { type?: string; text?: string; content?: Node[]; marks?: { type: string }[]; attrs?: { level?: number } };
+
+/** Jira's document format (REST v3) as the markdown its MCP shows, enough for a Test Case's sections. */
+function adfToMarkdown(node: Node): string {
+  const inline = (n: Node): string =>
+    n.type === "text" ? (n.marks?.some((m) => m.type === "strong") ? `**${n.text ?? ""}**` : (n.text ?? "")) : n.type === "hardBreak" ? "\n" : (n.content ?? []).map(inline).join("");
+  const block = (n: Node): string => {
+    switch (n.type) {
+      case "doc":
+        return (n.content ?? []).map(block).join("\n\n");
+      case "heading":
+        return `${"#".repeat(n.attrs?.level ?? 2)} ${inline(n)}`;
+      case "orderedList":
+        return (n.content ?? []).map((li, i) => `${i + 1}. ${(li.content ?? []).map(block).join(" ")}`).join("\n");
+      case "bulletList":
+        return (n.content ?? []).map((li) => `* ${(li.content ?? []).map(block).join(" ")}`).join("\n");
+      default:
+        return inline(n);
+    }
+  };
+  return block(node);
+}
+
+const descriptionText = (d: unknown): string => (typeof d === "string" ? d : d && typeof d === "object" ? adfToMarkdown(d as Node) : "");
+
+/** The markdown under `## <name>` up to the next heading. */
+function section(md: string, name: string): string {
+  const m = new RegExp(`^#{1,3}\\s+${name}\\s*$([\\s\\S]*?)(?=^#{1,3}\\s|$(?![\\s\\S]))`, "m").exec(md);
+  return (m?.[1] ?? "").trim();
+}
+
+const plain = (s: string) => s.replace(/\*\*|`/g, "").trim();
+
+/** Where a case starts on the UAT: Rabaed Admin for ADM cases, the web app in English otherwise. */
+export function startUrl(part: string, uatUrl: string): string {
+  const web = uatUrl.replace(/\/+$/, "");
+  return part === "ADM" ? web.replace("-web.", "-admin.") : `${web}/en`;
+}
+
+/** One Test Case issue as a row of the sheet. */
+export function caseFromIssue(issue: JiraIssue, uatUrl: string): SheetCase {
+  const md = descriptionText(issue.fields.description);
+  const [id = issue.key, ...rest] = issue.fields.summary.trim().split(/\s+/);
+  const labels = issue.fields.labels ?? [];
+  const part = (/^uat-part-([a-z0-9]+)$/.exec(labels.find((l) => l.startsWith("uat-part-")) ?? "")?.[1] ?? id.split("-")[0] ?? "").toUpperCase();
+  const round = /^uat-round-(.+)$/.exec(labels.find((l) => l.startsWith("uat-round-")) ?? "")?.[1] ?? "";
+  const who = plain(/\*\*Who:\*\*\s*(.+)/.exec(md)?.[1] ?? "");
+  const steps = section(md, "Steps")
+    .split("\n")
+    .map((l) => /^\s*\d+[.)]\s+(.*)$/.exec(l)?.[1]?.trim())
+    .filter((s): s is string => Boolean(s))
+    .map(plain);
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the Test Case's own heading in Jira, read as written.
+  const expected = plain(section(md, "Expected result"));
+  return { key: issue.key, id, title: rest.join(" "), part, round, who, steps, expected, url: startUrl(part, uatUrl) };
+}
+
+/** A scenario of planning/uat/<round>/test-cases.json, the source the Jira Test Cases were made from. */
+interface ScenarioRow {
+  id: string;
+  jira: string;
+  part: string;
+  title: string;
+  who?: string;
+  steps?: string;
+  expected?: string;
+  round?: string;
+  waits?: string;
+}
+
+// The round a case first runs, as its Jira label uat-round-N says (planning/uat/strategy.md 10.1):
+// what it waits for decides it, and a case waiting for nothing runs in Round 0.
+const ROUND_BY_EPIC: [RegExp, string][] = [
+  [/RP-589\b/, "5"],
+  [/RP-27\b/, "4"],
+  [/RP-28\b/, "3"],
+  [/RP-23\b/, "2"],
+  [/RP-588\b/, "1"],
+];
+export const roundFromWaits = (waits = ""): string => (/^\s*now\b/i.test(waits) || !waits.trim() ? "0" : (ROUND_BY_EPIC.find(([re]) => re.test(waits))?.[1] ?? ""));
+
+/** The round's local test-cases.json as rows of the sheet; "1) a 2) b" steps split into a list. */
+export function casesFromScenarios(text: string, uatUrl: string): SheetCase[] {
+  return (JSON.parse(text) as ScenarioRow[]).map((p) => ({
+    key: p.jira,
+    id: p.id,
+    title: p.title,
+    part: p.part,
+    round: p.round ?? roundFromWaits(p.waits),
+    who: plain(p.who ?? ""),
+    steps: numberedSteps(p.steps ?? ""),
+    expected: plain(p.expected ?? ""),
+    url: startUrl(p.part, uatUrl),
+  }));
+}
+
+/** "1) a 2) b" as ["a", "b"]: only the numbers in order split it, so "port 4750) on" stays inside its step. */
+export function numberedSteps(text: string): string[] {
+  const steps: string[] = [];
+  let rest = text.trim();
+  for (let n = 1; ; n++) {
+    const here = new RegExp(`^${n}\\)\\s+`).exec(rest);
+    if (!here) break;
+    rest = rest.slice(here[0].length);
+    const next = new RegExp(`(?:^|\\s)${n + 1}\\)\\s+`).exec(rest);
+    steps.push(plain(next ? rest.slice(0, next.index) : rest));
+    if (!next) return steps.filter(Boolean);
+    rest = rest.slice(next.index).trim();
+  }
+  return rest ? [...steps, plain(rest)].filter(Boolean) : steps.filter(Boolean);
+}
+
+function findFflate(): string {
+  const store = join(root, "node_modules", ".pnpm");
+  const dir = readdirSync(store)
+    .filter((d) => d.startsWith("fflate@"))
+    .sort()
+    .pop();
+  if (!dir) throw new Error("fflate is not in node_modules/.pnpm: run pnpm install");
+  return readFileSync(join(store, dir, "node_modules", "fflate", "umd", "index.js"), "utf8");
+}
+
+/** JSON safe inside a <script>: no "</" can close it. */
+const scriptJson = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c").replace(new RegExp("[\\u2028\\u2029]", "g"), (c) => `\\u${c.charCodeAt(0).toString(16)}`);
+
+/** The sheet's HTML: the template with the cases, fflate and the Excel writer inlined. */
+export function renderSheet({ round, cases, built }: { round: string; cases: SheetCase[]; built: string }): string {
+  const template = readFileSync(join(here, "uat-sheet", "template.html"), "utf8");
+  const writer = readFileSync(join(here, "uat-sheet", "xlsx.mjs"), "utf8").replace(/^export /gm, "");
+  return template
+    .replace("/*__FFLATE__*/", () => findFflate())
+    .replace("/*__XLSX__*/", () => writer)
+    .replace("/*__DATA__*/null", () => scriptJson({ round, built, cases }))
+    .replaceAll("__ROUND__", round.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!));
+}
+
+/** Every issue the JQL finds, page by page (Jira's enhanced search). */
+export async function searchIssues(jql: string, credentials: Credentials, fetchImpl: typeof fetch = fetch): Promise<JiraIssue[]> {
+  const headers = { Authorization: `Basic ${Buffer.from(`${credentials.email}:${credentials.token}`).toString("base64")}`, Accept: "application/json", "Content-Type": "application/json" };
+  const issues: JiraIssue[] = [];
+  let nextPageToken: string | undefined;
+  do {
+    const body = { jql, fields: ["summary", "labels", "description", "status"], maxResults: 100, ...(nextPageToken ? { nextPageToken } : {}) };
+    const response = await fetchImpl(`${JIRA}/rest/api/3/search/jql`, { method: "POST", headers, body: JSON.stringify(body) });
+    // Status only: Jira's error text is not echoed.
+    if (!response.ok) throw new Error(`Jira search answered ${response.status}`);
+    const page = (await response.json()) as { issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean };
+    issues.push(...page.issues);
+    nextPageToken = page.isLast === false || (page.nextPageToken && page.isLast !== true) ? page.nextPageToken : undefined;
+  } while (nextPageToken);
+  return issues;
+}
+
+/** Issues from a saved file: Jira's search answer, the MCP's `{ issues: { nodes } }`, or a plain list. */
+export function issuesFromFile(text: string): JiraIssue[] {
+  const data = JSON.parse(text) as unknown;
+  if (Array.isArray(data)) return data as JiraIssue[];
+  const issues = (data as { issues?: unknown }).issues;
+  if (Array.isArray(issues)) return issues as JiraIssue[];
+  if (issues && typeof issues === "object" && Array.isArray((issues as { nodes?: unknown }).nodes)) return (issues as { nodes: JiraIssue[] }).nodes;
+  throw new Error("The issues file holds no issues: expected a list, { issues: [...] } or { issues: { nodes: [...] } }.");
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+function arg(argv: string[], name: string): string | undefined {
+  const i = argv.indexOf(name);
+  return i === -1 ? undefined : argv[i + 1];
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const round = arg(argv, "--round");
+  if (!round) throw new Error('usage: node scripts/uat-sheet.ts --round "Round 1" [--jql <JQL> | --issues <file> | --scenarios <test-cases.json>] [--rounds 0,1] [--uat-url <url>] [--out <file>]');
+  const uatUrl = arg(argv, "--uat-url") ?? DEFAULT_UAT_URL;
+  const file = arg(argv, "--issues");
+  try {
+    process.loadEnvFile(join(root, ".env"));
+  } catch {
+    // No .env: the environment alone.
+  }
+  const scenarios = arg(argv, "--scenarios");
+  const unsorted = scenarios
+    ? casesFromScenarios(readFileSync(scenarios, "utf8"), uatUrl)
+    : (file ? issuesFromFile(readFileSync(file, "utf8")) : await searchIssues(arg(argv, "--jql") ?? DEFAULT_JQL, credentialsFrom(process.env))).map((i) => caseFromIssue(i, uatUrl));
+  const only = arg(argv, "--rounds")?.split(",").map((r) => r.trim());
+  const cases = unsorted.filter((c) => !only || only.includes(c.round)).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+  const out = arg(argv, "--out") ?? join(root, "planning", "uat", "sheet", `${slug(round)}.html`);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, renderSheet({ round, cases, built: new Date().toISOString().slice(0, 10) }));
+  console.log(`Wrote ${out}: ${cases.length} Test Cases.`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}
