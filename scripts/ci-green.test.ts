@@ -1,10 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
-  CI_OWN_FILES,
   CI_WORKFLOW,
   ciOverHttp,
   ciOwnChanges,
@@ -198,11 +197,11 @@ describe("isCiOwnFile", () => {
       expect(isCiOwnFile(path), path).toBe(false);
   });
 
-  it("names the image CI's 'web image starts' job builds (Main 6 on #580)", () => {
+  it("names the image CI's 'web image starts' job builds", () => {
     for (const path of ["Dockerfile", ".dockerignore", "apps/web/Dockerfile"]) expect(isCiOwnFile(path), path).toBe(true);
   });
 
-  it("names the shared test helpers: a helper that returns early turns every test using it green (Main 6 on #580)", () => {
+  it("names the shared test helpers: a helper that returns early turns every test using it green", () => {
     for (const path of [
       "packages/db/test-support/hidden-from.ts",
       "packages/db/test-support/id-sweep.ts",
@@ -217,13 +216,17 @@ describe("isCiOwnFile", () => {
     ])
       expect(isCiOwnFile(path), path).toBe(true);
   });
+
+  it("names the repo-wide checks unit tests run against the real repo: they judge, they are not code under test", () => {
+    for (const path of ["scripts/check-scenario-ids.ts", "scripts/check-leak-channels.ts", "scripts/check-hidden-asserts.ts"]) expect(isCiOwnFile(path), path).toBe(true);
+  });
 });
 
 describe("a PR that weakens expectHiddenFrom", () => {
   it("gets no CI credit: every visibility scenario would pass with it returning early", () => {
-    const own = ciOwnChanges(["packages/db/test-support/hidden-from.ts", "apps/api/src/app.ts"], () => ({ before: undefined, after: undefined }));
-    expect(own).toEqual(["packages/db/test-support/hidden-from.ts"]);
-    const verdict = ciVerdict(HEAD, PR, own, evidence(run()));
+    const ownChanged = ciOwnChanges(["packages/db/test-support/hidden-from.ts", "apps/api/src/app.ts"], () => ({ before: undefined, after: undefined }));
+    expect(ownChanged).toEqual(["packages/db/test-support/hidden-from.ts"]);
+    const verdict = ciVerdict(HEAD, PR, ownChanged, evidence(run()));
     expect(verdict.state).toBe("refused");
     if (verdict.state === "refused") expect(verdict.reason).toContain("packages/db/test-support/hidden-from.ts");
   });
@@ -235,32 +238,59 @@ describe("a PR that weakens expectHiddenFrom", () => {
  */
 const CODE_UNDER_TEST = ["packages/db/dev-tools/", "apps/web/next.config.ts", "scripts/screens-examples/", "scripts/uat-sheet/"];
 
+/** Tests whose code samples hold import lines that name no real file (lint rules' tests). */
+const SAMPLES = ["packages/eslint-plugin/src/rules.test.ts", "scripts/ci-green.test.ts", "scripts/uat-imports.test.ts"];
+
 describe("every helper a test imports", () => {
   const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.test.ts", "*.test.tsx"], { encoding: "utf8" }).stdout.split("\0").filter(Boolean);
-  // `@rabaed/<package>/<path>`: the package's folder, as the workspace resolves it.
+  const workspaces = ["apps", "packages"].flatMap((root) =>
+    spawnSync("git", ["ls-files", "--", `${root}/*/package.json`], { encoding: "utf8" })
+      .stdout.split("\n")
+      .filter(Boolean)
+      .map((file) => ({ dir: posix.dirname(file), ...(JSON.parse(readFileSync(file, "utf8")) as { name: string; exports?: Record<string, string> }) })),
+  );
+  const unresolved = new Set<string>();
+  const asFile = (base: string) => [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find((path) => existsSync(path) && !statSync(path).isDirectory());
+  // A relative import, or a workspace package's own (`@rabaed/<name>[/<sub>]`, by its `exports` map as pnpm resolves
+  // it); undefined for any other package. Throws for one of ours it cannot find, so nothing slips past unread.
   const resolve = (from: string, specifier: string): string | undefined => {
-    if (specifier.startsWith(".")) return posix.normalize(posix.join(posix.dirname(from), specifier));
-    const scoped = /^@rabaed\/([\w-]+)\/(.+)$/.exec(specifier);
-    if (!scoped) return undefined;
-    const base = `packages/${scoped[1]}/${scoped[2]}`;
-    return [`${base}.ts`, `${base}/index.ts`, base].find((path) => existsSync(path));
+    if (specifier.startsWith(".")) {
+      const found = asFile(posix.normalize(posix.join(posix.dirname(from), specifier)));
+      // Not a file: an import line inside a code sample (a lint rule's test); `SAMPLES` names where that is expected.
+      if (found === undefined) unresolved.add(`${from}: "${specifier}"`);
+      return found;
+    }
+    const workspace = workspaces.find((each) => specifier === each.name || specifier.startsWith(`${each.name}/`));
+    if (workspace === undefined) return undefined;
+    const sub = `.${specifier.slice(workspace.name.length)}`;
+    const target = workspace.exports?.[sub] ?? (sub === "." ? undefined : sub);
+    const found = target === undefined ? asFile(`${workspace.dir}/src/index`) : asFile(posix.join(workspace.dir, target));
+    if (found === undefined) unresolved.add(`${from}: "${specifier}"`);
+    return found;
   };
+  // `from "x"` (one line or several), `import "x"`, `import("x")`, `vi.mock("x")`, `require("x")`, either quote.
+  const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|\bvi\.mock\(\s*|\brequire\(\s*)(["'])([^"'\n]+)\1/g;
 
-  // A scripts/ file a test imports is the code under test, as src/ is; its fixtures are not.
+  it("reads every import form", () => {
+    const text = `import a from "./a.ts";\nimport {\n  b,\n} from './b.ts';\nimport "./c.ts";\nawait import("./d.ts");\nvi.mock("./e.ts");\nrequire("./f.ts");`;
+    expect([...text.matchAll(SPECIFIER)].map(([, , specifier]) => specifier)).toEqual(["./a.ts", "./b.ts", "./c.ts", "./d.ts", "./e.ts", "./f.ts"]);
+  });
+
+  // A scripts/ file a test imports is the code under test, as src/ is; its fixtures and the checks are not.
   it("is CI's own, unless it is code under test (under src/, or a scripts/ file) or another test", () => {
     expect(tracked.length).toBeGreaterThan(100);
     const missing = new Set<string>();
     for (const file of tracked) {
-      for (const [, specifier = ""] of readFileSync(file, "utf8").matchAll(/(?:from|import\() ?"([^"]+)"/g)) {
+      for (const [, , specifier = ""] of readFileSync(file, "utf8").matchAll(SPECIFIER)) {
         const path = resolve(file, specifier);
-        if (path === undefined || /\.test\.tsx?$/.test(path) || /(^|\/)src\//.test(path) || !existsSync(path)) continue;
-        if (/^scripts\/[^/]+\.ts$/.test(path) && !path.endsWith(".fixtures.ts")) continue;
-        if (CODE_UNDER_TEST.some((prefix) => path.startsWith(prefix))) continue;
-        if (!/\.[cm]?[jt]sx?$/.test(path)) continue;
-        if (!isCiOwnFile(path)) missing.add(`${path} (imported by ${file})`);
+        if (path === undefined || /\.test\.[cm]?[jt]sx?$/.test(path) || /(^|\/)src\//.test(path) || !/\.[cm]?[jt]sx?$/.test(path)) continue;
+        if (isCiOwnFile(path) || CODE_UNDER_TEST.some((prefix) => path.startsWith(prefix))) continue;
+        if (/^scripts\/[^/]+\.ts$/.test(path)) continue;
+        missing.add(`${path} (imported by ${file})`);
       }
     }
     expect([...missing]).toEqual([]);
+    expect([...unresolved].filter((entry) => !SAMPLES.some((file) => entry.startsWith(`${file}:`)))).toEqual([]);
   });
 });
 
@@ -306,7 +336,9 @@ describe("CI_OWN_FILES", () => {
   });
 
   it("names every scripts/ file the listed scripts import, all the way down", () => {
-    const listed = CI_OWN_FILES.filter((entry) => /^scripts\/[\w.-]+\.ts$/.test(entry));
+    const listed = readdirSync("scripts")
+      .map((name) => `scripts/${name}`)
+      .filter((path) => path.endsWith(".ts") && !/\.test\.ts$/.test(path) && isCiOwnFile(path));
     const seen = new Set<string>();
     const walk = (path: string) => {
       if (seen.has(path)) return;

@@ -48,24 +48,29 @@ export const CI_OWN_FILES: readonly string[] = [
   "**/Dockerfile*",
   "**/.dockerignore",
   // The shared test helpers (`expectHiddenFrom`, the towers, the id sweeps): one that returns early turns every test
-  // using it green. Helper files straight in a test/ folder count too (`isTestHelper`).
+  // using it green. Any other non-test code under a test/ folder counts too (`isTestHelper`).
   "**/test-support/**",
   "**/test/support/**",
   "scripts/*.fixtures.ts",
+  // The repo-wide checks unit tests run against the real repo (scenario IDs, leak channels, hidden asserts): CI's
+  // judges, not code under test. Their own tests match too.
+  "scripts/check-*.ts",
   // Dependencies: a swapped vitest, an override or an install script decides what the tests do.
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".npmrc",
-  // The vitest configs' global setups.
+  // The vitest configs' global setups (the other two are under test-support/ and test/support/).
   "scripts/test-services.ts",
-  "packages/db/test-support/global-setup.ts",
-  "apps/api/test/support/seed-demo.ts",
   // The scripts ci.yml and the root scripts run, and the scripts/ files they import.
   "scripts/check-migration-drift.ts",
   "scripts/check-migrations-hidden-sort.ts",
   "scripts/check-migrations-immutable.ts",
   "scripts/check-workflows.ts",
+  "scripts/ci-green.ts",
+  "scripts/claims.ts",
   "scripts/claude-sessions.ts",
+  "scripts/db-fn.ts",
+  "scripts/design-strip-fonts.ts",
   "scripts/desktop-sessions.ts",
   "scripts/docs-only.ts",
   "scripts/hidden-columns.ts",
@@ -74,12 +79,16 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/new-screenshots-reporter.ts",
   "scripts/paths.ts",
   "scripts/pnpm.ts",
+  "scripts/pr-overlap.ts",
   "scripts/reviewed-label.ts",
   "scripts/reviewed-required.ts",
   "scripts/session-lock.ts",
   "scripts/story-run.ts",
   "scripts/test-timing.ts",
+  "scripts/test-titles.ts",
   "scripts/typecheck.ts",
+  "scripts/verify-gate.ts",
+  "scripts/visibility-scenarios.ts",
   "scripts/worktrees-stale.ts",
   "scripts/worktrees.ts",
 ];
