@@ -37,11 +37,11 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
 
   // RP-1167: the check fails while auto-merge is on, and turning it on or off starts no other run of it. These land in
   // the workflow's own PR after this test change (rule 3), so they wait for it.
-  it.skipIf(!types.includes("auto_merge_enabled"))("re-runs the moment auto-merge is turned on or off (RP-1167)", () => {
+  it.skipIf(!types.some((type) => AUTO_MERGE_TYPES.includes(type)))("re-runs the moment auto-merge is turned on or off (RP-1167)", () => {
     expect(types).toEqual(expect.arrayContaining(AUTO_MERGE_TYPES));
   });
 
-  it.skipIf(!types.includes("auto_merge_enabled"))("may read the PR's issue events it judges the label and the queue entry by (RP-1167)", () => {
+  it.skipIf(!types.some((type) => AUTO_MERGE_TYPES.includes(type)))("may read the PR's issue events it judges the label and the queue entry by (RP-1167)", () => {
     expect(jobs[0]?.permissions?.issues).toBe("read");
   });
 
