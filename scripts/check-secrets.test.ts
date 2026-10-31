@@ -197,7 +197,7 @@ describe("scanStaged on real git output", () => {
 // CI's step in secret-scan.yml: a pull request's base..head, a queue entry's main..head, or main's HEAD.
 describe("scanRange on real git history", () => {
   let repo: string;
-  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "core.autocrlf=false", ...args], { cwd: repo, encoding: "utf8", stdio: "pipe" });
+  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", stdio: "pipe" });
   const commit = (file: string, text: string) => {
     writeFileSync(join(repo, file), text);
     git("add", "-A");
@@ -217,6 +217,13 @@ describe("scanRange on real git history", () => {
     commit("pr.ts", "const ok = 1;\n");
     expect(scanRange(repo, "main..pr")).toEqual([]);
     expect(scanRange(repo, "main..other")).toEqual([{ file: "other.ts", line: 1, rule: "github-token" }]);
+  });
+
+  it("reads a branch's whole history from one revision, the root commit included (main's push run)", () => {
+    writeFileSync(join(repo, "README.md"), `# repo\n${tokens.sendgrid}\n`);
+    git("commit", "-q", "-a", "--amend", "-m", "start");
+    commit("second.md", "clean\n");
+    expect(scanRange(repo, "HEAD")).toEqual([{ file: "README.md", line: 2, rule: "sendgrid-api-key" }]);
   });
 
   it("finds a token a later commit in the range removes: a pushed commit stays readable", () => {
@@ -253,7 +260,8 @@ describe("scanRange on real git history", () => {
     });
 
     it("refuses to run without the revisions, so an empty range in CI fails the step", () => {
-      expect(check()).toMatchObject({ status: 2, stderr: expect.stringContaining("--range needs the revisions") });
+      expect(check("")).toMatchObject({ status: 2, stderr: expect.stringContaining("--range needs the revisions") });
+      expect(check().status).toBe(2);
       expect(check("--staged").status).toBe(2);
     });
   });
