@@ -5,7 +5,7 @@
 import { sql } from "kysely";
 import type { Db } from "../src/client.ts";
 
-export { ageChanges, type AgeChanges, type AgedItem } from "./changes.ts";
+export { ageChanges, type AgeChanges, type AgeChangesOptions, type AgedItem } from "./changes.ts";
 export { JOBS, runJob, type JobConnections, type JobName, type JobRow, type JobRun, type RunJobOptions } from "./jobs.ts";
 export { AgeRefused, ageItems, ITEM_TIME_MAPS, ITEM_TIMES, type AgedRows, type AgeItem, type TableTimes } from "./age.ts";
 

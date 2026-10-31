@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgeCandidate } from "../packages/db/dev-tools/index.ts";
-import { parseAgeArgs, ageChanges } from "./uat-age.ts";
+import { ageChanges, describeChange, parseAgeArgs } from "./uat-age.ts";
 
 // `uat:age`'s pure part (RP-922, test 2): its arguments, and the plan it makes from the items whose
 // Document Number or Subject come close to what was asked. `--weeks N` leaves each item at Step Age N
@@ -114,5 +114,46 @@ describe("ageChanges", () => {
   it("reports every refusal at once, and plans nothing then", () => {
     const result = plan(["Roof", "Column formwork", "TWR-MAR-01-0004"]);
     expect(result).toEqual({ errors: [expect.stringContaining('"Roof"'), expect.stringContaining('"Column formwork"')] });
+  });
+});
+
+describe("inside the GitHub job: the log is public (Orchestrator, 2026-10-31)", () => {
+  // Texts no Document Number holds, so finding one in the output means item text leaked.
+  const secret = ["Hidden lintel", "Private pour", "Quiet mast", "Covert slab"];
+  const list = [
+    item("TWR-MAR-01-0020", "Hidden lintel"),
+    item("TWR-MAR-01-0021", "Private pour"),
+    item("TWR-WIR-01-0022", "private pour"),
+    item(null, "Quiet mast"),
+    item("TWR-MAR-01-0023", "Covert slab", { closed: true }),
+    item("TWR-MAR-01-0024", "Covert slab extra"),
+  ];
+  const leaks = (lines: string[]) => lines.filter((line) => secret.some((text) => line.toLowerCase().includes(text.toLowerCase())));
+
+  it("names every item by its Document Number or --item <n> only, in every refusal", () => {
+    const result = ageChanges({ items: ["Hidden", "Private pour", "Quiet mast", "Covert slab", "TWR-MAR-01-0020", "Hidden lintel"], weeks: 4 }, list, now, { itemText: false });
+    if (!("errors" in result)) throw new Error("expected refusals");
+    expect(result.errors).toEqual([
+      "--item 1 matches no item by Document Number or exact Subject. Close: TWR-MAR-01-0020",
+      "--item 2 matches 2 items; give one of their Document Numbers: TWR-MAR-01-0021, TWR-WIR-01-0022",
+      "--item 3 is a Draft: a Draft has no Step Age (ADR 0020)",
+      "TWR-MAR-01-0023 is closed: a closed item has no Step Age",
+      "TWR-MAR-01-0020 is named twice",
+    ]);
+    expect(leaks(result.errors)).toEqual([]);
+  });
+
+  it("prints a change by Document Number and Step Age only", () => {
+    const result = ageChanges({ items: ["Hidden lintel"], weeks: 4 }, list, now, { itemText: false });
+    if ("errors" in result) throw new Error(result.errors.join("; "));
+    const line = describeChange(result.items[0]!, { itemText: false });
+    expect(line).toMatch(/^TWR-MAR-01-0020: Step Age 1 → 4 for its holder's Company/);
+    expect(leaks([line])).toEqual([]);
+  });
+
+  it("still quotes Subjects on a lane", () => {
+    const result = ageChanges({ items: ["Hidden lintel"], weeks: 4 }, list, now);
+    if ("errors" in result) throw new Error(result.errors.join("; "));
+    expect(describeChange(result.items[0]!)).toContain('TWR-MAR-01-0020 "Hidden lintel"');
   });
 });

@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { ageItems, findAgeCandidates, type AgedItem, type AgedRows } from "../packages/db/dev-tools/index.ts";
 import { ageChanges } from "../packages/db/dev-tools/changes.ts";
 import { createDb } from "../packages/db/src/client.ts";
-import { guardedOrExit, laneOfEnv, loadToolEnv, runCli, type Target } from "./uat-guard.ts";
+import { guardedOrExit, laneOfEnv, loadToolEnv, printsItemText, runCli, type Target } from "./uat-guard.ts";
 export { ageChanges, type AgeChanges, type AgedItem } from "../packages/db/dev-tools/changes.ts";
 
 // `uat:age` (RP-922): moves chosen items back in time, so UAT can see Step Age it would otherwise wait
@@ -70,10 +70,10 @@ function spanOf(ms: number): string {
   return `${weeks} weeks ${days} days ${hours} hours`;
 }
 
-/** What the tool will do to one item, printed before it writes. */
-export function describeChange(item: AgedItem): string {
+/** What the tool will do to one item, printed before it writes; its Subject only where item text may be printed. */
+export function describeChange(item: AgedItem, { itemText }: { itemText: boolean } = { itemText: true }): string {
   const { own, others } = item.stepAge;
-  return `${item.documentNumber} "${item.subject}": Step Age ${own.from} → ${own.to} for its holder's Company, ${others.from} → ${others.to} for the other Companies; every time of it moves back ${spanOf(item.shiftMs)}`;
+  return `${item.documentNumber}${itemText ? ` "${item.subject}"` : ""}: Step Age ${own.from} → ${own.to} for its holder's Company, ${others.from} → ${others.to} for the other Companies; every time of it moves back ${spanOf(item.shiftMs)}`;
 }
 
 /** The rows it changed (or would), by table. */
@@ -93,13 +93,14 @@ async function main(argv: string[]): Promise<number> {
   console.log(`uat:age on ${guarded.label}${args.dryRun ? " (dry run: nothing is written)" : ""}`);
   const db = createDb(guarded.migratorUrl, { max: 1 });
   try {
-    const changes = ageChanges(args, await findAgeCandidates(db, args.items), new Date());
+    const itemText = printsItemText(env);
+    const changes = ageChanges(args, await findAgeCandidates(db, args.items), new Date(), { itemText });
     if ("errors" in changes) {
       for (const error of changes.errors) console.error(`uat:age: ${error}`);
       console.error("uat:age: nothing was changed");
       return 1;
     }
-    for (const item of changes.items) console.log(describeChange(item));
+    for (const item of changes.items) console.log(describeChange(item, { itemText }));
     const aged = await ageItems(db, changes.items, { dryRun: args.dryRun });
     for (const item of aged) console.log(describeRows(item, args.dryRun));
     console.log("Their history keeps its true times, so its events read later than the moved dates: by design (the audit trail is never changed).");

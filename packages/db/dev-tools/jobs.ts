@@ -80,7 +80,8 @@ async function addRows(trx: Transaction<Database>, job: JobName, { memberEmail, 
   let memberId: string | undefined;
   if (memberEmail !== undefined) {
     const { rows } = await sql<{ id: string }>`select id from member where lower(email) = lower(${memberEmail.trim()})`.execute(trx);
-    if (rows.length === 0) throw new Error(`no Member has the email ${memberEmail.trim()}`);
+    // Never the email itself: inside the GitHub job the log is public.
+    if (rows.length === 0) throw new Error("no Member has the --member email");
     memberId = rows[0]!.id;
   }
   await enqueue.execute(trx);

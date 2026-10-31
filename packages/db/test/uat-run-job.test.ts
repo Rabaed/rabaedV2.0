@@ -155,7 +155,7 @@ describe("uat:run-job weekly-report", () => {
 
   it("refuses a --member no Member has", async () => {
     await expect(runJob(jobDbs(), "weekly-report", { handlers, memberEmail: "nobody-at-all@rabaed.test", dryRun: true })).rejects.toThrow(
-      "no Member has the email nobody-at-all@rabaed.test",
+      "no Member has the --member email",
     );
   });
 
