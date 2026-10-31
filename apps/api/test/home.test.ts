@@ -7,7 +7,7 @@
 // Member on two Projects sees each count only for the Projects he is on.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import { activityFeedSearchParams, workItemSearchParams, type ActivityFeed, type Home, type ProjectSummary, type WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -35,8 +35,8 @@ let k1B: Caller;
 let c2: Company;
 let c2Engineer: Caller;
 
-const onboard = async (legalName: string): Promise<Company> => {
-  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+const onboard = async (legalName: string): Promise<Company> => { // not hidden-from: the helper's parameter
+  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) }); // not hidden-from: onboarding the test Company
   return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
 };
 
@@ -44,7 +44,7 @@ const onboard = async (legalName: string): Promise<Company> => {
 async function participantOf(at: Tower, name: string): Promise<string> {
   return (await c1.caller.get(`/v1/projects/${at.projectId}/participants`))
     .json()
-    .participants.find((p: { company: { legalName: { en: string } } }) => p.company.legalName.en === name).id as string;
+    .participants.find((p: { company: { legalName: { en: string } } }) => p.company.legalName.en === name).id as string; // not hidden-from: the setup finds a Participant by its Company's name
 }
 
 /** Home as `by` sees it, and everything the api said. */
@@ -53,6 +53,36 @@ async function home(by: Caller): Promise<Home & { body: string }> {
   return { ...(res.json() as Home), body: res.body };
 }
 const listed = (h: Home) => h.needsMyAction.map((i) => i.id);
+
+/** A Home read for expectHiddenFrom (RP-1095): the rows one part of a viewer's Home holds, by id. */
+type Part = (h: Home & { body: string }) => { id: string }[];
+const needsMyAction: Part = (h) => h.needsMyAction.map((i) => ({ id: i.id }));
+const activityItems: Part = (h) => h.activity.map((e) => ({ id: e.workItem.id }));
+const projectsOf: Part = (h) => h.projects.map((p) => ({ id: p.id }));
+/** Whether the api's whole answer names `id` anywhere: `[{ id }]` when it does. */
+const named =
+  (id: string): Part =>
+  (h) =>
+    h.body.includes(id) ? [{ id }] : [];
+/** `target` is in `part` of each Home in `seenBy` first, and of none in `hidden`. */
+async function homeHides(part: Part, target: string, seenBy: Caller | Caller[], hidden: Caller | Caller[], label: string) {
+  await expectHiddenFrom({ read: async (by: Caller) => part(await home(by)), target, seenBy, hiddenFrom: hidden, name: whoIs, label });
+}
+/** The same Home, read before and after a change: `target` is in `part` of `before` and not of `after`. */
+const goneFrom = (part: Part, target: string, before: Home & { body: string }, after: Home & { body: string }, label: string) =>
+  expectHiddenFrom({ read: async (h: Home & { body: string }) => part(h), target, seenBy: before, hiddenFrom: after, name: (h) => (h === before ? "before" : "after"), label });
+/** A row nobody's Home holds: `by`'s Home names `shown` (so the read works), never `target`. */
+const namedBy = (by: Caller, shown: string, target: string, label: string) =>
+  expectHiddenFrom({
+    read: async (id: string) => named(id)(await home(by)).map(() => ({ id: "named" })),
+    target: "named",
+    seenBy: shown,
+    hiddenFrom: target,
+    name: (id) => (id === shown ? `${whoIs(by)}'s Home, ${shown}` : `${whoIs(by)}'s Home, ${target}`),
+    label,
+  });
+const whoIs = (by: Caller) =>
+  by === k1A ? "K1 manager A" : by === k1B ? "K1 manager B" : by === c2Engineer ? "C2 engineer" : by === twr?.c1Pm ? "C1 PM" : by === twr?.c1Engineer ? "C1 engineer" : "a Member";
 
 /** The Projects page, as `by` sees it. */
 async function cards(by: Caller): Promise<ProjectSummary[]> {
@@ -119,8 +149,9 @@ describe("a Member on two Projects (RP-407-6)", () => {
     expect(b.counts.needMyAction).toBe(1);
     expect(listed(b)).toEqual([atTwr]);
     expect(b.projects.map((p) => p.code)).toEqual(["HOM"]);
-    expect(b.body).not.toContain(jcv.projectId);
-    expect(b.body).not.toContain("Villa pumps");
+    // The second Project and its item are on A's Home, and nowhere in B's.
+    await homeHides(projectsOf, jcv.projectId, k1A, k1B, "the second Project");
+    for (const id of [jcv.projectId, atJcv]) await homeHides(named(id), id, k1A, k1B, "the second Project's rows");
   });
 
   it("is the sum of the Projects page's counts, and lists the toggle's rows", async () => {
@@ -164,17 +195,18 @@ describe("a Member on two Projects (RP-407-6)", () => {
 describe("a second Contractor (RP-407-1)", () => {
   it("never counts, lists or hears of a C1 item", async () => {
     const c1Item = await submitted(twr, twr.c1Engineer, twr.c1Pm, "C1 switchboards");
-    await inInternalReview(twr, twr.c1Engineer, "C1 busbars");
+    const busbars = await inInternalReview(twr, twr.c1Engineer, "C1 busbars");
     const h = await home(c2Engineer);
     expect(h.counts.needMyAction).toBe(0);
     expect(h.counts.longAtStep).toBe(0);
-    expect(h.needsMyAction).toEqual([]);
-    expect(h.activity).toEqual([]);
-    expect(h.body).not.toContain(c1Item);
-    expect(h.body).not.toContain("C1 switchboards");
-    expect(h.body).not.toContain("C1 busbars");
-    // C1's name reaches C2 only as the Host Company on its Project card (V15), never through an item.
-    expect(h.projects.map((p) => p.hostCompany.legalName.en)).toEqual([C1_NAME]);
+    // The Submitted item waits with K1, and its Submit is on K1's Home; C1's internal one waits with C1's PM.
+    await homeHides(needsMyAction, c1Item, k1A, c2Engineer, "the Submitted item");
+    await homeHides(activityItems, c1Item, k1A, c2Engineer, "the Submit");
+    await homeHides(needsMyAction, busbars, twr.c1Pm, c2Engineer, "C1's internal item");
+    for (const id of [c1Item, busbars]) await homeHides(named(id), id, twr.c1Pm, c2Engineer, "a C1 item, anywhere on Home");
+    // C2 has only the Project's card, whose Host Company is C1: C1's name reaches C2 that way only (V15), never through an item.
+    expect(h.projects.map((p) => p.id)).toEqual([twr.projectId]);
+    expect(h.projects.map((p) => p.hostCompany.legalName)).toEqual([bilingual(C1_NAME)]); // not hidden-from: what C2 may see (V15); the card has no Company id, the Project is matched by id above
   });
 });
 
@@ -189,8 +221,8 @@ describe("a Draft (RP-407-2)", () => {
     const h = await home(engineer);
     expect(h.counts.needMyAction).toBe(0);
     expect(h.counts.longAtStep).toBe(0);
-    expect(h.needsMyAction).toEqual([]);
-    for (const who of [twr.c1Pm, k1A, k1B, c2Engineer]) expect((await home(who)).body).not.toContain(mine);
+    // Each Home names the Project, so the read works, and never the Draft: not even its raiser's.
+    for (const who of [engineer, twr.c1Pm, k1A, k1B, c2Engineer]) await namedBy(who, twr.projectId, mine, "the Draft");
   });
 });
 
@@ -237,8 +269,9 @@ describe("a closed Project (RP-407-3)", () => {
     expect(after.counts).toEqual({ activeProjects: 0, needMyAction: 0, longAtStep: 0, waitingWithOthers: 0 });
     // Its card still shows its Submittals count: the List is still the Member's to read (RP-408-1).
     expect(after.submittals).toEqual({ [closing.projectId]: 1 });
-    expect(after.needsMyAction).toEqual([]);
-    expect(after.activity).toEqual([]);
+    // The same item, and its activity, on the PM's Home before the close and not after.
+    await goneFrom(needsMyAction, id, before, after, "the closed Project's item");
+    await goneFrom(activityItems, id, before, after, "the closed Project's activity");
     // Still on the Projects list, as closed.
     expect(after.projects.map((p) => [p.code, p.status])).toEqual([["HCL", "closed"]]);
     // The Projects page too counts its Submittals List as each Member reads it; K1 never counts C1's internal item (RP-408-1).
@@ -322,7 +355,10 @@ describe("Waiting with others: my own Company's items another Participant holds 
     // C2 sees none of C1's items, and counts none.
     const h = await home(c2OnAt);
     expect(h.counts.waitingWithOthers).toBe(0);
-    for (const id of [sent, internal, mine]) expect(h.body).not.toContain(id);
+    // K1 has the Submitted item waiting, C1's PM the internal one; C2's Home names neither, nor C1's Draft.
+    await homeHides(named(sent), sent, at.k1Manager, c2OnAt, "the Submitted item");
+    await homeHides(named(internal), internal, at.c1Pm, c2OnAt, "C1's internal item");
+    await namedBy(c2OnAt, at.projectId, mine, "C1's Draft");
   });
 
   it("counts an item K1 sent on to a third Company for its raiser only: K1 and the third Company count none", async () => {

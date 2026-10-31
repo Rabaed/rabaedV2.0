@@ -1,1 +1,0 @@
-empty one Project of a few thousand work items (RP-1050) > still shows K1 only what it sees: the Submitted items, never C1's Drafts or internal review :: for (const hidden of ["Draft cable", "Reviewed cable"]) expect(board).not.toContain(hidden);

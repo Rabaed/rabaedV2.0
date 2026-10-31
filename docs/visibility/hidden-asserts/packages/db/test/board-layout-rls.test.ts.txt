@@ -1,1 +1,0 @@
-empty member_board_layout > is read by nobody else: not a colleague on the same Project, nor another Project's Member :: expect(await rowsAs(a.colleague, sql`select 1 from member_board_layout`)).toEqual([]);

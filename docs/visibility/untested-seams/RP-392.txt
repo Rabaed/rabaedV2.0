@@ -1,2 +1,0 @@
-RP-392-1 db  # C1 engineer saves a Draft on day 1; it is numbered on day 3, and later sent back (to its D
-RP-392-2 db  # C1 creates a Revision on day 5 and sends it for review on day 7

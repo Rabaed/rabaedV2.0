@@ -1,1 +1,0 @@
-RP-410-1 db  # A C1 item is Submitted and picked up by K1's manager; C1's PM picks up another in internal

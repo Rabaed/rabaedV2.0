@@ -1,3 +1,0 @@
-RP-412-1 db  # Tower's Project Admin (C1, the Host Company) saves the Project pattern twice, gives the MA
-RP-412-2 db  # C1 has issued two MAR numbers; a C1 engineer, a C2 engineer and a K1 manager open Project
-RP-412-3 api  # A C2 member who is also a Project Admin saves Tower's pattern; a Rabaed Engineer saves ano
