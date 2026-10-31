@@ -91,7 +91,7 @@ beforeAll(async () => {
   await drainOutbox(worker, { documental_record: quick });
 
   const c1 = await api.projectCreator();
-  const onboarded = await api.onboardCompany({ legalName: bilingual("Records Container Consultants") });
+  const onboarded = await api.onboardCompany({ legalName: bilingual("Records Container Consultants") }); // not hidden-from: setup, onboarding K1
   const k1: Company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   at = await buildTower(api, { c1, k1 }, "RCC");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
