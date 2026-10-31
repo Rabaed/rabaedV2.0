@@ -1,0 +1,5 @@
+empty notification_setting and member_notification_preference > are unreadable to any other Member, and with no Member set :: expect(await rowsAs(b.member, sql`select * from ${sql.table(table)}`), table).toEqual([]);
+empty notification_setting and member_notification_preference > are unreadable to any other Member, and with no Member set :: expect(none.rows, table).toEqual([]);
+empty project_mute > is set and cleared through app.set_project_mute, for a Project the Member is on :: expect(await rowsAs(a.member, sql`select * from project_mute`)).toEqual([]);
+empty project_mute > refuses another Project like a made-up one :: expect((await migrator.query("select 1 from project_mute where member_id = $1 and project_id = $2", [a.member, b.projectId])).rows).toEqual([]);
+empty project_mute > is unreadable to any other Member, and never written directly :: expect(await rowsAs(b.member, sql`select * from project_mute`)).toEqual([]);

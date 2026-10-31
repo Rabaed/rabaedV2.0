@@ -1,0 +1,13 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty Link search (scenario 79) > matches part of a Document Number or Subject, whatever the case :: expect(ids(await search(tower.c1Engineer, "nothing like this"))).toEqual([]);
+empty Link search (scenario 79) > treats % and _ as plain text, not wildcards :: expect(ids(await search(tower.c1Engineer, "%"))).toEqual([]);
+empty Link search (scenario 79) > treats % and _ as plain text, not wildcards :: expect(ids(await search(tower.c1Engineer, "_"))).toEqual([]);
+text Link search (scenario 79) > pages with a fixed maximum, and never counts hidden matches :: expect(first.links).toHaveLength(3);
+text Link search (scenario 79) > pages with a fixed maximum, and never counts hidden matches :: expect(second.links).toHaveLength(1);
+text Link search (scenario 79) > pages with a fixed maximum, and never counts hidden matches :: expect(c1Only.links).toHaveLength(3);
+empty Link search (scenario 79) > answers a Project the caller isn't on exactly like one that doesn't exist (404) :: await expectHidden(c1Outsider.get(searchUrl(tower.projectId, { q: "cable" })));
+empty Link search (scenario 79) > answers a Project the caller isn't on exactly like one that doesn't exist (404) :: await expectHidden(c2Engineer.get(searchUrl(elsewhere.projectId, { q: "cable" })));
+empty Link search (scenario 79) > answers a Project the caller isn't on exactly like one that doesn't exist (404) :: await expectHidden(tower.c1Engineer.get(searchUrl(randomUUID(), { q: "cable" })));
+empty Link search (scenario 79) > answers a Project the caller isn't on exactly like one that doesn't exist (404) :: await expectHidden(tower.c1Engineer.get(searchUrl("not-an-id", { q: "cable" })));

@@ -1,0 +1,1 @@
+empty numbering_counter > is read by the Project's Project Admin, and by no other Member (scenario 55) :: expect(await counters(who), who).toEqual([]);

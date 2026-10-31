@@ -1,0 +1,3 @@
+empty tables the app role reads only through item visibility > are caught when a new table's policy asks only whether the caller sees the item :: expect(found).not.toContain("own_probe");
+empty tables the app role reads only through item visibility > are caught when a new table's policy asks only whether the caller sees the item :: expect(found).not.toContain("ungranted_probe");
+empty tables the app role reads only through item visibility > are caught when a new policy opens an existing table to everyone who sees the item :: expect(await tablesReadableThroughItemVisibility(trx)).not.toContain("step_assignment");

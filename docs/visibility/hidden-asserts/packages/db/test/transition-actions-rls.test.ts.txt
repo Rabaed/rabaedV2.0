@@ -1,0 +1,6 @@
+empty "Assign to" (RP-431-2) > offers nobody when the next Step is another Participant's, and refuses any pick for it :: expect(await offeredAssignees(c1Pm, id, "submit")).toEqual([]);
+empty "Assign to" (RP-431-2) > offers nobody on a Transition without Assign to, nor to a Member who doesn't hold the item :: expect(await offeredAssignees(k1Manager2, id, "return_to_engineer")).toEqual([]);
+empty "Assign to" (RP-431-2) > offers nobody on a Transition without Assign to, nor to a Member who doesn't hold the item :: expect(await offeredAssignees(k1Manager, id, "approve_a")).toEqual([]);
+empty "Assign to" (RP-431-2) > offers nobody on a Transition without Assign to, nor to a Member who doesn't hold the item :: expect(await offeredAssignees(c1Pm, id, "return_to_engineer")).toEqual([]);
+empty set and copy > writes K1's own Review in its reply, internal to K1, and the Remarks it copies into the Code's, read by C1 from the Code (RP-431-1) :: expect((await events(c1Pm, id)).map((e) => e.type)).not.toContain("answers_changed");
+empty an action outside what the acting Participant fills (RP-431-1) > refuses K1 reading or writing C1's answers, or carrying its internal note into the Form, alike :: expect((await events(k1.member, id)).map((e) => e.type)).not.toContain("answers_changed");

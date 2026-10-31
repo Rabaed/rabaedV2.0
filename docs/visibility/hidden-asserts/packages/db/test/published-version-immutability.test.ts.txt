@@ -1,0 +1,4 @@
+empty tables that hang off a Version > each has a before-row guard on INSERT, UPDATE and DELETE, or is excused with a reason :: expect(catalogueGaps(catalogue)).toEqual([]);
+empty tables that hang off a Version > lists no excuse for a table that no longer hangs off a Version :: expect(Object.keys(EXCUSED).filter((table) => !catalogue.has(table))).toEqual([]);
+empty a published Version, behaviour per guarded table > refuses every guarded INSERT, UPDATE and DELETE on it with 42501 :: expect(await behaviourGaps(tables, FIXTURES, versionNeeds)).toEqual([]);
+empty a published Version, behaviour per guarded table > goes red for a guard trigger that refuses nothing :: expect(catalogueGaps(await readCatalogue())).toEqual([]);

@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoCitations, type Citation } from "./check-scenario-ids.ts";
+import { testBlocks, titlePathAt } from "./test-titles.ts";
 
 // A ratchet on visibility asserts that can pass falsely (RP-1095). An empty read passes a "hidden
 // from X" assert for the wrong reason when the row was never made or the read is broken, so such
@@ -8,20 +9,25 @@ import { repoCitations, type Citation } from "./check-scenario-ids.ts";
 // the row read it first, by id. A compare by a name, a title or a count passes when another row has
 // the same name, so visibility asserts compare by id.
 //
-// An audit on 2026-10-30 found about 280 such asserts already on main. Each test file's count of
-// them, per kind, is in docs/visibility/hidden-asserts.txt, and that list only shrinks: a file over
-// its count fails, and so does a count above what the file holds now. The counts are per file, not
-// per line, so an edit elsewhere in a file never breaks the check. A line that is no visibility
-// assert (a list of errors, say) is marked `// not hidden-from: <why>` and isn't counted.
+// An audit on 2026-10-30 found about 280 such asserts already on main. They are listed one per line
+// (RP-1134), so a fix and a new false-pass assert in one file don't cancel out. Each entry is keyed
+// `<kind> <titles> :: <line>`: the titles of the describe/it blocks around the assert and the text of
+// its line, never a line number, so an edit elsewhere in the file doesn't break the check. Each test
+// file has its own list, docs/visibility/hidden-asserts/<test file>.txt, so parallel PRs edit
+// different files. The lists only shrink: an assert not listed fails, and so does an entry with no
+// assert left; a list whose last entry goes is deleted. A line that is no visibility assert (a list of
+// errors, say) is marked `// not hidden-from: <why>` and isn't counted.
 // Checked by check-hidden-asserts.test.ts, in the unit project.
 
-export const baselineFile = "docs/visibility/hidden-asserts.txt";
+export const baselineDir = "docs/visibility/hidden-asserts";
+/** The baseline of a test file (`apps/api/test/a.test.ts` → `docs/visibility/hidden-asserts/apps/api/test/a.test.ts.txt`). */
+export const baselineFileFor = (testFile: string) => `${baselineDir}/${testFile}.txt`;
 
 export type Kind = "empty" | "text";
 const kinds: Kind[] = ["empty", "text"];
 const describeKind: Record<Kind, string> = {
-  empty: '"hidden" asserts that an empty read passes',
-  text: "compare by text or count",
+  empty: 'a "hidden" assert that an empty read passes',
+  text: "a compare by text or count",
 };
 const fixKind: Record<Kind, string> = {
   empty: "prove the row first with expectHiddenFrom (@rabaed/db/test-support), or mark a line that is no hidden-from assert `// not hidden-from: <why>`",
@@ -33,68 +39,117 @@ const patterns: Record<Kind, RegExp> = {
   text: /\blegalName\b|\bcompanyName\.en\b|\.name\.en\b|\.toHaveLength\([1-9]\d*\)/g,
 };
 const skipLine = /\/\/\s*not hidden-from:/;
+const topLevel = "(top level)";
+const titleSeparator = " > ";
 
-export type Counts = Record<Kind, number>;
+/** One assert: its kind, the titles of the blocks around it, its key in the baseline, and its line (1-based). */
+export type Assert = { kind: Kind; titles: string; key: string; line: number };
 
-/** How many asserts of each kind `text` holds, leaving out marked lines. */
-export function countAsserts(text: string): Counts {
-  const counts: Counts = { empty: 0, text: 0 };
-  for (const line of text.split("\n")) {
-    if (skipLine.test(line)) continue;
-    for (const kind of kinds) counts[kind] += [...line.matchAll(patterns[kind])].length;
-  }
-  return counts;
+/** The asserts `text` holds, in line order, leaving out marked lines. */
+export function findAsserts(file: string, text: string): Assert[] {
+  const blocks = testBlocks(file, text);
+  const found: Assert[] = [];
+  let offset = 0;
+  text.split("\n").forEach((raw, i) => {
+    if (!skipLine.test(raw)) {
+      const lineText = raw.replace(/\s+/g, " ").trim();
+      const matches = kinds.flatMap((kind) => [...raw.matchAll(patterns[kind])].map((match) => ({ kind, at: match.index })));
+      for (const { kind, at } of matches.sort((a, b) => a.at - b.at)) {
+        const titles = titlePathAt(blocks, offset + at).join(titleSeparator) || topLevel;
+        found.push({ kind, titles, key: `${kind} ${titles} :: ${lineText}`, line: i + 1 });
+      }
+    }
+    offset += raw.length + 1;
+  });
+  return found;
 }
 
-export type BaselineLine = { file: string; kind: Kind; count: number; line: number };
+export type BaselineEntry = { key: string; line: number };
+export type BaselineFile = { file: string; text: string };
 
-/** The baseline: one `<file> empty|text <count>` a line; blank lines and `#` comments skipped. */
-export function parseBaseline(text: string): BaselineLine[] {
+/** A baseline: one `<kind> <titles> :: <line>` entry a line; blank lines and lines starting with `#` skipped. */
+export function parseBaseline(file: string, text: string): BaselineEntry[] {
   return text.split("\n").flatMap((raw, i) => {
-    const line = raw.replace(/#.*/, "").trim();
-    if (line === "") return [];
-    const match = /^(\S+)\s+(empty|text)\s+(\d+)$/.exec(line);
-    if (!match) throw new Error(`${baselineFile}:${i + 1}: not \`<file> empty|text <count>\``);
-    return [{ file: match[1]!, kind: match[2] as Kind, count: Number(match[3]), line: i + 1 }];
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) return [];
+    if (!/^(empty|text) .+ :: .+$/.test(line)) throw new Error(`${file}:${i + 1}: not \`empty|text <titles> :: <line>\``);
+    return [{ key: line, line: i + 1 }];
   });
 }
 
 const seamTest = (file: string) =>
   (file.startsWith("apps/api/test/") || file.startsWith("packages/db/test/")) && !/\/support\//.test(file) && /\.test\.tsx?$/.test(file);
 
-/** Each seam test file's counts, by file. */
-function countsByFile(files: Citation[]): Map<string, Counts> {
-  return new Map(files.filter((f) => seamTest(f.file)).map((f) => [f.file, countAsserts(f.text)]));
-}
-
-/** The baseline lines for `files` as they are now, sorted: what to write after an audit. */
-export function renderBaseline(files: Citation[]): string[] {
-  const lines: string[] = [];
-  for (const [file, counts] of [...countsByFile(files)].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    for (const kind of kinds) if (counts[kind] > 0) lines.push(`${file} ${kind} ${counts[kind]}`);
+/** Each seam test file's asserts, by file, leaving out files with none. */
+function assertsByFile(files: Citation[]): Map<string, Assert[]> {
+  const byFile = new Map<string, Assert[]>();
+  for (const { file, text } of files) {
+    if (!seamTest(file)) continue;
+    const asserts = findAsserts(file, text);
+    if (asserts.length > 0) byFile.set(file, asserts);
   }
-  return lines;
+  return byFile;
 }
 
-/** What is wrong with the files' asserts against the baseline; empty when nothing is. */
-export function hiddenAssertProblems(files: Citation[], baseline: BaselineLine[]): string[] {
+/** The baselines for `files` as they are now, by file: what to write after an audit. */
+export function renderBaselines(files: Citation[]): BaselineFile[] {
+  return [...assertsByFile(files)]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([file, asserts]) => ({ file: baselineFileFor(file), text: asserts.map((a) => `${a.key}\n`).join("") }));
+}
+
+/** What is wrong with the files' asserts against the baselines; empty when nothing is. */
+export function hiddenAssertProblems(files: Citation[], baselines: BaselineFile[]): string[] {
   const problems: string[] = [];
-  const counts = countsByFile(files);
-  const allowed = new Map(baseline.map((b) => [`${b.file} ${b.kind}`, b]));
-  for (const [file, has] of counts) {
-    for (const kind of kinds) {
-      const limit = allowed.get(`${file} ${kind}`)?.count ?? 0;
-      if (has[kind] > limit) problems.push(`${file}: ${has[kind]} ${describeKind[kind]}, ${limit} allowed: ${fixKind[kind]} (RP-1095)`);
+  const asserts = assertsByFile(files);
+  const listed = new Map<string, BaselineEntry[]>();
+  for (const { file, text } of baselines) {
+    if (!file.startsWith(`${baselineDir}/`) || !file.endsWith(".txt")) {
+      problems.push(`${file}: not a baseline: use <test path>.txt`);
+      continue;
+    }
+    const entries = parseBaseline(file, text);
+    if (entries.length === 0) problems.push(`${file}: lists no assert: delete it`);
+    else listed.set(file.slice(baselineDir.length + 1, -".txt".length), entries);
+  }
+
+  for (const [file, has] of asserts) {
+    for (const assert of unmatched(has, listed.get(file) ?? [])) {
+      problems.push(`${file}:${assert.line}: ${describeKind[assert.kind]}, in "${assert.titles}", not in ${baselineFileFor(file)}: ${fixKind[assert.kind]} (RP-1095)`);
     }
   }
-  for (const b of baseline) {
-    const now = counts.get(b.file)?.[b.kind] ?? 0;
-    if (now < b.count) problems.push(`${baselineFile}:${b.line}: ${b.file} ${b.kind} is ${now} now: ${now === 0 ? "delete this line" : `lower it to ${now}`}`);
+  for (const [file, entries] of listed) {
+    for (const entry of unmatched(entries, asserts.get(file) ?? [])) {
+      problems.push(`${baselineFileFor(file)}:${entry.line}: ${file} has no such assert now: delete this line (and the list, if it is its last)`);
+    }
   }
   return problems;
 }
 
+/** The items of `these` left over once each item of `those` has used up one item of the same key. */
+function unmatched<T extends { key: string }>(these: T[], those: { key: string }[]): T[] {
+  const left = new Map<string, number>();
+  for (const { key } of those) left.set(key, (left.get(key) ?? 0) + 1);
+  return these.filter(({ key }) => {
+    const n = left.get(key) ?? 0;
+    left.set(key, n - 1);
+    return n <= 0;
+  });
+}
+
+/** The baseline files of the repository at `repo`, every file under the folder but its README. */
+export function readBaselines(repo: string): BaselineFile[] {
+  const dir = join(repo, baselineDir);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => `${join(entry.parentPath, entry.name).slice(dir.length + 1).replaceAll("\\", "/")}`)
+    .filter((name) => name !== "README.md")
+    .sort()
+    .map((name) => ({ file: `${baselineDir}/${name}`, text: readFileSync(join(dir, name), "utf8") }));
+}
+
 /** The problems of the repository at `repo`. */
 export function repoHiddenAssertProblems(repo: string): string[] {
-  return hiddenAssertProblems(repoCitations(repo), parseBaseline(readFileSync(join(repo, baselineFile), "utf8")));
+  return hiddenAssertProblems(repoCitations(repo), readBaselines(repo));
 }

@@ -1,0 +1,4 @@
+empty checkBootstrapRole > passes for a role that may create a role with BYPASSRLS :: await expect(checkBootstrapRole(urls.superuser)).resolves.toBeUndefined();
+empty checkBypassRole > passes when rabaed_admin bypasses row-level security :: await expect(checkBypassRole(urls.superuser)).resolves.toBeUndefined();
+empty checkSupabaseRolesHoldNothing > passes when anon and authenticated hold nothing, and skips a database that doesn't exist, saying so :: expect(await heldHere()).toEqual([]);
+empty checkSupabaseRolesHoldNothing > finds a privilege granted to anon, naming the role, privilege, object and database, and passes once it is revoked :: expect(await heldHere()).toEqual([]);

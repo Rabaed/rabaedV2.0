@@ -1,0 +1,6 @@
+empty counters > are hidden from a C1 member and from K1: a 404 that names nothing (scenario 55) :: await expectHidden(by.get(counters), label);
+empty counters > are hidden from a C1 member and from K1: a 404 that names nothing (scenario 55) :: await expectHidden(previewOf(by, `workItemType=MAR&participantId=${tower.c1ParticipantId}`), label);
+empty counters > are hidden from a C1 member and from K1: a 404 that names nothing (scenario 55) :: await expectHidden(startOf(by, { workItemType: "MAR", participantId: tower.c1ParticipantId, startingNumber: 900 }), label);
+empty counters > are hidden from a C1 member and from K1: a 404 that names nothing (scenario 55) :: await expectHidden(c1.caller.get(`/v1/projects/${randomUUID()}/numbering/counters`));
+empty counters > are hidden from a C1 member and from K1: a 404 that names nothing (scenario 55) :: await expectHidden(c1.caller.get("/v1/projects/not-a-uuid/numbering/counters"));
+empty counters > are hidden from a C1 member and from K1: a 404 that names nothing (scenario 55) :: await expectHidden(startOf(c1.caller, { workItemType: "MAR", participantId: tower.c1ParticipantId, startingNumber: 900 }, randomUUID()));

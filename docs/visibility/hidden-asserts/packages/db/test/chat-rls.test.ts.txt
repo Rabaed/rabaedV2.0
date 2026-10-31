@@ -1,0 +1,4 @@
+empty scenario RP-1062-1: a competing Contractor (V3) > neither reads nor posts on C1's item, and reads and posts on its own :: expect(await chat(other, item.c1AtB)).toEqual([]);
+empty scenario RP-1062-2: a Member outside the item's Location (layer 4) > neither reads nor posts, and reads and posts on an item in the Location they cover :: expect(await chat(manager, item.c1AtA)).toEqual([]);
+empty scenario RP-1062-3: before the Submission Date > posting is refused, and nothing is written; the same Member posts once it is Submitted :: expect(await chat(engineer, item.c1Internal)).toEqual([]);
+empty scenario RP-1062-5: a Member who loses access > stops reading the Chat at once, and goes on reading where they still have access :: expect(await chat(representative, item.c1AtA)).toEqual([]);

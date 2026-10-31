@@ -1,0 +1,8 @@
+empty the Form for a new MAR > is the latest published MAR Form Version, with its sections and fields :: expect(formSchemaProblems(form.schema)).toEqual([]);
+empty the Form for a new MAR > is not found off the Member's Projects, or for a Type that doesn't exist :: await expectHidden(outsider.get(`/v1/projects/${projectId}/work-item-types/MAR/form`));
+empty the Form for a new MAR > is not found off the Member's Projects, or for a Type that doesn't exist :: await expectHidden(engineer.get(`/v1/projects/${projectId}/work-item-types/XYZ/form`));
+empty Save draft > is open to the raiser's Participant only: anyone else gets 404 :: for (const who of [c2Engineer, k1Engineer, outsider]) await expectHidden(save(who, id, { model: "X" }));
+empty a hidden item's answers and Form > answer 404 to every other Company and to a Member off the Project :: await expectHidden(who.get(`/v1/work-items/${id}`));
+empty a hidden item's answers and Form > answer 404 to every other Company and to a Member off the Project :: await expectHidden(who.get(`/v1/work-items/${id}/form`));
+empty a hidden item's answers and Form > answer 404 for an id that isn't a Work Item at all :: await expectHidden(engineer.get(`/v1/work-items/${randomUUID()}/form`));
+empty a hidden item's answers and Form > answer 404 for an id that isn't a Work Item at all :: await expectHidden(save(engineer, randomUUID(), {}));

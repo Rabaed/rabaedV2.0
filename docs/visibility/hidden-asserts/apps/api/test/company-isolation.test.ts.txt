@@ -1,0 +1,3 @@
+text a Company's record > is readable by its own Members :: legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" },
+empty a Company's record > is not found for another Company's Member, exactly like an id that doesn't exist :: await expectHidden(res);
+empty a Company's record > works the other way round too :: await expectHidden(b.caller.get(`/v1/companies/${a.company.companyId}`));

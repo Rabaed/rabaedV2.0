@@ -1,0 +1,3 @@
+empty "Assign to" > offers the taker's own Members who may hold the next Step, by name, and lands the item with the one picked :: expect(await needMyAction(pm.caller)).not.toContain(id);
+empty set and copy > writes K1's Review in its own reply, internal to K1, and copies the Remarks into the Code's (RP-431-1) :: expect(await historyBody(pm.caller, id)).not.toContain("Checked");
+empty set and copy > writes K1's Review in its own reply, internal to K1, and copies the Remarks into the Code's (RP-431-1) :: expect(await historyBody(pm.caller, id)).not.toContain("Checked");

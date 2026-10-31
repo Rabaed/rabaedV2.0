@@ -81,6 +81,37 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
   };
 }
 
+/**
+ * Whether a Workflow whose next publish would pin Screen `screenId` shows it on a Transition
+ * that doesn't close the item (form-engine.md §3.3, RP-1088), in its latest published
+ * Version: a Workflow of the Screen's owner, or, for a Rabaed Default Screen, one whose key
+ * `app.workflow_screens` reads as this Screen (none of its owner's own). A draft is left to
+ * its own publish, which refuses it, so no one's unpublished draft holds a Screen back.
+ * Read with `db`'s row-level security.
+ */
+export async function readScreenShownOffClose(db: Db, screenId: string): Promise<boolean> {
+  const { rows } = await sql<{ shown: boolean }>`
+    select exists (
+      select 1
+      from screen s
+      join workflow_definition d
+        on s.owner_kind = 'rabaed'
+        or (s.owner_kind = 'project' and d.owner_kind = 'project' and d.project_id = s.project_id)
+        or (s.owner_kind = 'company' and d.owner_kind = 'company' and d.company_id = s.company_id)
+      join workflow_version v on v.workflow_definition_id = d.id and v.status = 'published'
+        and v.version_no = (select max(p.version_no) from workflow_version p
+                            where p.workflow_definition_id = d.id and p.status = 'published')
+      join workflow_transition t on t.workflow_version_id = v.id and t.screen_key = s.key and t.kind <> 'close'
+      where s.id = ${screenId}::uuid
+        and (s.owner_kind <> 'rabaed'
+          or coalesce((select sv.screen_id from app.workflow_screens(d.id) w
+                       join screen_version sv on sv.id = w.screen_version_id
+                       where w.key = s.key), s.id) = s.id)
+    ) as shown
+  `.execute(db);
+  return rows[0]?.shown === true;
+}
+
 /** The rows' layout, Steps and Transitions as the app.* draft functions take them (jsonb text). */
 export type DraftArguments = { layout: string; steps: string; transitions: string };
 

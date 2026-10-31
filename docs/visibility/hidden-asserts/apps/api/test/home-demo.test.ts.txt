@@ -1,0 +1,2 @@
+empty Home for the demo people > Yousef (Beta Build) never meets a TMC item; Nasser sees only Jeddah Corniche Villas (RP-407-1, RP-407-6) :: for (const id of tmcItems) expect(yousef.body).not.toContain(id);
+empty Home for the demo people > Yousef (Beta Build) never meets a TMC item; Nasser sees only Jeddah Corniche Villas (RP-407-1, RP-407-6) :: expect(nasser.body).not.toContain(tower.id);

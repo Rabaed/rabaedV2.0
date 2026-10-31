@@ -1,0 +1,1 @@
+empty scenario RP-1083-1: the api never gives a Document's fingerprint > not in the Documents list nor the item read, to C1 or to K1, who read the Document :: for (const fingerprint of hidden) expect(body).not.toContain(fingerprint);

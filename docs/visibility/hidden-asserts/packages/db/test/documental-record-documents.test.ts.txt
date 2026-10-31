@@ -1,0 +1,2 @@
+empty app.documents_shared_before_close: the Documents a closed item's record holds > holds nothing of an item Cancelled in its Draft: nobody else ever saw it :: expect(await recordDocuments(id)).toEqual([]);
+empty app.documents_shared_before_close: the Documents a closed item's record holds > answers nothing for an item still open :: expect(await recordDocuments(id)).toEqual([]);
