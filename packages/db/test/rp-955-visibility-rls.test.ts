@@ -286,6 +286,25 @@ describe("scenario RP-955-1: Rabaed cancels an item Sent Back to C1, because a C
     await expectHandedOverOnly(item, "RP-955-1");
   });
 
+  it("a Link Rabaed adds after the close (a Revision's, at its first Submit) is everyone's; C1's own from before the close stays C1's", async () => {
+    const item = await heldAfterSendBack("CSHR-1R");
+    await rabaedCancel(item.id, { stepsDone: true });
+    const revision = await draft("CSHR-1R Rev 1");
+    await submit(revision);
+    // As app.take_transition writes it at a Revision's first Submit (RP-316): from the closed item it
+    // revises, stamped with the close's own arrival by the insert trigger.
+    const chain = await one(
+      `insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id, created_at)
+       values ($1, $2, $3, 'related', $4, now()) returning id`,
+      [projectId, item.id, revision, c1.member],
+    );
+    const seenBy = [c1.member, c1Pm, k1.member, k1Manager];
+    for (const read of [linkRows(item.id), itemLinks(item.id)])
+      for (const as of seenBy) expect(ids(await read(as)), `${nameOf(as)} reads the Revision's Link`).toContain(chain);
+    await expectHiddenFrom({ read: linkedFrom(revision), target: item.id, seenBy, hiddenFrom: c2.member, name: nameOf, label: "RP-955-1, the Revision's Linked from" });
+    await expectHiddenFrom({ read: linkRows(item.id), target: item.heldLink, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, k1Manager], name: nameOf, label: "RP-955-1, C1's own Link beside the Revision's" });
+  });
+
   it("with its Steps left open, as the Record's own test closes it: the same", async () => {
     const item = await heldAfterSendBack("CSHR-1B");
     await rabaedCancel(item.id, { stepsDone: false });
