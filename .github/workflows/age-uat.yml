@@ -15,7 +15,7 @@ on:
         type: choice
         options: [age, digest, weekly-report]
       items:
-        description: "age: Document Numbers or exact Subjects, separated by commas"
+        description: "age: Document Numbers or exact Subjects, separated by commas (a Subject with a comma in it: give its Document Number)"
         required: false
         type: string
       weeks:
@@ -54,6 +54,12 @@ jobs:
       group: uat-database
       cancel-in-progress: false
     steps:
+      # First, before any step prints its env block: the member input is an email, and the repository's
+      # run logs are public. Read from the event file, so this step's own env shows nothing.
+      - name: Mask the member's email
+        run: |
+          member="$(jq -r '.inputs.member // ""' "$GITHUB_EVENT_PATH")"
+          if [ -n "$member" ]; then echo "::add-mask::$member"; fi
       - uses: actions/checkout@v7
         with: { ref: main, persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -77,12 +83,9 @@ jobs:
           MEMBER: ${{ inputs.member }}
           DRY_RUN: ${{ inputs.dry_run }}
         # The repository is public, and so are its run logs: every email is masked (the member input
-        # by GitHub, the recipients the job prints by sed). GitHub's bash runs with pipefail, so the
-        # tool's exit code is the step's.
+        # by the first step, the recipients the tool prints by sed). GitHub's bash runs with pipefail,
+        # so the tool's exit code is the step's.
         run: |
-          if [ -n "$MEMBER" ]; then echo "::add-mask::$MEMBER"; fi
-          # The tool names its target with UAT's Supabase project: a variable, not a secret, kept out of the public log all the same.
-          if [ -n "$SUPABASE_PROJECT_REF" ]; then echo "::add-mask::$SUPABASE_PROJECT_REF"; fi
           masked() { sed -E 's/[^[:space:]",:<>]+@[^[:space:]",:<>]+/<email>/g'; }
           trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
           args=(--uat)
