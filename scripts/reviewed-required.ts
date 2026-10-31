@@ -147,11 +147,13 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   }
   const gate = reviewGate(labels, files);
   if (gate.ok) return { ok: true, summary: `PR #${pr} has the '${gate.via}' label${gate.via === DOCS_ONLY_LABEL ? " and changes only docs" : ""}: passes.` };
-  // GitHub can list a label a few seconds before its event: judge nothing then, and say so.
+  // GitHub can list a label a few seconds before its event: judge nothing then, and say so. (A hand remove-and-re-add
+  // not listed yet still reads as CI's older label on the PR run; the queue's run, reading later, sees it.)
   if (lagging) {
+    const retry = event.kind === "merge_group" ? `The queue drops the PR: queue it again in a minute with \`pnpm queue ${pr}\`.` : "Re-run this check in a minute.";
     return {
       ok: false,
-      summary: `PR #${pr} has the '${REVIEWED_LABEL}' label, but GitHub's issue events have not caught up with it (the newest '${REVIEWED_LABEL}' event is not the label being added), so who added it cannot be told yet. Re-run this check in a minute.`,
+      summary: `PR #${pr} has the '${REVIEWED_LABEL}' label, but GitHub's issue events have not caught up with it (the newest '${REVIEWED_LABEL}' event is not the label being added), so who added it cannot be told yet. ${retry}`,
     };
   }
   const reason =
@@ -172,16 +174,17 @@ const isSwitch = (event: PrEvent) => event.event === "auto_merge_enabled" || eve
 /**
  * Whether auto-merge was on when the PR last entered the merge queue: the newest `auto_merge_enabled` or
  * `auto_merge_disabled` before its newest `added_to_merge_queue` is an enable. `pnpm queue` never turns auto-merge on,
- * so a PR it queued after auto-merge was turned off again passes. A switch in the same second as the entry counts as
- * before it, whichever GitHub lists first: an enable then caused the entry. While GitHub lists no entry yet, the newest
- * switch of all decides, so a missing event fails closed.
+ * so a PR it queued after auto-merge was turned off again passes (#531 and #564 fail; #563 and #565 pass). An enable
+ * in the same second as the entry counts as before it, whichever GitHub lists first: it caused the entry. A disable in
+ * that second does not move, since GitHub may turn auto-merge off as it enqueues (#564's shape). While GitHub lists no
+ * entry yet, the newest switch of all decides, so a missing event fails closed.
  */
 export function enteredQueueByAutoMerge(events: PrEvent[]): boolean {
   const entered = events.findLastIndex((event) => event.event === "added_to_merge_queue");
   if (entered === -1) return events.findLast(isSwitch)?.event === "auto_merge_enabled";
   const second = events[entered]?.createdAt;
-  const sameSecond = events.slice(entered + 1).filter((event) => isSwitch(event) && event.createdAt === second);
-  return [...events.slice(0, entered), ...sameSecond].findLast(isSwitch)?.event === "auto_merge_enabled";
+  if (events.slice(entered + 1).some((event) => event.event === "auto_merge_enabled" && event.createdAt === second)) return true;
+  return events.slice(0, entered).findLast(isSwitch)?.event === "auto_merge_enabled";
 }
 
 /**

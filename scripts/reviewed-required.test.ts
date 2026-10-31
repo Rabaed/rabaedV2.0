@@ -220,6 +220,26 @@ describe("requireReviewed on merge_group", () => {
     expect((await requireReviewed(event, seam)).ok).toBe(false);
   });
 
+  it("tells a queued PR whose events lag the label to queue again, since the queue has dropped it", async () => {
+    const { seam } = fakeSeam({ events: async () => [] });
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("pnpm queue 12");
+  });
+
+  it("still drops a PR whose auto-merge GitHub turned off in the same second it queued it (#564's shape)", async () => {
+    const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled", "2026-10-31T10:59:00Z"), eventBy("added_to_merge_queue", "2026-10-31T11:00:00Z"), eventBy("auto_merge_disabled", "2026-10-31T11:00:00Z")];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
+  it("drops it too when the enable is listed just before the entry in the same second", async () => {
+    const second = "2026-10-31T11:00:00Z";
+    const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled", second), eventBy("added_to_merge_queue", second)];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
   it("does not count an enable a second after the entry as the cause of it: auto-merge turned on later is the live check's job", async () => {
     const events = [...labeledBy("github-actions[bot]"), eventBy("added_to_merge_queue", "2026-10-31T11:00:00Z"), eventBy("auto_merge_enabled", "2026-10-31T11:00:01Z")];
     const { seam } = fakeSeam({ events: async () => events });
