@@ -245,6 +245,30 @@ describe("scanRange on real git history", () => {
     expect(scanRange(repo, "main..pr")).toEqual([{ file: "resolved.ts", line: 1, rule: "vercel-token" }]);
   });
 
+  // main's whole history is one range on a push to main: its `git log -p` passed 366 MB at 3,438
+  // commits, near the 512 MB a single read (and a V8 string) can hold, so it is read in batches.
+  it("reads a range in batches of commits and finds the same, merges and the root commit included", () => {
+    writeFileSync(join(repo, "README.md"), `# repo\n${tokens.sendgrid}\n`);
+    git("commit", "-q", "-a", "--amend", "-m", "start");
+    git("checkout", "-q", "-b", "side");
+    commit("side.ts", `const side = "${tokens.github}";\n`);
+    git("checkout", "-q", "main");
+    commit("main.ts", "const ok = 1;\n");
+    git("merge", "-q", "--no-ff", "--no-commit", "side");
+    writeFileSync(join(repo, "resolved.ts"), `const key = "${tokens.vercel}";\n`);
+    git("add", "-A");
+    git("commit", "-q", "-m", "merge side");
+    const sorted = (findings: ReturnType<typeof scanRange>) => [...findings].sort((a, b) => a.file.localeCompare(b.file));
+    const expected = [
+      { file: "README.md", line: 2, rule: "sendgrid-api-key" },
+      { file: "resolved.ts", line: 1, rule: "vercel-token" },
+      { file: "side.ts", line: 1, rule: "github-token" },
+    ];
+    expect(sorted(scanRange(repo, "HEAD", 1))).toEqual(expected);
+    expect(sorted(scanRange(repo, "HEAD", 2))).toEqual(expected);
+    expect(sorted(scanRange(repo, "HEAD"))).toEqual(expected);
+  });
+
   describe("node scripts/check-secrets.ts --range", () => {
     const check = (...args: string[]) => spawnSync("node", [join(import.meta.dirname, "check-secrets.ts"), "--range", ...args], { cwd: repo, encoding: "utf8" });
 

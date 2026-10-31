@@ -6,8 +6,8 @@ import { join, resolve } from "node:path";
 // RP-1100: Jira's attachment upload hands back a curl with the API token inside,
 // ready to be pasted into a script, doc or commit. This refuses the token shapes
 // of the services Rabaed uses before the commit is made (.githooks/pre-commit).
-// --range is for CI, so a skipped hook is caught too: RP-1100's second PR adds it
-// to secret-scan.yml, beside gitleaks and its own, wider rules.
+// --range is for CI (secret-scan.yml's gitleaks job, beside gitleaks and its own,
+// wider rules), so a commit made with the hook skipped or off is caught too.
 //
 // Only added lines count: removing a token is how a finding is fixed. A finding
 // names the file, line and kind, never the token. Tests build their fake tokens
@@ -176,8 +176,20 @@ const DIFF_OPTIONS = ["-U0", "--no-color", "--no-ext-diff", "--diff-filter=ACMR"
 /** The findings in the lines staged for the next commit. */
 export const scanStaged = (repo: string) => scanDiff(git(repo, ["diff", "--cached", ...DIFF_OPTIONS]));
 
-/** The findings in the lines a range's commits add; a merge is read against its first parent. */
-export const scanRange = (repo: string, range: string) => scanDiff(git(repo, ["log", "-p", "--format=", "--diff-merges=first-parent", ...DIFF_OPTIONS, range, "--"]));
+/**
+ * The findings in the lines a range's commits add; a merge is read against its first parent. Read `batch` commits at a
+ * time: main's whole history (a push to main) is one range, and its `git log -p` passed 366 MB at 3,438 commits, near the
+ * 512 MB one read can hold. A line a merge brings in again from its other parent is reported once.
+ */
+export function scanRange(repo: string, range: string, batch = 200): Finding[] {
+  const commits = git(repo, ["rev-list", range, "--"]).split("\n").filter(Boolean);
+  const seen = new Map<string, Finding>();
+  for (let start = 0; start < commits.length; start += batch) {
+    const diff = git(repo, ["log", "-p", "--no-walk=unsorted", "--format=", "--diff-merges=first-parent", ...DIFF_OPTIONS, ...commits.slice(start, start + batch), "--"]);
+    for (const finding of scanDiff(diff)) seen.set(`${finding.file}\0${finding.line}\0${finding.rule}`, finding);
+  }
+  return [...seen.values()];
+}
 
 /** The findings in every tracked text file. */
 export function scanTree(repo: string): Finding[] {
