@@ -251,7 +251,7 @@ stage "The UAT sealing authority (a test key, Fly secret only)"
 say "Every UAT record is sealed under a UAT-only test authority. Its key must never be in the repo,"
 say "a PR, Jira or chat: it lives only as two Fly secrets."
 ask AUTHORITY_DIR "A folder OUTSIDE the repo for its two files (for example $HOME/rabaed-uat-authority):"
-AUTHORITY_DIR="${AUTHORITY_DIR/#~/$HOME}"
+[[ $AUTHORITY_DIR == "~"* ]] && AUTHORITY_DIR="$HOME${AUTHORITY_DIR:1}"
 [[ "$AUTHORITY_DIR" = /* ]] || AUTHORITY_DIR="$PWD/$AUTHORITY_DIR"
 # Node on Windows needs the Windows form of a Git Bash path.
 NATIVE_DIR="$AUTHORITY_DIR"
@@ -270,17 +270,29 @@ if confirm "Set UAT_SEALING_AUTHORITY_KEY and UAT_SEALING_AUTHORITY_CERTIFICATE 
     | flyctl secrets import --stage --app "$FLY_RECORDS_APP"
   flyctl secrets list --app "$FLY_RECORDS_APP"
 fi
-say "The key file is no longer needed: Fly holds it. A new one can always be made."
-if confirm "Delete $KEY_FILE now?"; then
+# The key file goes as soon as Fly holds both secrets; otherwise its path is named, to delete by hand.
+if flyctl secrets list --app "$FLY_RECORDS_APP" | grep -q UAT_SEALING_AUTHORITY_KEY \
+  && flyctl secrets list --app "$FLY_RECORDS_APP" | grep -q UAT_SEALING_AUTHORITY_CERTIFICATE; then
   rm -f "$KEY_FILE"
-  say "Deleted. The certificate stays; it is public."
+  say "Fly holds both secrets, so the key file is deleted. The certificate stays; it is public."
+else
+  warn "Fly does not hold both secrets yet. The private key is still at $KEY_FILE: delete it once they are set."
+  SKIPPED+=("Delete the private key file $KEY_FILE once both Fly secrets are set")
 fi
 
 # ── 4 ──────────────────────────────────────────────────────────────────────
 stage "Let GitHub deploy the app"
 say "A deploy token for this one app, valid a year, goes straight into GitHub's uat environment."
 if confirm "Create the token and store it as FLY_API_TOKEN in environment uat?"; then
-  flyctl tokens create deploy --app "$FLY_RECORDS_APP" --expiry 8760h | set_env_secret FLY_API_TOKEN
+  # Held only in this variable, never on screen; nothing is set when flyctl gave no token.
+  token=$(flyctl tokens create deploy --app "$FLY_RECORDS_APP" --expiry 8760h) || token=""
+  if [[ -n $token ]]; then
+    printf '%s' "$token" | set_env_secret FLY_API_TOKEN
+  else
+    warn "flyctl gave no token; FLY_API_TOKEN was not set. Run this stage again."
+    SKIPPED+=("GitHub secret FLY_API_TOKEN in environment uat")
+  fi
+  unset token
 fi
 note "The database, file store and web address come from the uat environment you already have."
 
