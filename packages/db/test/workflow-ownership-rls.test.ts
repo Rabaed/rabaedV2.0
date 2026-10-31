@@ -367,10 +367,15 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
     expect(await pickUp(k1.member, item.id)).toBe("picked_up");
     expect(await take(k1.member, item.id, "send_to_manager")).toBe("applied");
 
+    // The moves `as` reads, by their Transition's key: app.event_transitions gives the Transition of the
+    // reader's own Participant's events only (RP-1140), and the events policy only those `as` may read.
     const moves = (as: string) =>
       call<{ key: string }>(
         as,
-        sql`select tr.key from work_item_event e join workflow_transition tr on tr.id = e.transition_id where e.work_item_id = ${item.id}::uuid order by e.seq`,
+        sql`select tr.key from work_item_event e
+          join app.event_transitions(array(select x.id from work_item_event x where x.work_item_id = ${item.id}::uuid)) et on et.event_id = e.id
+          join workflow_transition tr on tr.id = et.transition_id
+          where e.work_item_id = ${item.id}::uuid order by e.seq`,
       ).then((rows) => rows.map((r) => r.key));
     expect(await moves(k1.member)).toContain("send_to_manager");
     expect(await moves(c1Pm)).not.toContain("send_to_manager");

@@ -314,15 +314,18 @@ describe("reading the answers as another Company on the item", () => {
         sql`select id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, workflow_version_id,
           form_version_id, document_number, outcome, closed_at, submitted_at from work_item where id = ${a.itemId}::uuid`,
       ),
-      // Every column the app role reads: the hashes are not among them (RP-448 review), nor the Step an
-      // event left, which app.work_item_event_from_steps gives the actor's own Participant only (RP-1140).
+      // Every column the app role reads: the hashes are not among them (RP-448 review), nor an event's
+      // Transition and the Step it left, which app.event_transitions gives (RP-1140).
       await call(
         as,
-        sql`select id, project_id, work_item_id, seq, type, actor_member_id, actor_engineer_id, actor_participant_id, transition_id,
+        sql`select id, project_id, work_item_id, seq, type, actor_member_id, actor_engineer_id, actor_participant_id,
           to_step_id, payload, audience, audience_participant_id, created_at
           from work_item_event where work_item_id = ${a.itemId}::uuid`,
       ),
-      await call(as, sql`select * from app.work_item_event_from_steps(${a.itemId}::uuid)`),
+      await call(
+        as,
+        sql`select * from app.event_transitions(array(select id from work_item_event where work_item_id = ${a.itemId}::uuid))`,
+      ),
       await call(
         as,
         sql`select id, project_id, work_item_id, step_id, participant_id, assignee_member_id, status, done_at

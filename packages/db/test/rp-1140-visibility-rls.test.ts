@@ -32,28 +32,43 @@ let closed = ""; // The same, then closed by K1's manager with Code C from Consu
 const steps = new Map<string, string>(); // The Workflow Version's Steps by key.
 const step = (key: string) => steps.get(key) ?? key;
 
-/** Every Step id `as` reads in the columns of work_item_event the app role is granted, for both items. */
-const eventStepColumns = async (as: string) => {
+/**
+ * Every Step id `as` reads from the item's events, for both items: in the columns of work_item_event the
+ * app role is granted, and through its Transition when `transition_id` is one of them (a Transition leaves
+ * one Step, so its id names the Step the event left).
+ */
+const eventSteps = async (as: string) => {
   const { rows } = await migrator.query(
     `select column_name from information_schema.column_privileges
      where grantee = 'rabaed_app' and privilege_type = 'SELECT' and table_schema = 'public' and table_name = 'work_item_event'
-       and column_name in ('from_step_id', 'to_step_id')`,
+       and column_name in ('from_step_id', 'to_step_id', 'transition_id')`,
   );
-  const columns = (rows as { column_name: string }[]).map((r) => r.column_name);
-  expect(columns).toContain("to_step_id"); // not hidden-from: the read below must have a column to read
+  const granted = new Set((rows as { column_name: string }[]).map((r) => r.column_name));
+  expect([...granted]).toContain("to_step_id"); // not hidden-from: the read below must have a column to read
+  const columns = [
+    ...["from_step_id", "to_step_id"].filter((c) => granted.has(c)).map((c) => sql.ref(`e.${c}`)),
+    ...(granted.has("transition_id") ? [sql`tr.from_step_id as transition_from`, sql`tr.to_step_id as transition_to`] : []),
+  ];
   const read = await t.call<Record<string, string | null>>(
     as,
-    sql`select ${sql.join(columns.map((c) => sql.ref(c)))} from work_item_event where work_item_id = any(${[atApproval, closed]}::uuid[])`,
+    sql`select ${sql.join(columns)} from work_item_event e
+      ${granted.has("transition_id") ? sql`left join workflow_transition tr on tr.id = e.transition_id` : sql``}
+      where e.work_item_id = any(${[atApproval, closed]}::uuid[])`,
   );
-  return read.flatMap((r) => columns.flatMap((c) => (r[c] ? [{ id: r[c] }] : [])));
+  return read.flatMap((r) => Object.values(r).flatMap((v) => (v ? [{ id: v }] : [])));
 };
-/** The Steps app.work_item_event_from_steps gives `as`: each event's Step it left, for both items. */
-const fromSteps = async (as: string) =>
-  (
-    await Promise.all(
-      [atApproval, closed].map((id) => t.call<{ id: string }>(as, sql`select from_step_id as id from app.work_item_event_from_steps(${id}::uuid)`)),
-    )
-  ).flat();
+/** Every event of both items, as the migrator reads them: what app.event_transitions is asked about. */
+const eventIds = async () =>
+  ((await migrator.query("select id from work_item_event where work_item_id = any($1::uuid[])", [[atApproval, closed]])).rows as { id: string }[]).map((r) => r.id);
+/** The Steps app.event_transitions gives `as` for the items' events: each Step an event left, and its Transition's Steps. */
+const transitionSteps = async (as: string) =>
+  t.call<{ id: string }>(
+    as,
+    sql`select s.id from app.event_transitions(${await eventIds()}::uuid[]) x
+      left join workflow_transition tr on tr.id = x.transition_id
+      cross join lateral (values (x.from_step_id), (tr.from_step_id), (tr.to_step_id)) s (id)
+      where s.id is not null`,
+  );
 /** The Steps app.work_item_history names to `as`, as the Steps of the item's Workflow Version they name. */
 const historySteps = async (as: string) => {
   const { rows } = await migrator.query("select id, name from workflow_step where id = any($1::uuid[])", [[...steps.values()]]);
@@ -143,13 +158,22 @@ describe("scenario RP-1140-1: K1 moves C1's Submittal inside K1 and closes it fr
 
   it("work_item_event gives C1 no Step K1 reached after the Submit, nor K1 the Step C1's Submit left", async () => {
     // K1 reads its own move to Consultant approval; C1 reads neither it nor the close leaving from there.
-    await expectHiddenFrom({ read: eventStepColumns, target: step("consultant_approval"), seenBy: k1(), hiddenFrom: c1(), name: named, label: "K1's Consultant approval" });
-    await expectHiddenFrom({ read: eventStepColumns, target: step("internal_review"), seenBy: c1(), hiddenFrom: k1(), name: named, label: "C1's internal review" });
+    await expectHiddenFrom({ read: eventSteps, target: step("consultant_approval"), seenBy: k1(), hiddenFrom: c1(), name: named, label: "K1's Consultant approval" });
+    await expectHiddenFrom({ read: eventSteps, target: step("internal_review"), seenBy: c1(), hiddenFrom: k1(), name: named, label: "C1's internal review" });
   });
 
-  it("app.work_item_event_from_steps gives each viewer the Step an event left only for its own Participant's events", async () => {
-    await expectHiddenFrom({ read: fromSteps, target: step("consultant_approval"), seenBy: k1(), hiddenFrom: c1(), name: named, label: "the Step K1's close left" });
-    await expectHiddenFrom({ read: fromSteps, target: step("internal_review"), seenBy: c1(), hiddenFrom: k1(), name: named, label: "the Step C1's Submit left" });
+  it("app.event_transitions gives each viewer an event's Transition and the Step it left only for its own Participant's events, and everyone its label", async () => {
+    await expectHiddenFrom({ read: transitionSteps, target: step("consultant_approval"), seenBy: k1(), hiddenFrom: c1(), name: named, label: "the Step K1's close left" });
+    await expectHiddenFrom({ read: transitionSteps, target: step("internal_review"), seenBy: c1(), hiddenFrom: k1(), name: named, label: "the Step C1's Submit left" });
+    // The close is shared: C1 reads what K1 did ("Revise · C", a close), as the history and the feed show it.
+    const close = (await migrator.query("select id from work_item_event where work_item_id = $1 and type = 'issue_code'", [closed])).rows[0].id as string;
+    for (const as of c1()) {
+      const read = await t.call<{ transition_id: string | null; from_step_id: string | null; label: unknown; kind: string }>(
+        as,
+        sql`select transition_id, from_step_id, label, kind from app.event_transitions(${[close]}::uuid[])`,
+      );
+      expect(read, named(as)).toEqual([{ transition_id: null, from_step_id: null, label: { en: "Revise · C", ar: "مراجعة · C" }, kind: "close" }]);
+    }
   });
 
   it("app.work_item_history names Consultant approval to K1 only", async () => {
@@ -164,7 +188,7 @@ describe("scenario RP-1140-1: K1 moves C1's Submittal inside K1 and closes it fr
   it("C1 still reads where each shared move took the item: K1's Consultant review, and the close's Step", async () => {
     const closedStep = (await migrator.query("select current_step_id from work_item where id = $1", [closed])).rows[0].current_step_id as string;
     for (const as of [...c1(), ...k1()]) {
-      const read = (await eventStepColumns(as)).map((r) => r.id);
+      const read = (await eventSteps(as)).map((r) => r.id);
       expect(read, named(as)).toEqual(expect.arrayContaining([step("consultant_review"), closedStep]));
     }
   });

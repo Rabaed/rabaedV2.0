@@ -8,7 +8,7 @@ import { randomInt } from "node:crypto";
 import { sql } from "kysely";
 import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemHistory } from "@rabaed/domain";
+import type { ActivityFeed, Home, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
@@ -86,8 +86,9 @@ describe("scenario RP-1140-1: K1 moves C1's Submittal inside K1 and closes it fr
   const c1 = () => [at.c1Engineer, at.c1Pm];
   const k1 = () => [k1Engineer, at.k1Manager];
 
-  it("at Consultant approval, the history names K1's Step to K1 only", async () => {
+  it("at Consultant approval, the history names K1's Step to K1 only, and C1's internal review to C1 only", async () => {
     await expectHiddenFrom({ read: historySteps, target: steps.get("consultant_approval")!, seenBy: k1(), hiddenFrom: c1(), name: named, label: "K1's Consultant approval" });
+    await expectHiddenFrom({ read: historySteps, target: steps.get("internal_review")!, seenBy: c1(), hiddenFrom: k1(), name: named, label: "C1's internal review" });
   });
 
   it("closed from Consultant approval: C1 reads K1's close and its Code C, never the Step it left; K1 does", async () => {
@@ -101,5 +102,19 @@ describe("scenario RP-1140-1: K1 moves C1's Submittal inside K1 and closes it fr
       const close = (await history(by)).filter((e) => e.outcome === "C");
       expect(close.map((e) => (e.fromStep === null ? null : stepByName.get(nameKey(e.fromStep)))), named(by)).toEqual([steps.get("consultant_approval")]);
     }
+  });
+
+  it("the Activity Feed and Home show everyone what K1's close did, its Transition's label and kind, as before", async () => {
+    const closeOf = async (by: Caller) => {
+      const feed = (await ok(by.get(`/v1/projects/${at.projectId}/activity`), 200)).json() as ActivityFeed;
+      const home = (await ok(by.get("/v1/home"), 200)).json() as Home;
+      const entry = feed.entries.find((e) => e.workItem.id === item && e.outcome === "C");
+      const onHome = home.activity.find((e) => e.workItem.id === item && e.outcome === "C");
+      return { transition: entry?.transition ?? null, verb: onHome?.verb ?? null };
+    };
+    const k1Reads = await closeOf(at.k1Manager);
+    expect(k1Reads.transition).toEqual({ en: "Revise · C", ar: "مراجعة · C" });
+    expect(k1Reads.verb).not.toBeNull(); // not hidden-from: Home names what the close did
+    for (const by of c1()) expect(await closeOf(by), named(by)).toEqual(k1Reads);
   });
 });
