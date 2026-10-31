@@ -86,6 +86,26 @@ describe("findOverlaps", () => {
     expect(text).not.toContain("#10 (RP-10-x) shares scripts/a.ts: merges clean");
   });
 
+  it("knows the branch's own PR by its head commit too, on a detached HEAD or a branch renamed after it was pushed", async () => {
+    const own = openPr(30, ["scripts/a.ts"], { ref: "claude/pushed-name", head: "f".repeat(40) });
+    const seam = fakeSeam([own, openPr(10, ["scripts/a.ts"])], { 10: ["scripts/a.ts"] });
+    const report = await findOverlaps({ branch: "HEAD", files: branch.files, head: "f".repeat(40) }, seam);
+    expect(report.overlaps.map((o) => o.number)).toEqual([10]);
+    expect(report.self.number).toBe(30);
+    expect(seam.asked).toEqual([10]);
+  });
+
+  it("lists a PR whose files gh could not read as unreadable, and keeps the other overlaps", async () => {
+    const seam = fakeSeam([openPr(10, [], { unreadable: "gh api …/pulls/10/files failed (exit 1)" }), openPr(11, ["scripts/b.ts"])], { 11: ["scripts/b.ts"] });
+    const report = await findOverlaps(branch, seam);
+    expect(report.unreadable).toEqual([{ number: 10, ref: "RP-10-x", reason: "gh api …/pulls/10/files failed (exit 1)" }]);
+    expect(report.overlaps.map((o) => o.number)).toEqual([11]);
+    const text = overlapMessage(report);
+    expect(text).toContain("could not read the files of #10 (RP-10-x) (gh api …/pulls/10/files failed (exit 1)), so it may overlap");
+    expect(text).toContain("voided by #11 if #11 merges first");
+    expect(overlapMessage({ self: { number: undefined, stamped: false }, overlaps: [], unreadable: report.unreadable })).toContain("could not read the files of #10");
+  });
+
   it("puts the branch's own PR first when its body has the stamped line and the other PR's has none", async () => {
     const own = openPr(30, ["scripts/a.ts"], { ref: branch.branch, stamped: true });
     const report = await findOverlaps(branch, fakeSeam([own, openPr(10, ["scripts/a.ts"])], { 10: ["scripts/a.ts"] }));
@@ -172,6 +192,19 @@ describe("ghSeam", () => {
     expect(script.peak()).toBeLessThanOrEqual(5);
   });
 
+  it("keeps the other PRs when gh can't list the files of one, marking it unreadable", async () => {
+    const { run } = scripted([
+      { match: "pulls?state=open", stdout: `${pull(7, null)}\n${pull(8, null)}\n` },
+      { match: "pulls/7/files", code: 1 },
+      { match: "pulls/8/files", stdout: "docs/x.md\n" },
+    ]);
+    const prs = await ghSeam("repo", run).openPrs();
+    expect(prs.map((p) => [p.number, p.files, p.unreadable])).toEqual([
+      [7, [], expect.stringMatching(/pulls\/7\/files.*failed \(exit 1\)/)],
+      [8, ["docs/x.md"], undefined],
+    ]);
+  });
+
   it("throws when gh fails, rather than report no open PRs", async () => {
     const { run } = scripted([{ match: "pulls?state=open", code: 1 }]);
     await expect(ghSeam("repo", run).openPrs()).rejects.toThrow(/gh api .*failed \(exit 1\)/);
@@ -233,7 +266,7 @@ describe("branchFiles", () => {
     git("rm", "-q", "gone.txt");
     git("mv", "old/name.txt", "old/renamed.txt");
     git("commit", "-q", "-m", "delete and rename");
-    expect(await branchFiles(repo)).toEqual({ branch: "RP-1-x", files: ["gone.txt", "keep.txt", "old/name.txt", "old/renamed.txt"] });
+    expect(await branchFiles(repo)).toEqual({ branch: "RP-1-x", head: git("rev-parse", "HEAD"), files: ["gone.txt", "keep.txt", "old/name.txt", "old/renamed.txt"] });
   });
 
   it("leaves out uncommitted and untracked files, which git merge-tree would not see in HEAD", async () => {

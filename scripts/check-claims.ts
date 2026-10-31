@@ -185,8 +185,13 @@ export async function branchClaims(repo: string, push?: { commit: string; branch
  * `overlapWarning` themselves.
  */
 export async function branchOverlaps(repo: string, seam?: OverlapSeam): Promise<string> {
-  const { overlapWarning } = await import("./pr-overlap.ts");
-  return overlapWarning(repo, seam);
+  try {
+    const { overlapWarning } = await import("./pr-overlap.ts");
+    return await overlapWarning(repo, seam);
+  } catch (error) {
+    // A module that won't load must not fail a lane whose claims are fine.
+    return `Warning: check:claims could not run the overlap look (${error instanceof Error ? error.message : String(error)}).`;
+  }
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {

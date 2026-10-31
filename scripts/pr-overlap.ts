@@ -18,6 +18,8 @@ export interface OpenPr {
   files: string[];
   /** Whether its body has a stamped `pnpm verify passed` line naming its current head. */
   stamped: boolean;
+  /** Why GitHub's list of its files could not be read, when it could not (`files` is then empty). */
+  unreadable?: string;
 }
 
 /** GitHub and git, as the overlap finder uses them. */
@@ -27,9 +29,10 @@ export interface OverlapSeam {
   conflictsWith(pr: OpenPr): Promise<string[]>;
 }
 
-/** The branch under test: its name and the files it changes. */
+/** The branch under test: its name, its HEAD commit when known, and the files it changes. */
 export interface BranchFiles {
   branch: string;
+  head?: string;
   files: string[];
 }
 
@@ -50,15 +53,20 @@ export interface OverlapReport {
   /** The branch's own open PR, if it has one (never listed in `overlaps`). */
   self: { number: number | undefined; stamped: boolean };
   overlaps: Overlap[];
+  /** Open PRs whose files could not be read, so whether they overlap is not known. */
+  unreadable: { number: number; ref: string; reason: string }[];
 }
 
 /** The open PRs that change any of the branch's files, each with the shared files and the ones a merge would conflict in. */
 export async function findOverlaps(branch: BranchFiles, seam: OverlapSeam): Promise<OverlapReport> {
   const prs = branch.files.length === 0 ? [] : await seam.openPrs();
   const own = new Set(branch.files);
-  const self = prs.find((pr) => pr.ref === branch.branch);
+  // The branch's own PR, by name or by head: a detached HEAD, or a branch renamed after the push, has another name.
+  const self = prs.find((pr) => pr.ref === branch.branch || (branch.head !== undefined && pr.head === branch.head));
   const overlaps: Overlap[] = [];
+  const unreadable: OverlapReport["unreadable"] = [];
   for (const pr of prs.filter((other) => other !== self).sort((a, b) => a.number - b.number)) {
+    if (pr.unreadable !== undefined) unreadable.push({ number: pr.number, ref: pr.ref, reason: pr.unreadable });
     const shared = [...new Set(pr.files.filter((file) => own.has(file)))].sort();
     if (shared.length === 0) continue;
     const overlap: Overlap = { number: pr.number, ref: pr.ref, shared, conflicts: [], stamped: pr.stamped };
@@ -70,7 +78,7 @@ export async function findOverlaps(branch: BranchFiles, seam: OverlapSeam): Prom
     }
     overlaps.push(overlap);
   }
-  return { self: { number: self?.number, stamped: self?.stamped ?? false }, overlaps };
+  return { self: { number: self?.number, stamped: self?.stamped ?? false }, overlaps, unreadable };
 }
 
 /** A PR, or the branch itself, in line to merge. */
@@ -92,10 +100,11 @@ export function mergeOrder(report: OverlapReport): MergeCandidate[] {
   return [...others, { ...report.self, self: true }].sort((a, b) => Number(b.stamped) - Number(a.stamped) || rank(a) - rank(b));
 }
 
-/** What to print: "" with no overlap. */
+/** What to print: "" with no overlap and every PR's files read. */
 export function overlapMessage(report: OverlapReport): string {
-  if (report.overlaps.length === 0) return "";
-  const lines = ["check:claims: other open PRs change files this branch changes:"];
+  if (report.overlaps.length === 0 && report.unreadable.length === 0) return "";
+  const lines = report.overlaps.length > 0 ? ["check:claims: other open PRs change files this branch changes:"] : [];
+  for (const u of report.unreadable) lines.push(`Warning: check:claims could not read the files of #${u.number} (${u.ref}) (${u.reason}), so it may overlap.`);
   for (const o of report.overlaps) {
     const what = o.unknown !== undefined ? `shares ${o.shared.join(", ")}: could not tell whether it conflicts (${o.unknown})` : o.conflicts.length > 0 ? `would conflict in: ${o.conflicts.join(", ")}` : `shares ${o.shared.join(", ")}: merges clean`;
     lines.push(`  #${o.number} (${o.ref}) ${what}`);
@@ -146,13 +155,15 @@ async function git(run: Exec, repo: string, ...args: string[]): Promise<string> 
 /**
  * The checked-out branch and the files HEAD changes since it left origin/main, deletions and a rename's old
  * path too. HEAD, not the working tree: it is the commit `git merge-tree` merges, so an uncommitted file
- * can't look shared and then merge clean. Throws when git fails.
+ * can't look shared and then merge clean. origin/main is as last fetched: an old one lists main's own
+ * changes as the branch's (`git fetch origin main` first). Throws when git fails.
  */
 export async function branchFiles(repo: string, run: Exec = exec): Promise<BranchFiles> {
   const branch = (await git(run, repo, "rev-parse", "--abbrev-ref", "HEAD")).trim();
+  const head = (await git(run, repo, "rev-parse", "HEAD")).trim();
   const base = (await git(run, repo, "merge-base", "origin/main", "HEAD")).trim();
   const files = (await git(run, repo, "diff", "--name-only", "--no-renames", base, "HEAD")).split(/\r?\n/).filter(Boolean);
-  return { branch, files: [...new Set(files)].sort() };
+  return { branch, head, files: [...new Set(files)].sort() };
 }
 
 /** The files that would conflict merging `commit` into HEAD of `repo`. Throws when git can't say. */
@@ -192,12 +203,20 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
-/** One `gh api` JSON line per open PR: a fork's branch is `owner/repo:branch`, so a fork PR named like this branch is not its own PR. */
-const PULLS_JQ = '.[] | {number, ref: (if .head.repo.full_name == .base.repo.full_name then .head.ref else ((.head.repo.full_name // "fork") + ":" + .head.ref) end), head: .head.sha, body}';
+/**
+ * One `gh api` JSON line per open PR aimed at main (a PR stacked on another branch does not merge into main
+ * first, so it is not one to order against). A fork's branch is `owner/repo:branch`, so a fork PR named like
+ * this branch is not its own PR.
+ */
+const PULLS_JQ = '.[] | select(.base.ref == "main") | {number, ref: (if .head.repo.full_name == .base.repo.full_name then .head.ref else ((.head.repo.full_name // "fork") + ":" + .head.ref) end), head: .head.sha, body}';
 /** The path of each file a PR changes, a rename's old path too. */
 const FILES_JQ = ".[] | (.filename, (.previous_filename // empty))";
 
-/** GitHub through `gh api` (the repo's own `{owner}/{repo}`) and git in `repo`. */
+/**
+ * GitHub through `gh api` (the repo's own `{owner}/{repo}`) and git in `repo`. Read-only for the working
+ * tree and the branches, but `conflictsWith` fetches a PR's head into the object store (`git fetch origin
+ * pull/N/head`) and `git merge-tree` writes the merged trees there.
+ */
 export function ghSeam(repo: string, run: Exec = exec): OverlapSeam {
   const gh = async (path: string, jq: string) => {
     const done = await run("gh", ["api", path, "--paginate", "--jq", jq], repo);
@@ -209,10 +228,16 @@ export function ghSeam(repo: string, run: Exec = exec): OverlapSeam {
       const lines = (await gh("repos/{owner}/{repo}/pulls?state=open&per_page=100", PULLS_JQ)).split(/\r?\n/).filter((line) => line.trim() !== "");
       return mapLimit(lines, GH_AT_ONCE, async (line) => {
         const pull = JSON.parse(line) as { number: number; ref: string; head: string; body: string | null };
-        const names = await gh(`repos/{owner}/{repo}/pulls/${pull.number}/files?per_page=100`, FILES_JQ);
         // A stamp counts only for the head it names: after a push the old line is stale.
         const stamped = verifiedCommits(pull.body ?? "").some((commit) => pull.head.startsWith(commit));
-        return { number: pull.number, ref: pull.ref, head: pull.head, files: names.split(/\r?\n/).filter(Boolean), stamped };
+        const open = { number: pull.number, ref: pull.ref, head: pull.head, stamped };
+        try {
+          const names = await gh(`repos/{owner}/{repo}/pulls/${pull.number}/files?per_page=100`, FILES_JQ);
+          return { ...open, files: names.split(/\r?\n/).filter(Boolean) };
+        } catch (error) {
+          // One PR gh can't list (a rate limit, a blip) must not hide the others.
+          return { ...open, files: [], unreadable: error instanceof Error ? error.message : String(error) };
+        }
       });
     },
     async conflictsWith(pr) {
