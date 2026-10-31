@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addEvent, addReviewed, isTrustedAuthor, overHttp, reviewAt, reviewMarker, writersAmong, type AddSeam, type ReviewComment } from "./reviewed-add.ts";
+import { addEvent, addReviewed, isTrustedAuthor, overHttp, reviewAt, reviewMarker, writersAmong, type AddSeam, type Permission, type ReviewComment } from "./reviewed-add.ts";
 import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
 
@@ -42,7 +42,7 @@ describe("isTrustedAuthor", () => {
 
 describe("writersAmong", () => {
   it("keeps the markers' authors whose permission is admin or write (GitHub reports maintain as write)", async () => {
-    const permissions: Record<string, string> = { admin1: "admin", writer: "write", reader: "read", triager: "read", gone: "none" };
+    const permissions: Record<string, Permission> = { admin1: "admin", writer: "write", reader: "read", triager: "read", gone: "none" };
     const asked: string[] = [];
     const comments = Object.keys(permissions).map((login) => ({ ...review(HEAD), login }));
     const writers = await writersAmong([...comments, { ...review(OLD), login: "writer" }], async (login) => {
@@ -117,7 +117,7 @@ function fakeSeam(
   start: Partial<Pull> & {
     comments?: ReviewComment[];
     /** GitHub's `permission` per login; anyone else has "none". */
-    permissions?: Record<string, string>;
+    permissions?: Record<string, Permission>;
     graph?: ReviewedGit;
     headAfterAdd?: string;
     requiredRuns?: { id: number; status: string; conclusion: string | null }[];
@@ -178,7 +178,7 @@ describe("addReviewed", () => {
 
   it("trusts a review comment by an author with write access, read from their repo permission, not their org membership (RP-1159)", async () => {
     // On PR #542 CI's token saw the owner's private org membership as CONTRIBUTOR; the permission read sees admin.
-    for (const permission of ["admin", "write"]) {
+    for (const permission of ["admin", "write"] as const) {
       const { seam, calls } = fakeSeam({ permissions: { mmhaleess90: permission } });
       expect(await addReviewed({ pr: 5 }, seam)).toMatchObject({ ok: true, added: true });
       expect(calls).toContain("add");
@@ -186,7 +186,7 @@ describe("addReviewed", () => {
   });
 
   it("never adds it for a review comment by a user who can only read the repo", async () => {
-    for (const permission of ["read", "none"]) {
+    for (const permission of ["read", "none"] as const) {
       const { seam, calls } = fakeSeam({ permissions: { mmhaleess90: permission } });
       const result = await addReviewed({ pr: 5 }, seam);
       expect(result).toMatchObject({ ok: true, added: false });

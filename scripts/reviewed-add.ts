@@ -38,7 +38,10 @@ const MARKER = /<!-- code-review: ([0-9a-f]{40}) -->/g;
  * used: GitHub reports MEMBER only for a public org membership, so CI's token saw the owner as CONTRIBUTOR (RP-1159).
  * No bot counts: no review bot posts on this repo, and any workflow can comment as github-actions[bot].
  */
-const WRITE_PERMISSIONS = new Set(["admin", "write"]);
+const WRITE_PERMISSIONS: ReadonlySet<Permission> = new Set(["admin", "write"]);
+
+/** GitHub's legacy base role for a user on the repo (`permission` in the collaborator permission answer). */
+export type Permission = "admin" | "write" | "read" | "none";
 
 export interface ReviewComment {
   login: string;
@@ -48,10 +51,11 @@ export interface ReviewComment {
 }
 
 const markedCommits = (comment: ReviewComment) => [...comment.body.matchAll(MARKER)].map(([, sha = ""]) => sha);
+const hasMarker = (comment: ReviewComment) => markedCommits(comment).length > 0;
 
 /** The users among the markers' authors who can push to the repo; `permission` is asked once per login. */
-export async function writersAmong(comments: ReviewComment[], permission: (login: string) => Promise<string>): Promise<Set<string>> {
-  const logins = new Set(comments.filter((comment) => comment.type === "User" && markedCommits(comment).length > 0).map((comment) => comment.login));
+export async function writersAmong(comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> {
+  const logins = new Set(comments.filter((comment) => comment.type === "User" && hasMarker(comment)).map((comment) => comment.login));
   const writers = new Set<string>();
   for (const login of logins) if (WRITE_PERMISSIONS.has(await permission(login))) writers.add(login);
   return writers;
@@ -64,11 +68,11 @@ export type ReviewFound = { ok: true; commit: string } | { ok: false; reason: st
 
 /** A review comment by one of `writers` for `head`, or for a commit only clean commits led to it from. */
 export function reviewAt(comments: ReviewComment[], head: string, git: ReviewedGit, writers: ReadonlySet<string>): ReviewFound {
-  const trustedAuthor = (comment: ReviewComment) => isTrustedAuthor(comment, writers);
-  const trusted = comments.filter(trustedAuthor).flatMap(markedCommits);
+  const byWriter = (comment: ReviewComment) => isTrustedAuthor(comment, writers);
+  const trusted = comments.filter(byWriter).flatMap(markedCommits);
   const commit = trusted.find((candidate) => onlyCleanCommitsSince(candidate, head, git));
   if (commit !== undefined) return { ok: true, commit };
-  const untrusted = comments.filter((comment) => !trustedAuthor(comment) && markedCommits(comment).length > 0).map((comment) => comment.login);
+  const untrusted = comments.filter((comment) => !byWriter(comment) && hasMarker(comment)).map((comment) => comment.login);
   const parts = [
     trusted.length > 0
       ? `its /code-review comments name ${[...new Set(trusted)].join(", ")}, which is neither the head ${head} nor a commit only clean commits led to it from`
@@ -93,8 +97,8 @@ export interface AddSeam extends ReviewedGit {
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[]; draft: boolean; sameRepo: boolean; open: boolean }>;
   /** Every comment on the PR's conversation. */
   comments(pr: number): Promise<ReviewComment[]>;
-  /** GitHub's `permission` for `login` on the repo: "admin", "write", "read" or "none". */
-  permission(login: string): Promise<string>;
+  /** GitHub's `permission` for `login` on the repo. */
+  permission(login: string): Promise<Permission>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
   fetchPull(pr: number): void;
   /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
@@ -235,7 +239,7 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
     },
     async permission(login) {
       // 404: no such user (a deleted account's ghost), so no access. Needs only the token's metadata read.
-      const found = (await call("GET", `collaborators/${encodeURIComponent(login)}/permission`, undefined, true)) as { permission: string } | undefined;
+      const found = (await call("GET", `collaborators/${encodeURIComponent(login)}/permission`, undefined, true)) as { permission: Permission } | undefined;
       return found?.permission ?? "none";
     },
     async labelRuns(headSha) {
