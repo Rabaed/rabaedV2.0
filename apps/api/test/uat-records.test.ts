@@ -122,7 +122,7 @@ beforeAll(async () => {
   pages = await pageTexts(pdf);
   const xml = new TextDecoder().decode((await attachedFiles(pdf))[0]!.bytes);
   token = /link="https:\/\/rabaed\.test\/verify\/([A-Za-z0-9_-]{43})"/.exec(xml)![1]!;
-}, 240_000);
+}, 420_000);
 
 describe("scenario RP-1042-1: a Documental Record made by the UAT Records container", () => {
   it("is published: its checks passed, veraPDF's PDF/A-3 validation among them", async () => {

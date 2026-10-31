@@ -15,6 +15,8 @@ let migrator: pg.Client;
 let app: Db;
 
 const sha = (s: string) => createHash("sha256").update(s).digest();
+/** Each record's made-up Verification Code, `XXXX-XXXX`: RTK1-1042, RTK2-1042… */
+let codes = 0;
 const FIELDS = ["documentNumber", "fingerprints", "outcome", "project", "sealedAt", "signers", "status", "subject"];
 const face = (testKey?: boolean) => ({
   language: "en",
@@ -51,7 +53,7 @@ beforeAll(async () => {
       `insert into documental_record (project_id, work_item_id, pdf_file_id, record_data_file_id, layout_version, language, outcome,
          pdf_sha256, sealed_at, verification_token_hash, verification_code, status)
        values ($1, $2, $3, $4, '2', 'en', 'A', $5, now(), $6, $7, 'published')`,
-      [item.project_id, id, await file("record.pdf", "application/pdf"), await file("record-data.xml", "application/xml"), sha(`pdf ${title}`), sha(token), `RP10-42${title.length}X`],
+      [item.project_id, id, await file("record.pdf", "application/pdf"), await file("record-data.xml", "application/xml"), sha(`pdf ${title}`), sha(token), `RTK${++codes}-1042`],
     );
     // The record job's row, as the close writes it (the migrator stands in for it), already done, so no drain takes it.
     const outboxId = (
