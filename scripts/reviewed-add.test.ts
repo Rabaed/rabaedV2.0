@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CiRun } from "./ci-green.ts";
 import { addEvent, addReviewed, isTrustedAuthor, overHttp, reviewAt, reviewMarker, writersAmong, type AddSeam, type Permission, type ReviewComment } from "./reviewed-add.ts";
 import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
@@ -107,7 +108,16 @@ describe("addEvent", () => {
   });
 
   it("refuses any other event", () => {
-    expect(() => addEvent("push", {})).toThrow(/pull_request and issue_comment/);
+    expect(() => addEvent("push", {})).toThrow(/pull_request, issue_comment and workflow_run/);
+  });
+
+  it("reads the PR from a finished CI run on its head (RP-1190), and nothing from a fork's, a push's or another workflow's run", () => {
+    const ciRun = { event: "pull_request", path: ".github/workflows/ci.yml", head_sha: HEAD, pull_requests: [{ number: 3, head: { sha: OLD } }, { number: 4, head: { sha: HEAD } }] };
+    expect(addEvent("workflow_run", { workflow_run: ciRun })).toEqual({ pr: 4 });
+    // A fork's PR is not in pull_requests.
+    expect(addEvent("workflow_run", { workflow_run: { ...ciRun, pull_requests: [] } })).toBeUndefined();
+    expect(addEvent("workflow_run", { workflow_run: { ...ciRun, event: "push" } })).toBeUndefined();
+    expect(addEvent("workflow_run", { workflow_run: { ...ciRun, path: ".github/workflows/other.yml" } })).toBeUndefined();
   });
 });
 
@@ -121,6 +131,9 @@ function fakeSeam(
     graph?: ReviewedGit;
     headAfterAdd?: string;
     requiredRuns?: { id: number; status: string; conclusion: string | null }[];
+    verifyRuns?: { id: number; status: string; conclusion: string | null }[];
+    changed?: string[];
+    ci?: CiRun[] | Error;
   },
 ) {
   const calls: string[] = [];
@@ -134,6 +147,14 @@ function fakeSeam(
     fetchPull: () => void calls.push("fetch"),
     labelRuns: async () => [{ status: "completed" }],
     requiredRuns: async () => start.requiredRuns ?? [{ id: 41, status: "completed", conclusion: "failure" }],
+    verifyRuns: async () => start.verifyRuns ?? [{ id: 51, status: "completed", conclusion: "failure" }],
+    changedFiles: () => start.changed ?? ["scripts/x.ts"],
+    packageJsonVersions: () => ({ before: undefined, after: undefined }),
+    requiredChecks: async () => ["lint", "unit", "verify-gate", "reviewed-required"],
+    ciRuns: async () => {
+      if (start.ci instanceof Error) throw start.ci;
+      return start.ci ?? [];
+    },
     addLabel: async () => {
       calls.push("add");
       pull = { ...pull, labels: [...pull.labels, REVIEWED_LABEL], headSha: start.headAfterAdd ?? pull.headSha };
@@ -144,6 +165,75 @@ function fakeSeam(
   };
   return { seam, calls };
 }
+
+describe("addReviewed: CI green on the head counts as the verify (RP-1190)", () => {
+  const green = (status = "completed", conclusion: string | null = "success"): CiRun => ({
+    id: 61,
+    headSha: HEAD,
+    event: "pull_request",
+    path: ".github/workflows/ci.yml",
+    status,
+    conclusion,
+    repo: "Rabaed/rabaedV2.0",
+    headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 5, baseRef: "main" }],
+    jobs: ["lint", "unit"].map((name) => ({ name, status, conclusion })),
+  });
+
+  it("adds the label with no verify line when CI passed on the head, and re-runs the head's failed verify-gate and reviewed-required runs", async () => {
+    const { seam, calls } = fakeSeam({ body: "", ci: [green()] });
+    const result = await addReviewed({ pr: 5 }, seam);
+    expect(result).toMatchObject({ ok: true, added: true });
+    expect(result.summary).toContain("CI green (run 61)");
+    expect(calls).toEqual(["fetch", "rerun 51", "add", "rerun 41"]);
+  });
+
+  it("re-runs a failed verify-gate run once CI is green, even before a review: the check reads CI only when it runs", async () => {
+    const { seam, calls } = fakeSeam({ body: "", ci: [green()], comments: [] });
+    const result = await addReviewed({ pr: 5 }, seam);
+    expect(result.added).toBe(false);
+    expect(calls).toEqual(["fetch", "rerun 51"]);
+  });
+
+  it("leaves a verify-gate run that passed or is still running alone", async () => {
+    for (const verifyRuns of [[{ id: 52, status: "completed", conclusion: "success" }], [{ id: 53, status: "in_progress", conclusion: null }], []]) {
+      const { seam, calls } = fakeSeam({ body: "", ci: [green()], comments: [], verifyRuns });
+      await addReviewed({ pr: 5 }, seam);
+      expect(calls).toEqual(["fetch"]);
+    }
+  });
+
+  it("never adds it for a PR that edits ci.yml without the stamped line", async () => {
+    const { seam, calls } = fakeSeam({ body: "", ci: [green()], changed: [".github/workflows/ci.yml"] });
+    const result = await addReviewed({ pr: 5 }, seam);
+    expect(result).toMatchObject({ ok: true, added: false });
+    expect(result.summary).toContain("CI's own files");
+    expect(calls).toEqual(["fetch"]);
+  });
+
+  it("says CI is still running and adds nothing", async () => {
+    const { seam, calls } = fakeSeam({ body: "", ci: [green("in_progress", null)] });
+    const result = await addReviewed({ pr: 5 }, seam);
+    expect(result).toMatchObject({ ok: true, added: false });
+    expect(result.summary).toContain(`CI still running on ${HEAD}: 2 jobs left`);
+    expect(calls).toEqual(["fetch"]);
+  });
+
+  it("adds nothing when CI failed, or on an API error", async () => {
+    for (const ci of [[green("completed", "failure")], new Error("GitHub GET actions/workflows/ci.yml/runs answered 500")]) {
+      const { seam, calls } = fakeSeam({ body: "", ci });
+      const result = await addReviewed({ pr: 5 }, seam);
+      expect(result).toMatchObject({ ok: true, added: false });
+      expect(calls).toEqual(["fetch"]);
+    }
+  });
+
+  it("still adds it on a stamped line when CI cannot be read", async () => {
+    const { seam, calls } = fakeSeam({ ci: new Error("GitHub GET rules/branches/main answered 403") });
+    expect((await addReviewed({ pr: 5 }, seam)).added).toBe(true);
+    expect(calls).toEqual(["fetch", "add", "rerun 41"]);
+  });
+});
 
 describe("addReviewed", () => {
   it("adds the label when a trusted review comment and a stamped verify line both name the head, then re-runs reviewed-required", async () => {

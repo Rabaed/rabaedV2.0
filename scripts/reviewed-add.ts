@@ -2,8 +2,9 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isBaselineBotCommit, onlyCleanCommitsSince, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
+import { CI_WORKFLOW, ciOverHttp, ciOwnChanges, readCiEvidence, type CiReads } from "./ci-green.ts";
 import { REQUIRED_CHECK } from "./reviewed-required.ts";
-import { realGateGit, verifyGate } from "./verify-gate.ts";
+import { realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen } from "./verify-gate.ts";
 
 // Adds the `reviewed` label to a PR (RP-1118, owner's option b on RP-1098: no session labels its own PR).
 // It adds it only when both hold for the PR's current head:
@@ -11,7 +12,10 @@ import { realGateGit, verifyGate } from "./verify-gate.ts";
 //      hidden line `<!-- code-review: <40-hex sha> -->`, posted by a user with write access (`isTrustedAuthor`). The lane
 //      posts it with `node scripts/review-post.ts <pr> <summary-file>` after /code-review (the skill lives outside
 //      this repo, so the repo's script writes the marker);
-//   2. the body's stamped verify line passes the verify gate (`verifyGate`, RP-1094) for that head.
+//   2. the verify gate passes for that head (`verifiedOrGreen`): the body's stamped verify line (RP-1094), or CI
+//      green on that exact head for a PR that changes none of CI's own files (RP-1190, scripts/ci-green.ts).
+//      On a finished CI run (`workflow_run`) it also re-runs the head's failed verify-gate run, which ran before CI
+//      had finished and reads CI only when it runs.
 // Either may name an older commit when only clean commits led from it to the head: merges of main and the
 // screenshot bot's baseline commits (`onlyCleanCommitsSince`, RP-1017, RP-1103), the one rule the verify gate uses.
 //
@@ -22,8 +26,10 @@ import { realGateGit, verifyGate } from "./verify-gate.ts";
 // which reads the labels live. Docs-only PRs are unchanged: `docs-only` still passes without `reviewed`.
 //
 // Run by .github/workflows/reviewed-add.yml (PR 2) from the default branch's copy, on pull_request (the body's
-// verify line, a push, ready for review) and issue_comment (the review comment), in a checkout with main's full
-// history; it fetches the PR's head itself and runs none of its code.
+// verify line, a push, ready for review) and issue_comment (the review comment), and, once the workflow PR of RP-1190
+// lands, on workflow_run (CI finished on the head), in a checkout with main's full history; it fetches the PR's
+// head itself and runs none of its code. On workflow_run it needs `actions: write` for the verify-gate re-run, and
+// `actions: read` to read CI.
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH.
 
 /** The hidden line a /code-review summary comment carries for the commit it reviewed (the full sha). */
@@ -84,15 +90,28 @@ export function reviewAt(comments: ReviewComment[], head: string, git: ReviewedG
 
 export type AddEvent = { pr: number };
 
-/** The PR the workflow ran for; undefined for a comment on a plain issue. */
+/**
+ * The PR the workflow ran for; undefined for a comment on a plain issue, and for a `workflow_run` that is not a CI
+ * (ci.yml) pull_request run of a PR from this repo (GitHub lists no fork PR in `pull_requests`).
+ */
 export function addEvent(eventName: string, payload: unknown): AddEvent | undefined {
-  const event = payload as { pull_request?: { number: number }; issue?: { number: number; pull_request?: unknown } };
+  const event = payload as {
+    pull_request?: { number: number };
+    issue?: { number: number; pull_request?: unknown };
+    workflow_run?: { event: string; path: string; head_sha: string; pull_requests?: { number: number; head: { sha: string } }[] };
+  };
   if (eventName === "pull_request" && event.pull_request) return { pr: event.pull_request.number };
   if (eventName === "issue_comment" && event.issue) return event.issue.pull_request ? { pr: event.issue.number } : undefined;
-  throw new Error(`reviewed-add runs on pull_request and issue_comment, not ${eventName}`);
+  if (eventName === "workflow_run" && event.workflow_run) {
+    const run = event.workflow_run;
+    if (run.event !== "pull_request" || run.path !== CI_WORKFLOW) return undefined;
+    const pull = (run.pull_requests ?? []).find((candidate) => candidate.head.sha === run.head_sha);
+    return pull ? { pr: pull.number } : undefined;
+  }
+  throw new Error(`reviewed-add runs on pull_request, issue_comment and workflow_run, not ${eventName}`);
 }
 
-export interface AddSeam extends ReviewedGit {
+export interface AddSeam extends ReviewedGit, CiReads {
   /** The PR now. */
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[]; draft: boolean; sameRepo: boolean; open: boolean }>;
   /** Every comment on the PR's conversation. */
@@ -105,6 +124,12 @@ export interface AddSeam extends ReviewedGit {
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
   /** The `reviewed-required` workflow's pull_request runs for `headSha`, newest first. */
   requiredRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
+  /** The `verify-gate` workflow's pull_request runs for `headSha`, newest first. */
+  verifyRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
+  /** Paths `head` changes against main (`git diff --name-only origin/main...<head>`). */
+  changedFiles(head: string): string[];
+  /** A file's text at the merge base of origin/main and `head` and at `head`. */
+  packageJsonVersions(head: string, file: string): { before: string | undefined; after: string | undefined };
   addLabel(pr: number): Promise<void>;
   removeLabel(pr: number): Promise<void>;
   rerun(runId: number): Promise<void>;
@@ -156,13 +181,23 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!settled) return { ok: false, added: false, summary: `PR #${pr}: the reviewed-label run for ${head} did not finish within ${timeoutMs / 1000} s. Re-run this workflow once it has.` };
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
-  if (pull.labels.includes(REVIEWED_LABEL)) return skip(`already has \`${REVIEWED_LABEL}\`.`);
+  const verify = verifiedOrGreen(pull.body, head, pr, seam, ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file)), await readCiEvidence(head, seam));
+  // The verify-gate check reads CI only when it runs, and it ran when the head was pushed, before CI finished:
+  // re-run its failed run now CI is green, so the required check shows it.
+  let reran = "";
+  if (verify.ok && verify.via === "ci") {
+    const [latest] = await seam.verifyRuns(head);
+    if (latest !== undefined && latest.status === "completed" && latest.conclusion !== "success") {
+      await seam.rerun(latest.id);
+      reran = ` Re-ran ${VERIFY_CHECK} (run ${latest.id}) now CI is green.`;
+    }
+  }
+  if (pull.labels.includes(REVIEWED_LABEL)) return skip(`already has \`${REVIEWED_LABEL}\`.${reran}`);
   const comments = await seam.comments(pr);
   const review = reviewAt(comments, head, seam, await writersAmong(comments, seam.permission));
-  const verify = verifyGate(pull.body, head, seam);
   if (!review.ok || !verify.ok) {
     const reasons = [...(review.ok ? [] : [review.reason]), ...(verify.ok ? [] : [verify.reason])];
-    return skip(`no \`${REVIEWED_LABEL}\` label yet: ${reasons.join("; ")}.`);
+    return skip(`no \`${REVIEWED_LABEL}\` label yet: ${reasons.join("; ")}.${reran}`);
   }
   await seam.addLabel(pr);
   // A push between the read and the add was answered by a reviewed-label run that saw no label to remove.
@@ -182,16 +217,16 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
     pollMs,
     timeoutMs,
   );
-  const added = `PR #${pr}: added \`${REVIEWED_LABEL}\`: /code-review at ${review.commit} and \`pnpm verify\` on ${verify.commit}, for the head ${head}`;
+  const added = `PR #${pr}: added \`${REVIEWED_LABEL}\`: /code-review at ${review.commit} and ${verifiedBy(verify)}, for the head ${head}`;
   if (!finished) return { ok: false, added: true, summary: `${added}, but its ${REQUIRED_CHECK} run ${latest?.id} did not finish within ${timeoutMs / 1000} s; re-run that check once it has.` };
   const rerun = latest !== undefined && latest.conclusion !== "success";
   if (rerun && latest) await seam.rerun(latest.id);
-  return { ok: true, added: true, summary: `${added}${rerun ? `; re-ran ${REQUIRED_CHECK} (run ${latest?.id})` : ""}.` };
+  return { ok: true, added: true, summary: `${added}${rerun ? `; re-ran ${REQUIRED_CHECK} (run ${latest?.id})` : ""}.${reran}` };
 }
 
 const PER_PAGE = 100;
 
-export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Omit<AddSeam, keyof ReviewedGit | "fetchPull" | "sleep"> {
+export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Omit<AddSeam, keyof ReviewedGit | keyof CiReads | "fetchPull" | "changedFiles" | "packageJsonVersions" | "sleep"> {
   const call = async (method: string, path: string, body?: unknown, allow404 = false): Promise<unknown> => {
     const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
       method,
@@ -249,6 +284,9 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       // The API lists runs newest first.
       return ((await runs("reviewed-required.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
     },
+    async verifyRuns(headSha) {
+      return ((await runs("verify-gate.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
+    },
     addLabel: async (pr) => void (await call("POST", `issues/${pr}/labels`, { labels: [REVIEWED_LABEL] })),
     async removeLabel(pr) {
       // 404: the label is already gone, which is the goal.
@@ -269,7 +307,7 @@ async function main() {
     return;
   }
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
-  const result = await addReviewed(event, { ...realGateGit(), ...overHttp(repository, token), sleep });
+  const result = await addReviewed(event, { ...realGateGit(), ...overHttp(repository, token), ...ciOverHttp(repository, token), sleep });
   (result.ok ? console.log : console.error)(result.summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${result.summary}\n`);
   process.exit(result.ok ? 0 : 1);
