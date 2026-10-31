@@ -6,6 +6,7 @@ import {
   formatFormValue,
   formatNumber,
   isOpenStageCategory,
+  offersRevision,
   outcomeLook,
   watchOutcomeNames,
   type DocumentList,
@@ -75,6 +76,7 @@ import type { AnsweredChecklists } from "@/lib/checklist-once";
 import { changeText, replyAnswers, replyFiles } from "@/lib/history-details";
 import { historyMoveLabel } from "@/lib/history-move-label";
 import { notPickedUpYetValues } from "@/lib/pool-line";
+import { transitionGoesTo } from "@/lib/transition-goes-to";
 
 
 export type WorkItemPageProps = {
@@ -121,6 +123,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
   const tMap = useTranslations("workflowMap");
   const tViews = useTranslations("workItemViews");
   const tRevision = useTranslations("revision");
+  const tPopup = useTranslations("workItems.actions.popup");
   const form = useWorkItemForm();
   const router = useRouter();
   const [tab, setTab] = useState("form");
@@ -132,9 +135,22 @@ export function WorkItemPage(props: WorkItemPageProps) {
     const outcome = typeOutcomes.find((o) => o.code === code);
     return outcome ? outcomeLook(outcome, typeOutcomes) : undefined;
   };
+  // The pop-up's header (rows 34–36): the raiser's Company reads the Remarks with the signer's name (V14:
+  // the final outcome and its signer are shown), unless the viewer is of the raiser's Company.
+  const raiser = item.raisedBy.companyName;
+  const raisedByOwn = sameName(raiser, me.company.legalName);
   const opener = useTransitionOpener(item.id, item.actions, locale, (tr) => {
     const code = codes[tr.key] ?? null;
-    return { code, look: code ? lookOf(code) : undefined, documentNumber: item.documentNumber };
+    const outcome = code ? typeOutcomes.find((o) => o.code === code) : undefined;
+    const goes = raisedByOwn ? null : transitionGoesTo({ kind: tr.kind, offersRevision: outcome ? offersRevision(outcome) : false });
+    return {
+      code,
+      look: code ? lookOf(code) : undefined,
+      documentNumber: item.documentNumber,
+      goesTo: goes === "back" ? tPopup("goesBackTo", { company: raiser[locale] }) : goes === "closes" ? tPopup("closesFor", { company: raiser[locale] }) : null,
+      remarksReader: raisedByOwn ? null : raiser[locale],
+      ownCompany: me.company.legalName[locale],
+    };
   });
   const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale);
   // Internal Communication, the panel's own (V5): its banner and entries, and no composer (gap table row 42).

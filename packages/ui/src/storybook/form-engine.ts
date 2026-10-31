@@ -430,10 +430,28 @@ export const actionFormLabels: Record<Locale, ActionFormLabels> = {
     internalNoteHelp:
       "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form.",
     form: formRendererLabels.en,
+    page: {
+      optional: "Optional",
+      required: "Required",
+      internalNoteShort: "Only your Company sees it",
+      internalNotePlaceholder: (company) => `For ${company} only…`,
+      remarksRequired: (code) => `Required with Code ${code}`,
+      remarksHelp: (company) => `${company} sees these Remarks with your name as signer.`,
+      remarksMissing: (code) => `Write the Remarks for Code ${code}.`,
+    },
   },
   ar: {
     internalNote: "ملاحظة داخلية",
     internalNoteHelp: "اختيارية. لا يراها إلا شركتك، حتى عندما ينتقل العنصر إلى شركة أخرى. ما يخصهم يُكتب في المحادثة أو النموذج.",
     form: formRendererLabels.ar,
+    page: {
+      optional: "اختياري",
+      required: "مطلوب",
+      internalNoteShort: "لا يراها إلا شركتك",
+      internalNotePlaceholder: (company) => `لـ${company} فقط…`,
+      remarksRequired: (code) => `مطلوبة مع الرمز ${code}`,
+      remarksHelp: (company) => `ترى ${company} هذه الملاحظات واسمك موقّعًا عليها.`,
+      remarksMissing: (code) => `اكتب الملاحظات للرمز ${code}.`,
+    },
   },
 };
