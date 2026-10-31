@@ -59,13 +59,20 @@ export function queuedPrNumber(headRef: string): number | undefined {
  */
 export const REVIEWED_ADD_ACTOR = "github-actions[bot]";
 
+/** One of a PR's issue events: what happened (`labeled`, `auto_merge_enabled`, `added_to_merge_queue`, …), the label's name for a label event, and who did it. */
+export interface PrEvent {
+  event: string;
+  label?: string;
+  actor: string;
+}
+
 export interface RequiredSeam {
-  /** The PR's labels now (not the event's copy), how many files it changes, and who turned GitHub auto-merge on (absent when off). */
-  pull(pr: number): Promise<{ labels: string[]; changedFiles: number; autoMergeBy?: string }>;
+  /** The PR now (not the event's copy): its labels, how many files it changes, whether it is a draft, and who turned GitHub auto-merge on (absent when off). */
+  pull(pr: number): Promise<{ labels: string[]; changedFiles: number; draft?: boolean; autoMergeBy?: string }>;
   /** The paths the PR changes, as far as the API lists them. */
   files(pr: number): Promise<string[]>;
-  /** The logins that added the `reviewed` label to the PR, oldest first (its `labeled` issue events). */
-  reviewedLabelers(pr: number): Promise<string[]>;
+  /** The PR's issue events, oldest first. */
+  events(pr: number): Promise<PrEvent[]>;
   /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
   sleep(ms: number): Promise<void>;
@@ -106,6 +113,19 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
     }
   }
   const pull = await seam.pull(pr);
+  let read: PrEvent[] | undefined;
+  const events = async () => (read ??= await seam.events(pr));
+  if (event.kind === "merge_group") {
+    // A draft stays in the queue: #564 was turned back to draft while queued and still merged (2026-10-31).
+    if (pull.draft === true) return { ok: false, summary: `PR #${pr} is a draft, so it must not merge: turning a PR back to draft does not take it out of the merge queue. Mark it ready and queue it again with \`pnpm queue ${pr}\`.` };
+    // Auto-merge may already be off again once it has queued the PR (#564), so how the PR entered the queue decides.
+    if (enteredQueueByAutoMerge(await events())) {
+      return {
+        ok: false,
+        summary: `PR #${pr} entered the merge queue through GitHub auto-merge, not \`pnpm queue\` (RP-1167), so it is out of order. Turn auto-merge off (\`gh pr merge ${pr} --disable-auto\`) if it is still on, then queue it with \`pnpm queue ${pr}\`.`,
+      };
+    }
+  }
   // Auto-merge enqueues the PR the moment it is eligible, in no one's order (#531 went in ahead of #529 on
   // 2026-10-30); only `pnpm queue` enqueues, and it never turns auto-merge on. In the queue this drops such a PR.
   if (pull.autoMergeBy !== undefined) {
@@ -114,7 +134,7 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
       summary: `PR #${pr}: GitHub auto-merge is on (turned on by ${pull.autoMergeBy}), so GitHub would enqueue it out of order (RP-1167). Turn it off with \`gh pr merge ${pr} --disable-auto\`, re-run this check (turning it off starts no run of it), then queue it with \`pnpm queue ${pr}\`.`,
     };
   }
-  const { labels, handLabeler } = pull.labels.includes(REVIEWED_LABEL) ? countedLabels(pull.labels, await seam.reviewedLabelers(pr)) : { labels: pull.labels };
+  const { labels, handLabeler } = pull.labels.includes(REVIEWED_LABEL) ? countedLabels(pull.labels, reviewedLabelers(await events())) : { labels: pull.labels };
   const needsFiles = !labels.includes(REVIEWED_LABEL) && labels.includes(DOCS_ONLY_LABEL);
   let files: string[] | undefined;
   if (needsFiles) {
@@ -135,6 +155,20 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
     ok: false,
     summary: `PR #${pr}: ${reason}. Run /code-review, push its fixes, post its summary with \`node scripts/review-post.ts ${pr} <summary-file>\` and put the stamped \`pnpm verify\` line in the body: CI's reviewed-add then adds '${REVIEWED_LABEL}' (re-run its last run on the PR if both were already there). ${docsOnly} instead.`,
   };
+}
+
+/** Who added the `reviewed` label, oldest first. */
+export const reviewedLabelers = (events: PrEvent[]) => events.filter((event) => event.event === "labeled" && event.label === REVIEWED_LABEL).map((event) => event.actor);
+
+/**
+ * Whether auto-merge was on when the PR last entered the merge queue: the newest `auto_merge_enabled` or
+ * `auto_merge_disabled` before its newest `added_to_merge_queue` is an enable. `pnpm queue` never turns auto-merge on,
+ * so a PR it queued after auto-merge was turned off again passes.
+ */
+export function enteredQueueByAutoMerge(events: PrEvent[]): boolean {
+  const entered = events.findLastIndex((event) => event.event === "added_to_merge_queue");
+  const switched = events.slice(0, Math.max(entered, 0)).findLast((event) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled");
+  return entered >= 0 && switched?.event === "auto_merge_enabled";
 }
 
 /**
@@ -175,20 +209,20 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
   };
   return {
     async pull(pr) {
-      const pull = (await get(`pulls/${pr}`)) as { labels: { name: string }[]; changed_files: number; auto_merge?: { enabled_by: { login: string } | null } | null };
+      const pull = (await get(`pulls/${pr}`)) as { labels: { name: string }[]; changed_files: number; draft?: boolean; auto_merge?: { enabled_by: { login: string } | null } | null };
       const autoMergeBy = pull.auto_merge ? (pull.auto_merge.enabled_by?.login ?? "a login GitHub does not name") : undefined;
-      return { labels: pull.labels.map((label) => label.name), changedFiles: pull.changed_files, ...(autoMergeBy === undefined ? {} : { autoMergeBy }) };
+      return { labels: pull.labels.map((label) => label.name), changedFiles: pull.changed_files, draft: pull.draft === true, ...(autoMergeBy === undefined ? {} : { autoMergeBy }) };
     },
-    async reviewedLabelers(pr) {
-      const logins: string[] = [];
+    async events(pr) {
+      const events: PrEvent[] = [];
       // The API lists events oldest first. A deleted user shows as no actor; GitHub calls them ghost.
       for (let page = 1; page <= MAX_PAGES; page++) {
         const batch = (await get(`issues/${pr}/events?per_page=${PER_PAGE}&page=${page}`)) as { event: string; label?: { name: string }; actor: { login: string } | null }[];
-        for (const event of batch) if (event.event === "labeled" && event.label?.name === REVIEWED_LABEL) logins.push(event.actor?.login ?? "ghost");
-        if (batch.length < PER_PAGE) return logins;
+        events.push(...batch.map(({ event, label, actor }) => ({ event, ...(label ? { label: label.name } : {}), actor: actor?.login ?? "ghost" })));
+        if (batch.length < PER_PAGE) return events;
       }
-      // Past the last page the newest `labeled` may be missing, so the last one read proves nothing.
-      throw new Error(`PR #${pr} has more than ${MAX_PAGES * PER_PAGE} issue events; reviewed-required cannot tell who added '${REVIEWED_LABEL}' last`);
+      // Past the last page the newest events may be missing, so the last one read proves nothing.
+      throw new Error(`PR #${pr} has more than ${MAX_PAGES * PER_PAGE} issue events; reviewed-required cannot read its newest ones`);
     },
     async files(pr) {
       const files: string[] = [];
