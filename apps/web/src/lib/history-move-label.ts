@@ -13,6 +13,9 @@ type MoveKey =
   | "reassigned"
   | "reassignedFromPool"
   | "handedOver"
+  | "reassignedByRabaed"
+  | "assignedByRabaed"
+  | "returnedToPoolByRabaed"
   | "assignedOnlyMember"
   | "created"
   | "answersChanged"
@@ -41,6 +44,13 @@ export function historyMoveLabel(e: Event, locale: Locale, t: HistoryTranslator)
   }
   if (e.type === "assigned" && e.handover) {
     return t("handedOver", { from: e.handover.from?.[locale] ?? "", to: e.handover.to?.[locale] ?? "", because: e.handover.because });
+  }
+  // A Rabaed Engineer's reassign in Rabaed Admin (RP-1162): "by Rabaed", never the Engineer (V14).
+  if (e.type === "admin_reassigned") {
+    const from = e.handover?.from?.[locale];
+    const to = e.handover?.to?.[locale];
+    if (!to) return t("returnedToPoolByRabaed");
+    return from ? t("reassignedByRabaed", { from, to }) : t("assignedByRabaed", { to });
   }
   // A pool of one (§3.3 rule 4): its actor is the holder, internal to their own Participant.
   if (e.type === "assigned" && e.by.memberName) return t("assignedOnlyMember", { name: e.by.memberName[locale] });
