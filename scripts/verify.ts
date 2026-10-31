@@ -12,6 +12,7 @@ import { laneDatabaseRefusal } from "./verify-lane-db.ts";
 import { processAncestors, processStart } from "./process-start.ts";
 import { acquireLock, liveHolder, lockFile, mainSlot, releaseLock, waitForLock, type LockHolder, type Processes } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
+import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
 import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
 import { snapshotHash, systemFileHash, systemGit, treeChanged, treeSnapshot, watchTree } from "./verify-tree.ts";
@@ -30,6 +31,7 @@ import { listWorktrees } from "./worktrees.ts";
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
 // waits for its Main's one verify slot: a run in another of the Main's lanes waits for this one (RP-1096).
+// `--pr <n>` writes the stamped last line into PR n's body after a full, clean run, and refuses unless HEAD is the PR's head (RP-1171).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 // HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
@@ -126,6 +128,20 @@ const readHead = () => {
   return done.status === 0 ? done.stdout.trim() : "";
 };
 const startedOn = readHead();
+
+// `--pr <n>` (RP-1171): refuse before the long run when HEAD is not the PR's head, as a line for another commit
+// would not pass the verify gate; the line is written into the PR's body at the end.
+const prBody = options.pr === undefined ? undefined : realPrBodySeam(root);
+if (options.pr !== undefined && prBody) {
+  try {
+    const refusal = prHeadRefusal(options.pr, startedOn, prBody.pullHead(options.pr));
+    if (refusal) stopEarly(refusal);
+  } catch (error) {
+    stopEarly(`pnpm verify --pr ${options.pr}: could not read the PR's head: ${error instanceof Error ? error.message.trim() : String(error)}`);
+  }
+}
+// Extension point (RP-1172): the open-PR overlap finder (scripts/check-claims.ts) can be called here, before the first
+// step, to print a warning with `out.error`; a warning only, it must not stop the run.
 // And the working tree (RP-1169): HEAD stays put under a merge --no-commit or the app's base-branch sync half-done.
 const git = systemGit(root);
 const fileHash = systemFileHash(root);
@@ -314,4 +330,15 @@ const sha = startedOn === "" ? "" : spawnSync("git", ["rev-parse", "--short", st
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
-out.end([finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) })], false);
+const last = finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) });
+if (options.pr !== undefined && prBody) {
+  // A full, clean run on the PR's head only (writeVerifyLine checks the stamp and the head again, the PR may have been pushed to meanwhile).
+  const written = writeVerifyLine(options.pr, last, startedOn, prBody);
+  if (!written.ok) {
+    out.error(`${written.message}\nThe line, to paste by hand:\n${last}`);
+    out.end([`pnpm verify --pr ${options.pr} stopped: the line was not written to the PR body.`], true);
+    process.exit(1);
+  }
+  out.info(`pnpm verify --pr ${options.pr}: ${written.replaced ? "replaced the verify line in" : "added the verify line to"} PR #${options.pr}'s body.`);
+}
+out.end([last], false);

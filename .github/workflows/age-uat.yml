@@ -2,8 +2,11 @@
 # UAT's database, never another: `uat:age` moves items back so they read Step Age N, and
 # `uat:run-job` sends the daily digest or the weekly Step Age report now, through UAT's SendGrid.
 # scripts/uat-guard.ts refuses anything but UAT's database (Supabase's pooler, rabaed_uat, inside
-# GitHub Actions with RABAED_ENVIRONMENT=uat) and production everywhere. Its inputs reach the
-# commands through the environment only, never pasted into the script. Dry run is on by default.
+# GitHub Actions with RABAED_ENVIRONMENT=uat) and production everywhere. Dry run is on by default.
+# The repository's run logs and step summaries are public, so (Main 6, 2026-10-31): every free-text
+# input is read from the event file, never put in an env block; items must be Document Numbers, and
+# anything else is masked and refused before a step prints anything; the member's email is masked;
+# and the tool itself prints only Document Numbers, Step Ages and counts in GitHub Actions.
 # Run it on main: Actions > Age UAT items > Run workflow.
 name: Age UAT items
 on:
@@ -15,7 +18,7 @@ on:
         type: choice
         options: [age, digest, weekly-report]
       items:
-        description: "age: Document Numbers or exact Subjects, separated by commas (a Subject with a comma in it: give its Document Number)"
+        description: "age: Document Numbers, separated by commas (never a Subject: the run log is public)"
         required: false
         type: string
       weeks:
@@ -54,12 +57,36 @@ jobs:
       group: uat-database
       cancel-in-progress: false
     steps:
-      # First, before any step prints its env block: the member input is an email, and the repository's
-      # run logs are public. Read from the event file, so this step's own env shows nothing.
-      - name: Mask the member's email
+      # First, before any step prints anything. The inputs come from the event file, so no env block
+      # shows them. The member's email is masked. Each item must be shaped like a Document Number
+      # (scripts/uat-age.ts DOCUMENT_NUMBER); anything else is masked and the run stops here.
+      - name: Check the inputs and mask them
         run: |
           member="$(jq -r '.inputs.member // ""' "$GITHUB_EVENT_PATH")"
           if [ -n "$member" ]; then echo "::add-mask::$member"; fi
+          items="$(jq -r '.inputs.items // ""' "$GITHUB_EVENT_PATH")"
+          trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+          refused=0
+          IFS=',' read -ra list <<< "$items"
+          for item in "${list[@]}"; do
+            item="$(trim "$item")"
+            if [ -z "$item" ]; then continue; fi
+            if ! [[ "$item" =~ ^[A-Za-z0-9]+(-[A-Za-z0-9]+)+(\ [Rr]ev\ [0-9]+)?$ ]]; then
+              echo "::add-mask::$item"
+              refused=1
+            fi
+          done
+          if [ "$refused" = "1" ]; then
+            echo "::add-mask::$items"
+            echo "::error::items takes Document Numbers only (the run log is public); nothing was changed."
+            exit 1
+          fi
+          weeks="$(jq -r '.inputs.weeks // ""' "$GITHUB_EVENT_PATH")"
+          if [ -n "$weeks" ] && ! [[ "$weeks" =~ ^[0-9]{1,2}$ ]]; then
+            echo "::add-mask::$weeks"
+            echo "::error::weeks is a whole number from 1 to 52; nothing was changed."
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with: { ref: main, persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -77,27 +104,26 @@ jobs:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           UAT_WEB_URL: ${{ vars.UAT_WEB_URL }}
+          # Only the choice and the box: their values are fixed words. Free text is read from the event file.
           COMMAND: ${{ inputs.command }}
-          ITEMS: ${{ inputs.items }}
-          WEEKS: ${{ inputs.weeks }}
-          MEMBER: ${{ inputs.member }}
           DRY_RUN: ${{ inputs.dry_run }}
-        # The repository is public, and so are its run logs: every email is masked (the member input
-        # by the first step, the recipients the tool prints by sed). GitHub's bash runs with pipefail,
-        # so the tool's exit code is the step's.
+        # The recipients' emails the tool might still print are masked by sed as well. GitHub's bash
+        # runs with pipefail, so the tool's exit code is the step's.
         run: |
+          input() { jq -r --arg k "$1" '.inputs[$k] // ""' "$GITHUB_EVENT_PATH"; }
           masked() { sed -E 's/[^[:space:]",:<>]+@[^[:space:]",:<>]+/<email>/g'; }
           trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
           args=(--uat)
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           if [ "$COMMAND" = "age" ]; then
-            IFS=',' read -ra list <<< "$ITEMS"
+            IFS=',' read -ra list <<< "$(input items)"
             for item in "${list[@]}"; do
               item="$(trim "$item")"
               if [ -n "$item" ]; then args+=(--item "$item"); fi
             done
-            node scripts/uat-age.ts --weeks "$WEEKS" "${args[@]}" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
+            node scripts/uat-age.ts --weeks "$(input weeks)" "${args[@]}" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            if [ -n "$MEMBER" ]; then args+=(--member "$MEMBER"); fi
+            member="$(input member)"
+            if [ -n "$member" ]; then args+=(--member "$member"); fi
             node scripts/uat-run-job.ts "$COMMAND" "${args[@]}" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
           fi
