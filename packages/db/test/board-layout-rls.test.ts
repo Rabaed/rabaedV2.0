@@ -7,7 +7,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -83,7 +83,26 @@ describe("member_board_layout", () => {
   });
 
   it("is read by nobody else: not a colleague on the same Project, nor another Project's Member", async () => {
-    expect(await rowsAs(a.colleague, sql`select 1 from member_board_layout`)).toEqual([]);
+    // A's own row, read first by A, by its key (member and Project), then by neither of the others.
+    const key = (r: { member_id: string; project_id: string }) => `${r.member_id}/${r.project_id}`;
+    const name = (reader: string) => (reader === a.member ? "A" : reader === a.colleague ? "A's colleague" : "B");
+    await expectHiddenFrom({
+      read: (reader: string) => rowsAs<{ member_id: string; project_id: string }>(reader, sql`select member_id, project_id from member_board_layout`),
+      target: `${a.member}/${a.projectId}`,
+      idOf: key,
+      seenBy: a.member,
+      hiddenFrom: [a.colleague, b.member],
+      name,
+    });
+    // And B's row is B's alone.
+    await expectHiddenFrom({
+      read: (reader: string) => rowsAs<{ member_id: string; project_id: string }>(reader, sql`select member_id, project_id from member_board_layout`),
+      target: `${b.member}/${b.projectId}`,
+      idOf: key,
+      seenBy: b.member,
+      hiddenFrom: [a.member, a.colleague],
+      name,
+    });
     expect(await rowsAs(b.member, sql`select project_id from member_board_layout`)).toEqual([{ project_id: b.projectId }]);
   });
 
