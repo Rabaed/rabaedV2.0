@@ -301,7 +301,16 @@ async function normalise(file) {
   const blob = await new Promise((ok) => c.toBlob(ok, "image/png"));
   return { blob, type: "image/png", w, h };
 }
-async function addShots(key, files) {
+// One change at a time per case, so two quick pastes don't both start from the old list.
+const queues = new Map();
+function queued(key, fn) {
+  const p = (queues.get(key) ?? Promise.resolve()).then(fn);
+  queues.set(key, p.catch(() => {}));
+  return p;
+}
+const addShots = (key, files) => queued(key, () => addShotsNow(key, files));
+const removeShot = (key, id) => queued(key, () => removeShotNow(key, id));
+async function addShotsNow(key, files) {
   const e = entry(key);
   for (const f of files) {
     if (!f.type.startsWith("image/")) continue;
@@ -318,7 +327,7 @@ async function addShots(key, files) {
   await saveEntry(key, e);
   drawShots(key);
 }
-async function removeShot(key, id) {
+async function removeShotNow(key, id) {
   const e = entry(key); e.shots = e.shots.filter((x) => x !== id);
   const s = shots.get(id); if (s) URL.revokeObjectURL(s.url); shots.delete(id);
   if (db) await tx("shots", "readwrite", (st) => st.delete(id));
@@ -411,11 +420,12 @@ $("list").addEventListener("click", async (ev) => {
   if (ev.target.closest(".drop")) { $("pick").dataset.key = key; $("pick").click(); }
 });
 $("pick").addEventListener("change", async () => { const key = $("pick").dataset.key; if (key) await addShots(key, [...$("pick").files]); $("pick").value = ""; });
-let typing;
+// A timer per case: typing in the next case never cancels this one's save.
+const typing = new Map();
 $("list").addEventListener("input", (ev) => {
   const art = ev.target.closest(".case"); if (!art || ev.target.dataset.f !== "comment") return;
   const key = art.dataset.key, e = entry(key); e.comment = ev.target.value; entries.set(key, e);
-  clearTimeout(typing); typing = setTimeout(() => saveEntry(key, e), 400);
+  clearTimeout(typing.get(key)); typing.set(key, setTimeout(() => { typing.delete(key); saveEntry(key, e); }, 400));
 });
 $("list").addEventListener("dragover", (ev) => { const d = ev.target.closest(".drop"); if (d) { ev.preventDefault(); d.classList.add("over"); } });
 $("list").addEventListener("dragleave", (ev) => ev.target.closest(".drop")?.classList.remove("over"));
@@ -427,7 +437,8 @@ $("list").addEventListener("drop", async (ev) => {
 document.addEventListener("paste", async (ev) => {
   const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
   if (!files.length) return;
-  const key = ev.target.closest?.(".case")?.dataset.key || activeKey;
+  // The case the paste is in, else the last one clicked if it is still on screen (not filtered away).
+  const key = ev.target.closest?.(".case")?.dataset.key || (document.querySelector(`.case[data-key="${activeKey}"]`) ? activeKey : "");
   if (!key) return;
   ev.preventDefault(); await addShots(key, files);
 });
@@ -503,6 +514,11 @@ $("importFile").addEventListener("change", async () => {
   let n = 0;
   for (const [k, e] of Object.entries(data.entries ?? {})) {
     if (!byKey.has(k)) continue;
+    // Screenshots of the entry being replaced that the loaded one doesn't keep are removed, not left orphaned.
+    for (const old of entry(k).shots) if (!e.shots.includes(old)) {
+      const s = shots.get(old); if (s) URL.revokeObjectURL(s.url); shots.delete(old);
+      if (db) await tx("shots", "readwrite", (st) => st.delete(old));
+    }
     entries.set(k, e); n++;
     if (db) await tx("entries", "readwrite", (st) => st.put(e, k));
   }

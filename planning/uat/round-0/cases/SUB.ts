@@ -659,7 +659,7 @@ defineCase("SUB-23", async (t) => {
     await box.fill(term);
     await box.press("Enter");
     // Wait for this term's own ?q=, not any earlier search's, or the rows read are the last search's.
-    await page.waitForURL((url) => url.searchParams.get("q") === term, { timeout: 10000 }).catch(() => undefined);
+    await page.waitForURL((url) => (url.searchParams.get("q") ?? "").trim().toLowerCase() === term.trim().toLowerCase(), { timeout: 10000 }).catch(() => undefined);
     await settle(page, 2500);
     return listRows(page);
   };
