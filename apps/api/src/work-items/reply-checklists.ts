@@ -153,9 +153,14 @@ export async function incompleteReplyChecklists(
  */
 export async function arrivalRecommendedCode(trx: Trx, workItemId: string): Promise<{ code: string; name: BilingualText } | null> {
   const { rows } = await sql<{ code: string; name: BilingualText }>`
-    with arrival as (
-      select e.transition_id, e.created_at, e.audience_participant_id
+    -- An event's Transition, which app.event_transitions gives for the reader's own Participant's events (RP-1140).
+    with moves as (
+      select * from app.event_transitions(array(select x.id from work_item_event x where x.work_item_id = ${workItemId}::uuid))
+    ),
+    arrival as (
+      select mv.transition_id, e.created_at, e.audience_participant_id
       from work_item_event e
+      join moves mv on mv.event_id = e.id
       where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
         and e.actor_participant_id = e.audience_participant_id
         and e.seq = (
@@ -166,7 +171,8 @@ export async function arrivalRecommendedCode(trx: Trx, workItemId: string): Prom
     select r.payload ->> 'recommended_code' as code, oc.name
     from arrival a
     join work_item_event r on r.work_item_id = ${workItemId}::uuid and r.type = 'recommend_code'
-      and r.transition_id = a.transition_id and r.created_at = a.created_at and r.audience_participant_id = a.audience_participant_id
+      and r.created_at = a.created_at and r.audience_participant_id = a.audience_participant_id
+    join moves rm on rm.event_id = r.id and rm.transition_id = a.transition_id
     join work_item w on w.id = r.work_item_id
     join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = w.work_item_type_id and oc.code = r.payload ->> 'recommended_code'
   `.execute(trx);
