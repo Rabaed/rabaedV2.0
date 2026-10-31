@@ -25,6 +25,7 @@ import {
   type TableField,
 } from "@rabaed/domain";
 import { z } from "zod";
+import { recordPath } from "./record-path.ts";
 import { pick, same, type RecordLanguage, type RecordText } from "./record-text.ts";
 
 // The Form's content as the record prints it (form-engine.md §6, element 8): its
@@ -41,7 +42,8 @@ import { pick, same, type RecordLanguage, type RecordText } from "./record-text.
 // A reply Screen's own files (ADR 0024; RP-1029): its `attachments` files are listed with the
 // shared Documents and get appendix pages; its `photos` files print as a Form `photos` field's,
 // after the Form, under their Screen section's title. Only files a shared event took before the
-// close are in the facts (app.documents_shared_before_close); an internal event's never are.
+// close are in the facts (app.documents_shared_before_close); an internal event's never are. The
+// Screens read are those of the Transitions on the record path, as for reply checklists.
 
 export interface RecordPhoto {
   readonly fileName: string;
@@ -120,10 +122,13 @@ interface ReplyFileField {
 }
 
 /**
- * The `attachments` and `photos` fields of the item's reply Screens (the Action Forms of its
- * Transitions), by key, in the Transitions' order; the first one's where two show the same Screen.
- * Which files they hold is the facts' to say: only those a shared event took before the close
- * (app.documents_shared_before_close, V19). A Screen's file field never uses a key of the Form's.
+ * The `attachments` and `photos` fields of the reply Screens (the Action Forms) of the Transitions
+ * on the record path (recordPath, as for reply checklists: never a Code sent back, V7), by key, in
+ * the path's order; the first one's where two show the same Screen. Which files they hold is the
+ * facts' to say: only those a shared event took before the close (app.documents_shared_before_close,
+ * V19). A file is matched by its field's key, not by the event that took it: an off-path event's
+ * file under a key a Screen on the path also shows prints too (as a reply checklist's photos do,
+ * RP-982). A Screen's file field never uses a key of the Form's.
  */
 function replyFileFields(transitions: readonly TransitionFact[], formKeys: ReadonlySet<string>): Map<string, ReplyFileField> {
   const fields = new Map<string, ReplyFileField>();
@@ -145,7 +150,7 @@ export type FormAndScreens = Pick<RecordFacts, "form"> & Partial<Pick<RecordFact
 
 /** The reply Screens' file fields of `type`, by key. */
 function replyFieldsOf(facts: FormAndScreens, type: "attachments" | "photos"): Map<string, ReplyFileField> {
-  return new Map([...replyFileFields(facts.transitions ?? [], fieldKeysOf(facts))].filter(([, f]) => f.field.type === type));
+  return new Map([...replyFileFields(recordPath(facts.transitions ?? []), fieldKeysOf(facts))].filter(([, f]) => f.field.type === type));
 }
 
 /**

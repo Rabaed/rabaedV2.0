@@ -48,6 +48,7 @@ function withEvidence(language: RecordFacts["recordLanguage"]): RecordFacts {
 
 type Photos = Extract<RecordBlock, { kind: "photos" }>;
 const sectionTitled = (facts: RecordFacts, en: string) => recordDataOf(facts, verification).sections.find((s) => s.title.en === en);
+const sectionTitles = (facts: RecordFacts) => recordDataOf(facts, verification).sections.map((s) => s.title.en);
 
 describe("a reply Screen's files on the record (RP-1029)", () => {
   it("lists the shared code's attachments reply file with the Documents", () => {
@@ -92,6 +93,21 @@ describe("a reply Screen's files on the record (RP-1029)", () => {
     const twice = { ...facts, transitions: [...facts.transitions.slice(0, -1), earlier, facts.transitions.at(-1)!] };
     expect(recordDataOf(twice, verification).sections.filter((s) => s.title.en === "Site evidence")).toHaveLength(1);
     expect(recordDataOf(twice, verification).documents.map((d) => d.fileName)).toEqual(["cube-test.pdf"]);
+  });
+
+  it("prints nothing of the files a shared Code off the path took: sent back, then issued again (path only, as reply checklists)", () => {
+    const facts = withEvidence("en");
+    const code = facts.transitions.at(-1)!;
+    // The first Code went on to the Owner Representative, who Sent it Back; the Code issued again shows a Screen with no file field.
+    const first = { ...code, kind: "submit", toStepId: "or_review" };
+    const sentBack = { ...code, kind: "send_back", fromStepId: "or_review", toStepId: code.fromStepId, outcomeMode: null, answers: null, actionForm: null };
+    const again = { ...code, actionForm: { sections: [] } };
+    const reissued = { ...facts, transitions: [...facts.transitions.slice(0, -1), first, sentBack, again] };
+    const data = recordDataOf(reissued, verification);
+    expect(data.documents.map((d) => d.fileName)).toEqual([]);
+    expect(data.sections.map((s) => s.title.en)).toEqual(sectionTitles(goldenFacts("wir", "en")));
+    expect(attachmentFieldKeysOf(reissued)).toEqual(new Set());
+    expect(printedPhotosOf(reissued).map((d) => d.storageKey)).toEqual(["photo-1", "photo-2", "photo-3"]);
   });
 
   it("prints no section for a reply photos field the shared events took no file into", () => {

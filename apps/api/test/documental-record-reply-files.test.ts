@@ -51,7 +51,9 @@ afterAll(async () => {
 });
 
 const TYPE = "RPRF";
-/** A Consultant Position that may attach files in Submittals: no Rabaed Default one does. */
+const FORWARD_TYPE = "RPRFB";
+const FORWARD_TITLE = { en: "Forward evidence", ar: "أدلة الإحالة" };
+/** A Consultant (and an Owner Representative) Position that may review and attach files in Submittals: no Rabaed Default one does. */
 const REVIEWER = "rp1029_api_reviewer";
 const t = (en: string, ar: string) => ({ en, ar });
 const schema = {
@@ -97,6 +99,8 @@ const squeeze = (s: string) => s.replace(/\s+/g, "");
 
 let projectId = "";
 let id = "";
+/** The Trade and Location every item here is raised with. */
+const where = { trade: "", location: "" };
 const people = {} as Record<"c1Engineer" | "c1Pm" | "k1Engineer" | "k1Manager" | "orEngineer" | "c2Engineer", Caller>;
 const fileIds = {} as Record<keyof typeof names, string>;
 const who = new Map<Caller, string>();
@@ -110,8 +114,8 @@ let made: Made;
 let deps: RecordJobDeps;
 
 /** The record as `by` downloads it: its text without whitespace, and its Record Data. */
-async function download(by: Caller): Promise<Made> {
-  const link = (await ok(by.get(`/v1/work-items/${id}/documental-record`), 200)).json() as SignedUrl;
+async function download(by: Caller, itemId = id): Promise<Made> {
+  const link = (await ok(by.get(`/v1/work-items/${itemId}/documental-record`), 200)).json() as SignedUrl;
   const pdfBytes = new Uint8Array(await (await fetch(link.url)).arrayBuffer());
   const task = getDocument({ data: pdfBytes.slice(), useSystemFonts: false });
   const pdf = await task.promise;
@@ -126,8 +130,8 @@ async function download(by: Caller): Promise<Made> {
 }
 
 /** `by` adds `key`'s file to the reply Screen field `field` of the item; its Document's id. */
-const addReplyFile = (by: Caller, field: string, key: keyof typeof names, contentType: string) =>
-  uploadDocument(by, id, { fieldKey: field, reply: true, fileName: names[key], contentType, body: bytes[key] } as Parameters<typeof uploadDocument>[2]);
+const addReplyFile = (by: Caller, field: string, key: keyof typeof names, contentType: string, itemId = id) =>
+  uploadDocument(by, itemId, { fieldKey: field, reply: true, fileName: names[key], contentType, body: bytes[key] } as Parameters<typeof uploadDocument>[2]);
 
 /** The `<section>` of the Record Data's `<form>` whose English title is `title`. */
 const sectionOf = (xml: string, title: string) =>
@@ -147,18 +151,31 @@ beforeAll(async () => {
     .insertInto("work_item_type")
     .values({ owner_kind: "rabaed", module_key: "submittals", code: TYPE, name: JSON.stringify(t("Reply files", "ملفات الرد")), workflow_definition_id: workflowId, outcome_kind: "review_code", form_definition_id: formId })
     .execute();
+  // The same, with K1's shared Send to the Owner Representative, who may Send it Back (off the path then).
+  const forwardScreen = await addTestScreen(run, `rp1029_api_forward_${randomUUID().slice(0, 8)}`, evidenceScreen("forward", FORWARD_TITLE), []);
+  const forwardWorkflowId = await addTestWorkflow(run, {
+    name: bilingual(`RP-1029 sent back reply files ${randomUUID().slice(0, 8)}`),
+    forward: true,
+    screens: { forward: forwardScreen, revise_c: codeScreen },
+  });
+  await migrator
+    .insertInto("work_item_type")
+    .values({ owner_kind: "rabaed", module_key: "submittals", code: FORWARD_TYPE, name: JSON.stringify(t("Reply files, sent back", "ملفات الرد، مرجعة")), workflow_definition_id: forwardWorkflowId, outcome_kind: "review_code", form_definition_id: formId })
+    .execute();
   expect(await publishFormVersion(migrator, formId, schema)).toMatchObject({ ok: true });
-  await run(`
-    with p as (
-      insert into position (owner_kind, base_role, key, name, sort)
-      values ('rabaed', 'consultant', '${REVIEWER}', '{"en": "Reviewing engineer", "ar": "مهندس المراجعة"}', 99)
-      on conflict (base_role, key) do update set sort = excluded.sort
-      returning id
-    )
-    insert into position_permission (position_id, module_key, permission)
-    select p.id, 'submittals', x from p, unnest(array['view', 'review', 'approve', 'attach']) x
-    on conflict do nothing
-  `);
+  for (const role of ["consultant", "owner_representative"]) {
+    await run(`
+      with p as (
+        insert into position (owner_kind, base_role, key, name, sort)
+        values ('rabaed', '${role}', '${REVIEWER}', '{"en": "Reviewing engineer", "ar": "مهندس المراجعة"}', 99)
+        on conflict (base_role, key) do update set sort = excluded.sort
+        returning id
+      )
+      insert into position_permission (position_id, module_key, permission)
+      select p.id, 'submittals', x from p, unnest(array['view', 'review', 'approve', 'attach']) x
+      on conflict do nothing
+    `);
+  }
 
   const c1: Company = await api.projectCreator();
   const k1 = await api.authorizedPerson();
@@ -168,6 +185,7 @@ beforeAll(async () => {
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id as string;
   const electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
   const buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
+  Object.assign(where, { trade: electrical, location: buildingA });
   const buildingB = await post("locations", { code: "BB", name: bilingual("Building B"), parentId: null });
   const c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`)).json().participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id as string;
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
@@ -184,7 +202,7 @@ beforeAll(async () => {
   people.c1Pm = (await memberOnProject(api, c1, c1ParticipantId, ["project_manager"], { name: "Ali Sonour" })).caller;
   people.k1Engineer = (await memberOnProject(api, k1, k1ParticipantId, [REVIEWER], { name: "Ahmed bin Said" })).caller;
   people.k1Manager = (await memberOnProject(api, k1, k1ParticipantId, ["manager", REVIEWER], { name: "Mohammed Al Shamsi" })).caller;
-  people.orEngineer = (await memberOnProject(api, or, orParticipantId, ["engineer"], { name: "Faisal Al Otaibi" })).caller;
+  people.orEngineer = (await memberOnProject(api, or, orParticipantId, [REVIEWER], { name: "Faisal Al Otaibi" })).caller;
   people.c2Engineer = (await memberOnProject(api, c2, c2ParticipantId, ["engineer"], { name: "Yousef Karim" })).caller;
   for (const [key, by] of Object.entries(people)) who.set(by, key);
 
@@ -291,6 +309,56 @@ describe("RP-1029-1: never a file an internal event took", () => {
         });
       }
     }
+  });
+});
+
+// The owner's rule (2026-10-31, RP-1029): only the Screens of the Transitions on the record path,
+// as for reply checklists. K1's Engineer sends the item on to the Owner Representative, a shared
+// Transition whose Screen takes a photo and a report; the Owner Representative Sends it Back, so
+// that Transition leaves the path; K1 then issues Code C. The files stay shared (C1 reads them),
+// but the record prints neither.
+describe("RP-1029: a shared Transition Sent Back, then the item taken on again", () => {
+  let item = "";
+  let record: Made;
+  const forwarded = { photo: "", report: "" };
+  const forwardBytes = { photo: jpegWithExif({ takenAt: "2026:10:22 10:00:00", offset: "+03:00" }), report: Buffer.from("%PDF-1.7 sent on, then sent back (test)") };
+
+  beforeAll(async () => {
+    item = (await ok(people.c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: FORWARD_TYPE, title: "Chiller", answers: { model: "CH-2", ...where } }), 201)).json().id as string;
+    await take(people.c1Engineer, item, "send_for_review");
+    await ok(people.c1Pm.post(`/v1/work-items/${item}/pick-up`));
+    await take(people.c1Pm, item, "submit");
+    await ok(people.k1Engineer.post(`/v1/work-items/${item}/pick-up`));
+    const upload = (fileName: string, contentType: string, body: Buffer) =>
+      uploadDocument(people.k1Engineer, item, { fieldKey: fileName.endsWith(".pdf") ? "forward_reports" : "forward_photos", reply: true, fileName, contentType, body } as Parameters<typeof uploadDocument>[2]);
+    forwarded.photo = await upload("forward-site.jpg", "image/jpeg", forwardBytes.photo);
+    forwarded.report = await upload("forward-report.pdf", "application/pdf", forwardBytes.report);
+    await take(people.k1Engineer, item, "forward");
+    if ((await ok(people.orEngineer.get(`/v1/work-items/${item}`), 200)).json().actions?.pickUp) await ok(people.orEngineer.post(`/v1/work-items/${item}/pick-up`));
+    await take(people.orEngineer, item, "or_send_back");
+    if ((await ok(people.k1Engineer.get(`/v1/work-items/${item}`), 200)).json().actions?.pickUp) await ok(people.k1Engineer.post(`/v1/work-items/${item}/pick-up`));
+    await take(people.k1Engineer, item, "send_to_manager");
+    await ok(people.k1Manager.post(`/v1/work-items/${item}/pick-up`));
+    await take(people.k1Manager, item, "revise_c", { answers: { remarks: "Revise the chiller schedule" } });
+    await drainOutbox(worker, { documental_record: documentalRecordHandler(deps) });
+    record = await download(people.c1Engineer, item);
+  }, 600_000);
+
+  it("the Transition took them into a shared event: C1 reads both, C2 neither", async () => {
+    const documents = async (by: Caller) => (await readById<DocumentList>(`/v1/work-items/${item}/documents`)(by)).flatMap((l) => l.documents);
+    for (const file of [forwarded.photo, forwarded.report]) {
+      await expectHiddenFrom({ read: documents, target: file, seenBy: [people.c1Engineer, people.k1Engineer], hiddenFrom: people.c2Engineer, name: (by) => who.get(by) ?? "someone" });
+    }
+  });
+
+  it("prints neither: not in its pages, its Record Data, its Documents or its appendix, and no section of their Screen", () => {
+    // The record's other text is the positive control: it prints the item and its code.
+    const shown = ["forward-site.jpg", "forward-report.pdf", "Revise the chiller schedule"].filter((s) => record.xml.includes(s));
+    expect(shown, record.xml).toEqual(["Revise the chiller schedule"]);
+    const printed = ["forward-site.jpg", "forward-report.pdf", "Chiller"].filter((s) => record.text.includes(squeeze(s)));
+    expect(printed).toEqual(["Chiller"]);
+    const titles = [...record.xml.matchAll(/<title lang="en">([^<]*)<\/title>/g)].map((m) => m[1]);
+    expect([FORWARD_TITLE.en, "Material"].filter((title) => titles.includes(title))).toEqual(["Material"]);
   });
 });
 
