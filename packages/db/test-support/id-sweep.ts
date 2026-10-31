@@ -79,6 +79,14 @@ export const SWEEP_ALLOW: readonly AllowEntry[] = [
   { name: "app.set_company_image", errors: "writes the caller's own Company's logo or Stamp (p_kind 'logo' or 'stamp'; the sweep gives p_kind 'trade', which the dimension functions need)" },
   { name: "app.set_member_signature", errors: "writes the caller's own Signature, from a storage key under their own Signatures that no world has" },
   { name: "app.set_list_columns", errors: "writes the caller's own List columns; a generic '{}' fails its check constraint, and it reads no one else's row" },
+  {
+    name: "app.create_project",
+    errors: "creates a new Project of the caller's own; only a Project Creator may (of the viewers only C2's Authorized Person), and the generic code 'x' is no Project code",
+  },
+  {
+    name: "app.invite_member",
+    errors: "invites a Member into the caller's own Company; only its Authorized Person may, and the generic locale 'x' and the caller's own email are refused",
+  },
   { name: "app.set_member_appearance", errors: "writes the caller's own theme and mode; a generic 'x' fails its check constraint, and it reads no one else's row" },
   {
     name: "app.form_participant_choices",
