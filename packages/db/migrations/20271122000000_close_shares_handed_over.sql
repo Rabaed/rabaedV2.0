@@ -63,6 +63,24 @@ create function app.held_at_close(p_work_item_id uuid) returns boolean
   $$;
 revoke all on function app.held_at_close(uuid) from public;
 
+-- Whether a row added during arrival `p_arrival` was handed over to everyone but the holder, on an item
+-- that has had `p_arrivals` arrivals and closed at `p_closed_at` (null: open). Open: those added before its
+-- current arrival. Closed: all but those of the arrival the close follows (`arrivals - 1`; the close counts
+-- one arrival itself), so a row Rabaed adds after the close (a Revision's chain Link) is everyone's. The
+-- one definition of the arrival rule: app.item_row_as_arrived and the shared reads below call it.
+create function app.arrival_handed_over(p_arrival integer, p_arrivals integer, p_closed_at timestamptz) returns boolean
+  language plpgsql immutable
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      if p_closed_at is null then
+        return p_arrival < p_arrivals;
+      end if;
+      return p_arrival <> p_arrivals - 1;
+    end
+  $$;
+revoke all on function app.arrival_handed_over(integer, integer, timestamptz) from public;
+
 -- As in 20261110000000_sent_back_as_it_was.sql, with a closed item read as it was at its last arrival.
 -- The Participant holding the item, or holding it at its close, reads it as it is now (nothing removed);
 -- everyone else reads the rows the item had when it last arrived with them (a removed one included, an
@@ -77,10 +95,7 @@ create or replace function app.item_row_as_arrived(p_work_item_id uuid, p_arriva
       end if;
       return exists (
         select 1 from work_item w
-        where w.id = p_work_item_id
-          -- The close counts one arrival itself, so a closed item's last arrival is `arrivals - 1`; a row
-          -- of the close's own arrival was added after it, by Rabaed (a Revision's chain Link), for everyone.
-          and case when w.closed_at is null then p_arrival < w.arrivals else p_arrival <> w.arrivals - 1 end
+        where w.id = p_work_item_id and app.arrival_handed_over(p_arrival, w.arrivals, w.closed_at)
       );
     end
   $$;
@@ -107,6 +122,8 @@ grant execute on function app.document_seen(uuid, integer, uuid) to rabaed_app;
 alter policy member_reads_documents on document
   using (confirmed_at is not null and removed_at is null
     and project_id in (select app.current_project_ids())
+    -- Also inside app.document_seen; kept here so the policy names its item visibility, which
+    -- item-visibility-tables.test.ts reads from the policy text.
     and app.sees_work_item(work_item_id)
     and app.document_seen(work_item_id, arrival, reply_event_id));
 
@@ -156,8 +173,7 @@ create or replace function app.work_item_shared_documents(p_work_item_id uuid) r
         join work_item w on w.id = d.work_item_id
         where d.work_item_id = p_work_item_id and app.sees_work_item(w.id) and w.submitted_at is not null
           and d.confirmed_at is not null and d.removed_at is null
-          and (case when w.closed_at is null then d.arrival < w.arrivals
-            else d.arrival <> w.arrivals - 1 or d.reply_event_id is not null end)
+          and (app.arrival_handed_over(d.arrival, w.arrivals, w.closed_at) or w.closed_at is not null and d.reply_event_id is not null)
           and app.reply_event_shared(d.work_item_id, d.reply_event_id);
     end
   $$;
@@ -176,7 +192,7 @@ create or replace function app.work_item_shared_links(p_work_item_id uuid)
         join work_item f on f.id = l.from_id
         join work_item t on t.id = l.to_id
         where l.from_id = p_work_item_id and app.sees_work_item(f.id) and f.submitted_at is not null
-          and case when f.closed_at is null then l.arrival < f.arrivals else l.arrival <> f.arrivals - 1 end
+          and app.arrival_handed_over(l.arrival, f.arrivals, f.closed_at)
           and t.document_number is not null and not app.chain_item_unshared(f.id, t.id)
         -- hidden-sort-key: main's order, unchanged; the order they were added, never a time, which app.work_item_links already gives every reader (floored at the Creation Date, RP-399)
         order by l.created_at, t.document_number collate "C", l.id;
