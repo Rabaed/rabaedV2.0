@@ -139,16 +139,25 @@ export function WorkItemPage(props: WorkItemPageProps) {
   // the final outcome and its signer are shown), unless the viewer is of the raiser's Company.
   const raiser = item.raisedBy.companyName;
   const raisedByOwn = sameName(raiser, me.company.legalName);
+  // A Send Back goes to the Company that Submitted the item here: the newest shared move by another Company,
+  // which the viewer reads by its Company's name (V14: the hand-overs are shown). The raiser's, failing that.
+  const submitter =
+    [...(history?.events ?? [])].reverse().find((e) => e.type === "transition" && e.audience === "shared" && e.by.companyName && !sameName(e.by.companyName, me.company.legalName))?.by
+      .companyName ?? raiser;
   const opener = useTransitionOpener(item.id, item.actions, locale, (tr) => {
     const code = codes[tr.key] ?? null;
     const outcome = code ? typeOutcomes.find((o) => o.code === code) : undefined;
-    const goes = raisedByOwn ? null : transitionGoesTo({ kind: tr.kind, offersRevision: outcome ? offersRevision(outcome) : false });
+    const goes = transitionGoesTo({ kind: tr.kind, offersRevision: outcome ? offersRevision(outcome) : false });
+    // A code goes to the raiser; a Send Back to whoever Submitted it. Never the viewer's own Company.
+    const to = goes === "back" && tr.kind === "send_back" ? submitter : raiser;
+    const named = goes !== null && !sameName(to, me.company.legalName);
     return {
       code,
       look: code ? lookOf(code) : undefined,
       documentNumber: item.documentNumber,
-      goesTo: goes === "back" ? tPopup("goesBackTo", { company: raiser[locale] }) : goes === "closes" ? tPopup("closesFor", { company: raiser[locale] }) : null,
-      remarksReader: raisedByOwn ? null : raiser[locale],
+      goesTo: !named ? null : goes === "back" ? tPopup("goesBackTo", { company: to[locale] }) : tPopup("closesFor", { company: to[locale] }),
+      // Only a code's Remarks reach the raiser with the signer's name (V14); a move inside a Company promises nothing.
+      remarksReader: tr.kind === "close" && code !== null && !raisedByOwn ? raiser[locale] : null,
       ownCompany: me.company.legalName[locale],
     };
   });
