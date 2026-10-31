@@ -12,7 +12,8 @@ import { createTestApi, type Caller } from "../../api/test/support/harness.ts";
 import { buildTower, detail, memberOnProject, submitted, type Tower } from "../../api/test/support/tower.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
-const api = await createTestApi();
+// With the file store: a MAR's Draft attaches its datasheet.
+const api = await createTestApi({ files: true });
 const admin = await createTestAdmin();
 // Reads the audit trail directly.
 const adminDb = createDb(testDatabaseUrls().admin, { max: 1 });
@@ -44,8 +45,9 @@ const actionsOf = (engineerId: string, action: "read_work_item_step" | "reassign
     .execute();
 const find = (number: string, why = reason) =>
   engineer.browser.get(`/v1/steps?projectId=${tower.projectId}&documentNumber=${encodeURIComponent(number)}&reason=${encodeURIComponent(why)}`);
-const reassign = (toMemberId: string | null, why: string | undefined = reason) =>
-  engineer.browser.post(`/v1/work-items/${mar}/step/reassign`, why === undefined ? { toMemberId } : { toMemberId, reason: why });
+/** The Engineer's reassign of the MAR's Step; `why` null sends no reason at all. */
+const reassign = (toMemberId: string | null, why: string | null = reason) =>
+  engineer.browser.post(`/v1/work-items/${mar}/step/reassign`, why === null ? { toMemberId } : { toMemberId, reason: why });
 const historyTypes = async (person: { caller: Caller }) =>
   ((await person.caller.get(`/v1/work-items/${mar}/history`)).json() as { events: { type: string }[] }).events.map((e) => e.type);
 
@@ -104,7 +106,7 @@ describe("finding a stuck Step (RP-1162)", () => {
 
 describe("reassigning it (RP-1162)", () => {
   it("needs a reason", async () => {
-    expect((await reassign(khalid.id, undefined)).statusCode).toBe(400);
+    expect((await reassign(khalid.id, null)).statusCode).toBe(400);
     expect((await reassign(khalid.id, " ")).statusCode).toBe(400);
   });
 

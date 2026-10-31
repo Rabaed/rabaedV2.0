@@ -13,7 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { buildTower, memberOnProject, ok, submitted, type Tower } from "./support/tower.ts";
 
-const api = await createTestApi();
+// With the file store: a MAR's Draft attaches its datasheet.
+const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
 // The worker connects as the app role, with no Member set.
 const worker = createDb(urls.app, { max: 1 });
