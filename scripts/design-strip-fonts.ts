@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { decodePage, encodePage, isFontMime, isNestedPage, type ManifestEntry, manifestOf, manifestScript } from "./check-no-fonts.ts";
+import { decodePage, encodePage, isFontMime, isNestedPage, type Manifest, type ManifestEntry, manifestOf, manifestScript } from "./check-no-fonts.ts";
 
 // A Claude Design HTML export carries every asset base64 in its
 // `__bundler/manifest` script, fonts too: Thmanyah among them, which is licensed
@@ -30,19 +30,21 @@ const scriptJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u0
  * The page without its font resources, nested pages' included, and the manifest
  * keys removed: a nested page's as "<page uuid>/<font uuid>".
  */
-export function stripFonts(page: string): { html: string; removed: string[] } {
+export function stripFonts(page: string): Stripped {
   const stripped = stripPage(page);
-  if (!stripped) throw new Error("This is not a Claude Design page: it has no __bundler/manifest script.");
+  if (!stripped) throw new Error("This is not a Claude Design page: it has no __bundler/manifest script holding JSON.");
   return stripped;
 }
 
-/** stripFonts, or undefined for a page with no manifest. */
-function stripPage(page: string): { html: string; removed: string[] } | undefined {
+type Stripped = { html: string; removed: string[] };
+
+/** A page and every page it nests without their fonts; undefined for a page with no manifest, which is left as it is. */
+function stripPage(page: string): Stripped | undefined {
   const manifest = manifestOf(page);
   if (!manifest) return undefined;
 
   const removed: string[] = [];
-  const kept: Record<string, ManifestEntry> = {};
+  const kept: Manifest = {};
   for (const [uuid, entry] of Object.entries(manifest)) {
     if (isFontMime(entry.mime ?? "")) {
       removed.push(uuid);

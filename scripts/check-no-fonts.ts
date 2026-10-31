@@ -63,13 +63,23 @@ export const isFontMime = (mime: string) => new RegExp(`^${fontMime}`, "i").test
 /** One asset in a Claude Design manifest, keyed by uuid. */
 export type ManifestEntry = { mime: string; compressed?: boolean; data: string };
 
+/** A Claude Design manifest: its assets by uuid. */
+export type Manifest = Record<string, ManifestEntry>;
+
 // The opening tag may carry more attributes than its type.
 export const manifestScript = /(<script\b[^>]*\btype="__bundler\/manifest"[^>]*>)([\s\S]*?)(<\/script>)/;
+const manifestTag = "__bundler/manifest";
 
-/** A page's Claude Design manifest, or undefined when it has none. */
-export function manifestOf(page: string): Record<string, ManifestEntry> | undefined {
+/** A page's Claude Design manifest; undefined when it has none, or only quotes the tag (its script holds no JSON object). */
+export function manifestOf(page: string): Manifest | undefined {
   const match = manifestScript.exec(page);
-  return match ? (JSON.parse(match[2]!) as Record<string, ManifestEntry>) : undefined;
+  if (!match) return undefined;
+  try {
+    const manifest: unknown = JSON.parse(match[2]!);
+    return manifest && typeof manifest === "object" && !Array.isArray(manifest) ? (manifest as Manifest) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether a manifest entry is a whole page nested in the export. */
@@ -86,21 +96,14 @@ export function decodePage(uuid: string, entry: ManifestEntry): string {
 }
 
 /** A page's text encoded the way a manifest entry was: base64, gzipped when it was compressed. */
-export function encodePage(html: string, like: ManifestEntry): string {
+export function encodePage(html: string, original: ManifestEntry): string {
   const bytes = Buffer.from(html, "utf8");
-  return (like.compressed ? gzipSync(bytes) : bytes).toString("base64");
+  return (original.compressed ? gzipSync(bytes) : bytes).toString("base64");
 }
 
-/** Every page nested in a Claude Design export, decoded, at any depth; none when its manifest is no JSON (a page quoting the tag). */
+/** Every page nested in a Claude Design export, decoded, at any depth; throws on one that cannot be decoded. */
 export function nestedPages(page: string): string[] {
-  let manifest: Record<string, ManifestEntry> | undefined;
-  try {
-    manifest = manifestOf(page);
-  } catch {
-    return [];
-  }
-  if (!manifest) return [];
-  return Object.entries(manifest)
+  return Object.entries(manifestOf(page) ?? {})
     .filter(([, entry]) => isNestedPage(entry))
     .flatMap(([uuid, entry]) => {
       const nested = decodePage(uuid, entry);
@@ -108,10 +111,18 @@ export function nestedPages(page: string): string[] {
     });
 }
 
-/** Whether a page nested in this export holds embedded font data, by the same rule as the rest of the check. */
+/**
+ * Whether a page nested in this export holds embedded font data, by the same rule
+ * as the rest of the check. A nested page that cannot be decoded counts as one:
+ * it cannot be shown to hold none (design:strip-fonts names it).
+ */
 export function hasNestedFont(page: string): boolean {
   const font = new RegExp(embeddedFont, "i");
-  return nestedPages(page).some((nested) => font.test(nested));
+  try {
+    return nestedPages(page).some((nested) => font.test(nested));
+  } catch {
+    return true;
+  }
 }
 
 /** Every text file path that held embedded font data in the history (all refs and HEAD), or in a range's commits. */
@@ -119,44 +130,49 @@ export function filesWithEmbeddedFonts(repo: string, range?: string): string[] {
   // Every commit whose diff adds or removes a match. A merge is diffed against its
   // first parent, so a font only the merge brought in is found too (~5 s on the
   // full history, against ~2 s without merges).
-  const paths = gitLines(repo, ["log", ...revisions(range), "--diff-merges=first-parent", "-E", "-i", `-G${embeddedFont}`, "--format=", "--name-only", "--"]);
-  return [...new Set([...paths, ...pagesWithNestedFonts(repo, range)])];
+  const paths = gitLines(repo, historyLog(range, "-E", "-i", `-G${embeddedFont}`, "--name-only"));
+  return [...new Set([...paths, ...exportsWithNestedFonts(repo, range)])];
 }
 
-// Nested pages are decoded only in .html and .htm files, staged or committed: a Claude
-// Design export is a page, code that quotes the manifest tag is not (the test
-// fixtures), and decoding every blob in the history would read ~900 MB
-// (screenshots, lockfiles) where the pages are ~30 MB.
-const pageFile = /\.html?$/i;
+/** git log over the history (all refs and HEAD) or a range, merges diffed against their first parent, no commit lines. */
+const historyLog = (range: string | undefined, ...args: string[]) => ["log", ...revisions(range), "--diff-merges=first-parent", "--format=", ...args, "--"];
 
-/** Every page path whose version in the history (all refs and HEAD), or in a range's commits, nests a page holding a font. */
-function pagesWithNestedFonts(repo: string, range?: string): string[] {
-  // "--raw" lines: ":<old mode> <new mode> <old blob> <new blob> <status>\t<path>".
-  const versions = gitLines(repo, ["log", ...revisions(range), "--diff-merges=first-parent", "--no-renames", "--raw", "--no-abbrev", "--format=", "--"])
+/**
+ * Every path whose version in the history, or in a range's commits, nests a page
+ * holding a font. Reading every blob would read ~900 MB (screenshots, lockfiles), so
+ * only the paths that ever held the manifest tag are read: the commit that adds an
+ * export, or renames it (renames are an add here), adds the tag's line. Every
+ * version of those paths is decoded.
+ */
+function exportsWithNestedFonts(repo: string, range?: string): string[] {
+  const exports = new Set(gitLines(repo, historyLog(range, "--no-renames", "-F", `-G${manifestTag}`, "--name-only")));
+  if (exports.size === 0) return [];
+  // "--raw" lines: ":<old mode> <new mode> <old blob> <new blob> <status>\t<path>"; a deletion has no new blob to read.
+  const versions = gitLines(repo, historyLog(range, "--no-renames", "--raw", "--no-abbrev"))
     .map((line) => /^:\S+ \S+ \S+ ([0-9a-f]+) [^D]\S*\t(.+)$/.exec(line))
-    .filter((match): match is RegExpExecArray => !!match && pageFile.test(match[2]!))
+    .filter((match): match is RegExpExecArray => !!match && exports.has(match[2]!))
     .map((match) => ({ blob: match[1]!, path: match[2]! }));
   const pages = readBlobs(repo, [...new Set(versions.map((version) => version.blob))]);
   const withFont = new Set([...pages].filter(([, page]) => hasNestedFont(page)).map(([blob]) => blob));
   return [...new Set(versions.filter((version) => withFont.has(version.blob)).map((version) => version.path))];
 }
 
-/** Blobs' text by object name (or "<rev>:<path>"), read in one git cat-file. */
+/** Blobs' text by object name (or ":<path>" for the index), read in one git cat-file; a missing one is left out. */
 function readBlobs(repo: string, names: string[]): Map<string, string> {
   const blobs = new Map<string, string>();
   if (names.length === 0) return blobs;
   // eslint-disable-next-line rabaed/no-avoid-terms -- git cat-file's own flag, not a Transmittal
   const out = execFileSync("git", ["cat-file", "--batch"], { cwd: repo, input: names.join("\n") + "\n", maxBuffer: 1024 * 1024 * 1024 });
   // Each object: "<sha> <type> <size>\n<bytes>\n"; a missing one: "<name> missing\n".
-  let at = 0;
+  let offset = 0;
   for (const name of names) {
-    const headerEnd = out.indexOf(0x0a, at);
-    const header = out.subarray(at, headerEnd).toString("utf8").split(" ");
-    at = headerEnd + 1;
-    if (header.length !== 3) continue;
-    const size = Number(header[2]);
-    blobs.set(name, out.subarray(at, at + size).toString("utf8"));
-    at += size + 1;
+    const headerEnd = out.indexOf(0x0a, offset);
+    const header = /^[0-9a-f]+ \w+ (\d+)$/.exec(out.subarray(offset, headerEnd).toString("utf8"));
+    offset = headerEnd + 1;
+    if (!header) continue;
+    const size = Number(header[1]);
+    blobs.set(name, out.subarray(offset, offset + size).toString("utf8"));
+    offset += size + 1;
   }
   return blobs;
 }
@@ -173,11 +189,10 @@ export function stagedFontFiles(repo: string): string[] {
 export function stagedFilesWithEmbeddedFonts(repo: string): string[] {
   const staged = new Set(stagedPaths(repo));
   const inIndex = gitLines(repo, ["grep", "--cached", "-I", "-i", "-l", "-E", "-e", embeddedFont, "--"]).filter((path) => staged.has(path));
-  const exports = gitLines(repo, ["grep", "--cached", "-I", "-l", "-F", "-e", "__bundler/manifest", "--"]).filter(
-    (path) => staged.has(path) && pageFile.test(path) && !inIndex.includes(path),
-  );
-  const pages = readBlobs(repo, exports.map((path) => `:${path}`));
-  return [...inIndex, ...exports.filter((path) => hasNestedFont(pages.get(`:${path}`) ?? ""))];
+  // Any staged text file holding the manifest tag, whatever its name, is decoded.
+  const stagedExports = gitLines(repo, ["grep", "--cached", "-I", "-l", "-F", "-e", manifestTag, "--"]).filter((path) => staged.has(path) && !inIndex.includes(path));
+  const pages = readBlobs(repo, stagedExports.map((path) => `:${path}`));
+  return [...inIndex, ...stagedExports.filter((path) => hasNestedFont(pages.get(`:${path}`) ?? ""))];
 }
 
 /** A git command's output lines, paths unquoted; git grep's "nothing found" (exit 1) is no lines. */

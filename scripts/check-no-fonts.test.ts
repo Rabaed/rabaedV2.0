@@ -259,13 +259,34 @@ describe("a font in a page nested in a Claude Design export", () => {
     expect(filesWithEmbeddedFonts(repo, "main..pr")).toEqual(["pr.htm"]);
   });
 
-  it("is looked for only in pages, and a page whose manifest is no JSON nests none", () => {
+  it("is found in an export under any name, renamed into it too", () => {
+    writeFileSync(join(repo, "board.txt"), board());
+    git("add", "board.txt");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["board.txt"]);
+    git("checkout", "-q", "-b", "pr");
+    commit({ "notes/board": board() });
+    git("mv", "notes/board", "notes/board.svg");
+    git("commit", "-q", "-m", "rename");
+    git("rm", "-q", "notes/board.svg");
+    git("commit", "-q", "-m", "remove");
+    expect(filesWithEmbeddedFonts(repo, "main..pr").sort()).toEqual(["board.txt", "notes/board", "notes/board.svg"]);
+  });
+
+  it("passes code that quotes the manifest tag: a manifest that is no JSON nests no page", () => {
     writeFileSync(join(repo, "fixture.ts"), 'const page = `<script type="__bundler/manifest">${JSON.stringify(manifest)}</script>`;\n');
     writeFileSync(join(repo, "notes.html"), '<pre><script type="__bundler/manifest">{ ... }</script></pre>\n');
     git("add", "-A");
     expect(stagedFilesWithEmbeddedFonts(repo)).toEqual([]);
     git("commit", "-q", "-m", "notes");
     expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+
+  it("counts a nested page that cannot be decoded as a font: it cannot be shown to hold none", () => {
+    writeFileSync(join(repo, "broken.html"), claudeDesignExport({ board: { mime: "text/html", compressed: true, data: fakeBase64 } }));
+    git("add", "broken.html");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["broken.html"]);
+    git("commit", "-q", "--no-verify", "-m", "broken");
+    expect(filesWithEmbeddedFonts(repo)).toEqual(["broken.html"]);
   });
 
   it("is refused by the pre-commit check, naming the file", () => {

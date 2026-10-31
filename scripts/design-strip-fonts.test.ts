@@ -98,8 +98,14 @@ describe("stripFonts", () => {
     it("leaves a nested page without fonts, or one that is no export, byte for byte", () => {
       const plain = nestedPage("<html><body>No manifest</body></html>");
       const clean = nestedPage(claudeDesignExport({ app: { mime: "application/javascript", data: fakeBase64 } }));
-      const page = claudeDesignExport({ plain, clean });
+      const quoting = nestedPage('<pre><script type="__bundler/manifest">{ ... }</script></pre>');
+      const page = claudeDesignExport({ plain, clean, quoting });
       expect(stripFonts(page)).toEqual({ html: page, removed: [] });
+    });
+
+    it("refuses a nested page it cannot decode, naming it", () => {
+      const page = claudeDesignExport({ board: { mime: "text/html", compressed: true, data: fakeBase64 } });
+      expect(() => stripFonts(page)).toThrow(/nested page board .*could not be decoded/);
     });
   });
 
