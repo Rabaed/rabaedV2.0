@@ -93,6 +93,8 @@ describe("notification_setting and member_notification_preference", () => {
         return as === null ? app.transaction().execute((trx) => query.execute(trx)).then((r) => r.rows) : rowsAs<{ member_id: string }>(as, query);
       };
       await expectHiddenFrom({ read, target: a.member, seenBy: a.member, hiddenFrom: [b.member, null], idOf: (r) => r.member_id, name: named, label: table });
+      // Nobody but A has a row here, so B and no Member read none at all.
+      for (const as of [b.member, null]) expect(await read(as), `${table} as ${named(as)}`).toEqual([]); // not hidden-from: A's row is proved above
     }
   });
 
@@ -132,9 +134,10 @@ describe("project_mute", () => {
   });
 
   it("is unreadable to any other Member, and never written directly", async () => {
-    // A's mute, set at the end of the first test.
+    await mute(a.member, a.projectId, true); // A's mute, so there is a row to read first
     const mutes = (as: string) => rowsAs<{ member_id: string }>(as, sql`select member_id from project_mute`);
     await expectHiddenFrom({ read: mutes, target: a.member, seenBy: a.member, hiddenFrom: b.member, idOf: (r) => r.member_id, name: named });
+    expect(await mutes(b.member)).toEqual([]); // not hidden-from: A's mute is proved above, and B has none of their own
     await expect(rowsAs(a.member, sql`delete from project_mute`)).rejects.toThrow(/permission denied/);
     await expect(
       rowsAs(b.member, sql`insert into project_mute (member_id, project_id) values (${b.member}::uuid, ${a.projectId}::uuid)`),

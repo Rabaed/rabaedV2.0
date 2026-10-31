@@ -136,7 +136,7 @@ describe("a Transition that notifies a Position", () => {
     expect(more).toEqual([]); // not hidden-from: one notification, not two
     expect(n).toMatchObject({ kind: "watched_event", title: "Pumps", readAt: null });
     // The actor, K1's engineer (another Participant's "engineer"), another Contractor and a narrowed C1 engineer hear nothing of it.
-    await expectHiddenFrom({ read: (by: Caller) => movesOf(by, id),target: id, idOf: (n) => n.workItemId!, seenBy: c1Engineer2, hiddenFrom: [at.c1Pm, k1Engineer, c2Engineer, c1Narrowed], name: named });
+    await expectHiddenFrom({ read: (by: Caller) => movesOf(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: c1Engineer2, hiddenFrom: [at.c1Pm, k1Engineer, c2Engineer, c1Narrowed], name: named });
   });
 
   it("checks each recipient again at delivery: one narrowed off the item after the move hears nothing", async () => {
@@ -147,8 +147,8 @@ describe("a Transition that notifies a Position", () => {
     try {
       await drainOutbox(worker);
       // The raiser, named by the same move and still seeing the item, hears of it.
-      await expectHiddenFrom({ read: (by: Caller) => movesOf(by, id),target: id, idOf: (n) => n.workItemId!, seenBy: at.c1Engineer, hiddenFrom: c1Engineer2, name: named });
-      expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([]); // not hidden-from: the migrator's routing rows
+      await expectHiddenFrom({ read: (by: Caller) => movesOf(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: at.c1Engineer, hiddenFrom: c1Engineer2, name: named });
+      expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([]); // not hidden-from: the migrator's routing rows; the Member's bell is proved by expectHiddenFrom above
     } finally {
       await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${c1Engineer2Id}/visibility`, { trade: all, location: all }));
     }

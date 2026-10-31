@@ -219,13 +219,18 @@ describe("free Links", () => {
       canChange: false,
     });
     // A K1 manager who sees the linked item gets its id.
+    expect((await links(tower.k1Manager, mar)).links.map((l) => l.workItemId)).toEqual([item.c1Approved]);
     await expectHiddenFrom({ read: naming(linksUrl(mar), item.c1Approved), target: item.c1Approved, seenBy: tower.k1Manager, hiddenFrom: k1Mechanical, name: named });
     const linkedItem = readById(`/v1/work-items/${item.c1Approved}`);
     await expectHiddenFrom({ read: linkedItem, target: item.c1Approved, seenBy: tower.k1Manager, hiddenFrom: k1Mechanical, name: named });
     // The changes stay the raiser's own Participant's (V5).
     const changes = (by: Caller) => answersChanged(by, mar);
-    const [change] = await changes(tower.c1Engineer);
-    await expectHiddenFrom({ read: changes, target: eventKey(change!), idOf: eventKey, seenBy: [tower.c1Engineer, tower.c1Pm], hiddenFrom: [tower.k1Manager, k1Mechanical], name: named });
+    // Every change on the record (the add and the remove of the "change after a Return" test), not only the first.
+    const recorded = await changes(tower.c1Engineer);
+    expect(recorded.length, "the raiser's history records the Link changes").toBeGreaterThan(0);
+    for (const change of recorded) {
+      await expectHiddenFrom({ read: changes, target: eventKey(change), idOf: eventKey, seenBy: [tower.c1Engineer, tower.c1Pm], hiddenFrom: [tower.k1Manager, k1Mechanical], name: named });
+    }
   });
 
   it("open, by the Link's own id, as the hidden item's number and Subject only, never its id; its URL is 404 (RP-521-1)", async () => {
@@ -246,6 +251,7 @@ describe("free Links", () => {
     await expectHiddenFrom({ read: readById(`${linksUrl(mar)}/${toApproved}`), target: toApproved, seenBy: [k1Mechanical, tower.k1Manager], hiddenFrom: c2Engineer, name: named });
     for (const r of [
       tower.k1Manager.get(`${linksUrl(item.c1Submitted)}/${toApproved}`),
+      k1Mechanical.get(`${linksUrl(item.c1Submitted)}/${toApproved}`),
       k1Mechanical.get(`${linksUrl(mar)}/${randomUUID()}`),
       k1Mechanical.get(`${linksUrl(mar)}/not-an-id`),
     ]) {

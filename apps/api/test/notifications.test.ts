@@ -48,7 +48,6 @@ let k1Engineer: Member;
 let c2Engineer: Member;
 let engineerPm: Member; // C1 Engineer who is also a PM: in the pool they send to.
 let k1: { company: Company; participantId: string };
-let cableTrays = ""; // Sent for Review first: the PM's notification, nobody else's.
 
 /** A Member as a failure names them. */
 const named = (m: Member) =>
@@ -127,7 +126,6 @@ describe("Send for Review", () => {
   let id = "";
   beforeAll(async () => {
     id = await createDraft("Cable trays");
-    cableTrays = id;
     await take(engineer.caller, id, "send_for_review");
   });
 
@@ -146,6 +144,7 @@ describe("Send for Review", () => {
     expect(n!.step).toEqual({ name: { en: "Contractor review", ar: "مراجعة المقاول" } });
     const read = (who: Member) => about(who, id);
     await expectHiddenFrom({ read, target: id, idOf: (n) => n.workItemId!, seenBy: pm, hiddenFrom: [engineer, pmNarrowed, manager, k1Engineer, c2Engineer, pmRemoved], name: named });
+    expect((await notifications(pmRemoved)).notifications).toEqual([]); // not hidden-from: the PM's delivered notification is proved above, and the removed PM never had one
     expect((await outboxRows(id))[0]).toMatchObject({ attempts: 0, dead_at: null });
     expect((await outboxRows(id))[0]!.processed_at).not.toBeNull();
   });
@@ -207,9 +206,12 @@ describe("Return and Submit", () => {
   it("shows only the recipient's own notifications, with nothing of items that aren't theirs", async () => {
     const mine = await notifications(manager);
     expect(mine.notifications.every((n) => n.workItemId === id)).toBe(true);
-    // The PM's "Cable trays" notification, from the Send for Review above, is the PM's only.
+    // An item of the PM's pool only: the PM's notification about it is never the Consultant manager's.
+    const own = await createDraft("Cable duct");
+    await take(engineer.caller, own, "send_for_review");
+    await drainOutbox(worker);
     const read = async (who: Member) => (await notifications(who)).notifications;
-    await expectHiddenFrom({ read, target: cableTrays, idOf: (n) => n.workItemId ?? n.id, seenBy: pm, hiddenFrom: manager, name: named });
+    await expectHiddenFrom({ read, target: own, idOf: (n) => n.workItemId ?? n.id, seenBy: pm, hiddenFrom: manager, name: named });
     // The Return's reason is no notification's at all, so nobody reads it first.
     const body = JSON.stringify(mine);
     expect(body).not.toContain("Wrong tray size");

@@ -155,12 +155,16 @@ describe("a Link", () => {
     const byId = (as: string) => call<{ id: string }>(as, sql`select id from work_item_link where id = ${b.link}::uuid or from_id = ${b.from}::uuid`);
     await expectHiddenFrom({ read: byId, target: b.link, seenBy: b.ap, hiddenFrom: a.ap, name: named, label: "the table" });
     await expectHiddenFrom({ read: (as: string) => linksOf(as, b.from), target: b.link, seenBy: b.ap, hiddenFrom: a.ap, name: named, label: "app.work_item_links" });
+    // B's other Link from the same item too: nothing of it returns.
+    expect(await byId(a.ap)).toEqual([]); // not hidden-from: b.link is proved above; this covers every Link of b.from
+    expect(await linksOf(a.ap, b.from)).toEqual([]); // not hidden-from: b.link is proved above; this covers every Link of b.from
   });
 
   it("whose from item the reader can't see never returns", async () => {
     // The narrow Member sees the item in Building A, not the one in Building B.
     expect(await linkIds(a.narrow)).toEqual([a.link]);
     await expectHiddenFrom({ read: (as: string) => linksOf(as, a.target), target: a.backLink, seenBy: a.ap, hiddenFrom: a.narrow, name: named });
+    expect(await linksOf(a.narrow, a.target)).toEqual([]); // not hidden-from: a.backLink is proved above; this covers every Link of a.target
   });
 
   it("never gives the app role its target's id from the table", async () => {

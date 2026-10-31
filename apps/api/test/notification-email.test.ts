@@ -307,7 +307,7 @@ describe("checked again at send time", () => {
     // The raiser, who still sees it, is emailed the same Code B.
     const codeB = async (p: Person) => about(p.email, "Code B").map(itemOf);
     await expectHiddenFrom({ read: codeB, target: item.id, idOf: (id) => id ?? "", seenBy: raiser, hiddenFrom: orEngineer, name: named });
-    expect(to(orEngineer.email)).toEqual([]); // not hidden-from: nothing else was sent them either
+    expect(to(orEngineer.email)).toEqual([]); // not hidden-from: Code B is proved above; this covers every email to them
     expect(about(raiser.email, `${item.documentNumber}\u2069 · Cooling towers · Code B`).map(itemOf)).toEqual([item.id]);
   });
 });

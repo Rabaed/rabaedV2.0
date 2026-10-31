@@ -170,9 +170,11 @@ describe("a hidden item", () => {
       [at.c1Engineer, randomUUID()],
       [at.c1Engineer, "not-an-id"],
     ] as const) {
-      if (item !== id) await expectHidden(watchRead(who, item)); // not hidden-from: a made-up id
       await expectHidden(who.request("PUT", `/v1/work-items/${item}/watch`));
       await expectHidden(who.delete(`/v1/work-items/${item}/watch`));
+    }
+    for (const item of [randomUUID(), "not-an-id"]) {
+      await expectHidden(watchRead(at.c1Engineer, item)); // not hidden-from: a made-up id
     }
     // Nothing was written by the refused Watch: once the item is in sight, it isn't watched.
     await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${await memberIdOf(k1Mechanical)}/visibility`, {
