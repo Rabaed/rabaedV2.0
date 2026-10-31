@@ -16,6 +16,7 @@
     "worktrees:prune": "node scripts/worktrees-prune.ts",
     "worktree:remove": "node scripts/worktree-remove.ts",
     "servers:stop": "node scripts/servers-stop.ts",
+    "check:doctor": "node scripts/doctor.ts",
     "db:setup": "node scripts/pnpm.ts --filter @rabaed/db run setup",
     "demo": "docker compose up -d --wait db mailpit files && node scripts/pnpm.ts db:reset && node scripts/pnpm.ts demo:seed && node scripts/pnpm.ts dev:apps",
     "demo:session": "node --env-file-if-exists=.env scripts/demo-session.ts",
