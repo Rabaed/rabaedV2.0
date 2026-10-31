@@ -13,7 +13,7 @@
 // RP-1170: none is removed while a verify runs anywhere on the machine (verifies-running.ts), and the
 // sets go one at a time with a pause between, stopping at the first Docker does not answer in time.
 import { execFileSync } from "node:child_process";
-import { sleepSync } from "./sleep-sync.ts";
+import { sleepSync } from "./lanes.ts";
 import { STORIES_VOLUME_PREFIX, worktreeHash } from "./test-stories-linux.ts";
 import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 

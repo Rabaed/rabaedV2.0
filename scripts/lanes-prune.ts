@@ -237,7 +237,7 @@ for (const s of candidates) {
   }
   try {
     // removeProject reads the verifies again just before: one may have started since the prompt.
-    const { volumesKept } = removeProject(s, { keepVolumes: volumesStay !== undefined });
+    const { volumesKept } = removeProject(s, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
     console.log(volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed ${s.project}.`);
   } catch (error) {
     failed++;

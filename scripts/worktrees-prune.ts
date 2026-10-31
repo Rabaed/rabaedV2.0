@@ -227,7 +227,7 @@ removeProjectsNow({
   remove: (p) =>
     attempt(p.project, () => {
       // removeProject reads the verifies again just before: one may have started since the prompt.
-      const { volumesKept } = removeProject(p, { keepVolumes: volumesStay !== undefined });
+      const { volumesKept } = removeProject(p, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
       console.log(volumesKept !== undefined ? `Removed compose project ${p.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed compose project ${p.project}.`);
     }),
   log: (line) => logged.push(line),

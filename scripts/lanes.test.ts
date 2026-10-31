@@ -1069,7 +1069,7 @@ describe("removeProject (RP-1170: a kill that got no exit event is retried; volu
 
   it("keeps every volume with keepVolumes: no -v, no volume rm", () => {
     const { calls, run } = runner(() => undefined);
-    expect(removeProject(stale, { keepVolumes: true, run, wait: () => {} })).toEqual({ volumesKept: "asked to keep them" });
+    expect(removeProject(stale, { keepVolumes: true, run, wait: () => {}, volumesKeptBecause: () => undefined })).toEqual({ volumesKept: "asked to keep them" });
     expect(calls.slice(0, 3)).toEqual([
       ["rm", "-f", "db"],
       ["rm", "-f", "files"],

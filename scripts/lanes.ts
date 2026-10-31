@@ -4,8 +4,6 @@ import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import { holdReason, type Holders } from "./claude-sessions.ts";
 import { samePath } from "./paths.ts";
-import { sleepSync } from "./sleep-sync.ts";
-import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
@@ -765,12 +763,20 @@ export function readProjectNow(project: string, { worktrees, cwd }: { worktrees:
   return { claims, containers, postgres: db && { container: db.name, connections: postgresConnections(db.name) } };
 }
 
+const pause = new Int32Array(new SharedArrayBuffer(4));
+/** Blocks this thread for ms milliseconds (the clean-up scripts run Docker and git synchronously). */
+export const sleepSync = (ms: number): void => void Atomics.wait(pause, 0, 0, ms);
+
 /** How removeProject runs Docker; injected in tests. */
 export type RemoveProjectOptions = {
   /** Remove the containers and the network only. */
   keepVolumes?: boolean;
-  /** Why no volume may go now (RP-1170, rule 4: a verify runs anywhere on the machine), read just before; undefined lets them go. */
-  volumesKeptBecause?: () => string | undefined;
+  /**
+   * Why no volume may go now (RP-1170, rule 4: a verify runs anywhere on the machine; verifies-running.ts
+   * volumesKeptReason(verifiesRunningNow())), read just before; undefined lets them go. Required, so no caller
+   * skips the check; it is passed in because this file, which CI runs, imports only CI's own scripts (ci-green.ts).
+   */
+  volumesKeptBecause: () => string | undefined;
   run?: (args: string[]) => string;
   wait?: (ms: number) => void;
 };
@@ -785,12 +791,12 @@ const KILL_PAUSE_MS = 5000;
  * its compose file). The containers go one at a time (RP-1170): one whose kill got no exit event is
  * tried again, three times in all with a pause between; one already gone counts as removed; any other
  * failure stops it, naming which containers went. keepVolumes, or a verify running anywhere on the
- * machine (checked here, so no caller skips it; bulk volume removal during verifies hung Docker
+ * machine (volumesKeptBecause, asked just before; bulk volume removal during verifies hung Docker
  * twice), leaves every volume, anonymous ones too; volumesKept then says why.
  */
 export function removeProject(
   stale: StaleProject,
-  { keepVolumes = false, volumesKeptBecause = () => volumesKeptReason(verifiesRunningNow()), run = docker, wait = sleepSync }: RemoveProjectOptions = {},
+  { keepVolumes = false, volumesKeptBecause, run = docker, wait = sleepSync }: RemoveProjectOptions,
 ): { volumesKept: string | undefined } {
   // Every caller already keeps lane 7 (RP-1101); refused here too, so no future one can reach it.
   const harness = protectedLaneReason(stale.project);
