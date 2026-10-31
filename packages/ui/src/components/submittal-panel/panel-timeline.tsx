@@ -80,27 +80,34 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
               )}
               {item.move}
             </p>
-            {item.who && (item.who.person || item.who.company) && (
-              <p className={cn("mt-1 text-[12.5px] [overflow-wrap:anywhere]", item.who.avatar && "flex items-start gap-1.5")}>
-                {/* The page's History draws the person's initials before the name (RP-1151 row 60); the name is beside it. */}
-                {item.who.avatar && item.who.person && <Avatar name={item.who.person} size="sm" decorative />}
-                {/* One run of text, so it wraps as words, not part by part; the panel's line stays as it was. */}
-                <span className={cn(item.who.avatar && "min-w-0 self-center")}>
-                {/* Name · Position · Company, each part only when given; a Position only with its person. */}
-                {item.who.person && <span className="font-semibold">{item.who.person}</span>}
-                {item.who.person && item.who.position && (
-                  <>
-                    <span className="text-muted"> · </span>
-                    <span data-who="position" className="text-muted">
-                      {item.who.position}
-                    </span>
-                  </>
-                )}
-                {item.who.person && item.who.company && <span className="text-muted"> · </span>}
-                {item.who.company && <span className="text-muted">{item.who.company}</span>}
-                </span>
-              </p>
-            )}
+            {item.who && (item.who.person || item.who.company) && (() => {
+              const parts = (
+                <>
+                  {/* Name · Position · Company, each part only when given; a Position only with its person. */}
+                  {item.who.person && <span className="font-semibold">{item.who.person}</span>}
+                  {item.who.person && item.who.position && (
+                    <>
+                      <span className="text-muted"> · </span>
+                      <span data-who="position" className="text-muted">
+                        {item.who.position}
+                      </span>
+                    </>
+                  )}
+                  {item.who.person && item.who.company && <span className="text-muted"> · </span>}
+                  {item.who.company && <span className="text-muted">{item.who.company}</span>}
+                </>
+              );
+              // The page's History draws the person's initials before one run of text (RP-1151 row 60), so it
+              // wraps as words; every other timeline (the panel's) keeps its plain line, the same DOM as before.
+              return item.who.avatar && item.who.person ? (
+                <p className="mt-1 flex items-start gap-1.5 text-[12.5px] [overflow-wrap:anywhere]">
+                  <Avatar name={item.who.person} size="sm" decorative />
+                  <span className="min-w-0 self-center">{parts}</span>
+                </p>
+              ) : (
+                <p className="mt-1 text-[12.5px] [overflow-wrap:anywhere]">{parts}</p>
+              );
+            })()}
             {item.texts?.map((text) => (
               <p
                 key={text.label}
