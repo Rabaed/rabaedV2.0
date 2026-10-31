@@ -60,11 +60,12 @@ export function queuedPrNumber(headRef: string): number | undefined {
  */
 export const REVIEWED_ADD_ACTOR = "github-actions[bot]";
 
-/** One of a PR's issue events: what happened (`labeled`, `auto_merge_enabled`, `added_to_merge_queue`, …), the label's name for a label event, and who did it. */
+/** One of a PR's issue events: what happened (`labeled`, `auto_merge_enabled`, `added_to_merge_queue`, …), the label's name for a label event, who did it, and when (GitHub's `created_at`, to the second). */
 export interface PrEvent {
   event: string;
   label?: string;
   actor: string;
+  createdAt: string;
 }
 
 export interface RequiredSeam {
@@ -136,7 +137,7 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
       summary: `PR #${pr}: GitHub auto-merge is on (turned on by ${pull.autoMergeBy}), so GitHub would enqueue it out of order (RP-1167). Turn it off with \`gh pr merge ${pr} --disable-auto\`, re-run this check (turning it off starts no run of it), then queue it with \`pnpm queue ${pr}\`.`,
     };
   }
-  const { labels, handLabeler } = pull.labels.includes(REVIEWED_LABEL) ? countedLabels(pull.labels, reviewedLabelers(await events())) : { labels: pull.labels };
+  const { labels, handLabeler, lagging } = pull.labels.includes(REVIEWED_LABEL) ? countedLabels(pull.labels, await events()) : { labels: pull.labels };
   const needsFiles = !labels.includes(REVIEWED_LABEL) && labels.includes(DOCS_ONLY_LABEL);
   let files: string[] | undefined;
   if (needsFiles) {
@@ -146,6 +147,13 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   }
   const gate = reviewGate(labels, files);
   if (gate.ok) return { ok: true, summary: `PR #${pr} has the '${gate.via}' label${gate.via === DOCS_ONLY_LABEL ? " and changes only docs" : ""}: passes.` };
+  // GitHub can list a label a few seconds before its event: judge nothing then, and say so.
+  if (lagging) {
+    return {
+      ok: false,
+      summary: `PR #${pr} has the '${REVIEWED_LABEL}' label, but GitHub's issue events have not caught up with it (the newest '${REVIEWED_LABEL}' event is not the label being added), so who added it cannot be told yet. Re-run this check in a minute.`,
+    };
+  }
   const reason =
     handLabeler === undefined
       ? gate.reason
@@ -159,29 +167,34 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   };
 }
 
-/** Who added the `reviewed` label, oldest first. */
-export const reviewedLabelers = (events: PrEvent[]) => events.filter((event) => event.event === "labeled" && event.label === REVIEWED_LABEL).map((event) => event.actor);
+const isSwitch = (event: PrEvent) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled";
 
 /**
  * Whether auto-merge was on when the PR last entered the merge queue: the newest `auto_merge_enabled` or
  * `auto_merge_disabled` before its newest `added_to_merge_queue` is an enable. `pnpm queue` never turns auto-merge on,
- * so a PR it queued after auto-merge was turned off again passes. While GitHub lists no entry yet, the newest switch
- * of all decides, so a missing event fails closed. GitHub lists the enable before the entry it causes (#531, #564).
+ * so a PR it queued after auto-merge was turned off again passes. A switch in the same second as the entry counts as
+ * before it, whichever GitHub lists first: an enable then caused the entry. While GitHub lists no entry yet, the newest
+ * switch of all decides, so a missing event fails closed.
  */
 export function enteredQueueByAutoMerge(events: PrEvent[]): boolean {
   const entered = events.findLastIndex((event) => event.event === "added_to_merge_queue");
-  const before = entered === -1 ? events : events.slice(0, entered);
-  return before.findLast((event) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled")?.event === "auto_merge_enabled";
+  if (entered === -1) return events.findLast(isSwitch)?.event === "auto_merge_enabled";
+  const second = events[entered]?.createdAt;
+  const sameSecond = events.slice(entered + 1).filter((event) => isSwitch(event) && event.createdAt === second);
+  return [...events.slice(0, entered), ...sameSecond].findLast(isSwitch)?.event === "auto_merge_enabled";
 }
 
 /**
- * The labels that count: a `reviewed` that CI's reviewed-add did not add last counts as no label, and
- * `handLabeler` names who did (RP-1167). `labelers` lists who added `reviewed`, oldest first.
+ * The labels that count (RP-1167). `reviewed` counts only when the newest `labeled` or `unlabeled` event for it is
+ * CI's reviewed-add adding it. When someone else added it, it counts as no label and `handLabeler` names them. When
+ * the newest is an `unlabeled`, or there is none, though the label is there, GitHub's events have not caught up:
+ * `lagging`, and the label counts as no label.
  */
-export function countedLabels(labels: string[], labelers: string[]): { labels: string[]; handLabeler?: string } {
-  const last = labelers.at(-1);
-  if (last === REVIEWED_ADD_ACTOR) return { labels };
-  return { labels: labels.filter((label) => label !== REVIEWED_LABEL), handLabeler: last ?? "a login GitHub's events do not name" };
+export function countedLabels(labels: string[], events: PrEvent[]): { labels: string[]; handLabeler?: string; lagging?: true } {
+  const newest = events.findLast((event) => event.label === REVIEWED_LABEL && (event.event === "labeled" || event.event === "unlabeled"));
+  if (newest?.event === "labeled" && newest.actor === REVIEWED_ADD_ACTOR) return { labels };
+  const without = labels.filter((label) => label !== REVIEWED_LABEL);
+  return newest?.event === "labeled" ? { labels: without, handLabeler: newest.actor } : { labels: without, lagging: true };
 }
 
 /** The event the workflow ran for, from its payload (GITHUB_EVENT_PATH). */
@@ -220,8 +233,8 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       const events: PrEvent[] = [];
       // The API lists events oldest first. A deleted user shows as no actor; GitHub calls them ghost.
       for (let page = 1; page <= MAX_PAGES; page++) {
-        const batch = (await get(`issues/${pr}/events?per_page=${PER_PAGE}&page=${page}`)) as { event: string; label?: { name: string }; actor: { login: string } | null }[];
-        events.push(...batch.map(({ event, label, actor }) => ({ event, ...(label ? { label: label.name } : {}), actor: actor?.login ?? "ghost" })));
+        const batch = (await get(`issues/${pr}/events?per_page=${PER_PAGE}&page=${page}`)) as { event: string; label?: { name: string }; actor: { login: string } | null; created_at: string }[];
+        events.push(...batch.map(({ event, label, actor, created_at }) => ({ event, ...(label ? { label: label.name } : {}), actor: actor?.login ?? "ghost", createdAt: created_at })));
         if (batch.length < PER_PAGE) return events;
       }
       // Past the last page the newest events may be missing, so the last one read proves nothing.

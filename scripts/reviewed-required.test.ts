@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { overHttp, queuedPrNumber, REQUIRED_CHECK, requiredEvent, requireReviewed, reviewGate, type PrEvent, type RequiredSeam } from "./reviewed-required.ts";
 
+// Each made-up event is one second after the one before, as GitHub lists them, oldest first.
+let clock = 0;
+const tick = () => new Date(Date.UTC(2026, 9, 31, 10, 0, clock++)).toISOString().replace(".000Z", "Z");
 /** The PR's issue events when each login in turn added `reviewed`. */
-const labeledBy = (...logins: string[]): PrEvent[] => logins.map((actor) => ({ event: "labeled", label: "reviewed", actor }));
-const eventBy = (event: string): PrEvent => ({ event, actor: "mmhaleess90" });
+const labeledBy = (...logins: string[]): PrEvent[] => logins.map((actor) => ({ event: "labeled", label: "reviewed", actor, createdAt: tick() }));
+const eventBy = (event: string, createdAt = tick()): PrEvent => ({ event, actor: "mmhaleess90", createdAt });
 
 // The workflow the main ruleset requires: the queue must get the same check name as the PR.
 // It lands in its own PR after this script (rule 3, and it runs main's copy of the script), so these wait for it.
@@ -90,23 +93,24 @@ describe("overHttp", () => {
     expect((await recorded(() => ({ status: 200, body: { labels: [], changed_files: 1 } })).github.pull(9)).draft).toBe(false);
   });
 
-  it("lists the PR's issue events, oldest first, across pages", async () => {
-    const labeled = (login: string, name = "reviewed") => ({ event: "labeled", label: { name }, actor: { login } });
-    const firstPage = [labeled("mmhaleess90"), { event: "auto_merge_enabled", actor: { login: "mmhaleess90" } }, ...Array.from({ length: 98 }, () => labeled("x", "docs-only"))];
-    const { urls, github } = recorded((url) => ({ status: 200, body: url.endsWith("page=1") ? firstPage : [labeled("github-actions[bot]"), { event: "commented", actor: { login: "y" } }] }));
+  it("lists the PR's issue events, oldest first, with their times, across pages", async () => {
+    const at = "2026-10-31T10:03:14Z";
+    const labeled = (login: string, name = "reviewed") => ({ event: "labeled", label: { name }, actor: { login }, created_at: at });
+    const firstPage = [labeled("mmhaleess90"), { event: "auto_merge_enabled", actor: { login: "mmhaleess90" }, created_at: at }, ...Array.from({ length: 98 }, () => labeled("x", "docs-only"))];
+    const { urls, github } = recorded((url) => ({ status: 200, body: url.endsWith("page=1") ? firstPage : [labeled("github-actions[bot]"), { event: "commented", actor: { login: "y" }, created_at: at }] }));
     const events = await github.events(9);
     expect(events).toHaveLength(102);
     expect(events.slice(0, 2)).toEqual([
-      { event: "labeled", label: "reviewed", actor: "mmhaleess90" },
-      { event: "auto_merge_enabled", actor: "mmhaleess90" },
+      { event: "labeled", label: "reviewed", actor: "mmhaleess90", createdAt: at },
+      { event: "auto_merge_enabled", actor: "mmhaleess90", createdAt: at },
     ]);
-    expect(events.at(-2)).toEqual({ event: "labeled", label: "reviewed", actor: "github-actions[bot]" });
+    expect(events.at(-2)).toEqual({ event: "labeled", label: "reviewed", actor: "github-actions[bot]", createdAt: at });
     expect(urls).toEqual(["https://api.github.com/repos/o/r/issues/9/events?per_page=100&page=1", "https://api.github.com/repos/o/r/issues/9/events?per_page=100&page=2"]);
   });
 
   it("names a deleted user as GitHub's ghost, so their label still counts as a hand label", async () => {
-    const { github } = recorded(() => ({ status: 200, body: [{ event: "labeled", label: { name: "reviewed" }, actor: null }] }));
-    expect(await github.events(9)).toEqual([{ event: "labeled", label: "reviewed", actor: "ghost" }]);
+    const { github } = recorded(() => ({ status: 200, body: [{ event: "labeled", label: { name: "reviewed" }, actor: null, created_at: "2026-10-31T10:00:00Z" }] }));
+    expect(await github.events(9)).toEqual([{ event: "labeled", label: "reviewed", actor: "ghost", createdAt: "2026-10-31T10:00:00Z" }]);
   });
 
   it("throws rather than judge a PR whose events run past the last page it reads: the newest could be cut off", async () => {
@@ -207,6 +211,19 @@ describe("requireReviewed on merge_group", () => {
     expect((await requireReviewed(event, onNoEntry.seam)).ok).toBe(false);
     const offNoEntry = fakeSeam({ events: async () => [eventBy("auto_merge_enabled"), eventBy("auto_merge_disabled"), ...labeledBy("github-actions[bot]")] });
     expect((await requireReviewed(event, offNoEntry.seam)).ok).toBe(true);
+  });
+
+  it("counts an auto-merge enable in the same second as the queue entry as coming before it, whatever order GitHub lists them in", async () => {
+    const second = "2026-10-31T11:00:00Z";
+    const events = [...labeledBy("github-actions[bot]"), eventBy("added_to_merge_queue", second), eventBy("auto_merge_enabled", second)];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
+  it("does not count an enable a second after the entry as the cause of it: auto-merge turned on later is the live check's job", async () => {
+    const events = [...labeledBy("github-actions[bot]"), eventBy("added_to_merge_queue", "2026-10-31T11:00:00Z"), eventBy("auto_merge_enabled", "2026-10-31T11:00:01Z")];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(true);
   });
 
   it("reads the PR's events once for both the queue entry and the label", async () => {
@@ -337,9 +354,31 @@ describe("requireReviewed on pull_request", () => {
     expect((await requireReviewed(event, ciLast.seam)).ok).toBe(true);
   });
 
-  it("fails a reviewed label whose labeled event GitHub does not list", async () => {
+  it("fails closed, saying to re-run, while GitHub's events lag the label: no labeled event yet", async () => {
     const { seam } = fakeSeam({ events: async () => labeledBy() });
-    expect((await requireReviewed(event, seam)).ok).toBe(false);
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/not caught up.*re-run/i);
+  });
+
+  it("fails closed, saying to re-run, when the newest reviewed event is an unlabeled though the label is there", async () => {
+    const events = [...labeledBy("github-actions[bot]"), { ...eventBy("unlabeled"), label: "reviewed" }];
+    const { seam } = fakeSeam({ events: async () => events });
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/not caught up.*re-run/i);
+  });
+
+  it("counts CI's label when the newest reviewed event is CI's labeled, after an earlier unlabeled", async () => {
+    const events = [...labeledBy("github-actions[bot]"), { ...eventBy("unlabeled"), label: "reviewed" }, ...labeledBy("github-actions[bot]")];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(true);
+  });
+
+  it("ignores other labels' events when judging reviewed", async () => {
+    const events = [...labeledBy("github-actions[bot]"), { ...eventBy("unlabeled"), label: "docs-only" }];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(true);
   });
 
   it("still passes a docs-only PR that also has a hand-added reviewed label: docs-only is unchanged", async () => {
