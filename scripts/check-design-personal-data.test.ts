@@ -30,6 +30,8 @@ function withCheckDigit(prefix: string): string {
 }
 const nationalId = withCheckDigit("109876543");
 const iqama = withCheckDigit("234567891");
+const card = withCheckDigit("453914880343646").replace(/(\d{4})(?=\d)/g, "$1 ");
+const notACard = card.slice(0, -1) + String((Number(card.at(-1)) + 1) % 10);
 const notAnId = nationalId.slice(0, 9) + String((Number(nationalId[9]) + 1) % 10);
 
 describe("emails", () => {
@@ -59,6 +61,10 @@ describe("emails", () => {
     expect(kinds("jane.doe&#x40;gmail.com")).toEqual(["email"]);
     expect(kinds("jane.doe%40gmail.com")).toEqual(["email"]);
   });
+
+  it("is not evaded by a file extension after the domain", () => {
+    expect(kinds("jane.doe@gmail.com.png")).toEqual(["email"]);
+  });
 });
 
 describe("phone numbers", () => {
@@ -70,6 +76,8 @@ describe("phone numbers", () => {
     "0551234567",
     "055 123 4567",
     "055-123-4567",
+    "(055) 123 4567",
+    "966 55 123 4567",
     "011 555 1234", // a Riyadh landline
     "+44 20 7946 0958",
     "+1 (202) 555-0143",
@@ -81,6 +89,11 @@ describe("phone numbers", () => {
     const arabic = "٠٥٥١٢٣٤٥٦٧";
     expect(kinds(`<span>${arabic}</span>`)).toEqual(["phone"]);
     expect(kinds("<span>۰۵۵۱۲۳۴۵۶۷</span>")).toEqual(["phone"]);
+  });
+
+  it("finds a number whose digits are escaped", () => {
+    expect(kinds("&#48;&#53;&#53;1234567")).toEqual(["phone"]);
+    expect(kinds("\\u0030551234567")).toEqual(["phone"]);
   });
 
   it("lets an obvious placeholder through", () => {
@@ -107,6 +120,12 @@ describe("national IDs, Iqama numbers and other identifiers", () => {
     expect(kinds(`<td>v${nationalId} ${nationalId}.5 #${nationalId}</td>`.replace("#", "x"))).toEqual([]);
   });
 
+  it("lets a number inside a list of numbers through (a lookup table), but not one in a row of text", () => {
+    expect(kinds(`[5,${nationalId},7,9]`)).toEqual([]);
+    expect(kinds(`${nationalId}, 5, 7`)).toEqual([]);
+    expect(kinds(`name,${nationalId},site`)).toEqual(["national-id"]);
+  });
+
   it("lets an obvious placeholder through", () => {
     expect(kinds(`${withCheckDigit("100000000")} ${withCheckDigit("211111111")}`)).toEqual([]);
   });
@@ -114,6 +133,7 @@ describe("national IDs, Iqama numbers and other identifiers", () => {
   it("refuses a Commercial Registration number named as one", () => {
     expect(kinds("<td>CR No. 4030123456</td>")).toEqual(["commercial-registration"]);
     expect(kinds("<td>Commercial Registration: 1010123456</td>")).toEqual(["commercial-registration"]);
+    expect(kinds('{"cr": "1010123456"}')).toEqual(["commercial-registration"]);
     expect(kinds("<td>السجل التجاري 2050123456</td>")).toEqual(["commercial-registration"]);
     expect(kinds("<td>سجل تجاري: ٤٠٣٠١٢٣٤٥٦</td>")).toEqual(["commercial-registration"]);
   });
@@ -133,9 +153,9 @@ describe("national IDs, Iqama numbers and other identifiers", () => {
   });
 
   it("refuses a payment card number", () => {
-    expect(kinds("<td>4539 1488 0343 6467</td>")).toEqual(["payment-card"]);
-    expect(kinds("<td>4539-1488-0343-6467</td>")).toEqual(["payment-card"]);
-    expect(kinds("<td>4539 1488 0343 6468</td>")).toEqual([]);
+    expect(kinds(`<td>${card}</td>`)).toEqual(["payment-card"]);
+    expect(kinds(`<td>${card.replaceAll(" ", "-")}</td>`)).toEqual(["payment-card"]);
+    expect(kinds(`<td>${notACard}</td>`)).toEqual([]);
   });
 });
 
@@ -163,6 +183,17 @@ describe("the allow list", () => {
     const allow: Allow = { emailDomains: [], values: [], files: [{ path: "design/reference/old/", kinds: ["email"], reason: "Old export, owner checked." }] };
     expect(scanText("design/reference/old/a/b.html", "jane@gmail.com", allow)).toEqual([]);
     expect(scanText("design/reference/older.html", "jane@gmail.com", allow)).toHaveLength(1);
+  });
+
+  it("refuses a bare public top-level domain", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rabaed-allow-"));
+    try {
+      const file = join(dir, "allow.json");
+      writeFileSync(file, JSON.stringify({ emailDomains: [{ domain: "com", reason: "Everything on .com is fine." }], values: [], files: [] }));
+      expect(() => loadAllow(file)).toThrow(/top-level domain/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("refuses an entry without a reason", () => {
@@ -356,6 +387,29 @@ describe("node scripts/check-design-personal-data.ts", () => {
     write({ "design/copy.html": "<p>0551234567</p>\n" });
     git("add", "-A");
     expect(run("--staged").status).toBe(1);
+  });
+
+  it("--staged reads a design page whose name has spaces, brackets and non-ASCII letters", () => {
+    write({ "design/reference/My Board (ص) copy.html": "<p>jane.doe@gmail.com</p>\n" });
+    git("add", "-A");
+    const result = run("--staged");
+    expect(result.status).toBe(1);
+    expect(output(result)).toContain(":1: email");
+  });
+
+  it("--range with three dots compares against where the branch left its base, not the base's tip", () => {
+    write({ "design/page.html": "<p>hi</p>\n" });
+    git("add", "-A");
+    git("commit", "-q", "--no-verify", "-m", "page");
+    git("checkout", "-q", "-b", "feature");
+    write({ "design/page.html": "<p>hi</p>\n<p>0551234567</p>\n" });
+    git("commit", "-q", "--no-verify", "-am", "feature adds a number");
+    git("checkout", "-q", "main");
+    // main gains the same number meanwhile: the feature still adds it relative to where it left main.
+    write({ "design/page.html": "<p>hi</p>\n<p>0551234567</p>\n" });
+    git("commit", "-q", "--no-verify", "-am", "main adds it too");
+    git("checkout", "-q", "feature");
+    expect(run("--range", "main...feature").status).toBe(1);
   });
 
   it("--range passes a range that changes no design file", () => {

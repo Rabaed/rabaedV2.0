@@ -58,6 +58,7 @@ export interface Allow {
   files: (Reasoned & { path: string; kinds: Kind[] })[];
 }
 
+const MAX_BUFFER = 512 * 1024 * 1024;
 const ALLOW_FILE = join(import.meta.dirname, "design-personal-data-allow.json");
 
 /** The allow list; every entry must say why (a vague reason is the owner's to refuse in review). */
@@ -67,8 +68,12 @@ export function loadAllow(file = ALLOW_FILE): Allow {
   for (const entry of [...allow.emailDomains, ...allow.values, ...allow.files]) {
     if (typeof entry.reason !== "string" || entry.reason.trim() === "") throw new Error(`${file}: every allow-list entry needs a reason; ${JSON.stringify(entry)} has none.`);
   }
-  for (const entry of [...allow.values, ...allow.files.flatMap((file) => file.kinds.map((kind) => ({ kind })))]) {
+  for (const entry of [...allow.values, ...allow.files.flatMap((entry) => entry.kinds.map((kind) => ({ kind })))]) {
     if (!KINDS.includes(entry.kind)) throw new Error(`${file}: unknown kind "${entry.kind}"; the kinds are ${KINDS.join(", ")}.`);
+  }
+  // A bare "com" would allow every address on it; only the reserved top-level names are one label.
+  for (const { domain } of allow.emailDomains) {
+    if (!domain.includes(".") && !["test", "invalid", "localhost", "example"].includes(domain.toLowerCase())) throw new Error(`${file}: the email domain "${domain}" is a public top-level domain; list the domain that is meant, such as example.com.`);
   }
   return allow;
 }
@@ -76,8 +81,14 @@ export function loadAllow(file = ALLOW_FILE): Allow {
 /** Arabic-Indic and Persian digits as Latin ones; each is one character, so a column stays a column. */
 const latinDigits = (text: string) => text.replace(/[٠-٩۰-۹]/g, (char) => String(char.charCodeAt(0) & 0xf));
 
-/** The escapes that hide an "@" from a plain reader. */
-const unescapeAt = (text: string) => text.replace(/\\u0040|\\x40|&#0*64;|&#x0*40;|&commat;|%40/gi, "@");
+/** The escapes that hide a character from a plain reader: @, \x40, &#64;, &#x40;, &commat; and %40 for "@", and the same for ASCII digits and letters. */
+const unescape = (text: string) =>
+  text
+    .replace(/&commat;|%40/gi, "@")
+    .replace(/\\u([0-9a-f]{4})|\\x([0-9a-f]{2})|&#(\d{1,3});|&#x([0-9a-f]{1,2});/gi, (match, u, x, dec, hex) => {
+      const code = u ? parseInt(u, 16) : x ? parseInt(x, 16) : dec ? Number(dec) : parseInt(hex, 16);
+      return code < 128 ? String.fromCharCode(code) : match;
+    });
 
 const digitsOf = (text: string) => text.replace(/\D/g, "");
 
@@ -97,17 +108,18 @@ function luhn(digits: string): boolean {
   return sum % 10 === 0;
 }
 
-const fileExtensionTld = /^(png|jpe?g|gif|webp|avif|svg|ico|bmp|tiff?|css|scss|js|mjs|cjs|jsx|tsx?|json|html?|map|woff2?|ttf|otf|eot|mp[34]|webm|pdf)$/i;
+/** An asset name such as "logo@2x.png": a pixel-ratio "domain" ("2x.png") that ends in a file extension. A real host ("gmail.com.png") is not. */
+const assetName = /^\d+(?:x|dppx)\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|tiff?|css|scss|js|mjs|cjs|jsx|tsx?|json|html?|map|woff2?|ttf|otf|eot|mp[34]|webm|pdf)$/i;
 
 // A kind's candidates on one line, as [kind, matched text]. Lookbehinds keep a number that is
 // part of a longer word, number or decimal (an id, a hash, 0.0551234567) from being read.
 const EMAIL = /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.([A-Za-z]{2,}))(?![A-Za-z0-9-])/g;
 const PHONE_INTERNATIONAL = /(?<![\w+.])\+[1-9](?:[\s.()-]*\d){8,14}(?!\d)/g;
-const PHONE_00966 = /(?<![\w+.])00966(?:[\s.()-]*\d){8,10}(?!\d)/g;
-const PHONE_KSA_LOCAL = /(?<![\w+.])0(?:5\d|1[1-7])(?:[\s.-]*\d){7}(?!\d)/g;
-const ID_NUMBER = /(?<![\w.+-])[12]\d{9}(?!\w|\.\d)/g;
-const CR_LABELLED_CASE_SENSITIVE = /\bCR\b[^\d\n]{0,25}?(?<!\d)(\d{10})(?!\w|\.\d)/g;
-const CR_LABELLED = /(?:commercial\s+reg\w*|سجل\s*تجاري|السجل\s*التجاري)[^\d\n]{0,25}?(?<!\d)(\d{10})(?!\w|\.\d)/gi;
+const PHONE_00966 = /(?<![\w+.])(?:00)?966(?:[\s.()-]*\d){9,10}(?!\d)/g;
+const PHONE_KSA_LOCAL = /(?<![\w+.])\(?0(?:5\d|1[1-7])\)?(?:[\s.-]*\d){7}(?!\d)/g;
+// Not in a comma-separated list of numbers (a lookup table in a bundled library, not a person's ID).
+const ID_NUMBER = /(?<![\w.+-])(?<!\d\s*,\s*)[12]\d{9}(?!\w|\.\d|\s*,\s*\d)/g;
+const CR_LABELLED = /(?:\bCR\b|commercial\s+reg\w*|سجل\s*تجاري|السجل\s*التجاري)[^\d\n]{0,25}?(?<!\d)(\d{10})(?!\w|\.\d)/gi;
 const VAT_NUMBER = /(?<![\w.+-])3\d{13}3(?!\w|\.\d)/g;
 const IBAN = /(?<![\w])SA\d{2}(?:[\s-]?\d){20}(?!\d)/gi;
 const PAYMENT_CARD = /(?<![\w.+-])(\d{4})([ -])\d{4}\2\d{4}\2\d{4}(?![\w-])/g;
@@ -120,10 +132,10 @@ interface Candidate {
 
 /** Every candidate on one line, placeholders by shape already dropped. */
 function candidates(rawLine: string): Candidate[] {
-  const line = unescapeAt(latinDigits(rawLine));
+  const line = latinDigits(unescape(rawLine));
   const found: Candidate[] = [];
   for (const match of line.matchAll(EMAIL)) {
-    if (!fileExtensionTld.test(match[2]!)) found.push({ kind: "email", value: match[0].toLowerCase() });
+    if (!assetName.test(match[1]!)) found.push({ kind: "email", value: match[0].toLowerCase() });
   }
   for (const pattern of [PHONE_INTERNATIONAL, PHONE_00966, PHONE_KSA_LOCAL]) {
     for (const [phone] of line.matchAll(pattern)) {
@@ -133,7 +145,6 @@ function candidates(rawLine: string): Candidate[] {
   }
   const numbers: [Kind, RegExp, (digits: string) => boolean, number?][] = [
     ["national-id", ID_NUMBER, luhn],
-    ["commercial-registration", CR_LABELLED_CASE_SENSITIVE, () => true, 1],
     ["commercial-registration", CR_LABELLED, () => true, 1],
     ["vat-number", VAT_NUMBER, () => true],
     ["iban", IBAN, () => true],
@@ -234,36 +245,39 @@ export function scanDesignFileChange(file: string, text: string, before: string 
 /** One finding as a line of output: never the value. */
 export const formatFinding = ({ file, line, kind, nested }: Finding) => `  ${file}:${line}: ${kind}${nested ? ` (in the nested ${nested})` : ""}`;
 
-const git = (repo: string, args: string[]) => execFileSync("git", ["-c", "core.quotePath=false", ...args], { cwd: repo, encoding: "utf8", maxBuffer: 512 * 1024 * 1024 });
+const git = (repo: string, args: string[]) => execFileSync("git", ["-c", "core.quotePath=false", ...args], { cwd: repo, encoding: "utf8", maxBuffer: MAX_BUFFER });
 const inDesign = (path: string) => path.startsWith("design/");
-const lines = (output: string) => output.split("\n").filter(Boolean);
+/** NUL-separated paths, which git never quotes (a path with a quote, backslash or tab would otherwise come back escaped and unreadable). */
+const paths = (repo: string, args: string[]) => git(repo, [args[0]!, "-z", ...args.slice(1)]).split("\0").filter(inDesign);
 
-/** A file's text at a revision ("" for the index); undefined when the file is not there. */
+/** A file's text at a revision ("" for the index); undefined when the file is not in it. Any other failure throws: a file that cannot be read cannot be shown to hold none. */
 function showAt(repo: string, rev: string, path: string): string | undefined {
+  const spec = `${rev}:${path}`;
   try {
-    return execFileSync("git", ["show", `${rev}:${path}`], { cwd: repo, encoding: "utf8", maxBuffer: 512 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+    git(repo, ["cat-file", "-e", spec]);
   } catch {
     return undefined;
   }
+  return git(repo, ["show", spec]);
 }
 
 /** The new findings in the design files staged to be added or changed, as staged, against HEAD's version. */
 export function scanStaged(repo: string, allow = loadAllow()): Finding[] {
-  const paths = lines(git(repo, ["diff", "--cached", "--name-only", "--no-renames", "--diff-filter=ACM", "--", "design"])).filter(inDesign);
-  return paths.flatMap((path) => scanDesignFileChange(path, showAt(repo, "", path) ?? "", showAt(repo, "HEAD", path), allow));
+  return paths(repo, ["diff", "--cached", "--name-only", "--no-renames", "--diff-filter=ACM", "--", "design"]).flatMap((path) => scanDesignFileChange(path, showAt(repo, "", path)!, showAt(repo, "HEAD", path), allow));
 }
 
-/** The new findings in the design files a range changes, as they stand at its head, against base's version; a single revision is its whole design tree, every finding. */
+/** The new findings in the design files a range changes, as they stand at its head, against the version where it left its base; a single revision is its whole design tree, every finding. */
 export function scanRange(repo: string, range: string, allow = loadAllow()): Finding[] {
   const [base, head] = range.includes("..") ? range.split(/\.{2,3}/) : [undefined, range];
-  const paths = base === undefined ? lines(git(repo, ["ls-tree", "-r", "--name-only", head!, "--", "design"])) : lines(git(repo, ["diff", "--name-only", "--no-renames", "--diff-filter=ACM", range, "--", "design"]));
-  return paths.filter(inDesign).flatMap((path) => scanDesignFileChange(path, showAt(repo, head!, path) ?? "", base === undefined ? undefined : showAt(repo, base, path), allow));
+  if (base === undefined) return paths(repo, ["ls-tree", "-r", "--name-only", head!, "--", "design"]).flatMap((path) => scanDesignFileChange(path, showAt(repo, head!, path)!, undefined, allow));
+  if (!base || !head) throw new Error(`The range "${range}" needs a revision on both sides of the dots.`);
+  const forkPoint = git(repo, ["merge-base", base, head]).trim();
+  return paths(repo, ["diff", "--name-only", "--no-renames", "--diff-filter=ACM", forkPoint, head, "--", "design"]).flatMap((path) => scanDesignFileChange(path, showAt(repo, head, path)!, showAt(repo, forkPoint, path), allow));
 }
 
 /** Every finding in every tracked design file, as it is in the working tree. */
 export function scanTree(repo: string, allow = loadAllow()): Finding[] {
-  return lines(git(repo, ["ls-files", "--", "design"]))
-    .filter(inDesign)
+  return paths(repo, ["ls-files", "--", "design"])
     .flatMap((path) => {
       try {
         return scanDesignFile(path, readFileSync(join(repo, path), "utf8"), allow);
