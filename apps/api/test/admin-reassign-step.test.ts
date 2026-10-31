@@ -7,7 +7,7 @@
 // are apps/admin/test/steps.test.ts; the database's reads, packages/db/test/admin-reassign-step-rls.test.ts.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
@@ -107,7 +107,7 @@ describe("RP-1162-1: a reassign by Rabaed is K1's own, and names no Engineer", (
 
   it("RP-1162-1: the new holder has Step reached, once, and holds it; the other manager's is withdrawn", async () => {
     expect(await bellKinds(khalid)).toEqual(["step_reached"]);
-    expect(await bellKinds(sara)).toEqual([]);
+    expect(await bellKinds(sara)).toEqual([]); // not hidden-from: her own notice, withdrawn because the Step no longer waits on her; the last test reads it back once it does
     const item = (await ok(khalid.caller.get(`/v1/work-items/${mar}`), 200)).json();
     expect(JSON.stringify(item)).toContain("Khalid Manager");
   });
@@ -125,15 +125,18 @@ describe("RP-1162-1: a reassign by Rabaed is K1's own, and names no Engineer", (
   it("RP-1162-1: C1 reads nothing new: not in the history, the item, the List, the feed or the bell", async () => {
     expect(await everythingRead(omar.caller)).toEqual(c1Before);
     expect(await everythingRead(tower.c1Pm)).toEqual(c1PmBefore);
-    expect((await historyOf(omar.caller)).map((e) => e.type)).not.toContain("admin_reassigned");
+    // K1's managers read Rabaed's reassign in the history; C1's engineer and PM never do.
+    const reassignedIn = async (by: Caller) => (await historyOf(by)).filter((e) => e.type === "admin_reassigned").map(() => ({ id: "admin_reassigned" }));
+    const whoIs = (by: Caller) => (by === omar.caller ? "C1 engineer" : by === tower.c1Pm ? "C1 PM" : by === khalid.caller ? "K1 Khalid" : "K1 Sara");
+    await expectHiddenFrom({ read: reassignedIn, target: "admin_reassigned", seenBy: [khalid.caller, sara.caller], hiddenFrom: [omar.caller, tower.c1Pm], name: whoIs, label: "Rabaed's reassign in the history" });
   });
 
   it("RP-1162-1: no Company reads the Engineer's name or email anywhere", async () => {
     for (const by of [omar.caller, tower.c1Pm, khalid.caller, sara.caller, tower.k1Manager]) {
       const text = JSON.stringify(await everythingRead(by));
-      expect(text).not.toContain(ENGINEER_NAME);
-      expect(text).not.toContain(engineerEmail);
-      expect(text).not.toContain(engineerId);
+      expect(text).not.toContain(ENGINEER_NAME); // not hidden-from: no Company may ever read the Engineer, so there is no viewer to read it first; the reads are the ones K1 reads the event in
+      expect(text).not.toContain(engineerEmail); // not hidden-from: as above, nobody reads the Engineer
+      expect(text).not.toContain(engineerId); // not hidden-from: as above, nobody reads the Engineer
     }
   });
 

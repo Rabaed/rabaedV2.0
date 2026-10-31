@@ -126,9 +126,9 @@ describe("the Engineer's read of a stuck Step (RP-1162)", () => {
   });
 
   it("finds nothing for a number on another Project, or one nobody issued", async () => {
-    expect(await find("NOT-A-NUMBER")).toEqual([]);
+    expect(await find("NOT-A-NUMBER")).toEqual([]); // not hidden-from: Rabaed Admin's lookup of a number nobody issued; the test above finds the issued one
     const other = await sql<Found>`select * from app.work_item_step_for_engineer(${randomUUID()}::uuid, ${documentNumber})`.execute(adminDb);
-    expect(other.rows).toEqual([]);
+    expect(other.rows).toEqual([]); // not hidden-from: the issued number on a Project that has no such item
   });
 
   it("is refused to the app role: only Rabaed Admin reads or reassigns through these", async () => {
@@ -183,7 +183,7 @@ describe("RP-1162-1: a reassign by Rabaed is C1's own, and names no Engineer", (
   it("RP-1162-1: C1's engineer holds it and gets Step reached; C1's PM's unread one is withdrawn", async () => {
     expect(await holder()).toEqual([{ status: "picked_up", assignee_member_id: c1Engineer }]);
     expect((await notifications(c1Engineer)).map((n) => n.kind)).toContain("step_reached");
-    expect((await notifications(c1Pm)).filter((n) => n.kind === "step_reached")).toEqual([]);
+    expect((await notifications(c1Pm)).filter((n) => n.kind === "step_reached")).toEqual([]); // not hidden-from: the old holder's own notice, withdrawn because the Step no longer waits on them
   });
 
   it("RP-1162-1: C1's history reads it as Rabaed's, from the PM to the engineer, with no Member and no Company named", async () => {
@@ -229,6 +229,6 @@ describe("RP-1162-1: a reassign by Rabaed is C1's own, and names no Engineer", (
     const types = (await migrator.query("select type from work_item_event where work_item_id = $1 and actor_engineer_id is not null", [snag])).rows.map((r) => r.type);
     expect(types).toEqual(["admin_reassigned", "admin_reassigned"]);
     expect(await stepAsSeen(c1Pm)).toEqual(c1StepBefore);
-    expect(c1StepBefore).toHaveLength(1);
+    expect(c1StepBefore).toHaveLength(1); // not hidden-from: proves the compare above read a Step
   });
 });
