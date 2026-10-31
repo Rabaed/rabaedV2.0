@@ -10,7 +10,7 @@ import { Link } from "@/i18n/navigation";
 // returns them for the viewer. One they can't see comes as its number and
 // Subject only, without an id, so it can't be opened.
 
-export function WorkItemLinkedFrom({ items }: { items: readonly LinkedFromItem[] }) {
+export function WorkItemLinkedFrom({ items, look }: { items: readonly LinkedFromItem[]; look?: "rows" }) {
   const labels = useLinkedFromLabels();
-  return <LinkedFromList labels={labels} items={items} hrefFor={(id) => `/work-items/${id}`} linkAs={Link} />;
+  return <LinkedFromList labels={labels} items={items} hrefFor={(id) => `/work-items/${id}`} linkAs={Link} {...(look ? { look } : {})} />;
 }

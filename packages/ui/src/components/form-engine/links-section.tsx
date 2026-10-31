@@ -60,6 +60,11 @@ export type LinksSectionProps = {
   children?: ReactNode;
   /** Its heading for screen readers only, where a card already shows it (the Work Item page, RP-1151). */
   titleHidden?: boolean;
+  /**
+   * "rows": the Work Item page (RP-1188, gap table rows 52–53): Links and `children` (Linked from) side by side,
+   * each under its small label, as bordered rows.
+   */
+  look?: "list" | "rows";
   className?: string;
 };
 
@@ -84,8 +89,10 @@ export function LinksSection({
   debounceMs,
   children,
   titleHidden = false,
+  look = "list",
   className,
 }: LinksSectionProps) {
+  const rows = look === "rows";
   const titleId = useId();
   const free = links.filter((l) => l.fieldKey === null);
   const byQuestion = new Map<string, WorkItemLink[]>();
@@ -99,6 +106,7 @@ export function LinksSection({
       href={hrefFor(link)}
       hidden={link.workItemId === null}
       linkAs={linkAs}
+      look={look}
       remove={
         canChange && link.kind === "related"
           ? { label: text.remove(link.documentNumber), icon: "trash", disabled: pending, onRemove: () => onRemove(link) }
@@ -107,15 +115,12 @@ export function LinksSection({
     />
   );
   const list = (items: readonly WorkItemLink[], label: string) => (
-    <ul aria-label={label} className="flex flex-col divide-y divide-border rounded-md border border-border">
+    <ul aria-label={label} className={rows ? "flex flex-col gap-2" : "flex flex-col divide-y divide-border rounded-md border border-border"}>
       {items.map(row)}
     </ul>
   );
-  return (
-    <section aria-labelledby={titleId} className={cn("flex flex-col gap-3", className)} data-testid="work-item-links">
-      <h2 id={titleId} className={titleHidden ? "sr-only" : "text-h6 font-semibold text-text"}>
-        {text.title}
-      </h2>
+  const body = (
+    <>
       {links.length === 0 && <p className="text-sm text-muted">{text.none}</p>}
       {free.length > 0 && list(free, text.title)}
       {[...byQuestion].map(([fieldKey, items]) => (
@@ -141,7 +146,29 @@ export function LinksSection({
           {message}
         </p>
       )}
-      {children}
+    </>
+  );
+  return (
+    <section aria-labelledby={titleId} className={cn("flex flex-col gap-3", className)} data-testid="work-item-links">
+      <h2 id={titleId} className={titleHidden ? "sr-only" : "text-h6 font-semibold text-text"}>
+        {text.title}
+      </h2>
+      {rows ? (
+        <div className="grid gap-5 @[560px]/sdp:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-2">
+            <p aria-hidden="true" className="text-[12px] text-muted">
+              {text.title}
+            </p>
+            {body}
+          </div>
+          {children}
+        </div>
+      ) : (
+        <>
+          {body}
+          {children}
+        </>
+      )}
     </section>
   );
 }

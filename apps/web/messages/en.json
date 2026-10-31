@@ -1332,7 +1332,7 @@
       },
       "linkedFrom": {
         "title": "Linked from",
-        "none": "No Submitted item links here yet."
+        "none": "Nothing links here yet."
       },
       "search": {
         "label": "Find an item to link",

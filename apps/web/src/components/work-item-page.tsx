@@ -307,8 +307,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
       title: tItems("links.title"),
       summary: t("linksSummary", { count: links.links.length, n: n(links.links.length), from: n(linkedFrom.length) }),
       children: (
-        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} questionLabels={questionLabels} titleHidden>
-          <WorkItemLinkedFrom items={[...linkedFrom]} />
+        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} questionLabels={questionLabels} titleHidden look="rows">
+          <WorkItemLinkedFrom items={[...linkedFrom]} look="rows" />
         </WorkItemLinks>
       ),
     },
