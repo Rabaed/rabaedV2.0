@@ -40,7 +40,7 @@ export { DirectionProvider } from "./components/form/direction.tsx";
 export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
 export { ActionForm, internalNoteMaxLength, type ActionFormLabels, type ActionFormProps } from "./components/form-engine/action-form.tsx";
-export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
+export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps, type FormRendererSection } from "./components/form-engine/form-renderer.tsx";
 export { ChecklistTemplateItems, ChecklistTemplatePreview, type ChecklistTemplateFieldLabels } from "./components/form-engine/checklist-template-field.tsx";
 export { FormPdfOptions, type FormPdfOptionsLabels, type FormPdfOptionsProps } from "./components/form-engine/form-pdf-options.tsx";
 export { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./components/form-engine/checklist-field.tsx";
@@ -94,6 +94,7 @@ export {
   type RevisionRefusal,
 } from "./components/revision/revision-actions.tsx";
 export { RevisionPicker, type RevisionPickerLabels, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
+export { RevisionMenu, type RevisionMenuLabels, type RevisionMenuProps } from "./components/revision/revision-menu.tsx";
 export {
   NotificationSettingsForm,
   type NotificationSettingsLabels,
@@ -411,3 +412,9 @@ export {
   type RecordVerificationLabels,
   type VerificationCodeFormLabels,
 } from "./components/verification/record-verification.tsx";
+// The Work Item page (RP-1151): the Submittal Panel at page size, and its own parts.
+export { WorkItemPageFrame, WorkItemTopBarButton, type WorkItemPageFrameProps } from "./components/work-item-page/page-frame.tsx";
+export { CodeTile, StepAgePill, WorkItemActionsCard, WorkItemResultCard, type WorkItemActionsCardProps, type WorkItemResultCardProps } from "./components/work-item-page/page-parts.tsx";
+export { WorkItemPageHistory, type WorkItemPageHistoryLabels } from "./components/work-item-page/work-item-history.tsx";
+export { workItemHistoryEntries, type WorkItemHistoryEntry } from "./components/work-item-page/history-model.ts";
+export { transitionCodes, workItemCodeResult, type WorkItemCodeResult } from "./components/work-item-page/page-model.ts";

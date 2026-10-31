@@ -1,0 +1,65 @@
+/*
+ * The Work Item page (RP-1151, the owner's "Rabaed Work Item Page"): the Submittal Panel at page
+ * size. It is a `@container/sdp` too, so the panel's bands (submittal-panel.css) lay it out: the rail
+ * from 880px, the in-flow Workflow & History below it. What the page does beyond the panel is here,
+ * prefixed `wip`. These rules sit outside Tailwind's layers, so they win over the utilities.
+ */
+
+/* The page's main column takes the whole width beside the rail (the panel caps it at 1040px). */
+.wip .sdp-main {
+  max-width: none;
+}
+
+/* Under 880px the Transitions sit in the bar at the bottom (gap table row 28); from 880px the rail's card holds them. */
+.wip-narrow {
+  display: flex;
+}
+
+/* Compact (< 560): top-bar buttons by their icons only, the Transitions two by two across the bar. */
+@container sdp (max-width: 559px) {
+  .wip-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .wip-bar {
+    flex-wrap: wrap;
+  }
+  .wip-bar .wip-transitions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .wip-bar .wip-transitions > :only-child {
+    grid-column: 1 / -1;
+  }
+  .wip-bar .wip-transitions > button {
+    justify-content: center;
+    padding-inline: 8px;
+    font-size: 12.5px;
+  }
+}
+
+@container sdp (min-width: 880px) {
+  .wip-narrow {
+    display: none;
+  }
+}
+
+/* From 1600px: a 420px rail and wider gutters (the reference's `.wi .dlay` at that size). */
+@container sdp (min-width: 1600px) {
+  .wip .sdp-rail {
+    flex-basis: 420px;
+  }
+  .wip .sdp-identity,
+  .wip .sdp-route-slot {
+    padding-inline: 40px;
+  }
+  .wip .sdp-facts {
+    margin-inline: 40px;
+  }
+}
