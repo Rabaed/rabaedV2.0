@@ -16,6 +16,7 @@ import {
   isBuiltInField,
   isRequired,
   isUnanswered,
+  listSeparator,
   parseNumberInput,
   isAnnotatedCopy,
   withAnnotatedCopies,
@@ -60,7 +61,36 @@ import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabe
 import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
 import type { SaveAnnotated } from "../photo/photo-screens.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
+import { formSectionSummary } from "./section-summary.ts";
 import { TableInput, TableRead, type TableFieldLabels } from "./table-field.tsx";
+
+/** The fields a folded section's summary reads: the ones that read as one short line. */
+const summarised: ReadonlySet<string> = new Set([
+  "text",
+  "textarea",
+  "number",
+  "currency",
+  "calculated",
+  "date",
+  "datetime",
+  "time",
+  "select",
+  "multi_select",
+  "option_list",
+  "yes_no",
+  "email",
+  "phone",
+  "member",
+  "participant",
+  "approved_supplier",
+  "trade",
+  "location",
+  "scopes",
+]);
+
+/** An answer that reads across every column of a section's grid: long text, a table, files, a checklist, a pick of items. */
+const wideAnswer = (field: AnswerField) =>
+  ["textarea", "table", "attachments", "photos", "checklist", "checklist_template", "work_item_ref", "scopes"].includes(field.type);
 
 // The Form engine's renderer (form-engine.md §1, §5): draws a Form Version's
 // schema with its answers and per-field errors, to fill in (`edit`) or to read
@@ -206,7 +236,22 @@ export type FormRendererProps = {
    * the Form renders as every other.
    */
   look?: { sections?: "plain" | "cards"; checklistTemplate?: "select" | "cards" };
+  /**
+   * The page lays the sections out itself (the Work Item page's folding cards, RP-1151): each shown
+   * section's key, title, one-line summary and content, in order; the attention banner stays above.
+   * Read-mode answers then sit in the Submittal Panel's 1, 2 or 3 columns (`@container/sdp`).
+   */
+  sectionsAs?: (sections: readonly FormRendererSection[]) => ReactNode;
   className?: string;
+};
+
+/** One shown section of the Form, for `sectionsAs`. */
+export type FormRendererSection = {
+  key: string;
+  title: string;
+  /** Its first two answers, as read, joined by " · " (`formSectionSummary`); null when nothing is answered. */
+  summary: string | null;
+  content: ReactNode;
 };
 
 /** The files of a Form's `attachments`, `photos` and `checklist` fields, and what the page does with them (RP-281, RP-284, RP-285). */
@@ -628,6 +673,7 @@ export function FormRenderer({
   idPrefix = "form",
   sectionTitles = "shown",
   look = {},
+  sectionsAs,
   className,
 }: FormRendererProps) {
   const templateCards = look.checklistTemplate === "cards";
@@ -937,6 +983,118 @@ export function FormRenderer({
     return <bdi>{shown}</bdi>;
   }
 
+  /**
+   * A section's fields: controls while it is edited, its answers otherwise. `grid`: the answers sit in
+   * the Submittal Panel's 1, 2 or 3 columns (`sectionsAs`), a long one across them all.
+   */
+  function sectionBody(fields: FormField[], editing: boolean, grid: boolean): ReactNode {
+    return editing ? (
+        fields.map((field) => {
+          if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
+          const error = errorOf(field.key);
+          if (isBuiltInField(field) && field.type !== "scopes" && fixedByNumber.includes(field.type)) {
+            const shownAnswer = answer(field);
+            return (
+              <Field key={field.key} id={fieldId(field.key)} label={field.label[locale]} help={fixedNotice} group>
+                <p className={cn("text-body", shownAnswer ? "text-text" : "text-muted")}>{shownAnswer ?? labels.unanswered}</p>
+              </Field>
+            );
+          }
+          const { element, group } = isBuiltInField(field)
+            ? builtInControl(field.type)
+            : field.type === "attachments"
+              ? attachmentsControl(field)
+              : field.type === "photos"
+                ? photosControl(field)
+                : field.type === "checklist"
+                  ? checklistControl(field)
+                  : field.type === "work_item_ref"
+                    ? linkQuestionControl(field)
+                    : field.type === "approved_supplier"
+                      ? supplierControl(field)
+                      : field.type === "checklist_template"
+                        ? checklistTemplateControl(field)
+                        : field.type === "copied_checklist"
+                          ? { element: null }
+                          : control(
+                  field,
+                  // A calculated field shows the result worked out from the answers now, never one given.
+                  field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
+                  locale,
+                  labels,
+                  people,
+                  named[field.key],
+                  optionLists,
+                  (value) => onChange?.({ [field.key]: value }),
+                  cellErrorsOf(field.key),
+                );
+          const shownField = (
+            <Field
+              key={field.key}
+              id={fieldId(field.key)}
+              label={field.label[locale]}
+              help={helpOf(field)}
+              error={error && errorText(field, error, locale, labels)}
+              // Trade and Location always are, whatever the schema says (isRequired).
+              required={isRequired(field, visibility.answers)}
+              group={group}
+            >
+              {element}
+            </Field>
+          );
+          // The picked Checklist Template's items read below the pick and its help (RP-651); the cards show their own preview.
+          return field.type === "checklist_template" && !templateCards ? (
+            <Fragment key={field.key}>
+              {shownField}
+              <PickedTemplateItems value={answers[field.key]} choices={checklistTemplates} locale={locale} labels={labels.checklistTemplate} />
+            </Fragment>
+          ) : (
+            shownField
+          );
+        })
+      ) : (
+        fieldRuns(fields).map((run) =>
+          Array.isArray(run) ? (
+            <dl key={run[0]!.key} className={cn("flex flex-col gap-4", grid && "grid grid-cols-1 gap-x-6 gap-y-3 @[560px]/sdp:grid-cols-2 @[1160px]/sdp:grid-cols-3")}>
+              {run.map((field) => {
+                const shownAnswer = answer(field);
+                return (
+                  <div key={field.key} className={cn("flex min-w-0 flex-col gap-1", grid && wideAnswer(field) && "col-span-full")}>
+                    <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
+                    {/* The answer keeps its own direction, but lines up with the page's. */}
+                    <dd className={cn("text-body", shownAnswer ? "whitespace-pre-wrap text-text" : "text-muted")}>
+                      {shownAnswer ?? labels.unanswered}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          ) : (
+            <Layout key={run.key} field={run} locale={locale} />
+          ),
+        )
+      );
+  }
+
+  /** An answer as a folded section's header reads it; null for one that is a file, a table, a checklist or a pick of items. */
+  function summaryText(field: FormField): string | null {
+    if (!isAnswerField(field) || !summarised.has(field.type)) return null;
+    const value = field.type === "calculated" ? visibility.answers[field.key] : answers[field.key];
+    if (isBuiltInField(field)) return builtInAnswerLabels(field.type, value, choices).join(listSeparator[locale]) || null;
+    const naming = named[field.key];
+    if (isUnanswered(value) && !naming) return null;
+    return formatFormValue(field, value, locale, naming, optionLists, {}, suppliers) || null;
+  }
+
+  // The sections shown now, in order.
+  const shown = schema.sections.flatMap((section) => {
+    if (!visibility.sections.has(section.key)) return [];
+    // A reply Screen's checklist (RP-86) holds no answer of the pop-up's: the page saves it beforehand, and shows it apart.
+    const fields = section.fields.filter((f) => visibility.fields.has(f.key) && f.type !== "copied_checklist");
+    const editing = mode === "edit" && (editableSections === undefined || editableSections.includes(section.key));
+    return [{ section, fields, editing, headingId: `${idPrefix}-section-${section.key}` }];
+  });
+
   return (
     <div className={cn("flex flex-col gap-6", className)}>
       {shownErrors.length > 0 && (
@@ -956,110 +1114,27 @@ export function FormRenderer({
           </ul>
         </div>
       )}
-      {schema.sections.map((section) => {
-        if (!visibility.sections.has(section.key)) return null;
-        // A reply Screen's checklist (RP-86) holds no answer of the pop-up's: the page saves it beforehand, and shows it apart.
-        const fields = section.fields.filter((f) => visibility.fields.has(f.key) && f.type !== "copied_checklist");
-        const headingId = `${idPrefix}-section-${section.key}`;
-        const editing = mode === "edit" && (editableSections === undefined || editableSections.includes(section.key));
-        return (
-          <section
-            key={section.key}
-            aria-labelledby={headingId}
-            className={cn("flex flex-col gap-4", look.sections === "cards" && "rounded-lg border border-border bg-surface p-4 md:p-5")}
-          >
-            <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
-              {section.title[locale]}
-            </h3>
-            {editing ? (
-              fields.map((field) => {
-                if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
-                const error = errorOf(field.key);
-                if (isBuiltInField(field) && field.type !== "scopes" && fixedByNumber.includes(field.type)) {
-                  const shownAnswer = answer(field);
-                  return (
-                    <Field key={field.key} id={fieldId(field.key)} label={field.label[locale]} help={fixedNotice} group>
-                      <p className={cn("text-body", shownAnswer ? "text-text" : "text-muted")}>{shownAnswer ?? labels.unanswered}</p>
-                    </Field>
-                  );
-                }
-                const { element, group } = isBuiltInField(field)
-                  ? builtInControl(field.type)
-                  : field.type === "attachments"
-                    ? attachmentsControl(field)
-                    : field.type === "photos"
-                      ? photosControl(field)
-                      : field.type === "checklist"
-                        ? checklistControl(field)
-                        : field.type === "work_item_ref"
-                          ? linkQuestionControl(field)
-                          : field.type === "approved_supplier"
-                            ? supplierControl(field)
-                            : field.type === "checklist_template"
-                              ? checklistTemplateControl(field)
-                              : field.type === "copied_checklist"
-                                ? { element: null }
-                                : control(
-                        field,
-                        // A calculated field shows the result worked out from the answers now, never one given.
-                        field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
-                        locale,
-                        labels,
-                        people,
-                        named[field.key],
-                        optionLists,
-                        (value) => onChange?.({ [field.key]: value }),
-                        cellErrorsOf(field.key),
-                      );
-                const shownField = (
-                  <Field
-                    key={field.key}
-                    id={fieldId(field.key)}
-                    label={field.label[locale]}
-                    help={helpOf(field)}
-                    error={error && errorText(field, error, locale, labels)}
-                    // Trade and Location always are, whatever the schema says (isRequired).
-                    required={isRequired(field, visibility.answers)}
-                    group={group}
-                  >
-                    {element}
-                  </Field>
-                );
-                // The picked Checklist Template's items read below the pick and its help (RP-651); the cards show their own preview.
-                return field.type === "checklist_template" && !templateCards ? (
-                  <Fragment key={field.key}>
-                    {shownField}
-                    <PickedTemplateItems value={answers[field.key]} choices={checklistTemplates} locale={locale} labels={labels.checklistTemplate} />
-                  </Fragment>
-                ) : (
-                  shownField
-                );
-              })
-            ) : (
-              fieldRuns(fields).map((run) =>
-                Array.isArray(run) ? (
-                  <dl key={run[0]!.key} className="flex flex-col gap-4">
-                    {run.map((field) => {
-                      const shownAnswer = answer(field);
-                      return (
-                        <div key={field.key} className="flex flex-col gap-1">
-                          <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
-                          {/* The answer keeps its own direction, but lines up with the page's. */}
-                          <dd className={cn("text-body", shownAnswer ? "whitespace-pre-wrap text-text" : "text-muted")}>
-                            {shownAnswer ?? labels.unanswered}
-                          </dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-                ) : (
-                  <Layout key={run.key} field={run} locale={locale} />
-                ),
-              )
-            )}
-          </section>
-        );
-      })}
+      {sectionsAs
+        ? sectionsAs(
+            shown.map(({ section, fields, editing }) => ({
+              key: section.key,
+              title: section.title[locale],
+              summary: formSectionSummary(fields, summaryText),
+              content: sectionBody(fields, editing, true),
+            })),
+          )
+        : shown.map(({ section, fields, editing, headingId }) => (
+            <section
+              key={section.key}
+              aria-labelledby={headingId}
+              className={cn("flex flex-col gap-4", look.sections === "cards" && "rounded-lg border border-border bg-surface p-4 md:p-5")}
+            >
+              <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
+                {section.title[locale]}
+              </h3>
+              {sectionBody(fields, editing, false)}
+            </section>
+          ))}
     </div>
   );
 }
