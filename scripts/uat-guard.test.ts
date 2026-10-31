@@ -29,7 +29,6 @@ const uat = (overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({
   DATABASE_SUPERUSER_URL: `postgres://postgres.${ref}@${pooler}:5432/postgres?sslmode=require`,
   DATABASE_NAME: "rabaed_uat",
   DATABASE_MIGRATOR_PASSWORD: "migrator-placeholder",
-  DATABASE_APP_PASSWORD: "app-placeholder",
   UAT_WEB_URL: "https://rabaed-uat.vercel.app",
   MAIL_FROM: "Rabaed UAT <uat@example.com>",
   SENDGRID_API_KEY: "placeholder",
@@ -51,7 +50,6 @@ describe("a lane target", () => {
     expect(result).toEqual({
       label: "lane 42 (database rabaed on localhost:5852)",
       migratorUrl: "postgres://rabaed_migrator@localhost:5852/rabaed",
-      appUrl: "postgres://rabaed_app@localhost:5852/rabaed",
       webUrl: "http://lane42.localhost:3420",
       mail: "catcher",
     });
@@ -60,7 +58,6 @@ describe("a lane target", () => {
   it("passes a --db database of the lane (rabaed_<suffix>)", () => {
     const env = lane42({
       DATABASE_MIGRATOR_URL: "postgres://rabaed_migrator@localhost:5852/rabaed_rp922",
-      DATABASE_APP_URL: "postgres://rabaed_app@localhost:5852/rabaed_rp922",
     });
     expect(refusals(env, laneTarget)).toEqual([]);
   });
@@ -75,28 +72,19 @@ describe("a lane target", () => {
   });
 
   it("refuses another lane's Postgres port", () => {
-    const env = lane42({ DATABASE_APP_URL: "postgres://rabaed_app@localhost:5432/rabaed" });
-    expect(refusals(env, laneTarget)).toEqual(["DATABASE_APP_URL is on port 5432, not lane 42's Postgres (5852)"]);
+    const env = lane42({ DATABASE_MIGRATOR_URL: "postgres://rabaed_migrator@localhost:5432/rabaed" });
+    expect(refusals(env, laneTarget)).toEqual(["DATABASE_MIGRATOR_URL is on port 5432, not lane 42's Postgres (5852)"]);
   });
 
   it("refuses a database that is not the lane's (a test database, another name)", () => {
     expect(refusals(lane42({ DATABASE_MIGRATOR_URL: "postgres://rabaed_migrator@localhost:5852/rabaed_test" }), laneTarget)).toEqual([
       "DATABASE_MIGRATOR_URL is on database rabaed_test, not the lane's (rabaed or rabaed_<suffix>, never a test database)",
     ]);
-    expect(refusals(lane42({ DATABASE_APP_URL: "postgres://rabaed_app@localhost:5852/postgres" }), laneTarget)).toHaveLength(1);
-  });
-
-  it("refuses the two roles on different databases", () => {
-    const env = lane42({ DATABASE_APP_URL: "postgres://rabaed_app@localhost:5852/rabaed_other" });
-    expect(refusals(env, laneTarget)).toEqual(["DATABASE_MIGRATOR_URL and DATABASE_APP_URL are on different databases"]);
+    expect(refusals(lane42({ DATABASE_MIGRATOR_URL: "postgres://rabaed_migrator@localhost:5852/postgres" }), laneTarget)).toHaveLength(1);
   });
 
   it("refuses without the migrator URL: it never writes through the app role", () => {
     expect(refusals(lane42({ DATABASE_MIGRATOR_URL: undefined }), laneTarget)).toEqual(["DATABASE_MIGRATOR_URL is missing: the tool writes as the migrator, never as rabaed_app"]);
-  });
-
-  it("refuses without the app URL: the jobs run as the worker does", () => {
-    expect(refusals(lane42({ DATABASE_APP_URL: "" }), laneTarget)).toEqual(["DATABASE_APP_URL is missing: the jobs run as rabaed_app, as the worker does"]);
   });
 
   it("refuses production or staging config", () => {
@@ -134,7 +122,6 @@ describe("the UAT target (comment 15225)", () => {
     if ("refused" in result) throw new Error(result.refused.join("; "));
     expect(result.label).toBe(`UAT (database rabaed_uat, Supabase project ${ref})`);
     expect(new URL(result.migratorUrl).username).toBe(`rabaed_migrator.${ref}`);
-    expect(new URL(result.appUrl).username).toBe(`rabaed_app.${ref}`);
     expect(new URL(result.migratorUrl).port).toBe("5432");
     expect(result).toMatchObject({ webUrl: "https://rabaed-uat.vercel.app", mail: "sendgrid" });
   });
@@ -166,9 +153,8 @@ describe("the UAT target (comment 15225)", () => {
     expect(refusals(uat({ DATABASE_NAME: "rabaed_gate" }), uatTarget)).toEqual(["DATABASE_NAME must be rabaed_uat, UAT's database"]);
   });
 
-  it("refuses without the migrator's or the app role's password", () => {
+  it("refuses without the migrator's password", () => {
     expect(refusals(uat({ DATABASE_MIGRATOR_PASSWORD: "" }), uatTarget)).toEqual(["DATABASE_MIGRATOR_PASSWORD is required"]);
-    expect(refusals(uat({ DATABASE_APP_PASSWORD: undefined }), uatTarget)).toEqual(["DATABASE_APP_PASSWORD is required"]);
   });
 
   it("refuses mail that is not UAT's mailer, or a link that is not https", () => {

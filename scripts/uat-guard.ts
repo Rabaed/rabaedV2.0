@@ -13,9 +13,9 @@ import { uatRoleUrl } from "./uat-deploy.ts";
 //    UAT's database on Supabase's session pooler (scripts/uat-deploy.ts checks the host, port and
 //    project), named rabaed_uat, and mail through UAT's SendGrid.
 //
-// Both refuse production or staging config, and both need the migrator's URL (the tool writes as the
-// migrator, never as rabaed_app) and the app role's (the jobs run as the worker does). A refusal names
-// variables, never their values: the URLs hold passwords.
+// Both refuse production or staging config, and both need the migrator's URL: the tool writes as the
+// migrator, never as rabaed_app, and grants it nothing (packages/db/dev-tools/index.ts says why the
+// jobs run as the migrator too). A refusal names variables, never their values: the URLs hold passwords.
 
 export type Target = { kind: "lane"; lane: number } | { kind: "uat" };
 
@@ -23,7 +23,6 @@ export interface Guarded {
   /** What the tool prints as its target: no host of UAT's, no password. */
   label: string;
   migratorUrl: string;
-  appUrl: string;
   /** Where the emails link to. */
   webUrl: string;
   /** The mailer the env sets up (@rabaed/mailer mailerFromEnv). */
@@ -87,29 +86,18 @@ function laneGuard(env: NodeJS.ProcessEnv, lane: number): GuardResult {
   if (!isValidLane(lane)) return { refused: [`${lane} is not a lane: ${LANE_SCHEME}`] };
   const port = lanePorts(lane).postgres;
   const refused = [...productionRefusals(env), ...remoteUrls(env)];
-  const roles = [
-    { key: "DATABASE_MIGRATOR_URL", missing: "the tool writes as the migrator, never as rabaed_app" },
-    { key: "DATABASE_APP_URL", missing: "the jobs run as rabaed_app, as the worker does" },
-  ];
-  const databases: string[] = [];
-  for (const { key, missing } of roles) {
-    const value = env[key];
-    if (blank(value)) {
-      refused.push(`${key} is missing: ${missing}`);
-      continue;
-    }
-    if (!URL.canParse(value!)) {
-      refused.push(`${key} is not a URL`);
-      continue;
-    }
-    const url = new URL(value!);
+  const key = "DATABASE_MIGRATOR_URL";
+  const value = env[key] ?? "";
+  let database: string | undefined;
+  if (blank(value)) refused.push(`${key} is missing: the tool writes as the migrator, never as rabaed_app`);
+  else if (!URL.canParse(value)) refused.push(`${key} is not a URL`);
+  else {
+    const url = new URL(value);
     if (!isLocalHost(url.hostname)) refused.push(notLocal(key));
     else if (Number(url.port || 5432) !== port) refused.push(`${key} is on port ${url.port || 5432}, not lane ${lane}'s Postgres (${port})`);
-    const database = databaseNameOf(value!);
+    database = databaseNameOf(value);
     if (!laneDatabase(database)) refused.push(`${key} is on database ${database}, not the lane's (rabaed or rabaed_<suffix>, never a test database)`);
-    else databases.push(database);
   }
-  if (databases.length === 2 && databases[0] !== databases[1]) refused.push("DATABASE_MIGRATOR_URL and DATABASE_APP_URL are on different databases");
   if (blank(env.MAIL_CATCHER_URL)) refused.push("MAIL_CATCHER_URL is missing: a lane's mail must land in its own Mailpit");
   for (const key of ["SENDGRID_API_KEY", "MAIL_SES_CONFIGURATION_SET"]) {
     if (!blank(env[key])) refused.push(`${key} is set: a lane's mail must land in its own Mailpit`);
@@ -117,9 +105,8 @@ function laneGuard(env: NodeJS.ProcessEnv, lane: number): GuardResult {
   if (blank(env.WEB_URL)) refused.push("WEB_URL is missing: the emails link to it");
   if (refused.length > 0) return { refused: [...new Set(refused)] };
   return {
-    label: `lane ${lane} (database ${databases[0]} on localhost:${port})`,
-    migratorUrl: env.DATABASE_MIGRATOR_URL!,
-    appUrl: env.DATABASE_APP_URL!,
+    label: `lane ${lane} (database ${database} on localhost:${port})`,
+    migratorUrl: value,
     webUrl: env.WEB_URL!,
     mail: "catcher",
   };
@@ -132,15 +119,13 @@ function uatGuard(env: NodeJS.ProcessEnv): GuardResult {
   if (env.RABAED_ENVIRONMENT !== "uat") refused.push("RABAED_ENVIRONMENT must be uat: the UAT target runs only in the age-uat GitHub job");
   const database = env.DATABASE_NAME || UAT_DATABASE;
   if (database !== UAT_DATABASE) refused.push(`DATABASE_NAME must be ${UAT_DATABASE}, UAT's database`);
-  const urls: Partial<Record<"MIGRATOR" | "APP", string>> = {};
+  let migratorUrl: string | undefined;
   if (database === UAT_DATABASE) {
-    // uat-deploy.ts checks the pooler's host and port, the project and each role's password; its errors name variables only.
-    for (const role of ["MIGRATOR", "APP"] as const) {
-      try {
-        urls[role] = uatRoleUrl(env, role, "session");
-      } catch (error) {
-        refused.push((error as Error).message);
-      }
+    // uat-deploy.ts checks the pooler's host and port, the project and the password; its errors name variables only.
+    try {
+      migratorUrl = uatRoleUrl(env, "MIGRATOR", "session");
+    } catch (error) {
+      refused.push((error as Error).message);
     }
   }
   if (blank(env.SENDGRID_API_KEY)) refused.push("SENDGRID_API_KEY is missing: UAT's mail goes through SendGrid");
@@ -152,8 +137,7 @@ function uatGuard(env: NodeJS.ProcessEnv): GuardResult {
   if (refused.length > 0) return { refused: [...new Set(refused)] };
   return {
     label: `UAT (database ${UAT_DATABASE}, Supabase project ${env.SUPABASE_PROJECT_REF})`,
-    migratorUrl: urls.MIGRATOR!,
-    appUrl: urls.APP!,
+    migratorUrl: migratorUrl!,
     webUrl: web.replace(/\/+$/, ""),
     mail: "sendgrid",
   };
