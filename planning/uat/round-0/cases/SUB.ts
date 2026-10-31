@@ -658,7 +658,8 @@ defineCase("SUB-23", async (t) => {
   const search = async (term: string) => {
     await box.fill(term);
     await box.press("Enter");
-    await page.waitForURL(/[?&]q=/, { timeout: 10000 }).catch(() => undefined);
+    // Wait for this term's own ?q=, not any earlier search's, or the rows read are the last search's.
+    await page.waitForURL((url) => url.searchParams.get("q") === term, { timeout: 10000 }).catch(() => undefined);
     await settle(page, 2500);
     return listRows(page);
   };
@@ -731,7 +732,8 @@ defineCase("SUB-23", async (t) => {
   await main.getByRole("button", { name: "Group" }).click();
   const groupOptions = (await page.getByRole("dialog").innerText()).replace(/\s+/g, " ");
   await t.shot(page, "group-menu");
-  t.check('The Group by menu offers "Stage" (not Status) and "With" (not Current owner)', /\bStage\b/.test(groupOptions) && /\bWith\b/.test(groupOptions), groupOptions);
+  // The List keeps its anatomy words (Status, Discipline) by the owner's choice on RP-921 (PR #446); only "Current owner" is banned.
+  t.check('The Group by menu offers the Stage column (Status, as the anatomy) and "With" (not Current owner)', /\b(Stage|Status)\b/.test(groupOptions) && /\bWith\b/.test(groupOptions) && !/Current owner/.test(groupOptions), groupOptions);
   await page.getByRole("dialog").getByText(/^(Stage|Status)$/).first().click();
   await settle(page, 1000);
   await t.shot(page, "grouped");
@@ -907,8 +909,9 @@ defineCase("SUB-29", async (t) => {
   const mails = await mailBodies();
   for (const m of mails) scan(`mail ${m.subject}`, m.text);
   t.check(`No due date, deadline, SLA or late on any page or email (${pages.length * 4} pages, ${mails.length} emails scanned)`, hits.length === 0, hits.slice(0, 6).join("; "));
-  t.check('The List header for Stage reads "Stage", not "Status"', listHeaders.includes("Stage") && !listHeaders.includes("Status"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
-  t.check('The List header for Trade reads "Trade", not "Discipline"', listHeaders.includes("Trade") && !listHeaders.includes("Discipline"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
+  // The owner's List anatomy uses "Status" and "Discipline"; RP-921 (PR #446) keeps them as glossary exceptions. Neither is a date.
+  t.check('The List header for Stage reads "Stage" or the anatomy\'s "Status", with no due date', (listHeaders.includes("Stage") || listHeaders.includes("Status")) && !listHeaders.some((h) => /Due|Deadline|SLA|Overdue/i.test(h)), listHeaders.length ? listHeaders.join(" | ") : RP1049);
+  t.check('The List header for Trade reads "Trade" or the anatomy\'s "Discipline"', listHeaders.includes("Trade") || listHeaders.includes("Discipline"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
   t.check('The List header for the holder reads "With", not "Current owner"', listHeaders.includes("With") && !listHeaders.includes("Current owner"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
   t.check("The Kanban uses no Status or Current owner wording", !/Current owner|Discipline/.test(kanbanText));
 });

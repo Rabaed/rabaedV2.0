@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Search by Document Number finds exactly that item",
@@ -29,7 +29,7 @@
     {
       "text": "Search finds this case's items, and not the other Company's Drafts (TMC's own Drafts only if Ali's Company)",
       "ok": true,
-      "detail": "ui 3, api 3: UAT SUB-23 225339 pending; UAT SUB-23 225339 internal; UAT SUB-23 225339 draft"
+      "detail": "ui 3, api 3: UAT SUB-23 025056 pending; UAT SUB-23 025056 internal; UAT SUB-23 025056 draft"
     },
     {
       "text": "Both Stages are in the filter (URL)",
@@ -48,7 +48,7 @@
     {
       "text": "Need My Action keeps only items waiting on Ali (count equals the api's, no Draft)",
       "ok": true,
-      "detail": "page 196, api 196"
+      "detail": "page 201, api 201"
     },
     {
       "text": "Sort by Title orders the rows by Title",
@@ -58,22 +58,22 @@
     {
       "text": "A saved column order comes back after reload",
       "ok": true,
-      "detail": "put 200; before Submittal No.,Title,Rev,Discipline,Type,Status,Code,Zone,Building,Floor,Current owner,Created; after Submittal No.,Title,Rev,Type,Discipline,Status,Code,Zone,Building,Floor,Current owner,Created"
+      "detail": "put 200; before Submittal No.,Title,Rev,Type,Discipline,Status,Code,Zone,Building,Floor,With,Created; after Submittal No.,Title,Rev,Discipline,Type,Status,Code,Zone,Building,Floor,With,Created"
     },
     {
-      "text": "The Group by menu offers \"Stage\" (not Status) and \"With\" (not Current owner)",
-      "ok": false,
-      "detail": "GROUP BY Status Discipline Type Current owner Zone Code"
+      "text": "The Group by menu offers the Stage column (Status, as the anatomy) and \"With\" (not Current owner)",
+      "ok": true,
+      "detail": "GROUP BY Status Discipline Type With Zone Code"
     },
     {
       "text": "Group by Stage shows the Stage groups with counts",
       "ok": true,
-      "detail": "Title Rev Discipline Type Status Code Zone Building Floor Current owner Created Pending Approval 4 on this page"
+      "detail": "Title Rev Type Discipline Status Code Zone Building Floor With Created Pending Approval 4 on this page"
     },
     {
       "text": "The column header for the holder reads \"With\" (never \"Current owner\")",
-      "ok": false,
-      "detail": "headers: Submittal No. | Title | Rev | Discipline | Type | Status | Code | Zone | Building | Floor | Current owner | Created"
+      "ok": true,
+      "detail": "headers: Submittal No. | Title | Rev | Type | Discipline | Status | Code | Zone | Building | Floor | With | Created"
     }
   ],
   "screenshots": [
@@ -83,5 +83,5 @@
     "evidence/SUB-23-4-grouped.jpg"
   ],
   "notes": "Columns > move one > Save as my default was driven through the api (PUT .../list/columns), the layout restored afterwards; the Table settings pop-up itself was not clicked.",
-  "ranAt": "2026-10-27T22:54:22.780Z"
+  "ranAt": "2026-10-31T02:52:05.586Z"
 }
