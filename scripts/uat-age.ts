@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { ageItems, findAgeCandidates, type AgedItem, type AgedRows } from "../packages/db/dev-tools/index.ts";
 import { ageChanges } from "../packages/db/dev-tools/changes.ts";
 import { createDb } from "../packages/db/src/client.ts";
-import { guardedOrExit, laneOfEnv, loadToolEnv, runCli, type Target } from "./uat-guard.ts";
+import { guardedOrExit, laneOfEnv, loadToolEnv, printsItemText, runCli, type Target } from "./uat-guard.ts";
 export { ageChanges, type AgeChanges, type AgedItem } from "../packages/db/dev-tools/changes.ts";
 
 // `uat:age` (RP-922): moves chosen items back in time, so UAT can see Step Age it would otherwise wait
@@ -28,6 +28,9 @@ export interface AgeArgs {
 export const AGE_USAGE = `usage: pnpm uat:age --item <Document Number or exact Subject> [--item ...] --weeks <1-52> [--lane <n> | --uat] [--dry-run]
   --weeks N leaves each item at Step Age N (the dots its holder reads, 1 to 4+); all its times move back by one amount.`;
 
+/** A Document Number's shape (`TWR-MAR-01-0004`, `TWR-MAR-01-0003 Rev 1`): segments joined by dashes, perhaps a Revision. */
+export const DOCUMENT_NUMBER = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+(?: [Rr]ev [0-9]+)?$/;
+
 /** The command line, the lane defaulting to the one `env` (the worktree's .env) names. */
 export function parseAgeArgs(argv: string[], env: NodeJS.ProcessEnv): AgeArgs | { error: string } {
   const items: string[] = [];
@@ -46,6 +49,12 @@ export function parseAgeArgs(argv: string[], env: NodeJS.ProcessEnv): AgeArgs | 
   }
   if (items.length === 0 || items.some((text) => text.trim() === "")) return { error: "give at least one --item (a Document Number or an exact Subject)" };
   if (weeks === undefined || !/^[1-9][0-9]?$/.test(weeks) || Number(weeks) > 52) return { error: "--weeks is a whole number from 1 to 52" };
+  // Inside GitHub Actions the log is public: a typed Subject would reach it, so only Document Numbers
+  // are taken, and what was given is never echoed (Main 6, 2026-10-31).
+  if (!printsItemText(env)) {
+    const other = items.findIndex((text) => !DOCUMENT_NUMBER.test(text.trim()));
+    if (other >= 0) return { error: `--item ${other + 1} is not a Document Number: in the GitHub job give its Document Number` };
+  }
   const target = targetOf({ lane, uat }, env);
   if ("error" in target) return target;
   return { target, items, weeks: Number(weeks), dryRun };
@@ -70,10 +79,10 @@ function spanOf(ms: number): string {
   return `${weeks} weeks ${days} days ${hours} hours`;
 }
 
-/** What the tool will do to one item, printed before it writes. */
-export function describeChange(item: AgedItem): string {
+/** What the tool will do to one item, printed before it writes; its Subject only where item text may be printed. */
+export function describeChange(item: AgedItem, { itemText }: { itemText: boolean } = { itemText: true }): string {
   const { own, others } = item.stepAge;
-  return `${item.documentNumber} "${item.subject}": Step Age ${own.from} → ${own.to} for its holder's Company, ${others.from} → ${others.to} for the other Companies; every time of it moves back ${spanOf(item.shiftMs)}`;
+  return `${item.documentNumber}${itemText ? ` "${item.subject}"` : ""}: Step Age ${own.from} → ${own.to} for its holder's Company, ${others.from} → ${others.to} for the other Companies; every time of it moves back ${spanOf(item.shiftMs)}`;
 }
 
 /** The rows it changed (or would), by table. */
@@ -93,13 +102,14 @@ async function main(argv: string[]): Promise<number> {
   console.log(`uat:age on ${guarded.label}${args.dryRun ? " (dry run: nothing is written)" : ""}`);
   const db = createDb(guarded.migratorUrl, { max: 1 });
   try {
-    const changes = ageChanges(args, await findAgeCandidates(db, args.items), new Date());
+    const itemText = printsItemText(env);
+    const changes = ageChanges(args, await findAgeCandidates(db, args.items), new Date(), { itemText });
     if ("errors" in changes) {
       for (const error of changes.errors) console.error(`uat:age: ${error}`);
       console.error("uat:age: nothing was changed");
       return 1;
     }
-    for (const item of changes.items) console.log(describeChange(item));
+    for (const item of changes.items) console.log(describeChange(item, { itemText }));
     const aged = await ageItems(db, changes.items, { dryRun: args.dryRun });
     for (const item of aged) console.log(describeRows(item, args.dryRun));
     console.log("Their history keeps its true times, so its events read later than the moved dates: by design (the audit trail is never changed).");

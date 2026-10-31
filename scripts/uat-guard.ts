@@ -174,6 +174,13 @@ export function guardTarget(env: NodeJS.ProcessEnv, target: Target): GuardResult
   return target.kind === "lane" ? laneGuard(env, target.lane) : uatGuard(env);
 }
 
+/**
+ * Whether the tool may print item text (Subjects, recipients, what an --item asked for): not inside
+ * GitHub Actions, whose run logs are public for this repository (RP-922, Orchestrator 2026-10-31).
+ * There it prints Document Numbers and counts only.
+ */
+export const printsItemText = (env: NodeJS.ProcessEnv): boolean => env.GITHUB_ACTIONS !== "true";
+
 /** The tool's environment for a run: this folder's `.env` (none in the GitHub job) under the shell's values. */
 export function loadToolEnv(): NodeJS.ProcessEnv {
   return toolEnv(existsSync(".env") ? readFileSync(".env", "utf8") : "", process.env);

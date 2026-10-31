@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
 import { outboxHandlers } from "../apps/worker/src/jobs.ts";
-import { JOBS, runJob, type JobName, type JobRow } from "../packages/db/dev-tools/index.ts";
+import { JOBS, runJob, type JobName, type JobRow, type JobRun } from "../packages/db/dev-tools/index.ts";
 import { createDb } from "../packages/db/src/client.ts";
 import { mailerFromEnv, renderEmail, type Mailer } from "../packages/mailer/src/index.ts";
 import { targetOf } from "./uat-age.ts";
-import { guardedOrExit, loadToolEnv, runCli, type Target } from "./uat-guard.ts";
+import { guardedOrExit, loadToolEnv, printsItemText, runCli, type Target } from "./uat-guard.ts";
 
 // `uat:run-job` (RP-922): the daily digest or the weekly Step Age report now, so UAT need not wait for
 // 07:00 Riyadh (digest Sunday to Thursday, report Sunday). Dev and UAT only (scripts/uat-guard.ts):
@@ -68,7 +68,26 @@ export function recordingMailer(inner: Mailer): { mailer: Mailer; sent: SentEmai
   };
 }
 
+/** What each job emails, for the output. */
+const EMAIL_KIND: Record<JobName, string> = { digest: "daily digest", "weekly-report": "weekly Step Age report" };
+
 const who = (row: JobRow) => `${row.email}${row.projectId ? ` (Project ${row.projectId})` : ""}`;
+
+/**
+ * What a run printed: who got a row and each email sent, by recipient and subject, or (without item
+ * text, inside the GitHub job) only how many.
+ */
+export function describeRun(run: JobRun, sent: SentEmail[], { dryRun, member, itemText }: { dryRun: boolean; member: boolean; itemText: boolean }): string[] {
+  const list = <T>(rows: T[], show: (row: T) => string) => (itemText && rows.length > 0 ? `: ${rows.map(show).join(", ")}` : "");
+  const lines = [`${dryRun ? "Would add" : "Added"} ${run.queued.length} outbox row(s)${list(run.queued, who)}`];
+  if (member) lines.push(`${run.leftOut} row(s) for other Members were not queued`);
+  if (run.takenByWorker.length > 0) lines.push(`${run.takenByWorker.length} row(s) already processed by worker${list(run.takenByWorker, who)}`);
+  // A send's own error can quote its recipient: inside the job only a database error's code is printed.
+  const why = (error: string) => (itemText || /^database error [0-9A-Z]{5}$/.test(error) ? error : "the send failed");
+  for (const { row, error } of run.failed) lines.push(`${itemText ? who(row) : "a row"}: not sent (${why(error)}); left queued for the worker's retries`);
+  if (!dryRun) lines.push(`Sent ${sent.length} ${EMAIL_KIND[run.job]} email(s)${list(sent, (s) => `${s.to} "${s.subject}"`)}`);
+  return lines;
+}
 
 async function main(argv: string[]): Promise<number> {
   const env = loadToolEnv();
@@ -90,12 +109,8 @@ async function main(argv: string[]): Promise<number> {
       memberEmail: args.memberEmail,
       dryRun: args.dryRun,
     });
-    console.log(`${args.dryRun ? "Would add" : "Added"} ${run.queued.length} outbox row(s)${run.queued.length ? `: ${run.queued.map(who).join(", ")}` : ""}`);
-    if (args.memberEmail !== undefined) console.log(`${run.leftOut} row(s) for other Members were not queued`);
-    for (const row of run.takenByWorker) console.log(`${who(row)}: already processed by worker`);
-    for (const { row, error } of run.failed) console.log(`${who(row)}: not sent (${error}); left queued for the worker's retries`);
-    const sent = built?.sent ?? [];
-    if (!args.dryRun) console.log(`Sent ${sent.length} email(s)${sent.length ? `: ${sent.map((s) => `${s.to} "${s.subject}"`).join(", ")}` : ""}`);
+    const lines = describeRun(run, built?.sent ?? [], { dryRun: args.dryRun, member: args.memberEmail !== undefined, itemText: printsItemText(env) });
+    for (const line of lines) console.log(line);
     return run.failed.length > 0 ? 1 : 0;
   } finally {
     await Promise.all([migrator.destroy(), worker.destroy()]);

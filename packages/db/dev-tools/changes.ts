@@ -22,7 +22,15 @@ export interface AgeChanges {
   items: AgedItem[];
 }
 
-const named = (c: AgeCandidate) => (c.documentNumber ? `${c.documentNumber} "${c.subject}"` : `"${c.subject}" (a Draft)`);
+export interface AgeChangesOptions {
+  /**
+   * Whether messages may quote item text: each Subject, and what an --item asked for. False inside the
+   * GitHub job, whose log is public (RP-922, Orchestrator 2026-10-31): an item is then its Document
+   * Number, or "--item <n>" when it has none, and nothing else of it is printed.
+   */
+  itemText: boolean;
+}
+
 const fold = (text: string) => text.trim().toLowerCase();
 
 /** The candidates `text` names: by Document Number, else by exact Subject; both any case. */
@@ -37,25 +45,32 @@ function matchesOf(text: string, candidates: AgeCandidate[]): AgeCandidate[] {
  * them): each text must name exactly one open, numbered item, younger than `weeks`. Every refusal
  * at once, and then no plan.
  */
-export function ageChanges({ items, weeks }: { items: string[]; weeks: number }, candidates: AgeCandidate[], now: Date): AgeChanges | { errors: string[] } {
+export function ageChanges(
+  { items, weeks }: { items: string[]; weeks: number },
+  candidates: AgeCandidate[],
+  now: Date,
+  { itemText }: AgeChangesOptions = { itemText: true },
+): AgeChanges | { errors: string[] } {
+  const named = (c: AgeCandidate) => (itemText ? (c.documentNumber ? `${c.documentNumber} "${c.subject}"` : `"${c.subject}" (a Draft)`) : (c.documentNumber ?? "a Draft"));
   const errors: string[] = [];
   const planned: AgedItem[] = [];
   const seen = new Set<string>();
   // Into its Nth week by an hour, so it reads Step Age N for the week after the run.
   const enteredBy = now.getTime() - (weeks - 1) * WEEK - HOUR;
-  for (const text of items) {
+  for (const [index, text] of items.entries()) {
+    const asked = itemText ? `"${text.trim()}"` : `--item ${index + 1}`;
     const matches = matchesOf(text, candidates);
     if (matches.length === 0) {
       const close = candidates.filter((c) => fold(c.subject).includes(fold(text)) || fold(c.documentNumber ?? "").includes(fold(text))).slice(0, 10);
-      errors.push(`"${text.trim()}" matches no item by Document Number or exact Subject${close.length > 0 ? `. Close: ${close.map(named).join(", ")}` : ""}`);
+      errors.push(`${asked} matches no item by Document Number or exact Subject${close.length > 0 ? `. Close: ${close.map(named).join(", ")}` : ""}`);
       continue;
     }
     if (matches.length > 1) {
-      errors.push(`"${text.trim()}" matches ${matches.length} items; give one of their Document Numbers: ${matches.map(named).join(", ")}`);
+      errors.push(`${asked} matches ${matches.length} items; give one of their Document Numbers: ${matches.map(named).join(", ")}`);
       continue;
     }
     const c = matches[0]!;
-    const label = c.documentNumber ?? `"${c.subject}"`;
+    const label = c.documentNumber ?? (itemText ? `"${c.subject}"` : asked);
     if (seen.has(c.id)) {
       errors.push(`${label} is named twice`);
       continue;
