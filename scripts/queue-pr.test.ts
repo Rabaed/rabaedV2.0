@@ -37,6 +37,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     requiredChecks: () => [],
     checkRuns: () => [],
     commitStatuses: () => [],
+    mergeChecks: () => ({ ok: true, skipped: [] }),
     enqueue: (id, head) => {
       enqueued.push([id, head]);
       return { position: 3, state: "QUEUED" };
@@ -45,6 +46,78 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
   };
   return { seam, enqueued };
 }
+
+describe("queuePr: main's newest checks on the merge (RP-1171)", () => {
+  it("runs them on the merge-tree answer and the PR's head, after the merge is known clean", () => {
+    const seen: [string, string][] = [];
+    const { seam, enqueued } = fakeSeam({
+      mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
+      mergeChecks: (mergeOutput, head) => (seen.push([mergeOutput, head]), { ok: true, skipped: [] }),
+    });
+    expect(queuePr(511, seam).ok).toBe(true);
+    expect(seen).toEqual([["treeoid\n", "abc1234"]]);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("refuses with each failing check's name and lines, queueing nothing", () => {
+    const { seam, enqueued } = fakeSeam({
+      mergeChecks: () => ({
+        ok: false,
+        failures: [
+          { name: "check-hidden-asserts", lines: ["apps/api/test/a.test.ts:9: a compare by text"] },
+          { name: "check:migrations", lines: ["20271101000000 is shared"] },
+        ],
+      }),
+    });
+    const result = queuePr(496, seam);
+    expect(result.ok).toBe(false);
+    const text = result.lines.join("\n");
+    expect(text).toContain("PR #496");
+    expect(text).toContain("check-hidden-asserts");
+    expect(text).toContain("apps/api/test/a.test.ts:9: a compare by text");
+    expect(text).toContain("check:migrations");
+    expect(text).toContain("merge main");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("does not run them on a merge that conflicts", () => {
+    let ran = false;
+    const { seam } = fakeSeam({
+      mergeTree: () => ({ status: 1, output: "", stderr: "" }),
+      mergeChecks: () => ((ran = true), { ok: true, skipped: [] }),
+    });
+    expect(queuePr(1, seam).ok).toBe(false);
+    expect(ran).toBe(false);
+  });
+
+  it("refuses with a fix, not a crash, when the checkout of the merge fails", () => {
+    const { seam, enqueued } = fakeSeam({
+      mergeChecks: () => {
+        throw new Error("git worktree add failed: Filename too long");
+      },
+    });
+    const result = queuePr(7, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("Filename too long");
+    expect(result.lines.join("\n")).toContain("core.longpaths");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("warns, and still queues, when a check is not on the merge", () => {
+    const { seam, enqueued } = fakeSeam({ mergeChecks: () => ({ ok: true, skipped: ["check-scenario-seams"] }) });
+    const result = queuePr(1, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).toContain("check-scenario-seams");
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("still refuses a stale or missing verify line first, with the gate's own reason", () => {
+    const { seam } = fakeSeam({ body: () => "no line here" });
+    const result = queuePr(521, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("pnpm verify --pr 521");
+  });
+});
 
 describe("queuePr", () => {
   it("queues a clean branch pinned to HEAD and reports position and state", () => {
@@ -85,7 +158,9 @@ describe("queuePr", () => {
     expect(result.ok).toBe(false);
     const text = result.lines.join("\n");
     expect(text).toContain("reviewed");
-    expect(text).toContain("gh pr edit 149 --add-label reviewed");
+    // CI's reviewed-add adds the label; a hand label does not count (RP-1167).
+    expect(text).toContain("node scripts/review-post.ts 149");
+    expect(text).not.toContain("--add-label reviewed");
     expect(text).toContain("gh pr edit 149 --add-label docs-only");
     expect(enqueued).toEqual([]);
   });

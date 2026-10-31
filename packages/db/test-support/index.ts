@@ -41,7 +41,8 @@
  *   drainOutbox(db, handlers?)      runs the outbox until nothing is due; emails, digests and reports go nowhere.
  * Not re-exported (import by path): reset-test-database.ts and global-setup.ts (the test database's lifecycle),
  *   the catalogue checks grants.ts, function-grants.ts, definer-*.ts, id-defaults.ts, item-visibility-tables.ts,
- *   and statement-roles.ts (statementRoles(url): a db recording the role each statement runs as, RP-960).
+ *   and statement-roles.ts (statementRoles(url): a db recording the role each statement runs as, RP-960),
+ *   and id-sweep.ts (the seam-2 id sweep's catalog, call, leak check and allow list, RP-1166).
  *
  * The API tests' helpers are listed in apps/api/test/support/README.md.
  */

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 
@@ -30,9 +31,14 @@ export type WatchButtonProps = {
   watching: boolean;
   /** Called with `true` to watch, `false` to stop. */
   onChange: WatchCall;
+  /**
+   * `topBar`: the Work Item page's top-bar button (RP-1151 row 4): the eye, or a bell on the brand
+   * tint while watching; its words hidden under 560px, still its name.
+   */
+  look?: "default" | "topBar";
 };
 
-export function WatchButton({ labels, watching: initial, onChange }: WatchButtonProps) {
+export function WatchButton({ labels, watching: initial, onChange, look = "default" }: WatchButtonProps) {
   const [watching, setWatching] = useState(initial);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,10 +60,24 @@ export function WatchButton({ labels, watching: initial, onChange }: WatchButton
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button variant={watching ? "secondary" : "ghost"} size="sm" aria-pressed={watching} disabled={pending} onClick={() => void toggle()}>
-        <Icon name="eye" />
-        {watching ? labels.watching : labels.watch}
-      </Button>
+      {look === "topBar" ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-pressed={watching}
+          disabled={pending}
+          onClick={() => void toggle()}
+          className={cn("gap-1.5", watching && "bg-brand-tint text-brand-fg shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--brand)_35%,transparent)]")}
+        >
+          <Icon name={watching ? "bell-ringing" : "eye"} size={16} />
+          <span className="wip-label">{watching ? labels.watching : labels.watch}</span>
+        </Button>
+      ) : (
+        <Button variant={watching ? "secondary" : "ghost"} size="sm" aria-pressed={watching} disabled={pending} onClick={() => void toggle()}>
+          <Icon name="eye" />
+          {watching ? labels.watching : labels.watch}
+        </Button>
+      )}
       {error && (
         <p role="alert" className="text-sm text-danger-fg">
           {error}

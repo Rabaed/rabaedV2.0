@@ -199,11 +199,13 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
       w.creation_date,
-      -- At the Owner's review, no holder for those who read "Owner review": no name, filter, search or lane names it.
+      -- At the Owner's review, no holder for those who read "Owner review": no name, filter, search or lane names it
+      -- (db-mask: app.work_items_seen, which already gives them none; RP-1138, RP-1166).
       -- Asked only where the Step it is seen at confirms a Code: only there can it be at the Owner's review.
       case when w.owner_review is null then w.holder_participant_id end as holder_participant_id,
       case when w.owner_review is null then w.holder_member_id end as assignee_member_id, w.owner_review as owner_review_name,
-      -- The holder's and the raiser's Company by name, which everyone who sees the item reads (V14; the card's Contractor).
+      -- The holder's and the raiser's Company by name, which everyone who sees the item reads (V14; the card's Contractor;
+      -- db-mask: app.work_items_seen).
       case when w.owner_review is null then w.holder_company_name end as holder_name, w.raiser_company_name as raiser_name,
       w.raised_by_participant_id as raiser_participant_id,
       -- One holder: a closed item has none.
@@ -1029,6 +1031,7 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
   const byStage = new Map<string, BoardCardInput[]>();
   for (const r of rows) {
     const cards = byStage.get(r.stage_key) ?? [];
+    // db-mask: app.work_items_seen (no holder reaches those the Owner's review label reaches).
     cards.push({ card: toRow(r, now), holderParticipantId: r.owner_review_name ? ownerReviewLane : r.holder_participant_id });
     byStage.set(r.stage_key, cards);
   }

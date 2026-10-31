@@ -25,19 +25,23 @@ export interface AgeChanges {
 export interface AgeChangesOptions {
   /**
    * Whether messages may quote item text: each Subject, and what an --item asked for. False inside the
-   * GitHub job, whose log is public (RP-922, Orchestrator 2026-10-31): an item is then its Document
-   * Number, or "--item <n>" when it has none, and nothing else of it is printed.
+   * GitHub job, whose log is public (RP-922, Orchestrator 2026-10-31): items are then matched by
+   * Document Number only, an item is its Document Number, or "--item <n>", and nothing else of it is printed.
    */
   itemText: boolean;
 }
 
 const fold = (text: string) => text.trim().toLowerCase();
 
-/** The candidates `text` names: by Document Number, else by exact Subject; both any case. */
-function matchesOf(text: string, candidates: AgeCandidate[]): AgeCandidate[] {
+/**
+ * The candidates `text` names: by Document Number, else (with `bySubject`) by exact Subject; both any
+ * case. Never by Subject inside the GitHub job: a Subject shaped like a Document Number would match
+ * and so be shown (Main 6, 2026-10-31).
+ */
+function matchesOf(text: string, candidates: AgeCandidate[], bySubject: boolean): AgeCandidate[] {
   const want = fold(text);
   const byNumber = candidates.filter((c) => c.documentNumber !== null && fold(c.documentNumber) === want);
-  return byNumber.length > 0 ? byNumber : candidates.filter((c) => fold(c.subject) === want);
+  return byNumber.length > 0 || !bySubject ? byNumber : candidates.filter((c) => fold(c.subject) === want);
 }
 
 /**
@@ -59,7 +63,12 @@ export function ageChanges(
   const enteredBy = now.getTime() - (weeks - 1) * WEEK - HOUR;
   for (const [index, text] of items.entries()) {
     const asked = itemText ? `"${text.trim()}"` : `--item ${index + 1}`;
-    const matches = matchesOf(text, candidates);
+    const matches = matchesOf(text, candidates, itemText);
+    if (matches.length === 0 && !itemText) {
+      // No list of close items: which items' Subjects come close would tell of what was asked.
+      errors.push(`${asked} matches no item by Document Number`);
+      continue;
+    }
     if (matches.length === 0) {
       const close = candidates.filter((c) => fold(c.subject).includes(fold(text)) || fold(c.documentNumber ?? "").includes(fold(text))).slice(0, 10);
       errors.push(`${asked} matches no item by Document Number or exact Subject${close.length > 0 ? `. Close: ${close.map(named).join(", ")}` : ""}`);
