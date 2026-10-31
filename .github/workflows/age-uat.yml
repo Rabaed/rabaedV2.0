@@ -62,6 +62,15 @@ jobs:
       # (scripts/uat-age.ts DOCUMENT_NUMBER); anything else is masked and the run stops here.
       - name: Check the inputs and mask them
         run: |
+          # Before anything is echoed: one line each. A multi-line input (through the API or
+          # `gh workflow run -f`) would print its later lines unmasked, and a line starting `::` would
+          # be read as a workflow command. jq tests the value itself: $(...) drops trailing newlines.
+          for key in items member weeks; do
+            if jq -e --arg k "$key" '(.inputs[$k] // "") | test("[\r\n]")' "$GITHUB_EVENT_PATH" > /dev/null; then
+              echo "::error::$key takes one line only; nothing was changed."
+              exit 1
+            fi
+          done
           member="$(jq -r '.inputs.member // ""' "$GITHUB_EVENT_PATH")"
           if [ -n "$member" ]; then echo "::add-mask::$member"; fi
           items="$(jq -r '.inputs.items // ""' "$GITHUB_EVENT_PATH")"
