@@ -1,7 +1,7 @@
 import { composeProjectOfEnv, envValue } from "./lanes.ts";
 import { postgresOfEnv } from "./test-services.ts";
 import type { LockHolder } from "./verify-lock.ts";
-import { holderLabel } from "./verify-lock.ts";
+import { describeHolder } from "./verify-lock.ts";
 
 // One lane database, one verify (RP-1169). RP-996's lock is per worktree, so a second worktree on the same lane
 // ran its seam suites against the database a live verify was using, and both failed (an idle session did it to
@@ -56,7 +56,7 @@ export function laneDatabaseRefusal(own: string, others: OtherWorktree[], self: 
     if (!sharesLaneDatabase(mine, theirs)) continue;
     const via = mine.project !== undefined && mine.project === theirs.project ? `compose project ${mine.project}` : `Postgres port ${mine.port}`;
     return [
-      `Another worktree's verify is running on this lane's database (${via}): ${path}, ${holderLabel(holder)}.`,
+      `Another worktree's verify is running on this lane's database (${via}): ${path}, ${describeHolder(holder)}.`,
       "Two verifies on one database fail each other. Let it finish, or take a lane of your own (`pnpm lane:env <n> --free --force`, or `--db <suffix>` for an implementer subagent) before running verify again.",
     ].join("\n");
   }

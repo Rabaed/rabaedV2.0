@@ -33,6 +33,11 @@ describe("treeSnapshot", () => {
     expect(calls[0]).toEqual(["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"]);
   });
 
+  it("leaves out the paths it is told to ignore, such as the run's own log", () => {
+    const git = () => status("?? out.txt", " M a.ts");
+    expect(treeSnapshot(git, (path) => `h:${path}`, ["out.txt"])).toEqual(snapshot({ "a.ts": "h:a.ts" }));
+  });
+
   it("is undefined when git fails", () => {
     expect(treeSnapshot(() => undefined, () => "x")).toBeUndefined();
   });

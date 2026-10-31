@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
 import { composeProjectOfEnv, envValue, readWorktreeEnv } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
@@ -69,7 +69,10 @@ const taken = acquireLock(lock, self, processes);
 if (!taken.acquired) stopEarly(`${taken.message} Let it finish.`);
 process.on("exit", () => releaseLock(lock, process.pid));
 // A last line for an interrupted run too, so a background run's notification still says how it ended.
+// The step running now, killed with the run: it has a process group of its own off Windows, so Ctrl-C does not reach it.
+let runningChild: ReturnType<typeof spawn> | undefined;
 const interrupted = (signal: string, code: number) => () => {
+  if (runningChild) killTree(runningChild);
   out.end([`pnpm verify stopped: interrupted (${signal}).`], true);
   process.exit(code);
 };
@@ -126,11 +129,18 @@ const startedOn = readHead();
 // And the working tree (RP-1169): HEAD stays put under a merge --no-commit or the app's base-branch sync half-done.
 const git = systemGit(root);
 const fileHash = systemFileHash(root);
-const readTree = () => treeSnapshot(git, fileHash);
+// Not the run's own --log file, which grows as it runs.
+const ownLog = options.log === undefined ? [] : [relative(root, resolve(root, options.log)).replaceAll("\\", "/")];
+const readTree = () => treeSnapshot(git, fileHash, ownLog);
 const startedTree = readTree();
 if (startedTree) out.info(`working tree ${snapshotHash(startedTree)} (${startedTree.size} changed path${startedTree.size === 1 ? "" : "s"})`);
 /** Why the run must stop: HEAD or the working tree is no longer what it started on; undefined while it is. */
 const moved = (): string | undefined => headMoved(startedOn, readHead()) ?? treeChanged(startedTree, readTree());
+/** The same during a step, but a HEAD that can't be read right now (a failed spawn under load) is not a move. */
+const movedMidStep = (): string | undefined => {
+  const head = readHead();
+  return head === "" ? treeChanged(startedTree, readTree()) : (headMoved(startedOn, head) ?? treeChanged(startedTree, readTree()));
+};
 // Polled during a step, so a merge in the middle of a 20-minute suite stops it at once and not after it.
 const watchEveryMs = 15_000;
 
@@ -237,8 +247,8 @@ function runPnpm(args: string[], onSpawn: (child: ReturnType<typeof spawn>) => v
     child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
     const output = () => `${Buffer.concat(stdout).toString("utf8")}${Buffer.concat(stderr).toString("utf8")}`;
-    child.on("error", (error) => done({ status: 1, output: output(), exit: error.message }));
-    child.on("close", (code) => done({ status: code ?? 1, output: output(), exit: String(code) }));
+    child.on("error", (error) => (runningChild = undefined, done({ status: 1, output: output(), exit: error.message })));
+    child.on("close", (code) => (runningChild = undefined, done({ status: code ?? 1, output: output(), exit: String(code) })));
   });
 }
 
@@ -254,7 +264,7 @@ for (const { name, script } of steps) {
   let changedMidStep: string | undefined;
   let child: ReturnType<typeof spawn> | undefined;
   const stopWatching = watchTree({
-    check: moved,
+    check: movedMidStep,
     onChange: (message) => {
       changedMidStep = message;
       if (child) killTree(child);
@@ -267,7 +277,7 @@ for (const { name, script } of steps) {
     script,
     async (args) => {
       if (changedMidStep !== undefined) return { status: 1, output: "" };
-      const result = await runPnpm(args, (started) => (child = started));
+      const result = await runPnpm(args, (started) => (child = runningChild = started));
       exit = String(result.exit);
       out.stepOutput(["pnpm", ...args].join(" "), result.output);
       return { status: result.status, output: result.output };

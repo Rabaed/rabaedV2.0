@@ -34,7 +34,7 @@ export function lockFile(worktree: string): string {
 }
 
 const hhmm = (date: Date) => `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-const describeHolder = ({ pid, started, command }: LockHolder) => `pid ${pid}, started ${hhmm(started)}, \`${command}\``;
+export const describeHolder = ({ pid, started, command }: LockHolder) => `pid ${pid}, started ${hhmm(started)}, \`${command}\``;
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
 /** Links `from` to `file`; false when `file` is already there. */
@@ -205,8 +205,6 @@ export function liveHolder(file: string, self: LockHolder, processes: Processes)
   return holderStatus(holder, self, file, processes).live ? holder : undefined;
 }
 
-/** What a holder reads as in a message: its pid, when it started and its command. */
-export const holderLabel = describeHolder;
 
 /** Removes the lock if `pid` holds it; a lock another run took (over) is left alone. */
 export function releaseLock(file: string, pid: number): void {

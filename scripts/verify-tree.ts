@@ -33,10 +33,11 @@ export function changedPaths(status: string): string[] {
 }
 
 /** The tree as it is now; undefined when git can't say (a run then does not check the tree rather than stop on a hiccup). */
-export function treeSnapshot(git: Git, fileHash: FileHash): TreeSnapshot | undefined {
+export function treeSnapshot(git: Git, fileHash: FileHash, ignore: string[] = []): TreeSnapshot | undefined {
   const status = git(["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"]);
   if (status === undefined) return undefined;
-  return new Map(changedPaths(status).map((path) => [path, fileHash(path)]));
+  // `ignore`: paths the run itself writes (its --log file), which would otherwise change on every poll.
+  return new Map(changedPaths(status).filter((path) => !ignore.includes(path)).map((path) => [path, fileHash(path)]));
 }
 
 /** One 16-hex hash of the whole snapshot, for the log line that says what the run started on. */
