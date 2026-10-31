@@ -1,8 +1,18 @@
 "use client";
 
-import { formatNumber, formFields, type FieldError, type FormSchema, type FormValue, type Locale } from "@rabaed/domain";
-import { useId, type ReactNode } from "react";
-import { cn } from "../../lib/cn.ts";
+import {
+  calculatedReferences,
+  conditionFields,
+  defaultMaxLength,
+  formatNumber,
+  formFields,
+  isCalculatedField,
+  type FieldError,
+  type FormField,
+  type FormSchema,
+  type FormValue,
+  type Locale,
+} from "@rabaed/domain";
 import { Field } from "../form/field.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -20,6 +30,9 @@ export const internalNoteMaxLength = 4000;
 
 /** The key of the Remarks field a code's Action Form holds (form-engine.md §4 "Remarks"). */
 const remarksKey = "remarks";
+
+/** The page's pop-up labels: bold, as the owner's design draws them (RP-1188, rows 35–36). */
+const popupLabel = "text-[13.5px] font-bold";
 
 /** The pop-up form's words, from the app's messages: its Internal Note, and the Form engine's. */
 export type ActionFormLabels = {
@@ -95,10 +108,11 @@ export function ActionForm({
   return (
     <div className="flex flex-col gap-4">
       {remarks && page && (
-        <PopupField
+        <Field
           id={`${idPrefix}-${remarks.key}`}
           label={remarks.label[locale]}
-          tag={
+          labelClassName={popupLabel}
+          aside={
             remarks.required ? (
               <span className="rounded-full bg-danger-tint px-2 py-0.5 text-[11.5px] font-semibold text-danger-fg">
                 {page.code ? text.page.remarksRequired(page.code) : text.page.required}
@@ -109,20 +123,19 @@ export function ActionForm({
           }
           help={page.remarksReader ? text.page.remarksHelp(page.remarksReader) : remarks.help?.[locale]}
           error={remarksError(errors, remarks, page.code, locale, text)}
-          required={remarks.required}
+          errorFirst
         >
-          {(control) => (
-            <Textarea
-              {...control}
-              name={remarks.key}
-              rows={4}
-              maxLength={remarks.maxLength}
-              value={typeof answers[remarks.key] === "string" ? (answers[remarks.key] as string) : ""}
-              onChange={(e) => onChange({ [remarks.key]: e.target.value === "" ? undefined : e.target.value })}
-              className={cn(control["aria-invalid"] && "border-danger bg-danger-tint")}
-            />
-          )}
-        </PopupField>
+          {/* Required or not stays the Screen's; the pill says so in place of the asterisk. */}
+          <Textarea
+            name={remarks.key}
+            rows={4}
+            required={remarks.required}
+            maxLength={remarks.maxLength}
+            value={typeof answers[remarks.key] === "string" ? (answers[remarks.key] as string) : ""}
+            onChange={(e) => onChange({ [remarks.key]: e.target.value === "" ? undefined : e.target.value })}
+            className="aria-invalid:bg-danger-tint"
+          />
+        </Field>
       )}
       {rest && rest.sections.length > 0 && (
         <FormRenderer
@@ -139,53 +152,40 @@ export function ActionForm({
           {...(files ? { files } : {})}
         />
       )}
-      {page ? (
-        <PopupField
-          id={`${idPrefix}-internal-note`}
-          label={text.internalNote}
-          tag={<span className="text-[11.5px] font-medium text-muted">{text.page.optional}</span>}
-          // Amber, with a lock, above the box: it stays inside the taker's own Company, whoever the Transition goes to (V5).
-          banner={
-            <span className="flex items-center gap-1.5 rounded-[8px] bg-warning-tint px-2.5 py-2 text-[12.5px] font-semibold text-warning-fg">
-              <Icon name="lock" size={14} className="shrink-0" />
-              {text.page.internalNoteShort}
-            </span>
-          }
-          required={false}
-        >
-          {(control) => (
-            <Textarea
-              {...control}
-              name="internalNote"
-              rows={3}
-              maxLength={internalNoteMaxLength}
-              placeholder={text.page.internalNotePlaceholder(page.ownCompany)}
-              value={internalNote}
-              onChange={(e) => onInternalNoteChange(e.target.value)}
-            />
-          )}
-        </PopupField>
-      ) : (
-        <Field
-          label={text.internalNote}
-          // Amber, with a lock: it stays inside the taker's own Company, whoever the Transition goes to (V5; RP-1151 row 36).
-          help={
-            <span className="flex items-start gap-1.5 rounded-[8px] bg-warning-tint px-2.5 py-1.5 font-semibold text-warning-fg">
-              <Icon name="lock" size={14} className="mt-0.5 shrink-0" />
-              {text.internalNoteHelp}
-            </span>
-          }
-          id={`${idPrefix}-internal-note`}
-        >
-          <Textarea
-            name="internalNote"
-            rows={3}
-            maxLength={internalNoteMaxLength}
-            value={internalNote}
-            onChange={(e) => onInternalNoteChange(e.target.value)}
-          />
-        </Field>
-      )}
+      <Field
+        id={`${idPrefix}-internal-note`}
+        label={text.internalNote}
+        // Amber, with a lock: it stays inside the taker's own Company, whoever the Transition goes to (V5). On the page,
+        // the design's Optional tag, the short line above the box and a placeholder naming the Company (RP-1188 row 36).
+        {...(page
+          ? {
+              labelClassName: popupLabel,
+              aside: <span className="text-[11.5px] font-medium text-muted">{text.page.optional}</span>,
+              banner: (
+                <span className="flex items-center gap-1.5 rounded-[8px] bg-warning-tint px-2.5 py-2 text-[12.5px] font-semibold text-warning-fg">
+                  <Icon name="lock" size={14} className="shrink-0" />
+                  {text.page.internalNoteShort}
+                </span>
+              ),
+            }
+          : {
+              help: (
+                <span className="flex items-start gap-1.5 rounded-[8px] bg-warning-tint px-2.5 py-1.5 font-semibold text-warning-fg">
+                  <Icon name="lock" size={14} className="mt-0.5 shrink-0" />
+                  {text.internalNoteHelp}
+                </span>
+              ),
+            })}
+      >
+        <Textarea
+          name="internalNote"
+          rows={3}
+          maxLength={internalNoteMaxLength}
+          {...(page ? { placeholder: text.page.internalNotePlaceholder(page.ownCompany) } : {})}
+          value={internalNote}
+          onChange={(e) => onInternalNoteChange(e.target.value)}
+        />
+      </Field>
     </div>
   );
 }
@@ -197,7 +197,7 @@ function pageRemarks(schema: FormSchema): RemarksField | null {
   const fields = formFields(schema);
   const field = fields.find((f) => f.key === remarksKey);
   if (!field || field.type !== "textarea" || field.visible_if !== undefined || typeof field.required !== "boolean") return null;
-  if (JSON.stringify(fields.filter((f) => f !== field)).includes(`"field":"${remarksKey}"`)) return null;
+  if (fields.some((f) => f !== field && fieldsRead(f).includes(remarksKey))) return null;
   return { ...field, required: field.required };
 }
 
@@ -216,56 +216,15 @@ function remarksError(errors: readonly FieldError[] | undefined, field: RemarksF
   const error = errors?.find((e) => e.key === field.key);
   if (!error) return undefined;
   if (error.code === "required") return code ? text.page.remarksMissing(code) : text.form.required;
-  return error.code === "too_long" ? text.form.tooLong(formatNumber(field.maxLength ?? internalNoteMaxLength, locale)) : text.form.wrongType;
+  return error.code === "too_long" ? text.form.tooLong(formatNumber(field.maxLength ?? defaultMaxLength.textarea, locale)) : text.form.wrongType;
 }
 
-/**
- * A field of the page's pop-up, as the owner's design draws it: its label with a tag beside it (not
- * part of its name), an optional banner, the box, then the error and the help.
- */
-function PopupField({
-  id,
-  label,
-  tag,
-  banner,
-  help,
-  error,
-  required,
-  children,
-}: {
-  id: string;
-  label: string;
-  tag: ReactNode;
-  banner?: ReactNode;
-  help?: string | undefined;
-  error?: string | undefined;
-  required: boolean;
-  children: (control: { id: string; required: boolean; "aria-invalid": true | undefined; "aria-describedby": string | undefined }) => ReactNode;
-}) {
-  const own = useId();
-  const helpId = help ? `${own}-help` : undefined;
-  const errorId = error ? `${own}-error` : undefined;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={id} className="text-[13.5px] font-bold text-text">
-          {label}
-        </label>
-        {tag}
-      </div>
-      {banner}
-      {children({ id, required, "aria-invalid": error ? true : undefined, "aria-describedby": [errorId, helpId].filter(Boolean).join(" ") || undefined })}
-      {error && (
-        <p id={errorId} className="flex items-center gap-1.5 text-[12.5px] font-semibold text-danger-fg">
-          <Icon name="alert-circle" size={14} className="shrink-0" />
-          {error}
-        </p>
-      )}
-      {help && (
-        <p id={helpId} className="text-[12px] text-muted">
-          {help}
-        </p>
-      )}
-    </div>
-  );
+
+/** The field keys a field reads: its show-if and required-if conditions, and a calculated field's formula. */
+function fieldsRead(field: FormField): string[] {
+  return [
+    ...("visible_if" in field && field.visible_if ? conditionFields(field.visible_if) : []),
+    ...("required" in field && typeof field.required === "object" ? conditionFields(field.required) : []),
+    ...(isCalculatedField(field) ? calculatedReferences(field).map((r) => r.key) : []),
+  ];
 }
