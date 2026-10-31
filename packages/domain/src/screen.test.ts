@@ -74,6 +74,31 @@ describe("screenProblems", () => {
     const withChecklist = { sections: [{ ...codeReply.sections[0], fields: [checklist] }] };
     expect(screenProblems(withChecklist, [])).toEqual([{ key: "checks", code: "not_in_action_form" }]);
   });
+
+  // form-engine.md §3.3 (RP-1088): only a close takes a reply checklist.
+  describe("a reply checklist, while a Workflow shows the Screen on a Transition that doesn't close the item", () => {
+    const withReplyChecklist = {
+      sections: [
+        {
+          ...codeReply.sections[0],
+          fields: [...codeReply.sections[0]!.fields, { key: "inspection_checklist", type: "copied_checklist", copyOf: "checklist_template", label: label("Checklist"), required: true }],
+        },
+      ],
+    };
+
+    it("is refused: the Workflow's next publish would show it there", () => {
+      expect(screenProblems(withReplyChecklist, [], { shownOffClose: true })).toEqual([{ key: "inspection_checklist", code: "reply_checklist_not_on_close" }]);
+    });
+
+    it("is taken while every Transition showing the Screen closes the item, or none says", () => {
+      expect(screenProblems(withReplyChecklist, [], { shownOffClose: false })).toEqual([]);
+      expect(screenProblems(withReplyChecklist, [])).toEqual([]);
+    });
+
+    it("leaves a Screen with no reply checklist alone, wherever it is shown", () => {
+      expect(screenProblems(codeReply, [], { shownOffClose: true })).toEqual([]);
+    });
+  });
 });
 
 describe("createScreenRequest", () => {

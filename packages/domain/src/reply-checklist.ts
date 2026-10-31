@@ -5,12 +5,14 @@ import {
   checkChecklist,
   checklistItemFilesKey,
   checklistTemplateItem,
+  formFields,
   formKey,
   isNegativeAnswer,
   type ChecklistAnswers,
   type ChecklistField,
   type CopiedChecklistField,
   type FieldError,
+  type FormSchema,
   type ValidationMode,
 } from "./form.ts";
 
@@ -91,6 +93,18 @@ export function checklistOfRead(read: ReplyChecklistRead): ChecklistField {
 export function checklistsPropose(checklists: readonly Pick<ReplyChecklistRead, "answers">[]): "A" | "C" | null {
   if (checklists.length === 0) return null;
   return checklists.some((c) => proposedCode(c.answers) === "C") ? "C" : "A";
+}
+
+/**
+ * The keys of the reply checklists in Action Form `schema` (its `copied_checklist` fields).
+ * Only a Transition that closes the item may show one (form-engine.md §3.3, RP-1088): the
+ * close raises its Snags and the Documental Record prints it, which nothing does at the
+ * Owner's Confirm for one a Recommendation took.
+ */
+export function replyChecklistKeys(schema: FormSchema): string[] {
+  return formFields(schema)
+    .filter((f) => f.type === "copied_checklist")
+    .map((f) => f.key);
 }
 
 /** Save a reply checklist's answers so far (RP-86): the whole set, checked item by item, replacing those saved. */

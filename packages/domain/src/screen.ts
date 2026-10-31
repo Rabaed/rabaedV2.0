@@ -3,6 +3,7 @@ import { actionFormProblems, isScreenReplyField } from "./action-form.ts";
 import { bilingualText, type BilingualText } from "./company.ts";
 import { answerFields, formFields, formSchema, type FormSchema } from "./form.ts";
 import type { PublishContext, SchemaProblemCode } from "./form-publish.ts";
+import { replyChecklistKeys } from "./reply-checklist.ts";
 
 // Screens (ADR 0019, RP-516; workflow-engine.md §5.7; data-model.md screen). A Screen is
 // a named, reusable, versioned Action Form: an Action Form schema (action-form.ts) whose
@@ -34,16 +35,30 @@ export const saveScreenDraftRequest = screenContent;
 export type SaveScreenDraftRequest = z.infer<typeof saveScreenDraftRequest>;
 
 /** One thing stopping a Screen Version from being published, about its field `key` (`invalid_schema`: `key` is the path). */
-export type ScreenProblem = { key: string; code: SchemaProblemCode | "invalid_schema" | "unknown_internal_field" | "internal_file_field" };
+export type ScreenProblem = {
+  key: string;
+  code: SchemaProblemCode | "invalid_schema" | "unknown_internal_field" | "internal_file_field" | "reply_checklist_not_on_close";
+};
+
+/** What a Screen's publish checks read besides the Form checks' context. */
+export type ScreenPublishContext = PublishContext & {
+  /**
+   * A Workflow of the Screen's owner shows it on a Transition that doesn't close the item
+   * (`readScreenShownOffClose` in `@rabaed/db`), so its next publish would pin this Version
+   * there. Without it, where the Screen is shown isn't checked.
+   */
+  shownOffClose?: boolean;
+};
 
 /**
  * What stops `schema`, with `internalFields` internal, from being published as a Screen
  * Version: where it isn't a Form schema, else the Action Form checks (publish check 7, a
  * Screen's file fields taken: ADR 0024), then every internal key that isn't one of its
- * answer fields, and every internal file field (its files are shared once the Transition
- * takes them). Empty when there is nothing.
+ * answer fields, every internal file field (its files are shared once the Transition
+ * takes them), and every reply checklist while a Workflow shows the Screen on a Transition
+ * that doesn't close the item (form-engine.md §3.3, RP-1088). Empty when there is nothing.
  */
-export function screenProblems(schema: unknown, internalFields: readonly string[], context: PublishContext = {}): ScreenProblem[] {
+export function screenProblems(schema: unknown, internalFields: readonly string[], context: ScreenPublishContext = {}): ScreenProblem[] {
   const parsed = formSchema.safeParse(schema);
   if (!parsed.success) return parsed.error.issues.map((i) => ({ key: i.path.join(".") || "(schema)", code: "invalid_schema" }));
   const answered = new Set(answerFields(parsed.data).map((f) => f.key));
@@ -52,6 +67,7 @@ export function screenProblems(schema: unknown, internalFields: readonly string[
     ...actionFormProblems(parsed.data, context, { screen: true }),
     ...internalFields.filter((key) => !answered.has(key)).map((key): ScreenProblem => ({ key, code: "unknown_internal_field" })),
     ...internalFields.filter((key) => files.has(key)).map((key): ScreenProblem => ({ key, code: "internal_file_field" })),
+    ...(context.shownOffClose === true ? replyChecklistKeys(parsed.data).map((key): ScreenProblem => ({ key, code: "reply_checklist_not_on_close" })) : []),
   ];
 }
 
