@@ -169,12 +169,15 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   };
 }
 
-const isSwitch = (event: PrEvent) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled";
+// A dequeue cancels auto-merge with no `auto_merge_disabled` event (#578), so leaving the queue counts as a switch-off.
+// If auto-merge stays on after a drop and queues the PR again, the live auto-merge check fails it.
+const isSwitch = (event: PrEvent) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled" || event.event === "removed_from_merge_queue";
 
 /**
- * Whether auto-merge was on when the PR last entered the merge queue: the newest `auto_merge_enabled` or
- * `auto_merge_disabled` before its newest `added_to_merge_queue` is an enable. `pnpm queue` never turns auto-merge on,
- * so a PR it queued after auto-merge was turned off again passes (#531 and #564 fail; #563 and #565 pass). An enable
+ * Whether auto-merge was on when the PR last entered the merge queue: the newest `auto_merge_enabled`,
+ * `auto_merge_disabled` or `removed_from_merge_queue` before its newest `added_to_merge_queue` is an enable. `pnpm queue`
+ * never turns auto-merge on, so a PR it queued after auto-merge was turned off, or after a dequeue, passes (#531 and
+ * #564 fail; #563, #565 and #578's second entry pass). An enable
  * in the same second as the entry counts as before it, whichever GitHub lists first: it caused the entry. A disable in
  * that second does not move, since GitHub may turn auto-merge off as it enqueues (#564's shape). While GitHub lists no
  * entry yet, the newest switch of all decides, so a missing event fails closed.

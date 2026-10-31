@@ -227,6 +227,30 @@ describe("requireReviewed on merge_group", () => {
     expect(result.summary).toContain("pnpm queue 12");
   });
 
+  it("keeps #578: a dequeue ends auto-merge with no auto_merge_disabled event, so its later `pnpm queue` entry passes", async () => {
+    const events = [
+      ...labeledBy("github-actions[bot]"),
+      eventBy("auto_merge_enabled", "2026-10-31T15:47:50Z"),
+      eventBy("added_to_merge_queue", "2026-10-31T15:52:11Z"),
+      eventBy("removed_from_merge_queue", "2026-10-31T15:52:40Z"),
+      eventBy("added_to_merge_queue", "2026-10-31T15:53:38Z"),
+    ];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect(await requireReviewed(event, seam)).toMatchObject({ ok: true });
+  });
+
+  it("still drops a PR that auto-merge queued again after a dequeue: a new enable after the removal counts", async () => {
+    const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue"), eventBy("removed_from_merge_queue"), eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue")];
+    const { seam } = fakeSeam({ events: async () => events });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
+  it("still drops a PR re-queued while auto-merge stays on after a dequeue: the live auto-merge check catches it", async () => {
+    const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue"), eventBy("removed_from_merge_queue"), eventBy("added_to_merge_queue")];
+    const { seam } = fakeSeam({ events: async () => events, pull: async () => ({ labels: ["reviewed"], changedFiles: 3, autoMergeBy: "mmhaleess90" }) });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
   it("still drops a PR whose auto-merge GitHub turned off in the same second it queued it (#564's shape)", async () => {
     const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled", "2026-10-31T10:59:00Z"), eventBy("added_to_merge_queue", "2026-10-31T11:00:00Z"), eventBy("auto_merge_disabled", "2026-10-31T11:00:00Z")];
     const { seam } = fakeSeam({ events: async () => events });
