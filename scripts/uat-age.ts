@@ -28,6 +28,9 @@ export interface AgeArgs {
 export const AGE_USAGE = `usage: pnpm uat:age --item <Document Number or exact Subject> [--item ...] --weeks <1-52> [--lane <n> | --uat] [--dry-run]
   --weeks N leaves each item at Step Age N (the dots its holder reads, 1 to 4+); all its times move back by one amount.`;
 
+/** A Document Number's shape (`TWR-MAR-01-0004`, `TWR-MAR-01-0003 Rev 1`): segments joined by dashes, perhaps a Revision. */
+export const DOCUMENT_NUMBER = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+(?: [Rr]ev [0-9]+)?$/;
+
 /** The command line, the lane defaulting to the one `env` (the worktree's .env) names. */
 export function parseAgeArgs(argv: string[], env: NodeJS.ProcessEnv): AgeArgs | { error: string } {
   const items: string[] = [];
@@ -46,6 +49,12 @@ export function parseAgeArgs(argv: string[], env: NodeJS.ProcessEnv): AgeArgs | 
   }
   if (items.length === 0 || items.some((text) => text.trim() === "")) return { error: "give at least one --item (a Document Number or an exact Subject)" };
   if (weeks === undefined || !/^[1-9][0-9]?$/.test(weeks) || Number(weeks) > 52) return { error: "--weeks is a whole number from 1 to 52" };
+  // Inside GitHub Actions the log is public: a typed Subject would reach it, so only Document Numbers
+  // are taken, and what was given is never echoed (Main 6, 2026-10-31).
+  if (!printsItemText(env)) {
+    const other = items.findIndex((text) => !DOCUMENT_NUMBER.test(text.trim()));
+    if (other >= 0) return { error: `--item ${other + 1} is not a Document Number: in the GitHub job give its Document Number` };
+  }
   const target = targetOf({ lane, uat }, env);
   if ("error" in target) return target;
   return { target, items, weeks: Number(weeks), dryRun };

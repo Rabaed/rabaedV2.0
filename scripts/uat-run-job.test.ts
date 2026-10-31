@@ -64,7 +64,7 @@ describe("describeRun", () => {
       "3 row(s) for other Members were not queued",
       "1 row(s) already processed by worker",
       "a row: not sent (the send failed); left queued for the worker's retries",
-      "Sent 1 email(s)",
+      "Sent 1 weekly Step Age report email(s)",
     ]);
     expect(lines.join("\n")).not.toMatch(/@|Hidden Tower/);
   });
@@ -72,7 +72,7 @@ describe("describeRun", () => {
   it("on a lane names each recipient and email subject", () => {
     const lines = describeRun(run, sent, { dryRun: false, member: false, itemText: true });
     expect(lines[0]).toBe("Added 2 outbox row(s): ahmed@tester.example (Project p1), pm@tester.example (Project p1)");
-    expect(lines.at(-1)).toBe('Sent 1 email(s): ahmed@tester.example "Weekly Step Age report: Hidden Tower"');
+    expect(lines.at(-1)).toBe('Sent 1 weekly Step Age report email(s): ahmed@tester.example "Weekly Step Age report: Hidden Tower"');
   });
 
   it("prints item text everywhere but inside GitHub Actions", () => {

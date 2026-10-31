@@ -130,6 +130,18 @@ describe("inside the GitHub job: the log is public (Orchestrator, 2026-10-31)", 
   ];
   const leaks = (lines: string[]) => lines.filter((line) => secret.some((text) => line.toLowerCase().includes(text.toLowerCase())));
 
+  it("takes Document Numbers only, and refuses anything else without echoing it (Main 6)", () => {
+    const actions = { GITHUB_ACTIONS: "true" };
+    expect(parseAgeArgs(["--uat", "--item", "TWR-MAR-01-0002", "--item", "TWR-MAR-01-0003 Rev 1", "--weeks", "4"], actions)).toMatchObject({
+      items: ["TWR-MAR-01-0002", "TWR-MAR-01-0003 Rev 1"],
+    });
+    const refused = parseAgeArgs(["--uat", "--item", "TWR-MAR-01-0002", "--item", "Hidden lintel", "--weeks", "4"], actions);
+    expect(refused).toEqual({ error: "--item 2 is not a Document Number: in the GitHub job give its Document Number" });
+    expect(leaks([JSON.stringify(refused)])).toEqual([]);
+    // On a lane a Subject is fine.
+    expect(parseAgeArgs(["--item", "Hidden lintel", "--weeks", "4"], { COMPOSE_PROJECT_NAME: "rabaed-lane42" })).toMatchObject({ items: ["Hidden lintel"] });
+  });
+
   it("names every item by its Document Number or --item <n> only, in every refusal", () => {
     const result = ageChanges({ items: ["Hidden", "Private pour", "Quiet mast", "Covert slab", "TWR-MAR-01-0020", "Hidden lintel"], weeks: 4 }, list, now, { itemText: false });
     if (!("errors" in result)) throw new Error("expected refusals");

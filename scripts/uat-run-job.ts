@@ -68,6 +68,9 @@ export function recordingMailer(inner: Mailer): { mailer: Mailer; sent: SentEmai
   };
 }
 
+/** What each job emails, for the output. */
+const EMAIL_KIND: Record<JobName, string> = { digest: "daily digest", "weekly-report": "weekly Step Age report" };
+
 const who = (row: JobRow) => `${row.email}${row.projectId ? ` (Project ${row.projectId})` : ""}`;
 
 /**
@@ -82,7 +85,7 @@ export function describeRun(run: JobRun, sent: SentEmail[], { dryRun, member, it
   // A send's own error can quote its recipient: inside the job only a database error's code is printed.
   const why = (error: string) => (itemText || /^database error [0-9A-Z]{5}$/.test(error) ? error : "the send failed");
   for (const { row, error } of run.failed) lines.push(`${itemText ? who(row) : "a row"}: not sent (${why(error)}); left queued for the worker's retries`);
-  if (!dryRun) lines.push(`Sent ${sent.length} email(s)${list(sent, (s) => `${s.to} "${s.subject}"`)}`);
+  if (!dryRun) lines.push(`Sent ${sent.length} ${EMAIL_KIND[run.job]} email(s)${list(sent, (s) => `${s.to} "${s.subject}"`)}`);
   return lines;
 }
 
