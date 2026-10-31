@@ -44,7 +44,9 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       left join work_item w on w.id = n.work_item_id
       left join workflow_step s on s.id = n.step_id
       left join work_item_event e on e.id = n.work_item_event_id
-      left join workflow_transition tr on tr.id = e.transition_id
+      -- The Transition's label, which everyone who reads the event is shown; its id is the actor's own (RP-1140).
+      left join app.event_transitions(array(select l.work_item_event_id from latest l where l.work_item_event_id is not null)) tr
+        on tr.event_id = e.id
       left join lateral app.notification_package(n.id) k on n.package_id is not null
       order by n.created_at desc, n.id desc
     `.execute(trx);
