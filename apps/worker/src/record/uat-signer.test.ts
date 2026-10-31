@@ -4,7 +4,7 @@ import { commonNameOf, parseCertificate, pemToDer } from "./pki.ts";
 import { sealPdf, verifySeal } from "./seal.ts";
 import { kmsSealSigner, localSealSigner } from "./signer.ts";
 import { localTimestampAuthority } from "./timestamp.ts";
-import { newUatAuthority, UAT_AUTHORITY_NAME, UAT_SEAL_NAME, uatSealSigner, type UatAuthority } from "./uat-signer.ts";
+import { newUatAuthority, UAT_AUTHORITY_NAME, UAT_SIGNER_NAME, uatSigner, type UatAuthority } from "./uat-signer.ts";
 
 // The UAT signer (RP-1042, ADR 0026): on the UAT Records container the seal is made under a
 // test authority whose key is a host secret, never in the repo. Each test makes its own
@@ -31,7 +31,7 @@ describe("the UAT sealing authority", () => {
 
 describe("the UAT signer", () => {
   it("seals under its own certificate, issued by the UAT authority, and the seal verifies (PAdES B-LT)", async () => {
-    const signer = await uatSealSigner(authority);
+    const signer = await uatSigner(authority);
     expect(signer.test).toBe(true);
     expect(signer.certificates).toHaveLength(2);
     expect(Buffer.from(signer.certificates[1]!)).toEqual(Buffer.from(pemToDer(authority.certificate)));
@@ -39,32 +39,32 @@ describe("the UAT signer", () => {
     const check = await verifySeal(sealed);
     expect(check.problem).toBeNull();
     expect(check.valid).toBe(true);
-    expect(check.signer).toBe(UAT_SEAL_NAME);
+    expect(check.signer).toBe(UAT_SIGNER_NAME);
     expect(check.longTerm).toBe(true);
   });
 
-  it("names the seal as a UAT test seal, never Rabaed's real one", () => {
-    expect(UAT_SEAL_NAME).toContain("UAT");
-    expect(UAT_SEAL_NAME).not.toBe("Rabaed Documental Records");
+  it("names its certificate as a UAT test key, never Rabaed's real one", () => {
+    expect(UAT_SIGNER_NAME).toContain("UAT");
+    expect(UAT_SIGNER_NAME).not.toBe("Rabaed Documental Records");
   });
 
   it("refuses a certificate that is not a UAT authority's", async () => {
     const other = await newUatAuthority({ commonName: "Rabaed Documental Records" });
-    await expect(uatSealSigner(other)).rejects.toThrow(/UAT/);
+    await expect(uatSigner(other)).rejects.toThrow(/UAT/);
   });
 
   it("refuses a key that is not the certificate's", async () => {
     const other = await newUatAuthority();
-    await expect(uatSealSigner({ key: other.key, certificate: authority.certificate })).rejects.toThrow(/does not match/);
+    await expect(uatSigner({ key: other.key, certificate: authority.certificate })).rejects.toThrow(/does not match/);
   });
 
   it("refuses an authority whose certificate has expired", async () => {
     const expired = await newUatAuthority({ notAfter: new Date(Date.now() - 1000) });
-    await expect(uatSealSigner(expired)).rejects.toThrow(/expired/);
+    await expect(uatSigner(expired)).rejects.toThrow(/expired/);
   });
 
   it("refuses a value that is not PEM", async () => {
-    await expect(uatSealSigner({ key: "not a key", certificate: authority.certificate })).rejects.toThrow(/PEM/);
+    await expect(uatSigner({ key: "not a key", certificate: authority.certificate })).rejects.toThrow(/PEM/);
   });
 });
 

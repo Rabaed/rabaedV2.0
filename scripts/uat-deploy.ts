@@ -5,12 +5,14 @@ import { TRANSACTION_POOLER_PORT } from "../packages/db/src/supabase-gate.ts";
 import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } from "../packages/db/src/task-flags.ts";
 
 // The UAT deploy's helper (ADR 0026, RP-1043), run by .github/workflows/deploy-uat.yml and
-// reset-uat.yml with environment `uat`'s secrets and variables. It prints no secret.
+// reset-uat.yml with environment `uat`'s secrets and variables. It prints no secret, but for
+// `records-env`, whose lines go straight into `flyctl secrets import` (deploy-records-uat.yml, RP-1042).
 //
 //   node scripts/uat-deploy.ts migrate            bootstrap and migrate UAT's database (session pooler)
 //   node scripts/uat-deploy.ts app-role-check     as rabaed_app: RLS applies, the audit trail can't be rewritten (packages/db/src/check-app-role.ts)
 //   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again;
 //                                                 with the file store (FILE_STORE_*), ensure also stores any missing demo image (RP-672)
+//   node scripts/uat-deploy.ts records-env        the Records container's secrets (VERSION too), as NAME=VALUE lines (RP-1042)
 //   node scripts/uat-deploy.ts project <web|api|admin>   apply the project's settings and Sensitive variables
 //   node scripts/uat-deploy.ts bypass admin       print Admin's Protection Bypass for Automation secret while it has
 //                                                 Password Protection, else an empty line (mask it first)
@@ -199,6 +201,37 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
   ];
 }
 
+/**
+ * The UAT Records container's secrets (RP-1042, ADR 0026), from the same `uat` environment: the
+ * app role over the transaction pooler, the Project files store (the records are stored beside
+ * the files, as in AWS) and the web's address the records' QR links to. deploy-records-uat.yml
+ * imports them as the Fly app's secrets; its sealing settings are in its Fly config, and the UAT
+ * authority is the owner's own Fly secret, never here.
+ */
+export function recordsContainerEnv(env: NodeJS.ProcessEnv, version: string): Record<string, string> {
+  return {
+    APP_VERSION: version,
+    DATABASE_APP_URL: uatRoleUrl(env, "APP", "transaction"),
+    DATABASE_POOL_MAX: "2",
+    PROJECT_FILES_BUCKET: required(env, "PROJECT_FILES_BUCKET"),
+    FILE_STORE_ENDPOINT: httpsUrl(env, "FILE_STORE_ENDPOINT"),
+    FILE_STORE_ACCESS_KEY_ID: required(env, "FILE_STORE_ACCESS_KEY_ID"),
+    FILE_STORE_SECRET_ACCESS_KEY: required(env, "FILE_STORE_SECRET_ACCESS_KEY"),
+    FILE_STORE_REGION: "auto",
+    WEB_URL: httpsUrl(env, "UAT_WEB_URL"),
+  };
+}
+
+/** `vars` as `fly secrets import` reads them from stdin: one NAME=VALUE a line. A line break in a value is refused. */
+export function recordsSecretsImport(vars: Record<string, string>): string {
+  return Object.entries(vars)
+    .map(([key, value]) => {
+      if (/[\r\n]/.test(value)) throw new Error(`${key} has a line break: it cannot be imported as one secret`);
+      return `${key}=${value}\n`;
+    })
+    .join("");
+}
+
 const VERCEL_API = "https://api.vercel.com";
 
 type VercelAnswer = { error?: { code?: string; message?: string } } & Record<string, unknown>;
@@ -334,7 +367,9 @@ async function main([command, argument]: string[]): Promise<void> {
     return console.log(`uat-deploy: ${argument}'s settings and variables applied`);
   }
   if (command === "bypass") return void process.stdout.write(`${await automationBypass(project(argument), env)}\n`);
-  throw new Error("Usage: node scripts/uat-deploy.ts migrate | app-role-check | demo ensure|reset | project <web|api|admin> | bypass admin");
+  // Secrets on stdout, for `| flyctl secrets import` only: never into a log (RP-1042).
+  if (command === "records-env") return void process.stdout.write(recordsSecretsImport(recordsContainerEnv(env, required(env, "VERSION"))));
+  throw new Error("Usage: node scripts/uat-deploy.ts migrate | app-role-check | demo ensure|reset | project <web|api|admin> | bypass admin | records-env");
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {

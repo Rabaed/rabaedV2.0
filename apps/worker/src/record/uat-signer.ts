@@ -10,12 +10,12 @@ import type { SealSigner } from "./signer.ts";
 // first record the worker issues itself a fresh sealing key from it, in memory, as the local
 // signer does; that authority answers its OCSP and CRL addresses in this process, so the seal
 // is PAdES B-LT with nothing to reach on the internet. Every UAT record therefore chains to one
-// UAT authority, and its name says it is a test seal.
+// UAT authority, and its name says it is a test key.
 
 /** The common name of the UAT authority: always holding "UAT", which the signer checks. */
 export const UAT_AUTHORITY_NAME = "Rabaed UAT sealing authority (test only, not trusted)";
 /** The common name of the UAT seal's certificate: never Rabaed's real one. */
-export const UAT_SEAL_NAME = "Rabaed Documental Records (UAT test seal, not valid)";
+export const UAT_SIGNER_NAME = "Rabaed Documental Records (UAT test key, not valid)";
 
 /** The UAT authority as the host holds it: a PKCS #8 PEM key and its PEM certificate. */
 export interface UatAuthority {
@@ -66,14 +66,14 @@ const isAuthority = (certificate: pkijs.Certificate) =>
  * one (its name without "UAT", not an authority, expired) and a key that is not its certificate's,
  * so a real certificate can never be put on the UAT host by mistake.
  */
-export async function uatSealSigner(authority: UatAuthority, now: Date = new Date()): Promise<SealSigner> {
+export async function uatSigner(authority: UatAuthority, now: Date = new Date()): Promise<SealSigner> {
   const { der, certificate } = certificateOf(authority.certificate);
   const name = commonNameOf(certificate) ?? "";
   if (!/\bUAT\b/.test(name)) throw new Error(`the UAT sealing authority's certificate is not a UAT one (its name is "${name}")`);
   if (!isAuthority(certificate)) throw new Error("the UAT sealing authority's certificate is not an authority's (cA)");
   if (certificate.notAfter.value.getTime() <= now.getTime()) throw new Error("the UAT sealing authority's certificate has expired");
   const privateKey = await subtle.importKey("pkcs8", toArrayBuffer(keyDer(authority.key)), RSA_SHA256, false, ["sign"]);
-  const probe = new TextEncoder().encode("RP-1042 key check");
+  const probe = new TextEncoder().encode("RP-1042 key probe");
   const signature = await subtle.sign("RSASSA-PKCS1-v1_5", privateKey, toArrayBuffer(probe));
   const publicKey = await certificate.getPublicKey();
   if (!(await subtle.verify("RSASSA-PKCS1-v1_5", publicKey, signature, toArrayBuffer(probe)))) {
@@ -81,7 +81,7 @@ export async function uatSealSigner(authority: UatAuthority, now: Date = new Dat
   }
 
   const ca = await localCertificateAuthority(name, { root: { privateKey, certificate: der } });
-  const key = await ca.issue(UAT_SEAL_NAME, { ocsp: true });
+  const key = await ca.issue(UAT_SIGNER_NAME, { ocsp: true });
   const certificates = [key.certificate, der];
   return {
     certificates,

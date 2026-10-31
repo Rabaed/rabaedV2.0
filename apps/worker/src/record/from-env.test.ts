@@ -6,7 +6,7 @@ import { recordSealingFromEnv } from "./from-env.ts";
 import { LOCAL_SEAL_NAME } from "./signer.ts";
 import { parseCertificate, commonNameOf } from "./pki.ts";
 import { LOCAL_TSA_NAME, tokenCertificates } from "./timestamp.ts";
-import { newUatAuthority, UAT_AUTHORITY_NAME, UAT_SEAL_NAME } from "./uat-signer.ts";
+import { newUatAuthority, UAT_AUTHORITY_NAME, UAT_SIGNER_NAME } from "./uat-signer.ts";
 
 // RECORD_SEALING picks the seal's adapters explicitly (ADR 0023): never the local
 // test key in AWS, and nothing guessed from other settings.
@@ -61,7 +61,7 @@ describe("RECORD_SEALING", () => {
       const sealing = recordSealingFromEnv({ RECORD_SEALING: "uat", ...(await secrets()) });
       const signer = await sealing.signer();
       expect(signer.test).toBe(true);
-      expect(commonNameOf(parseCertificate(signer.certificates[0]!))).toBe(UAT_SEAL_NAME);
+      expect(commonNameOf(parseCertificate(signer.certificates[0]!))).toBe(UAT_SIGNER_NAME);
       expect(commonNameOf(parseCertificate(signer.certificates[1]!))).toBe(UAT_AUTHORITY_NAME);
       const token = await (await sealing.timestamps()).timestamp(new Uint8Array(32));
       expect(commonNameOf(parseCertificate(tokenCertificates(token)[0]!))).toBe(LOCAL_TSA_NAME);

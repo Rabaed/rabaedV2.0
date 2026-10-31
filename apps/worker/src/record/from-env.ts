@@ -10,7 +10,7 @@ import { pemToDer } from "./pki.ts";
 import { kmsSealSigner, localSealSigner, type SealSigner } from "./signer.ts";
 import { localTimestampAuthority, rfc3161TimestampAuthority, type TimestampAuthority } from "./timestamp.ts";
 import { uatMarkedRenderer } from "./uat-mark.ts";
-import { uatSealSigner } from "./uat-signer.ts";
+import { uatSigner } from "./uat-signer.ts";
 
 // The record job as the environment sets it up. RECORD_SEALING names the seal's
 // adapters explicitly, never inferred:
@@ -102,7 +102,7 @@ export function recordSealingFromEnv(source: NodeJS.ProcessEnv = process.env): P
       const key = settings.UAT_SEALING_AUTHORITY_KEY;
       const certificate = settings.UAT_SEALING_AUTHORITY_CERTIFICATE;
       if (!key || !certificate) throw new Error("UAT_SEALING_AUTHORITY_KEY and UAT_SEALING_AUTHORITY_CERTIFICATE are not set");
-      return uatSealSigner({ key: pemOf(key), certificate: pemOf(certificate) });
+      return uatSigner({ key: pemOf(key), certificate: pemOf(certificate) });
     }
     if (mode !== "kms") throw unset();
     if (!settings.PDF_SEALING_KEY_ID || !settings.AWS_REGION) throw new Error("PDF_SEALING_KEY_ID is not set");
