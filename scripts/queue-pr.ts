@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResult } from "./merge-checks.ts";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
@@ -59,6 +60,8 @@ export interface QueueSeam extends ReviewedGit {
   packageJsonVersions(commit: string, file: string): { before: string | undefined; after: string | undefined };
   /** The migration checks of `commit` against origin/main; status 0 when they pass. */
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
+  /** Main's newest checks (scripts/merge-checks.ts) on a checkout of the merge: `mergeOutput` is `mergeTree`'s clean answer, `head` the PR's head. */
+  mergeChecks(mergeOutput: string, head: string): MergeChecksResult;
   /** The PR's label names (`gh pr view <pr> --json labels`). */
   labels(pr: number): string[];
   /** The PR's body (`gh pr view <pr> --json body`); "" when it has none. */
@@ -265,6 +268,20 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   if (immutable.status !== 0) {
     return fail(immutable.output.trimEnd(), "Fix: merge main, rename the migration so it sorts after main's latest (an existing migration is never edited), push, wait for CI, then run `pnpm queue` again.");
   }
+
+  // Main's newest checks on the merge of the PR and main (RP-1171): the queue runs them on that merge, and PR #496
+  // dropped from it on checks that landed on main while it was queued.
+  // Extension point (RP-1172): the open-PR overlap finder (scripts/check-claims.ts) can be called here, to push a
+  // warning on `warnings`; it must not refuse.
+  const onMerge = seam.mergeChecks(merge.output, head);
+  if (!onMerge.ok) {
+    return fail(
+      `PR #${pr} fails ${onMerge.failures.length === 1 ? "a check" : "checks"} of origin/main on the merge of the PR and main, the merge the queue would test:`,
+      ...onMerge.failures.flatMap(({ name, lines }) => [`  ${name}:`, ...lines.map((line) => `    ${line}`)]),
+      "Fix: merge main into the branch, fix what the checks name, push, wait for CI, then run `pnpm queue` again.",
+    );
+  }
+  if (onMerge.skipped.length > 0) warnings.push(`Warning: not run on the merge (the file is not there yet): ${onMerge.skipped.join(", ")}.`);
 
   return { kind: "ready", id: pull.id, head, warnings, labelRunPending };
 }
@@ -487,6 +504,11 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
       return { before: base.status === 0 ? show(base.stdout.trim()) : undefined, after: show(commit) };
     },
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
+    mergeChecks: (mergeOutput, head) => {
+      const tree = mergeTreeOid(mergeOutput);
+      if (tree === undefined) throw new Error(`git merge-tree answered no tree for ${head}:\n${mergeOutput}`);
+      return runMergeChecks(tree, head, realMergeChecksSeam(cwd, spawn));
+    },
     labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
     body: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "body"])) as { body: string | null }).body ?? "",
     labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,
