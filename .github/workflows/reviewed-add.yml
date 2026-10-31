@@ -46,8 +46,9 @@ jobs:
     # On the job, not the workflow: a skipped job (any other comment) never joins the group, so
     # it cannot replace a pending run that matters. One run per PR at a time; never cancelled,
     # since a run may be mid-way through adding the label, and two re-runs of one
-    # reviewed-required run at once would fail. A CI run names its PR in pull_requests (empty
-    # only for a fork's, which the if: above skips); its head sha keys the group if not.
+    # reviewed-required run at once would fail. A CI run names its PR in pull_requests: empty for
+    # a fork's (which the if: above skips), and now and then otherwise (a closed PR, a moved head),
+    # when the script does nothing. Its head sha keys the group then.
     concurrency:
       group: reviewed-add-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}
       cancel-in-progress: false
@@ -55,8 +56,8 @@ jobs:
     # Two waits of up to 1500 s each (the reviewed-label run, then the reviewed-required run).
     timeout-minutes: 60
     # The script's read of a comment author's permission (collaborators/{login}/permission)
-    # needs only metadata: read, which every GITHUB_TOKEN has. actions: write reads the head's CI
-    # run and its jobs, and re-runs reviewed-required and verify-gate.
+    # needs only metadata: read, which every GITHUB_TOKEN has. actions: write is for the re-runs of
+    # reviewed-required and verify-gate; it also covers reading the head's CI run and its jobs.
     permissions:
       contents: read
       pull-requests: write
