@@ -9,6 +9,8 @@ import { chromiumRenderer } from "./render.ts";
 import { pemToDer } from "./pki.ts";
 import { kmsSealSigner, localSealSigner, type SealSigner } from "./signer.ts";
 import { localTimestampAuthority, rfc3161TimestampAuthority, type TimestampAuthority } from "./timestamp.ts";
+import { uatMarkedRenderer } from "./uat-mark.ts";
+import { uatSigner } from "./uat-signer.ts";
 
 // The record job as the environment sets it up. RECORD_SEALING names the seal's
 // adapters explicitly, never inferred:
@@ -23,6 +25,11 @@ import { localTimestampAuthority, rfc3161TimestampAuthority, type TimestampAutho
 //   RECORD_FONTS_DIR (the UAT Records image, ADR 0026) names a folder of
 //   Thmanyah files baked in at build time from the private R2 bucket; unset or
 //   empty, the fallback font.
+// - `uat` (the UAT Records container, RP-1042): the UAT signer (uat-signer.ts)
+//   under the UAT authority the host's secrets hold (UAT_SEALING_AUTHORITY_KEY,
+//   UAT_SEALING_AUTHORITY_CERTIFICATE, never in the repo), the timestamp
+//   stand-in and RECORD_FONTS_DIR's fonts, as local; and every page it renders
+//   carries the "UAT" mark (uat-mark.ts). Refused on ECS too.
 // Unset, the worker starts but every record job fails, saying so.
 
 /** Where Rabaed's sealing certificate (PEM, its chain after it) is kept in the build assets bucket. */
@@ -31,7 +38,7 @@ export const SEALING_CERTIFICATE_KEY = "sealing/pdf-sealing.pem";
 export const THMANYAH_PREFIX = "fonts/thmanyah/";
 
 const env = z.object({
-  RECORD_SEALING: z.enum(["local", "kms"]).optional(),
+  RECORD_SEALING: z.enum(["local", "kms", "uat"]).optional(),
   // Set by ECS in every task: the worker runs in AWS.
   ECS_CONTAINER_METADATA_URI_V4: z.string().min(1).optional(),
   AWS_REGION: z.string().min(1).optional(),
@@ -40,7 +47,12 @@ const env = z.object({
   TIMESTAMP_AUTHORITY_URL: z.url().optional(),
   CHROMIUM_PATH: z.string().min(1).optional(),
   RECORD_FONTS_DIR: z.string().min(1).optional(),
+  UAT_SEALING_AUTHORITY_KEY: z.string().min(1).optional(),
+  UAT_SEALING_AUTHORITY_CERTIFICATE: z.string().min(1).optional(),
 });
+
+/** A PEM as a host keeps it: a dashboard may store its line breaks as a backslash and `n`. */
+const pemOf = (value: string) => value.replaceAll("\\n", "\n");
 
 /** Every file in dir by name (thmanyahFonts keeps the Thmanyah ones), or none when it isn't there. */
 function filesIn(dir: string): Map<string, Uint8Array> {
@@ -63,13 +75,21 @@ function once<T>(make: () => Promise<T>): () => Promise<T> {
     }));
 }
 
-/** The seal's adapters and the fonts, as RECORD_SEALING names them (see above). Throws when it is `local` on ECS. */
-export function recordSealingFromEnv(source: NodeJS.ProcessEnv = process.env): Pick<RecordJobDeps, "signer" | "timestamps" | "fonts"> {
+/**
+ * The seal's adapters and the fonts, as RECORD_SEALING names them (see above), and whether every
+ * page carries the "UAT" mark. Throws when it is `local` or `uat` on ECS.
+ */
+export function recordSealingFromEnv(source: NodeJS.ProcessEnv = process.env): Pick<RecordJobDeps, "signer" | "timestamps" | "fonts"> & { uatMark: boolean } {
   const settings = env.parse(source);
   const mode = settings.RECORD_SEALING;
   if (mode === "local" && settings.ECS_CONTAINER_METADATA_URI_V4) {
     throw new Error("RECORD_SEALING=local on ECS: Documental Records are never sealed with the local test key in AWS");
   }
+  if (mode === "uat" && settings.ECS_CONTAINER_METADATA_URI_V4) {
+    throw new Error("RECORD_SEALING=uat on ECS: Documental Records are never sealed with the UAT test key in AWS");
+  }
+  /** The modes that seal with a test key in this process: local and uat. */
+  const inProcess = mode === "local" || mode === "uat";
   const unset = () => new Error("RECORD_SEALING is not set (local or kms)");
   const assets = () => {
     if (!settings.BUILD_ASSETS_BUCKET || !settings.AWS_REGION) throw new Error("BUILD_ASSETS_BUCKET and AWS_REGION are not set");
@@ -78,6 +98,12 @@ export function recordSealingFromEnv(source: NodeJS.ProcessEnv = process.env): P
 
   const signer = once<SealSigner>(async () => {
     if (mode === "local") return localSealSigner();
+    if (mode === "uat") {
+      const key = settings.UAT_SEALING_AUTHORITY_KEY;
+      const certificate = settings.UAT_SEALING_AUTHORITY_CERTIFICATE;
+      if (!key || !certificate) throw new Error("UAT_SEALING_AUTHORITY_KEY and UAT_SEALING_AUTHORITY_CERTIFICATE are not set");
+      return uatSigner({ key: pemOf(key), certificate: pemOf(certificate) });
+    }
     if (mode !== "kms") throw unset();
     if (!settings.PDF_SEALING_KEY_ID || !settings.AWS_REGION) throw new Error("PDF_SEALING_KEY_ID is not set");
     const { bucket, client } = assets();
@@ -87,23 +113,25 @@ export function recordSealingFromEnv(source: NodeJS.ProcessEnv = process.env): P
     return kmsSealSigner({ keyId: settings.PDF_SEALING_KEY_ID, region: settings.AWS_REGION, certificates });
   });
   const timestamps = once<TimestampAuthority>(async () => {
-    if (mode === "local") return localTimestampAuthority();
+    if (inProcess) return localTimestampAuthority();
     if (mode !== "kms") throw unset();
     if (!settings.TIMESTAMP_AUTHORITY_URL) throw new Error("TIMESTAMP_AUTHORITY_URL is not set");
     return rfc3161TimestampAuthority(settings.TIMESTAMP_AUTHORITY_URL);
   });
   const fonts = once<RecordFonts>(async () => {
-    if (mode === "local") return settings.RECORD_FONTS_DIR ? thmanyahFonts(filesIn(settings.RECORD_FONTS_DIR)) : fallbackFonts();
+    if (inProcess) return settings.RECORD_FONTS_DIR ? thmanyahFonts(filesIn(settings.RECORD_FONTS_DIR)) : fallbackFonts();
     if (mode !== "kms") throw unset();
     const { bucket, client } = assets();
     return thmanyahFonts(await filesUnder(client, bucket, THMANYAH_PREFIX));
   });
-  return { signer, timestamps, fonts };
+  return { signer, timestamps, fonts, uatMark: mode === "uat" };
 }
 
 export function recordJobFromEnv(webUrl: string, source: NodeJS.ProcessEnv = process.env): RecordJobDeps & { close(): Promise<void> } {
-  const sealing = recordSealingFromEnv(source);
+  const { uatMark, ...sealing } = recordSealingFromEnv(source);
   const { CHROMIUM_PATH } = env.parse(source);
-  const renderer = chromiumRenderer(CHROMIUM_PATH ? { executablePath: CHROMIUM_PATH } : {});
+  const chromium = chromiumRenderer(CHROMIUM_PATH ? { executablePath: CHROMIUM_PATH } : {});
+  // On UAT every PDF this worker draws says "UAT" on every page (uat-mark.ts).
+  const renderer = uatMark ? uatMarkedRenderer(chromium) : chromium;
   return { files: s3RecordFiles(projectFilesFromEnv(source)), renderer, ...sealing, webUrl, close: () => renderer.close() };
 }

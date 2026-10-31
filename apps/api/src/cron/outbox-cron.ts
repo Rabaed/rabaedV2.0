@@ -9,7 +9,7 @@ import {
   type ScheduledRun,
 } from "@rabaed/db";
 import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
-import { outboxHandlers, scheduledJobs } from "@rabaed/worker/jobs";
+import { outboxHandlers, RECORDS_CONTAINER_KINDS, scheduledJobs } from "@rabaed/worker/jobs";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { notSignedIn } from "../http-error.ts";
@@ -31,8 +31,8 @@ export const CRON_OUTBOX_PATH = "/internal/cron/outbox";
 /** The kinds the cron pass takes: everything but the Documental Record jobs, which need the Records container. */
 export const CRON_OUTBOX_KINDS = ["notification", "email", "digest", "step_age_report", "record_ready", "password_reset", "participant_invitation"] as const;
 
-/** The kinds left for the Records container (RP-1042): Chromium and the signer. With CRON_OUTBOX_KINDS, every outbox kind (a test checks). */
-export const RECORDS_CONTAINER_KINDS = ["documental_record", "documental_record_reproduce", "working_copy", "snag_report"] as const;
+/** The kinds left for the Records container (RP-1042, the worker's own list): Chromium and the signer. With CRON_OUTBOX_KINDS, every outbox kind (a test checks). */
+export { RECORDS_CONTAINER_KINDS };
 
 /** Rows one pass takes at most; the rest wait for the next minute. */
 export const CRON_OUTBOX_LIMIT = 100;
