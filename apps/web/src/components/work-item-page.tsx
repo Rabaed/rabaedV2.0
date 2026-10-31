@@ -299,7 +299,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
       icon: "paperclip",
       title: tItems("attachments.title"),
       summary: t("attachmentsSummary", { count: fileCount, n: n(fileCount) }),
-      children: <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} titleHidden />,
+      children: <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} titleHidden look="chips" />,
     },
     {
       key: "links",

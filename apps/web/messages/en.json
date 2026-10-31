@@ -1298,6 +1298,8 @@
       "limits": "PDF, images, Office documents, drawings, text or zip, up to {size}. Once Submitted, Documents can't be changed.",
       "open": "Open",
       "remove": "Remove",
+      "openDocument": "Open {document}",
+      "removeDocument": "Remove {document}",
       "frozenLabel": "Submitted: can't be changed",
       "annotatedSaved": "Annotated photo saved. The original is kept.",
       "annotateFrozen": "This photo was Submitted, so it can't be annotated.",

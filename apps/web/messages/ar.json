@@ -1298,6 +1298,8 @@
       "limits": "ملفات PDF أو صور أو ملفات Office أو مخططات أو نصوص أو zip، حتى {size}. بعد التقديم لا يمكن تغيير المستندات.",
       "open": "فتح",
       "remove": "إزالة",
+      "openDocument": "فتح {document}",
+      "removeDocument": "إزالة {document}",
       "frozenLabel": "مُقدَّم: لا يمكن تغييره",
       "annotatedSaved": "حُفظت الصورة المعلَّمة. الصورة الأصلية محفوظة.",
       "annotateFrozen": "قُدِّمت هذه الصورة، فلا يمكن التعليم عليها.",
