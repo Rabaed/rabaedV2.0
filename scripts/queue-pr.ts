@@ -4,7 +4,7 @@ import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResu
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
-import { realStopInput, stopQueuedStack } from "./queue-stack-stop.ts";
+import { realStopInput, stopAfterEnqueue } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
 import { needsVerify, packageJsonVersionsVia, VERIFY_CHECK, verifiedOrGreen, verifyFix } from "./verify-gate.ts";
@@ -638,13 +638,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     const noReview = args.includes("--no-review");
     let result = print(wait ? await queuePrWhenChecksPass(pr, seam, { noReview, log: (line) => console.log(line) }) : queuePr(pr, seam, { noReview }));
     // RP-1170: queued, so the lane's stack is idle; stopping it frees a Docker slot (its volumes stay). Never fails the queue.
-    if (result.ok && !args.includes("--keep-stack")) {
-      try {
-        for (const line of stopQueuedStack(realStopInput(pr, seam.pullRequest(pr).headRefName))) console.log(line);
-      } catch (error) {
-        console.log(`Warning: the lane's stack was not checked (${error instanceof Error ? error.message.split("\n")[0] : String(error)}); the PR is queued all the same.`);
-      }
-    }
+    for (const line of stopAfterEnqueue({ ok: result.ok, args, read: () => realStopInput(pr, seam.pullRequest(pr).headRefName) })) console.log(line);
     if (result.ok && wait) {
       console.log(`Waiting for PR #${pr} to merge (polling every ${POLL_MS / 1000} s)...`);
       result = print(await waitForMerge(pr, seam, started));

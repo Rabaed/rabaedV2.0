@@ -20,14 +20,13 @@ export type StopInput = {
   pr: number;
   /** The PR's head branch. */
   branch: string;
-  /** Every worktree of this clone, with COMPOSE_PROJECT_NAME from its .env. */
-  worktrees: { path: string; branch: string | undefined; project: string | undefined }[];
+  /** Every worktree of this clone, with COMPOSE_PROJECT_NAME from its .env; main marks the main checkout. */
+  worktrees: { path: string; branch: string | undefined; project: string | undefined; main?: boolean }[];
   containers: Container[];
   /** The live verify holding a worktree's lock, or undefined. */
   verifyIn: (path: string) => LockHolder | undefined;
   /** The worktree's running dev servers, described. */
   serversIn: (path: string) => string[];
-  platform?: NodeJS.Platform;
 };
 
 export type StopDecision = { stop: { project: string; containers: string[]; path: string } | undefined; lines: string[] };
@@ -42,6 +41,8 @@ export function chooseStackStop({ branch, worktrees, containers, verifyIn, serve
   const left = (why: string) => `Stack ${project} left running: ${why}.`;
   const harness = protectedLaneReason(project);
   if (harness !== undefined) return none(left(harness));
+  // The main folder's stack (lane 0) is the Orchestrator's, whatever branch it has checked out.
+  if (own.main === true) return none(left(`${own.path} is the main checkout`));
   const sharers = worktrees.filter((w) => w !== own && w.project === project);
   if (sharers.length > 0) return none(...sharers.map((w) => left(`the .env of ${w.path} (on ${w.branch ?? "a detached HEAD"}) has it too`)));
   const verify = verifyIn(own.path);
@@ -71,10 +72,23 @@ export function stopQueuedStack(input: StopInput, run: (args: string[]) => strin
   ];
 }
 
+/**
+ * queue-pr.ts's last step: after a successful queue, unless --keep-stack, the stop's lines; a read that
+ * throws (git, Docker or the process list) is a warning, so the queue never fails for it.
+ */
+export function stopAfterEnqueue({ ok, args, read, run }: { ok: boolean; args: string[]; read: () => StopInput; run?: (args: string[]) => string }): string[] {
+  if (!ok || args.includes("--keep-stack")) return [];
+  try {
+    return stopQueuedStack(read(), run);
+  } catch (error) {
+    return [`Warning: the lane's stack was not checked (${error instanceof Error ? error.message.split("\n")[0] : String(error)}); the PR is queued all the same.`];
+  }
+}
+
 /** The real facts for the PR's branch: git's worktrees, their .env files, Docker's containers, the verify locks and dev servers. Throws when git or Docker cannot be read. */
 export function realStopInput(pr: number, branch: string): StopInput {
   const listed = listWorktrees();
-  const worktrees = listed.map((w) => ({ path: w.path, branch: w.branch, project: existsSync(w.path) ? composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") : undefined }));
+  const worktrees = listed.map((w, i) => ({ path: w.path, branch: w.branch, project: existsSync(w.path) ? composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") : undefined, main: i === 0 }));
   const containers = listContainers(30_000);
   if (containers === undefined) throw new Error("Docker did not answer");
   // eslint-disable-next-line rabaed/no-avoid-terms -- the `pnpm queue` command, by its own name

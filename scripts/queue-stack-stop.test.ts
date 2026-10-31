@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Container } from "./lanes.ts";
-import { chooseStackStop, stopQueuedStack, type StopInput } from "./queue-stack-stop.ts";
+import { chooseStackStop, stopAfterEnqueue, stopQueuedStack, type StopInput } from "./queue-stack-stop.ts";
 
 // RP-1170: once `pnpm queue` has queued a PR, the lane's stack is no longer needed; stopping it (its volumes
 // stay) frees a Docker slot. On 2026-10-31 idle stacks held Docker at 8 of 8 while #539 waited.
@@ -18,7 +18,6 @@ const input = (over: Partial<StopInput> = {}): StopInput => ({
   containers: [c({ name: "rabaed-lane41-db-1" }), c({ name: "rabaed-lane41-files-1" }), c({ name: "rabaed-lane41-mailpit-1", state: "exited" }), c({ name: "rabaed-lane42-db-1", project: "rabaed-lane42" })],
   verifyIn: () => undefined,
   serversIn: () => [],
-  platform: "linux",
   ...over,
 });
 
@@ -90,5 +89,34 @@ describe("stopQueuedStack", () => {
       throw Object.assign(new Error("x"), { stderr: "Cannot connect to the Docker daemon" });
     });
     expect(lines).toEqual(["Warning: could not stop rabaed-lane41 (Cannot connect to the Docker daemon); the PR is queued all the same. Run `docker compose stop` in G:/r/.claude/worktrees/rp-1170."]);
+  });
+});
+
+describe("review fixes (RP-1170 PR 3 /code-review)", () => {
+  it("never stops the main checkout's stack, even when the PR's branch is checked out there", () => {
+    const worktrees = [{ path: "G:/r", branch: "RP-1170-queue-stop", project: "rabaed-lane0", main: true }];
+    expect(chooseStackStop(input({ worktrees, containers: [c({ name: "rabaed-lane0-db-1", project: "rabaed-lane0", workingDir: "G:/r" })] }))).toEqual({
+      stop: undefined,
+      lines: ["Stack rabaed-lane0 left running: G:/r is the main checkout."],
+    });
+  });
+
+  it("stopAfterEnqueue stops only after a successful queue, not with --keep-stack, and turns a read that throws into a warning", () => {
+    const calls: string[][] = [];
+    const run = (args: string[]) => (calls.push(args), "");
+    expect(stopAfterEnqueue({ ok: false, args: [], read: () => input(), run })).toEqual([]);
+    expect(stopAfterEnqueue({ ok: true, args: ["590", "--keep-stack"], read: () => input(), run })).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(stopAfterEnqueue({ ok: true, args: ["590"], read: () => input(), run })[0]).toMatch(/^Stopped rabaed-lane41's containers/);
+    expect(calls).toHaveLength(1);
+    const warning = stopAfterEnqueue({
+      ok: true,
+      args: ["590"],
+      read: () => {
+        throw new Error("Docker did not answer\nmore");
+      },
+      run,
+    });
+    expect(warning).toEqual(["Warning: the lane's stack was not checked (Docker did not answer); the PR is queued all the same."]);
   });
 });
