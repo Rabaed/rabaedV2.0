@@ -4,11 +4,11 @@
 // counting only the items the publishing Project Admin sees (scenario RP-555-1); and the
 // publish checks refuse a Send that hands the item to another Participant ("use Submit").
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowBuilderRead, WorkflowDefinition, WorkflowVersionRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { all, buildTower, draft, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -73,7 +73,7 @@ describe("on an exception's Workflow", () => {
   const C3_LEGAL_NAME = { en: "Najd Facades Contracting", ar: "مقاولات واجهات نجد" };
   let exception = "";
   beforeAll(async () => {
-    const c3Company = await api.onboardCompany({ legalName: C3_LEGAL_NAME });
+    const c3Company = await api.onboardCompany({ legalName: C3_LEGAL_NAME }); // not hidden-from: names the Company at onboarding, no compare
     const c3: Company = { company: c3Company, caller: await api.acceptInvitation(c3Company.invitationToken) };
     const c3Participant = await api.addParticipant(c1.caller, at.projectId, c3.company, "contractor");
     const mar = await sql<{ workflow_definition_id: string }>`
@@ -107,8 +107,11 @@ describe("items that keep their Version", () => {
     const own = await draft(at, at.c1Engineer, "C1's MAR on the noted route", { type: "MAR" });
     const other = await draft(at, c2Engineer, "C2's MAR on the noted route", { type: "MAR" });
     // Two MARs run on Version 1, and the Project Admin (on no Participant's team) sees neither.
-    for (const id of [own, other]) expect((await c1.caller.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
-    expect((await builder(c1.caller)).running).toEqual([]);
+    const named = new Map<Caller, string>([[c1.caller, "C1's Project Admin"], [at.c1Engineer, "C1's engineer"], [c2Engineer, "C2's engineer"]]);
+    const name = (by: Caller) => named.get(by) ?? "a caller";
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${own}`), target: own, seenBy: at.c1Engineer, hiddenFrom: [c1.caller, c2Engineer], name, label: "C1's Draft MAR" });
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${other}`), target: other, seenBy: c2Engineer, hiddenFrom: [c1.caller, at.c1Engineer], name, label: "C2's Draft MAR" });
+    expect((await builder(c1.caller)).running).toEqual([]); // not hidden-from: the Project Admin's count of what it sees; the reads above prove it sees neither MAR
     // Each reader of the history counts only what they see: C1's engineer their own MAR, C2's engineer theirs.
     expect((await versions(at.c1Engineer, 1)).history[0]!.running).toBe(1);
     expect((await versions(c2Engineer, 1)).history[0]!.running).toBe(1);

@@ -1,5 +1,0 @@
-text (top level) :: async function participant(c1: Company, role: "consultant" | "owner", legalName: string) {
-text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
-text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
-text (top level) :: const other = await api.onboardCompany({ legalName: bilingual("Unrelated Contracting") });
-empty the map of an item moving through C1 and K1 > names no Position the definition doesn't narrow a Step to :: expect(atK1Manager.pm.positions).toEqual([]);

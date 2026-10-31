@@ -1,3 +1,0 @@
-RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
-RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
-RP-427-4 db  # The Project Admin binds C2's MARs to an exception Workflow named after C2's Company, then
