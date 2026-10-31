@@ -1,4 +1,3 @@
-empty a Project's outcome sets > are hidden from anyone not on the Project, and for a Type the Project doesn't use, as a made-up Project is :: await expectHidden(outsider.caller.get(outcomesPath(t)));
 empty a Project's outcome sets > are hidden from anyone not on the Project, and for a Type the Project doesn't use, as a made-up Project is :: await expectHidden(c1.caller.get(outcomesPath(t, "NOPE")));
 empty a Project's outcome sets > are hidden from anyone not on the Project, and for a Type the Project doesn't use, as a made-up Project is :: await expectHidden(c1.caller.get(`/v1/projects/00000000-0000-4000-8000-000000000000/work-item-types/MAR/outcomes`));
 empty a Project's outcome sets > refuse an outcome the set has, a code it can't hold, and anyone but the Project Admin :: await expectHidden(add(t.k1Manager, t, e));

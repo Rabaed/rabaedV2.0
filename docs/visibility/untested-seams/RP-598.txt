@@ -1,1 +1,0 @@
-RP-598-2 api  # C1's SAR for Shared Cables is closed at Code A, which adds it to the list; C2, another Con

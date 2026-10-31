@@ -1,0 +1,66 @@
+name: Reviewed add
+# Adds the `reviewed` label when the PR's head has both a /code-review summary comment
+# (`<!-- code-review: <sha> -->`, by one of the repo's own accounts) and a stamped verify
+# line in the body (RP-1118, owner's option b on RP-1098: no session labels its own PR).
+# The rule is scripts/reviewed-add.ts; it waits for the head's reviewed-label run first,
+# and re-runs the head's reviewed-required run, since a label added with GITHUB_TOKEN
+# starts no `labeled` run.
+# The script it runs is the default branch's, never the pull request's (on pull_request
+# GitHub reads this file itself from the PR's merge commit, as for verify-gate; on
+# issue_comment from the default branch). The script fetches the PR's head as data and
+# runs none of its code. Full history, for the walk the script makes.
+# A fork's PR is skipped here on pull_request and by the script on issue_comment.
+# Not a required check (it must never be added to the main ruleset; it does not run on
+# merge_group).
+on:
+  pull_request:
+    # `edited`: the body gets its verify line. `synchronize`: a clean merge of main keeps both.
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  issue_comment:
+    # The /code-review summary comment, posted by scripts/review-post.ts.
+    types: [created, edited]
+permissions: {}
+jobs:
+  reviewed-add:
+    name: reviewed-add
+    # A same-repo PR's events, and only comments that can change the answer: a marked
+    # comment on a PR by one of the repo's own accounts (the script checks every comment again;
+    # keep the marker and the list in step with `MARKER` and `isTrustedAuthor` there).
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+      contains(github.event.comment.body, '<!-- code-review: ') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    # On the job, not the workflow: a skipped job (any other comment) never joins the group, so
+    # it cannot replace a pending run that matters. One run per PR at a time; never cancelled,
+    # since a run may be mid-way through adding the label, and two re-runs of one
+    # reviewed-required run at once would fail.
+    concurrency:
+      group: reviewed-add-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # Two waits of up to 1500 s each (the reviewed-label run, then the reviewed-required run).
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      # The script merged before this workflow (rule 3, RP-1118 PR 1), so a missing one is an error, never a pass.
+      - name: Fail when the script is missing
+        if: hashFiles('scripts/reviewed-add.ts') == ''
+        run: |
+          echo "::error::scripts/reviewed-add.ts is missing on the default branch; reviewed-add cannot label this PR"
+          exit 1
+      - name: Add the reviewed label when the review and the verify line name the head
+        run: node scripts/reviewed-add.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

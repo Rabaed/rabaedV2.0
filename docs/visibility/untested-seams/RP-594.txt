@@ -1,1 +1,0 @@
-RP-594-1 api  # C1 raises a Supplier Approval Request for Najd Cables (Electrical); K1 closes it at Code A

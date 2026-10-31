@@ -1,1 +1,0 @@
-empty an outcome's code, closing and polarity (decided 2026-10-09) > change while unused, audited :: expect((await setOf(project)).find((o) => o.code === "F")).toBeUndefined();

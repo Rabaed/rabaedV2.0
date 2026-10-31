@@ -21,15 +21,27 @@
               "components/forms/**",
               "components/navigation/**",
               "guidelines/**",
+              "handoff/submittal-panel/source/**",
+              "ui_kits/app/ac/**",
+              "ui_kits/app/bulk/**",
+              "ui_kits/app/drawings/**",
               "ui_kits/app/floor/**",
+              "ui_kits/app/imp/**",
               "ui_kits/app/list/**",
               "ui_kits/app/map/**",
+              "ui_kits/app/packages/**",
               "ui_kits/app/plan/**",
               "ui_kits/app/reports/**",
+              "ui_kits/app/responsive/**",
+              "ui_kits/app/sched/**",
+              "ui_kits/app/schedule-v3/**",
               "ui_kits/app/settings/**",
               "ui_kits/app/shell/**",
               "ui_kits/app/snag/**",
-              "ui_kits/app/wf/**"
+              "ui_kits/app/subflow/**",
+              "ui_kits/app/wf/**",
+              "ui_kits/app/wf2/**",
+              "ui_kits/app/wir/**"
             ],
             "message": "Import design-system components from 'index.js', not component internals."
           }

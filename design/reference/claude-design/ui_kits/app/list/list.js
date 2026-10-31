@@ -57,7 +57,7 @@ const FEXTRA=()=>{const Lx=(e,a)=>S.lang==='ar'?a:e;return [{k:'code',n:Lx('Appr
 const FSAVED={starred:['All Electrical MAR','Stuck 8+ days'],mine:['Rejected — this month','Zone A · Building 1','Pending approval · Civil']};
 const FPRESET={'All Electrical MAR':{trade:['EL'],type:['MAR']},'Stuck 8+ days':{days:['8']},'Rejected — this month':{status:['rejected'],created:['30']},'Zone A · Building 1':{zone:['A'],bldg:['1']},'Pending approval · Civil':{status:['pending'],trade:['CV']}};
 const fcount=()=>Object.values(V.fsel).filter(v=>v&&v.length).length;
-function filtered(){const q=V.q.trim().toLowerCase();let list=rows.filter(r=>fmatch(r)&&(!V.mine||r.owner===2)&&(!q||[r.id,r.t[0],r.t[1],PEOPLE[r.owner][0],r.type,r.disc].join(' ').toLowerCase().includes(q)));
+function filtered(){const q=V.q.trim().toLowerCase();let list=rows.filter(r=>!(V.hideClosed&&r.st==='approved')&&fmatch(r)&&(!V.mine||r.owner===2)&&(!q||[r.id,r.t[0],r.t[1],PEOPLE[r.owner][0],r.type,r.disc].join(' ').toLowerCase().includes(q)));
  const {id,dir}=V.sort;list.sort((a,b)=>{const x=sortKey(a,id),y=sortKey(b,id);return (x>y?1:x<y?-1:0)*dir});return list}
 const vis=()=>V.cols.filter(c=>c.on).map(c=>c.id);
 function head(){const cs=vis();return `<tr><th class="c-chk"><span class="ck${V.sel.size&&V.sel.size===filtered().length?' on':''}" data-act="selall">${V.sel.size?'<i class="ti ti-'+(V.sel.size===filtered().length?'check':'minus')+'"></i>':''}</span></th>${cs.map(id=>{const c=colDef(id);const on=V.sort.id===id;return `<th draggable="true" data-col="${id}" style="min-width:${c.w}px"><span class="hc"><i class="ti ti-grid-dots grip"></i>${L(c.en,c.ar)}<button class="srt${on?' on':''}" data-sort="${id}" title="${L('Sort','ترتيب')}"><i class="ti ${on?(V.sort.dir>0?'ti-sort-ascending':'ti-sort-descending'):'ti-arrows-sort'}"></i></button></span></th>`}).join('')}<th class="c-act"><button class="cb ter sm ic${V.settings?' on':''}" data-act="settings" title="${L('Table settings','إعدادات الجدول')}"><i class="ti ti-settings"></i></button></th></tr>`}
@@ -80,11 +80,24 @@ function toolbar(mode){mode=mode||'list';const g=mode==='kanban'?V.kgroup:V.grou
  <span class="tgl" data-act="mine"><span class="swc${V.mine?' on':''}"></span>${L('Need my action','بحاجة لإجرائي')}</span>
  <span class="sp"></span>
  <span class="rel"><button class="cb${g?' on':''}" data-menu="group"><i class="ti ti-category"></i>${g?L('Group: ','تجميع: ')+L(colDef(g).en,colDef(g).ar):L('Group','تجميع')}<i class="ti ti-chevron-down"></i></button>${V.menu==='group'?`<div class="pop end" data-stop><h6>${L('Group by','تجميع حسب')}</h6>${GL.map(id=>`<button class="mi${g===id?' on':''}" data-group="${id}">${L(colDef(id).en,colDef(id).ar)}${g===id?'<i class="ti ti-check ck"></i>':''}</button>`).join('')}${g?`<div class="sep"></div><button class="mi" data-group="">${L('Clear selection','مسح التحديد')}</button>`:''}</div>`:''}</span>
- <span class="split rel"><button class="cb" data-export="csv"><i class="ti ti-file-download"></i>${L('Export','تصدير')}</button><button class="cb" data-menu="export" aria-label="Export options"><i class="ti ti-chevron-down"></i></button>${V.menu==='export'?`<div class="pop end" data-stop><button class="mi" data-export="csv"><i class="ti ti-file-text"></i>CSV<small>.csv</small></button><button class="mi" data-export="xlsx"><i class="ti ti-table"></i>XLSX<small>Excel</small></button></div>`:''}</span>
  <span class="segv"><a href="submittals-kanban.html"><button class="${mode==='kanban'?'on':''}"><i class="ti ti-layout-grid"></i>${L('Kanban','كانبان')}</button></a><a href="submittals-list.html"><button class="${mode==='list'?'on':''}"><i class="ti ti-list"></i>${L('List','قائمة')}</button></a></span>
+ <span class="rel lv-more"><button class="cb ic${V.menu==='more'?' on':''}" data-menu="more" aria-label="${L('More actions','إجراءات أخرى')}" title="${L('More actions','إجراءات أخرى')}"><i class="ti ti-dots"></i></button>${V.menu==='more'?moreMenu():''}</span>
  </div>`}
-function view(){return `${toolbar()}<div class="tw rel">${V.sel.size?`<div class="bulk">${V.sel.size} ${L('selected','محدد')}<span class="sp"></span><button class="cb sm" data-export="csv"><i class="ti ti-file-download"></i>${L('Export selected','تصدير المحدد')}</button><button class="cb sm ter" data-act="clearsel">${L('Clear','مسح')}</button></div>`:''}<div class="ts"><table class="lv"><thead>${head()}</thead><tbody>${body()}</tbody></table></div>${pager()}</div>${settings()}${V.menu&&V.menu.startsWith('row:')?rowMenu():''}${V.toast?`<div class="toast"><i class="ti ti-circle-check"></i>${V.toast}</div>`:''}`}
-function exportData(kind){const cs=vis();const list=(V.sel.size?filtered().filter(r=>V.sel.has(r.id)):filtered());
+function moreMenu(){const sw=(on,act,l,sub)=>`<button class="mi mtg" data-act="${act}"><span class="t">${l}${sub?`<small>${sub}</small>`:''}</span><span class="swc${on?' on':''}"></span></button>`;
+ const ex=[['xlsx',L('Excel (.xlsx) — visible columns','Excel (.xlsx) — الأعمدة الظاهرة')],['xlsx-all',L('Excel (.xlsx) — all columns','Excel (.xlsx) — كل الأعمدة')],['csv',L('CSV — visible columns','CSV — الأعمدة الظاهرة')],['csv-all',L('CSV — all columns','CSV — كل الأعمدة')],0,['pdf',L('PDF register — visible columns','سجل PDF — الأعمدة الظاهرة')],['pdf-det',L('PDF — with details & attachments list','PDF — مع التفاصيل وقائمة المرفقات')],0,['print',L('Print list','طباعة القائمة')]];
+ const n=V.sel.size;
+ return `<div class="pop end more" data-stop>
+ ${sw(V.hideClosed,'hideclosed',L('Hide closed submittals','إخفاء التقديمات المغلقة'),L('Approved with Code A or B','المعتمدة برمز A أو B'))}${sw(V.compact,'compact',L('Compact rows','صفوف مضغوطة'))}
+ <div class="sep"></div>
+ <div class="msub"><button class="mi" data-act="msub"><i class="ti ti-file-download"></i><span class="t">${L('Export','تصدير')}${n?`<small>${n} ${L('selected','محدد')}</small>`:''}</span><i class="ti ti-chevron-right chv"></i></button><div class="pop subp${V.msub?' open':''}" data-stop><h6>${n?L(`Export ${n} selected`,`تصدير ${n} محدد`):L(`Export ${filtered().length} submittals`,`تصدير ${filtered().length} تقديم`)}</h6>${ex.map(x=>x?`<button class="mi" data-export="${x[0]}">${x[1]}</button>`:'<div class="sep"></div>').join('')}</div></div>
+ <a class="mi" href="import-register.html"><i class="ti ti-upload"></i><span class="t">${L('Import register','استيراد السجل')}<small>${L('Create Drafts from your .xlsx / .csv register','إنشاء مسودات من سجلك .xlsx / .csv')}</small></span></a>
+ <a class="mi" href="import-register.html#list"><i class="ti ti-history"></i><span class="t">${L('Imports','عمليات الاستيراد')}</span></a>
+ <button class="mi" data-act="bulkchg"><i class="ti ti-stack-2"></i><span class="t">${L('Bulk change submittals','تعديل التقديمات دفعة واحدة')}</span></button>
+ <div class="sep"></div>
+ <button class="mi" data-act="settings"><i class="ti ti-settings"></i><span class="t">${L('Column settings','إعدادات الأعمدة')}</span></button>
+ </div>`}
+function view(){return `${toolbar()}<div class="tw rel${V.compact?' lv-compact':''}">${V.sel.size?`<div class="bulk">${V.sel.size} ${L('selected','محدد')}<span class="sp"></span><button class="cb sm" data-export="csv"><i class="ti ti-file-download"></i>${L('Export selected','تصدير المحدد')}</button><button class="cb sm ter" data-act="clearsel">${L('Clear','مسح')}</button></div>`:''}<div class="ts"><table class="lv"><thead>${head()}</thead><tbody>${body()}</tbody></table></div>${pager()}</div>${settings()}${V.menu&&V.menu.startsWith('row:')?rowMenu():''}${V.toast?`<div class="toast"><i class="ti ti-circle-check"></i>${V.toast}</div>`:''}`}
+function exportData(kind){if(kind==='pdf'||kind==='pdf-det'||kind==='print'){return flash(kind==='print'?L('Opening print view…','جارٍ فتح عرض الطباعة…'):L('PDF register is being prepared…','جارٍ تجهيز سجل PDF…'))}const allc=/-all$/.test(kind);kind=kind.replace(/-all$/,'');const cs=allc?COLS.map(c=>c.id):vis();const list=(V.sel.size?filtered().filter(r=>V.sel.has(r.id)):filtered());
  const hdr=cs.map(id=>L(colDef(id).en,colDef(id).ar));const data=list.map(r=>cs.map(id=>String(val(r,id))));
  let blob,name;
  if(kind==='csv'){const q=s=>'"'+s.replace(/"/g,'""')+'"';blob=new Blob(['\ufeff'+[hdr,...data].map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'});name='rabaed-submittals.csv'}
@@ -99,7 +112,7 @@ function bind(root,render){
   if(!b){if((V.menu||V.settings)&&!e.target.closest('[data-stop]')){V.menu=null;V.settings=false;render()}return}
   const d=b.dataset;e.stopPropagation();
   if(d.sort){V.sort=V.sort.id===d.sort?{id:d.sort,dir:-V.sort.dir}:{id:d.sort,dir:1};return render()}
-  if(d.menu){V.menu=V.menu===d.menu?null:d.menu;V.settings=false;return render()}
+  if(d.menu){V.menu=V.menu===d.menu?null:d.menu;V.msub=false;V.settings=false;return render()}
   if(d.rowmenu){V.menu=V.menu==='row:'+d.rowmenu?null:'row:'+d.rowmenu;V.settings=false;return render()}
   if(d.group!==undefined){if(window.LV.mode==='kanban')V.kgroup=d.group||null;else V.group=d.group||null;V.menu=null;V.open={};return render()}
   if(d.export){V.menu=null;return exportData(d.export)}
@@ -109,6 +122,10 @@ function bind(root,render){
   if(d.page){V.page=+d.page;return render()}
   const a=d.act;
   if(a==='settings'){V.settings=!V.settings;V.menu=null;return render()}
+  if(a==='hideclosed'){V.hideClosed=!V.hideClosed;V.page=1;return render()}
+  if(a==='compact'){V.compact=!V.compact;return render()}
+  if(a==='msub'){V.msub=!V.msub;return render()}
+  if(a==='bulkchg'){V.menu=null;return flash(V.sel.size?L(`Bulk change ${V.sel.size} submittals — not designed yet`,`تعديل ${V.sel.size} تقديم دفعة واحدة — لم يُصمَّم بعد`):L('Select submittals first, then use Bulk change','حدد التقديمات أولًا ثم استخدم التعديل الجماعي'))}
   if(a==='mine'){V.mine=!V.mine;V.page=1;return render()}
   if(a==='selall'){const l=filtered();if(V.sel.size===l.length)V.sel.clear();else l.forEach(r=>V.sel.add(r.id));return render()}
   if(a==='clearsel'){V.sel.clear();return render()}
