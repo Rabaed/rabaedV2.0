@@ -100,10 +100,10 @@ export type Verified = { ok: true; via: "stamp"; commit: string } | { ok: true; 
  * line is read first, so an API error never blocks it. `ownChanges` is `ciOwnChanges` of the PR; `running` is set
  * while the head's CI run is still going, with the required jobs left.
  */
-export function verifiedOrGreen(body: string, head: string, git: ReviewedGit, ownChanges: string[], evidence: CiEvidence): Verified {
+export function verifiedOrGreen(body: string, head: string, pr: number, git: ReviewedGit, ownChanges: string[], evidence: CiEvidence): Verified {
   const line = verifyGate(body, head, git);
   if (line.ok) return { ok: true, via: "stamp", commit: line.commit };
-  const ci = ciVerdict(head, ownChanges, evidence);
+  const ci = ciVerdict(head, pr, ownChanges, evidence);
   if (ci.state === "green") return { ok: true, via: "ci", runId: ci.runId };
   if (ci.state === "running") return { ok: false, running: ci.left, reason: `${ciRunningLine(head, ci.left)}, and ${line.reason}` };
   return { ok: false, reason: `${ci.reason}; and ${line.reason}` };
@@ -152,7 +152,7 @@ export async function requireVerified(event: RequiredEvent, seam: GateSeam): Pro
   } catch (error) {
     return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this check.` };
   }
-  const gate = verifiedOrGreen(pull.body, head, seam, ownChanges, await readCiEvidence(head, seam));
+  const gate = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
   if (gate.ok && gate.via === "ci") return { ok: true, summary: `PR #${pr}: CI passed on its head ${head} (run ${gate.runId}), and it changes none of CI's own files: passes.` };
   if (gate.ok) return { ok: true, summary: `PR #${pr}: \`pnpm verify\` passed on ${gate.commit}${head.startsWith(gate.commit) ? ", its head" : `, which only clean merges of main and screenshot-bot baseline commits led to the head ${head} from`}: passes.` };
   return { ok: false, summary: `PR #${pr}: ${gate.reason}. ${verifyFix(pr, head)}. Editing the body, or CI finishing, runs this check again.` };

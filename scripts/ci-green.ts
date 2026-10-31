@@ -1,4 +1,3 @@
-/* eslint-disable rabaed/no-avoid-terms -- GitHub's required checks, workflow runs and jobs, by their own names, as in reviewed-required.ts */
 
 // CI green counts as the verify (RP-1190, owner's decision of 2026-10-31: "I agree if CI of GitHub do it the
 // test"). A PR's head passes the verify gate when the stamped `pnpm verify` line names it (RP-1094, still
@@ -30,8 +29,9 @@ export const OTHER_REQUIRED_CHECKS: Readonly<Record<string, string>> = {
  * CI's own files: what decides what CI runs and how it judges it. A change to one voids the PR's CI run as a
  * verify. A leading `**` and slash is any folder, `*` anything but a slash. ci-green.test.ts checks that every script and local
  * action ci.yml runs, every vitest global setup, and every scripts/ file those scripts import is here. App code
- * and tests are not: CI tests them, and review reads them. A package.json counts when its `scripts` change
- * (`ciOwnChanges`): CI calls `pnpm test:unit` and the like, and `pnpm install` runs lifecycle scripts.
+ * and tests are not: CI tests them, and review reads them. A package.json counts on any change but its `version`
+ * or `description` (`ciOwnChanges`): CI calls `pnpm test:unit` and the like, `pnpm install` runs lifecycle scripts,
+ * and its dependencies, overrides and `packageManager` choose the tools that run the tests.
  */
 export const CI_OWN_FILES: readonly string[] = [
   CI_WORKFLOW,
@@ -41,6 +41,11 @@ export const CI_OWN_FILES: readonly string[] = [
   "**/vite.config.*",
   "**/playwright.config.*",
   "eslint.config.*",
+  "packages/eslint-plugin/**",
+  "**/tsconfig*.json",
+  "**/.storybook/**",
+  // Dependencies: a swapped vitest, an override or an install script decides what the tests do.
+  "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".npmrc",
   // The vitest configs' global setups.
@@ -83,26 +88,29 @@ const OWN = CI_OWN_FILES.map(globPattern);
 /** True for a path in `CI_OWN_FILES`. */
 export const isCiOwnFile = (path: string): boolean => OWN.some((pattern) => pattern.test(path));
 
-const scriptsOf = (text: string | undefined): string | undefined => {
+/** A package.json's fields that matter to CI (all but `version` and `description`), as comparable text; undefined when it cannot be read. */
+const ciFieldsOf = (text: string | undefined): string | undefined => {
   if (text === undefined) return JSON.stringify({});
   try {
-    return JSON.stringify((JSON.parse(text) as { scripts?: unknown }).scripts ?? {});
+    const { version: _version, description: _description, ...rest } = JSON.parse(text) as Record<string, unknown>;
+    return JSON.stringify(rest);
   } catch {
     return undefined;
   }
 };
 
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`, and each package.json whose `scripts` differ between the
- * merge base and the head (`versions`, as `pnpm queue` reads them); one it cannot parse counts.
+ * The changed paths that are CI's own: `CI_OWN_FILES`, and each package.json that differs between the merge base and
+ * the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot parse,
+ * or read on either side, counts.
  */
 export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
     if (path !== "package.json" && !path.endsWith("/package.json")) return [];
     const { before, after } = versions(path);
-    const [was, now] = [scriptsOf(before), scriptsOf(after)];
-    return was === undefined || now === undefined || was !== now ? [`${path} (scripts)`] : [];
+    const [was, now] = [ciFieldsOf(before), ciFieldsOf(after)];
+    return (before === undefined && after === undefined) || was === undefined || now === undefined || was !== now ? [path] : [];
   });
 }
 
@@ -124,6 +132,8 @@ export interface CiRun {
   /** The repository the run belongs to, and the one its head came from (undefined: a deleted fork). */
   repo: string;
   headRepo: string | undefined;
+  /** The PRs the run was for (GitHub's `pull_requests`: this repo's PRs only), with the branch each merges into. */
+  pulls: { number: number; baseRef: string }[];
   jobs: CiJob[];
 }
 
@@ -137,17 +147,26 @@ export const ciRunningLine = (head: string, left: string[]) => `CI still running
 
 const passed = (job: CiJob | undefined) => job?.status === "completed" && job.conclusion === "success";
 
-/** Whether CI green on `head` counts as its verify; `ownChanges` is `ciOwnChanges` of the PR. */
-export function ciVerdict(head: string, ownChanges: string[], evidence: CiEvidence): CiVerdict {
+/** The branch a counted run's PR merges into: a run for a PR into another branch used that branch's ci.yml. */
+export const MAIN_BRANCH = "main";
+
+/** Whether CI green on `head` counts as PR `pr`'s verify; `ownChanges` is `ciOwnChanges` of the PR. */
+export function ciVerdict(head: string, pr: number, ownChanges: string[], evidence: CiEvidence): CiVerdict {
   const refused = (reason: string): CiVerdict => ({ state: "refused", reason });
+  // eslint-disable-next-line rabaed/no-avoid-terms -- git's files, by their own name
   if (ownChanges.length > 0) return refused(`it changes CI's own files (${ownChanges.join(", ")}), so its CI run, which used the PR's own copy of them, does not count: it needs a stamped verify line`);
   if ("error" in evidence) return refused(`could not read CI on ${head}: ${evidence.error.trim()}`);
   const required = evidence.required.filter((name) => !(name in OTHER_REQUIRED_CHECKS));
+  // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's required checks, by their own name
   if (required.length === 0) return refused("the main ruleset names no required check that ci.yml reports, so there is nothing to hold its CI run to");
   const onHead = evidence.runs.filter((run) => run.headSha === head && run.event === "pull_request" && run.path === CI_WORKFLOW);
-  const ours = onHead.filter((run) => run.headRepo !== undefined && run.headRepo === run.repo);
+  const fromHere = onHead.filter((run) => run.headRepo !== undefined && run.headRepo === run.repo);
+  // Only a run for this PR into main: the same head opened against another branch runs that branch's ci.yml.
+  const ours = fromHere.filter((run) => run.pulls.some((pull) => pull.number === pr && pull.baseRef === MAIN_BRANCH));
   if (ours.length === 0) {
-    return refused(onHead.length > 0 ? `its only CI runs on ${head} are from a fork, which never count` : `no CI (${CI_WORKFLOW}) pull_request run on its head ${head} yet`);
+    if (onHead.length === 0) return refused(`no CI (${CI_WORKFLOW}) pull_request run on its head ${head} yet`);
+    if (fromHere.length === 0) return refused(`its only CI runs on ${head} are from a fork, which never count`);
+    return refused(`its CI runs on ${head} are not for PR #${pr} into ${MAIN_BRANCH} (a PR into another branch runs that branch's ci.yml), so they do not count`);
   }
   const jobOf = (run: CiRun, name: string) => run.jobs.find((job) => job.name === name);
   const green = ours.find((run) => run.status === "completed" && run.conclusion === "success" && required.every((name) => passed(jobOf(run, name))));
@@ -212,6 +231,7 @@ interface RawRun {
   conclusion: string | null;
   repository: { full_name: string };
   head_repository: { full_name: string } | null;
+  pull_requests?: { number: number; base: { ref: string } }[];
 }
 
 /** The runs in the answer of `ciRunsPath`. */
@@ -231,6 +251,7 @@ export function ciRunFrom(run: RawRun, jobsAnswer: unknown): CiRun {
     conclusion: run.conclusion,
     repo: run.repository.full_name,
     headRepo: run.head_repository?.full_name,
+    pulls: (run.pull_requests ?? []).map((pull) => ({ number: pull.number, baseRef: pull.base.ref })),
     jobs: jobs.map(({ name, status, conclusion }) => ({ name, status, conclusion })),
   };
 }

@@ -369,6 +369,7 @@ describe("queuePr", () => {
       conclusion,
       repo: "Rabaed/rabaedV2.0",
       headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 149, baseRef: "main" }],
       jobs: ["lint", "unit"].map((name) => ({ name, status, conclusion })),
       ...overrides,
     });
@@ -1072,7 +1073,7 @@ describe("realSeam", () => {
       args.some((arg) => arg.includes("/jobs")) ? { status: 0, stdout: JSON.stringify({ total_count: 1, jobs: [{ name: "lint", status: "completed", conclusion: "success", id: 1 }] }) } : { status: 0, stdout: JSON.stringify({ workflow_runs: [run] }) },
     );
     expect(seam.ciRuns("abc1234")).toEqual([
-      { id: 5, headSha: "abc1234", event: "pull_request", path: ".github/workflows/ci.yml", status: "completed", conclusion: "success", repo: "Rabaed/rabaedV2.0", headRepo: "Rabaed/rabaedV2.0", jobs: [{ name: "lint", status: "completed", conclusion: "success" }] },
+      { id: 5, headSha: "abc1234", event: "pull_request", path: ".github/workflows/ci.yml", status: "completed", conclusion: "success", repo: "Rabaed/rabaedV2.0", headRepo: "Rabaed/rabaedV2.0", pulls: [], jobs: [{ name: "lint", status: "completed", conclusion: "success" }] },
     ]);
     expect(calls.map(({ args }) => args.join(" "))).toEqual([
       "api repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=abc1234&event=pull_request&per_page=100",

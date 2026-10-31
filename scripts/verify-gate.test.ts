@@ -158,6 +158,7 @@ describe("requireVerified", () => {
       conclusion,
       repo: "Rabaed/rabaedV2.0",
       headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 7, baseRef: "main" }],
       jobs: ["lint", "unit"].map((name) => ({ name, status, conclusion })),
     });
     const noLine = { pull: async () => ({ body: "", headSha: HEAD, labels: ["reviewed"] }) };
@@ -195,7 +196,7 @@ describe("requireVerified", () => {
       expect(result.summary).toContain("403");
     });
 
-    it("reads a package.json's scripts at the merge base and the head", async () => {
+    it("reads a changed package.json at the merge base and the head", async () => {
       const asked: string[] = [];
       const { seam } = fakeGate({
         ...noLine,
@@ -205,7 +206,7 @@ describe("requireVerified", () => {
       });
       const result = await requireVerified(event, seam);
       expect(result.ok).toBe(false);
-      expect(result.summary).toContain("package.json (scripts)");
+      expect(result.summary).toContain("CI's own files (package.json)");
       expect(asked).toEqual([`${HEAD} package.json`]);
     });
 

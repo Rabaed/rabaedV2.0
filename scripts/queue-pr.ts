@@ -185,7 +185,7 @@ type VerifyState = { state: "passed"; via: "stamp" | "ci" } | { state: "running"
  * followed, or CI green on it (`verifiedOrGreen`). While CI runs, `running` with the refusal to print without --wait.
  */
 function verifyState(pr: number, head: string, seam: QueueSeam, inputs: VerifyInputs, evidence: CiEvidence): VerifyState {
-  const gate = verifiedOrGreen(inputs.body, head, seam, inputs.ownChanges, evidence);
+  const gate = verifiedOrGreen(inputs.body, head, pr, seam, inputs.ownChanges, evidence);
   if (gate.ok) return { state: "passed", via: gate.via };
   if (gate.running) {
     return {

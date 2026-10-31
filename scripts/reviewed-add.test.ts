@@ -176,6 +176,7 @@ describe("addReviewed: CI green on the head counts as the verify (RP-1190)", () 
     conclusion,
     repo: "Rabaed/rabaedV2.0",
     headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 5, baseRef: "main" }],
     jobs: ["lint", "unit"].map((name) => ({ name, status, conclusion })),
   });
 

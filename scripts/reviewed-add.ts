@@ -181,7 +181,7 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!settled) return { ok: false, added: false, summary: `PR #${pr}: the reviewed-label run for ${head} did not finish within ${timeoutMs / 1000} s. Re-run this workflow once it has.` };
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
-  const verify = verifiedOrGreen(pull.body, head, seam, ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file)), await readCiEvidence(head, seam));
+  const verify = verifiedOrGreen(pull.body, head, pr, seam, ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file)), await readCiEvidence(head, seam));
   // The verify-gate check reads CI only when it runs, and it ran when the head was pushed, before CI finished:
   // re-run its failed run now CI is green, so the required check shows it.
   let reran = "";
