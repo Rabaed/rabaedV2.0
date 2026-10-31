@@ -22,7 +22,8 @@ import {
   idsIn,
   leakProblems,
   readSweepCatalog,
-  sweepProblems,
+  allowProblems,
+  skippedNames,
   SWEEP_ALLOW,
   unexcusedHits,
   type CallResult,
@@ -106,7 +107,7 @@ async function itemArguments(id: string): Promise<Record<string, unknown>> {
 
 /** Every swept function called once by each of `viewers` in `world`, through `exec`. */
 async function sweep(world: World, viewers: readonly Viewer[], exec: (as: string, f: CatalogFunction, values: unknown[]) => Promise<CallResult>): Promise<SweepCall[]> {
-  const skipped = new Set(SWEEP_ALLOW.filter((e) => "skip" in e).map((e) => e.name));
+  const skipped = skippedNames(SWEEP_ALLOW);
   const calls: SweepCall[] = [];
   for (const f of catalog.filter((c) => !skipped.has(c.name))) {
     for (const v of viewers) {
@@ -194,7 +195,7 @@ beforeAll(async () => {
     projectId: tower.projectId,
     typeCode: id === y ? DAR : TYPE,
     title: id === y ? "Lighting control calculation" : "Cable trays",
-    named: await itemArguments(id),
+    argumentsByName: await itemArguments(id),
     scenario,
     outsiders,
     insiders: [...new Set(forbidden.flatMap((f) => f.seenBy))],
@@ -215,7 +216,7 @@ beforeAll(async () => {
       later,
     ]),
     await world(x, "35", [v.c1Engineer, v.c1Pm], [k1Engineer, k1Manager, later]),
-    await world(y, "RP-598-1", [v.c1Engineer, v.c1Pm], [
+    await world(y, "RP-598-1", [v.c1Engineer, v.c1Pm, v.c2Engineer], [
       { id: ow.participantId, kind: "participant", what: "OW's Participant", seenBy: [v.owPm, v.k1Manager] },
       { id: ow.id, kind: "company", what: "OW's Company", seenBy: [v.owPm] },
       { id: owPm, kind: "member", what: "OW's PM", seenBy: [v.owPm] },
@@ -262,14 +263,16 @@ describe("the id sweep: every app.* function, as each outsider (RP-1166)", () =>
     await expectNoLeaks("35");
   });
 
-  it("scenario RP-598-1: at the Owner's review C1 reads no id of OW's, its Participant, Company or PM, nor of a K1 Member", async () => {
+  it("scenario RP-598-1: at the Owner's review neither C1 nor C2 reads an id of OW's, its Participant, Company or PM, nor of a K1 Member", async () => {
     await expectNoLeaks("RP-598-1");
   });
 
-  it("sweeps every function the app role may execute, or the allow list says why not (the ratchet), and every allow entry still excuses something", () => {
-    const calls = [...swept.values()].flatMap((s) => s.outsiders);
+  it("sweeps every function the app role may execute, each reached without an error by some caller, or the allow list says why not (the ratchet); every allow entry still excuses something", () => {
+    // The insiders' calls count for "reached" (an outsider may be refused with an error), never for what an entry excuses.
+    const outsiders = [...swept.values()].flatMap((s) => s.outsiders);
+    const insiders = [...swept.values()].flatMap((s) => s.insiders.map((c) => ({ ...c, hits: [] })));
     expect(catalog.length).toBeGreaterThan(200);
-    expect(sweepProblems(catalog, calls, SWEEP_ALLOW).filter((p) => !p.includes(" gave "))).toEqual([]); // not hidden-from: a list of ratchet problems
+    expect(allowProblems(catalog, [...outsiders, ...insiders], SWEEP_ALLOW)).toEqual([]); // not hidden-from: a list of ratchet problems
   });
 });
 

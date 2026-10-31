@@ -9,6 +9,7 @@ import { sql } from "kysely";
 import type pg from "pg";
 import type { Db } from "../src/client.ts";
 import { APP_ROLE } from "../src/config.ts";
+import { rolledBack } from "./index.ts";
 
 export type IdKind = "step" | "company" | "participant" | "member";
 
@@ -28,14 +29,19 @@ export type CatalogFunction = { name: string; signature: string; args: CatalogAr
 export type SweepCall = { name: string; signature: string; world: string; viewer: string; hits: IdHit[]; error: string | null };
 
 /**
- * An allow-list entry. `skip`: the function is not called at all, for that reason. Otherwise the entry excuses
+ * An allow-list entry. `skip`: the function is not called at all, for that reason. `errors`: it is called, and
+ * errors for every caller, for that reason (its error messages are still searched). Otherwise the entry excuses
  * the id `kinds` it names, from this function only, in the `worlds` it names (all when left out), and only the
  * ids its `whats` names (a world's ForbiddenId.what; all of those kinds when left out), for `reason`;
  * `pending` names the ticket that will make it give them no more.
  */
 export type AllowEntry =
   | { name: string; skip: string }
+  | { name: string; errors: string }
   | { name: string; kinds: readonly IdKind[]; worlds?: readonly string[]; whats?: readonly string[]; reason: string; pending?: string };
+
+/** The functions the allow list says not to call. */
+export const skippedNames = (allow: readonly AllowEntry[]) => new Set(allow.filter((e) => "skip" in e).map((e) => e.name));
 
 /**
  * What the sweep allows, each with its reason. A function the app role may execute is either swept or here
@@ -73,7 +79,7 @@ export function idsIn(value: unknown, forbidden: readonly ForbiddenId[]): IdHit[
   return hits;
 }
 
-const reasonOf = (entry: AllowEntry) => ("skip" in entry ? entry.skip : entry.reason);
+const reasonOf = (entry: AllowEntry) => ("skip" in entry ? entry.skip : "errors" in entry ? entry.errors : entry.reason);
 
 type Excusing = Extract<AllowEntry, { kinds: readonly IdKind[] }>;
 const excusingEntries = (allow: readonly AllowEntry[]) => allow.filter((e): e is Excusing => "kinds" in e);
@@ -97,12 +103,17 @@ export function leakProblems(calls: readonly SweepCall[], allow: readonly AllowE
   return calls.flatMap((c) => unexcusedHits(c, allow).map((h) => `${c.signature} gave ${c.viewer} ${h.what} (${h.kind} ${h.id}) at ${h.at}, in scenario ${c.world}`));
 }
 
-/** One line per leak (a hit no entry excuses), per function neither swept nor skipped, and per stale or reasonless entry. */
-export function sweepProblems(catalog: readonly CatalogFunction[], calls: readonly SweepCall[], allow: readonly AllowEntry[]): string[] {
-  const problems = leakProblems(calls, allow);
+/**
+ * One line per problem of the sweep as a whole (the ratchet): a function neither swept nor skipped, one that errored
+ * for every caller with no `errors` entry, and an entry that is stale (its function gone, or excusing nothing) or gives no reason.
+ */
+export function allowProblems(catalog: readonly CatalogFunction[], calls: readonly SweepCall[], allow: readonly AllowEntry[]): string[] {
+  const problems: string[] = [];
   const executable = new Set(catalog.map((f) => f.name));
-  const skipped = new Set(allow.filter((e) => "skip" in e).map((e) => e.name));
-  const swept = new Set(calls.map((c) => c.name));
+  const skipped = skippedNames(allow);
+  const erroring = new Set(allow.filter((e) => "errors" in e).map((e) => e.name));
+  const callsOf = new Map<string, SweepCall[]>();
+  for (const c of calls) callsOf.set(c.name, [...(callsOf.get(c.name) ?? []), c]);
   const excusing = excusingEntries(allow);
   const used = new Set<AllowEntry>();
   for (const c of calls) {
@@ -112,8 +123,13 @@ export function sweepProblems(catalog: readonly CatalogFunction[], calls: readon
     }
   }
   for (const f of catalog) {
-    if (!swept.has(f.name) && !skipped.has(f.name)) {
+    const made = callsOf.get(f.name) ?? [];
+    if (made.length === 0 && !skipped.has(f.name)) {
       problems.push(`${f.signature} is neither swept nor on the allow list: sweep it, or add it to SWEEP_ALLOW in packages/db/test-support/id-sweep.ts with a reason`);
+    } else if (made.length > 0 && made.every((c) => c.error !== null) && !erroring.has(f.name)) {
+      problems.push(
+        `${f.signature} errored for every caller (${made[0]!.error}): give its arguments a value in argumentValue, or add it to SWEEP_ALLOW with \`errors\` and a reason`,
+      );
     }
   }
   for (const e of allow) {
@@ -122,19 +138,26 @@ export function sweepProblems(catalog: readonly CatalogFunction[], calls: readon
     else if ("kinds" in e && !used.has(e)) {
       const fixed = e.pending ? ` (pending ${e.pending} is fixed?)` : "";
       problems.push(`SWEEP_ALLOW excuses ${e.kinds.join(", ")} ids from ${e.name}, but no call gave one${fixed}: remove the entry`);
+    } else if ("errors" in e && (callsOf.get(e.name) ?? []).some((c) => c.error === null)) {
+      problems.push(`SWEEP_ALLOW says ${e.name} errors for every caller, but a call succeeded: remove the entry`);
     }
   }
   return problems;
 }
 
+/** Every problem: the leaks, then the ratchet's. */
+export function sweepProblems(catalog: readonly CatalogFunction[], calls: readonly SweepCall[], allow: readonly AllowEntry[]): string[] {
+  return [...leakProblems(calls, allow), ...allowProblems(catalog, calls, allow)];
+}
+
 /** What a world gives a function's arguments: its item and Project, and ids by argument name. */
-export type SweepWorld = { item: string; projectId: string; typeCode: string; title: string; named: Record<string, unknown> };
+export type SweepWorld = { item: string; projectId: string; typeCode: string; title: string; argumentsByName: Record<string, unknown> };
 
 /** The viewer calling: their own Member, Participant, Company and email. */
 export type SweepViewer = { member: string; participant: string; company: string; email: string };
 
 /** One random id per sweep, for an argument naming nothing the world has (an idempotency key, a token). */
-const nothing = randomUUID();
+const unrelatedId = randomUUID();
 
 /**
  * The value a world gives argument `arg` when `viewer` calls: the world's item, Project and named ids by the
@@ -143,14 +166,14 @@ const nothing = randomUUID();
  */
 export function argumentValue(arg: CatalogArgument, world: SweepWorld, viewer: SweepViewer): unknown {
   const { name, type } = arg;
-  if (name in world.named) return world.named[name];
+  if (name in world.argumentsByName) return world.argumentsByName[name];
   if (type === "uuid") {
     if (/(^|_)(work_)?item_id$|^p_(closed_item|original|source|target)_id$/.test(name)) return world.item;
     if (name === "p_project_id") return world.projectId;
     if (/^p_participant(_id)?$/.test(name)) return viewer.participant;
     if (/^p_((from|to)_)?member_id$|^p_assign_to$/.test(name)) return viewer.member;
     if (name === "p_company_id") return viewer.company;
-    return nothing;
+    return unrelatedId;
   }
   if (type === "uuid[]") {
     if (/^p_(work_item_)?ids$/.test(name)) return [world.item];
@@ -208,19 +231,16 @@ function callQuery(f: CatalogFunction, values: readonly unknown[]) {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-class Rollback extends Error {}
-
 /** Calls `f` once as Member `as` on `app` (the app role), in a transaction that is always rolled back, so a writer changes nothing. */
 export async function callAs(app: Db, as: string, f: CatalogFunction, values: readonly unknown[]): Promise<CallResult> {
   let rows: unknown[] = [];
   try {
-    await app.transaction().execute(async (trx) => {
+    await rolledBack(app, async (trx) => {
       await sql`select set_config('app.member_id', ${as}, true), set_config('statement_timeout', '10s', true)`.execute(trx);
       rows = (await callQuery(f, values).execute(trx)).rows;
-      throw new Rollback();
     });
   } catch (error) {
-    if (!(error instanceof Rollback)) return { rows: [], error: messageOf(error) };
+    return { rows: [], error: messageOf(error) };
   }
   return { rows, error: null };
 }

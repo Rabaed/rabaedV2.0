@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { argumentValue, idsIn, sweepProblems, type AllowEntry, type CatalogFunction, type ForbiddenId, type SweepCall } from "./id-sweep.ts";
+import { allowProblems, argumentValue, idsIn, sweepProblems, type AllowEntry, type CatalogFunction, type ForbiddenId, type SweepCall } from "./id-sweep.ts";
 
 // The pure parts of the seam-2 id sweep (RP-1166); the sweep itself is packages/db/test/id-sweep-rls.test.ts.
 
@@ -78,6 +78,28 @@ describe("sweepProblems", () => {
     ]);
   });
 
+  it("fails a function every call of which errored, unless an entry says why (an error proves nothing was read)", () => {
+    const failing = { ...call("app.a"), error: "invalid input syntax" };
+    expect(sweepProblems([fn("app.a")], [failing, { ...failing, viewer: "K1's manager" }], [])).toEqual([
+      "app.a(uuid) errored for every caller (invalid input syntax): give its arguments a value in argumentValue, or add it to SWEEP_ALLOW with `errors` and a reason",
+    ]);
+    expect(sweepProblems([fn("app.a")], [failing, call("app.a")], [])).toEqual([]);
+    expect(sweepProblems([fn("app.a")], [failing], [{ name: "app.a", errors: "needs a real token" }])).toEqual([]);
+  });
+
+  it("fails an `errors` entry for a function that no longer errors", () => {
+    expect(sweepProblems([fn("app.a")], [call("app.a")], [{ name: "app.a", errors: "needs a real token" }])).toEqual([
+      "SWEEP_ALLOW says app.a errors for every caller, but a call succeeded: remove the entry",
+    ]);
+  });
+
+  it("keeps the allow-list problems apart from the leaks", () => {
+    const allow: AllowEntry[] = [{ name: "app.a", kinds: ["member"], reason: "expected, pending RP-1139", pending: "RP-1139" }];
+    expect(allowProblems([fn("app.a")], [call("app.a", [hit])], allow)).toEqual([
+      "SWEEP_ALLOW excuses member ids from app.a, but no call gave one (pending RP-1139 is fixed?): remove the entry",
+    ]);
+  });
+
   it("refuses an entry with no reason", () => {
     expect(sweepProblems([fn("app.a")], [call("app.a", [hit])], [{ name: "app.a", kinds: ["participant"], reason: " " }])).toContain(
       "SWEEP_ALLOW's entry for app.a gives no reason",
@@ -91,7 +113,7 @@ describe("argumentValue", () => {
     projectId: "22222222-0000-4000-8000-000000000002",
     typeCode: "DAR",
     title: "Earthing",
-    named: { p_definition_id: "33333333-0000-4000-8000-000000000003" },
+    argumentsByName: { p_definition_id: "33333333-0000-4000-8000-000000000003" },
   };
   const viewer = { member: "44444444-0000-4000-8000-000000000004", participant: "55555555-0000-4000-8000-000000000005", company: "66666666-0000-4000-8000-000000000006", email: "a@rabaed.test" };
   const value = (name: string, type: string) => argumentValue({ name, type }, world, viewer);
@@ -100,7 +122,7 @@ describe("argumentValue", () => {
     expect(value("p_work_item_id", "uuid")).toBe(world.item);
     expect(value("p_closed_item_id", "uuid")).toBe(world.item);
     expect(value("p_project_id", "uuid")).toBe(world.projectId);
-    expect(value("p_definition_id", "uuid")).toBe(world.named.p_definition_id);
+    expect(value("p_definition_id", "uuid")).toBe(world.argumentsByName.p_definition_id);
     expect(value("p_work_item_ids", "uuid[]")).toEqual([world.item]);
     expect(value("p_project_ids", "uuid[]")).toEqual([world.projectId]);
   });
