@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { expectHiddenFrom } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { expectNoDeadlineWords } from "./support/deadline-words.ts";
 import { createTestApi, expectHidden, readById, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
@@ -268,7 +269,7 @@ describe("Step Age", () => {
     const detail = (await again.get(`/v1/work-items/${id}`)).json();
     expect(detail.stepAgeWeeks).toBeNull();
     expect((await list(again)).items.find((i) => i.id === id)).toMatchObject({ stepEnteredAt: null, stepAgeWeeks: null });
-    expect(JSON.stringify(detail)).not.toMatch(/due|overdue|deadline/i);
+    expectNoDeadlineWords(JSON.stringify(detail), "the Work Item detail");
   });
 });
 

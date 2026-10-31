@@ -12,6 +12,7 @@ import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { type SnagBulkCandidates, type SnagBulkResult, type WorkItemExport, type WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { expectNoDeadlineWords } from "./support/deadline-words.ts";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, memberOnProject, ok, only, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -214,9 +215,7 @@ describe("the export of the Snag List (scenario RP-629-1, seam 1)", () => {
   it("follows the List's filters, and carries Step Age in weeks and no due date", async () => {
     const filtered = await exported(at.c1Pm, "?stage=in_progress");
     expect(filtered.items.map((i) => i.id)).toEqual([first]);
-    const text = JSON.stringify(filtered).toLowerCase();
-    expect(text).not.toContain("overdue"); // not hidden-from: Rabaed shows no due date
-    expect(text).not.toContain("due"); // not hidden-from: Rabaed shows no due date
+    expectNoDeadlineWords(JSON.stringify(filtered), "the export"); // not hidden-from: Rabaed shows no due date
     expect(filtered.items[0]).toHaveProperty("stepAgeWeeks");
     expect(filtered.capped).toBe(false);
   });
